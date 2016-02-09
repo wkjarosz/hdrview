@@ -2,22 +2,9 @@
     \author Wojciech Jarosz
 */
 #include "HDRViewer.h"
-#include <iostream>     // std::cout, std::fixed
-#include <iomanip>      // std::setprecision
+#include <iostream>
 
 using namespace std;
-
-//! Cast between arbitrary types using string streams.
-template<typename result_type, typename arg_type>
-result_type lexical_cast(const arg_type &arg)
-{
-    std::stringstream interpreter;
-    interpreter << arg;
-    result_type result = result_type();
-    interpreter >> result;
-    return result;
-}
-
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     Screen(Vector2i(640,480), "HDRView", true),
@@ -54,45 +41,50 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     // create layers panel
     //
     {
-        m_layers = new Window(this, "");
-        m_layers->setId("layers");
-        m_layers->setTheme(thm);
-        m_layers->setLayout(new GroupLayout(10, 4, 8, 10));
-        new Label(m_layers, "File operations", "sans-bold");
-        // Widget *filePanel = new Widget(m_layers);
-        // filePanel->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+        m_layersPanel = new Window(this, "");
+        m_layersPanel->setId("layers");
+        m_layersPanel->setTheme(thm);
+        m_layersPanel->setLayout(new GroupLayout(10, 4, 8, 10));
+        new Label(m_layersPanel, "File operations", "sans-bold");
         
-        Button *b = new Button(m_layers, "Open image", ENTYPO_ICON_SQUARED_PLUS);
+        Button *b = new Button(m_layersPanel, "Open image", ENTYPO_ICON_SQUARED_PLUS);
         b->setBackgroundColor(Color(0, 100, 0, 75));
         b->setTooltip("Load an image and add it to the set of opened images.");
         b->setFontSize(15);
-        b->setCallback([this] {
-            string file = file_dialog({ {"EXR", "OpenEXR image"},
-                {"PNG", "Portable Network Graphic"},
-                {"JPG", "Jpeg image"},
-                {"TGA", "Targa image"},
-                {"BMP", "Windows Bitmap image"},
-                {"GIF", "GIF image"},
-                {"HDR", "Radiance rgbE format"},
-                {"PPM", "Portable pixel map"},
-                {"PSD", "Photoshop document"}  }, false);
+        b->setCallback([&]
+        {
+            string file = file_dialog(
+                {
+                    {"EXR", "OpenEXR image"},
+                    {"png", "Portable Network Graphic"},
+                    {"jpg", "Jpeg image"},
+                    {"tga", "Targa image"},
+                    {"bmp", "Windows Bitmap image"},
+                    {"gif", "GIF image"},
+                    {"hdr", "Radiance rgbE format"},
+                    {"ppm", "Portable pixel map"},
+                    {"psd", "Photoshop document"}
+                }, false);
             if (file.size())
                 dropEvent({file});
         });
 
-        Button *b1 = new Button(m_layers, "Save image", ENTYPO_ICON_SAVE);
-        b1->setBackgroundColor(Color(0, 0, 100, 75));
-        b1->setTooltip("Save the image to disk.");
-        b1->setFontSize(15);
-        b1->setCallback([this] {
+        b = new Button(m_layersPanel, "Save image", ENTYPO_ICON_SAVE);
+        b->setBackgroundColor(Color(0, 0, 100, 75));
+        b->setTooltip("Save the image to disk.");
+        b->setFontSize(15);
+        b->setCallback([&]
+        {
             if (!currentImage())
                 return;
-            string file = file_dialog({
-                {"PNG", "Portable Network Graphic"},
-                {"JPG", "Jpeg image"},
-                {"TGA", "Targa image"},
-                {"BMP", "Windows Bitmap image"},
-                {"HDR", "Radiance rgbE format"}}, true);
+            string file = file_dialog(
+                {
+                    {"png", "Portable Network Graphic"},
+                    {"tga", "Targa image"},
+                    {"bmp", "Windows Bitmap image"},
+                    {"hdr", "Radiance rgbE format"},
+                    {"exr", "OpenEXR image"}
+                }, true);
             
             if (file.size())
             {
@@ -110,35 +102,27 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             }
         });
         
-        m_closeButton = new Button(m_layers, "Close image", ENTYPO_ICON_SQUARED_MINUS);
+        m_closeButton = new Button(m_layersPanel, "Close image", ENTYPO_ICON_SQUARED_MINUS);
         m_closeButton->setBackgroundColor(Color(100, 0, 0, 75));
         m_closeButton->setTooltip("Close the currently selected image.");
         m_closeButton->setFontSize(15);
         m_closeButton->setEnabled(m_images.size() > 0);
         m_closeButton->setCallback([&] { closeCurrentImage(); });
         
-        // Button * b0 = new Button(m_layers->buttonPanel(), "", ENTYPO_ICON_CROSS);
+        // Button * b0 = new Button(m_layersPanel->buttonPanel(), "", ENTYPO_ICON_CROSS);
         // b0->setCallback([this]
         //    {
-        //        this->m_layers->setVisible(false);
+        //        this->m_layersPanel->setVisible(false);
         //        this->m_layersButton->setPushed(false);
         //    });
 
-        new Label(m_layers, "Opened images:", "sans-bold");
+        new Label(m_layersPanel, "Opened images:", "sans-bold");
 
-        m_vscrollContainer = new Widget(m_layers);
-        // m_vscrollContainer->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-        
+        m_vscrollContainer = new Widget(m_layersPanel);
         m_layerScrollPanel = new VScrollPanel(m_vscrollContainer);
         m_layerListWidget = new Widget(m_layerScrollPanel);
         m_layerListWidget->setId("layer list widget");
         m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 5));
-
-        // VScrollPanel *vscroll = new VScrollPanel(popup);
-        // ImagePanel *imgPanel = new ImagePanel(vscroll);
-        // imgPanel->setImages(icons);
-
-        // m_vscrollContainer->setHeight(40);
 
 
     }
@@ -153,95 +137,77 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_helpButton->setTooltip("Bring up the help dialog.");
         m_helpButton->setFixedSize(Vector2i(22,22));
         m_helpButton->setFontSize(15);
-        m_helpButton->setChangeCallback([this](bool value) {m_helpDialog->setVisible(value);});
+        m_helpButton->setChangeCallback([&](bool value) {m_helpDialog->setVisible(value);});
 
         m_layersButton = new ToolButton(m_controlPanel, ENTYPO_ICON_FOLDER);
         m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
         m_layersButton->setFixedSize(Vector2i(22,22));
         m_layersButton->setFontSize(15);
-        m_layersButton->setChangeCallback([&,this](bool value) {m_layers->setVisible(value);performLayout();});
-
-        m_exposureLabel = new Label(m_controlPanel, "Exposure", "sans-bold");
-        m_exposureLabel->setFontSize(16);
-
-        m_exposureSlider = new Slider(m_controlPanel);
-
-        m_exposureTextBox = new TextBox(m_controlPanel);
-        m_exposureTextBox->setEditable(true);
+        m_layersButton->setChangeCallback([&](bool value)
         {
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(3) << m_exposure;
-            m_exposureTextBox->setValue(ss.str());
-        }
+            m_layersPanel->setVisible(value);
+            performLayout();
+        });
+
+        Label * exposureLabel = new Label(m_controlPanel, "Exposure", "sans-bold");
+        m_exposureSlider = new Slider(m_controlPanel);
+        m_exposureTextBox = new FloatBox<float>(m_controlPanel, m_exposure);
+
+        exposureLabel->setFontSize(16);
+        m_exposureTextBox->numberFormat("%6.2f");
+        m_exposureTextBox->setEditable(true);
         m_exposureTextBox->setFixedSize(Vector2i(40,15));
         m_exposureTextBox->setFontSize(14);
         m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
-        m_exposureTextBox->setCallback([this](const std::string & value)
+        auto exposureTextBoxCB = [&](float value)
         {
-            this->m_exposure = lexical_cast<float>(value);
-            this->m_exposureSlider->setValue(this->m_exposure / 20.0f + 0.5f);
-            return true;
+            m_exposure = value;
+            m_exposureSlider->setValue(m_exposure / 20.0f + 0.5f);
+        };
+        m_exposureTextBox->setCallback(exposureTextBoxCB);
+        m_exposureSlider->setCallback([&](float value)
+        {
+            m_exposure = (value - 0.5f) * 20;
+            m_exposureTextBox->setValue(m_exposure);
         });
-
-        m_exposureSlider->setValue(m_exposure / 20.0f + 0.5f);
         m_exposureSlider->setFixedWidth(40);
-        m_exposureSlider->setCallback([this](float value)
-        {
-            this->m_exposure = (value - 0.5f) * 20;
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(2) << this->m_exposure;
-            this->m_exposureTextBox->setValue(ss.str());
-        });
+        m_exposureTextBox->setValue(m_exposure);
+        exposureTextBoxCB(m_exposure);
+        
 
         m_sRGB = new CheckBox(m_controlPanel, "sRGB   ");
+        
         m_gammaLabel = new Label(m_controlPanel, "Gamma", "sans-bold");
         m_gammaSlider = new Slider(m_controlPanel);
+        m_gammaTextBox = new FloatBox<float>(m_controlPanel);
 
-        m_gammaTextBox = new TextBox(m_controlPanel);
+        m_gammaLabel->setFontSize(16);
         m_gammaTextBox->setEditable(true);
-        {
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(3) << m_gamma;
-            m_gammaTextBox->setValue(ss.str());
-        }
+        m_gammaTextBox->numberFormat("%6.3f");
         m_gammaTextBox->setFixedSize(Vector2i(40,15));
         m_gammaTextBox->setFontSize(14);
         m_gammaTextBox->setAlignment(TextBox::Alignment::Right);
-        m_gammaTextBox->setCallback([this](const std::string & value)
+        auto gammaTextBoxCB = [&](float value)
         {
-            float v = lexical_cast<float>(value);
-            this->m_gamma = v;
-            this->m_gammaSlider->setValue((v - 0.1f) / (10.0f-0.1f));
-            return true;
+            m_gamma = value;
+            m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.02f));
+        };
+        m_gammaTextBox->setCallback(gammaTextBoxCB);
+        m_gammaSlider->setCallback([&](float value)
+        {
+            m_gamma = 0.1f + value * (10.0f - 0.02f);
+            m_gammaTextBox->setValue(m_gamma);
         });
-
-        m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.1f));
         m_gammaSlider->setFixedWidth(40);
-        m_gammaSlider->setCallback([this](float value)
-        {
-            this->m_gamma = 0.1f + value * (10.0f - 0.1f);
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(3) << m_gamma;
-            this->m_gammaTextBox->setValue(ss.str());
-        });
+        m_gammaTextBox->setValue(m_gamma);
+        gammaTextBoxCB(m_gamma);
 
-        m_gammaTextBox->setCallback([this](const std::string & value)
-        {
-            float v = lexical_cast<float>(value);
-            this->m_gamma = v;
-            this->m_gammaSlider->setValue((v - 0.1f) / (10.0f-0.1f));
-            return true;
-        });
-
-        m_sRGB->setCallback([this](bool value)
+        m_sRGB->setCallback([&](bool value)
         {
             m_gammaSlider->setEnabled(!value);
             m_gammaTextBox->setEnabled(!value);
             m_gammaLabel->setEnabled(!value);
             m_gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);
-            // m_gammaSlider->setVisible(!value);
-            // m_gammaTextBox->setVisible(!value);
-            // m_gammaLabel->setVisible(!value);
             performLayout();
         });
 
@@ -297,10 +263,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_helpDialog->center();
 
         Button *button = new Button(m_helpDialog->buttonPanel(), "", ENTYPO_ICON_CROSS);
-        button->setCallback([this]
+        button->setCallback([&]
             {
-                this->m_helpDialog->setVisible(false);
-                this->m_helpButton->setPushed(false);
+                m_helpDialog->setVisible(false);
+                m_helpButton->setPushed(false);
             });
     }
 
@@ -315,7 +281,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
 
     // m_controlPanel->requestFocus();
 
-    m_layers->setVisible(false);
+    m_layersPanel->setVisible(false);
 
     drawAll();
     setVisible(true);
@@ -507,17 +473,15 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_G:
         {
             if (modifiers & GLFW_MOD_SHIFT)
-                m_gamma += 0.1f;
+                m_gamma += 0.02f;
             else
             {
-                m_gamma -= 0.1f;
+                m_gamma -= 0.02f;
                 if (m_gamma <= 0.0f)
-                    m_gamma = 0;
+                    m_gamma = 0.02;
             }
-            m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.1f));
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(3) << m_gamma;
-            m_gammaTextBox->setValue(ss.str());
+            m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.02f));
+            m_gammaTextBox->setValue(m_gamma);
             return true;
         }
         case GLFW_KEY_E:
@@ -527,9 +491,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             else
                 m_exposure -= 0.25f;
             m_exposureSlider->setValue(m_exposure / 20.0f + 0.5f);
-            std::stringstream ss;
-            ss << std::fixed << std::setprecision(3) << m_exposure;
-            m_exposureTextBox->setValue(ss.str());
+            m_exposureTextBox->setValue(m_exposure);
             return true;
         }
         
@@ -557,8 +519,8 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case GLFW_KEY_L:
-            m_layers->setVisible(!m_layers->visible());
-            m_layersButton->setPushed(m_layers->visible());
+            m_layersPanel->setVisible(!m_layersPanel->visible());
+            m_layersButton->setPushed(m_layersPanel->visible());
             return true;
             
         case GLFW_KEY_PAGE_DOWN:
@@ -600,8 +562,8 @@ void HDRViewScreen::performLayout()
     m_controlPanel->setSize(Vector2i(width(), controlPanelHeight));
     
     // put the layers panel directly below the control panel on the left side
-    m_layers->setPosition(Vector2i(0,controlPanelHeight));
-    m_layers->setSize(m_layers->preferredSize(mNVGContext));
+    m_layersPanel->setPosition(Vector2i(0,controlPanelHeight));
+    m_layersPanel->setSize(m_layersPanel->preferredSize(mNVGContext));
 
     // put the status bar full-width at the bottom
     m_statusBar->setSize(Vector2i(width(), 18));
@@ -651,7 +613,7 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
         Color pixelVal = img->pixel(pixel.x(), pixel.y());
         Color iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).cwiseMin(255.0f).cwiseMax(0.0f);
         char buf[1024];
-        snprintf(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d)",
+        NANOGUI_SNPRINTF(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d)",
                  pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2],
                  (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]));
         m_pixelInfoLabel->setCaption(buf);
@@ -684,7 +646,7 @@ void HDRViewScreen::updateZoomLabel()
     char buf[1024];
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-    snprintf(buf, 1024, "%7.3f%% (%d : %d)", realZoom * 100, ratio1, ratio2);
+    NANOGUI_SNPRINTF(buf, 1024, "%7.3f%% (%d : %d)", realZoom * 100, ratio1, ratio2);
     m_zoomLabel->setCaption(buf);
     performLayout();
 }
@@ -827,7 +789,7 @@ HDRViewScreen::drawPixelLabels() const
             float luminance = 1.0/3.0f * (pixel.x() + pixel.y() + pixel.z()) * pow(2.0f, m_exposure);
 
             char buf[1024];
-            snprintf(buf, 1024, "%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);
+            NANOGUI_SNPRINTF(buf, 1024, "%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);
 
             drawText(imageToScreen(Vector2i(i,j)), buf,
                      luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f),

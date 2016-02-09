@@ -120,7 +120,7 @@ add_executable(force-random-dither
   src/tinyexr.h
   src/forced-random-dither.cpp)
 
-target_link_libraries(dither-matrix nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 # if (APPLE)
 #   # Build an application bundle on OSX

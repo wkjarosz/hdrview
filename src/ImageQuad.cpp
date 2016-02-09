@@ -3,12 +3,12 @@
 */
 #include "ImageQuad.h"
 #include <iostream>     // std::cout, std::fixed
-#include <iomanip>      // std::setprecision
 #include <algorithm>    // std::transform
 #include <exception>    // std::transform
 
 #define TINYEXR_IMPLEMENTATION
 #include "tinyexr.h"
+
 // #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -17,10 +17,30 @@
 
 #include "dither-matrix256.h"
 
-
 using namespace nanogui;
 using namespace Eigen;
 using namespace std;
+
+
+// local functions
+namespace
+{
+
+string getFileExtension(const string& filename)
+{
+    if (filename.find_last_of(".") != string::npos)
+        return filename.substr(filename.find_last_of(".")+1);
+    return "";
+}
+
+float toSRGB(float value)
+{
+    if (value < 0.0031308f)
+       return 12.92f * value;
+    return 1.055f * pow(value, 0.41666f) - 0.055f;
+}
+
+} // namespace
 
 
 ImageQuad::ImageQuad() :
@@ -98,7 +118,7 @@ void ImageQuad::init()
     m_shader->uploadIndices(indices);
     m_shader->uploadAttrib("position", positions);
 
-    /* Allocate texture memory for the rendered image */
+    /* Allocate texture memory for the rendered exr */
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -192,21 +212,6 @@ Color ImageQuad::pixel(int x, int y) const
                  m_image[4*x + 4*m_size[0] * y + 3]);
 }
 
-
-static string getFileExtension(const string& filename)
-{
-    if (filename.find_last_of(".") != string::npos)
-        return filename.substr(filename.find_last_of(".")+1);
-    return "";
-}
-
-static float toSRGB(float value)
-{
-    if (value < 0.0031308f)
-       return 12.92f * value;
-    return 1.055f * pow(value, 0.41666f) - 0.055f;
-}
-
 bool ImageQuad::save(const string & filename,
                      float gain, float gamma,
                      bool sRGB, bool dither)
@@ -220,6 +225,57 @@ bool ImageQuad::save(const string & filename,
 
     if (extension == "hdr")
         return stbi_write_hdr(filename.c_str(), m_size[0], m_size[1], 4, m_image);
+    else if (extension == "exr")
+    {
+        EXRImage exr;
+        InitEXRImage(&exr);
+
+        exr.num_channels = 3;
+
+        // Must be BGR(A) order, since most of EXR viewers expect this channel order.
+        const char* channel_names[] = {"B", "G", "R"}; // "B", "G", "R", "A" for RGBA image
+
+        std::vector<float> channels[3];
+        channels[0].resize(width() * height());
+        channels[1].resize(width() * height());
+        channels[2].resize(width() * height());
+
+        for (int i = 0; i < width() * height(); i++)
+        {
+            channels[0][i] = m_image[4*i+0];
+            channels[1][i] = m_image[4*i+1];
+            channels[2][i] = m_image[4*i+2];
+        }
+
+        float* image_ptr[3];
+        image_ptr[0] = &(channels[2].at(0)); // B
+        image_ptr[1] = &(channels[1].at(0)); // G
+        image_ptr[2] = &(channels[0].at(0)); // R
+
+        exr.channel_names = channel_names;
+        exr.images = (unsigned char**)image_ptr;
+        exr.width = width();
+        exr.height = height();
+
+        exr.pixel_types = (int *)malloc(sizeof(int) * exr.num_channels);
+        exr.requested_pixel_types = (int *)malloc(sizeof(int) * exr.num_channels);
+        for (int i = 0; i < exr.num_channels; i++)
+        {
+            exr.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT; // pixel type of input exr
+            exr.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF; // pixel type of output exr to be stored in .EXR
+        }
+
+        const char* err;
+        int ret = SaveMultiChannelEXRToFile(&exr, filename.c_str(), &err);
+        if (ret != 0)
+        {
+            fprintf(stderr, "Save EXR err: %s\n", err);
+            return ret;
+        }
+        printf("Saved exr file. [ %s ] \n", filename.c_str());
+
+        return 0;
+    }
     else
     {
         vector<unsigned char> data(m_size[0]*m_size[1]*3, 0);
