@@ -1,5 +1,5 @@
 # HDRView
-This repository contains a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, and PSD images and writing HDR, PNG, TGA, and BMP images.
+This repository contains a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, and PSD images and writing EXR, HDR, PNG, TGA, and BMP images.
 
 ## Compiling
 
@@ -24,6 +24,6 @@ Run ``./HDRView --help`` to see command-line usage, or run ``./HDRView`` and hit
 
 3-clause BSD
 
-``hdrview`` uses ``tinyexr`` (https://github.com/syoyo/tinyexr) developed by Syoyo Fujita(syoyo@lighttransport.com) which is licensed under the 3-clause BSD.
+``hdrview`` uses ``OpenEXR`` (http://www.openexr.com) which is licensed under a modified BSD license.
 
 ``hdrview`` uses stb (https://github.com/nothings/stb), developed by Sean Barrett which is licensed under public domain.
