@@ -72,14 +72,34 @@ elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "
   endif()
 endif()
 
+# Build OpenEXR
+set(OPENEXR_BUILD_TESTS OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_UTILS  OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_EXAMPLES  OFF CACHE BOOL " " FORCE)
+set(OPENEXR_INSTALL_EXAMPLES  OFF CACHE BOOL " " FORCE)
+set(OPENEXR_INSTALL_DOCS  OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_SHARED_LIBS  OFF CACHE BOOL " " FORCE)
+set(OPENEXR_NAMESPACE_VERSIONING  OFF CACHE BOOL " " FORCE)
+set(ILMIMF_BUILD_TESTS OFF CACHE BOOL " " FORCE)
+set(ILMIMF_CREATE_LIBTOOL_FILE OFF CACHE BOOL " " FORCE)
+set(ILMIMF_INSTALL_PKGCONFIG OFF CACHE BOOL " " FORCE)
+set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr ext_build/openexr)
+set(OPENEXR_LIBRARIES IlmImf IlmThread Iex IexMath Imath Half)
+
 # Build NanoGUI
 set(NANOGUI_BUILD_EXAMPLE OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_SHARED  OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_PYTHON  OFF CACHE BOOL " " FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui ext_build/nanogui)
-set_property(TARGET nanogui glfw glfw_objects bin2c PROPERTY FOLDER "dependencies")
 
+set_property(TARGET IlmImf IlmThread Iex IexMath Imath Half nanogui glfw glfw_objects bin2c PROPERTY FOLDER "dependencies")
+
+
+# Compile against & link to previously compiled external projects
 # Header file directories of dependency libraries
+link_directories(${CMAKE_BINARY_DIR}/ext_build/dist/lib)
 include_directories(
   # Eigen
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui/ext/eigen
@@ -91,6 +111,15 @@ include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui/ext/nanovg/src
   # NanoGUI
   ${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui/include
+  # OpenEXR
+  ${CMAKE_BINARY_DIR}/ext_build/openexr/OpenEXR/config/
+  ${CMAKE_BINARY_DIR}/ext_build/openexr/IlmBase/config/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/IlmBase/IlmThread/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/IlmBase/Iex/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/IlmBase/IexMath/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/IlmBase/Imath/
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/openexr/IlmBase/Half/
   # Resource file
   ${CMAKE_CURRENT_BINARY_DIR}
 )
@@ -104,20 +133,17 @@ add_executable(HDRView #MACOSX_BUNDLE
   src/ImageQuad.h
   src/stb_image.h
   src/stb_image_write.h
-  src/tinyexr.h
   src/HDRViewer.h
   src/HDRViewer.cpp
   src/dither-matrix256.h
   src/FullScreenDitherer.h
-  src/main.cpp
-  ${EXTRA_SOURCE})
+  src/main.cpp)
 
-target_link_libraries(HDRView nanogui ${NANOGUI_EXTRA_LIBS})
-
+target_link_libraries(HDRView nanogui ${NANOGUI_EXTRA_LIBS} ${OPENEXR_LIBRARIES})
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
+
 add_executable(force-random-dither
-  src/tinyexr.h
   src/forced-random-dither.cpp)
 
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})

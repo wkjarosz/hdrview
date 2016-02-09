@@ -448,8 +448,11 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
     switch (key)
     {
         case GLFW_KEY_ESCAPE:
-            setVisible(false);
+        {
+            auto dlg = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!", "Do you really want to quit?", "Yes", "No", true);
+            dlg->setCallback([this](int result) {this->setVisible(result);});
             return true;
+        }
         case GLFW_KEY_EQUAL:
         {
             if (m_zoom < 20) m_zoom++;

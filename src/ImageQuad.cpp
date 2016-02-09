@@ -6,8 +6,14 @@
 #include <algorithm>    // std::transform
 #include <exception>    // std::transform
 
-#define TINYEXR_IMPLEMENTATION
-#include "tinyexr.h"
+#include <ImfArray.h>
+#include <ImfRgbaFile.h>
+#include <ImfInputFile.h>
+#include <ImfOutputFile.h>
+#include <ImfChannelList.h>
+#include <ImfFrameBuffer.h>
+#include <ImfStringAttribute.h>
+#include <half.h>
 
 // #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -20,6 +26,8 @@
 using namespace nanogui;
 using namespace Eigen;
 using namespace std;
+using namespace Imf;
+using namespace Imath;
 
 
 // local functions
@@ -186,20 +194,47 @@ bool ImageQuad::load(const string & filename)
     if (m_image)
         return true;
 
-    // now try EXR
-    const char* err;
-    if (LoadEXR(&m_image, &m_size.x(), &m_size.y(), m_filename.c_str(), &err))
+    try
     {
-        cout << "ERROR!" << endl;
-        fprintf(stderr, "Parse EXR err: %s\n", err);
+        Imf::RgbaInputFile file(m_filename.c_str());
+        Imath::Box2i dw = file.dataWindow();
         
+        m_size[0]  = dw.max.x - dw.min.x + 1;
+        m_size[1] = dw.max.y - dw.min.y + 1;
+        Imf::Array2D<Imf::Rgba> pixels(1, m_size[0]);
+
+        int y = dw.min.y;
+        int row = 0;
+        m_image = new float [m_size[0]*m_size[1]*4];
+        
+        while (y <= dw.max.y)
+        {
+            file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * m_size[0], 1, 0);
+            file.readPixels(y, y);
+            
+            // copy pixels over to the Image
+            for (int i = 0; i < m_size[0]; ++i)
+            {
+                const Imf::Rgba &p = pixels[0][i];
+                m_image[4*i + 4*m_size[0] * row + 0] = p.r;
+                m_image[4*i + 4*m_size[0] * row + 1] = p.g;
+                m_image[4*i + 4*m_size[0] * row + 2] = p.b;
+                m_image[4*i + 4*m_size[0] * row + 3] = p.a;
+            }
+
+            y++;
+            row++;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        cerr << "ERROR: Unable to read image file \"" << m_filename << "\": " << e.what() << endl;
+        delete [] m_image;
         m_image = nullptr;
         m_size = Vector2i::Zero();
-
         return false;
     }
 
-    
     cout << m_size << endl;
     return true;
 }
@@ -227,54 +262,33 @@ bool ImageQuad::save(const string & filename,
         return stbi_write_hdr(filename.c_str(), m_size[0], m_size[1], 4, m_image);
     else if (extension == "exr")
     {
-        EXRImage exr;
-        InitEXRImage(&exr);
-
-        exr.num_channels = 3;
-
-        // Must be BGR(A) order, since most of EXR viewers expect this channel order.
-        const char* channel_names[] = {"B", "G", "R"}; // "B", "G", "R", "A" for RGBA image
-
-        std::vector<float> channels[3];
-        channels[0].resize(width() * height());
-        channels[1].resize(width() * height());
-        channels[2].resize(width() * height());
-
-        for (int i = 0; i < width() * height(); i++)
+        try
         {
-            channels[0][i] = m_image[4*i+0];
-            channels[1][i] = m_image[4*i+1];
-            channels[2][i] = m_image[4*i+2];
+            Imf::RgbaOutputFile file(filename.c_str(), m_size[0], m_size[1], Imf::WRITE_RGBA);
+            Imf::Array2D<Imf::Rgba> pixels(1, m_size[0]);
+
+            for (int y = 0; y < m_size[1]; ++y)
+            {
+                // copy pixels over to the Image
+                for (int x = 0; x < m_size[0]; ++x)
+                {
+                    Imf::Rgba &p = pixels[0][x];
+                    Color c = pixel(x,y);
+                    p.r = c[0];
+                    p.g = c[1];
+                    p.b = c[2];
+                    p.a = c[3];
+                }
+            
+                file.setFrameBuffer(&pixels[0][0], 1, 0);
+                file.writePixels(1);
+            }
         }
-
-        float* image_ptr[3];
-        image_ptr[0] = &(channels[2].at(0)); // B
-        image_ptr[1] = &(channels[1].at(0)); // G
-        image_ptr[2] = &(channels[0].at(0)); // R
-
-        exr.channel_names = channel_names;
-        exr.images = (unsigned char**)image_ptr;
-        exr.width = width();
-        exr.height = height();
-
-        exr.pixel_types = (int *)malloc(sizeof(int) * exr.num_channels);
-        exr.requested_pixel_types = (int *)malloc(sizeof(int) * exr.num_channels);
-        for (int i = 0; i < exr.num_channels; i++)
+        catch (const std::exception &e)
         {
-            exr.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT; // pixel type of input exr
-            exr.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF; // pixel type of output exr to be stored in .EXR
+            cerr << "ERROR: Unable to write image file \"" << filename << "\": " << e.what() << endl;
+            return false;
         }
-
-        const char* err;
-        int ret = SaveMultiChannelEXRToFile(&exr, filename.c_str(), &err);
-        if (ret != 0)
-        {
-            fprintf(stderr, "Save EXR err: %s\n", err);
-            return ret;
-        }
-        printf("Saved exr file. [ %s ] \n", filename.c_str());
-
-        return 0;
     }
     else
     {
