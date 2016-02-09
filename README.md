@@ -7,7 +7,7 @@ Compiling from scratch requires CMake and a recent version of XCode on Mac, Visu
 
 On Linux and MacOS, compiling should be as simple as
 
-    git clone --recursive https://bitbucket.org/wkjarosz/HDRView
+    git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd HDRView
     mkdir build
     cmake-gui ../
