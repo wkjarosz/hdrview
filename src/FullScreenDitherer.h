@@ -1,4 +1,4 @@
-/*! \file imageQuad.h
+/*! \file FullScreenDitherer.h
     \author Wojciech Jarosz
 */
 #pragma once

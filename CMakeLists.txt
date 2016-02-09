@@ -95,33 +95,11 @@ include_directories(
   ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-# Run bin2c on resource files
-file(GLOB FRAG_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.frag")
-file(GLOB VERT_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.vert")
-file(GLOB GEO_FILES  "${CMAKE_CURRENT_SOURCE_DIR}/resources/*.geo")
-set(HV_RESOURCES ${FRAG_FILES} ${VERT_FILES} ${GEO_FILES})
-
-add_custom_command(
-  OUTPUT resources.cpp
-  COMMAND bin2c ARGS resources.cpp resources.h ${HV_RESOURCES}
-  DEPENDS bin2c ${HV_RESOURCES}
-  COMMENT "Running bin2c"
-  PRE_BUILD VERBATIM)
-
 if (HDR_VIEW_DEV_MODE)
   add_definitions(-DDEV_MODE)
 endif()
 
-# Resource file (icons etc.)
-set(EXTRA_SOURCE "")
-if (APPLE)
-  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/hdrview.icns")
-elseif(WIN32)
-  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/hdrview.rc")
-endif()
-
-add_executable(HDRView#MACOSX_BUNDLE
-  resources.cpp
+add_executable(HDRView #MACOSX_BUNDLE
   src/ImageQuad.cpp
   src/ImageQuad.h
   src/stb_image.h
@@ -138,10 +116,9 @@ target_link_libraries(HDRView nanogui ${NANOGUI_EXTRA_LIBS})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
-
-add_executable(dither-matrix
+add_executable(force-random-dither
   src/tinyexr.h
-  src/dither-matrix.cpp)
+  src/forced-random-dither.cpp)
 
 target_link_libraries(dither-matrix nanogui ${NANOGUI_EXTRA_LIBS})
 

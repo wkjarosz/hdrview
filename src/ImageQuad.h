@@ -1,4 +1,4 @@
-/*! \file imageQuad.h
+/*! \file ImageQuad.h
     \author Wojciech Jarosz
 */
 #ifndef IMAGE_QUAD_H

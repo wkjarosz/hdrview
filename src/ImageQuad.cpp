@@ -1,3 +1,6 @@
+/*! \file ImageQuad.cpp
+    \author Wojciech Jarosz
+*/
 #include "ImageQuad.h"
 #include <iostream>     // std::cout, std::fixed
 #include <iomanip>      // std::setprecision

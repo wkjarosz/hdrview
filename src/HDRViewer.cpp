@@ -1,4 +1,4 @@
-/*! \file HDRView.cpp
+/*! \file HDRViewer.cpp
     \author Wojciech Jarosz
 */
 #include "HDRViewer.h"

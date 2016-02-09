@@ -1,3 +1,10 @@
+/*
+    dither matrix generated with force-random-dither. This is basically a large
+    matrix of size N containing a permutation of the integers between 0 and N-1.
+    Used by HDRView for nicely dithering 32-bit floating-point images down to
+    8-bits per channel.
+*/
+
 #pragma once
 
 static const float dither_matrix256[65536] = 

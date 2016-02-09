@@ -1,7 +1,11 @@
-//
-// \author Wojciech Jarosz
-// \short Implementation of force random dither
-//
+/*!
+    force-random-dither.cpp -- Generate a dither matrix using the force-random-dither method
+
+    \author Wojciech Jarosz
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
 
 #include <iostream>
 #include <Eigen/Dense>
