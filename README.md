@@ -1,5 +1,5 @@
 # HDRView
-This repository contains a simple research-oriented high-dynamic range image viewer with minimalistic tonemapping capabilities.
+This repository contains a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. Currently supported image formats are OpenEXR, PNG, TGA, BMP, HDR, JPG, and GIF for reading, and HDR, PNG, TGA, BMP, for writing.
 
 ## Compiling
 
