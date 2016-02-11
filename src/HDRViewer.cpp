@@ -30,7 +30,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     m_statusBar = new Window(this, "");
     m_statusBar->setTheme(thm);
 
-    m_pixelInfoLabel = new Label(m_statusBar, "(---,---)", "sans");
+    m_pixelInfoLabel = new Label(m_statusBar, "", "sans");
     m_pixelInfoLabel->setFontSize(12);
     m_pixelInfoLabel->setPosition(Vector2i(6, 0));
     
@@ -615,10 +615,10 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
     {
         Color pixelVal = img->pixel(pixel.x(), pixel.y());
         Color iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).cwiseMin(255.0f).cwiseMax(0.0f);
-        char buf[1024];
-        NANOGUI_SNPRINTF(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d)",
-                 pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2],
-                 (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]));
+        char buf[2048];
+        NANOGUI_SNPRINTF(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d, %3d)",
+                 pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
+                 (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]), (int)round(iPixelVal[3]));
         m_pixelInfoLabel->setCaption(buf);
     }
     else

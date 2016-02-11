@@ -100,15 +100,17 @@ void ImageQuad::init()
         "}\n"
         "void main() {\n"
         "    vec4 color = texture(source, uv);\n"
-        "    color *= gain / color.w;\n"
+        "    color.rgb *= gain;\n"
         "    if (sRGB)\n"
         "       out_color.rgb = vec3(toSRGB(color.r), toSRGB(color.g), toSRGB(color.b));\n"
         "    else\n"
         "       out_color.rgb = pow(color.rgb, vec3(1.0/gamma));\n"
         "    float dith = texture(dither_texture, gl_FragCoord.xy/vec2(256,256)).r/65536 - 0.5;\n"
         "    out_color.rgb += dither ? vec3(dith/255.0) : vec3(0.0);\n"
-        "    out_color.rgb *= channels;\n"
-        "    out_color.w = 1.0;\n"
+        "    out_color.rgb = (channels.r == 0.0) ? \n"
+        "                       (channels.g == 0.0 ? out_color.bbb : out_color.ggg) :\n"
+        "                       (channels.g != 0.0 && channels.b != 0.0) ? out_color.rgb : out_color.rrr;"
+        "    out_color.a = color.a;\n"
         "}"
     );
 
@@ -132,7 +134,7 @@ void ImageQuad::init()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, width());
+    // glPixelStorei(GL_UNPACK_ROW_LENGTH, width());
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width(), height(),
                  0, GL_RGBA, GL_FLOAT, (uint8_t *) m_image);
 }
@@ -191,6 +193,7 @@ bool ImageQuad::load(const string & filename)
     // try PNG, JPG, HDR, etc files first
     int n;
     m_image = stbi_loadf(m_filename.c_str(), &m_size.x(), &m_size.y(), &n, 4);
+    cout << "num channels: " << n << endl;
     if (m_image)
         return true;
 
@@ -235,7 +238,6 @@ bool ImageQuad::load(const string & filename)
         return false;
     }
 
-    cout << m_size << endl;
     return true;
 }
 
@@ -292,8 +294,8 @@ bool ImageQuad::save(const string & filename,
     }
     else
     {
+        // convert floating-point image to 8-bit per channel with dithering
         vector<unsigned char> data(m_size[0]*m_size[1]*3, 0);
-
         float invGamma = 1.0f/gamma;
         for (int y = 0; y < m_size[1]; ++y)
             for (int x = 0; x < m_size[0]; ++x)

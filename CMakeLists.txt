@@ -24,8 +24,20 @@ endif()
 
 # Sanitize build environment for static build with C++11
 if (MSVC)
+
+  # Don't advertise awkward and non-standard "secure" C++ functions
   add_definitions (/D "_CRT_SECURE_NO_WARNINGS")
   add_definitions (/D "__TBB_NO_IMPLICIT_LINKAGE")
+
+  include_directories(ext/glew/include)
+  set(extra_libs opengl32 glew)
+
+  set(extra_libs ${extra_libs}
+    $<$<CONFIG:Debug>:zlibstaticd>
+    $<$<CONFIG:RelWithDebInfo>:zlibstatic>
+    $<$<CONFIG:Release>:zlibstatic> 
+    $<$<CONFIG:MinSizeRel>:zlibstatic>
+  )
 
   # Parallel build on MSVC (all targets)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
@@ -37,7 +49,7 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /DEIGEN_DONT_ALIGN")
   endif()
 
-  # Static build
+  # Statically link against the C++ runtime library, also apply these settings to nested projects
   set(CompilerFlags
         CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
         CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO
@@ -57,6 +69,15 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
   # Enable C++11 mode on GCC / Clang
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
+
+if(WIN32)
+  # Build zlib (only needed on Windows, Linux/OSX already have it)
+  ExternalProject_Add(zlib_p
+    URL             "${CMAKE_SOURCE_DIR}/ext/zlib"
+    PREFIX          "ext_build"
+    CMAKE_ARGS      ${CMAKE_EXTERNAL_ARGUMENTS}
+  )
+endif(WIN32)
 
 # Compile with compiler warnings
 if(MSVC)
@@ -95,6 +116,10 @@ set(NANOGUI_BUILD_PYTHON  OFF CACHE BOOL " " FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui ext_build/nanogui)
 
 set_property(TARGET IlmImf IlmThread Iex IexMath Imath Half nanogui glfw glfw_objects bin2c PROPERTY FOLDER "dependencies")
+
+if(WIN32)
+  add_dependencies(IlmImf zlib_p)
+endif(WIN32)
 
 
 # Compile against & link to previously compiled external projects

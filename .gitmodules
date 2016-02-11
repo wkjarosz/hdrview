@@ -4,3 +4,6 @@
 [submodule "ext/openexr"]
 	path = ext/openexr
 	url = https://github.com/wjakob/openexr
+[submodule "ext/zlib"]
+	path = ext/zlib
+	url = https://github.com/madler/zlib
