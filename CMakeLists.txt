@@ -22,6 +22,8 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 endif()
 
+include(ExternalProject)
+
 # Sanitize build environment for static build with C++11
 if (MSVC)
 
