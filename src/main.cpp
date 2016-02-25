@@ -100,12 +100,7 @@ int main(int argc, char **argv)
     }
     catch (const std::runtime_error &e)
     {
-        std::string error_msg = std::string("Caught a fatal error: ") + std::string(e.what());
-        #if defined(_WIN32)
-            MessageBoxA(nullptr, error_msg.c_str(), NULL, MB_ICONERROR | MB_OK);
-        #else
-            std::cerr << error_msg << endl;
-        #endif
+        std::cerr << "Caught a fatal error: " << e.what() << endl;
         return -1;
     }
 
