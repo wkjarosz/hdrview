@@ -23,6 +23,8 @@ include_directories(
 add_executable(hdrview #MACOSX_BUNDLE
   src/ImageQuad.cpp
   src/ImageQuad.h
+  src/pfm.h
+  src/pfm.cpp
   src/stb_image.h
   src/stb_image_write.h
   src/HDRViewer.h

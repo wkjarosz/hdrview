@@ -21,6 +21,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include "pfm.h"
+
 #include "dither-matrix256.h"
 
 using namespace nanogui;
@@ -197,6 +199,41 @@ bool ImageQuad::load(const string & filename)
     if (m_image)
         return true;
 
+    // then try pfm
+    float * pfm_data = nullptr;
+    try
+    {
+        pfm_data = load_pfm(m_filename.c_str(), &m_size.x(), &m_size.y(), &n);
+        if (pfm_data)
+        {
+            if (n == 3)
+            {
+                m_image = new float[m_size[0] * m_size[1] * 4];
+
+                // convert 3-channel pfm data to 4-channel internal representation
+                for (int i = 0; i < m_size.x() * m_size.y(); ++i)
+                {
+                    m_image[4*i + 0] = pfm_data[3*i + 0];
+                    m_image[4*i + 1] = pfm_data[3*i + 1];
+                    m_image[4*i + 2] = pfm_data[3*i + 2];
+                    m_image[4*i + 3] = 1.0f;
+                }
+
+                delete [] pfm_data;
+                return true;
+            }
+            else
+                throw runtime_error("Unsupported number of channels in PFM");
+        }
+        return true;
+    }
+    catch (const exception &e)
+    {
+        delete [] pfm_data;
+        cerr << e.what() << endl;
+    }
+
+    // finally try exrs
     try
     {
         Imf::RgbaInputFile file(m_filename.c_str());
@@ -229,7 +266,7 @@ bool ImageQuad::load(const string & filename)
             row++;
         }
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         cerr << "ERROR: Unable to read image file \"" << m_filename << "\": " << e.what() << endl;
         delete [] m_image;
@@ -262,6 +299,8 @@ bool ImageQuad::save(const string & filename,
 
     if (extension == "hdr")
         return stbi_write_hdr(filename.c_str(), m_size[0], m_size[1], 4, m_image);
+    else if (extension == "pfm")
+        return write_pfm(filename.c_str(), m_size[0], m_size[1], 4, m_image);
     else if (extension == "exr")
     {
         try
@@ -286,7 +325,7 @@ bool ImageQuad::save(const string & filename,
                 file.writePixels(1);
             }
         }
-        catch (const std::exception &e)
+        catch (const exception &e)
         {
             cerr << "ERROR: Unable to write image file \"" << filename << "\": " << e.what() << endl;
             return false;

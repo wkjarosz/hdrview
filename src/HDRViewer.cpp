@@ -57,6 +57,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
                 {
                     {"EXR", "OpenEXR image"},
                     {"png", "Portable Network Graphic"},
+                    {"pfm", "Portable Float Map"},
                     {"jpg", "Jpeg image"},
                     {"tga", "Targa image"},
                     {"bmp", "Windows Bitmap image"},
@@ -80,6 +81,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             string file = file_dialog(
                 {
                     {"png", "Portable Network Graphic"},
+                    {"pfm", "Portable Float Map"},
                     {"tga", "Targa image"},
                     {"bmp", "Windows Bitmap image"},
                     {"hdr", "Radiance rgbE format"},
