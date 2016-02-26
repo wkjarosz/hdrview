@@ -31,6 +31,9 @@ add_executable(hdrview #MACOSX_BUNDLE
   src/HDRViewer.cpp
   src/dither-matrix256.h
   src/FullScreenDitherer.h
+  src/Color.h
+  src/FloatImage.h
+  src/FloatImage.cpp
   src/main.cpp
 )
 

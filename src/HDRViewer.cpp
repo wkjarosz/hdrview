@@ -615,8 +615,8 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
     auto img = currentImage();
     if (img && (pixel.array() >= 0).all() && (pixel.array() < img->size().array()).all())
     {
-        Color pixelVal = img->pixel(pixel.x(), pixel.y());
-        Color iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).cwiseMin(255.0f).cwiseMax(0.0f);
+        Color4 pixelVal = img->pixel(pixel.x(), pixel.y());
+        Color4 iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).min(255.0f).max(0.0f);
         char buf[2048];
         NANOGUI_SNPRINTF(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d, %3d)",
                  pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
@@ -787,11 +787,9 @@ HDRViewScreen::drawPixelLabels() const
     {
         for (int i = minI; i <= maxI; ++i)
         {
-            Vector3f pixel( img->rgba()[4*i + 4*img->width() * j],
-                            img->rgba()[4*i + 4*img->width() * j + 1],
-                            img->rgba()[4*i + 4*img->width() * j + 2]);
+            Color4 pixel = img->pixel(i, j);
 
-            float luminance = 1.0/3.0f * (pixel.x() + pixel.y() + pixel.z()) * pow(2.0f, m_exposure);
+            float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 
             char buf[1024];
             NANOGUI_SNPRINTF(buf, 1024, "%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);

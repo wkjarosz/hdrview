@@ -12,6 +12,7 @@
 
 using namespace nanogui;
 using namespace std;
+using namespace Eigen;
 
 class HDRViewScreen : public Screen
 {

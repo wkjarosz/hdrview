@@ -7,8 +7,6 @@
 #include <nanogui/glutil.h>
 #include "dither-matrix256.h"
 
-using namespace nanogui;
-
 /*!
     A class which draws a full-screen quad with a dither matrix
     with values in the range [-0.5,0.5]/255.0
