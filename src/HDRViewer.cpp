@@ -14,8 +14,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     setBackground(Vector3f(0.1, 0.1, 0.1));
     Theme * scaledTheme = new Theme(mNVGContext);
     scaledTheme->mStandardFontSize                 = 16*m_GUIScaleFactor;
-    scaledTheme->mButtonFontSize                   = 20*m_GUIScaleFactor;
-    scaledTheme->mTextBoxFontSize                  = 20*m_GUIScaleFactor;
+    scaledTheme->mButtonFontSize                   = 15*m_GUIScaleFactor;
+    scaledTheme->mTextBoxFontSize                  = 14*m_GUIScaleFactor;
     scaledTheme->mWindowCornerRadius               = 2*m_GUIScaleFactor;
     scaledTheme->mWindowHeaderHeight               = 30*m_GUIScaleFactor;
     scaledTheme->mWindowDropShadowSize             = 10*m_GUIScaleFactor;
@@ -25,8 +25,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
 
     Theme * thm = new Theme(mNVGContext);
     thm->mStandardFontSize                 = 16*m_GUIScaleFactor;
-    thm->mButtonFontSize                   = 20*m_GUIScaleFactor;
-    thm->mTextBoxFontSize                  = 20*m_GUIScaleFactor;
+    thm->mButtonFontSize                   = 15*m_GUIScaleFactor;
+    thm->mTextBoxFontSize                  = 14*m_GUIScaleFactor;
     thm->mButtonCornerRadius               = 2*m_GUIScaleFactor;
     thm->mWindowHeaderHeight = 0;
     thm->mWindowDropShadowSize = 0;
@@ -50,11 +50,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     m_statusBar->setTheme(thm);
 
     m_pixelInfoLabel = new Label(m_statusBar, "", "sans");
-    m_pixelInfoLabel->setFontSize(12*m_GUIScaleFactor);
+    m_pixelInfoLabel->setFontSize(thm->mTextBoxFontSize*m_GUIScaleFactor);
     m_pixelInfoLabel->setPosition(Vector2i(6, 0)*m_GUIScaleFactor);
     
     m_zoomLabel = new Label(m_statusBar, "100% (1 : 1)", "sans");
-    m_zoomLabel->setFontSize(12*m_GUIScaleFactor);
+    m_zoomLabel->setFontSize(thm->mTextBoxFontSize*m_GUIScaleFactor);
 
     //
     // create layers panel
@@ -72,7 +72,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         Button *b = new Button(m_layersPanel, "Open image", ENTYPO_ICON_SQUARED_PLUS);
         b->setBackgroundColor(Color(0, 100, 0, 75));
         b->setTooltip("Load an image and add it to the set of opened images.");
-        b->setFontSize(15*m_GUIScaleFactor);
         b->setCallback([&]
         {
             string file = file_dialog(
@@ -95,7 +94,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         b = new Button(m_layersPanel, "Save image", ENTYPO_ICON_SAVE);
         b->setBackgroundColor(Color(0, 0, 100, 75));
         b->setTooltip("Save the image to disk.");
-        b->setFontSize(15*m_GUIScaleFactor);
         b->setCallback([&]
         {
             if (!currentImage())
@@ -129,7 +127,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_closeButton = new Button(m_layersPanel, "Close image", ENTYPO_ICON_SQUARED_MINUS);
         m_closeButton->setBackgroundColor(Color(100, 0, 0, 75));
         m_closeButton->setTooltip("Close the currently selected image.");
-        m_closeButton->setFontSize(15*m_GUIScaleFactor);
         m_closeButton->setEnabled(m_images.size() > 0);
         m_closeButton->setCallback([&] { closeCurrentImage(); });
         
@@ -161,14 +158,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     {
         m_helpButton = new ToolButton(m_controlPanel, ENTYPO_ICON_CIRCLED_HELP);
         m_helpButton->setTooltip("Bring up the help dialog.");
-        m_helpButton->setFixedSize(Vector2i(22,22)*m_GUIScaleFactor);
-        m_helpButton->setFontSize(15*m_GUIScaleFactor);
+        // m_helpButton->setFixedWidth(22*m_GUIScaleFactor);
         m_helpButton->setChangeCallback([&](bool value) {m_helpDialog->setVisible(value);});
 
         m_layersButton = new ToolButton(m_controlPanel, ENTYPO_ICON_FOLDER);
         m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
-        m_layersButton->setFixedSize(Vector2i(22,22)*m_GUIScaleFactor);
-        m_layersButton->setFontSize(15*m_GUIScaleFactor);
         m_layersButton->setChangeCallback([&](bool value)
         {
             m_layersPanel->setVisible(value);
@@ -179,11 +173,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_exposureSlider = new Slider(m_controlPanel);
         m_exposureTextBox = new FloatBox<float>(m_controlPanel, m_exposure);
 
-        exposureLabel->setFontSize(16*m_GUIScaleFactor);
         m_exposureTextBox->numberFormat("%6.2f");
         m_exposureTextBox->setEditable(true);
-        m_exposureTextBox->setFixedSize(Vector2i(40,15)*m_GUIScaleFactor);
-        m_exposureTextBox->setFontSize(14*m_GUIScaleFactor);
+        m_exposureTextBox->setFixedWidth(40*m_GUIScaleFactor);
         m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
         auto exposureTextBoxCB = [&](float value)
         {
@@ -202,17 +194,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         
 
         m_sRGB = new CheckBox(m_controlPanel, "sRGB   ");
-        m_sRGB->setFontSize(14*m_GUIScaleFactor);
         
         m_gammaLabel = new Label(m_controlPanel, "Gamma", "sans-bold");
         m_gammaSlider = new Slider(m_controlPanel);
         m_gammaTextBox = new FloatBox<float>(m_controlPanel);
 
-        m_gammaLabel->setFontSize(16*m_GUIScaleFactor);
         m_gammaTextBox->setEditable(true);
         m_gammaTextBox->numberFormat("%6.3f");
-        m_gammaTextBox->setFixedSize(Vector2i(40,15)*m_GUIScaleFactor);
-        m_gammaTextBox->setFontSize(14*m_GUIScaleFactor);
+        m_gammaTextBox->setFixedWidth(40*m_GUIScaleFactor);
         m_gammaTextBox->setAlignment(TextBox::Alignment::Right);
         auto gammaTextBoxCB = [&](float value)
         {
@@ -241,9 +230,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_dither = new CheckBox(m_controlPanel, "Dither  ");
         m_drawGrid = new CheckBox(m_controlPanel, "Grid  ");
         m_drawValues = new CheckBox(m_controlPanel, "RGB values  ");
-        m_dither->setFontSize(14*m_GUIScaleFactor);
-        m_drawGrid->setFontSize(14*m_GUIScaleFactor);
-        m_drawValues->setFontSize(14*m_GUIScaleFactor);
         m_dither->setChecked(true);
         m_drawGrid->setChecked(true);
         m_drawValues->setChecked(true);
@@ -406,7 +392,7 @@ void HDRViewScreen::repopulateLayerList()
         Button *b = new Button(m_layerListWidget, shortname);
         b->setFlags(Button::RadioButton);
         b->setFixedSize(Vector2i(b->width(),22*m_GUIScaleFactor));
-        b->setFontSize(14*m_GUIScaleFactor);
+        // b->setFontSize(14*m_GUIScaleFactor);
         b->setCallback([&, index]
             {
                 setSelectedLayer(index);
@@ -602,7 +588,7 @@ void HDRViewScreen::performLayout()
     m_layersPanel->setSize(m_layersPanel->preferredSize(mNVGContext));
 
     // put the status bar full-width at the bottom
-    m_statusBar->setSize(Vector2i(width(), 18*m_GUIScaleFactor));
+    m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)*m_GUIScaleFactor));
     m_statusBar->setPosition(Vector2i(0, height()-m_statusBar->height()));
 
     int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
