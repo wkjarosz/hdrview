@@ -64,6 +64,8 @@ private:
     Vector2i imageToScreen(const Vector2i & pixel) const;
     void updateZoomLabel();
 
+    int m_GUIScaleFactor = 1;
+
     FullScreenDitherer m_ditherer;
     vector<ImageQuad*> m_images;
     int m_current = -1;
