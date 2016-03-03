@@ -10,6 +10,7 @@ On Linux and MacOS, compiling should be as simple as
     git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd hdrview
     mkdir build
+    cd build
     cmake-gui ../
     make -j 4
 
