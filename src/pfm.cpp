@@ -11,6 +11,7 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 {
 	float * data = nullptr;
 	FILE *f = 0;
+	int numInputsRead = 0;
 
 	try
 	{
@@ -20,7 +21,10 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 			throw runtime_error("load_pfm: Error opening");
 
 		char buffer[1024];
-		fscanf(f, "%s\n", buffer);
+		numInputsRead = fscanf(f, "%s\n", buffer);
+		if (numInputsRead != 1)
+			throw runtime_error("load_pfm: Could not read number of channels in header");
+
 	    if (strcmp(buffer, "Pf") == 0)
 	        *numChannels = 1;
 	    else if (strcmp(buffer, "PF") == 0)
@@ -29,24 +33,27 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 			throw runtime_error("load_pfm: Cannot deduce number of channels from header");
 
 
-		fscanf(f, "%d%d", width, height);
-		if (*width <= 0 || *height <= 0)
+		numInputsRead = fscanf(f, "%d%d", width, height);
+		if (numInputsRead != 2 || *width <= 0 || *height <= 0)
 	    	throw runtime_error("load_pfm: Invalid image width or height");
 
 		float scale;
-		fscanf(f, "%f", &scale);
-		if (scale > 0.0f)
-	    	throw runtime_error("loadPFM: Big-Endian files not supported");
+		numInputsRead = fscanf(f, "%f", &scale);
+		if (numInputsRead != 1 || scale > 0.0f)
+	    	throw runtime_error("loadPFM: Invalid file endianness. Big-Endian files not supported");
 
 		data = new float[(*width) * (*height) * 3];
 
-		fread(data, 1, 1, f);
-		fread(data, sizeof(float), (*width) * (*height) * (*numChannels), f);
+		if (fread(data, 1, 1, f) != 1)
+			throw runtime_error("load_pfm: Unknown error");
+		size_t numFloats = (*width) * (*height) * (*numChannels);
+		if (fread(data, sizeof(float), numFloats, f) != numFloats)
+			throw runtime_error("load_pfm: Could not read all pixel data");
 
 		// multiply data by scale factor
 		scale = fabsf(scale);
 		if (scale != 1.f)
-	        for (int i = 0; i < (*width) * (*height) * (*numChannels); ++i)
+	        for (size_t i = 0; i < numFloats; ++i)
 	            data[i] *= scale;
 
 		fclose(f);
