@@ -10,6 +10,7 @@ On Linux and MacOS, compiling should be as simple as
     git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd hdrview
     mkdir build
+    cd build
     cmake-gui ../
     make -j 4
 
@@ -18,7 +19,7 @@ On Windows, open the generated file ``HDRView.sln`` after step 4 and proceed bui
 
 ## Usage
 
-Run ``./HDRView --help`` to see command-line usage, or run ``./HDRView`` and hit the ``h`` button to see a list of keyboard shortcuts in the application.
+Run ``./hdrview --help`` to see command-line usage, or run ``./hdrview `` and hit the ``h`` button to see a list of keyboard shortcuts in the application.
 
 ## License
 
