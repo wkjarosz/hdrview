@@ -17,7 +17,7 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 		f = fopen(filename, "rb");
 
 		if (!f)
-			throw runtime_error("load_pfm: Error opening");
+			throw std::runtime_error("load_pfm: Error opening");
 
 		char buffer[1024];
 		fscanf(f, "%s\n", buffer);
@@ -26,17 +26,17 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 	    else if (strcmp(buffer, "PF") == 0)
 	        *numChannels = 3;
 	    else
-			throw runtime_error("load_pfm: Cannot deduce number of channels from header");
+			throw std::runtime_error("load_pfm: Cannot deduce number of channels from header");
 
 
 		fscanf(f, "%d%d", width, height);
 		if (*width <= 0 || *height <= 0)
-	    	throw runtime_error("load_pfm: Invalid image width or height");
+	    	throw std::runtime_error("load_pfm: Invalid image width or height");
 
 		float scale;
 		fscanf(f, "%f", &scale);
 		if (scale > 0.0f)
-	    	throw runtime_error("loadPFM: Big-Endian files not supported");
+	    	throw std::runtime_error("loadPFM: Big-Endian files not supported");
 
 		data = new float[(*width) * (*height) * 3];
 
@@ -52,11 +52,11 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 		fclose(f);
 		return data;
 	}
-	catch (const runtime_error & e)
+	catch (const std::runtime_error & e)
 	{
 		fclose(f);
 		delete [] data;
-		throw runtime_error(string(e.what()) + " in file '" + filename + "'");
+		throw std::runtime_error(string(e.what()) + " in file '" + filename + "'");
 	}
 }
 
