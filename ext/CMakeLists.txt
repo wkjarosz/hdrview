@@ -151,3 +151,7 @@ set(CompilerFlags
 foreach(CompilerFlag ${CompilerFlags})
   set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)
 endforeach()
+
+if (WIN32)
+    add_dependencies(IlmImf zlibstatic)
+endif()
