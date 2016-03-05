@@ -11,7 +11,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     m_GUIScaleFactor(1),
     m_exposure(exposure), m_gamma(gamma)
 {
-    setBackground(Vector3f(0.1, 0.1, 0.1));
+    setBackground(Vector3f(0.1f, 0.1f, 0.1f));
     Theme * scaledTheme = new Theme(mNVGContext);
     scaledTheme->mStandardFontSize                 = 16*m_GUIScaleFactor;
     scaledTheme->mButtonFontSize                   = 15*m_GUIScaleFactor;
@@ -169,7 +169,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             performLayout();
         });
 
-        Label * exposureLabel = new Label(m_controlPanel, "Exposure", "sans-bold");
+        new Label(m_controlPanel, "Exposure", "sans-bold");
         m_exposureSlider = new Slider(m_controlPanel);
         m_exposureTextBox = new FloatBox<float>(m_controlPanel, m_exposure);
 
@@ -339,7 +339,7 @@ void HDRViewScreen::closeImage(int index)
         if (index < m_current)
             setSelectedLayer(m_current-1);
         else
-            setSelectedLayer(m_current >= int(m_images.size()) ? m_images.size()-1 : m_current);
+            setSelectedLayer(m_current >= int(m_images.size()) ? int(m_images.size()-1) : m_current);
         if (m_closeButton) m_closeButton->setEnabled(m_images.size() > 0);
     }
 }
@@ -437,7 +437,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
     
     repopulateLayerList();
 
-    setSelectedLayer(m_images.size()-1);
+    setSelectedLayer(int(m_images.size()-1));
 
     if (numErrors)
     {
@@ -469,7 +469,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_ESCAPE:
         {
             auto dlg = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!", "Do you really want to quit?", "Yes", "No", true);
-            dlg->setCallback([this](int result) {this->setVisible(result);});
+            dlg->setCallback([this](int result) {this->setVisible(result != 0);});
             return true;
         }
         case GLFW_KEY_EQUAL:
@@ -500,7 +500,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             {
                 m_gamma -= 0.02f;
                 if (m_gamma <= 0.0f)
-                    m_gamma = 0.02;
+                    m_gamma = 0.02f;
             }
             m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.02f));
             m_gammaTextBox->setValue(m_gamma);
@@ -551,7 +551,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             break;
 
         case GLFW_KEY_PAGE_UP:
-            setSelectedLayer((m_current-1 < 0) ? m_images.size()-1 : (m_current-1) % int(m_images.size()));
+            setSelectedLayer((m_current-1 < 0) ? int(m_images.size()-1) : (m_current-1) % int(m_images.size()));
             break;
 
         case GLFW_KEY_1:
@@ -811,7 +811,7 @@ HDRViewScreen::drawPixelLabels() const
 
             drawText(imageToScreen(Vector2i(i,j)), buf,
                      luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f),
-                     m_zoomf/32.0f * 10, m_zoomf);
+                     int(m_zoomf/32.0f * 10), int(m_zoomf));
         }
     }
 }
@@ -825,17 +825,17 @@ HDRViewScreen::drawText(const Vector2i & pos,
                               int fixedWidth) const
 {
     nvgFontFace(mNVGContext, "sans");
-    nvgFontSize(mNVGContext, fontSize);
+    nvgFontSize(mNVGContext, (float) fontSize);
     nvgFillColor(mNVGContext, color);
     if (fixedWidth > 0)
     {
         nvgTextAlign(mNVGContext, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-        nvgTextBox(mNVGContext, pos.x(), pos.y(), fixedWidth, text.c_str(), nullptr);
+        nvgTextBox(mNVGContext, (float) pos.x(), (float) pos.y(), (float) fixedWidth, text.c_str(), nullptr);
     }
     else
     {
         nvgTextAlign(mNVGContext, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-        nvgText(mNVGContext, pos.x(), pos.y() + fontSize, text.c_str(), nullptr);
+        nvgText(mNVGContext, (float) pos.x(), (float) pos.y() + fontSize, text.c_str(), nullptr);
     }
 }
 

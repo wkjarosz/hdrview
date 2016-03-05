@@ -31,7 +31,7 @@ int main(int argc, char **argv)
         {
             if (strcmp("--gamma", argv[i]) == 0 || strcmp("-g", argv[i]) == 0)
             {
-                gamma = atof(argv[++i]);
+                gamma = (float) atof(argv[++i]);
                 if (gamma < 0.f)
                     gamma = .1f;
                 cout << "Gamma correction with g=" << gamma << endl;
@@ -42,7 +42,7 @@ int main(int argc, char **argv)
             }
             else if (strcmp("--exposure", argv[i]) == 0 || strcmp("-e", argv[i]) == 0)
             {
-                exposure = atof(argv[++i]);
+                exposure = (float) atof(argv[++i]);
                 cout << "Intensity scale " << powf(2.0f, exposure) << endl;
 #if defined(__APPLE__)
             }
