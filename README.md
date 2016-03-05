@@ -1,4 +1,4 @@
-[![Ubuntu build status](https://semaphoreci.com/api/v1/projects/2a0b22e4-2173-4df3-b3ee-2a4db2a632e3/721754/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
+[![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/master/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
 
 [![Windows build status](https://ci.appveyor.com/api/projects/status/tyjo3acimqn28da2?svg=true&passingText=Windows%20build%20-%20OK&failingText=Windows%20build%20-%20Fails&pendingText=Windows%20build%20-%20Pending)](https://ci.appveyor.com/project/wkjarosz/hdrview)
 
