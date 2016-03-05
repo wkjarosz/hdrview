@@ -86,7 +86,9 @@ if (WIN32)
   add_subdirectory(zlib)
 
   set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
-  set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIGURATION>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+  set(ZLIB_LIBRARY
+		optimized "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstatic.lib"
+        debug "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstaticd.lib" CACHE FILEPATH " " FORCE)
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
   include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
