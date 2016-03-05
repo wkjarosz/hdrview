@@ -64,12 +64,13 @@ bool FloatImage::load(const string & filename)
                                        data[4*(x + y*w) + 3]);
         return true;
     }
-    std::cout << "HI" << endl;
+
     // then try pfm
     float * pfm_data = nullptr;
     try
     {
-        int w = 0, h = 0;
+		w = 0;
+		h = 0;
         pfm_data = load_pfm(filename.c_str(), &w, &h, &n);
         if (pfm_data)
         {
@@ -137,8 +138,6 @@ bool FloatImage::load(const string & filename)
         resize(0,0);
         return false;
     }
-
-    return true;
 }
 
 bool FloatImage::save(const string & filename,
@@ -153,9 +152,9 @@ bool FloatImage::save(const string & filename,
               ::tolower);
 
     if (extension == "hdr")
-        return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) data());
+        return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) data()) != 0;
     else if (extension == "pfm")
-        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) data());
+        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) data()) != 0;
     else if (extension == "exr")
     {
         try
@@ -179,6 +178,7 @@ bool FloatImage::save(const string & filename,
                 file.setFrameBuffer(&pixels[0][0], 1, 0);
                 file.writePixels(1);
             }
+			return true;
         }
         catch (const exception &e)
         {
@@ -212,18 +212,18 @@ bool FloatImage::save(const string & filename,
                 // convert to [0-255] range
                 c = (c * 255.0f).max(0.0f).min(255.0f);
                 
-                data[3*x + 3*y*width() + 0] = (int) c[0];
-                data[3*x + 3*y*width() + 1] = (int) c[1];
-                data[3*x + 3*y*width() + 2] = (int) c[2];
+                data[3*x + 3*y*width() + 0] = (unsigned char) c[0];
+                data[3*x + 3*y*width() + 1] = (unsigned char) c[1];
+                data[3*x + 3*y*width() + 2] = (unsigned char) c[2];
             }
 
         if (extension == "png")
             return stbi_write_png(filename.c_str(), width(), height(),
-                                    3, &data[0], sizeof(unsigned char)*width()*3);
+                                  3, &data[0], sizeof(unsigned char)*width()*3) != 0;
         else if (extension == "bmp")
-            return stbi_write_bmp(filename.c_str(), width(), height(), 3, &data[0]);
+            return stbi_write_bmp(filename.c_str(), width(), height(), 3, &data[0]) != 0;
         else if (extension == "tga")
-            return stbi_write_tga(filename.c_str(), width(), height(), 3, &data[0]);
+            return stbi_write_tga(filename.c_str(), width(), height(), 3, &data[0]) != 0;
         else
             throw runtime_error("Could not determine desired file type from extension.");
     }

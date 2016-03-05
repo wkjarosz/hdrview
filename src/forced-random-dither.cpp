@@ -1,5 +1,11 @@
 /*!
-    force-random-dither.cpp -- Generate a dither matrix using the force-random-dither method
+    force-random-dither.cpp -- Generate a dither matrix using the force-random-dither method from:
+
+	W. Purgathofer, R. F. Tobler and M. Geiler.
+	"Forced random dithering: improved threshold matrices for ordered dithering"
+	Image Processing, 1994. Proceedings. ICIP-94., IEEE International Conference,
+	Austin, TX, 1994, pp. 1032-1035 vol.2.
+	doi: 10.1109/ICIP.1994.413512
 
     \author Wojciech Jarosz
 
@@ -39,7 +45,7 @@ double force(double r)
 	return exp(-sqrt(2*r));
 }
 
-int main(int argc, char **argv)
+int main(int, char **)
 {
 	srand(unsigned ( std::time(0) ) );
 

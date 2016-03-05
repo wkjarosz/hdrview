@@ -36,8 +36,8 @@ public:
     }
     //@}
 
-    int width() const {return rows();}
-    int height() const {return cols();}
+    int width() const {return (int)rows();}
+    int height() const {return (int)cols();}
 
     bool load(const std::string & filename);
     bool save(const std::string & filename,
