@@ -24,6 +24,7 @@
 #include "stb_image_write.h"
 
 #include "pfm.h"
+#include "ppm.h"
 
 using namespace std;
 
@@ -52,27 +53,36 @@ bool FloatImage::load(const string & filename)
 {
     // try PNG, JPG, HDR, etc files first
     int n, w, h;
-    float * data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
-    if (data)
+    float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
+    if (float_data)
     {
         resize(w, h);
         for (int y = 0; y < h; ++y)
             for (int x = 0; x < w; ++x)
-                operator()(x,y) = Color4(data[4*(x + y*w) + 0],
-                                       data[4*(x + y*w) + 1],
-                                       data[4*(x + y*w) + 2],
-                                       data[4*(x + y*w) + 3]);
+                operator()(x,y) = Color4(float_data[4*(x + y*w) + 0],
+                                         float_data[4*(x + y*w) + 1],
+                                         float_data[4*(x + y*w) + 2],
+                                         float_data[4*(x + y*w) + 3]);
         return true;
     }
 
-    // then try pfm
-    float * pfm_data = nullptr;
+    // then try pfm/ppm
+    float_data = nullptr;
     try
     {
 		w = 0;
 		h = 0;
-        pfm_data = load_pfm(filename.c_str(), &w, &h, &n);
-        if (pfm_data)
+        try
+        {
+            float_data = load_pfm(filename.c_str(), &w, &h, &n);
+        }
+        catch (const exception &e)
+        {
+            delete [] float_data;
+            float_data = load_ppm(filename.c_str(), &w, &h, &n);
+        }
+        
+        if (float_data)
         {
             if (n == 3)
             {
@@ -81,26 +91,25 @@ bool FloatImage::load(const string & filename)
                 // convert 3-channel pfm data to 4-channel internal representation
                 for (int y = 0; y < h; ++y)
                     for (int x = 0; x < w; ++x)
-                        operator()(x,y) = Color4(pfm_data[3*(x + y*w) + 0],
-                                               pfm_data[3*(x + y*w) + 1],
-                                               pfm_data[3*(x + y*w) + 2],
-                                               1.0f);
+                        operator()(x,y) = Color4(float_data[3*(x + y*w) + 0],
+                                                 float_data[3*(x + y*w) + 1],
+                                                 float_data[3*(x + y*w) + 2],
+                                                 1.0f);
 
-                delete [] pfm_data;
+                delete [] float_data;
                 return true;
             }
             else
-                throw runtime_error("Unsupported number of channels in PFM");
+                throw runtime_error("Unsupported number of channels in PPM/PFM");
         }
     }
     catch (const exception &e)
     {
-        delete [] pfm_data;
+        delete [] float_data;
         resize(0,0);
         cerr << e.what() << endl;
     }
 
-    std::cout << "HI2" << endl;
     // finally try exrs
     try
     {
@@ -217,7 +226,9 @@ bool FloatImage::save(const string & filename,
                 data[3*x + 3*y*width() + 2] = (unsigned char) c[2];
             }
 
-        if (extension == "png")
+        if (extension == "ppm")
+            return write_ppm(filename.c_str(), width(), height(), 3, &data[0]);
+        else if (extension == "png")
             return stbi_write_png(filename.c_str(), width(), height(),
                                   3, &data[0], sizeof(unsigned char)*width()*3) != 0;
         else if (extension == "bmp")

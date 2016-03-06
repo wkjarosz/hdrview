@@ -25,6 +25,8 @@ add_executable(hdrview #MACOSX_BUNDLE
   src/ImageQuad.h
   src/pfm.h
   src/pfm.cpp
+  src/ppm.h
+  src/ppm.cpp
   src/stb_image.h
   src/stb_image_write.h
   src/HDRViewer.h

@@ -1,3 +1,11 @@
+/*!
+    pfm.cpp -- Routines to read and write a PFM images
+
+    \author Wojciech Jarosz
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
 #include "pfm.h"
 #include <stdio.h>
 #include <string.h>
@@ -40,7 +48,7 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 		float scale;
 		numInputsRead = fscanf(f, "%f", &scale);
 		if (numInputsRead != 1 || scale > 0.0f)
-	    	throw runtime_error("loadPFM: Invalid file endianness. Big-Endian files not supported");
+	    	throw runtime_error("load_pfm: Invalid file endianness. Big-Endian files not supported");
 
 		data = new float[(*width) * (*height) * 3];
 

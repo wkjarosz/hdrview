@@ -79,6 +79,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
                     {"EXR", "OpenEXR image"},
                     {"png", "Portable Network Graphic"},
                     {"pfm", "Portable Float Map"},
+                    {"ppm", "Portable PixMap"},
                     {"jpg", "Jpeg image"},
                     {"tga", "Targa image"},
                     {"bmp", "Windows Bitmap image"},
@@ -102,6 +103,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
                 {
                     {"png", "Portable Network Graphic"},
                     {"pfm", "Portable Float Map"},
+                    {"ppm", "Portable PixMap"},
                     {"tga", "Targa image"},
                     {"bmp", "Windows Bitmap image"},
                     {"hdr", "Radiance rgbE format"},
