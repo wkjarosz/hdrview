@@ -18,7 +18,7 @@ On Linux and MacOS, compiling should be as simple as
     cmake-gui ../
     make -j 4
 
-On Windows, open the generated file ``HDRView.sln`` after step 4 and proceed building as usual from within Visual Studio.
+On Windows, open the generated file ``HDRView.sln`` after step 5 and proceed building as usual from within Visual Studio.
 
 
 ## Usage
