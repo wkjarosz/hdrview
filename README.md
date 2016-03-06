@@ -29,7 +29,7 @@ Run ``./hdrview --help`` to see command-line usage, or run ``./hdrview `` and hi
 
 Copyright (c) Wojciech Jarosz
 
-3-clause BSD
+3-clause BSD. For details, see the ``LICENSE.txt`` file.
 
 hdrview uses Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
 
