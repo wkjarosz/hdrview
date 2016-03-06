@@ -76,7 +76,7 @@ bool FloatImage::load(const string & filename)
         {
             float_data = load_pfm(filename.c_str(), &w, &h, &n);
         }
-        catch (const exception &e)
+        catch (...)
         {
             delete [] float_data;
             float_data = load_ppm(filename.c_str(), &w, &h, &n);

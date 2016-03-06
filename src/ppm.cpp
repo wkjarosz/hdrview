@@ -33,6 +33,7 @@ float * load_ppm(const char * filename, int * width, int * height, int * numChan
     FILE *infile = 0;
     float * img = 0;
     int colors;
+    int numInputsRead = 0;
     float invColors;
     char buffer[256];
     RGB *buf = 0;
@@ -53,17 +54,21 @@ float * load_ppm(const char * filename, int * width, int * height, int * numChan
         do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
     
         // read image size
-        sscanf(buffer, "%d %d", width, height);
+        numInputsRead = sscanf(buffer, "%d %d", width, height);
+        if (numInputsRead != 2)
+            throw runtime_error("could not read number of channels in header.");
         
         // skip comments
         do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
     
         // read maximum pixel value (usually 255)
-        sscanf (buffer, "%d", &colors);
+        numInputsRead = sscanf(buffer, "%d", &colors);
+        if (numInputsRead != 1)
+            throw runtime_error("could not read max color value.");
         invColors = 1.0f/colors;
     
         if (colors != 255)
-            throw std::runtime_error("maximum pixel value must be 255.");
+            throw std::runtime_error("max color value must be 255.");
     
         img = new float [*width * *height * 3];
     
