@@ -1,9 +1,9 @@
-Ubuntu build status: [![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/master/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
-
-Windows build status: [![Windows build status](https://ci.appveyor.com/api/projects/status/tyjo3acimqn28da2?svg=true)](https://ci.appveyor.com/project/wkjarosz/hdrview)
-
 # HDRView
-This repository contains a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, and PSD images and writing EXR, HDR, PNG, TGA, and BMP images.
+
+[![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/master/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
+[![Windows build status](https://ci.appveyor.com/api/projects/status/tyjo3acimqn28da2?svg=true)](https://ci.appveyor.com/project/wkjarosz/hdrview)
+
+HDRView a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, and PSD images and writing EXR, HDR, PNG, TGA, and BMP images.
 
 ## Compiling
 
@@ -27,8 +27,12 @@ Run ``./hdrview --help`` to see command-line usage, or run ``./hdrview `` and hi
 
 ## License
 
+Copyright (c) Wojciech Jarosz
+
 3-clause BSD
 
-``hdrview`` uses ``OpenEXR`` (http://www.openexr.com) which is licensed under a modified BSD license.
+hdrview uses Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
 
-``hdrview`` uses stb (https://github.com/nothings/stb), developed by Sean Barrett which is licensed under public domain.
+hdrview uses ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
+
+hdrview uses some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released under public domain.
