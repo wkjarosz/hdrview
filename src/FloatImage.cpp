@@ -23,19 +23,26 @@
 #define STB_IMAGE_STATIC
 
 // these pragmas ignore warnings about unused static functions
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#elif defined(__GNUC__) || defined(__GNUG__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wunknown-pragmas"
+#elif defined(_MSC_VER)
 #pragma warning (push, 0)
+#endif
 
 #include "stb_image.h"
 
-#pragma warning (pop)
-#pragma GCC diagnostic pop
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#elif defined(__GNUC__) || defined(__GNUG__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning (pop)
+#endif
+
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
