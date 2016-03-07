@@ -17,8 +17,25 @@
 #include <ImfStringAttribute.h>
 #include <half.h>
 
-// #define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+
+// since NanoVG includes an old version of stb_image, we declare it static here
+#define STB_IMAGE_STATIC
+
+// these pragmas ignore warnings about unused static functions
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#pragma clang diagnostic ignored "-Wunknown-pragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
+#pragma warning (push, 0)
+
 #include "stb_image.h"
+
+#pragma warning (pop)
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -66,21 +83,12 @@ bool FloatImage::load(const string & filename)
         return true;
     }
 
-    // then try pfm/ppm
-    float_data = nullptr;
+    // then try pfm
     try
     {
 		w = 0;
 		h = 0;
-        try
-        {
-            float_data = load_pfm(filename.c_str(), &w, &h, &n);
-        }
-        catch (...)
-        {
-            delete [] float_data;
-            float_data = load_ppm(filename.c_str(), &w, &h, &n);
-        }
+        float_data = load_pfm(filename.c_str(), &w, &h, &n);
         
         if (float_data)
         {
