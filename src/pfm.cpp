@@ -12,6 +12,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
+#include <cstdint>
 
 using namespace std;
 
@@ -21,14 +22,18 @@ namespace
 
 float reinterpretAsHostEndian(float f, bool bigEndian)
 {
+	static_assert(sizeof(float) == sizeof(unsigned int), "Sizes must match");
+   
 	const unsigned char * uchar = (const unsigned char *) &f;
-	int i;
+	uint32_t i;
 	if (bigEndian)
 		i = (uchar[3]<<0) | (uchar[2]<<8) | (uchar[1]<<16) | (uchar[0]<<24);
 	else
 		i = (uchar[0]<<0) | (uchar[1]<<8) | (uchar[2]<<16) | (uchar[3]<<24);
 
-	return *(float*)&i;
+	float ret;
+	memcpy(&ret, &i, sizeof(float));
+	return ret;
 }
 
 } // end namespace
