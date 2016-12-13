@@ -5,6 +5,10 @@
 
 HDRView a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
+## Example screenshots
+![Screenshot](https://bitbucket.org/wkjarosz/hdrview/resources/screenshot1.png "Screenshot1")
+![Screenshot](https://bitbucket.org/wkjarosz/hdrview/resources/screenshot2.png "Screenshot2")
+
 ## Compiling
 
 Compiling from scratch requires CMake and a recent version of XCode on Mac, Visual Studio 2015 on Windows, and GCC on Linux.
