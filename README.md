@@ -10,6 +10,10 @@ HDRView supports loading several images and provides exposure and gamma/sRGB ton
 ![Screenshot](resources/screenshot1.png "Screenshot1")
 When sufficiently zoomed in, HDRView can overlay the pixel grid and numeric color values on each pixel to facilitate inspection.
 ![Screenshot](resources/screenshot2.png "Screenshot2")
+Displaying HDR images naively on a 24 bit display leads to visible banding in smooth gradients.
+![Screenshot](resources/screenshot2.png "Screenshot3")
+HDRView supports high-quality dithering (both when viewing and when saving to an LDR file) to reduce these artifacts.
+![Screenshot](resources/screenshot2.png "Screenshot4")
 
 ## Compiling
 

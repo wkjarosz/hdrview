@@ -18,9 +18,15 @@ include_directories(
   ${NANOGUI_INCLUDE_DIR}
 )
 
+# Resource file (icons etc.)
+set(EXTRA_SOURCE "")
+if (APPLE)
+  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.icns")
+endif()
+
 # The following lines build the main executable. If you add a source
 # code file to Nori, be sure to include it in this list.
-add_executable(hdrview #MACOSX_BUNDLE
+add_executable(HDRView MACOSX_BUNDLE
   src/ImageQuad.cpp
   src/ImageQuad.h
   src/pfm.h
@@ -37,12 +43,27 @@ add_executable(hdrview #MACOSX_BUNDLE
   src/FloatImage.h
   src/FloatImage.cpp
   src/main.cpp
+  ${EXTRA_SOURCE}
 )
+
+target_link_libraries(HDRView IlmImf nanogui ${NANOGUI_EXTRA_LIBS})
+set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
+
+if (APPLE)
+  # Build an application bundle on OSX
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
+  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+else()
+  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
+  set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
+endif()
 
 # The following lines build the warping test application
 add_executable(force-random-dither
   src/forced-random-dither.cpp
 )
 
-target_link_libraries(hdrview IlmImf nanogui ${NANOGUI_EXTRA_LIBS})
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})

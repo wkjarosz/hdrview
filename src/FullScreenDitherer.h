@@ -8,8 +8,8 @@
 #include "dither-matrix256.h"
 
 /*!
-    A class which draws a full-screen quad with a dither matrix
-    with values in the range [-0.5,0.5]/255.0
+    A simple utility class for uploading and binding the dither matrix to the
+    GPU.
 */
 class FullScreenDitherer
 {
