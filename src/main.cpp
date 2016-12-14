@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     vector<string> args;
     bool help = false;
     float gamma = 2.2f, exposure = 0.0f;
-    
+
 #if defined(__APPLE__)
     bool launched_from_finder = false;
 #endif

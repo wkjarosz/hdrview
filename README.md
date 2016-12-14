@@ -17,9 +17,9 @@ HDRView supports high-quality dithering (both when viewing and when saving to an
 
 ## Compiling
 
-Compiling from scratch requires CMake and a recent version of XCode on Mac, Visual Studio 2015 on Windows, and GCC on Linux.
+Compiling from scratch requires CMake and a recent version of XCode on macOS, Visual Studio 2015 on Windows, and GCC on Linux.
 
-On Linux and MacOS, compiling should be as simple as
+On Linux and macOS, compiling should be as simple as
 
     git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd hdrview
@@ -30,6 +30,12 @@ On Linux and MacOS, compiling should be as simple as
 
 On Windows, open the generated file ``HDRView.sln`` after step 5 and proceed building as usual from within Visual Studio.
 
+
+## Installing on macOS
+
+Compiling on macOS builds a mac bundle named ``HDRView`` which you can put into your ``/Applications/`` folder. If you'd like to easily launch HDRView also from the command-line, then you can add an alias to your ``.bash_profile``:
+
+    alias hdrview='/Applications/HDRView.app/Contents/MacOS/HDRView'
 
 ## Usage
 

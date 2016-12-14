@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 2.8.3)
 project(hdrview)
 
+# prevent glfw from changing the directory on macOS bundles
+SET(GLFW_USE_CHDIR OFF CACHE BOOL "Prevent glfwInit from chdir to Contents/Resources" FORCE)
+
 add_subdirectory(ext ext_build)
 
 include_directories(
