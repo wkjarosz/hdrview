@@ -486,6 +486,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             closeCurrentImage();
             return true;
         case GLFW_KEY_EQUAL:
+        case GLFW_KEY_KP_ADD:
         {
             if (m_zoom < 20) m_zoom++;
 
@@ -496,6 +497,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
         }
         case GLFW_KEY_MINUS:
+        case GLFW_KEY_KP_SUBTRACT:
         {
             if (m_zoom > -20) m_zoom--;
 
@@ -540,6 +542,14 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 
         case GLFW_KEY_SPACE:
             m_imagePan = Vector2f::Zero();
+            drawAll();
+            return true;
+
+        case GLFW_KEY_HOME:
+            m_imagePan = Vector2f::Zero();
+            m_zoom = 0;
+            m_zoomf = 1.0f;
+            updateZoomLabel();
             drawAll();
             return true;
 
