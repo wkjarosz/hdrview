@@ -76,7 +76,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         {
             string file = file_dialog(
                 {
-                    {"EXR", "OpenEXR image"},
+                    {"exr", "OpenEXR image"},
                     {"png", "Portable Network Graphic"},
                     {"pfm", "Portable Float Map"},
                     {"ppm", "Portable PixMap"},
