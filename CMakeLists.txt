@@ -180,7 +180,7 @@ if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
 endif()
 
-# The following lines build the warping test application
+
 add_executable(force-random-dither
   src/forced-random-dither.cpp
 )
