@@ -25,6 +25,8 @@ include_directories(
 set(EXTRA_SOURCE "")
 if (APPLE)
   set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.icns")
+elseif(WIN32)
+  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc")
 endif()
 
 # The following lines build the main executable. If you add a source
