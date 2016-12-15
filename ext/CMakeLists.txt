@@ -107,9 +107,9 @@ set(NANOGUI_BUILD_EXAMPLE OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_SHARED  OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_PYTHON  OFF CACHE BOOL " " FORCE)
 add_subdirectory(nanogui)
-set_property(TARGET glfw glfw_objects bin2c nanogui PROPERTY FOLDER "dependencies")
+set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
-set(OPENEXR_INCLUDE_DIRS 
+set(OPENEXR_INCLUDE_DIRS
   ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Imath
   ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Iex
   ${CMAKE_CURRENT_SOURCE_DIR}/openexr/IlmBase/Half

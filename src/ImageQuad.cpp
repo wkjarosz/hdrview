@@ -128,8 +128,8 @@ void ImageQuad::draw(const Matrix4f & mvp,
         m_shader->setUniform("channels", channels);
         m_shader->setUniform("source", 0);
         m_shader->setUniform("dither_texture", 1);
-        m_shader->setUniform("dither", dither);
-        m_shader->setUniform("sRGB", sRGB);
+        m_shader->setUniform("dither", (int)dither);
+        m_shader->setUniform("sRGB", (int)sRGB);
         m_shader->setUniform("modelViewProj", mvp);
         m_shader->drawIndexed(GL_TRIANGLES, 0, 2);
     }
