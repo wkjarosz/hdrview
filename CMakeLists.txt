@@ -75,7 +75,7 @@ if (WIN32)
     debug "${CMAKE_CURRENT_BINARY_DIR}/ext_build/zlib/$<CONFIG>/zlibstaticd.lib" CACHE FILEPATH " " FORCE)
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
-  include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+  include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/ext_build/zlib")
 endif()
 
 # Build OpenER
