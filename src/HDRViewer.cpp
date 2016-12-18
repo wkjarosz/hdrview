@@ -3,6 +3,8 @@
 */
 #include "HDRViewer.h"
 #include <iostream>
+#define TINYFILES_IMPL
+#include "tinyfiles.h"
 
 using namespace std;
 
@@ -424,24 +426,72 @@ void HDRViewScreen::repopulateLayerList()
 bool HDRViewScreen::dropEvent(const vector<string> &filenames)
 {
     size_t numErrors = 0;
-    vector<bool> loadedOK;
+    vector<pair<string, bool> > loadedOK;
     for (auto i : filenames)
     {
-        ImageQuad* image = new ImageQuad();
-        if (image->load(i.c_str()))
+        tfDIR dir;
+		if (tfDirOpen(&dir, i.c_str()))
         {
-            loadedOK.push_back(true);
-            image->init();
-            m_images.push_back(image);
-            printf("Loaded \"%s\" [%dx%d]\n", i.c_str(), image->width(), image->height());
+            // filename is actually a directory, traverse it
+    		while (dir.has_next)
+    		{
+    			tfFILE file;
+    			tfReadFile(&dir, &file);
+
+                if (file.is_reg)
+                {
+                    // only consider image files we support
+                    string ext = file.ext;
+                    transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                    if (ext != "exr" && ext != "png" && ext != "jpg" &&
+                        ext != "jpeg" && ext != "hdr" && ext != "pic" &&
+                        ext != "pfm" && ext != "ppm" && ext != "bmp" &&
+                        ext != "tga" && ext != "psd")
+                    {
+            			tfDirNext(&dir);
+                        continue;
+                    }
+
+                    ImageQuad* image = new ImageQuad();
+                    if (image->load(file.path))
+                    {
+                        loadedOK.push_back({file.path, true});
+                        image->init();
+                        m_images.push_back(image);
+                        printf("Loaded \"%s\" [%dx%d]\n", file.path,
+                               image->width(), image->height());
+                    }
+                    else
+                    {
+                        loadedOK.push_back({file.path, false});
+                        numErrors++;
+                        delete image;
+                    }
+                }
+    			tfDirNext(&dir);
+    		}
+
+    		tfDirClose(&dir);
         }
         else
         {
-            loadedOK.push_back(false);
-            numErrors++;
-            delete image;
+            ImageQuad* image = new ImageQuad();
+            if (image->load(i))
+            {
+                loadedOK.push_back({i, true});
+                image->init();
+                m_images.push_back(image);
+                printf("Loaded \"%s\" [%dx%d]\n", i.c_str(), image->width(), image->height());
+            }
+            else
+            {
+                loadedOK.push_back({i, false});
+                numErrors++;
+                delete image;
+            }
         }
     }
+
     if (m_closeButton)
         m_closeButton->setEnabled(m_images.size() > 0);
 
@@ -454,8 +504,8 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
         string badFiles;
         for (size_t i = 0; i < loadedOK.size(); ++i)
         {
-            if (!loadedOK[i])
-                badFiles += filenames[i] + "\n";
+            if (!loadedOK[i].second)
+                badFiles += loadedOK[i].first + "\n";
         }
         new MessageDialog(this, MessageDialog::Type::Warning, "Error",
                           "Could not load:\n " + badFiles);

@@ -127,6 +127,8 @@ include_directories(
     ${NANOGUI_EXTRA_INCS}
     # OpenEXR high dynamic range bitmap library
     ${OPENEXR_INCLUDE_DIRS}
+    # tinyfiles
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinyfiles
 )
 
 # Resource file (icons etc.)
