@@ -93,6 +93,7 @@ int tfDirOpen( tfDIR* dir, const char* path );
 #if TF_PLATFORM == TF_WINDOWS
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <Windows.h>
 
 	struct tfFILE
