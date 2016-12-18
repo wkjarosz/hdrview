@@ -92,6 +92,8 @@ int tfDirOpen( tfDIR* dir, const char* path );
 
 #if TF_PLATFORM == TF_WINDOWS
 
+#include <Windows.h>
+
 	struct tfFILE
 	{
 		char path[ TF_MAX_PATH ];
