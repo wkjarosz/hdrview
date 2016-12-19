@@ -129,6 +129,8 @@ include_directories(
     ${OPENEXR_INCLUDE_DIRS}
     # tinyfiles
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinyfiles
+    # tinydir
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinydir
 )
 
 # Resource file (icons etc.)

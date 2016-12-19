@@ -7,3 +7,6 @@
 [submodule "ext/zlib"]
 	path = ext/zlib
 	url = https://github.com/madler/zlib
+[submodule "ext/tinydir"]
+	path = ext/tinydir
+	url = https://github.com/cxong/tinydir.git

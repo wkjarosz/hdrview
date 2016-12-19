@@ -3,8 +3,7 @@
 */
 #include "HDRViewer.h"
 #include <iostream>
-#define TINYFILES_IMPL
-#include "tinyfiles.h"
+#include <tinydir.h>
 
 using namespace std;
 
@@ -429,26 +428,36 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
     vector<pair<string, bool> > loadedOK;
     for (auto i : filenames)
     {
-        tfDIR dir;
-		if (tfDirOpen(&dir, i.c_str()))
-        {
-            // filename is actually a directory, traverse it
-    		while (dir.has_next)
-    		{
-    			tfFILE file;
-    			tfReadFile(&dir, &file);
+        tinydir_dir dir;
+    	if (tinydir_open(&dir, i.c_str()) != -1)
+    	{
+            try
+            {
+                // filename is actually a directory, traverse it
+                printf("Loading images in \"%s\"...\n", dir.path);
+            	while (dir.has_next)
+            	{
+            		tinydir_file file;
+            		if (tinydir_readfile(&dir, &file) == -1)
+                        throw std::runtime_error("Error getting file");
 
-                if (file.is_reg)
-                {
+                    if (!file.is_reg)
+                    {
+                        if (tinydir_next(&dir) == -1)
+                            throw std::runtime_error("Error getting next file");
+                        continue;
+                    }
+
                     // only consider image files we support
-                    string ext = file.ext;
+                    string ext = file.extension;
                     transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                     if (ext != "exr" && ext != "png" && ext != "jpg" &&
                         ext != "jpeg" && ext != "hdr" && ext != "pic" &&
                         ext != "pfm" && ext != "ppm" && ext != "bmp" &&
                         ext != "tga" && ext != "psd")
                     {
-            			tfDirNext(&dir);
+                        if (tinydir_next(&dir) == -1)
+                            throw std::runtime_error("Error getting next file");
                         continue;
                     }
 
@@ -458,20 +467,26 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
                         loadedOK.push_back({file.path, true});
                         image->init();
                         m_images.push_back(image);
-                        printf("Loaded \"%s\" [%dx%d]\n", file.path,
+                        printf("Loaded \"%s\" [%dx%d]\n", file.name,
                                image->width(), image->height());
                     }
                     else
                     {
-                        loadedOK.push_back({file.path, false});
+                        loadedOK.push_back({file.name, false});
                         numErrors++;
                         delete image;
                     }
-                }
-    			tfDirNext(&dir);
-    		}
 
-    		tfDirClose(&dir);
+            		if (tinydir_next(&dir) == -1)
+                        throw std::runtime_error("Error getting next file");
+            	}
+
+                tinydir_close(&dir);
+            }
+            catch (std::exception & e)
+            {
+                cerr << "Error listing directory: (" << e.what() << ")." << endl;
+            }
         }
         else
         {
@@ -490,6 +505,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
                 delete image;
             }
         }
+        tinydir_close(&dir);
     }
 
     if (m_closeButton)
