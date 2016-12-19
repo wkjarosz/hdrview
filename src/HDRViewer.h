@@ -52,12 +52,12 @@ private:
         return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-currentImage()->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
                         int(m_imagePan[1] * m_zoomf) + int(-currentImage()->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
     }
-    
+
     void drawGrid(const Matrix4f & mvp) const;
     void drawPixelLabels() const;
     void drawText(const Vector2i & pos,
                   const std::string & text,
-                  const Color & col = Color(1.0f, 1.0f, 1.0f, 1.0f),      
+                  const Color & col = Color(1.0f, 1.0f, 1.0f, 1.0f),
                   int fontSize = 10,
                   int fixedWidth = 0) const;
     Vector2i screenToImage(const Vector2i & p) const;
@@ -69,7 +69,7 @@ private:
     FullScreenDitherer m_ditherer;
     vector<ImageQuad*> m_images;
     int m_current = -1;
-    
+
     float m_exposure = 0.f;
     float m_gamma = 2.2f;
     Vector3f m_channels = Vector3f(1.0f, 1.0f, 1.0f);

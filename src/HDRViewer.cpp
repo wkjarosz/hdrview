@@ -128,18 +128,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             }
         });
 
-        m_closeButton = new Button(m_layersPanel, "Close image", ENTYPO_ICON_SQUARED_MINUS);
+        m_closeButton = new Button(m_layersPanel, "Close image", ENTYPO_ICON_SQUARED_CROSS);
         m_closeButton->setBackgroundColor(Color(100, 0, 0, 75));
         m_closeButton->setTooltip("Close the currently selected image.");
         m_closeButton->setEnabled(m_images.size() > 0);
         m_closeButton->setCallback([&] { closeCurrentImage(); });
-
-        // Button * b0 = new Button(m_layersPanel->buttonPanel(), "", ENTYPO_ICON_CROSS);
-        // b0->setCallback([this]
-        //    {
-        //        this->m_layersPanel->setVisible(false);
-        //        this->m_layersButton->setPushed(false);
-        //    });
 
         new Label(m_layersPanel, "Opened images:", "sans-bold");
 
@@ -181,26 +174,28 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             performLayout();
         });
 
-        new Label(m_controlPanel, "Exposure", "sans-bold");
+        new Label(m_controlPanel, "EV", "sans-bold");
         m_exposureSlider = new Slider(m_controlPanel);
         m_exposureTextBox = new FloatBox<float>(m_controlPanel, m_exposure);
 
-        m_exposureTextBox->numberFormat("%6.2f");
+        m_exposureTextBox->numberFormat("%1.2f");
         m_exposureTextBox->setEditable(true);
-        m_exposureTextBox->setFixedWidth(40*m_GUIScaleFactor);
+        m_exposureTextBox->setFixedWidth(35*m_GUIScaleFactor);
         m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
         auto exposureTextBoxCB = [&](float value)
         {
             m_exposure = value;
-            m_exposureSlider->setValue(m_exposure / 20.0f + 0.5f);
+            m_exposureSlider->setValue(m_exposure);
         };
         m_exposureTextBox->setCallback(exposureTextBoxCB);
         m_exposureSlider->setCallback([&](float value)
         {
-            m_exposure = (value - 0.5f) * 20;
+            m_exposure = round(4*value) / 4.0f;
             m_exposureTextBox->setValue(m_exposure);
+            m_exposureSlider->setValue(m_exposure);
         });
-        m_exposureSlider->setFixedWidth(40*m_GUIScaleFactor);
+        m_exposureSlider->setFixedWidth(100*m_GUIScaleFactor);
+        m_exposureSlider->setRange({-9.0f,9.0f});
         m_exposureTextBox->setValue(m_exposure);
         exposureTextBoxCB(m_exposure);
 
@@ -212,21 +207,23 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_gammaTextBox = new FloatBox<float>(m_controlPanel);
 
         m_gammaTextBox->setEditable(true);
-        m_gammaTextBox->numberFormat("%6.3f");
+        m_gammaTextBox->numberFormat("%1.3f");
         m_gammaTextBox->setFixedWidth(40*m_GUIScaleFactor);
         m_gammaTextBox->setAlignment(TextBox::Alignment::Right);
         auto gammaTextBoxCB = [&](float value)
         {
             m_gamma = value;
-            m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.02f));
+            m_gammaSlider->setValue(m_gamma);
         };
         m_gammaTextBox->setCallback(gammaTextBoxCB);
         m_gammaSlider->setCallback([&](float value)
         {
-            m_gamma = 0.1f + value * (10.0f - 0.02f);
+            m_gamma = max(m_gammaSlider->range().first, round(10*value) / 10.0f);
             m_gammaTextBox->setValue(m_gamma);
+            m_gammaSlider->setValue(m_gamma);
         });
-        m_gammaSlider->setFixedWidth(40*m_GUIScaleFactor);
+        m_gammaSlider->setFixedWidth(100*m_GUIScaleFactor);
+        m_gammaSlider->setRange({0.02f,9.0f});
         m_gammaTextBox->setValue(m_gamma);
         gammaTextBoxCB(m_gamma);
 
@@ -255,11 +252,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         {
             {"h",       "Toggle this help panel"},
             {"l",       "Toggle the layer panel"},
-            {"r",       "Reload image"},
             {"-/+",     "Zoom out/in"},
             {"[SCROLL]","Pan the image"},
             {"g/G",     "Decrease/Increase gamma"},
             {"e/E",     "Decrease/Increase exposure"},
+            {"d",       "Toggle dither"},
             {"f",       "Flip image about horizontal axis"},
             {"m",       "Mirror image about vertical axis"},
             {"n",       "Negate image"},
@@ -399,11 +396,16 @@ void HDRViewScreen::repopulateLayerList()
     for (const auto img : m_images)
     {
         size_t start = img->filename().rfind("/")+1;
-        string shortname = img->filename().substr(start == string::npos ? 0 : start);
+        string filename = img->filename().substr(start == string::npos ? 0 : start);
+        string shortname = filename;
+        if (filename.size() > 8+8+3+4)
+            shortname = filename.substr(0, 8) + "..." + filename.substr(filename.size()-12);
 
         Button *b = new Button(m_layerListWidget, shortname);
         b->setFlags(Button::RadioButton);
-        b->setFixedSize(Vector2i(b->width(),22*m_GUIScaleFactor));
+        b->setTooltip(filename);
+        // b->setFixedSize(Vector2i(b->width(),22*m_GUIScaleFactor));
+        b->setFixedHeight(22*m_GUIScaleFactor);
         // b->setFontSize(14*m_GUIScaleFactor);
         b->setCallback([&, index]
             {
@@ -552,30 +554,22 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_BACKSPACE:
             closeCurrentImage();
             return true;
-        case GLFW_KEY_EQUAL:
+
+        case '=':
         case GLFW_KEY_KP_ADD:
-        {
             if (m_zoom < 20) m_zoom++;
-
             m_zoomf = powf(2.0f, m_zoom/2.0f);
-
             updateZoomLabel();
-
             return true;
-        }
-        case GLFW_KEY_MINUS:
+
+        case '-':
         case GLFW_KEY_KP_SUBTRACT:
-        {
             if (m_zoom > -20) m_zoom--;
-
             m_zoomf = powf(2.0f, m_zoom/2.0f);
-
             updateZoomLabel();
-
             return true;
-        }
-        case GLFW_KEY_G:
-        {
+
+        case 'G':
             if (modifiers & GLFW_MOD_SHIFT)
                 m_gamma += 0.02f;
             else
@@ -584,30 +578,32 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
                 if (m_gamma <= 0.0f)
                     m_gamma = 0.02f;
             }
-            m_gammaSlider->setValue((m_gamma - 0.1f) / (10.0f-0.02f));
+            m_gammaSlider->setValue(m_gamma);
             m_gammaTextBox->setValue(m_gamma);
             return true;
-        }
-        case GLFW_KEY_E:
-        {
+
+        case 'E':
             if (modifiers & GLFW_MOD_SHIFT)
                 m_exposure += 0.25f;
             else
                 m_exposure -= 0.25f;
-            m_exposureSlider->setValue(m_exposure / 20.0f + 0.5f);
+            m_exposureSlider->setValue(m_exposure);
             m_exposureTextBox->setValue(m_exposure);
             return true;
-        }
 
-        case GLFW_KEY_F:
+        case 'D':
+            m_dither->setChecked(!m_dither->checked());
+            return true;
+
+        case 'F':
             m_flipV = !m_flipV;
             return true;
 
-        case GLFW_KEY_M:
+        case 'M':
             m_flipH = !m_flipH;
             return true;
 
-        case GLFW_KEY_SPACE:
+        case ' ':
             m_imagePan = Vector2f::Zero();
             drawAll();
             return true;
@@ -620,17 +616,17 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             drawAll();
             return true;
 
-        case GLFW_KEY_T:
+        case 'T':
             m_controlPanel->setVisible(!m_controlPanel->visible());
             return true;
 
-        case GLFW_KEY_H:
+        case 'H':
             m_helpDialog->setVisible(!m_helpDialog->visible());
             m_helpDialog->center();
             m_helpButton->setPushed(m_helpDialog->visible());
             return true;
 
-        case GLFW_KEY_L:
+        case 'L':
             m_layersPanel->setVisible(!m_layersPanel->visible());
             m_layersButton->setPushed(m_layersPanel->visible());
             return true;
@@ -646,16 +642,16 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             setSelectedLayer((m_current-1 < 0) ? int(m_images.size()-1) : (m_current-1) % int(m_images.size()));
             break;
 
-        case GLFW_KEY_1:
+        case '1':
             m_channels = Vector3f(1.0f, 0.0f, 0.0f);
             return true;
-        case GLFW_KEY_2:
+        case '2':
             m_channels = Vector3f(0.0f, 1.0f, 0.0f);
             return true;
-        case GLFW_KEY_3:
+        case '3':
             m_channels = Vector3f(0.0f, 0.0f, 1.0f);
             return true;
-        case GLFW_KEY_4:
+        case '4':
             m_channels = Vector3f(1.0f, 1.0f, 1.0f);
             return true;
 
