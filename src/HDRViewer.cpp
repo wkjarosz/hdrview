@@ -824,7 +824,7 @@ void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
         "#version 330\n"
         "out vec4 out_color;\n"
         "void main() {\n"
-        "    out_color = vec4(1, 1, 1, 1);\n"
+        "    out_color = vec4(0.5, 0.5, 0.5, 0.5);\n"
         "}"
     );
 
