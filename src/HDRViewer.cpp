@@ -3,6 +3,7 @@
 */
 #include "HDRViewer.h"
 #include <iostream>
+#define NOMINMAX
 #include <tinydir.h>
 
 using namespace std;
