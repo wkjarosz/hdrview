@@ -8,5 +8,6 @@
 */
 #pragma once
 
+bool is_ppm(const char * filename);
 bool write_ppm(const char * filename, int width, int height, int numChannels, const unsigned char * data);
 float * load_ppm(const char * filename, int * width, int * height, int * numChannels);

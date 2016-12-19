@@ -75,6 +75,8 @@ float toSRGB(float value)
 
 bool FloatImage::load(const string & filename)
 {
+    string errors;
+
     // try PNG, JPG, HDR, etc files first
     int n, w, h;
     float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
@@ -89,14 +91,21 @@ bool FloatImage::load(const string & filename)
                                          float_data[4*(x + y*w) + 3]);
         return true;
     }
+    else
+    {
+        errors += string("\t") + stbi_failure_reason() + "\n";
+    }
 
-    // then try pfm
+    // then try pfm/ppm
     try
     {
 		w = 0;
 		h = 0;
-        float_data = load_pfm(filename.c_str(), &w, &h, &n);
-        
+        if (is_pfm(filename.c_str()))
+            float_data = load_pfm(filename.c_str(), &w, &h, &n);
+        else if (is_ppm(filename.c_str()))
+            float_data = load_ppm(filename.c_str(), &w, &h, &n);
+
         if (float_data)
         {
             if (n == 3)
@@ -115,14 +124,15 @@ bool FloatImage::load(const string & filename)
                 return true;
             }
             else
-                throw runtime_error("Unsupported number of channels in PPM/PFM");
+                throw runtime_error("Unsupported number of channels in PFM/PPM");
+            return true;
         }
     }
     catch (const exception &e)
     {
         delete [] float_data;
         resize(0,0);
-        cerr << e.what() << endl;
+        errors += string("\t") + e.what() + "\n";
     }
 
     // finally try exrs
@@ -130,7 +140,7 @@ bool FloatImage::load(const string & filename)
     {
         Imf::RgbaInputFile file(filename.c_str());
         Imath::Box2i dw = file.dataWindow();
-        
+
         w = dw.max.x - dw.min.x + 1;
         h = dw.max.y - dw.min.y + 1;
         Imf::Array2D<Imf::Rgba> pixels(1, w);
@@ -138,12 +148,12 @@ bool FloatImage::load(const string & filename)
         int y = dw.min.y;
         int row = 0;
         resize(w,h);
-        
+
         while (y <= dw.max.y)
         {
             file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, 0);
             file.readPixels(y, y);
-            
+
             // copy pixels over to the Image
             for (int i = 0; i < w; ++i)
             {
@@ -158,10 +168,13 @@ bool FloatImage::load(const string & filename)
     }
     catch (const exception &e)
     {
-        cerr << "ERROR: Unable to read image file \"" << filename << "\": " << e.what() << endl;
         resize(0,0);
-        return false;
+        errors += string("\t") + e.what() + "\n";
     }
+
+    cerr << "ERROR: Unable to read image file \"" << filename << "\": \n" << errors << endl;
+
+    return false;
 }
 
 bool FloatImage::save(const string & filename,
@@ -198,7 +211,7 @@ bool FloatImage::save(const string & filename,
                     p.b = c[2];
                     p.a = c[3];
                 }
-            
+
                 file.setFrameBuffer(&pixels[0][0], 1, 0);
                 file.writePixels(1);
             }
@@ -235,7 +248,7 @@ bool FloatImage::save(const string & filename,
 
                 // convert to [0-255] range
                 c = (c * 255.0f).max(0.0f).min(255.0f);
-                
+
                 data[3*x + 3*y*width() + 0] = (unsigned char) c[0];
                 data[3*x + 3*y*width() + 1] = (unsigned char) c[1];
                 data[3*x + 3*y*width() + 2] = (unsigned char) c[2];

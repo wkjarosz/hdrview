@@ -8,5 +8,6 @@
 */
 #pragma once
 
+bool is_pfm(const char * filename);
 bool write_pfm(const char * filename, int width, int height, int numChannels, const float * data);
 float * load_pfm(const char * filename, int * width, int * height, int * numChannels);

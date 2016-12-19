@@ -486,7 +486,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
 
                 tinydir_close(&dir);
             }
-            catch (std::exception & e)
+            catch (const exception & e)
             {
                 cerr << "Error listing directory: (" << e.what() << ")." << endl;
             }

@@ -23,7 +23,7 @@ namespace
 float reinterpretAsHostEndian(float f, bool bigEndian)
 {
 	static_assert(sizeof(float) == sizeof(unsigned int), "Sizes must match");
-   
+
 	const unsigned char * uchar = (const unsigned char *) &f;
 	uint32_t i;
 	if (bigEndian)
@@ -38,6 +38,45 @@ float reinterpretAsHostEndian(float f, bool bigEndian)
 
 } // end namespace
 
+bool is_pfm(const char * filename)
+{
+	FILE *f = 0;
+	int numInputsRead = 0;
+
+	try
+	{
+		f = fopen(filename, "rb");
+
+		if (!f)
+			throw runtime_error("load_pfm: Error opening");
+
+		char buffer[1024];
+		numInputsRead = fscanf(f, "%2s\n", buffer);
+		if (numInputsRead != 1)
+			throw runtime_error("load_pfm: Could not read number of channels in header");
+
+	    if (!(strcmp(buffer, "Pf") == 0 || strcmp(buffer, "PF") == 0))
+			throw runtime_error("load_pfm: Cannot deduce number of channels from header");
+
+		int width, height;
+		numInputsRead = fscanf(f, "%d%d", &width, &height);
+		if (numInputsRead != 2 || width <= 0 || height <= 0)
+	    	throw runtime_error("load_pfm: Invalid image width or height");
+
+		float scale;
+		numInputsRead = fscanf(f, "%f", &scale);
+		if (numInputsRead != 1)
+	    	throw runtime_error("load_pfm: Invalid file endianness. Big-Endian files not supported");
+
+		fclose(f);
+		return true;
+	}
+	catch (const runtime_error & e)
+	{
+		fclose(f);
+		return false;
+	}
+}
 
 float * load_pfm(const char * filename, int * width, int * height, int * numChannels)
 {
@@ -80,7 +119,7 @@ float * load_pfm(const char * filename, int * width, int * height, int * numChan
 
 		if (fread(data, 1, 1, f) != 1)
 			throw runtime_error("load_pfm: Unknown error");
-		
+
 		size_t numFloats = (*width) * (*height) * (*numChannels);
 		if (fread(data, sizeof(float), numFloats, f) != numFloats)
 			throw runtime_error("load_pfm: Could not read all pixel data");
