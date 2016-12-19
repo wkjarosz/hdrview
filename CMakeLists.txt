@@ -131,6 +131,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinyfiles
     # tinydir
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinydir
+    # stb
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/stb
 )
 
 # Resource file (icons etc.)
@@ -150,8 +152,6 @@ add_executable(HDRView MACOSX_BUNDLE
     src/pfm.cpp
     src/ppm.h
     src/ppm.cpp
-    src/stb_image.h
-    src/stb_image_write.h
     src/HDRViewer.h
     src/HDRViewer.cpp
     src/dither-matrix256.h
