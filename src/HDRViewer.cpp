@@ -71,7 +71,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
                                                  10*m_GUIScaleFactor));
         new Label(m_layersPanel, "File operations", "sans-bold");
 
-        Button *b = new Button(m_layersPanel, "Open image", ENTYPO_ICON_SQUARED_PLUS);
+        Widget *buttonRow = new Widget(m_layersPanel);
+        buttonRow->setLayout(new BoxLayout(Orientation::Horizontal,
+                                           Alignment::Fill, 0, 4));
+
+        Button *b = new Button(buttonRow, "Open", ENTYPO_ICON_FOLDER);
+        b->setFixedWidth(84);
         b->setBackgroundColor(Color(0, 100, 0, 75));
         b->setTooltip("Load an image and add it to the set of opened images.");
         b->setCallback([&]
@@ -94,10 +99,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
                 dropEvent({file});
         });
 
-        b = new Button(m_layersPanel, "Save image", ENTYPO_ICON_SAVE);
-        b->setBackgroundColor(Color(0, 0, 100, 75));
-        b->setTooltip("Save the image to disk.");
-        b->setCallback([&]
+        m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
+        m_saveButton->setEnabled(m_images.size() > 0);
+        m_saveButton->setFixedWidth(84);
+        m_saveButton->setBackgroundColor(Color(0, 0, 100, 75));
+        m_saveButton->setTooltip("Save the image to disk.");
+        m_saveButton->setCallback([&]
         {
             if (!currentImage())
                 return;
@@ -128,23 +135,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
             }
         });
 
-        m_closeButton = new Button(m_layersPanel, "Close image", ENTYPO_ICON_SQUARED_CROSS);
-        m_closeButton->setBackgroundColor(Color(100, 0, 0, 75));
-        m_closeButton->setTooltip("Close the currently selected image.");
-        m_closeButton->setEnabled(m_images.size() > 0);
-        m_closeButton->setCallback([&] { closeCurrentImage(); });
-
         new Label(m_layersPanel, "Opened images:", "sans-bold");
 
         m_vscrollContainer = new Widget(m_layersPanel);
         m_layerScrollPanel = new VScrollPanel(m_vscrollContainer);
-        m_layerListWidget = new Widget(m_layerScrollPanel);
-        m_layerListWidget->setId("layer list widget");
-        m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical,
-                                                   Alignment::Fill, 0,
-                                                   5*m_GUIScaleFactor));
-
-
     }
 
     dropEvent(args);
@@ -153,6 +147,18 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     // create top panel controls
     //
     {
+        Button *about = new Button(m_controlPanel, "", ENTYPO_ICON_INFO);
+        about->setFixedSize(Vector2i(25, 25));
+        about->setCallback([&]() {
+            auto dlg = new MessageDialog(
+                this, MessageDialog::Type::Information, "About HDRView",
+                "Copyright (c) Wojciech Jarosz\n\n"
+                "HDRView is a simple research-oriented viewer for examining and comparing high-dynamic range images.\n\n"
+                "HDRView is freely available under a 3-clause BSD license.");
+            performLayout();
+            dlg->center();
+        });
+
         m_helpButton = new Button(m_controlPanel, "", ENTYPO_ICON_CIRCLED_HELP);
         m_helpButton->setTooltip("Bring up the help dialog.");
         m_helpButton->setFlags(Button::ToggleButton);
@@ -250,28 +256,29 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
     {
         vector<pair<string, string> > helpStrings =
         {
-            {"h",       "Toggle this help panel"},
-            {"l",       "Toggle the layer panel"},
-            {"-/+",     "Zoom out/in"},
-            {"[SCROLL]","Pan the image"},
-            {"g/G",     "Decrease/Increase gamma"},
-            {"e/E",     "Decrease/Increase exposure"},
-            {"d",       "Toggle dither"},
-            {"f",       "Flip image about horizontal axis"},
-            {"m",       "Mirror image about vertical axis"},
-            {"n",       "Negate image"},
-            {"1/2/3/4", "View the R/G/B/RGB channels"},
-            {"[SPACE]", "Re-center view"},
-            {"[PG_UP]", "Previous image"},
-            {"[PG_DN]", "Next image"}
+            {"h",           "Toggle this help panel"},
+            {"l",           "Toggle the layer panel"},
+            {"t",           "Toggle the toolbar"},
+            {"-/+",         "Zoom out/in"},
+            {"[SCROLL]",    "Pan the image"},
+            {"[SPACE]",     "Re-center view"},
+            {"[HOME]",      "Re-center and reset zoom"},
+            {"g/G",         "Decrease/Increase gamma"},
+            {"e/E",         "Decrease/Increase exposure"},
+            {"d",           "Toggle dither"},
+            {"f",           "Flip image about horizontal axis"},
+            {"m",           "Mirror image about vertical axis"},
+            {"1/2/3/4",     "View the R/G/B/RGB channels"},
+            {"[DELETE]",    "Close current image"},
+            {"[UP/PG_UP]",  "Previous image"},
+            {"[DN/PG_DN]",  "Next image"}
         };
 
         m_helpDialog = new Window(this, "Help");
         m_helpDialog->setId("help dialog");
         // m_helpDialog->setTheme(thm);
         m_helpDialog->setVisible(false);
-        GridLayout *layout = new GridLayout(Orientation::Horizontal,
-                                            2*m_GUIScaleFactor,
+        GridLayout *layout = new GridLayout(Orientation::Horizontal, 2,
                                             Alignment::Middle,
                                             15*m_GUIScaleFactor,
                                             5*m_GUIScaleFactor);
@@ -349,7 +356,7 @@ void HDRViewScreen::closeImage(int index)
             setSelectedLayer(m_current-1);
         else
             setSelectedLayer(m_current >= int(m_images.size()) ? int(m_images.size()-1) : m_current);
-        if (m_closeButton) m_closeButton->setEnabled(m_images.size() > 0);
+        if (m_saveButton) m_saveButton->setEnabled(m_images.size() > 0);
     }
 }
 
@@ -387,12 +394,31 @@ void HDRViewScreen::setSelectedLayer(int index)
 
 void HDRViewScreen::repopulateLayerList()
 {
-    int index = 0;
+    // clear everything
+    if (m_layerListWidget)
+        m_layerScrollPanel->removeChild(m_layerListWidget);
+    m_layerListWidget = new Widget(m_layerScrollPanel);
+    m_layerListWidget->setId("layer list widget");
 
-    for (auto child : m_layerButtons)
-        m_layerListWidget->removeChild(child);
+    // a GridLayout seems to cause a floating point exception when there are no
+    // images, so use a BoxLayout instead, which seems to work fine
+    if (m_images.size())
+    {
+        GridLayout *grid = new GridLayout(Orientation::Horizontal, 2,
+                                                    Alignment::Fill,
+                                                    0, 1*m_GUIScaleFactor);
+        grid->setSpacing(1, 5*m_GUIScaleFactor);
+        m_layerListWidget->setLayout(grid);
+    }
+    else
+        m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical,
+                                                    Alignment::Fill,
+                                                    0, 5*m_GUIScaleFactor));
 
+    mFocusPath.clear();
     m_layerButtons.clear();
+
+    int index = 0;
     for (const auto img : m_images)
     {
         size_t start = img->filename().rfind("/")+1;
@@ -404,14 +430,14 @@ void HDRViewScreen::repopulateLayerList()
         Button *b = new Button(m_layerListWidget, shortname);
         b->setFlags(Button::RadioButton);
         b->setTooltip(filename);
-        // b->setFixedSize(Vector2i(b->width(),22*m_GUIScaleFactor));
         b->setFixedHeight(22*m_GUIScaleFactor);
-        // b->setFontSize(14*m_GUIScaleFactor);
-        b->setCallback([&, index]
-            {
-                setSelectedLayer(index);
-            });
+        b->setCallback([&, index]{setSelectedLayer(index);});
         m_layerButtons.push_back(b);
+
+        // create a close button for the layer
+        b = new Button(m_layerListWidget, "", ENTYPO_ICON_ERASE);
+        b->setFixedSize(Vector2i(22,22)*m_GUIScaleFactor);
+        b->setCallback([&, index]{closeImage(index);});
 
         index++;
     }
@@ -420,7 +446,6 @@ void HDRViewScreen::repopulateLayerList()
         b->setButtonGroup(m_layerButtons);
 
     m_layerListWidget->performLayout(mNVGContext);
-    // m_layerScrollPanel->performLayout(mNVGContext);
     m_vscrollContainer->performLayout(mNVGContext);
     performLayout();
 }
@@ -511,8 +536,8 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
         tinydir_close(&dir);
     }
 
-    if (m_closeButton)
-        m_closeButton->setEnabled(m_images.size() > 0);
+    if (m_saveButton)
+        m_saveButton->setEnabled(m_images.size() > 0);
 
     repopulateLayerList();
 
@@ -547,9 +572,32 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
     {
         case GLFW_KEY_ESCAPE:
         {
-            auto dlg = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!", "Do you really want to quit?", "Yes", "No", true);
-            dlg->setCallback([this](int result) {this->setVisible(result != 0);});
+            if (!m_okToQuitDialog)
+            {
+                m_okToQuitDialog = new MessageDialog(this,
+                        MessageDialog::Type::Warning, "Warning!",
+                        "Do you really want to quit?", "Yes", "No", true);
+                m_okToQuitDialog->setCallback([this](int result)
+                    {
+                        this->setVisible(result != 0);
+                        m_okToQuitDialog = nullptr;
+                    });
+            }
+            else if (m_okToQuitDialog->visible())
+            {
+                // dialog already visible, dismiss it
+                m_okToQuitDialog->dispose();
+                m_okToQuitDialog = nullptr;
+            }
             return true;
+        }
+        case GLFW_KEY_ENTER:
+        {
+            if (m_okToQuitDialog->visible())
+                // quit dialog already visible, "enter" clicks OK, and quits
+                m_okToQuitDialog->callback()(0);
+            else
+                return false;
         }
         case GLFW_KEY_BACKSPACE:
             closeCurrentImage();
@@ -711,8 +759,11 @@ bool HDRViewScreen::scrollEvent(const Vector2i &p, const Vector2f &rel)
     return false;
 }
 
-bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int)
+bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
+    if (Screen::mouseMotionEvent(p, rel, button, modifiers))
+        return true;
+
     if (button & (1 << GLFW_MOUSE_BUTTON_1))
         m_imagePan += rel.cast<float>() / m_zoomf;
 
@@ -732,14 +783,6 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
         m_pixelInfoLabel->setCaption("");
 
     m_statusBar->performLayout(mNVGContext);
-
-    return true;
-}
-
-
-bool HDRViewScreen::mouseDragEvent(const Vector2i &, const Vector2i &rel, int, int)
-{
-    m_imagePan += rel.cast<float>() / m_zoomf;
 
     return true;
 }

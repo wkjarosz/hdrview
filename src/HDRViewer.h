@@ -25,7 +25,6 @@ public:
     bool keyboardEvent(int key, int scancode, int action, int modifiers);
     void framebufferSizeChanged() {std::cout << "resizing" << std::endl; drawAll();}
     bool mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers);
-    bool mouseDragEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers);
     bool resizeEvent(const Vector2i &);
     bool scrollEvent(const Vector2i &p, const Vector2f &rel);
     void performLayout();
@@ -82,7 +81,7 @@ private:
     Window * m_controlPanel = nullptr;
     Button * m_helpButton = nullptr;
     Button * m_layersButton = nullptr;
-    Button * m_closeButton = nullptr;
+    Button * m_saveButton = nullptr;
     Window * m_layersPanel = nullptr;
     VScrollPanel * m_layerScrollPanel = nullptr;
     Widget * m_vscrollContainer = nullptr;
@@ -100,6 +99,7 @@ private:
     Window * m_statusBar = nullptr;
     Label * m_zoomLabel = nullptr;
     Label * m_pixelInfoLabel = nullptr;
+    MessageDialog * m_okToQuitDialog = nullptr;
 
     vector<Button*> m_layerButtons;
 };
