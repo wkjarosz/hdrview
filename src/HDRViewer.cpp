@@ -429,13 +429,13 @@ void HDRViewScreen::repopulateLayerList()
         Button *b = new Button(m_layerListWidget, shortname);
         b->setFlags(Button::RadioButton);
         b->setTooltip(filename);
-        b->setFixedHeight(22*m_GUIScaleFactor);
+        b->setFixedSize(Vector2i(145,25)*m_GUIScaleFactor);
         b->setCallback([&, index]{setSelectedLayer(index);});
         m_layerButtons.push_back(b);
 
         // create a close button for the layer
         b = new Button(m_layerListWidget, "", ENTYPO_ICON_ERASE);
-        b->setFixedSize(Vector2i(22,22)*m_GUIScaleFactor);
+        b->setFixedSize(Vector2i(25,25)*m_GUIScaleFactor);
         b->setCallback([&, index]{closeImage(index);});
 
         index++;
@@ -601,6 +601,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_BACKSPACE:
             closeCurrentImage();
             return true;
+        case 'W':
+            if (modifiers & GLFW_MOD_SUPER)
+            {
+                closeCurrentImage();
+                return true;
+            }
+            return false;
 
         case '=':
         case GLFW_KEY_KP_ADD:
@@ -758,13 +765,35 @@ bool HDRViewScreen::scrollEvent(const Vector2i &p, const Vector2f &rel)
     return false;
 }
 
+bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
+{
+    // only set drag state if the other widgets aren't taking the event and
+    // we are over the main canvas
+    if (Screen::mouseButtonEvent(p, button, down, modifiers) ||
+        (m_layersPanel->visible() && m_layersPanel->contains(p)) ||
+        (m_controlPanel->visible() && m_controlPanel->contains(p)) ||
+        (m_statusBar->visible() && m_statusBar->contains(p)))
+    {
+        m_drag = false;
+        return true;
+    }
+
+    m_drag = down && button == GLFW_MOUSE_BUTTON_1;
+
+    return true;
+}
+
+
 bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
+    if (m_drag && button & (1 << GLFW_MOUSE_BUTTON_1))
+    {
+        m_imagePan += rel.cast<float>() / m_zoomf;
+        return true;
+    }
+
     if (Screen::mouseMotionEvent(p, rel, button, modifiers))
         return true;
-
-    if (button & (1 << GLFW_MOUSE_BUTTON_1))
-        m_imagePan += rel.cast<float>() / m_zoomf;
 
     Vector2i pixel = screenToImage(p);
     auto img = currentImage();

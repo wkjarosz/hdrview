@@ -23,7 +23,8 @@ public:
     void drawContents();
     bool dropEvent(const std::vector<std::string> &filenames);
     bool keyboardEvent(int key, int scancode, int action, int modifiers);
-    void framebufferSizeChanged() {std::cout << "resizing" << std::endl; drawAll();}
+    void framebufferSizeChanged() {drawAll();}
+    bool mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers);
     bool mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers);
     bool resizeEvent(const Vector2i &);
     bool scrollEvent(const Vector2i &p, const Vector2f &rel);
@@ -76,7 +77,7 @@ private:
     Vector2f m_imagePan = Vector2f::Zero();
     int m_zoom = 0;
     float m_zoomf = 1.0f;
-    bool m_flipH = false, m_flipV = false;
+    bool m_flipH = false, m_flipV = false, m_drag = false;
 
     Window * m_controlPanel = nullptr;
     Button * m_helpButton = nullptr;
