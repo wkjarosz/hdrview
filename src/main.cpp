@@ -70,16 +70,13 @@ int main(int argc, char **argv)
 
     if (help)
     {
-        cout << "Syntax: " << argv[0] << "[options]  <input file(s)>" << endl;
+        cout << "Syntax: " << "hdrview [options] <input file(s)>" << endl;
         cout << "Options:" << endl;
         cout << "   -g, --gamma <gamma>       Desired gamma value for exposure+gamma tonemapping" << endl;
         cout << "   -e, --exposure <exposure> Desired power of 2 exposure offset (intensity will be scaled by 2^exposure)" << endl;
         cout << "   -h, --help                Display this message" << endl;
         return -1;
     }
-
-    if (args.size() == 0)
-        cout << "Running in GUI mode, start with -h for instructions on batch mode." << endl;
 
     try
     {

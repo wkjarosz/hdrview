@@ -9,7 +9,7 @@
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
-    Screen(Vector2i(640,480), "HDRView", true),
+    Screen(Vector2i(800,600), "HDRView", true),
     m_GUIScaleFactor(1),
     m_exposure(exposure), m_gamma(gamma)
 {
@@ -378,7 +378,6 @@ void HDRViewScreen::setSelectedLayer(int index)
 {
     if (m_images.empty() || index < 0 || index >= int(m_images.size()))
     {
-        cerr << "Trying to select an invalid image index" << endl;
         m_current = -1;
         updateCaption();
         return;

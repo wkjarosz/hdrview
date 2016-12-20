@@ -52,3 +52,5 @@ hdrview uses Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library
 hdrview uses ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
 
 hdrview uses some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released under public domain.
+
+hdrview uses the [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
