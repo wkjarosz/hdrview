@@ -101,6 +101,10 @@ set(NANOGUI_BUILD_PYTHON  OFF CACHE BOOL " " FORCE)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/nanogui ext_build/nanogui)
 set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
+# Build docopt.cpp
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ext/docopt ext_build/docopt)
+set_property(TARGET docopt PROPERTY FOLDER "dependencies")
+
 # Compile remainder of the codebase with compiler warnings turned on
 if(MSVC)
   if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
@@ -133,6 +137,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinydir
     # stb
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/stb
+    # NanoGUI
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/docopt
 )
 
 # Resource file (icons etc.)
@@ -164,7 +170,7 @@ add_executable(HDRView MACOSX_BUNDLE
 )
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
-target_link_libraries(HDRView IlmImf nanogui ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(HDRView IlmImf nanogui docopt ${NANOGUI_EXTRA_LIBS})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 

@@ -17,7 +17,7 @@ using namespace Eigen;
 class HDRViewScreen : public Screen
 {
 public:
-    HDRViewScreen(float exposure, float gamma, vector<string> args);
+    HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args);
     virtual ~HDRViewScreen();
 
     void drawContents();

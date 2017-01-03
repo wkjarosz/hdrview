@@ -126,7 +126,7 @@ public:
         r /= c.r; g /= c.g; b /= c.b; return *this;
     }
     //@}
-    
+
     float average() const {return(r + g + b) / 3.0f;}
     float luminance() const
     {
@@ -149,7 +149,7 @@ public:
             res[i] = (*this)[i] > 0.0f ? powf((*this)[i], exp[i]) : 0.0f;
         return res;
     }
-    
+
     friend std::ostream& operator<<(std::ostream& out, const Color3& c)
     {
 	   return(out << c.r << " " << c.g << " " << c.b);
@@ -174,23 +174,23 @@ public:
 
 
 inline Color3
-expf(const Color3 & c)
+exp(const Color3 & c)
 {
     return Color3(::expf(c[0]), ::expf(c[1]), ::expf(c[2]));
 }
 
 
 inline Color3
-logf(const Color3 & c)
+log(const Color3 & c)
 {
     return Color3(::logf(c[0]), ::logf(c[1]), ::logf(c[2]));
 }
 
 
 inline Color3
-powf(const Color3 & c, float e)
+pow(const Color3 & c, const Color3 & e)
 {
-    return Color3(::powf(c[0], e), ::powf(c[1], e), ::powf(c[2], e));
+    return Color3(::powf(c[0], e[0]), ::powf(c[1], e[1]), ::powf(c[2], e[2]));
 }
 
 
@@ -200,7 +200,7 @@ protected:
     float a;
 
 public:
-    
+
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
@@ -313,7 +313,7 @@ public:
         r /= v.r; g /= v.g; b /= v.b; a /= v.a; return *this;
     }
     //@}
-    
+
 
     float average() const
     {

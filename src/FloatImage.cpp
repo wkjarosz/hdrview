@@ -43,7 +43,6 @@
 #pragma warning (pop)
 #endif
 
-
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
@@ -188,10 +187,35 @@ bool FloatImage::save(const string & filename,
               extension.begin(),
               ::tolower);
 
+    FloatImage* img = this;
+    FloatImage imgCopy;
+
+    // if we need to tonemap, then modify a copy of the image data
+    if (gain != 1.0f || sRGB || gamma != 1.0f)
+    {
+        imgCopy = *this;
+        img = &imgCopy;
+
+        if (gain != 1.0f)
+            imgCopy *= gain;
+
+        for (int y = 0; y < height(); ++y)
+            for (int x = 0; x < width(); ++x)
+                imgCopy(x,y) = sRGB ?
+                                Color4(toSRGB(imgCopy(x,y)[0]),
+                                       toSRGB(imgCopy(x,y)[1]),
+                                       toSRGB(imgCopy(x,y)[2]),
+                                       imgCopy(x,y)[3]) :
+                                Color4(powf(imgCopy(x,y)[0], 1.0f/gamma),
+                                       powf(imgCopy(x,y)[1], 1.0f/gamma),
+                                       powf(imgCopy(x,y)[2], 1.0f/gamma),
+                                       imgCopy(x,y)[3]);
+    }
+
     if (extension == "hdr")
-        return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) data()) != 0;
+        return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "pfm")
-        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) data()) != 0;
+        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "exr")
     {
         try
@@ -205,7 +229,7 @@ bool FloatImage::save(const string & filename,
                 for (int x = 0; x < width(); ++x)
                 {
                     Imf::Rgba &p = pixels[0][x];
-                    Color4 c = operator()(x,y);
+                    Color4 c = (*img)(x,y);
                     p.r = c[0];
                     p.g = c[1];
                     p.b = c[2];
@@ -227,17 +251,10 @@ bool FloatImage::save(const string & filename,
     {
         // convert floating-point image to 8-bit per channel with dithering
         vector<unsigned char> data(size()*3, 0);
-        float invGamma = 1.0f/gamma;
         for (int y = 0; y < height(); ++y)
             for (int x = 0; x < width(); ++x)
             {
-                Color4 c = operator()(x,y);
-                c *= gain;
-                if (sRGB)
-                   c = Color4(toSRGB(c[0]), toSRGB(c[1]), toSRGB(c[2]), c[3]);
-                else
-                   c = Color4(::pow(c[0], invGamma), ::pow(c[1], invGamma), ::pow(c[2], invGamma), c[3]);
-
+                Color4 c = (*img)(x,y);
                 if (dither)
                 {
                     int xmod = x % 256;

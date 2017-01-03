@@ -8,7 +8,7 @@
 
 using namespace std;
 
-HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
+HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
     m_GUIScaleFactor(1),
     m_exposure(exposure), m_gamma(gamma)
@@ -245,7 +245,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
         m_dither = new CheckBox(m_controlPanel, "Dither  ");
         m_drawGrid = new CheckBox(m_controlPanel, "Grid  ");
         m_drawValues = new CheckBox(m_controlPanel, "RGB values  ");
-        m_dither->setChecked(true);
+        m_dither->setChecked(dither);
         m_drawGrid->setChecked(true);
         m_drawValues->setChecked(true);
     }
@@ -311,8 +311,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, vector<string> args) :
 
     m_ditherer.init();
 
-    m_sRGB->setChecked(true);
-    m_sRGB->callback()(true);
+    m_sRGB->setChecked(sRGB);
+    m_sRGB->callback()(sRGB);
 
     // m_controlPanel->requestFocus();
 
