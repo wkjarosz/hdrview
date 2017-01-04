@@ -24,30 +24,32 @@ comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 
 Usage:
-  hdrview convert [options] <file>...
+  hdrview batch [options <file>...]
   hdrview [view] [options <file>...]
   hdrview -h | --help | --version
 
 The available commands are:
     view       Launch the GUI image viewer [this is the default].
-    convert    Batch convert the files on the command-line.
+    batch      Batch process the files on the command-line.
 
 Options: (global)
-  -e <e>, --exposure <e>    Desired power of 2 EV or exposure value
-                            (gain = 2^exposure) [default: 0].
-  -g <g>, --gamma <g>       Desired gamma value for exposure+gamma tonemapping.
-                            An sRGB curve is used if gamma is not specified.
-  -d, --no-dither           Disable dithering.
-  -v <l>, --verbose <l>     Set verbosity (<l> can be 0, 1, 2) [default: 1].
-  -h, --help                Display this message.
-  --version                 Show the version.
+  -e E, --exposure=E       Desired power of 2 EV or exposure value
+                           (gain = 2^exposure) [default: 0].
+  -g G, --gamma=G          Desired gamma value for exposure+gamma tonemapping.
+                           An sRGB curve is used if gamma is not specified.
+  -d, --no-dither          Disable dithering.
+  -v L, --verbose=L        Set verbosity (L can be 0, 1, 2) [default: 1].
+  -h, --help               Display this message.
+  --version                Show the version.
 
-Options: (for convert command)
-  -f <ext>, --format <ext>  Output format for convert command.
-                            Available formats include:
-                                bmp, exr, pfm, png, ppm, hdr, tga
-                                [default: png].
-  -t, --test                Don't convert files, just show what would be done.
+Options: (for batch processing)
+  -c EXT, --convert=EXT    Convert all images to specified output format.
+                           Available formats include:
+                           bmp, exr, pfm, png, ppm, hdr, tga.
+  -a FILE, --average=FILE  Average all loaded images (all images must have the
+                           same dimensions).
+  -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
+  -t, --test               Don't convert files, just show what would be done.
 )";
 
 string getBasename(const string& filename)
@@ -67,9 +69,14 @@ int main(int argc, char **argv)
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
     vector<string> inFiles;
+    bool convert = false, average = false;
+    string convertFormat = "", avgFilename = "";
     int verbosity = 0;
     bool dither = true;
     bool sRGB = true;
+    bool onlyTesting = true;
+    bool fixNaNs = false;
+    Color3 nanColor(0.0f,0.0f,0.0f);
     float gamma, exposure;
 
 #if defined(__APPLE__)
@@ -101,7 +108,8 @@ int main(int argc, char **argv)
         {
             printf("Running with the following commands/arguments/options:\n");
             for (auto const& arg : docargs)
-                std::cout << arg.first << ": " << arg.second << std::endl;
+                cout << arg.first << ": " << arg.second << endl;
+            cout << endl;
         }
 
         // exposure
@@ -123,6 +131,38 @@ int main(int argc, char **argv)
         // dithering
         dither = !docargs["--no-dither"].asBool();
 
+        if (docargs["--convert"].isString())
+        {
+            convert = true;
+            convertFormat = docargs["--convert"].asString();
+            if (verbosity)
+                printf("Converting to \"%s\".\n", convertFormat.c_str());
+        }
+
+        if (docargs["--average"].isString())
+        {
+            average = true;
+            avgFilename = docargs["--average"].asString();
+            if (verbosity)
+                printf("Saving average image to \"%s\".\n", avgFilename.c_str());
+        }
+
+        if (docargs["--nan"].isString())
+        {
+            if (sscanf(docargs["--nan"].asString().c_str(), "%f,%f,%f", &nanColor[0], &nanColor[1], &nanColor[2]) != 3)
+            {
+                fprintf(stderr, "Cannot parse command-line parameter: --nan\n");
+                return -1;
+            }
+            if (verbosity)
+                printf("Replacing NaNs and Infinities with (%f,%f,%f).\n", nanColor[0], nanColor[1], nanColor[2]);
+            fixNaNs = true;
+        }
+
+        onlyTesting = docargs["--test"].asBool();
+        if (onlyTesting && verbosity)
+            printf("Only testing. Will not write files.\n");
+
         // list of filenames
         inFiles = docargs["<file>"].asStringList();
     }
@@ -134,7 +174,7 @@ int main(int argc, char **argv)
 
     try
     {
-        if (!docargs["convert"].asBool())
+        if (!docargs["batch"].asBool())
         {
             if (verbosity)
                 printf("Launching GUI. Start with -h for instructions on batch mode.\n");
@@ -156,14 +196,13 @@ int main(int argc, char **argv)
         }
         else
         {
-            string outFormat = docargs["--format"].asString();
-            if (verbosity)
-                printf("Converting to \"%s\".\n", outFormat.c_str());
+            if ((!average && !convert) || !inFiles.size())
+            {
+                fprintf(stderr, "Must specify at least one file and one of -c or -a in batch mode!\n");
+                return -1;
+            }
 
-            bool onlyTesting = docargs["--test"].asBool();
-            if (onlyTesting && verbosity)
-                printf("Only testing. Will not write files.\n");
-
+            FloatImage avgImg;
             for (size_t i = 0; i < inFiles.size(); ++i)
             {
                 FloatImage image;
@@ -176,7 +215,35 @@ int main(int argc, char **argv)
                 if (verbosity)
                     printf("Successfully read image \"%s\".\n", inFiles[i].c_str());
 
-                string filename = getBasename(inFiles[i]) + "." + outFormat;
+                if (fixNaNs)
+                    for (int y = 0; y < image.height(); ++y)
+                        for (int x = 0; x < image.width(); ++x)
+                            if (!isfinite(image(x,y)[0]) ||
+                                !isfinite(image(x,y)[1]) ||
+                                !isfinite(image(x,y)[2]))
+                                image(x,y) = Color4(nanColor, image(x,y)[3]);
+
+                if (average)
+                {
+                    if (i == 0)
+                        avgImg = image;
+                    else
+                    {
+                        if (avgImg.width() != image.width() ||
+                            avgImg.height() != image.height())
+                        {
+                            fprintf(stderr, "Images do not have the same size.");
+                            return -1;
+                        }
+                        avgImg += image;
+                    }
+                }
+
+                if (!convert)
+                    continue;
+
+                string filename = getBasename(inFiles[i]) + "." + convertFormat;
+
                 if (verbosity)
                     printf("Writing image \"%s\"...", filename.c_str());
 
@@ -186,11 +253,24 @@ int main(int argc, char **argv)
                 if (verbosity)
                     printf(" done!\n");
             }
+
+            if (average)
+            {
+                avgImg *= 1.0f/inFiles.size();
+
+                string filename = avgFilename;
+
+                if (verbosity)
+                    printf("Writing average image \"%s\"...\n", filename.c_str());
+
+                if (!onlyTesting)
+                    avgImg.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+            }
         }
     }
     catch (const std::exception &e)
     {
-        printf("Error: %s\n%s\n", e.what(), USAGE);
+        fprintf(stderr, "Error: %s\n%s\n", e.what(), USAGE);
         return -1;
     }
 
