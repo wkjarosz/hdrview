@@ -137,7 +137,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinydir
     # stb
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/stb
-    # NanoGUI
+    # docopt
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/docopt
 )
 
@@ -170,7 +170,7 @@ add_executable(HDRView MACOSX_BUNDLE
 )
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
-target_link_libraries(HDRView IlmImf nanogui docopt ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
