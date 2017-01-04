@@ -11,7 +11,7 @@ using namespace std;
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
     m_GUIScaleFactor(1),
-    m_exposure(exposure), m_gamma(gamma)
+    m_exposure(exposure), m_gamma(sRGB ? 2.2f : gamma)
 {
     setBackground(Vector3f(0.1f, 0.1f, 0.1f));
     Theme * scaledTheme = new Theme(mNVGContext);
@@ -153,7 +153,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             auto dlg = new MessageDialog(
                 this, MessageDialog::Type::Information, "About HDRView",
                 "Copyright (c) Wojciech Jarosz\n\n"
-                "HDRView is a simple research-oriented viewer for examining and comparing high-dynamic range images.\n\n"
+                "HDRView is a simple research-oriented tool for examining, "
+                "comparing, and converting high-dynamic range images.\n\n"
                 "HDRView is freely available under a 3-clause BSD license.");
             performLayout();
             dlg->center();

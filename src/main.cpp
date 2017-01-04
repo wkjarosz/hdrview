@@ -24,9 +24,9 @@ comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 
 Usage:
-  HDRView convert [options] <file>...
-  HDRView [view] [options <file>...]
-  HDRView -h | --help | --version
+  hdrview convert [options] <file>...
+  hdrview [view] [options <file>...]
+  hdrview -h | --help | --version
 
 The available commands are:
     view       Launch the GUI image viewer [this is the default].
@@ -35,12 +35,11 @@ The available commands are:
 Options: (global)
   -e <e>, --exposure <e>    Desired power of 2 EV or exposure value
                             (gain = 2^exposure) [default: 0].
-  -g <g>, --gamma <g>       Desired gamma value for exposure+gamma tonemapping
-                            If omitted, by default an sRGB curve is used.
+  -g <g>, --gamma <g>       Desired gamma value for exposure+gamma tonemapping.
+                            An sRGB curve is used if gamma is not specified.
   -d, --no-dither           Disable dithering.
+  -v <l>, --verbose <l>     Set verbosity (<l> can be 0, 1, 2) [default: 1].
   -h, --help                Display this message.
-  -v <l>, --verbose <l>     Set verbosity [default: 1].
-                            Available levels: 0, 1, 2.
   --version                 Show the version.
 
 Options: (for convert command)
@@ -138,7 +137,7 @@ int main(int argc, char **argv)
         if (!docargs["convert"].asBool())
         {
             if (verbosity)
-                printf("Launching GUI...\n");
+                printf("Launching GUI. Start with -h for instructions on batch mode.\n");
 
             nanogui::init();
 
