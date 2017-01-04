@@ -19,22 +19,36 @@ NANOGUI_FORCE_DISCRETE_GPU();
 static const char USAGE[] =
 R"(HDRView. Copyright (c) Wojciech Jarosz.
 
-HDRView is a simple research-oriented viewer for examining,
+HDRView is a simple research-oriented tool for examining,
 comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 
 Usage:
-  HDRView [options <file>...]
+  HDRView convert [options] <file>...
+  HDRView [view] [options <file>...]
+  HDRView -h | --help | --version
 
-Options:
-  -e <e>, --exposure <e>    Desired power of 2 EV or exposure value (intensity will be scaled by 2^exposure) [default: 0].
-  -g <g>, --gamma <g>       Desired gamma value for exposure+gamma tonemapping.
+The available commands are:
+    view       Launch the GUI image viewer [this is the default].
+    convert    Batch convert the files on the command-line.
+
+Options: (global)
+  -e <e>, --exposure <e>    Desired power of 2 EV or exposure value
+                            (gain = 2^exposure) [default: 0].
+  -g <g>, --gamma <g>       Desired gamma value for exposure+gamma tonemapping
+                            If omitted, by default an sRGB curve is used.
   -d, --no-dither           Disable dithering.
-  -c, --convert             Do not launch the GUI, convert the files instead.
-  -f <ext>, --format <ext>  Output format (bmp, exr, pfm, png, ppm, hdr, tga) [default: png].
-  -t, --test                Don't convert files, just test.
   -h, --help                Display this message.
-  -v, --version             Show the version.
+  -v <l>, --verbose <l>     Set verbosity [default: 1].
+                            Available levels: 0, 1, 2.
+  --version                 Show the version.
+
+Options: (for convert command)
+  -f <ext>, --format <ext>  Output format for convert command.
+                            Available formats include:
+                                bmp, exr, pfm, png, ppm, hdr, tga
+                                [default: png].
+  -t, --test                Don't convert files, just show what would be done.
 )";
 
 string getBasename(const string& filename)
@@ -54,6 +68,7 @@ int main(int argc, char **argv)
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
     vector<string> inFiles;
+    int verbosity = 0;
     bool dither = true;
     bool sRGB = true;
     float gamma, exposure;
@@ -78,22 +93,32 @@ int main(int argc, char **argv)
                                  true,            // show help if requested
                                  "HDRView 0.1");  // version string
 
-        printf("Running with the following commands/arguments/options:\n");
-        for (auto const& arg : docargs)
-            std::cout << arg.first << ": " << arg.second << std::endl;
+        verbosity = docargs["--verbose"].asLong();
+
+        if (verbosity)
+            printf("Verbosity set to level %d.\n", verbosity);
+
+        if (verbosity > 1)
+        {
+            printf("Running with the following commands/arguments/options:\n");
+            for (auto const& arg : docargs)
+                std::cout << arg.first << ": " << arg.second << std::endl;
+        }
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
-        printf("Setting intensity scale to %f\n", powf(2.0f, exposure));
+        if (verbosity)
+            printf("Setting intensity scale to %f\n", powf(2.0f, exposure));
 
         // gamma or sRGB
         if (docargs["--gamma"])
         {
             sRGB = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
-            printf("Setting gamma correction to g=%f\n", gamma);
+            if (verbosity)
+                printf("Setting gamma correction to g=%f\n", gamma);
         }
-        else
+        else if (verbosity)
             printf("Using sRGB response curve\n");
 
         // dithering
@@ -110,9 +135,11 @@ int main(int argc, char **argv)
 
     try
     {
-        if (!docargs["--convert"].asBool())
+        if (!docargs["convert"].asBool())
         {
-            printf("Launching GUI...\n");
+            if (verbosity)
+                printf("Launching GUI...\n");
+
             nanogui::init();
 
 #if defined(__APPLE__)
@@ -131,26 +158,34 @@ int main(int argc, char **argv)
         else
         {
             string outFormat = docargs["--format"].asString();
-            printf("Converting to \"%s\".\n", outFormat.c_str());
+            if (verbosity)
+                printf("Converting to \"%s\".\n", outFormat.c_str());
 
             bool onlyTesting = docargs["--test"].asBool();
-            if (onlyTesting) printf("Only testing. Will not write files.\n");
+            if (onlyTesting && verbosity)
+                printf("Only testing. Will not write files.\n");
 
             for (size_t i = 0; i < inFiles.size(); ++i)
             {
                 FloatImage image;
                 if (!image.load(inFiles[i]))
                 {
-                    printf("Cannot read image \"%s\".\n", inFiles[i].c_str());
+                    printf("Cannot read image \"%s\". Skipping...\n", inFiles[i].c_str());
                     continue;
                 }
 
-                printf("Successfully read image \"%s\".\n", inFiles[i].c_str());
+                if (verbosity)
+                    printf("Successfully read image \"%s\".\n", inFiles[i].c_str());
 
                 string filename = getBasename(inFiles[i]) + "." + outFormat;
-                printf("Writing image \"%s\".\n", filename.c_str());
+                if (verbosity)
+                    printf("Writing image \"%s\"...", filename.c_str());
+
                 if (!onlyTesting)
                     image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+
+                if (verbosity)
+                    printf(" done!\n");
             }
         }
     }
