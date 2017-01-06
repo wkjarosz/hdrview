@@ -7,8 +7,8 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 #include "pfm.h"
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <cmath>

@@ -99,17 +99,26 @@ void ImageQuad::init()
                 float rn = sqrt(2*r+1)-1;   // negative triangle
                 return (r < 0) ? rn : rp;
             }
+            float checkerboard(float period, vec2 xy)
+            {
+                return step(0.0, sin(xy.x * 3.1415926 / period) *
+                                 sin(xy.y * 3.1415926 / period));
+            }
             void main()
             {
-                vec4 color = texture(source, uv);
-                color.rgb *= gain;
+                vec4 fg = texture(source, uv);
+                fg.rgb *= gain;
+                vec4 bg;
+                bg.rgb = vec3(checkerboard(8, gl_FragCoord.xy))*0.5 + 0.5;
+                bg.a = 1.0;
+                vec4 color = mix(bg, fg, fg.a);
                 out_color.rgb = sRGB ? linearToSRGB(color.rgb) : pow(color.rgb, vec3(1.0/gamma));
                 float dith = randZeroMeanTriangle(gl_FragCoord.xy + randomness);
                 out_color.rgb += dither ? vec3(dith/255.0) : vec3(0.0);
                 out_color.rgb = (channels.r == 0.0) ?
                                    (channels.g == 0.0 ? out_color.bbb : out_color.ggg) :
                                    (channels.g != 0.0 && channels.b != 0.0) ? out_color.rgb : out_color.rrr;
-                out_color.a = color.a;
+                out_color.a = 1.0;
             }
         )"
     );

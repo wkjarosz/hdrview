@@ -5,14 +5,12 @@
 #pragma once
 
 #include <iostream>
-#include <math.h>
+#include <cmath>
 
 class Color3
 {
-protected:
-    float r, g, b;
-
 public:
+    float r, g, b;
 
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
@@ -20,7 +18,7 @@ public:
     Color3() {}
     Color3(const Color3 & c) : r(c.r), g(c.g), b(c.b) {}
     Color3(float x, float y, float z) : r(x), g(y), b(z) {}
-    Color3(float c) : r(c), g(c), b(c) {}
+    explicit Color3(float c) : r(c), g(c), b(c) {}
     Color3(const float* c) : r(c[0]), g(c[1]), b(c[2]) {}
     const Color3 & operator=(float c) {r = g = b = c; return *this;}
     //@}
@@ -127,7 +125,8 @@ public:
     }
     //@}
 
-    float average() const {return(r + g + b) / 3.0f;}
+    float sum() const {return r + g + b;}
+    float average() const {return sum() / 3.0f;}
     float luminance() const
     {
         return 0.212671f * r + 0.715160f * g + 0.072169f * b;
@@ -173,33 +172,10 @@ public:
 };
 
 
-inline Color3
-exp(const Color3 & c)
-{
-    return Color3(::expf(c[0]), ::expf(c[1]), ::expf(c[2]));
-}
-
-
-inline Color3
-log(const Color3 & c)
-{
-    return Color3(::logf(c[0]), ::logf(c[1]), ::logf(c[2]));
-}
-
-
-inline Color3
-pow(const Color3 & c, const Color3 & e)
-{
-    return Color3(::powf(c[0], e[0]), ::powf(c[1], e[1]), ::powf(c[2], e[2]));
-}
-
-
 class Color4 : public Color3
 {
-protected:
-    float a;
-
 public:
+    float a;
 
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
@@ -207,7 +183,7 @@ public:
     Color4() {}
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}
-    Color4(float x) : Color3(x), a(1.0f) {}
+    explicit Color4(float x) : Color3(x), a(x) {}
     Color4(const float* c) : Color3(c), a(c[3]) {}
     const Color4 & operator=(float c) {r = g = b = a = c; return *this;}
     //@}
@@ -314,21 +290,12 @@ public:
     }
     //@}
 
-
-    float average() const
-    {
-        return(r + g + b + a) / 4.0f;
-    }
+    float sum() const       {return r + g + b + a;}
+    float average() const   {return sum() / 4.0f;}
     float min() const {return std::min(Color3::min(), a);}
-    Color4 min(float m) const
-    {
-        return Color4(Color3::min(m), std::min(a,m));
-    }
+    Color4 min(float m) const {return Color4(Color3::min(m), std::min(a,m));}
     float max() const {return std::max(Color3::max(), a);}
-    Color4 max(float m) const
-    {
-        return Color4(Color3::max(m), std::max(a,m));
-    }
+    Color4 max(float m) const {return Color4(Color3::max(m), std::max(a,m));}
 
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)
@@ -353,6 +320,97 @@ public:
     }
 };
 
+
+#define COLOR_FUNCTION_WRAPPER(FUNC) \
+    inline Color3 FUNC(const Color3 & c) \
+    { \
+        return Color3(std:: FUNC(c[0]), \
+                      std:: FUNC(c[1]), \
+                      std:: FUNC(c[2])); \
+    } \
+    inline Color4 FUNC(const Color4 & c) \
+    { \
+        return Color4(std:: FUNC(c[0]), std:: FUNC(c[1]), \
+                      std:: FUNC(c[2]), std:: FUNC(c[3])); \
+    }
+
+#define COLOR_FUNCTION_WRAPPER2(FUNC) \
+    inline Color3 FUNC(const Color3 & c, const Color3 & e) \
+    { \
+        return Color3(std:: FUNC(c[0], e[0]), \
+                      std:: FUNC(c[1], e[1]), \
+                      std:: FUNC(c[2], e[2])); \
+    } \
+    template <typename T> \
+    inline Color3 FUNC(const Color3 & c, T e) \
+    { \
+        return Color3(std:: FUNC(c[0], e), \
+                      std:: FUNC(c[1], e), \
+                      std:: FUNC(c[2], e)); \
+    } \
+    inline Color4 FUNC(const Color4 & c, const Color4 & e) \
+    { \
+        return Color4(std:: FUNC(c[0], e[0]), \
+                      std:: FUNC(c[1], e[1]), \
+                      std:: FUNC(c[2], e[2]), \
+                      std:: FUNC(c[3], e[3])); \
+    } \
+    template <typename T> \
+    inline Color4 FUNC(const Color4 & c, T e) \
+    { \
+        return Color4(std:: FUNC(c[0], e), \
+                      std:: FUNC(c[1], e), \
+                      std:: FUNC(c[2], e), \
+                      std:: FUNC(c[3], e)); \
+    }
+
+//
+// create vectorized versions of the math functions across the elements of
+// a Color3 or Color4
+//
+COLOR_FUNCTION_WRAPPER(exp)
+COLOR_FUNCTION_WRAPPER(exp2)
+COLOR_FUNCTION_WRAPPER(expm1)
+COLOR_FUNCTION_WRAPPER(log)
+COLOR_FUNCTION_WRAPPER(log10)
+COLOR_FUNCTION_WRAPPER(log2)
+COLOR_FUNCTION_WRAPPER(log1p)
+COLOR_FUNCTION_WRAPPER(fabs)
+COLOR_FUNCTION_WRAPPER(sqrt)
+COLOR_FUNCTION_WRAPPER(cbrt)
+COLOR_FUNCTION_WRAPPER(sin)
+COLOR_FUNCTION_WRAPPER(cos)
+COLOR_FUNCTION_WRAPPER(tan)
+COLOR_FUNCTION_WRAPPER(asin)
+COLOR_FUNCTION_WRAPPER(acos)
+COLOR_FUNCTION_WRAPPER(atan)
+COLOR_FUNCTION_WRAPPER(erf)
+COLOR_FUNCTION_WRAPPER(erfc)
+COLOR_FUNCTION_WRAPPER(tgamma)
+COLOR_FUNCTION_WRAPPER(lgamma)
+COLOR_FUNCTION_WRAPPER(ceil)
+COLOR_FUNCTION_WRAPPER(floor)
+COLOR_FUNCTION_WRAPPER(trunc)
+COLOR_FUNCTION_WRAPPER(round)
+COLOR_FUNCTION_WRAPPER2(pow)
+COLOR_FUNCTION_WRAPPER2(fmin)
+COLOR_FUNCTION_WRAPPER2(fmax)
+
+
+template<typename T> T toSRGB(const T &);
+template<> inline Color3 toSRGB(const Color3 & c)
+{
+    Color3 powed = pow(c, Color3(1.0f/2.4f));
+    float r = c.r < 0.0031308f ? 12.92f * c.r : 1.055f * powed.r - 0.055f;
+    float g = c.g < 0.0031308f ? 12.92f * c.g : 1.055f * powed.g - 0.055f;
+    float b = c.b < 0.0031308f ? 12.92f * c.b : 1.055f * powed.b - 0.055f;
+    return Color3(r, g, b);
+}
+
+template<> inline Color4 toSRGB(const Color4 & c)
+{
+    return Color4(toSRGB(reinterpret_cast<const Color3&>(c)), c.a);
+}
 
 namespace Eigen
 {

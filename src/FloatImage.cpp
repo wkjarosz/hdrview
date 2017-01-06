@@ -5,7 +5,8 @@
 */
 #include "FloatImage.h"
 #include "dither-matrix256.h"
-#include <math.h>
+#include <cmath>
+#include <functional>
 #include <iostream>
 #include <sstream>
 #include <ImfArray.h>
@@ -50,6 +51,7 @@
 #include "ppm.h"
 
 using namespace std;
+using namespace Eigen;
 
 // local functions
 namespace
@@ -62,11 +64,29 @@ string getFileExtension(const string& filename)
     return "";
 }
 
-float toSRGB(float value)
+
+// create a vector containing the normalized values of a 1D Gaussian filter
+ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
 {
-    if (value < 0.0031308f)
-       return 12.92f * value;
-    return 1.055f * pow(value, 0.41666f) - 0.055f;
+    // calculate the size of the filter
+    int offset = int(ceil(truncate * sigma));
+    int filterSize = 2*offset+1;
+
+    ArrayXXf fData(filterSize, 1);
+
+    // compute the un-normalized value of the Gaussian
+    float normalizer = 0.0f;
+    for (int i = 0; i < filterSize; i++)
+    {
+        fData(i,0) = std::exp(-pow(i - offset, 2) / (2.0f * pow(sigma, 2)));
+        normalizer += fData(i,0);
+    }
+
+    // normalize
+    for (int i = 0; i < filterSize; i++)
+        fData(i,0) /= normalizer;
+
+    return fData;
 }
 
 } // namespace
@@ -197,19 +217,12 @@ bool FloatImage::save(const string & filename,
         img = &imgCopy;
 
         if (gain != 1.0f)
-            imgCopy *= gain;
+            imgCopy *= Color4(gain);
 
-        for (int y = 0; y < height(); ++y)
-            for (int x = 0; x < width(); ++x)
-                imgCopy(x,y) = sRGB ?
-                                Color4(toSRGB(imgCopy(x,y)[0]),
-                                       toSRGB(imgCopy(x,y)[1]),
-                                       toSRGB(imgCopy(x,y)[2]),
-                                       imgCopy(x,y)[3]) :
-                                Color4(powf(imgCopy(x,y)[0], 1.0f/gamma),
-                                       powf(imgCopy(x,y)[1], 1.0f/gamma),
-                                       powf(imgCopy(x,y)[2], 1.0f/gamma),
-                                       imgCopy(x,y)[3]);
+        if (sRGB)
+            imgCopy = imgCopy.unaryExpr(ptr_fun((Color4 (*)(const Color4&))toSRGB));
+        else if (gamma != 1.0f)
+            imgCopy = imgCopy.pow(Color4(1.0f/gamma));
     }
 
     if (extension == "hdr")
@@ -283,4 +296,337 @@ bool FloatImage::save(const string & filename,
         else
             throw runtime_error("Could not determine desired file type from extension.");
     }
+}
+
+
+FloatImage FloatImage::convolve(const ArrayXXf & kernel) const
+{
+    FloatImage imFilter(width(), height());
+
+    int centerX = int((kernel.rows()-1.0)/2.0);
+    int centerY = int((kernel.cols()-1.0)/2.0);
+
+    // for every pixel in the image
+    for (int x = 0; x < width(); x++)
+    {
+        for (int y = 0; y < height(); y++)
+        {
+            Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
+            float weightSum = 0.0f;
+            // for every pixel in the kernel
+            for (int xFilter = 0; xFilter < kernel.rows(); xFilter++)
+            {
+                int xx = x-xFilter+centerX;
+                // ignore pixels outside the image
+                if (xx < 0 || xx >= width()) continue;
+
+                for (int yFilter = 0; yFilter < kernel.cols(); yFilter++)
+                {
+                    int yy = y-yFilter+centerY;
+                    // ignore pixels outside the image
+                    if (yy < 0 || yy >= height()) continue;
+                    accum += kernel(xFilter, yFilter) * operator()(xx, yy);
+                    weightSum += kernel(xFilter, yFilter);
+                }
+            }
+
+            // assign the pixel the value from convolution
+            imFilter(x,y) = accum / weightSum;
+        }
+    }
+
+    return imFilter;
+}
+
+FloatImage FloatImage::gaussianBlurX(float sigmaX, float truncateX) const
+{
+    return convolve(horizontalGaussianKernel(sigmaX, truncateX));
+}
+
+FloatImage FloatImage::gaussianBlurY(float sigmaY, float truncateY) const
+{
+    return convolve(horizontalGaussianKernel(sigmaY, truncateY).transpose());
+}
+
+// Use principles of seperabiltity to blur an image using 2 1D Gaussian Filters
+FloatImage FloatImage::gaussianBlur(float sigmaX, float sigmaY,
+                                    float truncateX, float truncateY) const
+{
+    // blur using 2, 1D filters in the x and y directions
+    return gaussianBlurX(sigmaX, truncateX).gaussianBlurY(sigmaY, truncateY);
+}
+
+
+// sharpen an image
+FloatImage FloatImage::unsharpMask(float sigma, float truncate, float strength) const
+{
+    return *this + Color4(strength) * (*this - gaussianBlur(sigma, sigma, truncate, truncate));
+}
+
+
+
+FloatImage FloatImage::median(float radius, int channel) const
+{
+    int radiusi = int(ceil(radius));
+
+    vector<float> mBuffer;
+    mBuffer.reserve((2*radiusi)*(2*radiusi));
+
+    int xCoord, yCoord;
+    FloatImage tempBuffer = *this;
+
+    for (int y = 0; y < height(); y++)
+    {
+        for (int x = 0; x < width(); x++)
+        {
+            mBuffer.clear();
+            // over all pixels in the neighborhood kernel
+            for (int i = -radiusi; i <= radiusi; i++)
+            {
+                xCoord = x + i;
+                // ignore pixels outside the image
+                if (xCoord < 0 || xCoord >= width()) continue;
+
+                for (int j = -radiusi; j <= radiusi; j++)
+                {
+                    yCoord = y + j;
+                    // ignore pixels outside the image
+                    if (yCoord < 0 || yCoord >= height()) continue;
+
+                    if (i*i + j*j > radius*radius)
+                        continue;
+
+                    mBuffer.push_back(operator()(xCoord, yCoord)[channel]);
+                }
+            }
+
+            int num = mBuffer.size();
+            int med = (num-1)/2;
+
+            nth_element(mBuffer.begin() + 0,
+                        mBuffer.begin() + med,
+                        mBuffer.begin() + mBuffer.size());
+            tempBuffer(x,y)[channel] = mBuffer[med];
+        }
+    }
+
+    return tempBuffer;
+}
+
+
+FloatImage FloatImage::bilateral(float sigmaRange, float sigmaDomain, float truncateDomain)
+{
+    FloatImage imFilter(width(), height());
+
+    // calculate the filter size
+    int radius = int(ceil(truncateDomain * sigmaDomain));
+
+    // for every pixel in the image
+    for (int x = 0; x < imFilter.width(); x++)
+    {
+        for (int y = 0; y < imFilter.height(); y++)
+        {
+            // initilize normalizer and sum value to 0 for every pixel location
+            float weightSum = 0.0f;
+            Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
+
+            for (int xFilter = -radius; xFilter <= radius; xFilter++)
+            {
+                int xx = x+xFilter;
+                // ignore pixels outside the image
+                if (xx < 0 || xx >= width()) continue;
+
+                for (int yFilter = -radius; yFilter <= radius; yFilter++)
+                {
+                    int yy = y+yFilter;
+                    // ignore pixels outside the image
+                    if (yy < 0 || yy >= height()) continue;
+
+                    // calculate the squared distance between the 2 pixels (in range)
+                    float rangeExp = ::pow(operator()(xx,yy) - operator()(x,y), 2).sum();
+                    float domainExp = std::pow(xFilter,2) + std::pow(yFilter,2);
+
+                    // calculate the exponentiated weighting factor from the domain and range
+                    float factorDomain = std::exp(-domainExp / (2.0 * std::pow(sigmaDomain,2)));
+                    float factorRange = std::exp(-rangeExp / (2.0 * std::pow(sigmaRange,2)));
+                    weightSum += factorDomain * factorRange;
+                    accum += factorDomain * factorRange * operator()(xx,yy);
+                }
+            }
+
+            // set pixel in filtered image to weighted sum of values in the filter region
+            imFilter(x,y) = accum/weightSum;
+        }
+    }
+
+    return imFilter;
+}
+
+
+static int nextOddInt(int i)
+{
+  return (i % 2 == 0) ? i+1 : i;
+}
+
+
+FloatImage FloatImage::iteratedBoxBlur(float sigma, int iterations) const
+{
+    // Compute box blur size for desired sigma and number of iterations:
+    // The kernel resulting from repeated box blurs of the same width is the
+    // Irwin–Hall distribution
+    // (https://en.wikipedia.org/wiki/Irwin–Hall_distribution)
+    //
+    // The variance of the Irwin-Hall distribution with n unit-sized boxes:
+    //
+    //      V(1, n) = n/12.
+    //
+    // Since V[w * X] = w^2 V[X] where w is a constant, we know that the
+    // variance will scale as follows using width-w boxes:
+    //
+    //      V(w, n) = w^2*n/12.
+    //
+    // To achieve a certain standard deviation sigma, we want to find solve:
+    //
+    //      sqrt(V(w, n)) = sigma
+    //
+    // for w, given n and sigma.
+    //
+    // This gives us:
+    //
+    //      V(w, n) = sigma^2
+    //      w = sqrt(12/n)*sigma
+    //
+
+    int w = nextOddInt(round(std::sqrt(12.f/iterations) * sigma));
+
+    // Now, if width is odd, then we can use a centered box and are good to go.
+    // If width is even, then we can't use centered boxes, but must instead
+    // use a symmetric pairs of off-centered boxes. For now, just always round
+    // up to next odd width
+    int hw = (w-1)/2;
+
+    cout << w << endl;
+    FloatImage imFilter = *this;
+    for (int i = 0; i < iterations; i++)
+        imFilter = imFilter.boxBlur(hw);
+
+    return imFilter;
+}
+
+FloatImage FloatImage::fastGaussianBlur(float sigmaX, float sigmaY) const
+{
+    // See comments in FloatImage::iteratedBoxBlur for derivation of width
+    int hw = round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
+    int hh = round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
+
+    FloatImage im;
+    // do horizontal blurs
+    if (hw < 3)
+        // use a separable Gaussian
+        im = gaussianBlurX(sigmaX);
+    else
+        // approximate Gaussian with 6 box blurs
+        im = boxBlurX(hw).boxBlurX(hw).boxBlurX(hw).
+             boxBlurX(hw).boxBlurX(hw).boxBlurX(hw);
+
+    // now do vertical blurs
+    if (hh < 3)
+        // use a separable Gaussian
+        im = im.gaussianBlurY(sigmaY);
+    else
+        // approximate Gaussian with 6 box blurs
+        im = im.boxBlurY(hh).boxBlurY(hh).boxBlurY(hh).
+                boxBlurY(hh).boxBlurY(hh).boxBlurY(hh);
+
+    return im;
+}
+
+
+FloatImage FloatImage::boxBlurX(int leftSize, int rightSize) const
+{
+    FloatImage imFilter(width(), height());
+
+    // cannot blur by more than the whole image width
+    // code below would access outside the bounds of the array without this
+    leftSize = std::min(width(), leftSize);
+    rightSize = std::min(width(), rightSize);
+
+    Color4 scale(1.f);
+    scale /= leftSize + rightSize + 1;
+
+    // allocate enough storage for a single scanline
+    Base out = Base(width(), 1);
+    for (int y = 0; y < height(); ++y)
+    {
+        // take the y-th scanline
+        const auto in = col(y);
+
+        int right = 0;
+        int left = 0;
+
+        // in the beginning, left side of kernel is outside the image boundary.
+        // assume the first pixel is replicated to the left.
+        out(0) = leftSize * in(left);
+        for (int x = 0; x <= rightSize; ++x)
+            out(0) += in(right++);
+
+        // continue to fill until left side of kernel is within image boundary.
+        for (int x = 1; x <= leftSize; ++x)
+            out(x) = out(x-1) + in(right++) - in(left);
+
+        // now entire kernel is contained in the image bounds.
+        // start sliding both ends of the kernel
+        for (int x = leftSize + 1; x < width() - rightSize - 1; ++x)
+            out(x) = out(x-1) + in(right++) - in(left++);
+
+        // finish up as we approach the right side of the scanline.
+        // replicate the right-most pixel as kernel extends past the boundary.
+        for (int x = width() - rightSize - 1; x < width(); ++x)
+            out(x) = out(x-1) + in(right) - in(left++);
+
+        imFilter.block(0, y, width(), 1) = out * scale;
+    }
+
+    return imFilter;
+}
+
+FloatImage FloatImage::boxBlurY(int leftSize, int rightSize) const
+{
+    FloatImage imFilter(width(), height());
+
+    // cannot blur by more than the whole image width
+    // code below would access outside the bounds of the array without this
+    leftSize = std::min(height(), leftSize);
+    rightSize = std::min(height(), rightSize);
+
+    Color4 scale(1.f);
+    scale /= leftSize + rightSize + 1;
+
+    // allocate enough storage for a single vertical scanline
+    Base out = Base(height(), 1);
+    for (int x = 0; x < width(); ++x)
+    {
+        // take the x-th vertical scanline
+        const auto in = row(x);
+
+        int bottom = 0;
+        int top = 0;
+
+        out(0) = leftSize * in(top);
+        for (int y = 0; y <= rightSize; ++y)
+            out(0) += in(bottom++);
+
+        for (int y = 1; y <= leftSize; ++y)
+            out(y) = out(y-1) + in(bottom++) - in(top);
+
+        for (int y = leftSize + 1; y < height() - rightSize - 1; ++y)
+            out(y) = out(y-1) + in(bottom++) - in(top++);
+
+        for (int y = height() - rightSize - 1; y < height(); ++y)
+            out(y) = out(y-1) + in(bottom) - in(top++);
+
+        imFilter.block(x, 0, 1, height()) = out.transpose() * scale;
+    }
+
+    return imFilter;
 }

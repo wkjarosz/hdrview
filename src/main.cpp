@@ -48,6 +48,8 @@ Options: (for batch processing)
                            bmp, exr, pfm, png, ppm, hdr, tga.
   -a FILE, --average=FILE  Average all loaded images (all images must have the
                            same dimensions).
+  --blur="TYPE W,H"        Perform a blur of type ("Gaussian", "Box", "FastGaussian"),
+                           with specified width W and height H.
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
   -t, --test               Don't convert files, just show what would be done.
 )";
@@ -69,8 +71,9 @@ int main(int argc, char **argv)
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
     vector<string> inFiles;
-    bool convert = false, average = false;
-    string convertFormat = "", avgFilename = "";
+    bool convert = false, average = false, blur = false;
+    string convertFormat = "", avgFilename = "", blurType = "";
+    float blurWidth = 0, blurHeight = 0;
     int verbosity = 0;
     bool dither = true;
     bool sRGB = true;
@@ -145,6 +148,21 @@ int main(int argc, char **argv)
             avgFilename = docargs["--average"].asString();
             if (verbosity)
                 printf("Saving average image to \"%s\".\n", avgFilename.c_str());
+        }
+
+        if (docargs["--blur"].isString())
+        {
+            blur = true;
+            char type[32];
+            if (sscanf(docargs["--blur"].asString().c_str(), "%s %f,%f", type, &blurWidth, &blurHeight) != 3)
+            {
+                fprintf(stderr, "Cannot parse command-line parameter: --blur:");
+                fprintf(stderr, "\t%s\n", docargs["--blur"].asString().c_str());
+                return -1;
+            }
+            blurType = type;
+            if (verbosity)
+                printf("Blurring using %s(%f,%f).\n", blurType.c_str(), blurWidth, blurHeight);
         }
 
         if (docargs["--nan"].isString())
@@ -239,6 +257,16 @@ int main(int argc, char **argv)
                     }
                 }
 
+                if (blur)
+                {
+                    if (blurType == "Gaussian")
+                        image = image.gaussianBlur(blurWidth, blurHeight);
+                    else if (blurType == "Box")
+                        image = image.boxBlur(blurWidth, blurHeight);
+                    else if (blurType == "FastGaussian")
+                        image = image.fastGaussianBlur(blurWidth, blurHeight);
+                }
+
                 if (!convert)
                     continue;
 
@@ -256,7 +284,7 @@ int main(int argc, char **argv)
 
             if (average)
             {
-                avgImg *= 1.0f/inFiles.size();
+                avgImg *= Color4(1.0f/inFiles.size());
 
                 string filename = avgFilename;
 
