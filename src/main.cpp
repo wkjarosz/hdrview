@@ -67,6 +67,18 @@ Options: (for batch processing)
                                    bilateral | median).
                            For example: '--filter fast-gaussian,10x10' would
                            filter using a 10x10 fast Gaussian approximation.
+  -r SIZE, --resize=SIZE   Resize the image to the specified SIZE.
+                           This currently uses a box filter for resampling, but
+                           you can combine with a Gaussian blur to obtain
+                           smoother downsampled results. The blur is applied
+                           *before* downsampling.
+                           SIZE can be either absolute or relative.
+                           Absolute: SIZE should be a string matching the
+                           pattern '%dx%d', for instance: '640x480'.
+                           Relative: SIZE should be a string matching the
+                           pattern '%f%%x%f%%' e.g. '33.3%x25%' would make the
+                           image a third its original width and a quarter its
+                           original height.
   -a FILE, --average=FILE  Average all loaded images and save to FILE
                            (all images must have the same dimensions).
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
@@ -352,6 +364,23 @@ int main(int argc, char **argv)
                     else
                     {
                         fprintf(stderr, "Unrecognized filter type: \"%s\".", filterType.c_str());
+                        return -1;
+                    }
+                }
+
+                if (docargs["--resize"].isString())
+                {
+                    int iwidth, iheight;
+                    float percentX, percentY;
+                    if (sscanf(docargs["--resize"].asString().c_str(), "%dx%d", &iwidth, &iheight) == 2)
+                        image = image.smoothScale(iwidth, iheight);
+                    else if (sscanf(docargs["--resize"].asString().c_str(), "%f%%x%f%%", &percentX, &percentY) == 2)
+                        image = image.smoothScale((int)round(percentX*image.width()),
+                                                  (int)round(percentY*image.height()));
+                    else
+                    {
+                        fprintf(stderr, "Cannot parse --resize parameters:");
+                        fprintf(stderr, "\t%s\n", docargs["--resize"].asString().c_str());
                         return -1;
                     }
                 }

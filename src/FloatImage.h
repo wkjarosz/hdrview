@@ -51,6 +51,15 @@ public:
 
 
     //-----------------------------------------------------------------------
+    //@{ \name Resizing.
+    //-----------------------------------------------------------------------
+    FloatImage halfSize() const;
+    FloatImage doubleSize() const;
+    FloatImage smoothScale(int width, int height) const;
+    //@}
+
+
+    //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
     FloatImage convolve(const Eigen::ArrayXXf & kernel) const;
