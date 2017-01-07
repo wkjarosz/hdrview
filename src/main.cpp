@@ -65,7 +65,9 @@ Options: (for batch processing)
                            filter-specific PARAMS specified after the comma.
                            TYPE : (gaussian | box | fast-gaussian | unsharp |
                                    bilateral | median).
-  -a FILE, --average=FILE  Average all loaded images to FILE
+                           For example: '--filter fast-gaussian,10x10' would
+                           filter using a 10x10 fast Gaussian approximation.
+  -a FILE, --average=FILE  Average all loaded images and save to FILE
                            (all images must have the same dimensions).
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
   --dry-run                Don't actually save any files, just report what would

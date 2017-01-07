@@ -5,6 +5,7 @@
 #include <iostream>
 #define NOMINMAX
 #include <tinydir.h>
+#include <tinyformat.h>
 
 using namespace std;
 
@@ -802,11 +803,11 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
     {
         Color4 pixelVal = img->pixel(pixel.x(), pixel.y());
         Color4 iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).min(255.0f).max(0.0f);
-        char buf[2048];
-        NANOGUI_SNPRINTF(buf, 1024, "(%4d,%4d) = (%6.3g, %6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d, %3d)",
+        string s =
+            tfm::format("(%4d,%4d) = (%6.3g, %6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d, %3d)",
                  pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
                  (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]), (int)round(iPixelVal[3]));
-        m_pixelInfoLabel->setCaption(buf);
+        m_pixelInfoLabel->setCaption(s);
     }
     else
         m_pixelInfoLabel->setCaption("");
@@ -824,12 +825,10 @@ void HDRViewScreen::updateZoomLabel()
     mPixelRatio = (float) mFBSize[0] / (float) mSize[0];
 
     float realZoom = m_zoomf * mPixelRatio;
-
-    char buf[1024];
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-    NANOGUI_SNPRINTF(buf, 1024, "%7.3f%% (%d : %d)", realZoom * 100, ratio1, ratio2);
-    m_zoomLabel->setCaption(buf);
+    string cap = tfm::format("%7.3f%% (%d : %d)", realZoom * 100, ratio1, ratio2);
+    m_zoomLabel->setCaption(cap);
     performLayout();
 }
 
@@ -966,10 +965,9 @@ HDRViewScreen::drawPixelLabels() const
 
             float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 
-            char buf[1024];
-            NANOGUI_SNPRINTF(buf, 1024, "%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);
+            string text = tfm::format("%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);
 
-            drawText(imageToScreen(Vector2i(i,j)), buf,
+            drawText(imageToScreen(Vector2i(i,j)), text,
                      luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f),
                      int(m_zoomf/32.0f * 10), int(m_zoomf));
         }

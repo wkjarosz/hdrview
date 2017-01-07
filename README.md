@@ -47,10 +47,11 @@ Copyright (c) Wojciech Jarosz
 
 3-clause BSD. For details, see the ``LICENSE.txt`` file.
 
-hdrview uses Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
+HDRView depends on the following libraries (which are included explicitly or as git submodules):
 
-hdrview uses ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
-
-hdrview uses some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released under public domain.
-
-hdrview uses the [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
+* Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
+* ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
+* Some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released into the public domain.
+* The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
+* The [docopt.cpp](https://github.com/docopt/docopt.cpp) library, which is dual-licensed under MIT and Boost licenses.
+* Wenzel Jakob's simplification of Chris Foster's [tinyformat](https://github.com/mitsuba-renderer/tinyformat) library, which is licensed under the Boost license.
