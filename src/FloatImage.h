@@ -66,7 +66,7 @@ public:
     FloatImage boxBlurX(int halfSize) const {return boxBlurX(halfSize, halfSize);}
     FloatImage boxBlurY(int upSize, int downSize) const;
     FloatImage boxBlurY(int halfSize) const {return boxBlurY(halfSize, halfSize);}
-    FloatImage unsharpMask(float sigma, float truncate, float strength) const;
+    FloatImage unsharpMask(float sigma, float strength) const;
     FloatImage median(float radius, int channel) const;
     FloatImage median(float r) const
     {

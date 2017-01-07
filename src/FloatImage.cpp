@@ -358,9 +358,9 @@ FloatImage FloatImage::gaussianBlur(float sigmaX, float sigmaY,
 
 
 // sharpen an image
-FloatImage FloatImage::unsharpMask(float sigma, float truncate, float strength) const
+FloatImage FloatImage::unsharpMask(float sigma, float strength) const
 {
-    return *this + Color4(strength) * (*this - gaussianBlur(sigma, sigma, truncate, truncate));
+    return *this + Color4(strength) * (*this - fastGaussianBlur(sigma, sigma));
 }
 
 

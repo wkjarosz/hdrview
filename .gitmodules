@@ -13,3 +13,6 @@
 [submodule "ext/docopt"]
 	path = ext/docopt
 	url = https://github.com/docopt/docopt.cpp.git
+[submodule "ext/tinyformat"]
+	path = ext/tinyformat
+	url = https://github.com/wjakob/tinyformat

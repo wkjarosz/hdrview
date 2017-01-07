@@ -10,6 +10,7 @@
 #include <iostream>
 #include <docopt.h>
 #include "HDRViewer.h"
+#include <tinyformat.h>
 
 using namespace std;
 
@@ -43,17 +44,43 @@ Options: (global)
   --version                Show the version.
 
 Options: (for batch processing)
-  -c EXT, --convert=EXT    Convert all images to specified output format.
-                           Available formats include:
-                           bmp, exr, pfm, png, ppm, hdr, tga.
-  -a FILE, --average=FILE  Average all loaded images (all images must have the
-                           same dimensions).
-  --blur="TYPE W,H"        Perform a blur of type ("Gaussian", "Box", "FastGaussian"),
-                           with specified width W and height H.
+  -o BASE, --out=BASE      Save image(s) using specified base output filename.
+                           If multiple images are processed, an image sequence
+                           is created by concetenating: the base filename, image
+                           number, and output format extension. For example:
+                                HDRView -o 'output-image-' -f png *.exr
+                           would save all OpenEXR images in the working
+                           directory as a PNG sequence 'output-image-%3d.png'.
+                           If a single image is processed, the number is omitted.
+                           If no basename is provided, the input files' basenames
+                           are used instead and no numbers are appended (files
+                           may be overwritten!). For example:
+                                HDRview -f png fileA.exr fileB.exr
+                           would output 'fileA.png' and 'fileB.png'.
+  -f EXT, --format=EXT     Specify output file format and extension.
+                           If no format is given, each image is saved in it's
+                           original format (if supported).
+                           EXT : (bmp | exr | pfm | png | ppm | hdr | tga).
+  --filter=TYPE,PARAMS...  Process image(s) using filter TYPE with
+                           filter-specific PARAMS specified after the comma.
+                           TYPE : (gaussian | box | fast-gaussian | unsharp |
+                                   bilateral | median).
+  -a FILE, --average=FILE  Average all loaded images to FILE
+                           (all images must have the same dimensions).
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
-  -t, --test               Don't convert files, just show what would be done.
+  --dry-run                Don't actually save any files, just report what would
+                           be done.
 )";
 
+// TODO: don't duplicate this function, put it in some header
+string getFileExtension(const string& filename)
+{
+    if (filename.find_last_of(".") != string::npos)
+        return filename.substr(filename.find_last_of(".")+1);
+    return "";
+}
+
+// TODO: also put this in the same header
 string getBasename(const string& filename)
 {
     auto lastSlash = filename.find_last_of("/\\");
@@ -66,21 +93,28 @@ string getBasename(const string& filename)
     return filename.substr(start, length);
 }
 
+
 int main(int argc, char **argv)
 {
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
-    vector<string> inFiles;
-    bool convert = false, average = false, blur = false;
-    string convertFormat = "", avgFilename = "", blurType = "";
-    float blurWidth = 0, blurHeight = 0;
+    float gamma,
+          exposure;
+    string ext = "",
+           avgFilename = "",
+           basename = "",
+           filterType = "",
+           filterParams = "";
     int verbosity = 0;
-    bool dither = true;
-    bool sRGB = true;
-    bool onlyTesting = true;
-    bool fixNaNs = false;
+    bool average = false,
+         filter = false,
+         dither = true,
+         sRGB = true,
+         dryRun = true,
+         fixNaNs = false;
     Color3 nanColor(0.0f,0.0f,0.0f);
-    float gamma, exposure;
+
+    vector<string> inFiles;
 
 #if defined(__APPLE__)
     bool launched_from_finder = false;
@@ -134,12 +168,25 @@ int main(int argc, char **argv)
         // dithering
         dither = !docargs["--no-dither"].asBool();
 
-        if (docargs["--convert"].isString())
+        // format
+        if (docargs["--format"].isString())
         {
-            convert = true;
-            convertFormat = docargs["--convert"].asString();
+            ext = docargs["--format"].asString();
             if (verbosity)
-                printf("Converting to \"%s\".\n", convertFormat.c_str());
+                printf("Converting to \"%s\".\n", ext.c_str());
+        }
+        else
+        {
+            if (verbosity)
+                printf("Keeping original image file formats.\n");
+        }
+
+        // base filename
+        if (docargs["--out"].isString())
+        {
+            basename = docargs["--out"].asString();
+            if (verbosity)
+                printf("Setting base filename to \"%s\".\n", basename.c_str());
         }
 
         if (docargs["--average"].isString())
@@ -150,19 +197,22 @@ int main(int argc, char **argv)
                 printf("Saving average image to \"%s\".\n", avgFilename.c_str());
         }
 
-        if (docargs["--blur"].isString())
+        if (docargs["--filter"].isString())
         {
-            blur = true;
-            char type[32];
-            if (sscanf(docargs["--blur"].asString().c_str(), "%s %f,%f", type, &blurWidth, &blurHeight) != 3)
+            filter = true;
+            char type[22];
+            char params[32];
+            if (sscanf(docargs["--filter"].asString().c_str(), "%20[^','],%30s", type, params) != 2)
             {
-                fprintf(stderr, "Cannot parse command-line parameter: --blur:");
-                fprintf(stderr, "\t%s\n", docargs["--blur"].asString().c_str());
+                fprintf(stderr, "Cannot parse command-line parameter: --filter:");
+                fprintf(stderr, "\t%s\n", docargs["--filter"].asString().c_str());
                 return -1;
             }
-            blurType = type;
+            filterType = type;
+            transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
+            filterParams = params;
             if (verbosity)
-                printf("Blurring using %s(%f,%f).\n", blurType.c_str(), blurWidth, blurHeight);
+                printf("Filtering using %s(%s).\n", filterType.c_str(), filterParams.c_str());
         }
 
         if (docargs["--nan"].isString())
@@ -177,8 +227,8 @@ int main(int argc, char **argv)
             fixNaNs = true;
         }
 
-        onlyTesting = docargs["--test"].asBool();
-        if (onlyTesting && verbosity)
+        dryRun = docargs["--dry-run"].asBool();
+        if (dryRun && verbosity)
             printf("Only testing. Will not write files.\n");
 
         // list of filenames
@@ -214,9 +264,9 @@ int main(int argc, char **argv)
         }
         else
         {
-            if ((!average && !convert) || !inFiles.size())
+            if (!inFiles.size())
             {
-                fprintf(stderr, "Must specify at least one file and one of -c or -a in batch mode!\n");
+                fprintf(stderr, "No files specified for batch mode!\n");
                 return -1;
             }
 
@@ -233,13 +283,11 @@ int main(int argc, char **argv)
                 if (verbosity)
                     printf("Successfully read image \"%s\".\n", inFiles[i].c_str());
 
-                if (fixNaNs)
-                    for (int y = 0; y < image.height(); ++y)
-                        for (int x = 0; x < image.width(); ++x)
-                            if (!isfinite(image(x,y)[0]) ||
-                                !isfinite(image(x,y)[1]) ||
-                                !isfinite(image(x,y)[2]))
-                                image(x,y) = Color4(nanColor, image(x,y)[3]);
+                if (fixNaNs || !dryRun)
+                    image = image.unaryExpr([&](const Color4 & c)
+                    {
+                        return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
+                    });
 
                 if (average)
                 {
@@ -257,25 +305,67 @@ int main(int argc, char **argv)
                     }
                 }
 
-                if (blur)
+                if (filter)
                 {
-                    if (blurType == "Gaussian")
-                        image = image.gaussianBlur(blurWidth, blurHeight);
-                    else if (blurType == "Box")
-                        image = image.boxBlur(blurWidth, blurHeight);
-                    else if (blurType == "FastGaussian")
-                        image = image.fastGaussianBlur(blurWidth, blurHeight);
+                    if (filterType == "gaussian" ||
+                        filterType == "box" ||
+                        filterType == "fast-gaussian" ||
+                        filterType == "median" ||
+                        filterType == "bilateral")
+                    {
+                        float width, height;
+                        if (sscanf(filterParams.c_str(), "%fx%f", &width, &height) != 2)
+                        {
+                            fprintf(stderr, "Cannot parse filter parameters (expecting \"%%fx%%f\"):");
+                            fprintf(stderr, "\t%s\n", filterParams.c_str());
+                            return -1;
+                        }
+
+                        if (dryRun)
+                            ;
+                        else if (filterType == "gaussian")
+                            image = image.gaussianBlur(width, height);
+                        else if (filterType == "box")
+                            image = image.boxBlur(width, height);
+                        else if (filterType == "fast-gaussian")
+                            image = image.fastGaussianBlur(width, height);
+                        else if (filterType == "median")
+                            image = image.median(width, height);
+                        else if (filterType == "bilateral")
+                            image = image.bilateral(width, height);
+                    }
+                    else if (filterType == "unsharp")
+                    {
+                        float sigma, strength;
+                        if (sscanf(filterParams.c_str(), "%f,%f", &sigma, &strength) != 2)
+                        {
+                            fprintf(stderr, "Cannot parse 'unsharp' filter parameters (expecting \"%%f,%%f\"):");
+                            fprintf(stderr, "\t%s\n", filterParams.c_str());
+                            return -1;
+                        }
+
+                        if (!dryRun)
+                            image = image.unsharpMask(sigma, strength);
+                    }
+                    else
+                    {
+                        fprintf(stderr, "Unrecognized filter type: \"%s\".", filterType.c_str());
+                        return -1;
+                    }
                 }
 
-                if (!convert)
-                    continue;
-
-                string filename = getBasename(inFiles[i]) + "." + convertFormat;
+                string thisExt = ext.size() ? ext : getFileExtension(inFiles[i]);
+                string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
+                string filename;
+                if (inFiles.size() == 1 || !basename.size())
+                    filename = thisBasename + "." + thisExt;
+                else
+                    filename = tfm::format("%s%03d.%s", thisBasename, i, thisExt);
 
                 if (verbosity)
                     printf("Writing image \"%s\"...", filename.c_str());
 
-                if (!onlyTesting)
+                if (!dryRun)
                     image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
 
                 if (verbosity)
@@ -291,7 +381,7 @@ int main(int argc, char **argv)
                 if (verbosity)
                     printf("Writing average image \"%s\"...\n", filename.c_str());
 
-                if (!onlyTesting)
+                if (!dryRun)
                     avgImg.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
             }
         }
