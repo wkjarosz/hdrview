@@ -154,8 +154,12 @@ endif()
 # The following lines build the main executable. If you add a source
 # code file to Nori, be sure to include it in this list.
 add_executable(HDRView MACOSX_BUNDLE
+    src/common.cpp
+    src/common.h
     src/ImageQuad.cpp
     src/ImageQuad.h
+    src/EnvMapConversions.cpp
+    src/EnvMapConversions.h
     src/pfm.h
     src/pfm.cpp
     src/ppm.h

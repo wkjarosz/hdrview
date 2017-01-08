@@ -9,8 +9,10 @@
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
-#include "HDRViewer.h"
 #include <tinyformat.h>
+#include "HDRViewer.h"
+#include "common.h"
+#include "EnvMapConversions.h"
 
 using namespace std;
 
@@ -79,33 +81,26 @@ Options: (for batch processing)
                            pattern '%f%%x%f%%' e.g. '33.3%x25%' would make the
                            image a third its original width and a quarter its
                            original height.
+  --remap=SIZE,M,M,[S]     Remap the input image from one environment map
+                           format to another. SIZE is a size specification just
+                           like in --resize. M,M are the input and output
+                           environment map formats respectively.
+                           MAP : (latlong | angularmap | mirrorball | cubemap).
+                           The optional S results in SxS super-sampling, where
+                           the default is one centered sample per pixel S=1.
+                           Technically this method can be abused to resize an
+                           image without any remapping by specifying the same
+                           M parameter twice.
+  --border-mode=MODE       Specifies what mode to use when accessing pixels
+                           outside the bounds of the image.
+                           MODE : (black | mirror | edge | repeat)
+                           [default: edge]
   -a FILE, --average=FILE  Average all loaded images and save to FILE
                            (all images must have the same dimensions).
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
   --dry-run                Don't actually save any files, just report what would
                            be done.
 )";
-
-// TODO: don't duplicate this function, put it in some header
-string getFileExtension(const string& filename)
-{
-    if (filename.find_last_of(".") != string::npos)
-        return filename.substr(filename.find_last_of(".")+1);
-    return "";
-}
-
-// TODO: also put this in the same header
-string getBasename(const string& filename)
-{
-    auto lastSlash = filename.find_last_of("/\\");
-    auto lastDot = filename.find_last_of(".");
-    if (lastSlash == std::string::npos && lastDot == std::string::npos)
-        return filename;
-
-    auto start = (lastSlash != string::npos) ? lastSlash + 1 : 0;
-    auto length = (lastDot != string::npos) ? lastDot-start : filename.size()-start;
-    return filename.substr(start, length);
-}
 
 
 int main(int argc, char **argv)
@@ -126,6 +121,7 @@ int main(int argc, char **argv)
          sRGB = true,
          dryRun = true,
          fixNaNs = false;
+    FloatImage::BorderMode borderMode;
     Color3 nanColor(0.0f,0.0f,0.0f);
 
     vector<string> inFiles;
@@ -182,6 +178,20 @@ int main(int argc, char **argv)
         // dithering
         dither = !docargs["--no-dither"].asBool();
 
+        if (docargs["--border-mode"].asString() == "black")
+            borderMode = FloatImage::BLACK;
+        else if (docargs["--border-mode"].asString() == "mirror")
+            borderMode = FloatImage::MIRROR;
+        else if (docargs["--border-mode"].asString() == "repeat")
+            borderMode = FloatImage::REPEAT;
+        else if (docargs["--border-mode"].asString() == "edge")
+            borderMode = FloatImage::EDGE;
+        else
+            throw invalid_argument(tfm::format("Invalid border mode \"%s\".", docargs["--border-mode"].asString()));
+
+        if (verbosity)
+            printf("Using border mode: %s.\n", docargs["--border-mode"].asString().c_str());
+
         // format
         if (docargs["--format"].isString())
         {
@@ -217,11 +227,8 @@ int main(int argc, char **argv)
             char type[22];
             char params[32];
             if (sscanf(docargs["--filter"].asString().c_str(), "%20[^','],%30s", type, params) != 2)
-            {
-                fprintf(stderr, "Cannot parse command-line parameter: --filter:");
-                fprintf(stderr, "\t%s\n", docargs["--filter"].asString().c_str());
-                return -1;
-            }
+                throw invalid_argument(tfm::format("Cannot parse command-line parameter: --filter:\t%s", docargs["--filter"].asString()));
+
             filterType = type;
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
             filterParams = params;
@@ -232,10 +239,8 @@ int main(int argc, char **argv)
         if (docargs["--nan"].isString())
         {
             if (sscanf(docargs["--nan"].asString().c_str(), "%f,%f,%f", &nanColor[0], &nanColor[1], &nanColor[2]) != 3)
-            {
-                fprintf(stderr, "Cannot parse command-line parameter: --nan\n");
-                return -1;
-            }
+                throw invalid_argument("Cannot parse command-line parameter: --nan");
+
             if (verbosity)
                 printf("Replacing NaNs and Infinities with (%f,%f,%f).\n", nanColor[0], nanColor[1], nanColor[2]);
             fixNaNs = true;
@@ -279,10 +284,7 @@ int main(int argc, char **argv)
         else
         {
             if (!inFiles.size())
-            {
-                fprintf(stderr, "No files specified for batch mode!\n");
-                return -1;
-            }
+                throw invalid_argument("No files specified for batch mode!");
 
             FloatImage avgImg;
             for (size_t i = 0; i < inFiles.size(); ++i)
@@ -309,12 +311,8 @@ int main(int argc, char **argv)
                         avgImg = image;
                     else
                     {
-                        if (avgImg.width() != image.width() ||
-                            avgImg.height() != image.height())
-                        {
-                            fprintf(stderr, "Images do not have the same size.");
-                            return -1;
-                        }
+                        if (avgImg.width() != image.width() || avgImg.height() != image.height())
+                            throw invalid_argument("Images do not have the same size.");
                         avgImg += image;
                     }
                 }
@@ -329,63 +327,113 @@ int main(int argc, char **argv)
                     {
                         float width, height;
                         if (sscanf(filterParams.c_str(), "%fx%f", &width, &height) != 2)
-                        {
-                            fprintf(stderr, "Cannot parse filter parameters (expecting \"%%fx%%f\"):");
-                            fprintf(stderr, "\t%s\n", filterParams.c_str());
-                            return -1;
-                        }
+                            throw invalid_argument(tfm::format("Cannot parse filter parameters (expecting \"%%fx%%f\"):\t%s\n", filterParams));
 
                         if (dryRun)
                             ;
                         else if (filterType == "gaussian")
-                            image = image.gaussianBlur(width, height);
+                            image = image.gaussianBlur(width, height, borderMode);
                         else if (filterType == "box")
-                            image = image.boxBlur(width, height);
+                            image = image.boxBlur(width, height, borderMode);
                         else if (filterType == "fast-gaussian")
-                            image = image.fastGaussianBlur(width, height);
+                            image = image.fastGaussianBlur(width, height, borderMode);
                         else if (filterType == "median")
-                            image = image.median(width, height);
+                            image = image.median(width, height, borderMode);
                         else if (filterType == "bilateral")
-                            image = image.bilateral(width, height);
+                            image = image.bilateral(width, height, borderMode);
                     }
                     else if (filterType == "unsharp")
                     {
                         float sigma, strength;
                         if (sscanf(filterParams.c_str(), "%f,%f", &sigma, &strength) != 2)
-                        {
-                            fprintf(stderr, "Cannot parse 'unsharp' filter parameters (expecting \"%%f,%%f\"):");
-                            fprintf(stderr, "\t%s\n", filterParams.c_str());
-                            return -1;
-                        }
+                            throw invalid_argument(tfm::format("Cannot parse 'unsharp' filter parameters (expecting \"%%f,%%f\"):\t%s\n", filterParams));
 
                         if (!dryRun)
-                            image = image.unsharpMask(sigma, strength);
+                            image = image.unsharpMask(sigma, strength, borderMode);
                     }
                     else
-                    {
-                        fprintf(stderr, "Unrecognized filter type: \"%s\".", filterType.c_str());
-                        return -1;
-                    }
+                        throw invalid_argument(tfm::format("Unrecognized filter type: \"%s\".", filterType));
                 }
 
                 if (docargs["--resize"].isString())
                 {
-                    int iwidth, iheight;
+                    bool relative = false;
+                    int newWidth, newHeight;
                     float percentX, percentY;
-                    if (sscanf(docargs["--resize"].asString().c_str(), "%dx%d", &iwidth, &iheight) == 2)
-                        image = image.smoothScale(iwidth, iheight);
+                    if (sscanf(docargs["--resize"].asString().c_str(), "%dx%d", &newWidth, &newHeight) == 2)
+                        relative = false;
                     else if (sscanf(docargs["--resize"].asString().c_str(), "%f%%x%f%%", &percentX, &percentY) == 2)
-                        image = image.smoothScale((int)round(percentX*image.width()),
-                                                  (int)round(percentY*image.height()));
-                    else
                     {
-                        fprintf(stderr, "Cannot parse --resize parameters:");
-                        fprintf(stderr, "\t%s\n", docargs["--resize"].asString().c_str());
-                        return -1;
+                        relative = true;
+                        newWidth = (int)round(percentX*image.width());
+                        newHeight = (int)round(percentY*image.height());
                     }
+                    else
+                        throw invalid_argument(tfm::format("Cannot parse --resize parameters:\t%s\n", docargs["--resize"].asString()));
+
+                    image = image.smoothScale(newWidth, newHeight);
                 }
 
-                string thisExt = ext.size() ? ext : getFileExtension(inFiles[i]);
+                if (docargs["--remap"].isString())
+                {
+                    bool relative = false;
+                    int newWidth, newHeight;
+                    float percentX, percentY;
+                    int numSamples = 1;
+                    char s1[32], s2[32], s3[32] = "bilinear";
+                    if (sscanf(docargs["--remap"].asString().c_str(), "%dx%d,%30[^','],%30[^','],%d,%30[^',']", &newWidth, &newHeight, s1, s2, &numSamples, s3) >= 4)
+                        relative = false;
+                    else if (sscanf(docargs["--remap"].asString().c_str(), "%f%%x%f%%,%30[^','],%30s,%d,%30[^',']", &percentX, &percentY, s1, s2, &numSamples, s3) >= 4)
+                    {
+                        relative = true;
+                        newWidth = (int)round(percentX*image.width());
+                        newHeight = (int)round(percentY*image.height());
+                    }
+                    else
+                        throw invalid_argument(tfm::format("Cannot parse --remap parameters:\t%s\n", docargs["--remap"].asString()));
+
+                    FloatImage::UV2XYZFn dst2xyz;
+                    FloatImage::XYZ2UVFn xyz2src;
+
+                    string from = s1;
+                    string to = s2;
+                    if (from == "angularmap")
+                        xyz2src = XYZToAngularMap;
+                    else if (from == "mirrorball")
+                        xyz2src = XYZToMirrorBall;
+                    else if (from == "latlong")
+                        xyz2src = XYZToLatLong;
+                    else if (from == "cubemap")
+                        xyz2src = XYZToCubeMap;
+                    else
+                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", from));
+
+                    if (to == "angularmap")
+                        dst2xyz = angularMapToXYZ;
+                    else if (to == "mirrorball")
+                        dst2xyz = mirrorBallToXYZ;
+                    else if (to == "latlong")
+                        dst2xyz = latLongToXYZ;
+                    else if (to == "cubemap")
+                        dst2xyz = cubeMapToXYZ;
+                    else
+                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", to));
+
+                    FloatImage::PixelSamplerFn sampler;
+                    string interp = s3;
+                    if (interp == "nearest")
+                        sampler = &FloatImage::nearest;
+                    else if (interp == "bilinear")
+                        sampler = &FloatImage::bilinear;
+                    else if (interp == "bicubic")
+                        sampler = &FloatImage::bicubic;
+                    else
+                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized sampler type \"%s\"", interp));
+
+                    image = image.resample(newWidth, newHeight, dst2xyz, xyz2src, sampler, numSamples, borderMode);
+                }
+
+                string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
                 string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
                 string filename;
                 if (inFiles.size() == 1 || !basename.size())
