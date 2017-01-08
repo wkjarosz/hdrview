@@ -331,17 +331,12 @@ HDRImage HDRImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mod
             for (int xFilter = -radius; xFilter <= radius; xFilter++)
             {
                 int xx = x+xFilter;
-                // ignore pixels outside the image
-                if (xx < 0 || xx >= width()) continue;
-
                 for (int yFilter = -radius; yFilter <= radius; yFilter++)
                 {
                     int yy = y+yFilter;
-                    // ignore pixels outside the image
-                    if (yy < 0 || yy >= height()) continue;
 
                     // calculate the squared distance between the 2 pixels (in range)
-                    float rangeExp = ::pow(operator()(xx,yy) - operator()(x,y), 2).sum();
+                    float rangeExp = ::pow(pixel(xx,yy,mode) - (*this)(x,y), 2).sum();
                     float domainExp = std::pow(xFilter,2) + std::pow(yFilter,2);
 
                     // calculate the exponentiated weighting factor from the domain and range
@@ -385,13 +380,10 @@ HDRImage HDRImage::iteratedBoxBlur(float sigma, int iterations, BorderMode mode)
     //
     // To achieve a certain standard deviation sigma, we want to find solve:
     //
-    //      sqrt(V(w, n)) = sigma
+    //      sqrt(V(w, n)) = w*sqrt(n/12) = sigma
     //
-    // for w, given n and sigma.
+    // for w, given n and sigma; which is:
     //
-    // This gives us:
-    //
-    //      V(w, n) = sigma^2
     //      w = sqrt(12/n)*sigma
     //
 
@@ -419,72 +411,44 @@ HDRImage HDRImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode)
     HDRImage im;
     // do horizontal blurs
     if (hw < 3)
-        // use a separable Gaussian
+        // for small blurs, just use a separable Gaussian
         im = gaussianBlurX(sigmaX, mode);
     else
-        // approximate Gaussian with 6 box blurs
+        // for large blurs, approximate Gaussian with 6 box blurs
         im = boxBlurX(hw, mode).boxBlurX(hw, mode).boxBlurX(hw, mode).
              boxBlurX(hw, mode).boxBlurX(hw, mode).boxBlurX(hw, mode);
 
     // now do vertical blurs
     if (hh < 3)
-        // use a separable Gaussian
+        // for small blurs, just use a separable Gaussian
         im = im.gaussianBlurY(sigmaY, mode);
     else
-        // approximate Gaussian with 6 box blurs
+        // for large blurs, approximate Gaussian with 6 box blurs
         im = im.boxBlurY(hh, mode).boxBlurY(hh, mode).boxBlurY(hh, mode).
                 boxBlurY(hh, mode).boxBlurY(hh, mode).boxBlurY(hh, mode);
 
     return im;
 }
 
-// TODO actually use the mode parameter
+
 HDRImage HDRImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) const
 {
     HDRImage imFilter(width(), height());
 
-    // cannot blur by more than the whole image width
-    // code below would access outside the bounds of the array without this
-    leftSize = std::min(width(), leftSize);
-    rightSize = std::min(width(), rightSize);
-
-    Color4 scale(1.f);
-    scale /= leftSize + rightSize + 1;
-
-    // allocate enough storage for a single scanline
-    Base out = Base(width(), 1);
     for (int y = 0; y < height(); ++y)
     {
-        // take the y-th scanline
-        const auto in = col(y);
+        // fill up the accumulator
+        imFilter(0, y) = 0;
+        for (int dx = -leftSize; dx <= rightSize; ++dx)
+            imFilter(0, y) += pixel(dx, y, mode);
 
-        int right = 0;
-        int left = 0;
-
-        // in the beginning, left side of kernel is outside the image boundary.
-        // assume the first pixel is replicated to the left.
-        out(0) = leftSize * in(left);
-        for (int x = 0; x <= rightSize; ++x)
-            out(0) += in(right++);
-
-        // continue to fill until left side of kernel is within image boundary.
-        for (int x = 1; x <= leftSize; ++x)
-            out(x) = out(x-1) + in(right++) - in(left);
-
-        // now entire kernel is contained in the image bounds.
-        // start sliding both ends of the kernel
-        for (int x = leftSize + 1; x < width() - rightSize - 1; ++x)
-            out(x) = out(x-1) + in(right++) - in(left++);
-
-        // finish up as we approach the right side of the scanline.
-        // replicate the right-most pixel as kernel extends past the boundary.
-        for (int x = width() - rightSize - 1; x < width(); ++x)
-            out(x) = out(x-1) + in(right) - in(left++);
-
-        imFilter.block(0, y, width(), 1) = out * scale;
+        for (int x = 1; x < width(); ++x)
+            imFilter(x, y) = imFilter(x-1, y) -
+                             pixel(x-1-leftSize, y, mode) +
+                             pixel(x+rightSize, y, mode);
     }
 
-    return imFilter;
+    return imFilter * Color4(1.f/(leftSize + rightSize + 1));
 }
 
 // TODO actually use the mode parameter
@@ -492,41 +456,20 @@ HDRImage HDRImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) const
 {
     HDRImage imFilter(width(), height());
 
-    // cannot blur by more than the whole image width
-    // code below would access outside the bounds of the array without this
-    leftSize = std::min(height(), leftSize);
-    rightSize = std::min(height(), rightSize);
-
-    Color4 scale(1.f);
-    scale /= leftSize + rightSize + 1;
-
-    // allocate enough storage for a single vertical scanline
-    Base out = Base(height(), 1);
     for (int x = 0; x < width(); ++x)
     {
-        // take the x-th vertical scanline
-        const auto in = row(x);
+        // fill up the accumulator
+        imFilter(x, 0) = 0;
+        for (int dy = -leftSize; dy <= rightSize; ++dy)
+            imFilter(x, 0) += pixel(x, dy, mode);
 
-        int bottom = 0;
-        int top = 0;
-
-        out(0) = leftSize * in(top);
-        for (int y = 0; y <= rightSize; ++y)
-            out(0) += in(bottom++);
-
-        for (int y = 1; y <= leftSize; ++y)
-            out(y) = out(y-1) + in(bottom++) - in(top);
-
-        for (int y = leftSize + 1; y < height() - rightSize - 1; ++y)
-            out(y) = out(y-1) + in(bottom++) - in(top++);
-
-        for (int y = height() - rightSize - 1; y < height(); ++y)
-            out(y) = out(y-1) + in(bottom) - in(top++);
-
-        imFilter.block(x, 0, 1, height()) = out.transpose() * scale;
+        for (int y = 1; y < height(); ++y)
+            imFilter(x, y) = imFilter(x, y-1) -
+                             pixel(x, y-1-leftSize, mode) +
+                             pixel(x, y+rightSize, mode);
     }
 
-    return imFilter;
+    return imFilter * Color4(1.f/(leftSize + rightSize + 1));
 }
 
 HDRImage HDRImage::halfSize() const
@@ -657,10 +600,10 @@ bool HDRImage::load(const string & filename)
         resize(w, h);
         for (int y = 0; y < h; ++y)
             for (int x = 0; x < w; ++x)
-                operator()(x,y) = Color4(float_data[4*(x + y*w) + 0],
-                                         float_data[4*(x + y*w) + 1],
-                                         float_data[4*(x + y*w) + 2],
-                                         float_data[4*(x + y*w) + 3]);
+                (*this)(x,y) = Color4(float_data[4*(x + y*w) + 0],
+                                      float_data[4*(x + y*w) + 1],
+                                      float_data[4*(x + y*w) + 2],
+                                      float_data[4*(x + y*w) + 3]);
         return true;
     }
     else
@@ -687,10 +630,10 @@ bool HDRImage::load(const string & filename)
                 // convert 3-channel pfm data to 4-channel internal representation
                 for (int y = 0; y < h; ++y)
                     for (int x = 0; x < w; ++x)
-                        operator()(x,y) = Color4(float_data[3*(x + y*w) + 0],
-                                                 float_data[3*(x + y*w) + 1],
-                                                 float_data[3*(x + y*w) + 2],
-                                                 1.0f);
+                        (*this)(x,y) = Color4(float_data[3*(x + y*w) + 0],
+                                              float_data[3*(x + y*w) + 1],
+                                              float_data[3*(x + y*w) + 2],
+                                              1.0f);
 
                 delete [] float_data;
                 return true;
@@ -730,7 +673,7 @@ bool HDRImage::load(const string & filename)
             for (int i = 0; i < w; ++i)
             {
                 const Imf::Rgba &p = pixels[0][i];
-                operator()(i, row) = Color4(p.r, p.g, p.b, p.a);
+                (*this)(i, row) = Color4(p.r, p.g, p.b, p.a);
             }
 
             y++;
