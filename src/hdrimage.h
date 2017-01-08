@@ -69,14 +69,12 @@ public:
     HDRImage halfSize() const;
     HDRImage doubleSize() const;
     HDRImage smoothScale(int width, int height) const;
-
-    typedef Eigen::Vector3f (*UV2XYZFn)(const Eigen::Vector2f &);
-    typedef Eigen::Vector2f (*XYZ2UVFn)(const Eigen::Vector3f &);
     HDRImage resample(int width, int height,
-                        UV2XYZFn dst2xyz,
-                        XYZ2UVFn xyz2src,
-                        PixelSamplerFn sampler,
-                        int superSample = 1, BorderMode mode = REPEAT) const;
+                      std::function<Color4(const HDRImage &, float, float, BorderMode)> sampler =
+                            [](const HDRImage & i, float x, float y, BorderMode m) {return i.bilinear(x,y,m);},
+                      std::function<Eigen::Vector2f(const Eigen::Vector2f&)> warpFn =
+                            [](const Eigen::Vector2f & uv) {return uv;},
+                      int superSample = 1, BorderMode mode = REPEAT) const;
     //@}
 
 

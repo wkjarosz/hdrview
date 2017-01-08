@@ -178,11 +178,10 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mode) const
 }
 
 
-#define CALL_MEMBER_FN(object,ptrToMember)  ((object).*(ptrToMember))
 HDRImage HDRImage::resample(int w, int h,
-                                UV2XYZFn dst2xyz, XYZ2UVFn xyz2src,
-                                PixelSamplerFn sampler,
-                                int superSample, BorderMode mode) const
+                            function<Color4(const HDRImage &, float, float, BorderMode)> samplerFn,
+                            function<Vector2f(const Vector2f&)> warpFn,
+                            int superSample, BorderMode mode) const
 {
     HDRImage result(w, h);
 
@@ -196,9 +195,8 @@ HDRImage HDRImage::resample(int w, int h,
                 for (int xx = 0; xx < superSample; ++xx)
                 {
                     float i = (xx+0.5f)/superSample;
-                    Vector2f dstUV = Vector2f((x+i)/w, (y+j)/h);
-                    Vector2f srcUV = xyz2src(dst2xyz(dstUV));
-                    sum += CALL_MEMBER_FN(*this, sampler)(srcUV(0)*width(), srcUV(1)*height(), mode);
+                    Vector2f srcUV = warpFn(Vector2f((x+i)/w, (y+j)/h)).array() * Array2f(width(), height());
+                    sum += samplerFn(*this, srcUV(0), srcUV(1), mode);
                 }
             }
             result(x,y) = sum/(superSample*superSample);

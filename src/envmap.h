@@ -8,6 +8,9 @@
 
 #include <Eigen/Core>
 
+typedef Eigen::Vector3f (*UV2XYZFn)(const Eigen::Vector2f &);
+typedef Eigen::Vector2f (*XYZ2UVFn)(const Eigen::Vector3f &);
+
 // functions that convert from UV image plane coordinates to
 // XYZ world coordinates for the various light probe representations
 Eigen::Vector3f angularMapToXYZ(const Eigen::Vector2f & uv);

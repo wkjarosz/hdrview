@@ -392,45 +392,53 @@ int main(int argc, char **argv)
                     else
                         throw invalid_argument(tfm::format("Cannot parse --remap parameters:\t%s\n", docargs["--remap"].asString()));
 
-                    HDRImage::UV2XYZFn dst2xyz;
-                    HDRImage::XYZ2UVFn xyz2src;
+                    UV2XYZFn dst2xyz;
+                    XYZ2UVFn xyz2src;
 
-                    string from = s1;
-                    string to = s2;
-                    if (from == "angularmap")
-                        xyz2src = XYZToAngularMap;
-                    else if (from == "mirrorball")
-                        xyz2src = XYZToMirrorBall;
-                    else if (from == "latlong")
-                        xyz2src = XYZToLatLong;
-                    else if (from == "cubemap")
-                        xyz2src = XYZToCubeMap;
-                    else
-                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", from));
+                    string from = s1, to = s2;
 
-                    if (to == "angularmap")
-                        dst2xyz = angularMapToXYZ;
-                    else if (to == "mirrorball")
-                        dst2xyz = mirrorBallToXYZ;
-                    else if (to == "latlong")
-                        dst2xyz = latLongToXYZ;
-                    else if (to == "cubemap")
-                        dst2xyz = cubeMapToXYZ;
-                    else
-                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", to));
+                    // by default create a no-op passthrough warp function
+                    function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
+                    if (from != to)
+                    {
+                        if (from == "angularmap")
+                            xyz2src = XYZToAngularMap;
+                        else if (from == "mirrorball")
+                            xyz2src = XYZToMirrorBall;
+                        else if (from == "latlong")
+                            xyz2src = XYZToLatLong;
+                        else if (from == "cubemap")
+                            xyz2src = XYZToCubeMap;
+                        else
+                            throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", from));
 
-                    HDRImage::PixelSamplerFn sampler;
+                        if (to == "angularmap")
+                            dst2xyz = angularMapToXYZ;
+                        else if (to == "mirrorball")
+                            dst2xyz = mirrorBallToXYZ;
+                        else if (to == "latlong")
+                            dst2xyz = latLongToXYZ;
+                        else if (to == "cubemap")
+                            dst2xyz = cubeMapToXYZ;
+                        else
+                            throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", to));
+
+                        warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+                    }
+
+                    function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler;
                     string interp = s3;
                     if (interp == "nearest")
-                        sampler = &HDRImage::nearest;
+                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
                     else if (interp == "bilinear")
-                        sampler = &HDRImage::bilinear;
+                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
                     else if (interp == "bicubic")
-                        sampler = &HDRImage::bicubic;
+                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
                     else
                         throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized sampler type \"%s\"", interp));
 
-                    image = image.resample(newWidth, newHeight, dst2xyz, xyz2src, sampler, numSamples, borderMode);
+                    image = image.resample(newWidth, newHeight, sampler,
+                                           warp, numSamples, borderMode);
                 }
 
                 string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
