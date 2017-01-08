@@ -1,5 +1,5 @@
 /*!
-    \file FloatImage.h
+    \file hdrimage.h
     \brief Contains the definition of a floating-point RGBA image class
     \author Wojciech Jarosz
 */
@@ -8,28 +8,28 @@
 #include <string>
 #include <Eigen/Core>
 #include <nanogui/common.h>
-#include "Color.h"
+#include "color.h"
 
 
 //! Floating point image
-class FloatImage : public Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>
+class HDRImage : public Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>
 {
 typedef Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic> Base;
 public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors, destructors, etc.
     //-----------------------------------------------------------------------
-    FloatImage(void) : Base() {}
-    FloatImage(int w, int h) : Base(w, h) {}
-    FloatImage(const Base & other) : Base(other) {}
+    HDRImage(void) : Base() {}
+    HDRImage(int w, int h) : Base(w, h) {}
+    HDRImage(const Base & other) : Base(other) {}
 
-    //! This constructor allows you to construct a FloatImage from Eigen expressions
+    //! This constructor allows you to construct a HDRImage from Eigen expressions
     template <typename OtherDerived>
-    FloatImage(const Eigen::ArrayBase<OtherDerived>& other) : Base(other) { }
+    HDRImage(const Eigen::ArrayBase<OtherDerived>& other) : Base(other) { }
 
-    //! This method allows you to assign Eigen expressions to a FloatImage
+    //! This method allows you to assign Eigen expressions to a HDRImage
     template <typename OtherDerived>
-    FloatImage& operator=(const Eigen::ArrayBase <OtherDerived>& other)
+    HDRImage& operator=(const Eigen::ArrayBase <OtherDerived>& other)
     {
         this->Base::operator=(other);
         return *this;
@@ -56,7 +56,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Pixel samplers.
     //-----------------------------------------------------------------------
-    typedef Color4 (FloatImage::*PixelSamplerFn)(float, float, FloatImage::BorderMode) const;
+    typedef Color4 (HDRImage::*PixelSamplerFn)(float, float, HDRImage::BorderMode) const;
     Color4 bilinear(float sx, float sy, BorderMode mode = EDGE) const;
     Color4 bicubic(float sx, float sy, BorderMode mode = EDGE) const;
     Color4 nearest(float sx, float sy, BorderMode mode = EDGE) const;
@@ -66,13 +66,13 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Resizing.
     //-----------------------------------------------------------------------
-    FloatImage halfSize() const;
-    FloatImage doubleSize() const;
-    FloatImage smoothScale(int width, int height) const;
+    HDRImage halfSize() const;
+    HDRImage doubleSize() const;
+    HDRImage smoothScale(int width, int height) const;
 
     typedef Eigen::Vector3f (*UV2XYZFn)(const Eigen::Vector2f &);
     typedef Eigen::Vector2f (*XYZ2UVFn)(const Eigen::Vector3f &);
-    FloatImage resample(int width, int height,
+    HDRImage resample(int width, int height,
                         UV2XYZFn dst2xyz,
                         XYZ2UVFn xyz2src,
                         PixelSamplerFn sampler,
@@ -83,36 +83,36 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    FloatImage flipVertical()   {return colwise().reverse().eval();}
-    FloatImage flipHorizontal() {return rowwise().reverse().eval();}
-    FloatImage rotate90CW()     {return transpose().colwise().reverse().eval();}
-    FloatImage rotate90CCW()    {return transpose().rowwise().reverse().eval();}
+    HDRImage flipVertical()   {return colwise().reverse().eval();}
+    HDRImage flipHorizontal() {return rowwise().reverse().eval();}
+    HDRImage rotate90CW()     {return transpose().colwise().reverse().eval();}
+    HDRImage rotate90CCW()    {return transpose().rowwise().reverse().eval();}
     //@}
 
 
     //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
-    FloatImage convolve(const Eigen::ArrayXXf & kernel, BorderMode mode = EDGE) const;
-    FloatImage gaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE,
+    HDRImage convolve(const Eigen::ArrayXXf & kernel, BorderMode mode = EDGE) const;
+    HDRImage gaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE,
                             float truncateX=6.0f, float truncateY=6.0f) const;
-    FloatImage gaussianBlurX(float sigmaX, BorderMode mode = EDGE, float truncateX=6.0f) const;
-    FloatImage gaussianBlurY(float sigmaY, BorderMode mode = EDGE, float truncateY=6.0f) const;
-    FloatImage iteratedBoxBlur(float sigma, int iterations = 6, BorderMode mode = EDGE) const;
-    FloatImage fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE) const;
-    FloatImage boxBlur(int w, BorderMode mode = EDGE) const{return boxBlur(w,w, mode);}
-    FloatImage boxBlur(int hw, int hh, BorderMode mode = EDGE) const{return boxBlurX(hw,mode).boxBlurY(hh,mode);}
-    FloatImage boxBlurX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
-    FloatImage boxBlurX(int halfSize, BorderMode mode = EDGE) const {return boxBlurX(halfSize, halfSize, mode);}
-    FloatImage boxBlurY(int upSize, int downSize, BorderMode mode = EDGE) const;
-    FloatImage boxBlurY(int halfSize, BorderMode mode = EDGE) const {return boxBlurY(halfSize, halfSize, mode);}
-    FloatImage unsharpMask(float sigma, float strength, BorderMode mode = EDGE) const;
-    FloatImage median(float radius, int channel, BorderMode mode = EDGE) const;
-    FloatImage median(float r, BorderMode mode = EDGE) const
+    HDRImage gaussianBlurX(float sigmaX, BorderMode mode = EDGE, float truncateX=6.0f) const;
+    HDRImage gaussianBlurY(float sigmaY, BorderMode mode = EDGE, float truncateY=6.0f) const;
+    HDRImage iteratedBoxBlur(float sigma, int iterations = 6, BorderMode mode = EDGE) const;
+    HDRImage fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE) const;
+    HDRImage boxBlur(int w, BorderMode mode = EDGE) const{return boxBlur(w,w, mode);}
+    HDRImage boxBlur(int hw, int hh, BorderMode mode = EDGE) const{return boxBlurX(hw,mode).boxBlurY(hh,mode);}
+    HDRImage boxBlurX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
+    HDRImage boxBlurX(int halfSize, BorderMode mode = EDGE) const {return boxBlurX(halfSize, halfSize, mode);}
+    HDRImage boxBlurY(int upSize, int downSize, BorderMode mode = EDGE) const;
+    HDRImage boxBlurY(int halfSize, BorderMode mode = EDGE) const {return boxBlurY(halfSize, halfSize, mode);}
+    HDRImage unsharpMask(float sigma, float strength, BorderMode mode = EDGE) const;
+    HDRImage median(float radius, int channel, BorderMode mode = EDGE) const;
+    HDRImage median(float r, BorderMode mode = EDGE) const
     {
         return median(r, 0, mode).median(r, 1, mode).median(r, 2, mode).median(r, 3, mode);
     }
-    FloatImage bilateral(float sigmaRange = 0.1f,
+    HDRImage bilateral(float sigmaRange = 0.1f,
                          float sigmaDomain = 1.0f,
                          BorderMode mode = EDGE,
                          float truncateDomain = 6.0f);

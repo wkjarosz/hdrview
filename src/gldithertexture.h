@@ -1,4 +1,4 @@
-/*! \file FullScreenDitherer.h
+/*! \file gldithertexture.h
     \author Wojciech Jarosz
 */
 #pragma once
@@ -11,10 +11,10 @@
     A simple utility class for uploading and binding the dither matrix to the
     GPU.
 */
-class FullScreenDitherer
+class GLDitherTexture
 {
 public:
-    ~FullScreenDitherer()
+    ~GLDitherTexture()
     {
         if (texture)
             glDeleteTextures(1, &texture);

@@ -1,9 +1,9 @@
 /*!
-    \file FloatImage.cpp
+    \file hdrimage.cpp
     \brief Contains the implementation of a floating-point RGBA image class
     \author Wojciech Jarosz
 */
-#include "FloatImage.h"
+#include "hdrimage.h"
 #include "dither-matrix256.h"
 #include <cmath>
 #include <functional>
@@ -87,7 +87,7 @@ ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
 } // namespace
 
 
-const Color4 & FloatImage::pixel(int x, int y, BorderMode mode) const
+const Color4 & HDRImage::pixel(int x, int y, BorderMode mode) const
 {
     if (x >= 0 && x < width() && y >= 0 && y < height())
         return (*this)(x, y);
@@ -106,7 +106,7 @@ const Color4 & FloatImage::pixel(int x, int y, BorderMode mode) const
     }
 }
 
-Color4 & FloatImage::pixel(int x, int y, BorderMode mode)
+Color4 & HDRImage::pixel(int x, int y, BorderMode mode)
 {
     if (x >= 0 && x < width() && y >= 0 && y < height())
         return (*this)(x, y);
@@ -125,13 +125,13 @@ Color4 & FloatImage::pixel(int x, int y, BorderMode mode)
     }
 }
 
-Color4 FloatImage::nearest(float sx, float sy, BorderMode mode) const
+Color4 HDRImage::nearest(float sx, float sy, BorderMode mode) const
 {
     return pixel(floor(sx), floor(sy), mode);
 }
 
 
-Color4 FloatImage::bilinear(float sx, float sy, BorderMode mode) const
+Color4 HDRImage::bilinear(float sx, float sy, BorderMode mode) const
 {
     int x0 = (int) floor(sx);
     int y0 = (int) floor(sy);
@@ -146,7 +146,7 @@ Color4 FloatImage::bilinear(float sx, float sy, BorderMode mode) const
 
 
 // photoshop bicubic
-Color4 FloatImage::bicubic(float sx, float sy, BorderMode mode) const
+Color4 HDRImage::bicubic(float sx, float sy, BorderMode mode) const
 {
     int bx = (int) floor(sx);
     int by = (int) floor(sy);
@@ -179,12 +179,12 @@ Color4 FloatImage::bicubic(float sx, float sy, BorderMode mode) const
 
 
 #define CALL_MEMBER_FN(object,ptrToMember)  ((object).*(ptrToMember))
-FloatImage FloatImage::resample(int w, int h,
+HDRImage HDRImage::resample(int w, int h,
                                 UV2XYZFn dst2xyz, XYZ2UVFn xyz2src,
                                 PixelSamplerFn sampler,
                                 int superSample, BorderMode mode) const
 {
-    FloatImage result(w, h);
+    HDRImage result(w, h);
 
     for (int y = 0; y < result.height(); ++y)
         for (int x = 0; x < result.width(); ++x)
@@ -207,9 +207,9 @@ FloatImage FloatImage::resample(int w, int h,
 }
 
 
-FloatImage FloatImage::convolve(const ArrayXXf & kernel, BorderMode mode) const
+HDRImage HDRImage::convolve(const ArrayXXf & kernel, BorderMode mode) const
 {
-    FloatImage imFilter(width(), height());
+    HDRImage imFilter(width(), height());
 
     int centerX = int((kernel.rows()-1.0)/2.0);
     int centerY = int((kernel.cols()-1.0)/2.0);
@@ -242,18 +242,18 @@ FloatImage FloatImage::convolve(const ArrayXXf & kernel, BorderMode mode) const
     return imFilter;
 }
 
-FloatImage FloatImage::gaussianBlurX(float sigmaX, BorderMode mode, float truncateX) const
+HDRImage HDRImage::gaussianBlurX(float sigmaX, BorderMode mode, float truncateX) const
 {
     return convolve(horizontalGaussianKernel(sigmaX, truncateX), mode);
 }
 
-FloatImage FloatImage::gaussianBlurY(float sigmaY, BorderMode mode, float truncateY) const
+HDRImage HDRImage::gaussianBlurY(float sigmaY, BorderMode mode, float truncateY) const
 {
     return convolve(horizontalGaussianKernel(sigmaY, truncateY).transpose(), mode);
 }
 
 // Use principles of seperabiltity to blur an image using 2 1D Gaussian Filters
-FloatImage FloatImage::gaussianBlur(float sigmaX, float sigmaY, BorderMode mode,
+HDRImage HDRImage::gaussianBlur(float sigmaX, float sigmaY, BorderMode mode,
                                     float truncateX, float truncateY) const
 {
     // blur using 2, 1D filters in the x and y directions
@@ -262,14 +262,14 @@ FloatImage FloatImage::gaussianBlur(float sigmaX, float sigmaY, BorderMode mode,
 
 
 // sharpen an image
-FloatImage FloatImage::unsharpMask(float sigma, float strength, BorderMode mode) const
+HDRImage HDRImage::unsharpMask(float sigma, float strength, BorderMode mode) const
 {
     return *this + Color4(strength) * (*this - fastGaussianBlur(sigma, sigma, mode));
 }
 
 
 
-FloatImage FloatImage::median(float radius, int channel, BorderMode mode) const
+HDRImage HDRImage::median(float radius, int channel, BorderMode mode) const
 {
     int radiusi = int(ceil(radius));
 
@@ -277,7 +277,7 @@ FloatImage FloatImage::median(float radius, int channel, BorderMode mode) const
     mBuffer.reserve((2*radiusi)*(2*radiusi));
 
     int xCoord, yCoord;
-    FloatImage tempBuffer = *this;
+    HDRImage tempBuffer = *this;
 
     for (int y = 0; y < height(); y++)
     {
@@ -312,9 +312,9 @@ FloatImage FloatImage::median(float radius, int channel, BorderMode mode) const
 }
 
 
-FloatImage FloatImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain)
+HDRImage HDRImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain)
 {
-    FloatImage imFilter(width(), height());
+    HDRImage imFilter(width(), height());
 
     // calculate the filter size
     int radius = int(ceil(truncateDomain * sigmaDomain));
@@ -367,7 +367,7 @@ static int nextOddInt(int i)
 }
 
 
-FloatImage FloatImage::iteratedBoxBlur(float sigma, int iterations, BorderMode mode) const
+HDRImage HDRImage::iteratedBoxBlur(float sigma, int iterations, BorderMode mode) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -403,20 +403,20 @@ FloatImage FloatImage::iteratedBoxBlur(float sigma, int iterations, BorderMode m
     // up to next odd width
     int hw = (w-1)/2;
 
-    FloatImage imFilter = *this;
+    HDRImage imFilter = *this;
     for (int i = 0; i < iterations; i++)
         imFilter = imFilter.boxBlur(hw, mode);
 
     return imFilter;
 }
 
-FloatImage FloatImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode) const
+HDRImage HDRImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode) const
 {
-    // See comments in FloatImage::iteratedBoxBlur for derivation of width
+    // See comments in HDRImage::iteratedBoxBlur for derivation of width
     int hw = round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
     int hh = round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
 
-    FloatImage im;
+    HDRImage im;
     // do horizontal blurs
     if (hw < 3)
         // use a separable Gaussian
@@ -439,9 +439,9 @@ FloatImage FloatImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode m
 }
 
 // TODO actually use the mode parameter
-FloatImage FloatImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) const
+HDRImage HDRImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) const
 {
-    FloatImage imFilter(width(), height());
+    HDRImage imFilter(width(), height());
 
     // cannot blur by more than the whole image width
     // code below would access outside the bounds of the array without this
@@ -488,9 +488,9 @@ FloatImage FloatImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) co
 }
 
 // TODO actually use the mode parameter
-FloatImage FloatImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) const
+HDRImage HDRImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) const
 {
-    FloatImage imFilter(width(), height());
+    HDRImage imFilter(width(), height());
 
     // cannot blur by more than the whole image width
     // code below would access outside the bounds of the array without this
@@ -529,9 +529,9 @@ FloatImage FloatImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) co
     return imFilter;
 }
 
-FloatImage FloatImage::halfSize() const
+HDRImage HDRImage::halfSize() const
 {
-    FloatImage result(width() / 2, height() / 2);
+    HDRImage result(width() / 2, height() / 2);
 
     for (int y = 0; y < result.height(); ++y)
     {
@@ -548,9 +548,9 @@ FloatImage FloatImage::halfSize() const
 }
 
 
-FloatImage FloatImage::doubleSize() const
+HDRImage HDRImage::doubleSize() const
 {
-    FloatImage result(width() * 2, height() * 2);
+    HDRImage result(width() * 2, height() * 2);
 
     for (int y = 0; y < result.height(); ++y)
     {
@@ -566,7 +566,7 @@ FloatImage FloatImage::doubleSize() const
 }
 
 
-FloatImage FloatImage::smoothScale(int w, int h) const
+HDRImage HDRImage::smoothScale(int w, int h) const
 {
     float wInv = 1.0f / w;
     float hInv = 1.0f / h;
@@ -576,9 +576,9 @@ FloatImage FloatImage::smoothScale(int w, int h) const
     Color4 sum;
 
     // resize horizontally
-    FloatImage xBuffer(w, hOld);
+    HDRImage xBuffer(w, hOld);
     {
-        const FloatImage & src = *this;
+        const HDRImage & src = *this;
         for (int y = 0; y < hOld; ++y)
         {
             float fx1 = 0.0f;
@@ -609,9 +609,9 @@ FloatImage FloatImage::smoothScale(int w, int h) const
     }
 
     // resize vertically
-    FloatImage yBuffer(w, h);
+    HDRImage yBuffer(w, h);
     {
-        const FloatImage & src = xBuffer;
+        const HDRImage & src = xBuffer;
         for (int x = 0; x < w; ++x)
         {
             float fy1 = 0.0f;
@@ -645,7 +645,7 @@ FloatImage FloatImage::smoothScale(int w, int h) const
 }
 
 
-bool FloatImage::load(const string & filename)
+bool HDRImage::load(const string & filename)
 {
     string errors;
 
@@ -749,7 +749,7 @@ bool FloatImage::load(const string & filename)
     return false;
 }
 
-bool FloatImage::save(const string & filename,
+bool HDRImage::save(const string & filename,
                       float gain, float gamma,
                       bool sRGB, bool dither)
 {
@@ -760,8 +760,8 @@ bool FloatImage::save(const string & filename,
               extension.begin(),
               ::tolower);
 
-    FloatImage* img = this;
-    FloatImage imgCopy;
+    HDRImage* img = this;
+    HDRImage imgCopy;
 
     // if we need to tonemap, then modify a copy of the image data
     if (gain != 1.0f || sRGB || gamma != 1.0f)

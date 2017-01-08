@@ -1,7 +1,7 @@
-/*! \file HDRViewer.cpp
+/*! \file hdrviewer.cpp
     \author Wojciech Jarosz
 */
-#include "HDRViewer.h"
+#include "hdrviewer.h"
 #include <iostream>
 #define NOMINMAX
 #include <tinydir.h>
@@ -331,13 +331,13 @@ HDRViewScreen::~HDRViewScreen()
 }
 
 
-ImageQuad * HDRViewScreen::currentImage()
+GLImage * HDRViewScreen::currentImage()
 {
     if (m_current < 0 || m_current >= int(m_images.size()))
         return nullptr;
     return m_images[m_current];
 }
-const ImageQuad * HDRViewScreen::currentImage() const
+const GLImage * HDRViewScreen::currentImage() const
 {
     if (m_current < 0 || m_current >= int(m_images.size()))
         return nullptr;
@@ -347,7 +347,7 @@ const ImageQuad * HDRViewScreen::currentImage() const
 
 void HDRViewScreen::closeImage(int index)
 {
-    ImageQuad * img = (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
+    GLImage * img = (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 
     if (img)
     {
@@ -490,7 +490,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
                         continue;
                     }
 
-                    ImageQuad* image = new ImageQuad();
+                    GLImage* image = new GLImage();
                     if (image->load(file.path))
                     {
                         loadedOK.push_back({file.path, true});
@@ -519,7 +519,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
         }
         else
         {
-            ImageQuad* image = new ImageQuad();
+            GLImage* image = new GLImage();
             if (image->load(i))
             {
                 loadedOK.push_back({i, true});

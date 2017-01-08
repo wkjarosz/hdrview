@@ -156,21 +156,21 @@ endif()
 add_executable(HDRView MACOSX_BUNDLE
     src/common.cpp
     src/common.h
-    src/ImageQuad.cpp
-    src/ImageQuad.h
-    src/EnvMapConversions.cpp
-    src/EnvMapConversions.h
+    src/glimage.cpp
+    src/glimage.h
+    src/gldithertexture.h
+    src/envmap.cpp
+    src/envmap.h
     src/pfm.h
     src/pfm.cpp
     src/ppm.h
     src/ppm.cpp
-    src/HDRViewer.h
-    src/HDRViewer.cpp
+    src/hdrviewer.h
+    src/hdrviewer.cpp
     src/dither-matrix256.h
-    src/FullScreenDitherer.h
-    src/Color.h
-    src/FloatImage.h
-    src/FloatImage.cpp
+    src/color.h
+    src/hdrimage.h
+    src/hdrimage.cpp
     src/main.cpp
     ${EXTRA_SOURCE}
 )

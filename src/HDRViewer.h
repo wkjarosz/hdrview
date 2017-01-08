@@ -1,4 +1,4 @@
-/*! \file HDRViewer.h
+/*! \file hdrviewer.h
     \author Wojciech Jarosz
 */
 #pragma once
@@ -6,8 +6,8 @@
 #include <nanogui/nanogui.h>
 #include <vector>
 #include <iostream>
-#include "ImageQuad.h"
-#include "FullScreenDitherer.h"
+#include "glimage.h"
+#include "gldithertexture.h"
 
 
 using namespace nanogui;
@@ -32,8 +32,8 @@ public:
 
 private:
 
-    ImageQuad * currentImage();
-    const ImageQuad * currentImage() const;
+    GLImage * currentImage();
+    const GLImage * currentImage() const;
 
     void closeCurrentImage();
     void closeImage(int index);
@@ -66,8 +66,8 @@ private:
 
     int m_GUIScaleFactor = 1;
 
-    FullScreenDitherer m_ditherer;
-    vector<ImageQuad*> m_images;
+    GLDitherTexture m_ditherer;
+    vector<GLImage*> m_images;
     int m_current = -1;
 
     float m_exposure = 0.f;

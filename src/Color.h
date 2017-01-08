@@ -1,4 +1,4 @@
-/*! \file Color.h
+/*! \file color.h
     \brief Contains the definition of Color classes
     \author Wojciech Jarosz
 */

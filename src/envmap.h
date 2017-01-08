@@ -1,5 +1,5 @@
 /*!
-    \file EnvMapConversions.h
+    \file envmap.h
     \brief Contains conversions between the various envmap parametrizations
     \author Wojciech Jarosz
 */

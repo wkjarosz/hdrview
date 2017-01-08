@@ -1,7 +1,7 @@
-/*! \file ImageQuad.cpp
+/*! \file glimage.cpp
     \author Wojciech Jarosz
 */
-#include "ImageQuad.h"
+#include "glimage.h"
 #include <iostream>     // std::cout, std::fixed
 #include <algorithm>    // std::transform
 #include <exception>    // std::transform
@@ -16,20 +16,20 @@ namespace
     std::mt19937 g_rand(53);
 }
 
-ImageQuad::ImageQuad() :
+GLImage::GLImage() :
     m_filename()
 {
     // empty
 }
 
 
-ImageQuad::~ImageQuad()
+GLImage::~GLImage()
 {
     clear();
 }
 
 
-void ImageQuad::init()
+void GLImage::init()
 {
     m_shader = new GLShader();
     // Gamma/exposure tonemapper with dither as a GLSL shader
@@ -149,7 +149,7 @@ void ImageQuad::init()
 }
 
 
-void ImageQuad::clear()
+void GLImage::clear()
 {
     if (m_texture)
         glDeleteTextures(1, &m_texture);
@@ -162,7 +162,7 @@ void ImageQuad::clear()
 }
 
 
-void ImageQuad::draw(const Matrix4f & mvp,
+void GLImage::draw(const Matrix4f & mvp,
                      float gain, float gamma,
                      bool sRGB, bool dither,
                      const Vector3f & channels)

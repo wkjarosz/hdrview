@@ -10,9 +10,9 @@
 #include <iostream>
 #include <docopt.h>
 #include <tinyformat.h>
-#include "HDRViewer.h"
+#include "hdrviewer.h"
 #include "common.h"
-#include "EnvMapConversions.h"
+#include "envmap.h"
 
 using namespace std;
 
@@ -121,7 +121,7 @@ int main(int argc, char **argv)
          sRGB = true,
          dryRun = true,
          fixNaNs = false;
-    FloatImage::BorderMode borderMode;
+    HDRImage::BorderMode borderMode;
     Color3 nanColor(0.0f,0.0f,0.0f);
 
     vector<string> inFiles;
@@ -179,13 +179,13 @@ int main(int argc, char **argv)
         dither = !docargs["--no-dither"].asBool();
 
         if (docargs["--border-mode"].asString() == "black")
-            borderMode = FloatImage::BLACK;
+            borderMode = HDRImage::BLACK;
         else if (docargs["--border-mode"].asString() == "mirror")
-            borderMode = FloatImage::MIRROR;
+            borderMode = HDRImage::MIRROR;
         else if (docargs["--border-mode"].asString() == "repeat")
-            borderMode = FloatImage::REPEAT;
+            borderMode = HDRImage::REPEAT;
         else if (docargs["--border-mode"].asString() == "edge")
-            borderMode = FloatImage::EDGE;
+            borderMode = HDRImage::EDGE;
         else
             throw invalid_argument(tfm::format("Invalid border mode \"%s\".", docargs["--border-mode"].asString()));
 
@@ -286,10 +286,10 @@ int main(int argc, char **argv)
             if (!inFiles.size())
                 throw invalid_argument("No files specified for batch mode!");
 
-            FloatImage avgImg;
+            HDRImage avgImg;
             for (size_t i = 0; i < inFiles.size(); ++i)
             {
-                FloatImage image;
+                HDRImage image;
                 if (!image.load(inFiles[i]))
                 {
                     printf("Cannot read image \"%s\". Skipping...\n", inFiles[i].c_str());
@@ -392,8 +392,8 @@ int main(int argc, char **argv)
                     else
                         throw invalid_argument(tfm::format("Cannot parse --remap parameters:\t%s\n", docargs["--remap"].asString()));
 
-                    FloatImage::UV2XYZFn dst2xyz;
-                    FloatImage::XYZ2UVFn xyz2src;
+                    HDRImage::UV2XYZFn dst2xyz;
+                    HDRImage::XYZ2UVFn xyz2src;
 
                     string from = s1;
                     string to = s2;
@@ -419,14 +419,14 @@ int main(int argc, char **argv)
                     else
                         throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", to));
 
-                    FloatImage::PixelSamplerFn sampler;
+                    HDRImage::PixelSamplerFn sampler;
                     string interp = s3;
                     if (interp == "nearest")
-                        sampler = &FloatImage::nearest;
+                        sampler = &HDRImage::nearest;
                     else if (interp == "bilinear")
-                        sampler = &FloatImage::bilinear;
+                        sampler = &HDRImage::bilinear;
                     else if (interp == "bicubic")
-                        sampler = &FloatImage::bicubic;
+                        sampler = &HDRImage::bicubic;
                     else
                         throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized sampler type \"%s\"", interp));
 

@@ -1,10 +1,11 @@
 /*!
-    \file EnvMapConversions.cpp
+    \file envmap.cpp
     \author Wojciech Jarosz
 */
 
-#include "EnvMapConversions.h"
+#define _USE_MATH_DEFINES
 #include <cmath>
+#include "envmap.h"
 #include "common.h"
 
 using namespace Eigen;

@@ -1,31 +1,28 @@
-/*! \file ImageQuad.h
+/*! \file glimage.h
     \author Wojciech Jarosz
 */
-#ifndef IMAGE_QUAD_H
-#define IMAGE_QUAD_H
+#pragma once
 
-#include <string>  
+#include <string>
 #include <nanogui/opengl.h>
 #include <nanogui/glutil.h>
-#include "FloatImage.h"
-
+#include "hdrimage.h"
 
 /*!
     A class which encapulates a single image which is draw as a
     textured GL quad to the screen.
 */
-class ImageQuad
+class GLImage
 {
 public:
-    ImageQuad();
-    ~ImageQuad();
+    GLImage();
+    ~GLImage();
     void clear();
-
 
     void init();
 
     std::string filename() const {return m_filename;}
-    const FloatImage & image() const {return m_image;}
+    const HDRImage & image() const {return m_image;}
     const Color4 & pixel(int x, int y) const {return m_image(x, y);}
     Color4 & pixel(int x, int y) {return m_image(x, y);}
     Eigen::Vector2i size() const {return Eigen::Vector2i(width(), height());}
@@ -51,8 +48,6 @@ public:
 private:
     nanogui::GLShader * m_shader = nullptr;
     uint32_t m_texture = 0;
-    FloatImage m_image;
+    HDRImage m_image;
     std::string m_filename;
 };
-
-#endif
