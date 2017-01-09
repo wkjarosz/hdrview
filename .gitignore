@@ -1,0 +1,33 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# CMake temporary files
+CMakeCache.txt
+CMakeFiles
+CPackConfig.cmake
+CPackSourceConfig.cmake
+Makefile
+cmake_install.cmake
+.ninja_deps
+.ninja_log
+build.ninja
+rules.ninja
+
+# Executables, build directories and miscellaneous
+*.exe
+.DS_Store
+ext_build
+build
