@@ -9,12 +9,14 @@
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
-#include <tinyformat.h>
 #include "hdrviewer.h"
 #include "common.h"
 #include "envmap.h"
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
 
 using namespace std;
+namespace spd = spdlog;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
@@ -41,7 +43,19 @@ Options: (global)
   -g G, --gamma=G          Desired gamma value for exposure+gamma tonemapping.
                            An sRGB curve is used if gamma is not specified.
   -d, --no-dither          Disable dithering.
-  -v L, --verbose=L        Set verbosity (L can be 0, 1, 2) [default: 1].
+  -v T, --verbose=T        Set verbosity threshold with lower values meaning
+                           more verbose and higher values removing low-priority
+                           messages.
+                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 2].
+                           All messages with severity > T are displayed, where
+                           the severities are:
+                                trace    = 0
+                                debug    = 1
+                                info     = 2
+                                warn     = 3
+                                err      = 4
+                                critical = 5
+                                off      = 6
   -h, --help               Display this message.
   --version                Show the version.
 
@@ -81,16 +95,17 @@ Options: (for batch processing)
                            pattern '%f%%x%f%%' e.g. '33.3%x25%' would make the
                            image a third its original width and a quarter its
                            original height.
-  --remap=SIZE,M,M,[S]     Remap the input image from one environment map
-                           format to another. SIZE is a size specification just
-                           like in --resize. M,M are the input and output
+  --remap=M,M,[S],[L]      Remap the input image from one environment map
+                           format to another. M,M are the input and output
                            environment map formats respectively.
                            MAP : (latlong | angularmap | mirrorball | cubemap).
                            The optional S results in SxS super-sampling, where
-                           the default is one centered sample per pixel S=1.
-                           Technically this method can be abused to resize an
-                           image without any remapping by specifying the same
-                           M parameter twice.
+                           the default is S=1: one centered sample per pixel.
+                           The option I parameter specifies the sampling lookup
+                           mode: I : (nearest | bilinear | bicubic).
+                           Specifying the same M parameter twice results in no
+                           change. Combine with --resize to specify output file
+                           dimensions.
   --border-mode=MODE       Specifies what mode to use when accessing pixels
                            outside the bounds of the image.
                            MODE : (black | mirror | edge | repeat)
@@ -107,41 +122,48 @@ int main(int argc, char **argv)
 {
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
-    float gamma,
-          exposure;
     string ext = "",
            avgFilename = "",
            basename = "",
            filterType = "",
            filterParams = "";
-    int verbosity = 0;
+    int verbosity = 0, absoluteWidth, absoluteHeight, samples = 1;
+    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f;
     bool average = false,
-         filter = false,
          dither = true,
          sRGB = true,
          dryRun = true,
-         fixNaNs = false;
+         fixNaNs = false,
+         resize = false,
+         remap = false,
+         relativeSize = true;
     HDRImage::BorderMode borderMode;
     Color3 nanColor(0.0f,0.0f,0.0f);
+    // by default use a no-op passthrough warp function
+    function<Vector2f(const Vector2f&)> warp =
+        [](const Vector2f & uv) {return uv;};
+    function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler =
+        [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+    function<HDRImage(const HDRImage &)> filter;
 
     vector<string> inFiles;
 
-#if defined(__APPLE__)
-    bool launched_from_finder = false;
-    // check whether -psn is set, and remove it from the arguments
-    for (vector<string>::iterator i = argVector.begin(); i != argVector.end(); ++i)
-    {
-        if (strncmp("-psn", i->c_str(), 4) == 0)
-        {
-            launched_from_finder = true;
-            argVector.erase(i);
-            break;
-        }
-    }
-#endif
-
     try
     {
+
+#if defined(__APPLE__)
+        bool launched_from_finder = false;
+        // check whether -psn is set, and remove it from the arguments
+        for (vector<string>::iterator i = argVector.begin(); i != argVector.end(); ++i)
+        {
+            if (strncmp("-psn", i->c_str(), 4) == 0)
+            {
+                launched_from_finder = true;
+                argVector.erase(i);
+                break;
+            }
+        }
+#endif
         docargs = docopt::docopt(USAGE, argVector,
                                  true,            // show help if requested
                                  "HDRView 0.1");  // version string
@@ -151,33 +173,43 @@ int main(int argc, char **argv)
         if (verbosity)
             printf("Verbosity set to level %d.\n", verbosity);
 
-        if (verbosity > 1)
+        // Console logger with color
+        auto console = spd::stdout_color_mt("console");
+        spd::set_pattern("[%l] %v");
+        spd::set_level(spd::level::level_enum(2));
+
+        if (verbosity < spd::level::trace || verbosity > spd::level::off)
         {
-            printf("Running with the following commands/arguments/options:\n");
-            for (auto const& arg : docargs)
-                cout << arg.first << ": " << arg.second << endl;
-            cout << endl;
+            console->error("Invalid verbosity threshold. Setting to default \"2\"");
+            verbosity = 2;
         }
+
+        spd::set_level(spd::level::level_enum(verbosity));
+
+        console->info("Welcome to HDRView!");
+
+        console->debug("Running with the following commands/arguments/options:");
+        for (auto const& arg : docargs)
+            console->debug("{:<13}: {}", arg.first, arg.second);
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
-        if (verbosity)
-            printf("Setting intensity scale to %f\n", powf(2.0f, exposure));
+        console->info("Setting intensity scale to {:f}", powf(2.0f, exposure));
 
         // gamma or sRGB
         if (docargs["--gamma"])
         {
             sRGB = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
-            if (verbosity)
-                printf("Setting gamma correction to g=%f\n", gamma);
+            console->info("Setting gamma correction to g={:f}.", gamma);
         }
-        else if (verbosity)
-            printf("Using sRGB response curve\n");
+        else
+            console->info("Using sRGB response curve.");
 
         // dithering
         dither = !docargs["--no-dither"].asBool();
 
+        // border mode
         if (docargs["--border-mode"].asString() == "black")
             borderMode = HDRImage::BLACK;
         else if (docargs["--border-mode"].asString() == "mirror")
@@ -187,53 +219,132 @@ int main(int argc, char **argv)
         else if (docargs["--border-mode"].asString() == "edge")
             borderMode = HDRImage::EDGE;
         else
-            throw invalid_argument(tfm::format("Invalid border mode \"%s\".", docargs["--border-mode"].asString()));
+            throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
 
-        if (verbosity)
-            printf("Using border mode: %s.\n", docargs["--border-mode"].asString().c_str());
+        console->info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
         // format
         if (docargs["--format"].isString())
         {
             ext = docargs["--format"].asString();
-            if (verbosity)
-                printf("Converting to \"%s\".\n", ext.c_str());
+            console->info("Converting to \"{}\".", ext);
         }
         else
-        {
-            if (verbosity)
-                printf("Keeping original image file formats.\n");
-        }
+            console->info("Keeping original image file formats.");
 
         // base filename
         if (docargs["--out"].isString())
         {
             basename = docargs["--out"].asString();
-            if (verbosity)
-                printf("Setting base filename to \"%s\".\n", basename.c_str());
+            console->info("Setting base filename to \"{}\".", basename);
         }
 
         if (docargs["--average"].isString())
         {
             average = true;
             avgFilename = docargs["--average"].asString();
-            if (verbosity)
-                printf("Saving average image to \"%s\".\n", avgFilename.c_str());
+            console->info("Saving average image to \"{}\".", avgFilename);
         }
 
         if (docargs["--filter"].isString())
         {
-            filter = true;
-            char type[22];
-            char params[32];
+            float filterArg1, filterArg2;
+            char type[22], params[32];
             if (sscanf(docargs["--filter"].asString().c_str(), "%20[^','],%30s", type, params) != 2)
-                throw invalid_argument(tfm::format("Cannot parse command-line parameter: --filter:\t%s", docargs["--filter"].asString()));
+                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
+
+            filterParams = params;
+            if (sscanf(filterParams.c_str(), "%f,%f", &filterArg1, &filterArg2) != 2)
+                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
 
             filterType = type;
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
-            filterParams = params;
-            if (verbosity)
-                printf("Filtering using %s(%s).\n", filterType.c_str(), filterParams.c_str());
+
+            if (filterType == "gaussian")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.gaussianBlur(filterArg1,filterArg2,borderMode);};
+            else if (filterType == "box")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.boxBlur(filterArg1,filterArg2,borderMode);};
+            else if (filterType == "fast-gaussian")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.fastGaussianBlur(filterArg1,filterArg2,borderMode);};
+            else if (filterType == "median")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.median(filterArg1,filterArg2,borderMode);};
+            else if (filterType == "bilateral")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.bilateral(filterArg1,filterArg2,borderMode);};
+            else if (filterType == "unsharp")
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.unsharpMask(filterArg1,filterArg2,borderMode);};
+            else
+                throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
+
+            console->info("Filtering using {}({:f},{:f}).", filterType, filterArg1, filterArg2);
+        }
+
+        if (docargs["--resize"].isString())
+        {
+            if (sscanf(docargs["--resize"].asString().c_str(), "%dx%d", &absoluteWidth, &absoluteHeight) == 2)
+                relativeSize = false;
+            else if (sscanf(docargs["--resize"].asString().c_str(), "%f%%x%f%%", &relativeWidth, &relativeHeight) == 2)
+                relativeSize = true;
+            else
+                throw invalid_argument(fmt::format("Cannot parse --resize parameters:\t{}", docargs["--resize"].asString()));
+
+            resize = true;
+            if (relativeSize)
+                console->info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", relativeWidth, relativeHeight);
+            else
+                console->info("Resizing images to an absolute size of {:d} x {:d}.", absoluteWidth, absoluteHeight);
+        }
+
+        if (docargs["--remap"].isString())
+        {
+            char s1[32], s2[32], s3[32] = "bilinear";
+            if (sscanf(docargs["--remap"].asString().c_str(), "%30[^','],%30[^','],%d,%30[^',']", s1, s2, &samples, s3) < 2)
+                throw invalid_argument(fmt::format("Cannot parse --remap parameters:\t{}", docargs["--remap"].asString()));
+
+            remap = true;
+
+            UV2XYZFn dst2xyz;
+            XYZ2UVFn xyz2src;
+
+            string from = s1, to = s2;
+
+            if (from != to)
+            {
+                if (from == "angularmap")
+                    xyz2src = XYZToAngularMap;
+                else if (from == "mirrorball")
+                    xyz2src = XYZToMirrorBall;
+                else if (from == "latlong")
+                    xyz2src = XYZToLatLong;
+                else if (from == "cubemap")
+                    xyz2src = XYZToCubeMap;
+                else
+                    throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", from));
+
+                if (to == "angularmap")
+                    dst2xyz = angularMapToXYZ;
+                else if (to == "mirrorball")
+                    dst2xyz = mirrorBallToXYZ;
+                else if (to == "latlong")
+                    dst2xyz = latLongToXYZ;
+                else if (to == "cubemap")
+                    dst2xyz = cubeMapToXYZ;
+                else
+                    throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", to));
+
+                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+            }
+
+            string interp = s3;
+            if (interp == "nearest")
+                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
+            else if (interp == "bilinear")
+                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+            else if (interp == "bicubic")
+                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
+            else
+                throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized sampler type \"{}\"", interp));
+
+            console->info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
         }
 
         if (docargs["--nan"].isString())
@@ -241,30 +352,22 @@ int main(int argc, char **argv)
             if (sscanf(docargs["--nan"].asString().c_str(), "%f,%f,%f", &nanColor[0], &nanColor[1], &nanColor[2]) != 3)
                 throw invalid_argument("Cannot parse command-line parameter: --nan");
 
-            if (verbosity)
-                printf("Replacing NaNs and Infinities with (%f,%f,%f).\n", nanColor[0], nanColor[1], nanColor[2]);
+            console->info("Replacing NaNs and Infinities with ({}).", nanColor);
             fixNaNs = true;
         }
 
         dryRun = docargs["--dry-run"].asBool();
-        if (dryRun && verbosity)
-            printf("Only testing. Will not write files.\n");
+        if (dryRun)
+            console->info("Only testing. Will not write files.");
 
         // list of filenames
         inFiles = docargs["<file>"].asStringList();
-    }
-    catch (const std::exception &e)
-    {
-        printf("Error: %s\n%s\n", e.what(), USAGE);
-        return -1;
-    }
 
-    try
-    {
+
+        // now actually do stuff
         if (!docargs["batch"].asBool())
         {
-            if (verbosity)
-                printf("Launching GUI. Start with -h for instructions on batch mode.\n");
+            console->info("Launching GUI. Start with -h for instructions on batch mode.");
 
             nanogui::init();
 
@@ -290,14 +393,13 @@ int main(int argc, char **argv)
             for (size_t i = 0; i < inFiles.size(); ++i)
             {
                 HDRImage image;
+                console->info("Reading image \"{}\"...", inFiles[i]);
                 if (!image.load(inFiles[i]))
                 {
-                    printf("Cannot read image \"%s\". Skipping...\n", inFiles[i].c_str());
+                    console->error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
                     continue;
                 }
-
-                if (verbosity)
-                    printf("Successfully read image \"%s\".\n", inFiles[i].c_str());
+                console->info("Image size: {:d}x{:d}", image.width(), image.height());
 
                 if (fixNaNs || !dryRun)
                     image = image.unaryExpr([&](const Color4 & c)
@@ -319,126 +421,33 @@ int main(int argc, char **argv)
 
                 if (filter)
                 {
-                    if (filterType == "gaussian" ||
-                        filterType == "box" ||
-                        filterType == "fast-gaussian" ||
-                        filterType == "median" ||
-                        filterType == "bilateral")
-                    {
-                        float width, height;
-                        if (sscanf(filterParams.c_str(), "%fx%f", &width, &height) != 2)
-                            throw invalid_argument(tfm::format("Cannot parse filter parameters (expecting \"%%fx%%f\"):\t%s\n", filterParams));
+                    console->info("Filtering image with {}({})...", filterType, filterParams);
 
-                        if (dryRun)
-                            ;
-                        else if (filterType == "gaussian")
-                            image = image.gaussianBlur(width, height, borderMode);
-                        else if (filterType == "box")
-                            image = image.boxBlur(width, height, borderMode);
-                        else if (filterType == "fast-gaussian")
-                            image = image.fastGaussianBlur(width, height, borderMode);
-                        else if (filterType == "median")
-                            image = image.median(width, height, borderMode);
-                        else if (filterType == "bilateral")
-                            image = image.bilateral(width, height, borderMode);
-                    }
-                    else if (filterType == "unsharp")
-                    {
-                        float sigma, strength;
-                        if (sscanf(filterParams.c_str(), "%f,%f", &sigma, &strength) != 2)
-                            throw invalid_argument(tfm::format("Cannot parse 'unsharp' filter parameters (expecting \"%%f,%%f\"):\t%s\n", filterParams));
-
-                        if (!dryRun)
-                            image = image.unsharpMask(sigma, strength, borderMode);
-                    }
-                    else
-                        throw invalid_argument(tfm::format("Unrecognized filter type: \"%s\".", filterType));
+                    if (!dryRun)
+                        image = filter(image);
                 }
 
-                if (docargs["--resize"].isString())
+                if (resize || remap)
                 {
-                    bool relative = false;
-                    int newWidth, newHeight;
-                    float percentX, percentY;
-                    if (sscanf(docargs["--resize"].asString().c_str(), "%dx%d", &newWidth, &newHeight) == 2)
-                        relative = false;
-                    else if (sscanf(docargs["--resize"].asString().c_str(), "%f%%x%f%%", &percentX, &percentY) == 2)
+                    int w = (int)round(relativeWidth/100.f*image.width());
+                    int h = (int)round(relativeHeight/100.f*image.height());
+                    if (!relativeSize)
                     {
-                        relative = true;
-                        newWidth = (int)round(percentX*image.width());
-                        newHeight = (int)round(percentY*image.height());
-                    }
-                    else
-                        throw invalid_argument(tfm::format("Cannot parse --resize parameters:\t%s\n", docargs["--resize"].asString()));
-
-                    image = image.smoothScale(newWidth, newHeight);
-                }
-
-                if (docargs["--remap"].isString())
-                {
-                    bool relative = false;
-                    int newWidth, newHeight;
-                    float percentX, percentY;
-                    int numSamples = 1;
-                    char s1[32], s2[32], s3[32] = "bilinear";
-                    if (sscanf(docargs["--remap"].asString().c_str(), "%dx%d,%30[^','],%30[^','],%d,%30[^',']", &newWidth, &newHeight, s1, s2, &numSamples, s3) >= 4)
-                        relative = false;
-                    else if (sscanf(docargs["--remap"].asString().c_str(), "%f%%x%f%%,%30[^','],%30s,%d,%30[^',']", &percentX, &percentY, s1, s2, &numSamples, s3) >= 4)
-                    {
-                        relative = true;
-                        newWidth = (int)round(percentX*image.width());
-                        newHeight = (int)round(percentY*image.height());
-                    }
-                    else
-                        throw invalid_argument(tfm::format("Cannot parse --remap parameters:\t%s\n", docargs["--remap"].asString()));
-
-                    UV2XYZFn dst2xyz;
-                    XYZ2UVFn xyz2src;
-
-                    string from = s1, to = s2;
-
-                    // by default create a no-op passthrough warp function
-                    function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
-                    if (from != to)
-                    {
-                        if (from == "angularmap")
-                            xyz2src = XYZToAngularMap;
-                        else if (from == "mirrorball")
-                            xyz2src = XYZToMirrorBall;
-                        else if (from == "latlong")
-                            xyz2src = XYZToLatLong;
-                        else if (from == "cubemap")
-                            xyz2src = XYZToCubeMap;
-                        else
-                            throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", from));
-
-                        if (to == "angularmap")
-                            dst2xyz = angularMapToXYZ;
-                        else if (to == "mirrorball")
-                            dst2xyz = mirrorBallToXYZ;
-                        else if (to == "latlong")
-                            dst2xyz = latLongToXYZ;
-                        else if (to == "cubemap")
-                            dst2xyz = cubeMapToXYZ;
-                        else
-                            throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized mapping type \"%s\"", to));
-
-                        warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+                        w = absoluteWidth;
+                        h = absoluteHeight;
                     }
 
-                    function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler;
-                    string interp = s3;
-                    if (interp == "nearest")
-                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
-                    else if (interp == "bilinear")
-                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
-                    else if (interp == "bicubic")
-                        sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
+                    if (!remap)
+                    {
+                        console->info("Resizing image to {:d}x{:d}...", w, h);
+                        image = image.smoothScale(w, h);
+                    }
                     else
-                        throw invalid_argument(tfm::format("Cannot parse --remap parameters, unrecognized sampler type \"%s\"", interp));
-
-                    image = image.resample(newWidth, newHeight, sampler,
-                                           warp, numSamples, borderMode);
+                    {
+                        console->info("Remapping image to {:d}x{:d}...", w, h);
+                        image = image.resample(w, h, sampler, warp, samples,
+                                               borderMode);
+                    }
                 }
 
                 string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
@@ -447,16 +456,12 @@ int main(int argc, char **argv)
                 if (inFiles.size() == 1 || !basename.size())
                     filename = thisBasename + "." + thisExt;
                 else
-                    filename = tfm::format("%s%03d.%s", thisBasename, i, thisExt);
+                    filename = fmt::format("{}{:03d}.{}", thisBasename, i, thisExt);
 
-                if (verbosity)
-                    printf("Writing image \"%s\"...", filename.c_str());
+                console->info("Writing image to \"{}\"...", filename);
 
                 if (!dryRun)
                     image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
-
-                if (verbosity)
-                    printf(" done!\n");
             }
 
             if (average)
@@ -465,17 +470,23 @@ int main(int argc, char **argv)
 
                 string filename = avgFilename;
 
-                if (verbosity)
-                    printf("Writing average image \"%s\"...\n", filename.c_str());
+                console->info("Writing average image to \"{}\"...", filename);
 
                 if (!dryRun)
                     avgImg.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
             }
         }
     }
+    // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
+    catch (const spd::spdlog_ex& e)
+    {
+        fprintf(stderr, "Log init failed: %s\n", e.what());
+        return 1;
+    }
     catch (const std::exception &e)
     {
-        fprintf(stderr, "Error: %s\n%s\n", e.what(), USAGE);
+        spd::get("console")->critical("Error: {}", e.what());
+        fprintf(stderr, "%s", USAGE);
         return -1;
     }
 

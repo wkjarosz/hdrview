@@ -135,12 +135,12 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinyfiles
     # tinydir
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinydir
-    # tinyformat
-    ${CMAKE_CURRENT_SOURCE_DIR}/ext/tinyformat
     # stb
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/stb
     # docopt
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/docopt
+    # spdlog
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/spdlog/include
 )
 
 # Resource file (icons etc.)

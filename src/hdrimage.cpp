@@ -310,7 +310,7 @@ HDRImage HDRImage::median(float radius, int channel, BorderMode mode) const
 }
 
 
-HDRImage HDRImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain)
+HDRImage HDRImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain) const
 {
     HDRImage imFilter(width(), height());
 

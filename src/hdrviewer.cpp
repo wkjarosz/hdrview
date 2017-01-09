@@ -5,14 +5,15 @@
 #include <iostream>
 #define NOMINMAX
 #include <tinydir.h>
-#include <tinyformat.h>
+#include <spdlog/fmt/fmt.h>
 
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
     m_GUIScaleFactor(1),
-    m_exposure(exposure), m_gamma(sRGB ? 2.2f : gamma)
+    m_exposure(exposure), m_gamma(sRGB ? 2.2f : gamma),
+    console(spdlog::get("console"))
 {
     setBackground(Vector3f(0.1f, 0.1f, 0.1f));
     Theme * scaledTheme = new Theme(mNVGContext);
@@ -463,7 +464,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
             try
             {
                 // filename is actually a directory, traverse it
-                printf("Loading images in \"%s\"...\n", dir.path);
+                console->info("Loading images in \"{}\"...", dir.path);
             	while (dir.has_next)
             	{
             		tinydir_file file;
@@ -496,7 +497,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
                         loadedOK.push_back({file.path, true});
                         image->init();
                         m_images.push_back(image);
-                        printf("Loaded \"%s\" [%dx%d]\n", file.name,
+                        console->info("Loaded \"{}\" [{:d}x{:d}]", file.name,
                                image->width(), image->height());
                     }
                     else
@@ -514,7 +515,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
             }
             catch (const exception & e)
             {
-                cerr << "Error listing directory: (" << e.what() << ")." << endl;
+                console->error("Error listing directory: ({}).", e.what());
             }
         }
         else
@@ -525,7 +526,7 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
                 loadedOK.push_back({i, true});
                 image->init();
                 m_images.push_back(image);
-                printf("Loaded \"%s\" [%dx%d]\n", i.c_str(), image->width(), image->height());
+                console->info("Loaded \"{}\" [{:d}x{:d}]", i, image->width(), image->height());
             }
             else
             {
@@ -804,7 +805,7 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
         Color4 pixelVal = img->pixel(pixel.x(), pixel.y());
         Color4 iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).min(255.0f).max(0.0f);
         string s =
-            tfm::format("(%4d,%4d) = (%6.3g, %6.3g, %6.3g, %6.3g) / (%3d, %3d, %3d, %3d)",
+            fmt::format("({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
                  pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
                  (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]), (int)round(iPixelVal[3]));
         m_pixelInfoLabel->setCaption(s);
@@ -827,7 +828,7 @@ void HDRViewScreen::updateZoomLabel()
     float realZoom = m_zoomf * mPixelRatio;
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-    string cap = tfm::format("%7.3f%% (%d : %d)", realZoom * 100, ratio1, ratio2);
+    string cap = fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2);
     m_zoomLabel->setCaption(cap);
     performLayout();
 }
@@ -965,7 +966,7 @@ HDRViewScreen::drawPixelLabels() const
 
             float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 
-            string text = tfm::format("%1.3f\n%1.3f\n%1.3f", pixel[0], pixel[1], pixel[2]);
+            string text = fmt::format("{:1.3f}\n{:1.3f}\n{:1.3f}", pixel[0], pixel[1], pixel[2]);
 
             drawText(imageToScreen(Vector2i(i,j)), text,
                      luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f),

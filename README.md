@@ -54,4 +54,4 @@ HDRView depends on the following libraries (which are included explicitly or as 
 * Some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released into the public domain.
 * The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
 * The [docopt.cpp](https://github.com/docopt/docopt.cpp) library, which is dual-licensed under MIT and Boost licenses.
-* Wenzel Jakob's simplification of Chris Foster's [tinyformat](https://github.com/mitsuba-renderer/tinyformat) library, which is licensed under the Boost license.
+* Gabi Melman's [spdlog](https://github.com/gabime/spdlog) library, which is licensed under the MIT license.

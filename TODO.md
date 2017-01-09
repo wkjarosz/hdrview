@@ -1,7 +1,6 @@
 ## Todo/Wishlist
 
-* add error logging wrapper which respects a global verbosity setting, uses colorful output to console, and possibly outputs to a debug status panel in
-  the GUI.
+* allow error logging to output to a debug status panel in the GUI.
 * add basic HDR merging capabilities (i.e. assuming registered, sRGB images)
 * add image processing operations (e.g. filtering, resizing) to GUI mode
 * add ability to re-arrange images in layer stack by dragging

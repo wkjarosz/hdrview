@@ -113,7 +113,7 @@ public:
     HDRImage bilateral(float sigmaRange = 0.1f,
                          float sigmaDomain = 1.0f,
                          BorderMode mode = EDGE,
-                         float truncateDomain = 6.0f);
+                         float truncateDomain = 6.0f) const;
     //@}
 
     bool load(const std::string & filename);

@@ -6,6 +6,7 @@
 #include <nanogui/nanogui.h>
 #include <vector>
 #include <iostream>
+#include <spdlog/spdlog.h>
 #include "glimage.h"
 #include "gldithertexture.h"
 
@@ -13,6 +14,8 @@
 using namespace nanogui;
 using namespace std;
 using namespace Eigen;
+namespace spd = spdlog;
+
 
 class HDRViewScreen : public Screen
 {
@@ -101,6 +104,7 @@ private:
     Label * m_zoomLabel = nullptr;
     Label * m_pixelInfoLabel = nullptr;
     MessageDialog * m_okToQuitDialog = nullptr;
-
     vector<Button*> m_layerButtons;
+
+    std::shared_ptr<spdlog::logger> console;
 };
