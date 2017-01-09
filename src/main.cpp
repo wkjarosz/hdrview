@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
+#include <random>
 #include "hdrviewer.h"
 #include "common.h"
 #include "envmap.h"
@@ -21,6 +22,11 @@ namespace spd = spdlog;
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
 
+namespace
+{
+std::mt19937 g_rand(53);
+}
+
 static const char USAGE[] =
 R"(HDRView. Copyright (c) Wojciech Jarosz.
 
@@ -29,8 +35,8 @@ comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 
 Usage:
-  hdrview batch [options <file>...]
-  hdrview [view] [options <file>...]
+  hdrview batch [options FILE...]
+  hdrview [view] [options FILE...]
   hdrview -h | --help | --version
 
 The available commands are:
@@ -60,6 +66,8 @@ Options: (global)
   --version                Show the version.
 
 Options: (for batch processing)
+  -s, --save               Save the processed images. Specify output filename
+                           using --out and/or --format.
   -o BASE, --out=BASE      Save image(s) using specified base output filename.
                            If multiple images are processed, an image sequence
                            is created by concetenating: the base filename, image
@@ -110,8 +118,20 @@ Options: (for batch processing)
                            outside the bounds of the image.
                            MODE : (black | mirror | edge | repeat)
                            [default: edge]
+  --error=TYPE             Compute the error of the image(s) where TYPE can be:
+                           TYPE : (rmse | mse | mae)
+                           A reference image must be specified with --reference.
+                           the TYPE is appended to the saved filename (before
+                           image sequence number).
+  --reference=FILE         Specify the reference image for error computation.
   -a FILE, --average=FILE  Average all loaded images and save to FILE
                            (all images must have the same dimensions).
+  --variance=FILE          Compute an unbiased reference-less sample variance
+                           of FILEs and save to FILE. This uses the FILEs
+                           themselves to compute the mean, and uses the (n-1)
+                           Bessel correction factor.
+  --random-noise=M,V       Generate random Gaussian noise with mean M and
+                           variance V.
   -n R,G,B, --nan=R,G,B    Replace all NaNs and INFs with (R,G,B)
   --dry-run                Don't actually save any files, just report what would
                            be done.
@@ -124,19 +144,23 @@ int main(int argc, char **argv)
     map<string, docopt::value> docargs;
     string ext = "",
            avgFilename = "",
+           varFilename = "",
            basename = "",
            filterType = "",
-           filterParams = "";
+           filterParams = "",
+           errorType = "",
+           referenceFile = "";
     int verbosity = 0, absoluteWidth, absoluteHeight, samples = 1;
-    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f;
-    bool average = false,
-         dither = true,
+    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f, noiseMean = 0, noiseVar = 0;
+    bool dither = true,
          sRGB = true,
          dryRun = true,
          fixNaNs = false,
          resize = false,
          remap = false,
-         relativeSize = true;
+         relativeSize = true,
+         saveFiles = false,
+         makeNoise = false;
     HDRImage::BorderMode borderMode;
     Color3 nanColor(0.0f,0.0f,0.0f);
     // by default use a no-op passthrough warp function
@@ -147,6 +171,7 @@ int main(int argc, char **argv)
     function<HDRImage(const HDRImage &)> filter;
 
     vector<string> inFiles;
+    normal_distribution<float> normalDist(0,0);
 
     try
     {
@@ -223,6 +248,8 @@ int main(int argc, char **argv)
 
         console->info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
+        saveFiles = docargs["--save"].asBool();
+
         // format
         if (docargs["--format"].isString())
         {
@@ -241,9 +268,18 @@ int main(int argc, char **argv)
 
         if (docargs["--average"].isString())
         {
-            average = true;
             avgFilename = docargs["--average"].asString();
             console->info("Saving average image to \"{}\".", avgFilename);
+            if (docargs["FILE"].asStringList().size() < 2)
+                console->error("Computing an average from less than 2 images!");
+        }
+
+        if (docargs["--variance"].isString())
+        {
+            varFilename = docargs["--variance"].asString();
+            if (docargs["FILE"].asStringList().size() < 2)
+                throw invalid_argument("Computing reference-less variance requires at least 2 images.");
+            console->info("Saving variance image to \"{}\".", varFilename);
         }
 
         if (docargs["--filter"].isString())
@@ -276,6 +312,24 @@ int main(int argc, char **argv)
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
             console->info("Filtering using {}({:f},{:f}).", filterType, filterArg1, filterArg2);
+        }
+
+        if (docargs["--error"].isString())
+        {
+            char type[22];
+            if (sscanf(docargs["--error"].asString().c_str(), "%s", type) != 1)
+                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --error:\t{}", docargs["--error"].asString()));
+
+            errorType = type;
+            if (errorType != "mse" && errorType != "rmse" && errorType != "mae")
+                throw invalid_argument(fmt::format("Invalid error TYPE specified in --error:\t{}", docargs["--error"].asString()));
+
+            if (docargs["--reference"].isString())
+                referenceFile = docargs["--reference"].asString();
+            else
+                throw invalid_argument("Need to specify a reference file for error computation.");
+
+            console->info("Computing {} using {} as reference.", errorType, referenceFile);
         }
 
         if (docargs["--resize"].isString())
@@ -347,6 +401,16 @@ int main(int argc, char **argv)
             console->info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
         }
 
+
+        if (docargs["--random-noise"].isString())
+        {
+            makeNoise = true;
+            if (sscanf(docargs["--random-noise"].asString().c_str(), "%f,%f", &noiseMean, &noiseVar) != 2)
+                throw invalid_argument("Cannot parse command-line parameter: --random-noise");
+            normalDist = normal_distribution<float>(noiseMean, sqrt(noiseVar));
+            console->info("Replacing images with random-noise({:f},{:f}).", noiseMean, noiseVar);
+        }
+
         if (docargs["--nan"].isString())
         {
             if (sscanf(docargs["--nan"].asString().c_str(), "%f,%f,%f", &nanColor[0], &nanColor[1], &nanColor[2]) != 3)
@@ -361,7 +425,7 @@ int main(int argc, char **argv)
             console->info("Only testing. Will not write files.");
 
         // list of filenames
-        inFiles = docargs["<file>"].asStringList();
+        inFiles = docargs["FILE"].asStringList();
 
 
         // now actually do stuff
@@ -389,7 +453,19 @@ int main(int argc, char **argv)
             if (!inFiles.size())
                 throw invalid_argument("No files specified for batch mode!");
 
+            HDRImage referenceImage;
+            if (!referenceFile.empty())
+            {
+                console->info("Reading reference image \"{}\"...", referenceFile);
+                if (!referenceImage.load(referenceFile))
+                    throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
+                console->info("Reference image size: {:d}x{:d}", referenceImage.width(), referenceImage.height());
+            }
+
             HDRImage avgImg;
+            HDRImage varImg;
+            int varN = 0;
+
             for (size_t i = 0; i < inFiles.size(); ++i)
             {
                 HDRImage image;
@@ -401,22 +477,41 @@ int main(int argc, char **argv)
                 }
                 console->info("Image size: {:d}x{:d}", image.width(), image.height());
 
+                varN += 1;
+                // initialize variables for average and variance
+                if (varN == 1)
+                {
+                    // set images to zeros
+                    varImg = avgImg = image.unaryExpr([](const Color4 & c)
+                    {
+                        return Color4(0,0,0,0);
+                    });
+                }
+
                 if (fixNaNs || !dryRun)
-                    image = image.unaryExpr([&](const Color4 & c)
+                    image = image.unaryExpr([nanColor](const Color4 & c)
                     {
                         return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
                     });
 
-                if (average)
+                if (!avgFilename.empty() || !varFilename.empty())
                 {
-                    if (i == 0)
-                        avgImg = image;
-                    else
-                    {
-                        if (avgImg.width() != image.width() || avgImg.height() != image.height())
-                            throw invalid_argument("Images do not have the same size.");
-                        avgImg += image;
-                    }
+                    if (avgImg.width() != image.width() || avgImg.height() != image.height())
+                        throw invalid_argument("Images do not have the same size.");
+
+                    auto delta = image - avgImg;
+                    avgImg += delta/Color4(varN,varN,varN,varN);
+                    auto delta2 = image - avgImg;
+                    varImg += delta * delta2;
+
+                    // if (i == 0)
+                    // {
+                    //     avgImg = image;
+                    // }
+                    // else
+                    // {
+                    //     avgImg += image;
+                    // }
                 }
 
                 if (filter)
@@ -450,30 +545,99 @@ int main(int argc, char **argv)
                     }
                 }
 
-                string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
-                string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
-                string filename;
-                if (inFiles.size() == 1 || !basename.size())
-                    filename = thisBasename + "." + thisExt;
-                else
-                    filename = fmt::format("{}{:03d}.{}", thisBasename, i, thisExt);
+                if (makeNoise)
+                {
+                    for (int y = 0; y < image.height(); ++y)
+                        for (int x = 0; x < image.width(); ++x)
+                        {
+                            image(x,y) = Color4(normalDist(g_rand), normalDist(g_rand),
+                                          normalDist(g_rand), 1.0f);
+                        }
+                }
 
-                console->info("Writing image to \"{}\"...", filename);
+                if (!errorType.empty())
+                {
+                    if (image.width() != referenceImage.width() ||
+                        image.height() != referenceImage.height())
+                    {
+                        console->error("Images must have same dimensions!");
+                        continue;
+                    }
 
-                if (!dryRun)
-                    image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+                    Color4 error(0,0,0,0);
+                    Color4 maxError(0,0,0,0);
+                    for (int y = 0; y < image.height(); ++y)
+                        for (int x = 0; x < image.width(); ++x)
+                        {
+                            auto a = image(x,y);
+                            auto b = referenceImage(x,y);
+                            Color4 e(0,0,0,0);
+
+                            if (errorType == "mse" || errorType == "rmse")
+                                e = pow(a-b, Color4(2,2,2,2));
+                            else if (errorType == "mae")
+                                e = fabs(a-b);
+
+                            image(x,y) = e;
+                            image(x,y).a = 1.0f;
+                            error += e;
+                            maxError = fmax(maxError, e);
+                        }
+
+                    if (errorType == "rmse")
+                    {
+                        image.pow(Color4(0.5f,0.5f,0.5f,0.5f));
+                        error = sqrt(error);
+                    }
+
+                    error /= float(image.width()*image.height());
+
+                    console->info(fmt::format("Error: {}.", error));
+                    console->info(fmt::format("Max Error: {}.", maxError));
+                }
+
+                if (saveFiles)
+                {
+                    string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
+                    string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
+                    string filename;
+                    string extra = (errorType.empty()) ? "" : fmt::format("-{}", errorType);
+                    if (inFiles.size() == 1 || !basename.size())
+                        filename = fmt::format("{}{}.{}", thisBasename, extra, thisExt);
+                    else
+                        filename = fmt::format("{}{}{:03d}.{}", thisBasename, extra, i, thisExt);
+
+                    console->info("Writing image to \"{}\"...", filename);
+
+                    if (!dryRun)
+                        image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+                }
             }
 
-            if (average)
+            if (!avgFilename.empty())
             {
-                avgImg *= Color4(1.0f/inFiles.size());
+                // avgImg *= Color4(1.0f/inFiles.size());
 
-                string filename = avgFilename;
-
-                console->info("Writing average image to \"{}\"...", filename);
+                console->info("Writing average image to \"{}\"...", avgFilename);
 
                 if (!dryRun)
-                    avgImg.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+                    avgImg.save(avgFilename, powf(2.0f, exposure), gamma, sRGB, dither);
+            }
+
+            if (!varFilename.empty())
+            {
+                varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
+
+                // set alpha channel to 1
+                varImg = varImg.unaryExpr([](const Color4 & c)
+                {
+                    return Color4(c.r,c.g,c.b,1);
+                });
+
+                console->info("Writing variance image to \"{}\"...", varFilename);
+
+                if (!dryRun)
+                    varImg.save(varFilename, powf(2.0f, exposure), gamma, sRGB, dither);
             }
         }
     }
