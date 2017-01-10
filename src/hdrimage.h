@@ -39,6 +39,29 @@ public:
     int width() const {return (int)rows();}
     int height() const {return (int)cols();}
 
+    void setAlpha(float a)
+    {
+        *this = unaryExpr([a](const Color4 & c){return Color4(c.r,c.g,c.b,a);});
+    }
+
+    Color4 min() const
+    {
+        Color4 m = (*this)(0,0);
+        for (int y = 0; y < height(); ++y)
+            for (int x = 0; x < width(); ++x)
+                m = ::min(m, (*this)(x,y));
+        return m;
+    }
+
+    Color4 max() const
+    {
+        Color4 m = (*this)(0,0);
+        for (int y = 0; y < height(); ++y)
+            for (int x = 0; x < width(); ++x)
+                m = ::max(m, (*this)(x,y));
+        return m;
+    }
+
     //-----------------------------------------------------------------------
     //@{ \name Pixel accessors.
     //-----------------------------------------------------------------------

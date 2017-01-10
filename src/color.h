@@ -364,6 +364,9 @@ public:
                       std:: FUNC(c[3], e)); \
     }
 
+// namespace std
+// {
+
 //
 // create vectorized versions of the math functions across the elements of
 // a Color3 or Color4
@@ -376,6 +379,7 @@ COLOR_FUNCTION_WRAPPER(log10)
 COLOR_FUNCTION_WRAPPER(log2)
 COLOR_FUNCTION_WRAPPER(log1p)
 COLOR_FUNCTION_WRAPPER(fabs)
+COLOR_FUNCTION_WRAPPER(abs)
 COLOR_FUNCTION_WRAPPER(sqrt)
 COLOR_FUNCTION_WRAPPER(cbrt)
 COLOR_FUNCTION_WRAPPER(sin)
@@ -395,7 +399,10 @@ COLOR_FUNCTION_WRAPPER(round)
 COLOR_FUNCTION_WRAPPER2(pow)
 COLOR_FUNCTION_WRAPPER2(fmin)
 COLOR_FUNCTION_WRAPPER2(fmax)
+COLOR_FUNCTION_WRAPPER2(min)
+COLOR_FUNCTION_WRAPPER2(max)
 
+// }
 
 template<typename T> T toSRGB(const T &);
 template<> inline Color3 toSRGB(const Color3 & c)
@@ -412,6 +419,21 @@ template<> inline Color4 toSRGB(const Color4 & c)
     return Color4(toSRGB(reinterpret_cast<const Color3&>(c)), c.a);
 }
 
+template<typename T> T toLinear(const T &);
+template<> inline Color3 toLinear(const Color3 & c)
+{
+   float r = c.r < 0.04045f ? (1.f / 12.92f) * c.r : pow((c.r + 0.055f) * (1.f / 1.055f), 2.4f);
+   float g = c.g < 0.04045f ? (1.f / 12.92f) * c.g : pow((c.g + 0.055f) * (1.f / 1.055f), 2.4f);
+   float b = c.b < 0.04045f ? (1.f / 12.92f) * c.b : pow((c.b + 0.055f) * (1.f / 1.055f), 2.4f);
+   return Color3(r, g, b);
+}
+
+template<> inline Color4 toLinear(const Color4 & c)
+{
+    return Color4(toLinear(reinterpret_cast<const Color3&>(c)), c.a);
+}
+
+
 namespace Eigen
 {
 
@@ -420,7 +442,7 @@ template<> struct NumTraits<Color4>
 {
     typedef Color4 Real;
     typedef Color4 NonInteger;
-    typedef Color4 Nested;
+    typedef Color4 & Nested;
     enum {
         IsComplex = 0,
         IsInteger = 0,

@@ -30,7 +30,7 @@ public:
 
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 256, 256,
-                     0, GL_RED, GL_FLOAT, (uint8_t *) dither_matrix256);
+                     0, GL_RED, GL_FLOAT, (const GLvoid *) dither_matrix256);
     }
 
     void bind()

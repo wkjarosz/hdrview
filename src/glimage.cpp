@@ -145,7 +145,7 @@ void GLImage::init()
 
     // glPixelStorei(GL_UNPACK_ROW_LENGTH, width());
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width(), height(),
-                 0, GL_RGBA, GL_FLOAT, (uint8_t *) m_image.data());
+                 0, GL_RGBA, GL_FLOAT, (const GLvoid *) m_image.data());
 }
 
 

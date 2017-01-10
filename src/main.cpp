@@ -118,10 +118,11 @@ Options: (for batch processing)
                            outside the bounds of the image.
                            MODE : (black | mirror | edge | repeat)
                            [default: edge]
-  --error=TYPE             Compute the error of the image(s) where TYPE can be:
-                           TYPE : (rmse | mse | mae)
-                           A reference image must be specified with --reference.
-                           the TYPE is appended to the saved filename (before
+  --error=TYPE             Compute the error or difference between the images
+                           and a reference image, specified with --reference.
+                           The error type can be:
+                           TYPE : (squared | absolute | relative-squared).
+                           The 'TYPE' is appended to the saved filename (before
                            image sequence number).
   --reference=FILE         Specify the reference image for error computation.
   -a FILE, --average=FILE  Average all loaded images and save to FILE
@@ -151,7 +152,8 @@ int main(int argc, char **argv)
            errorType = "",
            referenceFile = "";
     int verbosity = 0, absoluteWidth, absoluteHeight, samples = 1;
-    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f, noiseMean = 0, noiseVar = 0;
+    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f,
+          noiseMean = 0, noiseVar = 0;
     bool dither = true,
          sRGB = true,
          dryRun = true,
@@ -166,8 +168,10 @@ int main(int argc, char **argv)
     // by default use a no-op passthrough warp function
     function<Vector2f(const Vector2f&)> warp =
         [](const Vector2f & uv) {return uv;};
+    // use bilinear lookup by default
     function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler =
         [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+    // no filter by default
     function<HDRImage(const HDRImage &)> filter;
 
     vector<string> inFiles;
@@ -195,9 +199,6 @@ int main(int argc, char **argv)
 
         verbosity = docargs["--verbose"].asLong();
 
-        if (verbosity)
-            printf("Verbosity set to level %d.\n", verbosity);
-
         // Console logger with color
         auto console = spd::stdout_color_mt("console");
         spd::set_pattern("[%l] %v");
@@ -212,6 +213,7 @@ int main(int argc, char **argv)
         spd::set_level(spd::level::level_enum(verbosity));
 
         console->info("Welcome to HDRView!");
+        console->info("Verbosity threshold set to level {:d}.", verbosity);
 
         console->debug("Running with the following commands/arguments/options:");
         for (auto const& arg : docargs)
@@ -250,7 +252,6 @@ int main(int argc, char **argv)
 
         saveFiles = docargs["--save"].asBool();
 
-        // format
         if (docargs["--format"].isString())
         {
             ext = docargs["--format"].asString();
@@ -259,7 +260,6 @@ int main(int argc, char **argv)
         else
             console->info("Keeping original image file formats.");
 
-        // base filename
         if (docargs["--out"].isString())
         {
             basename = docargs["--out"].asString();
@@ -321,7 +321,7 @@ int main(int argc, char **argv)
                 throw invalid_argument(fmt::format("Cannot parse command-line parameter: --error:\t{}", docargs["--error"].asString()));
 
             errorType = type;
-            if (errorType != "mse" && errorType != "rmse" && errorType != "mae")
+            if (errorType != "squared" && errorType != "absolute" && errorType != "relative-squared")
                 throw invalid_argument(fmt::format("Invalid error TYPE specified in --error:\t{}", docargs["--error"].asString()));
 
             if (docargs["--reference"].isString())
@@ -329,7 +329,7 @@ int main(int argc, char **argv)
             else
                 throw invalid_argument("Need to specify a reference file for error computation.");
 
-            console->info("Computing {} using {} as reference.", errorType, referenceFile);
+            console->info("Computing {} error using {} as reference.", errorType, referenceFile);
         }
 
         if (docargs["--resize"].isString())
@@ -400,7 +400,6 @@ int main(int argc, char **argv)
 
             console->info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
         }
-
 
         if (docargs["--random-noise"].isString())
         {
@@ -499,19 +498,11 @@ int main(int argc, char **argv)
                     if (avgImg.width() != image.width() || avgImg.height() != image.height())
                         throw invalid_argument("Images do not have the same size.");
 
+                    // incremental average and variance computation
                     auto delta = image - avgImg;
                     avgImg += delta/Color4(varN,varN,varN,varN);
                     auto delta2 = image - avgImg;
                     varImg += delta * delta2;
-
-                    // if (i == 0)
-                    // {
-                    //     avgImg = image;
-                    // }
-                    // else
-                    // {
-                    //     avgImg += image;
-                    // }
                 }
 
                 if (filter)
@@ -564,36 +555,20 @@ int main(int argc, char **argv)
                         continue;
                     }
 
-                    Color4 error(0,0,0,0);
-                    Color4 maxError(0,0,0,0);
-                    for (int y = 0; y < image.height(); ++y)
-                        for (int x = 0; x < image.width(); ++x)
-                        {
-                            auto a = image(x,y);
-                            auto b = referenceImage(x,y);
-                            Color4 e(0,0,0,0);
+                    if (errorType == "squared")
+                        image = (image-referenceImage).square();
+                    else if (errorType == "absolute")
+                        image = (image-referenceImage).abs();
+                    else //if (errorType == "relative-squared")
+                        image = (image-referenceImage).square() / (referenceImage.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
 
-                            if (errorType == "mse" || errorType == "rmse")
-                                e = pow(a-b, Color4(2,2,2,2));
-                            else if (errorType == "mae")
-                                e = fabs(a-b);
+                    Color4 meanError = image.mean();
+                    Color4 maxError = image.max();
 
-                            image(x,y) = e;
-                            image(x,y).a = 1.0f;
-                            error += e;
-                            maxError = fmax(maxError, e);
-                        }
+                    image.setAlpha(1.0f);
 
-                    if (errorType == "rmse")
-                    {
-                        image.pow(Color4(0.5f,0.5f,0.5f,0.5f));
-                        error = sqrt(error);
-                    }
-
-                    error /= float(image.width()*image.height());
-
-                    console->info(fmt::format("Error: {}.", error));
-                    console->info(fmt::format("Max Error: {}.", maxError));
+                    console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
+                    console->info(fmt::format("Max {} error: {}.", errorType, maxError));
                 }
 
                 if (saveFiles)
@@ -601,7 +576,7 @@ int main(int argc, char **argv)
                     string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
                     string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
                     string filename;
-                    string extra = (errorType.empty()) ? "" : fmt::format("-{}", errorType);
+                    string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
                     if (inFiles.size() == 1 || !basename.size())
                         filename = fmt::format("{}{}.{}", thisBasename, extra, thisExt);
                     else
