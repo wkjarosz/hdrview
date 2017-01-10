@@ -592,16 +592,25 @@ bool HDRImage::load(const string & filename)
 
     // try PNG, JPG, HDR, etc files first
     int n, w, h;
+    // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
+    // we'll do our own srgb correction
+    stbi_ldr_to_hdr_scale(1.0f);
+    stbi_ldr_to_hdr_gamma(1.0f);
+    bool convert2Linear = !stbi_is_hdr(filename.c_str());
+
     float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
     if (float_data)
     {
         resize(w, h);
         for (int y = 0; y < h; ++y)
             for (int x = 0; x < w; ++x)
-                (*this)(x,y) = Color4(float_data[4*(x + y*w) + 0],
-                                      float_data[4*(x + y*w) + 1],
-                                      float_data[4*(x + y*w) + 2],
-                                      float_data[4*(x + y*w) + 3]);
+            {
+                Color4 c(float_data[4*(x + y*w) + 0],
+                         float_data[4*(x + y*w) + 1],
+                         float_data[4*(x + y*w) + 2],
+                         float_data[4*(x + y*w) + 3]);
+                (*this)(x,y) = convert2Linear ? toLinear(c) : c;
+            }
         return true;
     }
     else
