@@ -48,6 +48,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include "stb_image_resize.h"
+
 #include "pfm.h"
 #include "ppm.h"
 
@@ -470,119 +473,16 @@ HDRImage HDRImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) const
     return imFilter * Color4(1.f/(leftSize + rightSize + 1));
 }
 
-HDRImage HDRImage::halfSize() const
+
+HDRImage HDRImage::resized(int w, int h) const
 {
-    HDRImage result(width() / 2, height() / 2);
+    HDRImage newImage(w, h);
 
-    for (int y = 0; y < result.height(); ++y)
-    {
-        int cy = 2 * y;
-        for (int x = 0; x < result.width(); ++x)
-        {
-            int cx = 2 * x;
-            result(x,y) = 0.25f * ((*this)(cx  , cy) + (*this)(cx  , cy+1) +
-                                   (*this)(cx+1, cy) + (*this)(cx+1, cy+1));
-        }
-    }
+    if (!stbir_resize_float((const float *)data(), width(), height(), 0,
+                            (float *) newImage.data(), w, h, 0, 4))
+        throw runtime_error("Failed to resize image.");
 
-    return result;
-}
-
-
-HDRImage HDRImage::doubleSize() const
-{
-    HDRImage result(width() * 2, height() * 2);
-
-    for (int y = 0; y < result.height(); ++y)
-    {
-        int cy = y / 2;
-        for (int x = 0; x < result.width(); ++x)
-        {
-            int cx = x / 2;
-            result(x, y) = (*this)(cx, cy);
-        }
-    }
-
-    return result;
-}
-
-
-HDRImage HDRImage::smoothScale(int w, int h) const
-{
-    float wInv = 1.0f / w;
-    float hInv = 1.0f / h;
-    int wOld = width();
-    int hOld = height();
-
-    Color4 sum;
-
-    // resize horizontally
-    HDRImage xBuffer(w, hOld);
-    {
-        const HDRImage & src = *this;
-        for (int y = 0; y < hOld; ++y)
-        {
-            float fx1 = 0.0f;
-            int ix1 = 0;
-            float fracX1 = 1.0f;
-
-            for (int x = 0; x < w; ++x)
-            {
-                float fx2 = (x + 1.0f) * wInv * wOld;
-                int ix2 = int(fx2);
-                float fracX2 = fx2 - ix2;
-
-                sum = src(ix1, y) * fracX1;
-                if (ix2 < wOld)
-                    sum += src(ix2, y) * fracX2;
-
-                int i;
-                for (i = ix1 + 1; i < ix2; i++)
-                    sum += src(i, y);
-
-                xBuffer(x, y) = sum / (fracX1 + fracX2 + i - ix1 - 1.0f);
-
-                fx1 = fx2;
-                ix1 = ix2;
-                fracX1 = 1.0f - fracX2;
-            }
-        }
-    }
-
-    // resize vertically
-    HDRImage yBuffer(w, h);
-    {
-        const HDRImage & src = xBuffer;
-        for (int x = 0; x < w; ++x)
-        {
-            float fy1 = 0.0f;
-            int iy1 = 0;
-            float fracY1 = 1.0f;
-
-            for (int y = 0; y < h; ++y)
-            {
-                float fy2 = (y + 1.0f) * hInv * hOld;
-                int iy2 = int(fy2);
-                float fracY2 = fy2 - iy2;
-
-                sum = src(x, iy1) * fracY1;
-                if (iy2 < hOld)
-                    sum += src(x, iy2) * fracY2;
-
-                int i;
-                for (i = iy1+1; i < iy2; i++)
-                    sum += src(x, i);
-
-                yBuffer(x, y) = sum / (fracY1 + fracY2 + i - iy1 - 1);
-
-                fy1 = fy2;
-                iy1 = iy2;
-                fracY1 = 1.0f - fracY2;
-            }
-        }
-    }
-
-    return yBuffer;
+    return newImage;
 }
 
 

@@ -49,7 +49,6 @@ private:
     void bringLayerForeward();
 
 
-    Vector2i topLeftImageCorner2Screen() const;
 
     void drawGrid(const Matrix4f & mvp) const;
     void drawPixelLabels() const;
@@ -58,6 +57,7 @@ private:
                   const Color & col = Color(1.0f, 1.0f, 1.0f, 1.0f),
                   int fontSize = 10,
                   int fixedWidth = 0) const;
+    Vector2i topLeftImageCorner2Screen() const;
     Vector2i screenToImage(const Vector2i & p) const;
     Vector2i imageToScreen(const Vector2i & pixel) const;
     void updateZoomLabel();

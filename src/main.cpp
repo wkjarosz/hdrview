@@ -526,7 +526,7 @@ int main(int argc, char **argv)
                     if (!remap)
                     {
                         console->info("Resizing image to {:d}x{:d}...", w, h);
-                        image = image.smoothScale(w, h);
+                        image = image.resized(w, h);
                     }
                     else
                     {

@@ -89,9 +89,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Resizing.
     //-----------------------------------------------------------------------
-    HDRImage halfSize() const;
-    HDRImage doubleSize() const;
-    HDRImage smoothScale(int width, int height) const;
+    HDRImage resized(int width, int height) const;
     HDRImage resample(int width, int height,
                       std::function<Color4(const HDRImage &, float, float, BorderMode)> sampler =
                             [](const HDRImage & i, float x, float y, BorderMode m) {return i.bilinear(x,y,m);},
