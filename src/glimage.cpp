@@ -137,7 +137,7 @@ void GLImage::init()
     m_shader->uploadIndices(indices);
     m_shader->uploadAttrib("position", positions);
 
-    /* Allocate texture memory for the rendered exr */
+    // Allocate texture memory for the image
     glGenTextures(1, &m_texture);
     glBindTexture(GL_TEXTURE_2D, m_texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -165,7 +165,7 @@ void GLImage::clear()
 void GLImage::draw(const Matrix4f & mvp,
                      float gain, float gamma,
                      bool sRGB, bool dither,
-                     const Vector3f & channels)
+                     const Vector3f & channels) const
 {
     if (m_shader)
     {

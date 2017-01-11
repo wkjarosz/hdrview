@@ -104,10 +104,10 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    HDRImage flipVertical()   {return colwise().reverse().eval();}
-    HDRImage flipHorizontal() {return rowwise().reverse().eval();}
-    HDRImage rotate90CW()     {return transpose().colwise().reverse().eval();}
-    HDRImage rotate90CCW()    {return transpose().rowwise().reverse().eval();}
+    HDRImage flipVertical() const   {return colwise().reverse().eval();}
+    HDRImage flipHorizontal() const {return rowwise().reverse().eval();}
+    HDRImage rotate90CW() const     {return transpose().colwise().reverse().eval();}
+    HDRImage rotate90CCW() const    {return transpose().rowwise().reverse().eval();}
     //@}
 
 
@@ -142,5 +142,5 @@ public:
     bool load(const std::string & filename);
     bool save(const std::string & filename,
               float gain, float gamma,
-              bool sRGB, bool dither);
+              bool sRGB, bool dither) const;
 };

@@ -149,7 +149,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create top panel controls
     //
     {
-        Button *about = new Button(m_controlPanel, "", ENTYPO_ICON_INFO);
+        auto about = new Button(m_controlPanel, "", ENTYPO_ICON_INFO);
         about->setFixedSize(Vector2i(25, 25));
         about->setCallback([&]() {
             auto dlg = new MessageDialog(
@@ -274,7 +274,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             {"1/2/3/4",     "View the R/G/B/RGB channels"},
             {"[DELETE]",    "Close current image"},
             {"[UP/PG_UP]",  "Previous image"},
-            {"[DN/PG_DN]",  "Next image"}
+            {"[DN/PG_DN]",  "Next image"},
+            {"CMD-[",       "Send layer backward"},
+            {"CMD-]",       "Bring layer foreward"}
         };
 
         m_helpDialog = new Window(this, "Help");
@@ -371,8 +373,9 @@ void HDRViewScreen::closeCurrentImage()
 
 void HDRViewScreen::updateCaption()
 {
-    if (currentImage())
-        setCaption(string("HDRView [") + currentImage()->filename() + "]");
+    const auto cImg = currentImage();
+    if (cImg)
+        setCaption(string("HDRView [") + cImg->filename() + (cImg->modified() ? "*" : "") + "]");
     else
         setCaption(string("HDRView"));
 }
@@ -394,8 +397,38 @@ void HDRViewScreen::setSelectedLayer(int index)
     updateCaption();
 }
 
+
+void HDRViewScreen::sendLayerBackward()
+{
+    if (m_images.empty() || m_current == 0)
+        // do nothing
+        return;
+
+    std::swap(m_images[m_current], m_images[m_current-1]);
+    repopulateLayerList();
+    m_current--;
+    setSelectedLayer(m_current);
+}
+
+
+void HDRViewScreen::bringLayerForeward()
+{
+    if (m_images.empty() || m_current == int(m_images.size()-1))
+        // do nothing
+        return;
+
+    std::swap(m_images[m_current], m_images[m_current+1]);
+    repopulateLayerList();
+    m_current++;
+    setSelectedLayer(m_current);
+}
+
 void HDRViewScreen::repopulateLayerList()
 {
+    // this currently just clears all the widges and recreates all of them
+    // from scratch. this doesn't scale, but shoud be fine unless you have a
+    // lot of images, and makes the logic a lot simpler.
+
     // clear everything
     if (m_layerListWidget)
         m_layerScrollPanel->removeChild(m_layerListWidget);
@@ -625,7 +658,18 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             m_zoomf = powf(2.0f, m_zoom/2.0f);
             updateZoomLabel();
             return true;
-
+        case '[':
+            if (modifiers & GLFW_MOD_SUPER)
+            {
+                sendLayerBackward();
+                return true;
+            }
+        case ']':
+            if (modifiers & GLFW_MOD_SUPER)
+            {
+                bringLayerForeward();
+                return true;
+            }
         case 'G':
             if (modifiers & GLFW_MOD_SHIFT)
                 m_gamma += 0.02f;
@@ -653,12 +697,22 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'F':
-            m_flipV = !m_flipV;
-            return true;
+            if (currentImage())
+            {
+                currentImage()->image() = currentImage()->image().flipVertical();
+                currentImage()->init();
+                updateCaption();
+                return true;
+            }
 
         case 'M':
-            m_flipH = !m_flipH;
-            return true;
+            if (currentImage())
+            {
+                currentImage()->image() = currentImage()->image().flipHorizontal();
+                currentImage()->init();
+                updateCaption();
+                return true;
+            }
 
         case ' ':
             m_imagePan = Vector2f::Zero();
@@ -799,10 +853,10 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
         return true;
 
     Vector2i pixel = screenToImage(p);
-    auto img = currentImage();
+    const auto img = currentImage();
     if (img && (pixel.array() >= 0).all() && (pixel.array() < img->size().array()).all())
     {
-        Color4 pixelVal = img->pixel(pixel.x(), pixel.y());
+        Color4 pixelVal = img->image()(pixel.x(), pixel.y());
         Color4 iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).min(255.0f).max(0.0f);
         string s =
             fmt::format("({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
@@ -837,7 +891,7 @@ void HDRViewScreen::drawContents()
 {
     glViewport(0, 0, mFBSize[0], mFBSize[1]);
     performLayout();
-    auto img = currentImage();
+    const auto img = currentImage();
     if (img)
     {
 
@@ -856,14 +910,9 @@ void HDRViewScreen::drawContents()
         imageScale(0,0) = float(img->size()[0] * mPixelRatio)/mFBSize[0];
         imageScale(1,1) = float(img->size()[1] * mPixelRatio)/mFBSize[1];
 
-        Matrix4f flip;
-        flip.setIdentity();
-        flip(0,0) = m_flipH ? -1.0f : 1.0f;
-        flip(1,1) = m_flipV ? -1.0f : 1.0f;
-
         Matrix4f mvp;
         mvp.setIdentity();
-        mvp = scale * trans * imageScale * flip;
+        mvp = scale * trans * imageScale;
 
         m_ditherer.bind();
         img->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB->checked(), m_dither->checked(), m_channels);
@@ -876,7 +925,7 @@ void HDRViewScreen::drawContents()
 
 void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
 {
-    auto img = currentImage();
+    const auto img = currentImage();
     if (!m_drawGrid->checked() || m_zoomf < 8 || !img)
         return;
 
@@ -917,20 +966,18 @@ void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
     MatrixXf positions(2, numLines * 2);
 
     int line = 0;
-    float xFlip = (m_flipH ? -1.0f : 1.0f);
-    float yFlip = (m_flipV ? 1.0f : -1.0f);
     // horizontal lines
     for (int j = minJ; j <= maxJ; ++j)
     {
-        positions.col(2*line+0) << xFlip * (2 * minI/float(img->width()) - 1), yFlip * (2 * j/float(img->height()) - 1);
-        positions.col(2*line+1) << xFlip * (2 * maxI/float(img->width()) - 1), yFlip * (2 * j/float(img->height()) - 1);
+        positions.col(2*line+0) << (2 * minI/float(img->width()) - 1), -(2 * j/float(img->height()) - 1);
+        positions.col(2*line+1) << (2 * maxI/float(img->width()) - 1), -(2 * j/float(img->height()) - 1);
         line++;
     }
     // vertical lines
     for (int i = minI; i <= maxI; ++i)
     {
-        positions.col(2*line+0) << xFlip * (2 * i/float(img->width()) - 1), yFlip * (2 * minJ/float(img->height()) - 1);
-        positions.col(2*line+1) << xFlip * (2 * i/float(img->width()) - 1), yFlip * (2 * maxJ/float(img->height()) - 1);
+        positions.col(2*line+0) << (2 * i/float(img->width()) - 1), -(2 * minJ/float(img->height()) - 1);
+        positions.col(2*line+1) << (2 * i/float(img->width()) - 1), -(2 * maxJ/float(img->height()) - 1);
         line++;
     }
 
@@ -946,12 +993,10 @@ void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
 void
 HDRViewScreen::drawPixelLabels() const
 {
-    auto img = currentImage();
+    const auto img = currentImage();
     // if pixels are big enough, draw color labels on each visible pixel
     if (!m_drawValues->checked() || m_zoomf < 32 || !img)
         return;
-
-    // TODO: account for flipping
 
     Vector2i xy0 = topLeftImageCorner2Screen();
     int minJ = max(0, int(-xy0.y() / m_zoomf));
@@ -962,7 +1007,7 @@ HDRViewScreen::drawPixelLabels() const
     {
         for (int i = minI; i <= maxI; ++i)
         {
-            Color4 pixel = img->pixel(i, j);
+            Color4 pixel = img->image()(i, j);
 
             float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 
@@ -998,36 +1043,39 @@ HDRViewScreen::drawText(const Vector2i & pos,
     }
 }
 
-
-Vector2i
-HDRViewScreen::imageToScreen(const Vector2i & pixel) const
+Vector2i HDRViewScreen::topLeftImageCorner2Screen() const
 {
-    if (!currentImage())
+    const auto cImg = currentImage();
+    if (!cImg)
         return Vector2i(0,0);
 
-    int xFlipFactor = m_flipH ? currentImage()->width() - 1 : 0;
-    int yFlipFactor = m_flipV ? currentImage()->height() - 1 : 0;
-    Vector2i sxy((pixel.x() - xFlipFactor) * m_zoomf, (pixel.y() - yFlipFactor) * m_zoomf);
-    if (m_flipH)
-        sxy.x() = -sxy.x();
-    if (m_flipV)
-        sxy.y() = -sxy.y();
+    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-cImg->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
+                    int(m_imagePan[1] * m_zoomf) + int(-cImg->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
+}
 
+Vector2i HDRViewScreen::imageToScreen(const Vector2i & pixel) const
+{
+    const auto cImg = currentImage();
+    if (!cImg)
+        return Vector2i(0,0);
+
+    Vector2i sxy(pixel.x() * m_zoomf, pixel.y() * m_zoomf);
     sxy += topLeftImageCorner2Screen();
     return sxy;
 }
 
 Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
 {
-    if (!currentImage())
+    const auto cImg = currentImage();
+    if (!cImg)
         return Vector2i(0,0);
 
     Vector2i xy0 = topLeftImageCorner2Screen();
 
     Vector2i xy(int(floor((p[0] - xy0.x()) / m_zoomf)),
                 int(floor((p[1] - xy0.y()) / m_zoomf)));
-    if (m_flipH) xy[0] = currentImage()->width() - 1 - xy[0];
-    if (m_flipV) xy[1] = currentImage()->height() - 1 - xy[1];
+    if (false) xy[0] = cImg->width() - 1 - xy[0];
+    if (false) xy[1] = cImg->height() - 1 - xy[1];
 
     return xy;
 }

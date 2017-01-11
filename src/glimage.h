@@ -21,10 +21,11 @@ public:
 
     void init();
 
+    bool modified() const {return m_modified;}
+
     std::string filename() const {return m_filename;}
+    HDRImage & image() {m_modified = true; return m_image;}
     const HDRImage & image() const {return m_image;}
-    const Color4 & pixel(int x, int y) const {return m_image(x, y);}
-    Color4 & pixel(int x, int y) {return m_image(x, y);}
     Eigen::Vector2i size() const {return Eigen::Vector2i(width(), height());}
     int width() const {return m_image.width();}
     int height() const {return m_image.height();}
@@ -32,7 +33,7 @@ public:
     void draw(const Eigen::Matrix4f & mvp,
               float gain, float gamma,
               bool sRGB, bool dither,
-              const Eigen::Vector3f & channels);
+              const Eigen::Vector3f & channels) const;
     bool load(const std::string & filename)
     {
         m_filename = filename;
@@ -40,7 +41,7 @@ public:
     }
     bool save(const std::string & filename,
               float gain, float gamma,
-              bool sRGB, bool dither)
+              bool sRGB, bool dither) const
     {
         return m_image.save(filename, gain, gamma, sRGB, dither);
     }
@@ -50,4 +51,5 @@ private:
     uint32_t m_texture = 0;
     HDRImage m_image;
     std::string m_filename;
+    bool m_modified = false;
 };

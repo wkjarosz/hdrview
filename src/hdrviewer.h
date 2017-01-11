@@ -45,16 +45,11 @@ private:
 
     void repopulateLayerList();
     void setSelectedLayer(int index);
+    void sendLayerBackward();
+    void bringLayerForeward();
 
 
-    Vector2i topLeftImageCorner2Screen() const
-    {
-        if (!currentImage())
-            return Vector2i(0,0);
-
-        return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-currentImage()->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
-                        int(m_imagePan[1] * m_zoomf) + int(-currentImage()->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
-    }
+    Vector2i topLeftImageCorner2Screen() const;
 
     void drawGrid(const Matrix4f & mvp) const;
     void drawPixelLabels() const;
@@ -80,7 +75,7 @@ private:
     Vector2f m_imagePan = Vector2f::Zero();
     int m_zoom = 0;
     float m_zoomf = 1.0f;
-    bool m_flipH = false, m_flipV = false, m_drag = false;
+    bool m_drag = false;
 
     Window * m_controlPanel = nullptr;
     Button * m_helpButton = nullptr;

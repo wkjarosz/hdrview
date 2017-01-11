@@ -701,7 +701,7 @@ bool HDRImage::load(const string & filename)
 
 bool HDRImage::save(const string & filename,
                       float gain, float gamma,
-                      bool sRGB, bool dither)
+                      bool sRGB, bool dither) const
 {
     string extension = getExtension(filename);
 
@@ -710,7 +710,7 @@ bool HDRImage::save(const string & filename,
               extension.begin(),
               ::tolower);
 
-    HDRImage* img = this;
+    auto img = this;
     HDRImage imgCopy;
 
     // if we need to tonemap, then modify a copy of the image data
