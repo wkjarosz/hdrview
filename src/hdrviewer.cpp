@@ -6,8 +6,11 @@
 #define NOMINMAX
 #include <tinydir.h>
 #include <spdlog/fmt/fmt.h>
+#include "widgets.h"
+#include <algorithm>
 
 using namespace std;
+
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
@@ -61,86 +64,233 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_zoomLabel->setFontSize(thm->mTextBoxFontSize*m_GUIScaleFactor);
 
     //
-    // create layers panel
+    // create side panel
+    //
+    m_sidePanel = new Window(this, "");
+    m_sidePanel->setId("layers");
+    m_sidePanel->setTheme(thm);
+
+    m_sideScrollPanel = new VScrollPanel(m_sidePanel);
+    m_sidePanelContents = new Widget(m_sideScrollPanel);
+    auto sideLayout = new BoxLayout(Orientation::Vertical,
+                                    Alignment::Fill,
+                                    4*m_GUIScaleFactor, 4*m_GUIScaleFactor);
+    m_sidePanelContents->setLayout(sideLayout);
+
+    //
+    // create side panel
     //
     {
-        m_layersPanel = new Window(this, "");
-        m_layersPanel->setId("layers");
-        m_layersPanel->setTheme(thm);
-        m_layersPanel->setLayout(new GroupLayout(10*m_GUIScaleFactor,
-                                                 4*m_GUIScaleFactor,
-                                                 8*m_GUIScaleFactor,
-                                                 10*m_GUIScaleFactor));
-        new Label(m_layersPanel, "File operations", "sans-bold");
+        auto w = new Button(m_sidePanelContents, "File", ENTYPO_ICON_CHEVRON_DOWN);
+        w->setBackgroundColor(Color(15, 100, 185, 75));
+        w->setFlags(Button::ToggleButton);
+        w->setPushed(true);
+        w->setIconPosition(Button::IconPosition::Right);
+        m_layersPanelContents = new Widget(m_sidePanelContents);
 
-        Widget *buttonRow = new Widget(m_layersPanel);
-        buttonRow->setLayout(new BoxLayout(Orientation::Horizontal,
-                                           Alignment::Fill, 0, 4));
+        w->setChangeCallback([&,w,sideLayout](bool value)
+                             {
+                                 w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+                                 m_layersPanelContents->setVisible(value);
+                                 m_sidePanelContents->performLayout(mNVGContext);
+                                 performLayout();
+                             });
 
-        Button *b = new Button(buttonRow, "Open", ENTYPO_ICON_FOLDER);
-        b->setFixedWidth(84);
-        b->setBackgroundColor(Color(0, 100, 0, 75));
-        b->setTooltip("Load an image and add it to the set of opened images.");
-        b->setCallback([&]
+        m_layersPanelContents->setId("layers panel");
+        m_layersPanelContents->setLayout(new GroupLayout(2 * m_GUIScaleFactor,
+                                                         4 * m_GUIScaleFactor,
+                                                         8 * m_GUIScaleFactor,
+                                                         10 * m_GUIScaleFactor));
         {
-            string file = file_dialog(
-                {
-                    {"exr", "OpenEXR image"},
-                    {"png", "Portable Network Graphic"},
-                    {"pfm", "Portable Float Map"},
-                    {"ppm", "Portable PixMap"},
-                    {"jpg", "Jpeg image"},
-                    {"tga", "Targa image"},
-                    {"bmp", "Windows Bitmap image"},
-                    {"gif", "GIF image"},
-                    {"hdr", "Radiance rgbE format"},
-                    {"ppm", "Portable pixel map"},
-                    {"psd", "Photoshop document"}
-                }, false);
-            if (file.size())
-                dropEvent({file});
-        });
+            new Label(m_layersPanelContents, "File operations", "sans-bold");
 
-        m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
-        m_saveButton->setEnabled(m_images.size() > 0);
-        m_saveButton->setFixedWidth(84);
-        m_saveButton->setBackgroundColor(Color(0, 0, 100, 75));
-        m_saveButton->setTooltip("Save the image to disk.");
-        m_saveButton->setCallback([&]
-        {
-            if (!currentImage())
-                return;
-            string file = file_dialog(
-                {
-                    {"png", "Portable Network Graphic"},
-                    {"pfm", "Portable Float Map"},
-                    {"ppm", "Portable PixMap"},
-                    {"tga", "Targa image"},
-                    {"bmp", "Windows Bitmap image"},
-                    {"hdr", "Radiance rgbE format"},
-                    {"exr", "OpenEXR image"}
-                }, true);
+            Widget *buttonRow = new Widget(m_layersPanelContents);
+            buttonRow->setLayout(new BoxLayout(Orientation::Horizontal,
+                                               Alignment::Fill, 0, 4));
 
-            if (file.size())
+            Button *b = new Button(buttonRow, "Open", ENTYPO_ICON_FOLDER);
+            b->setFixedWidth(84);
+            b->setBackgroundColor(Color(0, 100, 0, 75));
+            b->setTooltip("Load an image and add it to the set of opened images.");
+            b->setCallback([&] {
+                string file = file_dialog(
+                        {
+                                {"exr", "OpenEXR image"},
+                                {"png", "Portable Network Graphic"},
+                                {"pfm", "Portable Float Map"},
+                                {"ppm", "Portable PixMap"},
+                                {"jpg", "Jpeg image"},
+                                {"tga", "Targa image"},
+                                {"bmp", "Windows Bitmap image"},
+                                {"gif", "GIF image"},
+                                {"hdr", "Radiance rgbE format"},
+                                {"ppm", "Portable pixel map"},
+                                {"psd", "Photoshop document"}
+                        }, false);
+                if (file.size())
+                    dropEvent({file});
+            });
+
+            m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
+            m_saveButton->setEnabled(m_images.size() > 0);
+            m_saveButton->setFixedWidth(84);
+            m_saveButton->setBackgroundColor(Color(0, 0, 100, 75));
+            m_saveButton->setTooltip("Save the image to disk.");
+            m_saveButton->setCallback([&]
             {
-                try
-                {
-                    currentImage()->save(file, powf(2.0f, m_exposure),
-                                         m_gamma, m_sRGB->checked(),
-                                         m_dither->checked());
-                }
-                catch (std::runtime_error & e)
-                {
-                    new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-                          string("Could not save image due to an error:\n") + e.what());
-                }
-            }
-        });
+                if (!currentImage())
+                    return;
+                string file = file_dialog(
+                        {
+                                {"png", "Portable Network Graphic"},
+                                {"pfm", "Portable Float Map"},
+                                {"ppm", "Portable PixMap"},
+                                {"tga", "Targa image"},
+                                {"bmp", "Windows Bitmap image"},
+                                {"hdr", "Radiance rgbE format"},
+                                {"exr", "OpenEXR image"}
+                        }, true);
 
-        new Label(m_layersPanel, "Opened images:", "sans-bold");
+                if (file.size())
+                {
+                    try
+                    {
+                        currentImage()->save(file, powf(2.0f, m_exposure),
+                                             m_gamma, m_sRGB->checked(),
+                                             m_dither->checked());
+                    }
+                    catch (std::runtime_error &e)
+                    {
+                        new MessageDialog(this, MessageDialog::Type::Warning, "Error",
+                                          string("Could not save image due to an error:\n") + e.what());
+                    }
+                    updateCaption();
+                    repopulateLayerList();
+                    setSelectedLayer(m_current);
+                }
+            });
 
-        m_vscrollContainer = new Widget(m_layersPanel);
-        m_layerScrollPanel = new VScrollPanel(m_vscrollContainer);
+            new Label(m_layersPanelContents, "Opened images:", "sans-bold");
+        }
+    }
+
+    //
+    // create edit panel
+    //
+    {
+        auto w = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_RIGHT);
+        w->setBackgroundColor(Color(15, 100, 185, 75));
+        w->setFlags(Button::ToggleButton);
+        w->setIconPosition(Button::IconPosition::Right);
+
+        m_editPanelContents = new Widget(m_sidePanelContents);
+        m_editPanelContents->setVisible(false);
+
+        w->setChangeCallback([&,w](bool value)
+            {
+                w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+                m_editPanelContents->setVisible(value);
+                m_sidePanelContents->performLayout(mNVGContext);
+                performLayout();
+            });
+
+        m_editPanelContents->setId("edit panel");
+        m_editPanelContents->setLayout(new GroupLayout(2 * m_GUIScaleFactor,
+                                                 4 * m_GUIScaleFactor,
+                                                 8 * m_GUIScaleFactor,
+                                                 10 * m_GUIScaleFactor));
+
+        new Label(m_editPanelContents, "History", "sans-bold");
+
+        auto buttonRow = new Widget(m_editPanelContents);
+        buttonRow->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 4));
+
+        m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
+        m_undoButton->setFixedWidth(84);
+        m_undoButton->setCallback([&]()
+                                  {
+                                      currentImage()->undo();
+                                      updateCaption();
+                                      repopulateLayerList();
+                                      setSelectedLayer(m_current);
+                                  });
+        m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
+        m_redoButton->setFixedWidth(84);
+        m_redoButton->setCallback([&]()
+                                  {
+                                      currentImage()->redo();
+                                      updateCaption();
+                                      repopulateLayerList();
+                                      setSelectedLayer(m_current);
+                                  });
+
+        new Label(m_editPanelContents, "Transformations", "sans-bold");
+
+        Widget *buttonGrid = new Widget(m_editPanelContents);
+        buttonGrid->setLayout(new GridLayout(Orientation::Vertical, 2, Alignment::Fill, 0, 4));
+
+        // flip h
+        w = new Button(buttonGrid, "Flip H", ENTYPO_ICON_LEFT_BOLD);
+        w->setCallback([&](){flipImage(true);});
+        m_filterButtons.push_back(w);
+
+        // flip v
+        w = new Button(buttonGrid, "Flip V", ENTYPO_ICON_DOWN_BOLD);
+        w->setCallback([&](){flipImage(false);});
+        m_filterButtons.push_back(w);
+
+        // rotate cw
+        w = new Button(buttonGrid, "Rotate CW", ENTYPO_ICON_CW);
+        w->setCallback([&]()
+                       {
+                           if (!currentImage())
+                               return;
+
+                           currentImage()->modify([&](HDRImage & img)
+                              {
+                                  img = img.rotated90CW();
+                                  return new LambdaUndo([](HDRImage & img2){img2 = img2.rotated90CCW();},
+                                                        [](HDRImage & img2){img2 = img2.rotated90CW();});
+                              });
+                           updateCaption();
+                           repopulateLayerList();
+                           setSelectedLayer(m_current);
+                       });
+        m_filterButtons.push_back(w);
+
+        // rotate ccw
+        w = new Button(buttonGrid, "Rotate CCW", ENTYPO_ICON_CCW);
+        w->setCallback([&]()
+           {
+               if (!currentImage())
+                   return;
+
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      img = img.rotated90CCW();
+                      return new LambdaUndo([](HDRImage & img2){img2 = img2.rotated90CW();},
+                                            [](HDRImage & img2){img2 = img2.rotated90CCW();});
+                  });
+
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+        m_filterButtons.push_back(w);
+
+
+        new Label(m_editPanelContents, "Resize/resample", "sans-bold");
+        m_filterButtons.push_back(createResizeButton(m_editPanelContents));
+
+        new Label(m_editPanelContents, "Filters", "sans-bold");
+        m_filterButtons.push_back(createGaussianFilterButton(m_editPanelContents));
+        m_filterButtons.push_back(createFastGaussianFilterButton(m_editPanelContents));
+        m_filterButtons.push_back(createBoxFilterButton(m_editPanelContents));
+        m_filterButtons.push_back(createBilateralFilterButton(m_editPanelContents));
+        m_filterButtons.push_back(createUnsharpMaskFilterButton(m_editPanelContents));
+        m_filterButtons.push_back(createMedianFilterButton(m_editPanelContents));
+
+
     }
 
     dropEvent(args);
@@ -179,7 +329,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_layersButton->setFixedSize(Vector2i(25, 25));
         m_layersButton->setChangeCallback([&](bool value)
         {
-            m_layersPanel->setVisible(value);
+            m_sidePanel->setVisible(value);
             performLayout();
         });
 
@@ -312,7 +462,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     updateZoomLabel();
     m_layerListWidget->performLayout(mNVGContext);
-    m_vscrollContainer->performLayout(mNVGContext);
 
     m_ditherer.init();
 
@@ -321,7 +470,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     // m_controlPanel->requestFocus();
 
-    m_layersPanel->setVisible(false);
+    m_sidePanel->setVisible(false);
 
     drawAll();
     setVisible(true);
@@ -340,6 +489,7 @@ GLImage * HDRViewScreen::currentImage()
         return nullptr;
     return m_images[m_current];
 }
+
 const GLImage * HDRViewScreen::currentImage() const
 {
     if (m_current < 0 || m_current >= int(m_images.size()))
@@ -354,14 +504,29 @@ void HDRViewScreen::closeImage(int index)
 
     if (img)
     {
-        delete img;
-        m_images.erase(m_images.begin()+index);
-        repopulateLayerList();
-        if (index < m_current)
-            setSelectedLayer(m_current-1);
+        auto closeIt = [&,index](int close = 0)
+        {
+            if (close != 0)
+                return;
+
+            delete m_images[index];
+            m_images.erase(m_images.begin()+index);
+            repopulateLayerList();
+            if (index < m_current)
+                setSelectedLayer(m_current-1);
+            else
+                setSelectedLayer(m_current >= int(m_images.size()) ? int(m_images.size()-1) : m_current);
+            enableDisableButtons();
+        };
+
+        if (img->isModified())
+        {
+            auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
+                                            "Image is modified. Close anyway?", "Close", "Cancel", true);
+            dialog->setCallback(closeIt);
+        }
         else
-            setSelectedLayer(m_current >= int(m_images.size()) ? int(m_images.size()-1) : m_current);
-        if (m_saveButton) m_saveButton->setEnabled(m_images.size() > 0);
+            closeIt();
     }
 }
 
@@ -373,9 +538,9 @@ void HDRViewScreen::closeCurrentImage()
 
 void HDRViewScreen::updateCaption()
 {
-    const auto cImg = currentImage();
-    if (cImg)
-        setCaption(string("HDRView [") + cImg->filename() + (cImg->modified() ? "*" : "") + "]");
+    const GLImage * img = currentImage();
+    if (img)
+        setCaption(string("HDRView [") + img->filename() + (img->isModified() ? "*" : "") + "]");
     else
         setCaption(string("HDRView"));
 }
@@ -395,6 +560,7 @@ void HDRViewScreen::setSelectedLayer(int index)
         m_layerButtons[index]->setPushed(true);
     m_current = index;
     updateCaption();
+    enableDisableButtons();
 }
 
 
@@ -431,8 +597,8 @@ void HDRViewScreen::repopulateLayerList()
 
     // clear everything
     if (m_layerListWidget)
-        m_layerScrollPanel->removeChild(m_layerListWidget);
-    m_layerListWidget = new Widget(m_layerScrollPanel);
+        m_layersPanelContents->removeChild(m_layerListWidget);
+    m_layerListWidget = new Widget(m_layersPanelContents);
     m_layerListWidget->setId("layer list widget");
 
     // a GridLayout seems to cause a floating point exception when there are no
@@ -462,7 +628,7 @@ void HDRViewScreen::repopulateLayerList()
         if (filename.size() > 8+8+3+4)
             shortname = filename.substr(0, 8) + "..." + filename.substr(filename.size()-12);
 
-        Button *b = new Button(m_layerListWidget, shortname);
+        Button *b = new Button(m_layerListWidget, shortname, img->isModified() ? ENTYPO_ICON_PENCIL : 0);
         b->setFlags(Button::RadioButton);
         b->setTooltip(filename);
         b->setFixedSize(Vector2i(145,25)*m_GUIScaleFactor);
@@ -481,8 +647,22 @@ void HDRViewScreen::repopulateLayerList()
         b->setButtonGroup(m_layerButtons);
 
     m_layerListWidget->performLayout(mNVGContext);
-    m_vscrollContainer->performLayout(mNVGContext);
     performLayout();
+}
+
+void HDRViewScreen::enableDisableButtons()
+{
+    if (m_saveButton)
+        m_saveButton->setEnabled(m_images.size() > 0);
+
+    if (m_editPanelContents)
+        for_each(m_filterButtons.begin(), m_filterButtons.end(),
+                 [&](Widget * w){w->setEnabled(m_images.size() > 0); });
+
+    if (m_undoButton)
+        m_undoButton->setEnabled(currentImage() && currentImage()->hasUndo());
+    if (m_redoButton)
+        m_redoButton->setEnabled(currentImage() && currentImage()->hasRedo());
 }
 
 bool HDRViewScreen::dropEvent(const vector<string> &filenames)
@@ -571,11 +751,8 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
         tinydir_close(&dir);
     }
 
-    if (m_saveButton)
-        m_saveButton->setEnabled(m_images.size() > 0);
-
+    enableDisableButtons();
     repopulateLayerList();
-
     setSelectedLayer(int(m_images.size()-1));
 
     if (numErrors)
@@ -592,6 +769,29 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
     }
 
     return true;
+}
+
+
+void HDRViewScreen::flipImage(bool h)
+{
+    if (!currentImage())
+        return;
+
+    if (h)
+        currentImage()->modify([](HDRImage & img)
+            {
+                img = img.flippedHorizontal();
+                return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedHorizontal();});
+            });
+    else
+        currentImage()->modify([](HDRImage & img)
+           {
+               img = img.flippedVertical();
+               return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedVertical();});
+           });
+    updateCaption();
+    repopulateLayerList();
+    setSelectedLayer(m_current);
 }
 
 
@@ -628,11 +828,11 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         }
         case GLFW_KEY_ENTER:
         {
-            if (m_okToQuitDialog->visible())
-                // quit dialog already visible, "enter" clicks OK, and quits
-                m_okToQuitDialog->callback()(0);
-            else
-                return false;
+             if (m_okToQuitDialog && m_okToQuitDialog->visible())
+                 // quit dialog already visible, "enter" clicks OK, and quits
+                 m_okToQuitDialog->callback()(0);
+             else
+                return true;
         }
         case GLFW_KEY_BACKSPACE:
             closeCurrentImage();
@@ -697,22 +897,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'F':
-            if (currentImage())
-            {
-                currentImage()->image() = currentImage()->image().flipVertical();
-                currentImage()->init();
-                updateCaption();
-                return true;
-            }
+            flipImage(false);
+            return true;
+
 
         case 'M':
-            if (currentImage())
-            {
-                currentImage()->image() = currentImage()->image().flipHorizontal();
-                currentImage()->init();
-                updateCaption();
-                return true;
-            }
+            flipImage(true);
+            return true;
 
         case ' ':
             m_imagePan = Vector2f::Zero();
@@ -738,8 +929,8 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'L':
-            m_layersPanel->setVisible(!m_layersPanel->visible());
-            m_layersButton->setPushed(m_layersPanel->visible());
+            m_sidePanel->setVisible(!m_sidePanel->visible());
+            m_layersButton->setPushed(m_sidePanel->visible());
             return true;
 
         case GLFW_KEY_PAGE_DOWN:
@@ -782,27 +973,29 @@ void HDRViewScreen::performLayout()
     int controlPanelHeight = m_controlPanel->preferredSize(mNVGContext).y();
     m_controlPanel->setSize(Vector2i(width(), controlPanelHeight));
 
-    // put the layers panel directly below the control panel on the left side
-    m_layersPanel->setPosition(Vector2i(0,controlPanelHeight));
-    m_layersPanel->setSize(m_layersPanel->preferredSize(mNVGContext));
-
     // put the status bar full-width at the bottom
     m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)*m_GUIScaleFactor));
     m_statusBar->setPosition(Vector2i(0, height()-m_statusBar->height()));
+
+    int sidePanelHeight = height() - m_controlPanel->height() - m_statusBar->height();
+
+    m_sidePanelContents->setFixedWidth(195);
+    m_sideScrollPanel->setFixedWidth(195+12*m_GUIScaleFactor);
+
+    // put the layers panel directly below the control panel on the left side
+    m_sidePanel->setPosition(Vector2i(0, controlPanelHeight));
+    m_sidePanel->setSize(Vector2i(195+12*m_GUIScaleFactor, sidePanelHeight));
+
 
     int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
     m_zoomLabel->setWidth(zoomWidth);
     m_zoomLabel->setPosition(Vector2i(width()-zoomWidth-6*m_GUIScaleFactor, 0));
 
-    int lheight = (height() - m_vscrollContainer->absolutePosition().y() - m_statusBar->height() - 10*m_GUIScaleFactor);
-    int lheight2 = std::min(lheight, m_layerListWidget->preferredSize(mNVGContext).y());
-    m_layerScrollPanel->setFixedHeight(lheight2);
-    m_vscrollContainer->setFixedHeight(lheight);
+    int lheight2 = std::min(sidePanelHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
+    m_sideScrollPanel->setFixedHeight(lheight2);
 
-    m_layerListWidget->setFixedWidth(m_layerListWidget->preferredSize(mNVGContext).x());
-    m_vscrollContainer->setFixedWidth(m_layerListWidget->preferredSize(mNVGContext).x()+18*m_GUIScaleFactor);
-    m_layerScrollPanel->setFixedWidth(m_layerListWidget->preferredSize(mNVGContext).x()+18*m_GUIScaleFactor);
-
+//    m_layerListWidget->setFixedWidth(m_layerListWidget->preferredSize(mNVGContext).x());
+//    m_sideScrollPanel->setFixedWidth(m_sidePanelContents->preferredSize(mNVGContext).x()+18*m_GUIScaleFactor);
 }
 
 
@@ -827,7 +1020,7 @@ bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, i
     // only set drag state if the other widgets aren't taking the event and
     // we are over the main canvas
     if (Screen::mouseButtonEvent(p, button, down, modifiers) ||
-        (m_layersPanel->visible() && m_layersPanel->contains(p)) ||
+        (m_sidePanel->visible() && m_sidePanel->contains(p)) ||
         (m_controlPanel->visible() && m_controlPanel->contains(p)) ||
         (m_statusBar->visible() && m_statusBar->contains(p)))
     {
@@ -853,7 +1046,7 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
         return true;
 
     Vector2i pixel = screenToImage(p);
-    const auto img = currentImage();
+    const GLImage * img = currentImage();
     if (img && (pixel.array() >= 0).all() && (pixel.array() < img->size().array()).all())
     {
         Color4 pixelVal = img->image()(pixel.x(), pixel.y());
@@ -891,7 +1084,7 @@ void HDRViewScreen::drawContents()
 {
     glViewport(0, 0, mFBSize[0], mFBSize[1]);
     performLayout();
-    const auto img = currentImage();
+    const GLImage * img = currentImage();
     if (img)
     {
 
@@ -925,7 +1118,7 @@ void HDRViewScreen::drawContents()
 
 void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
 {
-    const auto img = currentImage();
+    const GLImage * img = currentImage();
     if (!m_drawGrid->checked() || m_zoomf < 8 || !img)
         return;
 
@@ -993,7 +1186,7 @@ void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
 void
 HDRViewScreen::drawPixelLabels() const
 {
-    const auto img = currentImage();
+    const GLImage * img = currentImage();
     // if pixels are big enough, draw color labels on each visible pixel
     if (!m_drawValues->checked() || m_zoomf < 32 || !img)
         return;
@@ -1045,18 +1238,18 @@ HDRViewScreen::drawText(const Vector2i & pos,
 
 Vector2i HDRViewScreen::topLeftImageCorner2Screen() const
 {
-    const auto cImg = currentImage();
-    if (!cImg)
+    const GLImage * img = currentImage();
+    if (!img)
         return Vector2i(0,0);
 
-    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-cImg->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
-                    int(m_imagePan[1] * m_zoomf) + int(-cImg->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
+    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-img->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
+                    int(m_imagePan[1] * m_zoomf) + int(-img->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
 }
 
 Vector2i HDRViewScreen::imageToScreen(const Vector2i & pixel) const
 {
-    const auto cImg = currentImage();
-    if (!cImg)
+    const GLImage * img = currentImage();
+    if (!img)
         return Vector2i(0,0);
 
     Vector2i sxy(pixel.x() * m_zoomf, pixel.y() * m_zoomf);
@@ -1066,16 +1259,341 @@ Vector2i HDRViewScreen::imageToScreen(const Vector2i & pixel) const
 
 Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
 {
-    const auto cImg = currentImage();
-    if (!cImg)
+    const GLImage * img = currentImage();
+    if (!img)
         return Vector2i(0,0);
 
     Vector2i xy0 = topLeftImageCorner2Screen();
 
     Vector2i xy(int(floor((p[0] - xy0.x()) / m_zoomf)),
                 int(floor((p[1] - xy0.y()) / m_zoomf)));
-    if (false) xy[0] = cImg->width() - 1 - xy[0];
-    if (false) xy[1] = cImg->height() - 1 - xy[1];
+    if (false) xy[0] = img->width() - 1 - xy[0];
+    if (false) xy[1] = img->height() - 1 - xy[1];
 
     return xy;
+}
+
+
+Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
+{
+    string name = "Gaussian blur...";
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Width:", "sans-bold");
+           auto width = new FloatBox<float>(body, 1.0f);
+           width->setEditable(true);
+           width->setSpinnable(true);
+           width->setMinValue(0.0f);
+           width->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Height:", "sans-bold");
+           auto height = new FloatBox<float>(body, 1.0f);
+           height->setEditable(true);
+           height->setSpinnable(true);
+           height->setMinValue(0.0f);
+           height->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,width,height](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,width,height](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.GaussianBlurred(width->value(), height->value());
+                                          return undo;
+                                      });
+
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
+{
+    string name = "Fast Gaussian blur...";
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Width:", "sans-bold");
+           auto width = new FloatBox<float>(body, 1.0f);
+           width->setEditable(true);
+           width->setSpinnable(true);
+           width->setMinValue(0.0f);
+           width->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Height:", "sans-bold");
+           auto height = new FloatBox<float>(body, 1.0f);
+           height->setEditable(true);
+           height->setSpinnable(true);
+           height->setMinValue(0.0f);
+           height->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,width,height](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,width,height](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.fastGaussianBlurred(width->value(), height->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
+{
+    string name = "Box blur...";
+    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Width:", "sans-bold");
+           auto width = new FloatBox<float>(body, 1.0f);
+           width->setEditable(true);
+           width->setSpinnable(true);
+           width->setMinValue(0.0f);
+           width->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Height:", "sans-bold");
+           auto height = new FloatBox<float>(body, 1.0f);
+           height->setEditable(true);
+           height->setSpinnable(true);
+           height->setMinValue(0.0f);
+           height->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,width,height](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,width,height](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.boxBlurred(width->value(), height->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
+{
+    string name = "Bilateral filter...";
+    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Range sigma:", "sans-bold");
+           auto domainSigma = new FloatBox<float>(body, 1.0f);
+           domainSigma->setEditable(true);
+           domainSigma->setSpinnable(true);
+           domainSigma->setMinValue(0.0f);
+           domainSigma->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Value sigma:", "sans-bold");
+           auto valueSigma = new FloatBox<float>(body, 0.1f);
+           valueSigma->setEditable(true);
+           valueSigma->setSpinnable(true);
+           valueSigma->setMinValue(0.0f);
+           valueSigma->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,domainSigma,valueSigma](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,domainSigma,valueSigma](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.bilateralFiltered(valueSigma->value(), domainSigma->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
+{
+    string name = "Unsharp mask...";
+    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Width:", "sans-bold");
+           auto sigma = new FloatBox<float>(body, 1.0f);
+           sigma->setEditable(true);
+           sigma->setSpinnable(true);
+           sigma->setMinValue(0.0f);
+           sigma->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Height:", "sans-bold");
+           auto strength = new FloatBox<float>(body, 1.0f);
+           strength->setEditable(true);
+           strength->setSpinnable(true);
+           strength->setMinValue(0.0f);
+           strength->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,sigma,strength](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,sigma,strength](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.unsharpMasked(sigma->value(), strength->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
+{
+    string name = "Median filter...";
+    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Radius:", "sans-bold");
+           auto radius = new FloatBox<float>(body, 1.0f);
+           radius->setEditable(true);
+           radius->setSpinnable(true);
+           radius->setMinValue(0.0f);
+           radius->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,radius](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,radius](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.medianFiltered(radius->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
+}
+
+
+Button * HDRViewScreen::createResizeButton(Widget * parent)
+{
+    string name = "Resize...";
+    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_RESIZE_FULL);
+    b->setCallback([&,name]()
+       {
+           auto body = new Widget(nullptr);
+           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
+           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
+           layout->setSpacing(0, 10);
+           body->setLayout(layout);
+
+           new Label(body, "Width:", "sans-bold");
+           auto width = new IntBox<int>(body, currentImage() ? currentImage()->width() : 128);
+           width->setEditable(true);
+           width->setSpinnable(true);
+           width->setMinValue(1);
+           width->setFixedSize(Vector2i(100, 20));
+
+           new Label(body, "Height:", "sans-bold");
+           auto height = new IntBox<int>(body, currentImage() ? currentImage()->height() : 128);
+           height->setEditable(true);
+           height->setSpinnable(true);
+           height->setMinValue(1);
+           height->setFixedSize(Vector2i(100, 20));
+
+           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+
+           dialog->setCallback([&,width,height](int btn)
+           {
+               if (btn != 0 || !currentImage())
+                   return;
+
+               currentImage()->modify([&,width,height](HDRImage & img)
+                                      {
+                                          auto undo = new FullImageUndo(img);
+                                          img = img.resized(width->value(), height->value());
+                                          return undo;
+                                      });
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           });
+       });
+    return b;
 }

@@ -172,8 +172,9 @@ add_executable(HDRView MACOSX_BUNDLE
     src/hdrimage.h
     src/hdrimage.cpp
     src/main.cpp
-    ${EXTRA_SOURCE}
-)
+    src/widgets.h
+    src/widgets.cpp
+    ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
 target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS})

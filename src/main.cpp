@@ -85,6 +85,7 @@ Options: (for batch processing)
                            If no format is given, each image is saved in it's
                            original format (if supported).
                            EXT : (bmp | exr | pfm | png | ppm | hdr | tga).
+  --invert, -i             Invert the image (compute 1-image).
   --filter=TYPE,PARAMS...  Process image(s) using filter TYPE with
                            filter-specific PARAMS specified after the comma.
                            TYPE : (gaussian | box | fast-gaussian | unsharp |
@@ -109,8 +110,8 @@ Options: (for batch processing)
                            MAP : (latlong | angularmap | mirrorball | cubemap).
                            The optional S results in SxS super-sampling, where
                            the default is S=1: one centered sample per pixel.
-                           The option I parameter specifies the sampling lookup
-                           mode: I : (nearest | bilinear | bicubic).
+                           The optional L parameter specifies the sampling lookup
+                           mode: L : (nearest | bilinear | bicubic).
                            Specifying the same M parameter twice results in no
                            change. Combine with --resize to specify output file
                            dimensions.
@@ -162,7 +163,8 @@ int main(int argc, char **argv)
          remap = false,
          relativeSize = true,
          saveFiles = false,
-         makeNoise = false;
+         makeNoise = false,
+         invert = false;
     HDRImage::BorderMode borderMode;
     Color3 nanColor(0.0f,0.0f,0.0f);
     // by default use a no-op passthrough warp function
@@ -251,6 +253,7 @@ int main(int argc, char **argv)
         console->info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
         saveFiles = docargs["--save"].asBool();
+        invert = docargs["--invert"].asBool();
 
         if (docargs["--format"].isString())
         {
@@ -297,17 +300,23 @@ int main(int argc, char **argv)
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
 
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.gaussianBlur(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .GaussianBlurred(filterArg1, filterArg2, borderMode);};
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.boxBlur(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .boxBlurred(filterArg1, filterArg2, borderMode);};
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.fastGaussianBlur(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .fastGaussianBlurred(filterArg1, filterArg2, borderMode);};
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.median(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .medianFiltered(filterArg1, filterArg2, borderMode);};
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.bilateral(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .bilateralFiltered(filterArg1, filterArg2, borderMode);};
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i.unsharpMask(filterArg1,filterArg2,borderMode);};
+                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
+                    .unsharpMasked(filterArg1, filterArg2, borderMode);};
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -531,8 +540,8 @@ int main(int argc, char **argv)
                     else
                     {
                         console->info("Remapping image to {:d}x{:d}...", w, h);
-                        image = image.resample(w, h, sampler, warp, samples,
-                                               borderMode);
+                        image = image.resampled(w, h, sampler, warp, samples,
+                                                borderMode);
                     }
                 }
 
@@ -569,6 +578,11 @@ int main(int argc, char **argv)
 
                     console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
                     console->info(fmt::format("Max {} error: {}.", errorType, maxError));
+                }
+
+                if (invert)
+                {
+                    image = Color4(1.0f, 1.0f, 1.0f, 2.0f) - image;
                 }
 
                 if (saveFiles)

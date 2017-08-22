@@ -40,14 +40,22 @@ private:
 
     void closeCurrentImage();
     void closeImage(int index);
-
+    void enableDisableButtons();
     void updateCaption();
-
     void repopulateLayerList();
     void setSelectedLayer(int index);
     void sendLayerBackward();
     void bringLayerForeward();
 
+    void flipImage(bool h);
+
+    Button * createGaussianFilterButton(Widget * parent);
+    Button * createFastGaussianFilterButton(Widget * parent);
+    Button * createBoxFilterButton(Widget * parent);
+    Button * createBilateralFilterButton(Widget * parent);
+    Button * createUnsharpMaskFilterButton(Widget * parent);
+    Button * createMedianFilterButton(Widget * parent);
+    Button * createResizeButton(Widget * parent);
 
 
     void drawGrid(const Matrix4f & mvp) const;
@@ -81,10 +89,14 @@ private:
     Button * m_helpButton = nullptr;
     Button * m_layersButton = nullptr;
     Button * m_saveButton = nullptr;
-    Window * m_layersPanel = nullptr;
-    VScrollPanel * m_layerScrollPanel = nullptr;
-    Widget * m_vscrollContainer = nullptr;
+    Button * m_undoButton = nullptr;
+    Button * m_redoButton = nullptr;
+    Window * m_sidePanel = nullptr;
+    VScrollPanel * m_sideScrollPanel = nullptr;
+    Widget * m_sidePanelContents = nullptr;
+    Widget * m_layersPanelContents = nullptr;
     Widget * m_layerListWidget = nullptr;
+    Widget * m_editPanelContents = nullptr;
     Window * m_helpDialog = nullptr;
     FloatBox<float> * m_exposureTextBox = nullptr;
     Slider * m_exposureSlider = nullptr;
@@ -99,6 +111,7 @@ private:
     Label * m_zoomLabel = nullptr;
     Label * m_pixelInfoLabel = nullptr;
     MessageDialog * m_okToQuitDialog = nullptr;
+    vector<Button*> m_filterButtons;
     vector<Button*> m_layerButtons;
 
     std::shared_ptr<spdlog::logger> console;

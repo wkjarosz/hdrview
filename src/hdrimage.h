@@ -90,51 +90,53 @@ public:
     //@{ \name Resizing.
     //-----------------------------------------------------------------------
     HDRImage resized(int width, int height) const;
-    HDRImage resample(int width, int height,
-                      std::function<Color4(const HDRImage &, float, float, BorderMode)> sampler =
-                            [](const HDRImage & i, float x, float y, BorderMode m) {return i.bilinear(x,y,m);},
-                      std::function<Eigen::Vector2f(const Eigen::Vector2f&)> warpFn =
-                            [](const Eigen::Vector2f & uv) {return uv;},
-                      int superSample = 1, BorderMode mode = REPEAT) const;
+    HDRImage resampled(int width, int height,
+                       std::function<Color4(const HDRImage &, float, float, BorderMode)> sampler =
+                       [](const HDRImage &i, float x, float y, BorderMode m)
+                       { return i.bilinear(x, y, m); },
+                       std::function<Eigen::Vector2f(const Eigen::Vector2f &)> warpFn =
+                       [](const Eigen::Vector2f &uv)
+                       { return uv; },
+                       int superSample = 1, BorderMode mode = REPEAT) const;
     //@}
 
 
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    HDRImage flipVertical() const   {return colwise().reverse().eval();}
-    HDRImage flipHorizontal() const {return rowwise().reverse().eval();}
-    HDRImage rotate90CW() const     {return transpose().colwise().reverse().eval();}
-    HDRImage rotate90CCW() const    {return transpose().rowwise().reverse().eval();}
+    HDRImage flippedVertical() const    {return rowwise().reverse().eval();}
+    HDRImage flippedHorizontal() const  {return colwise().reverse().eval();}
+    HDRImage rotated90CW() const        {return transpose().colwise().reverse().eval();}
+    HDRImage rotated90CCW() const       {return transpose().rowwise().reverse().eval();}
     //@}
 
 
     //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
-    HDRImage convolve(const Eigen::ArrayXXf & kernel, BorderMode mode = EDGE) const;
-    HDRImage gaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE,
-                            float truncateX=6.0f, float truncateY=6.0f) const;
-    HDRImage gaussianBlurX(float sigmaX, BorderMode mode = EDGE, float truncateX=6.0f) const;
-    HDRImage gaussianBlurY(float sigmaY, BorderMode mode = EDGE, float truncateY=6.0f) const;
-    HDRImage iteratedBoxBlur(float sigma, int iterations = 6, BorderMode mode = EDGE) const;
-    HDRImage fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode = EDGE) const;
-    HDRImage boxBlur(int w, BorderMode mode = EDGE) const{return boxBlur(w,w, mode);}
-    HDRImage boxBlur(int hw, int hh, BorderMode mode = EDGE) const{return boxBlurX(hw,mode).boxBlurY(hh,mode);}
-    HDRImage boxBlurX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
-    HDRImage boxBlurX(int halfSize, BorderMode mode = EDGE) const {return boxBlurX(halfSize, halfSize, mode);}
-    HDRImage boxBlurY(int upSize, int downSize, BorderMode mode = EDGE) const;
-    HDRImage boxBlurY(int halfSize, BorderMode mode = EDGE) const {return boxBlurY(halfSize, halfSize, mode);}
-    HDRImage unsharpMask(float sigma, float strength, BorderMode mode = EDGE) const;
-    HDRImage median(float radius, int channel, BorderMode mode = EDGE) const;
-    HDRImage median(float r, BorderMode mode = EDGE) const
+    HDRImage convolved(const Eigen::ArrayXXf &kernel, BorderMode mode = EDGE) const;
+    HDRImage GaussianBlurred(float sigmaX, float sigmaY, BorderMode mode = EDGE,
+                             float truncateX = 6.0f, float truncateY = 6.0f) const;
+    HDRImage GaussianBlurredX(float sigmaX, BorderMode mode = EDGE, float truncateX = 6.0f) const;
+    HDRImage GaussianBlurredY(float sigmaY, BorderMode mode = EDGE, float truncateY = 6.0f) const;
+    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, BorderMode mode = EDGE) const;
+    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mode = EDGE) const;
+    HDRImage boxBlurred(int w, BorderMode mode = EDGE) const{return boxBlurred(w, w, mode);}
+    HDRImage boxBlurred(int hw, int hh, BorderMode mode = EDGE) const{return boxBlurredX(hw, mode).boxBlurredY(hh, mode);}
+    HDRImage boxBlurredX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
+    HDRImage boxBlurredX(int halfSize, BorderMode mode = EDGE) const {return boxBlurredX(halfSize, halfSize, mode);}
+    HDRImage boxBlurredY(int upSize, int downSize, BorderMode mode = EDGE) const;
+    HDRImage boxBlurredY(int halfSize, BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, mode);}
+    HDRImage unsharpMasked(float sigma, float strength, BorderMode mode = EDGE) const;
+    HDRImage medianFiltered(float radius, int channel, BorderMode mode = EDGE) const;
+    HDRImage medianFiltered(float r, BorderMode mode = EDGE) const
     {
-        return median(r, 0, mode).median(r, 1, mode).median(r, 2, mode).median(r, 3, mode);
+        return medianFiltered(r, 0, mode).medianFiltered(r, 1, mode).medianFiltered(r, 2, mode).medianFiltered(r, 3, mode);
     }
-    HDRImage bilateral(float sigmaRange = 0.1f,
-                         float sigmaDomain = 1.0f,
-                         BorderMode mode = EDGE,
-                         float truncateDomain = 6.0f) const;
+    HDRImage bilateralFiltered(float sigmaRange = 0.1f,
+                               float sigmaDomain = 1.0f,
+                               BorderMode mode = EDGE,
+                               float truncateDomain = 6.0f) const;
     //@}
 
     bool load(const std::string & filename);

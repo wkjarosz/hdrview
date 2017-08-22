@@ -181,10 +181,10 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mode) const
 }
 
 
-HDRImage HDRImage::resample(int w, int h,
-                            function<Color4(const HDRImage &, float, float, BorderMode)> samplerFn,
-                            function<Vector2f(const Vector2f&)> warpFn,
-                            int superSample, BorderMode mode) const
+HDRImage HDRImage::resampled(int w, int h,
+                             function<Color4(const HDRImage &, float, float, BorderMode)> samplerFn,
+                             function<Vector2f(const Vector2f &)> warpFn,
+                             int superSample, BorderMode mode) const
 {
     HDRImage result(w, h);
 
@@ -208,7 +208,7 @@ HDRImage HDRImage::resample(int w, int h,
 }
 
 
-HDRImage HDRImage::convolve(const ArrayXXf & kernel, BorderMode mode) const
+HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mode) const
 {
     HDRImage imFilter(width(), height());
 
@@ -243,34 +243,34 @@ HDRImage HDRImage::convolve(const ArrayXXf & kernel, BorderMode mode) const
     return imFilter;
 }
 
-HDRImage HDRImage::gaussianBlurX(float sigmaX, BorderMode mode, float truncateX) const
+HDRImage HDRImage::GaussianBlurredX(float sigmaX, BorderMode mode, float truncateX) const
 {
-    return convolve(horizontalGaussianKernel(sigmaX, truncateX), mode);
+    return convolved(horizontalGaussianKernel(sigmaX, truncateX), mode);
 }
 
-HDRImage HDRImage::gaussianBlurY(float sigmaY, BorderMode mode, float truncateY) const
+HDRImage HDRImage::GaussianBlurredY(float sigmaY, BorderMode mode, float truncateY) const
 {
-    return convolve(horizontalGaussianKernel(sigmaY, truncateY).transpose(), mode);
+    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), mode);
 }
 
-// Use principles of seperabiltity to blur an image using 2 1D Gaussian Filters
-HDRImage HDRImage::gaussianBlur(float sigmaX, float sigmaY, BorderMode mode,
-                                    float truncateX, float truncateY) const
+// Use principles of separability to blur an image using 2 1D Gaussian Filters
+HDRImage HDRImage::GaussianBlurred(float sigmaX, float sigmaY, BorderMode mode,
+                                   float truncateX, float truncateY) const
 {
     // blur using 2, 1D filters in the x and y directions
-    return gaussianBlurX(sigmaX, mode, truncateX).gaussianBlurY(sigmaY, mode, truncateY);
+    return GaussianBlurredX(sigmaX, mode, truncateX).GaussianBlurredY(sigmaY, mode, truncateY);
 }
 
 
 // sharpen an image
-HDRImage HDRImage::unsharpMask(float sigma, float strength, BorderMode mode) const
+HDRImage HDRImage::unsharpMasked(float sigma, float strength, BorderMode mode) const
 {
-    return *this + Color4(strength) * (*this - fastGaussianBlur(sigma, sigma, mode));
+    return *this + Color4(strength) * (*this - fastGaussianBlurred(sigma, sigma, mode));
 }
 
 
 
-HDRImage HDRImage::median(float radius, int channel, BorderMode mode) const
+HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mode) const
 {
     int radiusi = int(ceil(radius));
 
@@ -313,7 +313,7 @@ HDRImage HDRImage::median(float radius, int channel, BorderMode mode) const
 }
 
 
-HDRImage HDRImage::bilateral(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain) const
+HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, BorderMode mode, float truncateDomain) const
 {
     HDRImage imFilter(width(), height());
 
@@ -363,7 +363,7 @@ static int nextOddInt(int i)
 }
 
 
-HDRImage HDRImage::iteratedBoxBlur(float sigma, int iterations, BorderMode mode) const
+HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, BorderMode mode) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -398,14 +398,14 @@ HDRImage HDRImage::iteratedBoxBlur(float sigma, int iterations, BorderMode mode)
 
     HDRImage imFilter = *this;
     for (int i = 0; i < iterations; i++)
-        imFilter = imFilter.boxBlur(hw, mode);
+        imFilter = imFilter.boxBlurred(hw, mode);
 
     return imFilter;
 }
 
-HDRImage HDRImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode) const
+HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mode) const
 {
-    // See comments in HDRImage::iteratedBoxBlur for derivation of width
+    // See comments in HDRImage::iteratedBoxBlurred for derivation of width
     int hw = round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
     int hh = round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
 
@@ -413,26 +413,26 @@ HDRImage HDRImage::fastGaussianBlur(float sigmaX, float sigmaY, BorderMode mode)
     // do horizontal blurs
     if (hw < 3)
         // for small blurs, just use a separable Gaussian
-        im = gaussianBlurX(sigmaX, mode);
+        im = GaussianBlurredX(sigmaX, mode);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = boxBlurX(hw, mode).boxBlurX(hw, mode).boxBlurX(hw, mode).
-             boxBlurX(hw, mode).boxBlurX(hw, mode).boxBlurX(hw, mode);
+        im = boxBlurredX(hw, mode).boxBlurredX(hw, mode).boxBlurredX(hw, mode).
+            boxBlurredX(hw, mode).boxBlurredX(hw, mode).boxBlurredX(hw, mode);
 
     // now do vertical blurs
     if (hh < 3)
         // for small blurs, just use a separable Gaussian
-        im = im.gaussianBlurY(sigmaY, mode);
+        im = im.GaussianBlurredY(sigmaY, mode);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = im.boxBlurY(hh, mode).boxBlurY(hh, mode).boxBlurY(hh, mode).
-                boxBlurY(hh, mode).boxBlurY(hh, mode).boxBlurY(hh, mode);
+        im = im.boxBlurredY(hh, mode).boxBlurredY(hh, mode).boxBlurredY(hh, mode).
+            boxBlurredY(hh, mode).boxBlurredY(hh, mode).boxBlurredY(hh, mode);
 
     return im;
 }
 
 
-HDRImage HDRImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) const
+HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, BorderMode mode) const
 {
     HDRImage imFilter(width(), height());
 
@@ -453,7 +453,7 @@ HDRImage HDRImage::boxBlurX(int leftSize, int rightSize, BorderMode mode) const
 }
 
 // TODO actually use the mode parameter
-HDRImage HDRImage::boxBlurY(int leftSize, int rightSize, BorderMode mode) const
+HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, BorderMode mode) const
 {
     HDRImage imFilter(width(), height());
 
@@ -618,14 +618,16 @@ bool HDRImage::save(const string & filename,
     {
         imgCopy = *this;
         img = &imgCopy;
+        Color4 gainC = Color4(gain, gain, gain, 1.0f);
+        Color4 gainG = Color4(1.0f/gamma, 1.0f/gamma, 1.0f/gamma, 1.0f);
 
         if (gain != 1.0f)
-            imgCopy *= Color4(gain);
+            imgCopy *= gainC;
 
         if (sRGB)
             imgCopy = imgCopy.unaryExpr(ptr_fun((Color4 (*)(const Color4&))toSRGB));
         else if (gamma != 1.0f)
-            imgCopy = imgCopy.pow(Color4(1.0f/gamma));
+            imgCopy = imgCopy.pow(gainG);
     }
 
     if (extension == "hdr")
