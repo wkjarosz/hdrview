@@ -605,7 +605,7 @@ int main(int argc, char **argv)
 
             if (!avgFilename.empty())
             {
-                // avgImg *= Color4(1.0f/inFiles.size());
+                // avgImg *= Color4(1.0f/inFiles.size());mess
 
                 console->info("Writing average image to \"{}\"...", avgFilename);
 
