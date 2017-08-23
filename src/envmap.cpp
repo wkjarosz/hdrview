@@ -136,7 +136,7 @@ Vector2f XYZToLatLong(const Vector3f& xyz)
     float phi   = std::acos(xyz(1));
     float theta = std::atan2(xyz(2), xyz(0));
 
-    return Vector2f(0.5f*(1.0f - theta/M_PI)+0.25f, phi/M_PI);
+    return Vector2f(mod(float(0.5f - theta*M_1_PI*0.5f)+0.25f, 1.0f), phi/M_PI);
 }
 
 Vector2f XYZToCubeMap(const Vector3f& xyz)

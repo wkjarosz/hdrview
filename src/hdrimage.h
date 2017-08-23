@@ -67,7 +67,7 @@ public:
     //-----------------------------------------------------------------------
     enum BorderMode
     {
-        BLACK,
+        BLACK = 0,
         EDGE,
         REPEAT,
         MIRROR

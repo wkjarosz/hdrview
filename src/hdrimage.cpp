@@ -136,6 +136,10 @@ Color4 HDRImage::nearest(float sx, float sy, BorderMode mode) const
 
 Color4 HDRImage::bilinear(float sx, float sy, BorderMode mode) const
 {
+    // shift so that pixels are defined at their centers
+    sx -= 0.5f;
+    sy -= 0.5f;
+
     int x0 = (int) floor(sx);
     int y0 = (int) floor(sy);
     int x1 = x0 + 1;
@@ -151,6 +155,10 @@ Color4 HDRImage::bilinear(float sx, float sy, BorderMode mode) const
 // photoshop bicubic
 Color4 HDRImage::bicubic(float sx, float sy, BorderMode mode) const
 {
+    // shift so that pixels are defined at their centers
+    sx -= 0.5f;
+    sy -= 0.5f;
+
     int bx = (int) floor(sx);
     int by = (int) floor(sy);
 

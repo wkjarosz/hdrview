@@ -46,7 +46,8 @@ private:
     void setSelectedLayer(int index);
     void sendLayerBackward();
     void bringLayerForeward();
-
+    bool undo();
+    bool redo();
     void flipImage(bool h);
 
     Button * createGaussianFilterButton(Widget * parent);
@@ -56,6 +57,7 @@ private:
     Button * createUnsharpMaskFilterButton(Widget * parent);
     Button * createMedianFilterButton(Widget * parent);
     Button * createResizeButton(Widget * parent);
+    Button * createResampleButton(Widget * parent);
 
 
     void drawGrid(const Matrix4f & mvp) const;

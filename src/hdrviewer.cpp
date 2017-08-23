@@ -6,8 +6,9 @@
 #define NOMINMAX
 #include <tinydir.h>
 #include <spdlog/fmt/fmt.h>
-#include "widgets.h"
 #include <algorithm>
+#include "widgets.h"
+#include "envmap.h"
 
 using namespace std;
 
@@ -207,22 +208,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
         m_undoButton->setFixedWidth(84);
-        m_undoButton->setCallback([&]()
-                                  {
-                                      currentImage()->undo();
-                                      updateCaption();
-                                      repopulateLayerList();
-                                      setSelectedLayer(m_current);
-                                  });
+        m_undoButton->setCallback([&](){undo();});
         m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
         m_redoButton->setFixedWidth(84);
-        m_redoButton->setCallback([&]()
-                                  {
-                                      currentImage()->redo();
-                                      updateCaption();
-                                      repopulateLayerList();
-                                      setSelectedLayer(m_current);
-                                  });
+        m_redoButton->setCallback([&](){redo();});
 
         new Label(m_editPanelContents, "Transformations", "sans-bold");
 
@@ -281,6 +270,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         new Label(m_editPanelContents, "Resize/resample", "sans-bold");
         m_filterButtons.push_back(createResizeButton(m_editPanelContents));
+        m_filterButtons.push_back(createResampleButton(m_editPanelContents));
 
         new Label(m_editPanelContents, "Filters", "sans-bold");
         m_filterButtons.push_back(createGaussianFilterButton(m_editPanelContents));
@@ -589,6 +579,30 @@ void HDRViewScreen::bringLayerForeward()
     setSelectedLayer(m_current);
 }
 
+bool HDRViewScreen::undo()
+{
+    if (!currentImage())
+        return false;
+
+    currentImage()->undo();
+    updateCaption();
+    repopulateLayerList();
+    setSelectedLayer(m_current);
+    return true;
+}
+
+bool HDRViewScreen::redo()
+{
+    if (!currentImage())
+        return false;
+
+    currentImage()->redo();
+    updateCaption();
+    repopulateLayerList();
+    setSelectedLayer(m_current);
+    return true;
+}
+
 void HDRViewScreen::repopulateLayerList()
 {
     // this currently just clears all the widges and recreates all of them
@@ -803,6 +817,17 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
     if (!action)
         return false;
 
+    // disable events if there is a modal dialog
+    if (mFocusPath.size() > 1)
+    {
+        const Window *window = dynamic_cast<Window *>(mFocusPath[mFocusPath.size() - 2]);
+        if (window && window->modal())
+        {
+            if (!window->contains(mMousePos))
+                return false;
+        }
+    }
+
     switch (key)
     {
         case GLFW_KEY_ESCAPE:
@@ -834,6 +859,18 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
              else
                 return true;
         }
+
+        // undo & redo
+        case 'Z':
+            if (modifiers & GLFW_MOD_SUPER)
+            {
+                if (modifiers & GLFW_MOD_SHIFT)
+                    return redo();
+                else
+                    return undo();
+            }
+            return false;
+
         case GLFW_KEY_BACKSPACE:
             closeCurrentImage();
             return true;
@@ -956,17 +993,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case '4':
             m_channels = Vector3f(1.0f, 1.0f, 1.0f);
             return true;
-
-        default:
-            return Screen::keyboardEvent(key, scancode, action, modifiers);
     }
     return false;
 }
 
 void HDRViewScreen::performLayout()
 {
-    for (auto c : mChildren)
-        c->performLayout(mNVGContext);
+    Screen::performLayout();
 
     // make the control panel full-width
     m_controlPanel->setPosition(Vector2i(0,0));
@@ -993,9 +1026,6 @@ void HDRViewScreen::performLayout()
 
     int lheight2 = std::min(sidePanelHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
     m_sideScrollPanel->setFixedHeight(lheight2);
-
-//    m_layerListWidget->setFixedWidth(m_layerListWidget->preferredSize(mNVGContext).x());
-//    m_sideScrollPanel->setFixedWidth(m_sidePanelContents->preferredSize(mNVGContext).x()+18*m_GUIScaleFactor);
 }
 
 
@@ -1276,276 +1306,288 @@ Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
 
 Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
 {
+    static float width = 1.0f, height = 1.0f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Gaussian blur...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Width:", "sans-bold");
-           auto width = new FloatBox<float>(body, 1.0f);
-           width->setEditable(true);
-           width->setSpinnable(true);
-           width->setMinValue(0.0f);
-           width->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           new Label(body, "Height:", "sans-bold");
-           auto height = new FloatBox<float>(body, 1.0f);
-           height->setEditable(true);
-           height->setSpinnable(true);
-           height->setMinValue(0.0f);
-           height->setFixedSize(Vector2i(100, 20));
+           auto w = gui->addVariable("Width:", width);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
+           w = gui->addVariable("Height:", height);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
-           dialog->setCallback([&,width,height](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
 
-               currentImage()->modify([&,width,height](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.GaussianBlurred(width->value(), height->value());
-                                          return undo;
-                                      });
-
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.GaussianBlurred(width, height, borderMode);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
 
 Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
 {
+    static float width = 1.0f, height = 1.0f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Fast Gaussian blur...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Width:", "sans-bold");
-           auto width = new FloatBox<float>(body, 1.0f);
-           width->setEditable(true);
-           width->setSpinnable(true);
-           width->setMinValue(0.0f);
-           width->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           new Label(body, "Height:", "sans-bold");
-           auto height = new FloatBox<float>(body, 1.0f);
-           height->setEditable(true);
-           height->setSpinnable(true);
-           height->setMinValue(0.0f);
-           height->setFixedSize(Vector2i(100, 20));
+           auto w = gui->addVariable("Width:", width);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
+           w = gui->addVariable("Height:", height);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
-           dialog->setCallback([&,width,height](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
 
-               currentImage()->modify([&,width,height](HDRImage & img)
+               currentImage()->modify([&](HDRImage & img)
                                       {
                                           auto undo = new FullImageUndo(img);
-                                          img = img.fastGaussianBlurred(width->value(), height->value());
+                                          img = img.fastGaussianBlurred(width, height, borderMode);
                                           return undo;
                                       });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
 
 Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
 {
+    static float width = 1.0f, height = 1.0f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Box blur...";
-    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Width:", "sans-bold");
-           auto width = new FloatBox<float>(body, 1.0f);
-           width->setEditable(true);
-           width->setSpinnable(true);
-           width->setMinValue(0.0f);
-           width->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           new Label(body, "Height:", "sans-bold");
-           auto height = new FloatBox<float>(body, 1.0f);
-           height->setEditable(true);
-           height->setSpinnable(true);
-           height->setMinValue(0.0f);
-           height->setFixedSize(Vector2i(100, 20));
+           auto w = gui->addVariable("Width:", width);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
+           w = gui->addVariable("Height:", height);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
-           dialog->setCallback([&,width,height](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
 
-               currentImage()->modify([&,width,height](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.boxBlurred(width->value(), height->value());
-                                          return undo;
-                                      });
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.boxBlurred(width, height, borderMode);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
 
 Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
 {
+    static float rangeSigma = 1.0f, valueSigma = 0.1f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Bilateral filter...";
-    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Range sigma:", "sans-bold");
-           auto domainSigma = new FloatBox<float>(body, 1.0f);
-           domainSigma->setEditable(true);
-           domainSigma->setSpinnable(true);
-           domainSigma->setMinValue(0.0f);
-           domainSigma->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           new Label(body, "Value sigma:", "sans-bold");
-           auto valueSigma = new FloatBox<float>(body, 0.1f);
-           valueSigma->setEditable(true);
-           valueSigma->setSpinnable(true);
-           valueSigma->setMinValue(0.0f);
-           valueSigma->setFixedSize(Vector2i(100, 20));
+           auto w = gui->addVariable("Range sigma:", rangeSigma);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
+           w = gui->addVariable("Value sigma:", valueSigma);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
-           dialog->setCallback([&,domainSigma,valueSigma](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
-
-               currentImage()->modify([&,domainSigma,valueSigma](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.bilateralFiltered(valueSigma->value(), domainSigma->value());
-                                          return undo;
-                                      });
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.bilateralFiltered(valueSigma, rangeSigma, borderMode);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
 
 Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
 {
+    static float sigma = 1.0f, strength = 1.0f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Unsharp mask...";
-    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Width:", "sans-bold");
-           auto sigma = new FloatBox<float>(body, 1.0f);
-           sigma->setEditable(true);
-           sigma->setSpinnable(true);
-           sigma->setMinValue(0.0f);
-           sigma->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           new Label(body, "Height:", "sans-bold");
-           auto strength = new FloatBox<float>(body, 1.0f);
-           strength->setEditable(true);
-           strength->setSpinnable(true);
-           strength->setMinValue(0.0f);
-           strength->setFixedSize(Vector2i(100, 20));
+           auto w = gui->addVariable("Sigma:", sigma);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
+           w = gui->addVariable("Strength:", strength);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
-           dialog->setCallback([&,sigma,strength](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
-
-               currentImage()->modify([&,sigma,strength](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.unsharpMasked(sigma->value(), strength->value());
-                                          return undo;
-                                      });
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.unsharpMasked(sigma, strength, borderMode);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
 
 Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
 {
+    static float radius = 1.0f;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
     string name = "Median filter...";
-    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_DROPLET);
+    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Radius:", "sans-bold");
-           auto radius = new FloatBox<float>(body, 1.0f);
-           radius->setEditable(true);
-           radius->setSpinnable(true);
-           radius->setMinValue(0.0f);
-           radius->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           auto w = gui->addVariable("Radius:", radius);
+           w->setSpinnable(true);
+           w->setMinValue(0.0f);
 
-           dialog->setCallback([&,radius](int btn)
+           auto e = gui->addVariable("Border mode:", borderMode, true);
+           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
-
-               currentImage()->modify([&,radius](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.medianFiltered(radius->value());
-                                          return undo;
-                                      });
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.medianFiltered(radius, borderMode);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
@@ -1553,47 +1595,168 @@ Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
 
 Button * HDRViewScreen::createResizeButton(Widget * parent)
 {
+    static int width = 128, height = 128;
     string name = "Resize...";
-    auto b = new Button(m_editPanelContents, name, ENTYPO_ICON_RESIZE_FULL);
+    auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
     b->setCallback([&,name]()
        {
-           auto body = new Widget(nullptr);
-           auto layout = new GridLayout(Orientation::Horizontal, 2, Alignment::Middle, 15, 5);
-           layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-           layout->setSpacing(0, 10);
-           body->setLayout(layout);
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(75, 20));
 
-           new Label(body, "Width:", "sans-bold");
-           auto width = new IntBox<int>(body, currentImage() ? currentImage()->width() : 128);
-           width->setEditable(true);
-           width->setSpinnable(true);
-           width->setMinValue(1);
-           width->setFixedSize(Vector2i(100, 20));
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+           window->setModal(true);
 
-           new Label(body, "Height:", "sans-bold");
-           auto height = new IntBox<int>(body, currentImage() ? currentImage()->height() : 128);
-           height->setEditable(true);
-           height->setSpinnable(true);
-           height->setMinValue(1);
-           height->setFixedSize(Vector2i(100, 20));
+           width = currentImage()->width();
+           auto w = gui->addVariable("Width:", width);
+           w->setSpinnable(true);
+           w->setMinValue(1);
 
-           auto dialog = new Dialog(this, name, "OK", "Cancel", true, body);
+           height = currentImage()->height();
+           w = gui->addVariable("Height:", height);
+           w->setSpinnable(true);
+           w->setMinValue(1);
 
-           dialog->setCallback([&,width,height](int btn)
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
            {
-               if (btn != 0 || !currentImage())
+               if (!currentImage())
                    return;
 
-               currentImage()->modify([&,width,height](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.resized(width->value(), height->value());
-                                          return undo;
-                                      });
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.resized(width, height);
+                      return undo;
+                  });
+               window->dispose();
                updateCaption();
                repopulateLayerList();
                setSelectedLayer(m_current);
-           });
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
        });
     return b;
 }
+
+
+Button * HDRViewScreen::createResampleButton(Widget * parent)
+{
+    enum MappingMode
+    {
+        ANGULAR_MAP = 0,
+        MIRROR_BALL,
+        LAT_LONG,
+        CUBE_MAP
+    };
+    static MappingMode from = ANGULAR_MAP, to = ANGULAR_MAP;
+
+    enum SampleLookup
+    {
+        NEAREST = 0,
+        BILINEAR,
+        BICUBIC
+    };
+    static SampleLookup interpolationMode = BILINEAR;
+
+    static int width = 128, height = 128;
+    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static int samples = 1;
+
+    string name = "Remap...";
+    auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+    b->setCallback([&,name]()
+       {
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(125, 20));
+
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+           width = currentImage()->width();
+           auto w = gui->addVariable("Width:", width);
+           w->setSpinnable(true);
+           w->setMinValue(1);
+
+           height = currentImage()->height();
+           w = gui->addVariable("Height:", height);
+           w->setSpinnable(true);
+           w->setMinValue(1);
+
+           gui->addVariable("Source parametrization:", from, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
+           gui->addVariable("Target parametrization:", to, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
+           gui->addVariable("Interpolation:", interpolationMode, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
+           gui->addVariable("Border mode:", borderMode, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+
+           w = gui->addVariable("Super-samples:", samples);
+           w->setSpinnable(true);
+           w->setMinValue(1);
+
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
+           {
+               if (!currentImage())
+                   return;
+
+               // by default use a no-op passthrough warp function
+               function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
+
+               UV2XYZFn dst2xyz;
+               XYZ2UVFn xyz2src;
+
+               if (from != to)
+               {
+                   if (from == ANGULAR_MAP)
+                       xyz2src = XYZToAngularMap;
+                   else if (from == MIRROR_BALL)
+                       xyz2src = XYZToMirrorBall;
+                   else if (from == LAT_LONG)
+                       xyz2src = XYZToLatLong;
+                   else if (from == CUBE_MAP)
+                       xyz2src = XYZToCubeMap;
+
+                   if (to == ANGULAR_MAP)
+                       dst2xyz = angularMapToXYZ;
+                   else if (to == MIRROR_BALL)
+                       dst2xyz = mirrorBallToXYZ;
+                   else if (to == LAT_LONG)
+                       dst2xyz = latLongToXYZ;
+                   else if (to == CUBE_MAP)
+                       dst2xyz = cubeMapToXYZ;
+
+                   warp = [&](const Vector2f & uv){return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+               }
+
+               // use bilinear lookup by default
+               function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler =
+                   [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+
+               if (interpolationMode == NEAREST)
+                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
+               else if (interpolationMode == BILINEAR)
+                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+               else if (interpolationMode == BICUBIC)
+                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
+
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.resampled(width, height, sampler, warp, samples, borderMode);
+                      return undo;
+                  });
+               window->dispose();
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           performLayout();
+           window->center();
+           window->requestFocus();
+       });
+    return b;
+}
+
+

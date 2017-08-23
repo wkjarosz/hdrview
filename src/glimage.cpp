@@ -161,6 +161,26 @@ void GLImage::clear()
     m_shader = 0;
 }
 
+bool GLImage::undo()
+{
+    if (m_history.undo(m_image))
+    {
+        init();
+        return true;
+    }
+    return false;
+}
+
+bool GLImage::redo()
+{
+    if (m_history.redo(m_image))
+    {
+        init();
+        return true;
+    }
+    return false;
+}
+
 
 void GLImage::draw(const Matrix4f & mvp,
                      float gain, float gamma,

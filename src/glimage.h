@@ -137,8 +137,8 @@ public:
         init();
     }
     bool isModified() const         {return m_history.isModified();}
-    bool undo()                     {bool ret = m_history.undo(m_image); init(); return ret;}
-    bool redo()                     {bool ret = m_history.redo(m_image); init(); return ret;}
+    bool undo();
+    bool redo();
     bool hasUndo()                  {return m_history.hasUndo();}
     bool hasRedo()                  {return m_history.hasRedo();}
 
