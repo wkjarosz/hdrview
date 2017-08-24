@@ -215,21 +215,18 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         new Label(m_editPanelContents, "Transformations", "sans-bold");
 
-        Widget *buttonGrid = new Widget(m_editPanelContents);
-        buttonGrid->setLayout(new GridLayout(Orientation::Vertical, 2, Alignment::Fill, 0, 4));
-
         // flip h
-        w = new Button(buttonGrid, "Flip H", ENTYPO_ICON_LEFT_BOLD);
+        w = new Button(m_editPanelContents, "Flip H", ENTYPO_ICON_LEFT_BOLD);
         w->setCallback([&](){flipImage(true);});
         m_filterButtons.push_back(w);
 
         // flip v
-        w = new Button(buttonGrid, "Flip V", ENTYPO_ICON_DOWN_BOLD);
+        w = new Button(m_editPanelContents, "Flip V", ENTYPO_ICON_DOWN_BOLD);
         w->setCallback([&](){flipImage(false);});
         m_filterButtons.push_back(w);
 
         // rotate cw
-        w = new Button(buttonGrid, "Rotate CW", ENTYPO_ICON_CW);
+        w = new Button(m_editPanelContents, "Rotate CW", ENTYPO_ICON_CW);
         w->setCallback([&]()
                        {
                            if (!currentImage())
@@ -248,7 +245,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_filterButtons.push_back(w);
 
         // rotate ccw
-        w = new Button(buttonGrid, "Rotate CCW", ENTYPO_ICON_CCW);
+        w = new Button(m_editPanelContents, "Rotate CCW", ENTYPO_ICON_CCW);
         w->setCallback([&]()
            {
                if (!currentImage())
@@ -267,6 +264,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
            });
         m_filterButtons.push_back(w);
 
+        // shift
+        m_filterButtons.push_back(createShiftButton(m_editPanelContents));
+
 
         new Label(m_editPanelContents, "Resize/resample", "sans-bold");
         m_filterButtons.push_back(createResizeButton(m_editPanelContents));
@@ -279,8 +279,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_filterButtons.push_back(createBilateralFilterButton(m_editPanelContents));
         m_filterButtons.push_back(createUnsharpMaskFilterButton(m_editPanelContents));
         m_filterButtons.push_back(createMedianFilterButton(m_editPanelContents));
-
-
     }
 
     dropEvent(args);
@@ -313,7 +311,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_helpDialog->center();
         });
 
-        m_layersButton = new Button(m_controlPanel, "", ENTYPO_ICON_FOLDER);
+        m_layersButton = new Button(m_controlPanel, "", ENTYPO_ICON_LIST);
         m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
         m_layersButton->setFlags(Button::ToggleButton);
         m_layersButton->setFixedSize(Vector2i(25, 25));
@@ -1307,7 +1305,7 @@ Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
 Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
 {
     static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Gaussian blur...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1325,8 +1323,8 @@ Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+	       gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+	       gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1337,7 +1335,7 @@ Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.GaussianBlurred(width, height, borderMode);
+                      img = img.GaussianBlurred(width, height, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();
@@ -1356,7 +1354,7 @@ Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
 Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
 {
     static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Fast Gaussian blur...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1374,8 +1372,8 @@ Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1386,7 +1384,7 @@ Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                                       {
                                           auto undo = new FullImageUndo(img);
-                                          img = img.fastGaussianBlurred(width, height, borderMode);
+                                          img = img.fastGaussianBlurred(width, height, borderModeX, borderModeY);
                                           return undo;
                                       });
                window->dispose();
@@ -1405,7 +1403,7 @@ Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
 Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
 {
     static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Box blur...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1423,8 +1421,8 @@ Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1435,7 +1433,7 @@ Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.boxBlurred(width, height, borderMode);
+                      img = img.boxBlurred(width, height, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();
@@ -1454,7 +1452,7 @@ Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
 Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
 {
     static float rangeSigma = 1.0f, valueSigma = 0.1f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Bilateral filter...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1472,8 +1470,8 @@ Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1483,7 +1481,7 @@ Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.bilateralFiltered(valueSigma, rangeSigma, borderMode);
+                      img = img.bilateralFiltered(valueSigma, rangeSigma, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();
@@ -1502,7 +1500,7 @@ Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
 Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
 {
     static float sigma = 1.0f, strength = 1.0f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Unsharp mask...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1520,8 +1518,8 @@ Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1531,7 +1529,7 @@ Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.unsharpMasked(sigma, strength, borderMode);
+                      img = img.unsharpMasked(sigma, strength, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();
@@ -1550,7 +1548,7 @@ Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
 Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
 {
     static float radius = 1.0f;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     string name = "Median filter...";
     auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
     b->setCallback([&,name]()
@@ -1565,8 +1563,8 @@ Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
            w->setSpinnable(true);
            w->setMinValue(0.0f);
 
-           auto e = gui->addVariable("Border mode:", borderMode, true);
-           e->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
            gui->addButton("OK", [&,window]()
@@ -1576,7 +1574,7 @@ Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.medianFiltered(radius, borderMode);
+                      img = img.medianFiltered(radius, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();
@@ -1652,17 +1650,9 @@ Button * HDRViewScreen::createResampleButton(Widget * parent)
         CUBE_MAP
     };
     static MappingMode from = ANGULAR_MAP, to = ANGULAR_MAP;
-
-    enum SampleLookup
-    {
-        NEAREST = 0,
-        BILINEAR,
-        BICUBIC
-    };
-    static SampleLookup interpolationMode = BILINEAR;
-
+    static HDRImage::Sampler sampler = HDRImage::BILINEAR;
     static int width = 128, height = 128;
-    static HDRImage::BorderMode borderMode = HDRImage::EDGE;
+    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
     static int samples = 1;
 
     string name = "Remap...";
@@ -1687,8 +1677,9 @@ Button * HDRViewScreen::createResampleButton(Widget * parent)
 
            gui->addVariable("Source parametrization:", from, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
            gui->addVariable("Target parametrization:", to, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
-           gui->addVariable("Interpolation:", interpolationMode, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
-           gui->addVariable("Border mode:", borderMode, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Sampler:", sampler, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
 
            w = gui->addVariable("Super-samples:", samples);
            w->setSpinnable(true);
@@ -1729,21 +1720,66 @@ Button * HDRViewScreen::createResampleButton(Widget * parent)
                    warp = [&](const Vector2f & uv){return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
                }
 
-               // use bilinear lookup by default
-               function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler =
-                   [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+               currentImage()->modify([&](HDRImage & img)
+                  {
+                      auto undo = new FullImageUndo(img);
+                      img = img.resampled(width, height, warp, samples, sampler, borderModeX, borderModeY);
+                      return undo;
+                  });
+               window->dispose();
+               updateCaption();
+               repopulateLayerList();
+               setSelectedLayer(m_current);
+           })->setIcon(ENTYPO_ICON_CHECK);
 
-               if (interpolationMode == NEAREST)
-                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
-               else if (interpolationMode == BILINEAR)
-                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
-               else if (interpolationMode == BICUBIC)
-                   sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
+           performLayout();
+           window->center();
+           window->requestFocus();
+       });
+    return b;
+}
+
+Button * HDRViewScreen::createShiftButton(Widget * parent)
+{
+    static HDRImage::Sampler sampler = HDRImage::BILINEAR;
+    static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
+    static float dx = 0.f, dy = 0.f;
+    string name = "Shift...";
+    auto b = new Button(parent, name, ENTYPO_ICON_HAIR_CROSS);
+    b->setCallback([&,name]()
+       {
+           FormHelper *gui = new FormHelper(this);
+           gui->setFixedSize(Vector2i(125, 20));
+
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+           auto w = gui->addVariable("X offset:", dx);
+           w->setSpinnable(true);
+
+           w = gui->addVariable("Y offset:", dy);
+           w->setSpinnable(true);
+
+           gui->addVariable("Sampler:", sampler, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
+           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
+
+           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&,window]()
+           {
+               if (!currentImage())
+                   return;
+
+               // by default use a no-op passthrough warp function
+               function<Vector2f(const Vector2f&)> shift = [&](const Vector2f & uv)
+               {
+                   return (uv + Vector2f(dx/currentImage()->width(), dy/currentImage()->height())).eval();
+               };
 
                currentImage()->modify([&](HDRImage & img)
                   {
                       auto undo = new FullImageUndo(img);
-                      img = img.resampled(width, height, sampler, warp, samples, borderMode);
+                      img = img.resampled(img.width(), img.height(), shift, 1, sampler, borderModeX, borderModeY);
                       return undo;
                   });
                window->dispose();

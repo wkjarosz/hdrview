@@ -58,6 +58,7 @@ private:
     Button * createMedianFilterButton(Widget * parent);
     Button * createResizeButton(Widget * parent);
     Button * createResampleButton(Widget * parent);
+    Button * createShiftButton(Widget * parent);
 
 
     void drawGrid(const Matrix4f & mvp) const;

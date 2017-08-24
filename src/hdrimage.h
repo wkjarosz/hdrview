@@ -72,17 +72,23 @@ public:
         REPEAT,
         MIRROR
     };
-    Color4 & pixel(int x, int y, BorderMode mode = EDGE);
-    const Color4 & pixel(int x, int y, BorderMode mode = EDGE) const;
+    Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE);
+    const Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     //@}
 
     //-----------------------------------------------------------------------
     //@{ \name Pixel samplers.
     //-----------------------------------------------------------------------
-    typedef Color4 (HDRImage::*PixelSamplerFn)(float, float, HDRImage::BorderMode) const;
-    Color4 bilinear(float sx, float sy, BorderMode mode = EDGE) const;
-    Color4 bicubic(float sx, float sy, BorderMode mode = EDGE) const;
-    Color4 nearest(float sx, float sy, BorderMode mode = EDGE) const;
+    enum Sampler
+    {
+        NEAREST = 0,
+        BILINEAR,
+        BICUBIC
+    };
+    Color4 sample(float sx, float sy, Sampler s, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    Color4 bilinear(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    Color4 bicubic(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    Color4 nearest(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     //@}
 
 
@@ -91,13 +97,9 @@ public:
     //-----------------------------------------------------------------------
     HDRImage resized(int width, int height) const;
     HDRImage resampled(int width, int height,
-                       std::function<Color4(const HDRImage &, float, float, BorderMode)> sampler =
-                       [](const HDRImage &i, float x, float y, BorderMode m)
-                       { return i.bilinear(x, y, m); },
                        std::function<Eigen::Vector2f(const Eigen::Vector2f &)> warpFn =
-                       [](const Eigen::Vector2f &uv)
-                       { return uv; },
-                       int superSample = 1, BorderMode mode = REPEAT) const;
+                       [](const Eigen::Vector2f &uv) { return uv; },
+                       int superSample = 1, Sampler s = NEAREST, BorderMode mX = REPEAT, BorderMode mY = REPEAT) const;
     //@}
 
 
@@ -114,28 +116,28 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
-    HDRImage convolved(const Eigen::ArrayXXf &kernel, BorderMode mode = EDGE) const;
-    HDRImage GaussianBlurred(float sigmaX, float sigmaY, BorderMode mode = EDGE,
+    HDRImage convolved(const Eigen::ArrayXXf &kernel, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage GaussianBlurred(float sigmaX, float sigmaY, BorderMode mX = EDGE, BorderMode mY = EDGE,
                              float truncateX = 6.0f, float truncateY = 6.0f) const;
     HDRImage GaussianBlurredX(float sigmaX, BorderMode mode = EDGE, float truncateX = 6.0f) const;
     HDRImage GaussianBlurredY(float sigmaY, BorderMode mode = EDGE, float truncateY = 6.0f) const;
-    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, BorderMode mode = EDGE) const;
-    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mode = EDGE) const;
-    HDRImage boxBlurred(int w, BorderMode mode = EDGE) const{return boxBlurred(w, w, mode);}
-    HDRImage boxBlurred(int hw, int hh, BorderMode mode = EDGE) const{return boxBlurredX(hw, mode).boxBlurredY(hh, mode);}
+    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage boxBlurred(int w, BorderMode mX = EDGE, BorderMode mY = EDGE) const{return boxBlurred(w, w, mX, mY);}
+    HDRImage boxBlurred(int hw, int hh, BorderMode mX = EDGE, BorderMode mY = EDGE) const{return boxBlurredX(hw, mX).boxBlurredY(hh, mY);}
     HDRImage boxBlurredX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
     HDRImage boxBlurredX(int halfSize, BorderMode mode = EDGE) const {return boxBlurredX(halfSize, halfSize, mode);}
     HDRImage boxBlurredY(int upSize, int downSize, BorderMode mode = EDGE) const;
     HDRImage boxBlurredY(int halfSize, BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, mode);}
-    HDRImage unsharpMasked(float sigma, float strength, BorderMode mode = EDGE) const;
-    HDRImage medianFiltered(float radius, int channel, BorderMode mode = EDGE) const;
-    HDRImage medianFiltered(float r, BorderMode mode = EDGE) const
+    HDRImage unsharpMasked(float sigma, float strength, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage medianFiltered(float radius, int channel, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage medianFiltered(float r, BorderMode mX = EDGE, BorderMode mY = EDGE) const
     {
-        return medianFiltered(r, 0, mode).medianFiltered(r, 1, mode).medianFiltered(r, 2, mode).medianFiltered(r, 3, mode);
+        return medianFiltered(r, 0, mX, mY).medianFiltered(r, 1, mX, mY).medianFiltered(r, 2, mX, mY).medianFiltered(r, 3, mX, mY);
     }
     HDRImage bilateralFiltered(float sigmaRange = 0.1f,
                                float sigmaDomain = 1.0f,
-                               BorderMode mode = EDGE,
+                               BorderMode mX = EDGE, BorderMode mY = EDGE,
                                float truncateDomain = 6.0f) const;
     //@}
 

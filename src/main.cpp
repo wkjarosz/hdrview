@@ -25,6 +25,20 @@ NANOGUI_FORCE_DISCRETE_GPU();
 namespace
 {
 std::mt19937 g_rand(53);
+
+HDRImage::BorderMode parseBorderMode(const string &mode)
+{
+	if (mode == "black")
+		return HDRImage::BLACK;
+	if (mode == "mirror")
+		return HDRImage::MIRROR;
+	if (mode == "repeat")
+		return HDRImage::REPEAT;
+	if (mode == "edge")
+		return HDRImage::EDGE;
+
+	throw invalid_argument(fmt::format("Invalid border mode \"{}\".", mode));
+}
 }
 
 static const char USAGE[] =
@@ -115,10 +129,10 @@ Options: (for batch processing)
                            Specifying the same M parameter twice results in no
                            change. Combine with --resize to specify output file
                            dimensions.
-  --border-mode=MODE       Specifies what mode to use when accessing pixels
+  --border-mode=MODE,MODE  Specifies what x- and y-modes to use when accessing pixels
                            outside the bounds of the image.
                            MODE : (black | mirror | edge | repeat)
-                           [default: edge]
+                           [default: edge,edge]
   --error=TYPE             Compute the error or difference between the images
                            and a reference image, specified with --reference.
                            The error type can be:
@@ -165,14 +179,12 @@ int main(int argc, char **argv)
          saveFiles = false,
          makeNoise = false,
          invert = false;
-    HDRImage::BorderMode borderMode;
+    HDRImage::BorderMode borderModeX, borderModeY;
     Color3 nanColor(0.0f,0.0f,0.0f);
     // by default use a no-op passthrough warp function
-    function<Vector2f(const Vector2f&)> warp =
-        [](const Vector2f & uv) {return uv;};
+    function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
     // use bilinear lookup by default
-    function<Color4(const HDRImage &, float, float, HDRImage::BorderMode)> sampler =
-        [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+    HDRImage::Sampler sampler = HDRImage::BILINEAR;
     // no filter by default
     function<HDRImage(const HDRImage &)> filter;
 
@@ -239,14 +251,15 @@ int main(int argc, char **argv)
         dither = !docargs["--no-dither"].asBool();
 
         // border mode
-        if (docargs["--border-mode"].asString() == "black")
-            borderMode = HDRImage::BLACK;
-        else if (docargs["--border-mode"].asString() == "mirror")
-            borderMode = HDRImage::MIRROR;
-        else if (docargs["--border-mode"].asString() == "repeat")
-            borderMode = HDRImage::REPEAT;
-        else if (docargs["--border-mode"].asString() == "edge")
-            borderMode = HDRImage::EDGE;
+	    if (docargs["--border-mode"].isString())
+	    {
+		    char first[22], second[32];
+		    if (sscanf(docargs["--border-mode"].asString().c_str(), "%20[^','],%20s", first, second) != 2)
+			    throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
+
+			borderModeX = parseBorderMode(first);
+		    borderModeY = parseBorderMode(second);
+	    }
         else
             throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
 
@@ -300,23 +313,23 @@ int main(int argc, char **argv)
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
 
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .GaussianBlurred(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .GaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .boxBlurred(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .boxBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .fastGaussianBlurred(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .fastGaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .medianFiltered(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .medianFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .bilateralFiltered(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .bilateralFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, borderMode](const HDRImage & i) {return i
-                    .unsharpMasked(filterArg1, filterArg2, borderMode);};
+                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .unsharpMasked(filterArg1, filterArg2, borderModeX, borderModeY);};
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -399,11 +412,11 @@ int main(int argc, char **argv)
 
             string interp = s3;
             if (interp == "nearest")
-                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.nearest(x,y,m);};
+                sampler = HDRImage::NEAREST;
             else if (interp == "bilinear")
-                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bilinear(x,y,m);};
+                sampler = HDRImage::BILINEAR;
             else if (interp == "bicubic")
-                sampler = [](const HDRImage & i, float x, float y, HDRImage::BorderMode m) {return i.bicubic(x,y,m);};
+                sampler = HDRImage::BICUBIC;
             else
                 throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized sampler type \"{}\"", interp));
 
@@ -540,8 +553,8 @@ int main(int argc, char **argv)
                     else
                     {
                         console->info("Remapping image to {:d}x{:d}...", w, h);
-                        image = image.resampled(w, h, sampler, warp, samples,
-                                                borderMode);
+                        image = image.resampled(w, h, warp, samples,
+                                                sampler, borderModeX, borderModeY);
                     }
                 }
 
@@ -605,7 +618,7 @@ int main(int argc, char **argv)
 
             if (!avgFilename.empty())
             {
-                // avgImg *= Color4(1.0f/inFiles.size());mess
+                // avgImg *= Color4(1.0f/inFiles.size());
 
                 console->info("Writing average image to \"{}\"...", avgFilename);
 
