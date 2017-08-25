@@ -67,7 +67,7 @@ const Color4 g_blackPixel(0,0,0,0);
 ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
 {
     // calculate the size of the filter
-    int offset = int(ceil(truncate * sigma));
+    int offset = int(std::ceil(truncate * sigma));
     int filterSize = 2*offset+1;
 
     ArrayXXf fData(filterSize, 1);
@@ -143,7 +143,7 @@ Color4 HDRImage::sample(float sx, float sy, Sampler s, BorderMode mX, BorderMode
 
 Color4 HDRImage::nearest(float sx, float sy, BorderMode mX, BorderMode mY) const
 {
-    return pixel(floor(sx), floor(sy), mX, mY);
+    return pixel(std::floor(sx), std::floor(sy), mX, mY);
 }
 
 Color4 HDRImage::bilinear(float sx, float sy, BorderMode mX, BorderMode mY) const
@@ -152,8 +152,8 @@ Color4 HDRImage::bilinear(float sx, float sy, BorderMode mX, BorderMode mY) cons
     sx -= 0.5f;
     sy -= 0.5f;
 
-    int x0 = (int) floor(sx);
-    int y0 = (int) floor(sy);
+    int x0 = (int) std::floor(sx);
+    int y0 = (int) std::floor(sy);
     int x1 = x0 + 1;
     int y1 = y0 + 1;
     sx -= x0;
@@ -170,8 +170,8 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
     sx -= 0.5f;
     sy -= 0.5f;
 
-    int bx = (int) floor(sx);
-    int by = (int) floor(sy);
+    int bx = (int) std::floor(sx);
+    int by = (int) std::floor(sy);
 
     float A = -0.75f;
     float totalweight = 0;
@@ -290,7 +290,7 @@ HDRImage HDRImage::unsharpMasked(float sigma, float strength, BorderMode mX, Bor
 
 HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, BorderMode mY) const
 {
-    int radiusi = int(ceil(radius));
+    int radiusi = int(std::ceil(radius));
 
     vector<float> mBuffer;
     mBuffer.reserve((2*radiusi)*(2*radiusi));
@@ -336,7 +336,7 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, Border
     HDRImage imFilter(width(), height());
 
     // calculate the filter size
-    int radius = int(ceil(truncateDomain * sigmaDomain));
+    int radius = int(std::ceil(truncateDomain * sigmaDomain));
 
     // for every pixel in the image
     for (int x = 0; x < imFilter.width(); x++)
@@ -406,7 +406,7 @@ HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, BorderMode mX
     //      w = sqrt(12/n)*sigma
     //
 
-    int w = nextOddInt(round(std::sqrt(12.f/iterations) * sigma));
+    int w = nextOddInt(std::round(std::sqrt(12.f/iterations) * sigma));
 
     // Now, if width is odd, then we can use a centered box and are good to go.
     // If width is even, then we can't use centered boxes, but must instead
@@ -424,8 +424,8 @@ HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, BorderMode mX
 HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mX, BorderMode mY) const
 {
     // See comments in HDRImage::iteratedBoxBlurred for derivation of width
-    int hw = round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
-    int hh = round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
+    int hw = std::round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
+    int hh = std::round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
 
     HDRImage im;
     // do horizontal blurs
