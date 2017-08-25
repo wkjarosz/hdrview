@@ -7,7 +7,6 @@
 #include <tinydir.h>
 #include <spdlog/fmt/fmt.h>
 #include <algorithm>
-#include "widgets.h"
 #include "envmap.h"
 
 using namespace std;
