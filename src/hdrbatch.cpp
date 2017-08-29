@@ -1,5 +1,5 @@
 /*
-    main.cpp -- HDRView application entry point
+    hdrbatch.cpp -- HDRBatch application entry point
 
     All rights reserved. Use of this source code is governed by a
     BSD-style license that can be found in the LICENSE.txt file.
@@ -42,22 +42,17 @@ HDRImage::BorderMode parseBorderMode(const string &mode)
 }
 
 static const char USAGE[] =
-R"(HDRView. Copyright (c) Wojciech Jarosz.
+R"(HDRBatch. Copyright (c) Wojciech Jarosz.
 
-HDRView is a simple research-oriented tool for examining,
-comparing, and converting high-dynamic range images. HDRView
-is freely available under a 3-clause BSD license.
+HDRBatch is a simple research-oriented tool for batch
+processing high-dynamic range images. HDRBatch is freely
+available under a 3-clause BSD license.
 
 Usage:
-  hdrview batch [options FILE...]
-  hdrview [view] [options FILE...]
-  hdrview -h | --help | --version
+  hdrbatch [options FILE...]
+  hdrbatch -h | --help | --version
 
-The available commands are:
-    view       Launch the GUI image viewer [this is the default].
-    batch      Batch process the files on the command-line.
-
-Options: (global)
+Options:
   -e E, --exposure=E       Desired power of 2 EV or exposure value
                            (gain = 2^exposure) [default: 0].
   -g G, --gamma=G          Desired gamma value for exposure+gamma tonemapping.
@@ -78,8 +73,6 @@ Options: (global)
                                 off      = 6
   -h, --help               Display this message.
   --version                Show the version.
-
-Options: (for batch processing)
   -s, --save               Save the processed images. Specify output filename
                            using --out and/or --format.
   -o BASE, --out=BASE      Save image(s) using specified base output filename.
@@ -208,8 +201,8 @@ int main(int argc, char **argv)
         }
 #endif
         docargs = docopt::docopt(USAGE, argVector,
-                                 true,            // show help if requested
-                                 "HDRView 0.1");  // version string
+                                 true,             // show help if requested
+                                 "HDRBatch 0.1");  // version string
 
         verbosity = docargs["--verbose"].asLong();
 
@@ -225,6 +218,8 @@ int main(int argc, char **argv)
         }
 
         spd::set_level(spd::level::level_enum(verbosity));
+
+        console->flush_on(spd::level::level_enum(verbosity));
 
         console->info("Welcome to HDRView!");
         console->info("Verbosity threshold set to level {:d}.", verbosity);
@@ -251,17 +246,21 @@ int main(int argc, char **argv)
         dither = !docargs["--no-dither"].asBool();
 
         // border mode
-	    if (docargs["--border-mode"].isString())
-	    {
-		    char first[22], second[32];
-		    if (sscanf(docargs["--border-mode"].asString().c_str(), "%20[^','],%20s", first, second) != 2)
-			    throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
+        if (docargs["--border-mode"])
+        {
+            if (docargs["--border-mode"].isString())
+            {
+                char first[22], second[32];
+                if (sscanf(docargs["--border-mode"].asString().c_str(), "%20[^','],%20s", first, second) != 2)
+                    throw invalid_argument(
+                        fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
 
-			borderModeX = parseBorderMode(first);
-		    borderModeY = parseBorderMode(second);
-	    }
-        else
-            throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
+                borderModeX = parseBorderMode(first);
+                borderModeY = parseBorderMode(second);
+            }
+            else
+                throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
+        }
 
         console->info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
@@ -450,197 +449,175 @@ int main(int argc, char **argv)
 
 
         // now actually do stuff
-        if (!docargs["batch"].asBool())
+        if (!inFiles.size())
+            throw invalid_argument("No files specified!");
+
+        HDRImage referenceImage;
+        if (!referenceFile.empty())
         {
-            console->info("Launching GUI. Start with -h for instructions on batch mode.");
-
-            nanogui::init();
-
-#if defined(__APPLE__)
-            if (launched_from_finder)
-                nanogui::chdir_to_bundle_parent();
-#endif
-
-            {
-                nanogui::ref<HDRViewScreen> viewer = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
-                viewer->setVisible(true);
-                nanogui::mainloop();
-            }
-
-            nanogui::shutdown();
+            console->info("Reading reference image \"{}\"...", referenceFile);
+            if (!referenceImage.load(referenceFile))
+                throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
+            console->info("Reference image size: {:d}x{:d}", referenceImage.width(), referenceImage.height());
         }
-        else
+
+        HDRImage avgImg;
+        HDRImage varImg;
+        int varN = 0;
+
+        for (size_t i = 0; i < inFiles.size(); ++i)
         {
-            if (!inFiles.size())
-                throw invalid_argument("No files specified for batch mode!");
-
-            HDRImage referenceImage;
-            if (!referenceFile.empty())
+            HDRImage image;
+            console->info("Reading image \"{}\"...", inFiles[i]);
+            if (!image.load(inFiles[i]))
             {
-                console->info("Reading reference image \"{}\"...", referenceFile);
-                if (!referenceImage.load(referenceFile))
-                    throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
-                console->info("Reference image size: {:d}x{:d}", referenceImage.width(), referenceImage.height());
+                console->error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
+                continue;
+            }
+            console->info("Image size: {:d}x{:d}", image.width(), image.height());
+
+            varN += 1;
+            // initialize variables for average and variance
+            if (varN == 1)
+            {
+                // set images to zeros
+                varImg = avgImg = image.unaryExpr([](const Color4 & c)
+                {
+                    return Color4(0,0,0,0);
+                });
             }
 
-            HDRImage avgImg;
-            HDRImage varImg;
-            int varN = 0;
-
-            for (size_t i = 0; i < inFiles.size(); ++i)
-            {
-                HDRImage image;
-                console->info("Reading image \"{}\"...", inFiles[i]);
-                if (!image.load(inFiles[i]))
+            if (fixNaNs || !dryRun)
+                image = image.unaryExpr([nanColor](const Color4 & c)
                 {
-                    console->error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
-                    continue;
-                }
-                console->info("Image size: {:d}x{:d}", image.width(), image.height());
-
-                varN += 1;
-                // initialize variables for average and variance
-                if (varN == 1)
-                {
-                    // set images to zeros
-                    varImg = avgImg = image.unaryExpr([](const Color4 & c)
-                    {
-                        return Color4(0,0,0,0);
-                    });
-                }
-
-                if (fixNaNs || !dryRun)
-                    image = image.unaryExpr([nanColor](const Color4 & c)
-                    {
-                        return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
-                    });
-
-                if (!avgFilename.empty() || !varFilename.empty())
-                {
-                    if (avgImg.width() != image.width() || avgImg.height() != image.height())
-                        throw invalid_argument("Images do not have the same size.");
-
-                    // incremental average and variance computation
-                    auto delta = image - avgImg;
-                    avgImg += delta/Color4(varN,varN,varN,varN);
-                    auto delta2 = image - avgImg;
-                    varImg += delta * delta2;
-                }
-
-                if (filter)
-                {
-                    console->info("Filtering image with {}({})...", filterType, filterParams);
-
-                    if (!dryRun)
-                        image = filter(image);
-                }
-
-                if (resize || remap)
-                {
-                    int w = (int)round(relativeWidth/100.f*image.width());
-                    int h = (int)round(relativeHeight/100.f*image.height());
-                    if (!relativeSize)
-                    {
-                        w = absoluteWidth;
-                        h = absoluteHeight;
-                    }
-
-                    if (!remap)
-                    {
-                        console->info("Resizing image to {:d}x{:d}...", w, h);
-                        image = image.resized(w, h);
-                    }
-                    else
-                    {
-                        console->info("Remapping image to {:d}x{:d}...", w, h);
-                        image = image.resampled(w, h, warp, samples,
-                                                sampler, borderModeX, borderModeY);
-                    }
-                }
-
-                if (makeNoise)
-                {
-                    for (int y = 0; y < image.height(); ++y)
-                        for (int x = 0; x < image.width(); ++x)
-                        {
-                            image(x,y) = Color4(normalDist(g_rand), normalDist(g_rand),
-                                          normalDist(g_rand), 1.0f);
-                        }
-                }
-
-                if (!errorType.empty())
-                {
-                    if (image.width() != referenceImage.width() ||
-                        image.height() != referenceImage.height())
-                    {
-                        console->error("Images must have same dimensions!");
-                        continue;
-                    }
-
-                    if (errorType == "squared")
-                        image = (image-referenceImage).square();
-                    else if (errorType == "absolute")
-                        image = (image-referenceImage).abs();
-                    else //if (errorType == "relative-squared")
-                        image = (image-referenceImage).square() / (referenceImage.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
-
-                    Color4 meanError = image.mean();
-                    Color4 maxError = image.max();
-
-                    image.setAlpha(1.0f);
-
-                    console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
-                    console->info(fmt::format("Max {} error: {}.", errorType, maxError));
-                }
-
-                if (invert)
-                {
-                    image = Color4(1.0f, 1.0f, 1.0f, 2.0f) - image;
-                }
-
-                if (saveFiles)
-                {
-                    string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
-                    string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
-                    string filename;
-                    string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
-                    if (inFiles.size() == 1 || !basename.size())
-                        filename = fmt::format("{}{}.{}", thisBasename, extra, thisExt);
-                    else
-                        filename = fmt::format("{}{}{:03d}.{}", thisBasename, extra, i, thisExt);
-
-                    console->info("Writing image to \"{}\"...", filename);
-
-                    if (!dryRun)
-                        image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
-                }
-            }
-
-            if (!avgFilename.empty())
-            {
-                // avgImg *= Color4(1.0f/inFiles.size());
-
-                console->info("Writing average image to \"{}\"...", avgFilename);
-
-                if (!dryRun)
-                    avgImg.save(avgFilename, powf(2.0f, exposure), gamma, sRGB, dither);
-            }
-
-            if (!varFilename.empty())
-            {
-                varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
-
-                // set alpha channel to 1
-                varImg = varImg.unaryExpr([](const Color4 & c)
-                {
-                    return Color4(c.r,c.g,c.b,1);
+                    return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
                 });
 
-                console->info("Writing variance image to \"{}\"...", varFilename);
+            if (!avgFilename.empty() || !varFilename.empty())
+            {
+                if (avgImg.width() != image.width() || avgImg.height() != image.height())
+                    throw invalid_argument("Images do not have the same size.");
+
+                // incremental average and variance computation
+                auto delta = image - avgImg;
+                avgImg += delta/Color4(varN,varN,varN,varN);
+                auto delta2 = image - avgImg;
+                varImg += delta * delta2;
+            }
+
+            if (filter)
+            {
+                console->info("Filtering image with {}({})...", filterType, filterParams);
 
                 if (!dryRun)
-                    varImg.save(varFilename, powf(2.0f, exposure), gamma, sRGB, dither);
+                    image = filter(image);
             }
+
+            if (resize || remap)
+            {
+                int w = (int)round(relativeWidth/100.f*image.width());
+                int h = (int)round(relativeHeight/100.f*image.height());
+                if (!relativeSize)
+                {
+                    w = absoluteWidth;
+                    h = absoluteHeight;
+                }
+
+                if (!remap)
+                {
+                    console->info("Resizing image to {:d}x{:d}...", w, h);
+                    image = image.resized(w, h);
+                }
+                else
+                {
+                    console->info("Remapping image to {:d}x{:d}...", w, h);
+                    image = image.resampled(w, h, warp, samples,
+                                            sampler, borderModeX, borderModeY);
+                }
+            }
+
+            if (makeNoise)
+            {
+                for (int y = 0; y < image.height(); ++y)
+                    for (int x = 0; x < image.width(); ++x)
+                    {
+                        image(x,y) = Color4(normalDist(g_rand), normalDist(g_rand),
+                                      normalDist(g_rand), 1.0f);
+                    }
+            }
+
+            if (!errorType.empty())
+            {
+                if (image.width() != referenceImage.width() ||
+                    image.height() != referenceImage.height())
+                {
+                    console->error("Images must have same dimensions!");
+                    continue;
+                }
+
+                if (errorType == "squared")
+                    image = (image-referenceImage).square();
+                else if (errorType == "absolute")
+                    image = (image-referenceImage).abs();
+                else //if (errorType == "relative-squared")
+                    image = (image-referenceImage).square() / (referenceImage.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
+
+                Color4 meanError = image.mean();
+                Color4 maxError = image.max();
+
+                image.setAlpha(1.0f);
+
+                console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
+                console->info(fmt::format("Max {} error: {}.", errorType, maxError));
+            }
+
+            if (invert)
+            {
+                image = Color4(1.0f, 1.0f, 1.0f, 2.0f) - image;
+            }
+
+            if (saveFiles)
+            {
+                string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
+                string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
+                string filename;
+                string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
+                if (inFiles.size() == 1 || !basename.size())
+                    filename = fmt::format("{}{}.{}", thisBasename, extra, thisExt);
+                else
+                    filename = fmt::format("{}{}{:03d}.{}", thisBasename, extra, i, thisExt);
+
+                console->info("Writing image to \"{}\"...", filename);
+
+                if (!dryRun)
+                    image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+            }
+        }
+
+        if (!avgFilename.empty())
+        {
+            // avgImg *= Color4(1.0f/inFiles.size());
+
+            console->info("Writing average image to \"{}\"...", avgFilename);
+
+            if (!dryRun)
+                avgImg.save(avgFilename, powf(2.0f, exposure), gamma, sRGB, dither);
+        }
+
+        if (!varFilename.empty())
+        {
+            varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
+
+            // set alpha channel to 1
+            varImg = varImg.unaryExpr([](const Color4 & c)
+            {
+                return Color4(c.r,c.g,c.b,1);
+            });
+
+            console->info("Writing variance image to \"{}\"...", varFilename);
+
+            if (!dryRun)
+                varImg.save(varFilename, powf(2.0f, exposure), gamma, sRGB, dither);
         }
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)

@@ -171,8 +171,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/color.h
     src/hdrimage.h
     src/hdrimage.cpp
-    src/main.cpp
-        ${EXTRA_SOURCE})
+    src/hdrview.cpp
+    ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
 target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS})
@@ -195,6 +195,23 @@ if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
 endif()
 
+
+add_executable(hdrbatch
+    src/common.cpp
+    src/common.h
+    src/envmap.cpp
+    src/envmap.h
+    src/pfm.h
+    src/pfm.cpp
+    src/ppm.h
+    src/ppm.cpp
+    src/dither-matrix256.h
+    src/color.h
+    src/hdrimage.h
+    src/hdrimage.cpp
+    src/hdrbatch.cpp)
+
+target_link_libraries(hdrbatch IlmImf docopt_s)
 
 add_executable(force-random-dither
   src/forced-random-dither.cpp
