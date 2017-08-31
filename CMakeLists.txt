@@ -78,7 +78,7 @@ if (WIN32)
   include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/ext_build/zlib")
 endif()
 
-# Build OpenER
+# Build OpenEXR
 set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
 set(OPENEXR_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
 set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
@@ -121,6 +121,7 @@ endif()
 
 if (WIN32)
     add_dependencies(IlmImf zlibstatic)
+	link_directories(${Boost_LIBRARY_DIR_DEBUG} ${Boost_LIBRARY_DIR_RELEASE})
 endif()
 
 
@@ -141,6 +142,8 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/docopt
     # spdlog
     ${CMAKE_CURRENT_SOURCE_DIR}/ext/spdlog/include
+	# boost REGEX
+	${Boost_INCLUDE_DIRS}
 )
 
 # Resource file (icons etc.)
@@ -175,7 +178,7 @@ add_executable(HDRView MACOSX_BUNDLE
     ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
-target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS})
+target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_LIBRARIES})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
@@ -211,7 +214,7 @@ add_executable(hdrbatch
     src/hdrimage.cpp
     src/hdrbatch.cpp)
 
-target_link_libraries(hdrbatch IlmImf docopt_s)
+target_link_libraries(hdrbatch IlmImf docopt_s ${Boost_LIBRARIES})
 
 add_executable(force-random-dither
   src/forced-random-dither.cpp
