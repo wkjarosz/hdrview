@@ -28,7 +28,13 @@ On Linux and macOS, compiling should be as simple as
     cmake-gui ../
     make -j 4
 
-On Windows, open the generated file ``HDRView.sln`` after step 5 and proceed building as usual from within Visual Studio.
+On Windows, a few extra steps are needed.
+
+Since MSVC's regex implementation is buggy, you first need to have the [Boost](http://www.boost.org/) regex library installed. You can find binary installers for Windows on the Boost website. You need at least Boost version 1.53.
+
+After cloning the repo, open up ``cmake-gui``. Click "Add Entry" to define the ``BOOST_ROOT`` directory, and set it to your root Boost directory. Run Configure and select your version of Visual C++ and 64bit. After configure finishes, search for ``USE_BOOST_REGEX`` and check it. Run configure again, and then click Generate.
+
+Open the generated file ``HDRView.sln`` and proceed building as usual from within Visual Studio.
 
 
 ## Installing on macOS
