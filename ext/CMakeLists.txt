@@ -95,11 +95,13 @@ if (WIN32)
     set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
     add_subdirectory(zlib)
 
-    set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
-    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIGURATION>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+  set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
+  set(ZLIB_LIBRARY
+		optimized "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstatic.lib"
+		debug "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstaticd.lib" CACHE FILEPATH " " FORCE)
 
-    set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
-    include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+  set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
+  include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
 endif()
 
 #============================================================================
@@ -125,6 +127,12 @@ set_property(TARGET glfw glfw_objects nanogui nanogui-obj PROPERTY FOLDER "depen
 # Build docopt.cpp
 #============================================================================
 add_subdirectory(docopt)
+if (WIN32)
+	add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
+	set(Boost_USE_STATIC_LIBS ON)
+	set(Boost_USE_STATIC_RUNTIME ON)
+    find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
 #============================================================================
@@ -132,7 +140,6 @@ set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 #============================================================================
 if (WIN32)
     add_dependencies(IlmImf zlibstatic)
-    link_directories(${Boost_LIBRARY_DIR_DEBUG} ${Boost_LIBRARY_DIR_RELEASE})
 endif()
 
 #============================================================================
@@ -193,7 +200,8 @@ set(CompilerFlags
     NANOVG_INCLUDE_DIR NANOGUI_EXTRA_INCS NANOGUI_EXTRA_DEFS
     NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR EIGEN_INCLUDE_DIR
     DOCOPT_INCLUDE_DIR TINYDIR_INCLUDE_DIR STB_INCLUDE_DIR SPDLOG_INCLUDE_DIR
-    CMAKE_CXX_STANDARD CMAKE_CXX_STANDARD_REQUIRED CMAKE_CXX_EXTENSIONS)
+    CMAKE_CXX_STANDARD CMAKE_CXX_STANDARD_REQUIRED CMAKE_CXX_EXTENSIONS
+	Boost_INCLUDE_DIRS Boost_LIBRARIES Boost_REGEX_LIBRARY)
 foreach(CompilerFlag ${CompilerFlags})
     set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)
 endforeach()

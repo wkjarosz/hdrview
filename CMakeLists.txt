@@ -35,8 +35,6 @@ elseif(WIN32)
   set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc")
 endif()
 
-# The following lines build the main executable. If you add a source
-# code file to Nori, be sure to include it in this list.
 add_executable(HDRView MACOSX_BUNDLE
     src/common.cpp
     src/common.h
@@ -98,7 +96,6 @@ add_executable(hdrbatch
 add_executable(force-random-dither
   src/forced-random-dither.cpp
 )
-
-target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_LIBRARIES})
-target_link_libraries(hdrbatch IlmImf docopt_s ${Boost_LIBRARIES})
+target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
+target_link_libraries(hdrbatch IlmImf docopt_s ${Boost_REGEX_LIBRARY})
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
