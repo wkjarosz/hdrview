@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     vector<string> argVector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
     int verbosity = 0;
-    float gamma, exposure;
+    float gamma = 2.2f, exposure;
     bool dither = true, sRGB = true;
 
     vector<string> inFiles;
