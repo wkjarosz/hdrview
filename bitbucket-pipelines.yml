@@ -3,14 +3,12 @@
 # Only use spaces to indent your .yml configuration.
 # -----
 # You can specify a custom docker image from Docker Hub as your build environment.
-image: rikorose/gcc-cmake:gcc-7
+image: andystanton/gcc-cmake-gl
 
 pipelines:
   default:
     - step:
         script:
-          - add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          - apt-get -y --force-yes install xorg-dev libglu1-mesa-dev libxrandr-dev
           - git submodule update --init --recursive
           - mkdir build
           - cd build
