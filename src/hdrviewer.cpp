@@ -3,9 +3,12 @@
 */
 #include "hdrviewer.h"
 #include <iostream>
+#include "glimage.h"
+#include <nanogui/nanogui.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
 #define NOMINMAX
 #include <tinydir.h>
-#include <spdlog/fmt/fmt.h>
 #include <algorithm>
 #include "envmap.h"
 
@@ -1094,12 +1097,21 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
 
 void HDRViewScreen::updateZoomLabel()
 {
-    // only necessary before the first time drawAll is called
-    glfwGetFramebufferSize(mGLFWWindow, &mFBSize[0], &mFBSize[1]);
-    glfwGetWindowSize(mGLFWWindow, &mSize[0], &mSize[1]);
-    mPixelRatio = (float) mFBSize[0] / (float) mSize[0];
+//    // only necessary before the first time drawAll is called
+//    glfwMakeContextCurrent(mGLFWWindow);
+//    glfwGetFramebufferSize(mGLFWWindow, &mFBSize[0], &mFBSize[1]);
+//    glfwGetWindowSize(mGLFWWindow, &mSize[0], &mSize[1]);
+//
+//#if defined(_WIN32) || defined(__linux__)
+//    mSize = (mSize.cast<float>() / mPixelRatio).cast<int>();
+//    mFBSize = (mSize.cast<float>() * mPixelRatio).cast<int>();
+//#else
+//    /* Recompute pixel ratio on OSX */
+//    if (mSize[0])
+//        mPixelRatio = (float) mFBSize[0] / (float) mSize[0];
+//#endif
 
-    float realZoom = m_zoomf * mPixelRatio;
+    float realZoom = m_zoomf * pixelRatio();
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
     string cap = fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2);
@@ -1109,7 +1121,6 @@ void HDRViewScreen::updateZoomLabel()
 
 void HDRViewScreen::drawContents()
 {
-    glViewport(0, 0, mFBSize[0], mFBSize[1]);
     performLayout();
     const GLImage * img = currentImage();
     if (img)
@@ -1117,8 +1128,8 @@ void HDRViewScreen::drawContents()
 
         Matrix4f trans;
         trans.setIdentity();
-        trans.rightCols<1>() = Vector4f( 2 * m_imagePan[0]/(mFBSize[0]/mPixelRatio),
-                                        -2 * m_imagePan[1]/(mFBSize[1]/mPixelRatio),
+        trans.rightCols<1>() = Vector4f( 2 * m_imagePan[0]/size().x(),
+                                        -2 * m_imagePan[1]/size().y(),
                                          0.0f, 1.0f);
         Matrix4f scale;
         scale.setIdentity();
@@ -1127,8 +1138,8 @@ void HDRViewScreen::drawContents()
 
         Matrix4f imageScale;
         imageScale.setIdentity();
-        imageScale(0,0) = float(img->size()[0] * mPixelRatio)/mFBSize[0];
-        imageScale(1,1) = float(img->size()[1] * mPixelRatio)/mFBSize[1];
+        imageScale(0,0) = float(img->size()[0]) / size().x();
+        imageScale(1,1) = float(img->size()[1]) / size().y();
 
         Matrix4f mvp;
         mvp.setIdentity();
@@ -1172,10 +1183,10 @@ void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
     Vector2i xy0 = topLeftImageCorner2Screen();
 
     int minJ = max(0, int(-xy0.y() / m_zoomf));
-    int maxJ = min(img->height(), int(ceil((mFBSize.y()/mPixelRatio - xy0.y())/m_zoomf)));
+    int maxJ = min(img->height(), int(ceil((size().y() - xy0.y())/m_zoomf)));
 
     int minI = max(0, int(-xy0.x() / m_zoomf));
-    int maxI = min(img->width(), int(ceil((mFBSize.x()/mPixelRatio - xy0.x())/m_zoomf)));
+    int maxI = min(img->width(), int(ceil((size().x() - xy0.x())/m_zoomf)));
 
     int numLines = (maxJ - minJ + 1) + (maxI - minI + 1);
     MatrixXu indices(2, numLines);
@@ -1220,9 +1231,9 @@ HDRViewScreen::drawPixelLabels() const
 
     Vector2i xy0 = topLeftImageCorner2Screen();
     int minJ = max(0, int(-xy0.y() / m_zoomf));
-    int maxJ = min(img->height()-1, int(ceil((mFBSize.y()/mPixelRatio - xy0.y())/m_zoomf)));
+    int maxJ = min(img->height()-1, int(ceil((size().y() - xy0.y())/m_zoomf)));
     int minI = max(0, int(-xy0.x() / m_zoomf));
-    int maxI = min(img->width()-1, int(ceil((mFBSize.x()/mPixelRatio - xy0.x())/m_zoomf)));
+    int maxI = min(img->width()-1, int(ceil((size().x() - xy0.x())/m_zoomf)));
     for (int j = minJ; j <= maxJ; ++j)
     {
         for (int i = minI; i <= maxI; ++i)
@@ -1269,8 +1280,8 @@ Vector2i HDRViewScreen::topLeftImageCorner2Screen() const
     if (!img)
         return Vector2i(0,0);
 
-    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-img->size()[0] / 2.0 * m_zoomf) + int(mFBSize[0] / 2.0f / mPixelRatio),
-                    int(m_imagePan[1] * m_zoomf) + int(-img->size()[1] / 2.0 * m_zoomf) + int(mFBSize[1] / 2.0f / mPixelRatio));
+    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-img->size()[0] / 2.0 * m_zoomf) + int(size().x() / 2.0f),
+                    int(m_imagePan[1] * m_zoomf) + int(-img->size()[1] / 2.0 * m_zoomf) + int(size().y() / 2.0f));
 }
 
 Vector2i HDRViewScreen::imageToScreen(const Vector2i & pixel) const

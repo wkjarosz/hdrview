@@ -4,14 +4,10 @@
     All rights reserved. Use of this source code is governed by a
     BSD-style license that can be found in the LICENSE.txt file.
 */
-
-#include <thread>
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
-#include <random>
 #include "hdrviewer.h"
-#include "common.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 

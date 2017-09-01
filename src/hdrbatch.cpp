@@ -4,23 +4,20 @@
     All rights reserved. Use of this source code is governed by a
     BSD-style license that can be found in the LICENSE.txt file.
 */
-
-#include <thread>
-#include <cstdlib>
-#include <iostream>
-#include <docopt.h>
-#include <random>
-#include "hdrviewer.h"
-#include "common.h"
-#include "envmap.h"
+#include <ctype.h>                       // for tolower
+#include <docopt.h>                      // for docopt
+#include <Eigen/Core>                    // for Vector2f
+#include <iostream>                      // for string
+#include <random>                        // for normal_distribution, mt19937
+#include "common.h"                      // for getBasename, getExtension
+#include "hdrimage.h"                    // for HDRImage
+#include "envmap.h"                      // for XYZToAngularMap, XYZToCubeMap
+#include "hdrviewer.h"                   // for spdlog
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
 namespace spd = spdlog;
-
-// Force usage of discrete GPU on laptops
-NANOGUI_FORCE_DISCRETE_GPU();
 
 namespace
 {

@@ -3,12 +3,24 @@
 */
 #pragma once
 
-#include <nanogui/nanogui.h>
+#include <nanogui/screen.h>
+#include <nanogui/common.h>
 #include <vector>
 #include <iostream>
-#include <spdlog/spdlog.h>
-#include "glimage.h"
 #include "gldithertexture.h"
+
+// forward declarations
+class GLImage;
+namespace nanogui { class Button; }
+namespace nanogui { class CheckBox; }
+namespace nanogui { class Label; }
+namespace nanogui { class MessageDialog; }
+namespace nanogui { class Slider; }
+namespace nanogui { class VScrollPanel; }
+namespace nanogui { class Widget; }
+namespace nanogui { class Window; }
+namespace nanogui { template <typename Scalar> class FloatBox; }
+namespace spdlog { class logger; }
 
 
 using namespace nanogui;
@@ -24,7 +36,7 @@ public:
     virtual ~HDRViewScreen();
 
     void drawContents();
-    bool dropEvent(const std::vector<std::string> &filenames);
+    bool dropEvent(const std::vector<string> &filenames);
     bool keyboardEvent(int key, int scancode, int action, int modifiers);
     void framebufferSizeChanged() {drawAll();}
     bool mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers);
@@ -64,7 +76,7 @@ private:
     void drawGrid(const Matrix4f & mvp) const;
     void drawPixelLabels() const;
     void drawText(const Vector2i & pos,
-                  const std::string & text,
+                  const string & text,
                   const Color & col = Color(1.0f, 1.0f, 1.0f, 1.0f),
                   int fontSize = 10,
                   int fixedWidth = 0) const;

@@ -5,10 +5,10 @@
 */
 #pragma once
 
-#include <string>
-#include <Eigen/Core>
-#include <nanogui/common.h>
-#include "color.h"
+#include <Eigen/Core>            // for Array, CwiseUnaryOp, Dynamic, DenseC...
+#include <functional>            // for function
+#include <iosfwd>                // for string
+#include "color.h"               // for Color4, max, min
 
 
 //! Floating point image

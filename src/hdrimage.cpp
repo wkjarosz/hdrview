@@ -4,20 +4,24 @@
     \author Wojciech Jarosz
 */
 #include "hdrimage.h"
-#include "dither-matrix256.h"
-#include <cmath>
-#include <functional>
-#include <iostream>
-#include <sstream>
-#include <ImfArray.h>
-#include <ImfRgbaFile.h>
-#include <ImfInputFile.h>
-#include <ImfOutputFile.h>
-#include <ImfChannelList.h>
-#include <ImfFrameBuffer.h>
-#include <ImfStringAttribute.h>
-#include <half.h>
-#include "common.h"
+#include "dither-matrix256.h"    // for dither_matrix256
+#include <ImfArray.h>            // for Array2D
+#include <ImfRgbaFile.h>         // for RgbaInputFile, RgbaOutputFile
+#include <ImathBox.h>            // for Box2i
+#include <ImathVec.h>            // for Vec2
+#include <ImfRgba.h>             // for Rgba, RgbaChannels::WRITE_RGBA
+#include <ctype.h>               // for tolower
+#include <half.h>                // for half
+#include <stdlib.h>              // for abs
+#include <algorithm>             // for nth_element, transform
+#include <cmath>                 // for floor, pow, exp, ceil, round, sqrt
+#include <exception>             // for exception
+#include <functional>            // for pointer_to_unary_function, function
+#include <iostream>              // for string, operator<<, basic_ostream, cerr
+#include <stdexcept>             // for runtime_error, out_of_range
+#include <string>                // for allocator, operator==, basic_string
+#include <vector>                // for vector
+#include "common.h"              // for lerp, mod, clamp, getExtension
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -35,7 +39,7 @@
 #pragma warning (push, 0)
 #endif
 
-#include "stb_image.h"
+#include "stb_image.h"           // for stbi_failure_reason, stbi_is_hdr
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -46,10 +50,10 @@
 #endif
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
+#include "stb_image_write.h"     // for stbi_write_bmp, stbi_write_hdr, stbi...
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "stb_image_resize.h"
+#include "stb_image_resize.h"    // for stbir_resize_float
 
 #include "pfm.h"
 #include "ppm.h"

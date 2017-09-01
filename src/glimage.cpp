@@ -2,10 +2,9 @@
     \author Wojciech Jarosz
 */
 #include "glimage.h"
-#include <iostream>     // std::cout, std::fixed
-#include <algorithm>    // std::transform
-#include <exception>    // std::transform
 #include <random>
+#include <nanogui/common.h>
+#include <nanogui/glutil.h>
 
 using namespace nanogui;
 using namespace Eigen;

@@ -3,10 +3,15 @@
 */
 #pragma once
 
-#include <string>
-#include <nanogui/opengl.h>
-#include <nanogui/glutil.h>
-#include "hdrimage.h"
+#include <cstdint>             // for uint32_t
+#include <Eigen/Core>          // for Vector2i, Matrix4f, Vector3f
+#include <functional>          // for function
+#include <iosfwd>              // for string
+#include <type_traits>         // for swap
+#include <vector>              // for vector, allocator
+#include "hdrimage.h"          // for HDRImage
+
+namespace nanogui { class GLShader; }
 
 //! Generic image manipulation undo class
 class ImageCommandUndo

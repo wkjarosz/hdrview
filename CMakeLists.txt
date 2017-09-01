@@ -30,9 +30,9 @@ include_directories(
 # Resource file (icons etc.)
 set(EXTRA_SOURCE "")
 if (APPLE)
-  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.icns")
+    set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.icns")
 elseif(WIN32)
-  set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc")
+    set(EXTRA_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc")
 endif()
 
 add_executable(HDRView MACOSX_BUNDLE
@@ -61,19 +61,19 @@ add_definitions(${NANOGUI_EXTRA_DEFS})
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
 if (APPLE)
-  # Build an application bundle on OSX
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
-  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    # Build an application bundle on OSX
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
+    set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 elseif (NOT WIN32)
-  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
-  set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
+    # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
+    set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
 endif()
 
 if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
-  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
+    add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
 endif()
 
 
@@ -94,8 +94,16 @@ add_executable(hdrbatch
 
 
 add_executable(force-random-dither
-  src/forced-random-dither.cpp
+src/forced-random-dither.cpp
 )
+
 target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
 target_link_libraries(hdrbatch IlmImf docopt_s ${Boost_REGEX_LIBRARY})
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
+
+if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3)
+    find_program(iwyu_path NAMES include-what-you-use iwyu)
+    if (iwyu_path)
+        set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
+    endif()
+endif()
