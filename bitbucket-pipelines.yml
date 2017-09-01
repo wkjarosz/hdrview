@@ -3,15 +3,15 @@
 # Only use spaces to indent your .yml configuration.
 # -----
 # You can specify a custom docker image from Docker Hub as your build environment.
-image: ubuntu:14.04
+image: ubuntu:17.04
 
 pipelines:
   default:
     - step:
         script:
           - apt-get -qq -y --force-yes update
-          - apt-get -y --force-yes install cmake cmake-data gcc-4.9 g++-4.9 xorg-dev libglu1-mesa-dev libxrandr-dev
-          - update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-4.9 90 --slave /usr/bin/g++ g++ /usr/bin/g++-4.9
+          - apt-get install build-essential
+          - apt-get -y --force-yes install cmake cmake-data xorg-dev libglu1-mesa-dev libxrandr-dev
           - git submodule update --init --recursive
           - mkdir build
           - cd build
