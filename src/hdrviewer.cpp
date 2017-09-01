@@ -4,8 +4,6 @@
 #include "hdrviewer.h"
 #include <iostream>
 #include "glimage.h"
-#include <nanogui/nanogui.h>
-#include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>
 #define NOMINMAX
 #include <tinydir.h>

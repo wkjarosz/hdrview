@@ -3,10 +3,10 @@
 */
 #pragma once
 
-#include <nanogui/screen.h>
-#include <nanogui/common.h>
+#include <nanogui/nanogui.h>
 #include <vector>
 #include <iostream>
+#include <spdlog/spdlog.h>
 #include "gldithertexture.h"
 
 // forward declarations
