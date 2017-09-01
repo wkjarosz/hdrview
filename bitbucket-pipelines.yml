@@ -3,7 +3,7 @@
 # Only use spaces to indent your .yml configuration.
 # -----
 # You can specify a custom docker image from Docker Hub as your build environment.
-image: andystanton/gcc-cmake-gl
+image: alext234/my-docker-gcc
 
 pipelines:
   default:
