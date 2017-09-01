@@ -9,6 +9,7 @@ pipelines:
   default:
     - step:
         script:
+          - sudo apt-get -y --force-yes install xorg-dev libglu1-mesa-dev libxrandr-dev
           - git submodule update --init --recursive
           - mkdir build
           - cd build
