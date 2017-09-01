@@ -8,7 +8,8 @@ image: rikorose/gcc-cmake:gcc-7
 pipelines:
   default:
     - step:
-        script: # Modify the commands below to build your repository.
+        script:
+          - git submodule update --init --recursive
           - mkdir build
           - cd build
           - cmake ..
