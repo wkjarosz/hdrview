@@ -10,8 +10,7 @@ pipelines:
     - step:
         script:
           - apt-get -qq -y --force-yes update
-          - apt-get install build-essential
-          - apt-get -y --force-yes install cmake cmake-data xorg-dev libglu1-mesa-dev libxrandr-dev
+          - apt-get -y --force-yes install build-essential cmake cmake-data xorg-dev libglu1-mesa-dev libxrandr-dev
           - git submodule update --init --recursive
           - mkdir build
           - cd build
