@@ -2,11 +2,12 @@
 
 Master status:
 [![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/master/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/tyjo3acimqn28da2/branch/master?svg=true)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
+[![Windows build status](https://ci.appveyor.com/api/projects/status/bitbucket/wkjarosz/hdrview?svg=true&branch=master&passingText=master%20-%20OK&failingText=master%20-%20failed&pendingText=master%20-%20pending)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
 
 Develop status:
 [![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/develop/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/tyjo3acimqn28da2/branch/develop?svg=true)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/develop)
+[![Windows build status](https://ci.appveyor.com/api/projects/status/bitbucket/wkjarosz/hdrview?svg=true&branch=develop&passingText=develop%20-%20OK&failingText=develop%20-%20failed&pendingText=develop%20-%20pending)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
+
 
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
