@@ -36,24 +36,34 @@ elseif(WIN32)
 endif()
 
 add_executable(HDRView MACOSX_BUNDLE
+    src/color.h
     src/common.cpp
     src/common.h
-    src/glimage.cpp
-    src/glimage.h
-    src/gldithertexture.h
+    src/dither-matrix256.h
+    src/editimagepanel.cpp
+    src/editimagepanel.h
     src/envmap.cpp
     src/envmap.h
+    src/fwd.h
+    src/gldithertexture.h
+    src/glimage.cpp
+    src/glimage.h
+    src/hdrimage.cpp
+    src/hdrimage.h
+    src/hdrview.cpp
+    src/hdrviewer.cpp
+    src/hdrviewer.h
+    src/histogrampanel.cpp
+    src/histogrampanel.h
+    src/layerspanel.cpp
+    src/layerspanel.h
+    src/multigraph.cpp
+    src/multigraph.h
     src/pfm.h
     src/pfm.cpp
     src/ppm.h
     src/ppm.cpp
-    src/hdrviewer.h
-    src/hdrviewer.cpp
-    src/dither-matrix256.h
-    src/color.h
-    src/hdrimage.h
-    src/hdrimage.cpp
-    src/hdrview.cpp
+    src/range.h
     ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
@@ -90,18 +100,18 @@ add_executable(hdrbatch
     src/color.h
     src/hdrimage.h
     src/hdrimage.cpp
-    src/hdrbatch.cpp)
+    src/hdrbatch.cpp
+    src/range.h)
 
 
 add_executable(force-random-dither
-src/forced-random-dither.cpp
-)
+    src/forced-random-dither.cpp)
 
 target_link_libraries(HDRView IlmImf nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
 target_link_libraries(hdrbatch IlmImf docopt_s ${Boost_REGEX_LIBRARY})
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
-if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3)
+if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)
     find_program(iwyu_path NAMES include-what-you-use iwyu)
     if (iwyu_path)
         set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})

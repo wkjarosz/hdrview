@@ -2,54 +2,49 @@
     \author Wojciech Jarosz
 */
 #include "hdrviewer.h"
-#include <iostream>
+#include "histogrampanel.h"
 #include "glimage.h"
+#include "editimagepanel.h"
+#include "layerspanel.h"
+#include <iostream>
+#include "common.h"
 #include <spdlog/fmt/fmt.h>
 #define NOMINMAX
 #include <tinydir.h>
 #include <algorithm>
-#include "envmap.h"
 
 using namespace std;
 
-
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
-    m_GUIScaleFactor(1),
-    m_exposure(exposure), m_gamma(sRGB ? 2.2f : gamma),
+    m_exposure(0.0f), m_gamma(sRGB ? 2.2f : gamma),
     console(spdlog::get("console"))
 {
     setBackground(Vector3f(0.1f, 0.1f, 0.1f));
-    Theme * scaledTheme = new Theme(mNVGContext);
-    scaledTheme->mStandardFontSize                 = 16*m_GUIScaleFactor;
-    scaledTheme->mButtonFontSize                   = 15*m_GUIScaleFactor;
-    scaledTheme->mTextBoxFontSize                  = 14*m_GUIScaleFactor;
-    scaledTheme->mWindowCornerRadius               = 2*m_GUIScaleFactor;
-    scaledTheme->mWindowHeaderHeight               = 30*m_GUIScaleFactor;
-    scaledTheme->mWindowDropShadowSize             = 10*m_GUIScaleFactor;
-    scaledTheme->mButtonCornerRadius               = 2*m_GUIScaleFactor;
-
-    this->setTheme(scaledTheme);
 
     Theme * thm = new Theme(mNVGContext);
-    thm->mStandardFontSize                 = 16*m_GUIScaleFactor;
-    thm->mButtonFontSize                   = 15*m_GUIScaleFactor;
-    thm->mTextBoxFontSize                  = 14*m_GUIScaleFactor;
-    thm->mButtonCornerRadius               = 2*m_GUIScaleFactor;
-    thm->mWindowHeaderHeight = 0;
-    thm->mWindowDropShadowSize = 0;
-    thm->mWindowCornerRadius = 0;
-    thm->mWindowFillFocused = Color(.2f,.2f,.2f,.9f);
-    thm->mWindowFillUnfocused = Color(.2f,.2f,.2f,.9f);
+    thm->mStandardFontSize     = 16;
+    thm->mButtonFontSize       = 15;
+    thm->mTextBoxFontSize      = 14;
+    setTheme(thm);
 
-    m_controlPanel = new Window(this, "");
-    m_controlPanel->setId("control panel");
-    m_controlPanel->setTheme(thm);
-    m_controlPanel->setPosition(Vector2i(0, 0));
-    m_controlPanel->setLayout(new BoxLayout(Orientation::Horizontal,
-                                            Alignment::Middle,
-                                            5*m_GUIScaleFactor,
-                                            5*m_GUIScaleFactor));
+    thm = new Theme(mNVGContext);
+    thm->mStandardFontSize     = 16;
+    thm->mButtonFontSize       = 15;
+    thm->mTextBoxFontSize      = 14;
+    thm->mButtonCornerRadius   = 2;
+    thm->mWindowHeaderHeight   = 0;
+    thm->mWindowDropShadowSize = 0;
+    thm->mWindowCornerRadius   = 0;
+    thm->mWindowFillFocused    = Color(.2f,.2f,.2f,.9f);
+    thm->mWindowFillUnfocused  = Color(.2f,.2f,.2f,.9f);
+
+    m_topPanel = new Window(this, "");
+    m_topPanel->setId("top panel");
+    m_topPanel->setTheme(thm);
+    m_topPanel->setPosition(Vector2i(0, 0));
+    m_topPanel->setLayout(new BoxLayout(Orientation::Horizontal,
+                                            Alignment::Middle, 5, 5));
 
     //
     // create status bar widgets
@@ -58,11 +53,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_statusBar->setTheme(thm);
 
     m_pixelInfoLabel = new Label(m_statusBar, "", "sans");
-    m_pixelInfoLabel->setFontSize(thm->mTextBoxFontSize*m_GUIScaleFactor);
-    m_pixelInfoLabel->setPosition(Vector2i(6, 0)*m_GUIScaleFactor);
+    m_pixelInfoLabel->setFontSize(thm->mTextBoxFontSize);
+    m_pixelInfoLabel->setPosition(Vector2i(6, 0));
 
     m_zoomLabel = new Label(m_statusBar, "100% (1 : 1)", "sans");
-    m_zoomLabel->setFontSize(thm->mTextBoxFontSize*m_GUIScaleFactor);
+    m_zoomLabel->setFontSize(thm->mTextBoxFontSize);
 
     //
     // create side panel
@@ -74,12 +69,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_sideScrollPanel = new VScrollPanel(m_sidePanel);
     m_sidePanelContents = new Widget(m_sideScrollPanel);
     auto sideLayout = new BoxLayout(Orientation::Vertical,
-                                    Alignment::Fill,
-                                    4*m_GUIScaleFactor, 4*m_GUIScaleFactor);
+                                    Alignment::Fill, 4, 4);
     m_sidePanelContents->setLayout(sideLayout);
 
     //
-    // create side panel
+    // create file/layers panel
     //
     {
         auto w = new Button(m_sidePanelContents, "File", ENTYPO_ICON_CHEVRON_DOWN);
@@ -87,92 +81,41 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         w->setFlags(Button::ToggleButton);
         w->setPushed(true);
         w->setIconPosition(Button::IconPosition::Right);
-        m_layersPanelContents = new Widget(m_sidePanelContents);
+        m_layersPanel = new LayersPanel(m_sidePanelContents, this);
 
         w->setChangeCallback([&,w,sideLayout](bool value)
                              {
                                  w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
-                                 m_layersPanelContents->setVisible(value);
+                                 m_layersPanel->setVisible(value);
                                  m_sidePanelContents->performLayout(mNVGContext);
                                  performLayout();
                              });
+    }
 
-        m_layersPanelContents->setId("layers panel");
-        m_layersPanelContents->setLayout(new GroupLayout(2 * m_GUIScaleFactor,
-                                                         4 * m_GUIScaleFactor,
-                                                         8 * m_GUIScaleFactor,
-                                                         10 * m_GUIScaleFactor));
-        {
-            new Label(m_layersPanelContents, "File operations", "sans-bold");
+    //
+    // create histogram panel
+    //
+    {
+        auto w = new Button(m_sidePanelContents, "Histogram", ENTYPO_ICON_CHEVRON_RIGHT);
+        w->setBackgroundColor(Color(15, 100, 185, 75));
+        w->setFlags(Button::ToggleButton);
+        w->setIconPosition(Button::IconPosition::Right);
 
-            Widget *buttonRow = new Widget(m_layersPanelContents);
-            buttonRow->setLayout(new BoxLayout(Orientation::Horizontal,
-                                               Alignment::Fill, 0, 4));
+        auto w2 = new Widget(m_sidePanelContents);
+        w2->setVisible(false);
+        w2->setId("histogram panel");
+        w2->setLayout(new GroupLayout(2, 4, 8, 10));
 
-            Button *b = new Button(buttonRow, "Open", ENTYPO_ICON_FOLDER);
-            b->setFixedWidth(84);
-            b->setBackgroundColor(Color(0, 100, 0, 75));
-            b->setTooltip("Load an image and add it to the set of opened images.");
-            b->setCallback([&] {
-                string file = file_dialog(
-                        {
-                                {"exr", "OpenEXR image"},
-                                {"png", "Portable Network Graphic"},
-                                {"pfm", "Portable Float Map"},
-                                {"ppm", "Portable PixMap"},
-                                {"jpg", "Jpeg image"},
-                                {"tga", "Targa image"},
-                                {"bmp", "Windows Bitmap image"},
-                                {"gif", "GIF image"},
-                                {"hdr", "Radiance rgbE format"},
-                                {"ppm", "Portable pixel map"},
-                                {"psd", "Photoshop document"}
-                        }, false);
-                if (file.size())
-                    dropEvent({file});
-            });
+        new Label(w2, "Histogram", "sans-bold");
+        m_histogramPanel = new HistogramPanel(w2);
 
-            m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
-            m_saveButton->setEnabled(m_images.size() > 0);
-            m_saveButton->setFixedWidth(84);
-            m_saveButton->setBackgroundColor(Color(0, 0, 100, 75));
-            m_saveButton->setTooltip("Save the image to disk.");
-            m_saveButton->setCallback([&]
-            {
-                if (!currentImage())
-                    return;
-                string file = file_dialog(
-                        {
-                                {"png", "Portable Network Graphic"},
-                                {"pfm", "Portable Float Map"},
-                                {"ppm", "Portable PixMap"},
-                                {"tga", "Targa image"},
-                                {"bmp", "Windows Bitmap image"},
-                                {"hdr", "Radiance rgbE format"},
-                                {"exr", "OpenEXR image"}
-                        }, true);
-
-                if (file.size())
-                {
-                    try
-                    {
-                        currentImage()->save(file, powf(2.0f, m_exposure),
-                                             m_gamma, m_sRGB->checked(),
-                                             m_dither->checked());
-                    }
-                    catch (std::runtime_error &e)
-                    {
-                        new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-                                          string("Could not save image due to an error:\n") + e.what());
-                    }
-                    updateCaption();
-                    repopulateLayerList();
-                    setSelectedLayer(m_current);
-                }
-            });
-
-            new Label(m_layersPanelContents, "Opened images:", "sans-bold");
-        }
+        w->setChangeCallback([&,w,w2](bool value)
+             {
+                 w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+                 w2->setVisible(value);
+                 m_sidePanelContents->performLayout(mNVGContext);
+                 performLayout();
+             });
     }
 
     //
@@ -184,101 +127,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         w->setFlags(Button::ToggleButton);
         w->setIconPosition(Button::IconPosition::Right);
 
-        m_editPanelContents = new Widget(m_sidePanelContents);
-        m_editPanelContents->setVisible(false);
+	    m_editPanel = new EditImagePanel(m_sidePanelContents, this);
+        m_editPanel->setVisible(false);
+	    m_editPanel->setId("edit panel");
 
         w->setChangeCallback([&,w](bool value)
-            {
-                w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
-                m_editPanelContents->setVisible(value);
-                m_sidePanelContents->performLayout(mNVGContext);
-                performLayout();
-            });
-
-        m_editPanelContents->setId("edit panel");
-        m_editPanelContents->setLayout(new GroupLayout(2 * m_GUIScaleFactor,
-                                                 4 * m_GUIScaleFactor,
-                                                 8 * m_GUIScaleFactor,
-                                                 10 * m_GUIScaleFactor));
-
-        new Label(m_editPanelContents, "History", "sans-bold");
-
-        auto buttonRow = new Widget(m_editPanelContents);
-        buttonRow->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 4));
-
-        m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
-        m_undoButton->setFixedWidth(84);
-        m_undoButton->setCallback([&](){undo();});
-        m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
-        m_redoButton->setFixedWidth(84);
-        m_redoButton->setCallback([&](){redo();});
-
-        new Label(m_editPanelContents, "Transformations", "sans-bold");
-
-        // flip h
-        w = new Button(m_editPanelContents, "Flip H", ENTYPO_ICON_LEFT_BOLD);
-        w->setCallback([&](){flipImage(true);});
-        m_filterButtons.push_back(w);
-
-        // flip v
-        w = new Button(m_editPanelContents, "Flip V", ENTYPO_ICON_DOWN_BOLD);
-        w->setCallback([&](){flipImage(false);});
-        m_filterButtons.push_back(w);
-
-        // rotate cw
-        w = new Button(m_editPanelContents, "Rotate CW", ENTYPO_ICON_CW);
-        w->setCallback([&]()
-                       {
-                           if (!currentImage())
-                               return;
-
-                           currentImage()->modify([&](HDRImage & img)
-                              {
-                                  img = img.rotated90CW();
-                                  return new LambdaUndo([](HDRImage & img2){img2 = img2.rotated90CCW();},
-                                                        [](HDRImage & img2){img2 = img2.rotated90CW();});
-                              });
-                           updateCaption();
-                           repopulateLayerList();
-                           setSelectedLayer(m_current);
-                       });
-        m_filterButtons.push_back(w);
-
-        // rotate ccw
-        w = new Button(m_editPanelContents, "Rotate CCW", ENTYPO_ICON_CCW);
-        w->setCallback([&]()
-           {
-               if (!currentImage())
-                   return;
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      img = img.rotated90CCW();
-                      return new LambdaUndo([](HDRImage & img2){img2 = img2.rotated90CW();},
-                                            [](HDRImage & img2){img2 = img2.rotated90CCW();});
-                  });
-
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           });
-        m_filterButtons.push_back(w);
-
-        // shift
-        m_filterButtons.push_back(createShiftButton(m_editPanelContents));
-
-
-        new Label(m_editPanelContents, "Resize/resample", "sans-bold");
-        m_filterButtons.push_back(createResizeButton(m_editPanelContents));
-        m_filterButtons.push_back(createResampleButton(m_editPanelContents));
-
-        new Label(m_editPanelContents, "Filters", "sans-bold");
-        m_filterButtons.push_back(createGaussianFilterButton(m_editPanelContents));
-        m_filterButtons.push_back(createFastGaussianFilterButton(m_editPanelContents));
-        m_filterButtons.push_back(createBoxFilterButton(m_editPanelContents));
-        m_filterButtons.push_back(createBilateralFilterButton(m_editPanelContents));
-        m_filterButtons.push_back(createUnsharpMaskFilterButton(m_editPanelContents));
-        m_filterButtons.push_back(createMedianFilterButton(m_editPanelContents));
+         {
+             w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+             m_editPanel->setVisible(value);
+             m_sidePanelContents->performLayout(mNVGContext);
+             performLayout();
+         });
     }
 
     dropEvent(args);
@@ -287,7 +146,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create top panel controls
     //
     {
-        auto about = new Button(m_controlPanel, "", ENTYPO_ICON_INFO);
+        auto about = new Button(m_topPanel, "", ENTYPO_ICON_INFO);
         about->setFixedSize(Vector2i(25, 25));
         about->setCallback([&]() {
             auto dlg = new MessageDialog(
@@ -300,7 +159,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             dlg->center();
         });
 
-        m_helpButton = new Button(m_controlPanel, "", ENTYPO_ICON_CIRCLED_HELP);
+        m_helpButton = new Button(m_topPanel, "", ENTYPO_ICON_CIRCLED_HELP);
         m_helpButton->setTooltip("Bring up the help dialog.");
         m_helpButton->setFlags(Button::ToggleButton);
         m_helpButton->setFixedSize(Vector2i(25, 25));
@@ -311,7 +170,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_helpDialog->center();
         });
 
-        m_layersButton = new Button(m_controlPanel, "", ENTYPO_ICON_LIST);
+        m_layersButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
         m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
         m_layersButton->setFlags(Button::ToggleButton);
         m_layersButton->setFixedSize(Vector2i(25, 25));
@@ -321,41 +180,38 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             performLayout();
         });
 
-        new Label(m_controlPanel, "EV", "sans-bold");
-        m_exposureSlider = new Slider(m_controlPanel);
-        m_exposureTextBox = new FloatBox<float>(m_controlPanel, m_exposure);
+        new Label(m_topPanel, "EV", "sans-bold");
+        m_exposureSlider = new Slider(m_topPanel);
+        m_exposureTextBox = new FloatBox<float>(m_topPanel, m_exposure);
 
         m_exposureTextBox->numberFormat("%1.2f");
         m_exposureTextBox->setEditable(true);
-        m_exposureTextBox->setFixedWidth(35*m_GUIScaleFactor);
+        m_exposureTextBox->setFixedWidth(35);
         m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
         auto exposureTextBoxCB = [&](float value)
         {
-            m_exposure = value;
-            m_exposureSlider->setValue(m_exposure);
+            changeExposure(value);
         };
         m_exposureTextBox->setCallback(exposureTextBoxCB);
         m_exposureSlider->setCallback([&](float value)
         {
-            m_exposure = round(4*value) / 4.0f;
-            m_exposureTextBox->setValue(m_exposure);
-            m_exposureSlider->setValue(m_exposure);
+            changeExposure(round(4*value) / 4.0f);
         });
-        m_exposureSlider->setFixedWidth(100*m_GUIScaleFactor);
+        m_exposureSlider->setFixedWidth(100);
         m_exposureSlider->setRange({-9.0f,9.0f});
         m_exposureTextBox->setValue(m_exposure);
-        exposureTextBoxCB(m_exposure);
+        changeExposure(m_exposure);
 
 
-        m_sRGB = new CheckBox(m_controlPanel, "sRGB   ");
+        m_sRGB = new CheckBox(m_topPanel, "sRGB   ");
 
-        m_gammaLabel = new Label(m_controlPanel, "Gamma", "sans-bold");
-        m_gammaSlider = new Slider(m_controlPanel);
-        m_gammaTextBox = new FloatBox<float>(m_controlPanel);
+        m_gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
+        m_gammaSlider = new Slider(m_topPanel);
+        m_gammaTextBox = new FloatBox<float>(m_topPanel);
 
         m_gammaTextBox->setEditable(true);
         m_gammaTextBox->numberFormat("%1.3f");
-        m_gammaTextBox->setFixedWidth(40*m_GUIScaleFactor);
+        m_gammaTextBox->setFixedWidth(40);
         m_gammaTextBox->setAlignment(TextBox::Alignment::Right);
         auto gammaTextBoxCB = [&](float value)
         {
@@ -369,7 +225,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             m_gammaTextBox->setValue(m_gamma);
             m_gammaSlider->setValue(m_gamma);
         });
-        m_gammaSlider->setFixedWidth(100*m_GUIScaleFactor);
+        m_gammaSlider->setFixedWidth(100);
         m_gammaSlider->setRange({0.02f,9.0f});
         m_gammaTextBox->setValue(m_gamma);
         gammaTextBoxCB(m_gamma);
@@ -383,9 +239,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             performLayout();
         });
 
-        m_dither = new CheckBox(m_controlPanel, "Dither  ");
-        m_drawGrid = new CheckBox(m_controlPanel, "Grid  ");
-        m_drawValues = new CheckBox(m_controlPanel, "RGB values  ");
+        m_dither = new CheckBox(m_topPanel, "Dither  ");
+        m_drawGrid = new CheckBox(m_topPanel, "Grid  ");
+        m_drawValues = new CheckBox(m_topPanel, "RGB values  ");
         m_dither->setChecked(dither);
         m_drawGrid->setChecked(true);
         m_drawValues->setChecked(true);
@@ -419,14 +275,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         m_helpDialog = new Window(this, "Help");
         m_helpDialog->setId("help dialog");
-        // m_helpDialog->setTheme(thm);
         m_helpDialog->setVisible(false);
         GridLayout *layout = new GridLayout(Orientation::Horizontal, 2,
                                             Alignment::Middle,
-                                            15*m_GUIScaleFactor,
-                                            5*m_GUIScaleFactor);
+                                            15,
+                                            5);
         layout->setColAlignment({ Alignment::Maximum, Alignment::Fill });
-        layout->setSpacing(0, 10*m_GUIScaleFactor);
+        layout->setSpacing(0, 10);
         m_helpDialog->setLayout(layout);
 
         new Label(m_helpDialog, "key", "sans-bold");
@@ -449,14 +304,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     }
 
     updateZoomLabel();
-    m_layerListWidget->performLayout(mNVGContext);
+
 
     m_ditherer.init();
 
     m_sRGB->setChecked(sRGB);
     m_sRGB->callback()(sRGB);
 
-    // m_controlPanel->requestFocus();
+    // m_topPanel->requestFocus();
 
     m_sidePanel->setVisible(false);
 
@@ -470,6 +325,66 @@ HDRViewScreen::~HDRViewScreen()
     // empty
 }
 
+
+void HDRViewScreen::changeExposure(float newVal)
+{
+    if (newVal == m_exposure)
+        return;
+
+    m_exposure = newVal;
+    m_exposureTextBox->setValue(m_exposure);
+    m_exposureSlider->setValue(m_exposure);
+    if (m_histogramPanel)
+        m_histogramPanel->setImage(currentImage()->image());
+}
+
+void HDRViewScreen::runFilter(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
+{
+	if (!currentImage())
+		return;
+
+	currentImage()->modify(command);
+
+	updateCaption();
+	repopulateLayerList();
+	setSelectedLayer(m_current);
+}
+
+
+void HDRViewScreen::saveImage()
+{
+	if (!currentImage())
+		return;
+
+	string file = file_dialog(
+		{
+			{"png", "Portable Network Graphic"},
+			{"pfm", "Portable Float Map"},
+			{"ppm", "Portable PixMap"},
+			{"tga", "Targa image"},
+			{"bmp", "Windows Bitmap image"},
+			{"hdr", "Radiance rgbE format"},
+			{"exr", "OpenEXR image"}
+		}, true);
+
+	if (file.size())
+	{
+		try
+		{
+			currentImage()->save(file, powf(2.0f, m_exposure),
+			                     m_gamma, m_sRGB->checked(),
+			                     m_dither->checked());
+		}
+		catch (std::runtime_error &e)
+		{
+			new MessageDialog(this, MessageDialog::Type::Warning, "Error",
+			                  string("Could not save image due to an error:\n") + e.what());
+		}
+		updateCaption();
+		repopulateLayerList();
+		setSelectedLayer(m_current);
+	}
+}
 
 GLImage * HDRViewScreen::currentImage()
 {
@@ -542,13 +457,13 @@ void HDRViewScreen::setSelectedLayer(int index)
         return;
     }
 
-    if (m_current >= 0 && m_current < int(m_layerButtons.size()))
-        m_layerButtons[m_current]->setPushed(false);
-    if (index >= 0 && index < int(m_layerButtons.size()))
-        m_layerButtons[index]->setPushed(true);
+    m_layersPanel->selectLayer(index);
     m_current = index;
     updateCaption();
     enableDisableButtons();
+
+	// update histogram
+	m_histogramPanel->setImage(currentImage()->image());
 }
 
 
@@ -603,78 +518,13 @@ bool HDRViewScreen::redo()
 
 void HDRViewScreen::repopulateLayerList()
 {
-    // this currently just clears all the widges and recreates all of them
-    // from scratch. this doesn't scale, but shoud be fine unless you have a
-    // lot of images, and makes the logic a lot simpler.
-
-    // clear everything
-    if (m_layerListWidget)
-        m_layersPanelContents->removeChild(m_layerListWidget);
-    m_layerListWidget = new Widget(m_layersPanelContents);
-    m_layerListWidget->setId("layer list widget");
-
-    // a GridLayout seems to cause a floating point exception when there are no
-    // images, so use a BoxLayout instead, which seems to work fine
-    if (m_images.size())
-    {
-        GridLayout *grid = new GridLayout(Orientation::Horizontal, 2,
-                                                    Alignment::Fill,
-                                                    0, 1*m_GUIScaleFactor);
-        grid->setSpacing(1, 5*m_GUIScaleFactor);
-        m_layerListWidget->setLayout(grid);
-    }
-    else
-        m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical,
-                                                    Alignment::Fill,
-                                                    0, 5*m_GUIScaleFactor));
-
-    mFocusPath.clear();
-    m_layerButtons.clear();
-
-    int index = 0;
-    for (const auto img : m_images)
-    {
-        size_t start = img->filename().rfind("/")+1;
-        string filename = img->filename().substr(start == string::npos ? 0 : start);
-        string shortname = filename;
-        if (filename.size() > 8+8+3+4)
-            shortname = filename.substr(0, 8) + "..." + filename.substr(filename.size()-12);
-
-        Button *b = new Button(m_layerListWidget, shortname, img->isModified() ? ENTYPO_ICON_PENCIL : 0);
-        b->setFlags(Button::RadioButton);
-        b->setTooltip(filename);
-        b->setFixedSize(Vector2i(145,25)*m_GUIScaleFactor);
-        b->setCallback([&, index]{setSelectedLayer(index);});
-        m_layerButtons.push_back(b);
-
-        // create a close button for the layer
-        b = new Button(m_layerListWidget, "", ENTYPO_ICON_ERASE);
-        b->setFixedSize(Vector2i(25,25)*m_GUIScaleFactor);
-        b->setCallback([&, index]{closeImage(index);});
-
-        index++;
-    }
-
-    for (auto b : m_layerButtons)
-        b->setButtonGroup(m_layerButtons);
-
-    m_layerListWidget->performLayout(mNVGContext);
-    performLayout();
+    m_layersPanel->repopulateLayerList();
 }
 
 void HDRViewScreen::enableDisableButtons()
 {
-    if (m_saveButton)
-        m_saveButton->setEnabled(m_images.size() > 0);
-
-    if (m_editPanelContents)
-        for_each(m_filterButtons.begin(), m_filterButtons.end(),
-                 [&](Widget * w){w->setEnabled(m_images.size() > 0); });
-
-    if (m_undoButton)
-        m_undoButton->setEnabled(currentImage() && currentImage()->hasUndo());
-    if (m_redoButton)
-        m_redoButton->setEnabled(currentImage() && currentImage()->hasRedo());
+    m_layersPanel->enableDisableButtons();
+	m_editPanel->enableDisableButtons();
 }
 
 bool HDRViewScreen::dropEvent(const vector<string> &filenames)
@@ -786,24 +636,18 @@ bool HDRViewScreen::dropEvent(const vector<string> &filenames)
 
 void HDRViewScreen::flipImage(bool h)
 {
-    if (!currentImage())
-        return;
-
     if (h)
-        currentImage()->modify([](HDRImage & img)
+        runFilter([](HDRImage & img)
             {
                 img = img.flippedHorizontal();
                 return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedHorizontal();});
             });
     else
-        currentImage()->modify([](HDRImage & img)
+        runFilter([](HDRImage & img)
            {
                img = img.flippedVertical();
                return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedVertical();});
            });
-    updateCaption();
-    repopulateLayerList();
-    setSelectedLayer(m_current);
 }
 
 
@@ -920,11 +764,9 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 
         case 'E':
             if (modifiers & GLFW_MOD_SHIFT)
-                m_exposure += 0.25f;
+                changeExposure(m_exposure + 0.25f);
             else
-                m_exposure -= 0.25f;
-            m_exposureSlider->setValue(m_exposure);
-            m_exposureTextBox->setValue(m_exposure);
+                changeExposure(m_exposure - 0.25f);
             return true;
 
         case 'D':
@@ -954,7 +796,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'T':
-            m_controlPanel->setVisible(!m_controlPanel->visible());
+            m_topPanel->setVisible(!m_topPanel->visible());
             return true;
 
         case 'H':
@@ -999,28 +841,28 @@ void HDRViewScreen::performLayout()
 {
     Screen::performLayout();
 
-    // make the control panel full-width
-    m_controlPanel->setPosition(Vector2i(0,0));
-    int controlPanelHeight = m_controlPanel->preferredSize(mNVGContext).y();
-    m_controlPanel->setSize(Vector2i(width(), controlPanelHeight));
+    // make the top panel full-width
+    m_topPanel->setPosition(Vector2i(0,0));
+    int topPanelHeight = m_topPanel->preferredSize(mNVGContext).y();
+    m_topPanel->setSize(Vector2i(width(), topPanelHeight));
 
     // put the status bar full-width at the bottom
-    m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)*m_GUIScaleFactor));
+    m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)));
     m_statusBar->setPosition(Vector2i(0, height()-m_statusBar->height()));
 
-    int sidePanelHeight = height() - m_controlPanel->height() - m_statusBar->height();
+    int sidePanelHeight = height() - m_topPanel->height() - m_statusBar->height();
 
     m_sidePanelContents->setFixedWidth(195);
-    m_sideScrollPanel->setFixedWidth(195+12*m_GUIScaleFactor);
+    m_sideScrollPanel->setFixedWidth(195+12);
 
-    // put the layers panel directly below the control panel on the left side
-    m_sidePanel->setPosition(Vector2i(0, controlPanelHeight));
-    m_sidePanel->setSize(Vector2i(195+12*m_GUIScaleFactor, sidePanelHeight));
+    // put the side panel directly below the top panel on the left side
+    m_sidePanel->setPosition(Vector2i(0, topPanelHeight));
+    m_sidePanel->setSize(Vector2i(195+12, sidePanelHeight));
 
 
     int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
     m_zoomLabel->setWidth(zoomWidth);
-    m_zoomLabel->setPosition(Vector2i(width()-zoomWidth-6*m_GUIScaleFactor, 0));
+    m_zoomLabel->setPosition(Vector2i(width()-zoomWidth-6, 0));
 
     int lheight2 = std::min(sidePanelHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
     m_sideScrollPanel->setFixedHeight(lheight2);
@@ -1049,7 +891,7 @@ bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, i
     // we are over the main canvas
     if (Screen::mouseButtonEvent(p, button, down, modifiers) ||
         (m_sidePanel->visible() && m_sidePanel->contains(p)) ||
-        (m_controlPanel->visible() && m_controlPanel->contains(p)) ||
+        (m_topPanel->visible() && m_topPanel->contains(p)) ||
         (m_statusBar->visible() && m_statusBar->contains(p)))
     {
         m_drag = false;
@@ -1095,20 +937,6 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
 
 void HDRViewScreen::updateZoomLabel()
 {
-//    // only necessary before the first time drawAll is called
-//    glfwMakeContextCurrent(mGLFWWindow);
-//    glfwGetFramebufferSize(mGLFWWindow, &mFBSize[0], &mFBSize[1]);
-//    glfwGetWindowSize(mGLFWWindow, &mSize[0], &mSize[1]);
-//
-//#if defined(_WIN32) || defined(__linux__)
-//    mSize = (mSize.cast<float>() / mPixelRatio).cast<int>();
-//    mFBSize = (mSize.cast<float>() * mPixelRatio).cast<int>();
-//#else
-//    /* Recompute pixel ratio on OSX */
-//    if (mSize[0])
-//        mPixelRatio = (float) mFBSize[0] / (float) mSize[0];
-//#endif
-
     float realZoom = m_zoomf * pixelRatio();
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
@@ -1147,76 +975,46 @@ void HDRViewScreen::drawContents()
         img->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB->checked(), m_dither->checked(), m_channels);
 
         drawPixelLabels();
-        drawGrid(mvp);
+        drawPixelGrid(mvp);
     }
 }
 
 
-void HDRViewScreen::drawGrid(const Matrix4f & mvp) const
+void HDRViewScreen::drawPixelGrid(const Matrix4f &mvp) const
 {
     const GLImage * img = currentImage();
     if (!m_drawGrid->checked() || m_zoomf < 8 || !img)
         return;
 
-    GLShader shader;
-    shader.init(
-        "Grid renderer",
-
-        /* Vertex shader */
-        "#version 330\n"
-        "uniform mat4 modelViewProj;\n"
-        "in vec2 position;\n"
-        "void main() {\n"
-        "    gl_Position = modelViewProj * vec4(position.x, position.y, 0.0, 1.0);\n"
-        "}",
-
-        /* Fragment shader */
-        "#version 330\n"
-        "out vec4 out_color;\n"
-        "void main() {\n"
-        "    out_color = vec4(0.5, 0.5, 0.5, 0.5);\n"
-        "}"
-    );
-
     Vector2i xy0 = topLeftImageCorner2Screen();
-
     int minJ = max(0, int(-xy0.y() / m_zoomf));
     int maxJ = min(img->height(), int(ceil((size().y() - xy0.y())/m_zoomf)));
-
     int minI = max(0, int(-xy0.x() / m_zoomf));
     int maxI = min(img->width(), int(ceil((size().x() - xy0.x())/m_zoomf)));
 
-    int numLines = (maxJ - minJ + 1) + (maxI - minI + 1);
-    MatrixXu indices(2, numLines);
+    nvgBeginPath(mNVGContext);
 
-    for (int i = 0; i < numLines; ++i)
-        indices.col(i) << 2 * i, 2 * i + 1;
-
-    MatrixXf positions(2, numLines * 2);
-
-    int line = 0;
-    // horizontal lines
-    for (int j = minJ; j <= maxJ; ++j)
-    {
-        positions.col(2*line+0) << (2 * minI/float(img->width()) - 1), -(2 * j/float(img->height()) - 1);
-        positions.col(2*line+1) << (2 * maxI/float(img->width()) - 1), -(2 * j/float(img->height()) - 1);
-        line++;
-    }
-    // vertical lines
+    // draw vertical lines
     for (int i = minI; i <= maxI; ++i)
     {
-        positions.col(2*line+0) << (2 * i/float(img->width()) - 1), -(2 * minJ/float(img->height()) - 1);
-        positions.col(2*line+1) << (2 * i/float(img->width()) - 1), -(2 * maxJ/float(img->height()) - 1);
-        line++;
+        Vector2i sxy0 = imageToScreen(Vector2i(i,minJ));
+        Vector2i sxy1 = imageToScreen(Vector2i(i,maxJ));
+        nvgMoveTo(mNVGContext, sxy0.x(), sxy0.y());
+        nvgLineTo(mNVGContext, sxy1.x(), sxy1.y());
     }
 
-    shader.bind();
-    shader.uploadIndices(indices);
-    shader.uploadAttrib("position", positions);
+    // draw horizontal lines
+    for (int j = minJ; j <= maxJ; ++j)
+    {
+        Vector2i sxy0 = imageToScreen(Vector2i(minI, j));
+        Vector2i sxy1 = imageToScreen(Vector2i(maxI, j));
+        nvgMoveTo(mNVGContext, sxy0.x(), sxy0.y());
+        nvgLineTo(mNVGContext, sxy1.x(), sxy1.y());
+    }
 
-    shader.setUniform("modelViewProj", mvp);
-    shader.drawIndexed(GL_LINES, 0, numLines);
-
+    nvgStrokeWidth(mNVGContext, 2.0f);
+    nvgStrokeColor(mNVGContext, Color(1.0f, 1.0f, 1.0f, 0.2f));
+    nvgStroke(mNVGContext);
 }
 
 void
@@ -1308,499 +1106,3 @@ Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
 
     return xy;
 }
-
-
-Button * HDRViewScreen::createGaussianFilterButton(Widget * parent)
-{
-    static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Gaussian blur...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-	       gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-	       gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.GaussianBlurred(width, height, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createFastGaussianFilterButton(Widget * parent)
-{
-    static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Fast Gaussian blur...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               currentImage()->modify([&](HDRImage & img)
-                                      {
-                                          auto undo = new FullImageUndo(img);
-                                          img = img.fastGaussianBlurred(width, height, borderModeX, borderModeY);
-                                          return undo;
-                                      });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createBoxFilterButton(Widget * parent)
-{
-    static float width = 1.0f, height = 1.0f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Box blur...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.boxBlurred(width, height, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createBilateralFilterButton(Widget * parent)
-{
-    static float rangeSigma = 1.0f, valueSigma = 0.1f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Bilateral filter...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Range sigma:", rangeSigma);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Value sigma:", valueSigma);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.bilateralFiltered(valueSigma, rangeSigma, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createUnsharpMaskFilterButton(Widget * parent)
-{
-    static float sigma = 1.0f, strength = 1.0f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Unsharp mask...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Sigma:", sigma);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Strength:", strength);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.unsharpMasked(sigma, strength, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createMedianFilterButton(Widget * parent)
-{
-    static float radius = 1.0f;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    string name = "Median filter...";
-    auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Radius:", radius);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.medianFiltered(radius, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-
-Button * HDRViewScreen::createResizeButton(Widget * parent)
-{
-    static int width = 128, height = 128;
-    string name = "Resize...";
-    auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-           window->setModal(true);
-
-           width = currentImage()->width();
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(1);
-
-           height = currentImage()->height();
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(1);
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.resized(width, height);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-
-Button * HDRViewScreen::createResampleButton(Widget * parent)
-{
-    enum MappingMode
-    {
-        ANGULAR_MAP = 0,
-        MIRROR_BALL,
-        LAT_LONG,
-        CUBE_MAP
-    };
-    static MappingMode from = ANGULAR_MAP, to = ANGULAR_MAP;
-    static HDRImage::Sampler sampler = HDRImage::BILINEAR;
-    static int width = 128, height = 128;
-    static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-    static int samples = 1;
-
-    string name = "Remap...";
-    auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(125, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           width = currentImage()->width();
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(1);
-
-           height = currentImage()->height();
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(1);
-
-           gui->addVariable("Source parametrization:", from, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
-           gui->addVariable("Target parametrization:", to, true)->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
-           gui->addVariable("Sampler:", sampler, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           w = gui->addVariable("Super-samples:", samples);
-           w->setSpinnable(true);
-           w->setMinValue(1);
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               // by default use a no-op passthrough warp function
-               function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
-
-               UV2XYZFn dst2xyz;
-               XYZ2UVFn xyz2src;
-
-               if (from != to)
-               {
-                   if (from == ANGULAR_MAP)
-                       xyz2src = XYZToAngularMap;
-                   else if (from == MIRROR_BALL)
-                       xyz2src = XYZToMirrorBall;
-                   else if (from == LAT_LONG)
-                       xyz2src = XYZToLatLong;
-                   else if (from == CUBE_MAP)
-                       xyz2src = XYZToCubeMap;
-
-                   if (to == ANGULAR_MAP)
-                       dst2xyz = angularMapToXYZ;
-                   else if (to == MIRROR_BALL)
-                       dst2xyz = mirrorBallToXYZ;
-                   else if (to == LAT_LONG)
-                       dst2xyz = latLongToXYZ;
-                   else if (to == CUBE_MAP)
-                       dst2xyz = cubeMapToXYZ;
-
-                   warp = [&](const Vector2f & uv){return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
-               }
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.resampled(width, height, warp, samples, sampler, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-Button * HDRViewScreen::createShiftButton(Widget * parent)
-{
-    static HDRImage::Sampler sampler = HDRImage::BILINEAR;
-    static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
-    static float dx = 0.f, dy = 0.f;
-    string name = "Shift...";
-    auto b = new Button(parent, name, ENTYPO_ICON_HAIR_CROSS);
-    b->setCallback([&,name]()
-       {
-           FormHelper *gui = new FormHelper(this);
-           gui->setFixedSize(Vector2i(125, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("X offset:", dx);
-           w->setSpinnable(true);
-
-           w = gui->addVariable("Y offset:", dy);
-           w->setSpinnable(true);
-
-           gui->addVariable("Sampler:", sampler, true)->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
-           gui->addVariable("Border mode X:", borderModeX, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-           gui->addVariable("Border mode Y:", borderModeY, true)->setItems({"Black", "Edge", "Repeat", "Mirror"});
-
-           gui->addButton("Cancel", [&,window](){window->dispose();})->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&,window]()
-           {
-               if (!currentImage())
-                   return;
-
-               // by default use a no-op passthrough warp function
-               function<Vector2f(const Vector2f&)> shift = [&](const Vector2f & uv)
-               {
-                   return (uv + Vector2f(dx/currentImage()->width(), dy/currentImage()->height())).eval();
-               };
-
-               currentImage()->modify([&](HDRImage & img)
-                  {
-                      auto undo = new FullImageUndo(img);
-                      img = img.resampled(img.width(), img.height(), shift, 1, sampler, borderModeX, borderModeY);
-                      return undo;
-                  });
-               window->dispose();
-               updateCaption();
-               repopulateLayerList();
-               setSelectedLayer(m_current);
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           performLayout();
-           window->center();
-           window->requestFocus();
-       });
-    return b;
-}
-
-

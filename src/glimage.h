@@ -10,8 +10,7 @@
 #include <type_traits>         // for swap
 #include <vector>              // for vector, allocator
 #include "hdrimage.h"          // for HDRImage
-
-namespace nanogui { class GLShader; }
+#include "fwd.h"          // for HDRImage
 
 //! Generic image manipulation undo class
 class ImageCommandUndo
