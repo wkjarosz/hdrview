@@ -31,54 +31,68 @@ HDRImageViewer::HDRImageViewer(HDRViewScreen * parent)
 
 void HDRImageViewer::draw(NVGcontext* ctx)
 {
-	if (!m_image)
-		return;
-
 	Widget::draw(ctx);
 	nvgEndFrame(ctx); // Flush the NanoVG draw stack, not necessary to call nvgBeginFrame afterwards.
 
+	if (m_image)
+	{
+		Vector2f screenSize = m_screen->size().cast<float>();
+		Vector2f positionInScreen = absolutePosition().cast<float>();
 
-	Vector2f screenSize = m_screen->size().cast<float>();
-	Vector2f positionInScreen = absolutePosition().cast<float>();
+		glEnable(GL_SCISSOR_TEST);
+		float r = m_screen->pixelRatio();
+		glScissor(positionInScreen.x() * r,
+		          (screenSize.y() - positionInScreen.y() - size().y()) * r,
+		          size().x() * r, size().y() * r);
 
-	glEnable(GL_SCISSOR_TEST);
-	float r = m_screen->pixelRatio();
-	glScissor(positionInScreen.x() * r,
-	          (screenSize.y() - positionInScreen.y() - size().y()) * r,
-	          size().x() * r, size().y() * r);
+		Matrix4f trans;
+		trans.setIdentity();
+		trans.rightCols<1>() = Vector4f(2 * m_offset.x() / screenSize.x(),
+		                                -2 * m_offset.y() / screenSize.y(),
+		                                0.0f, 1.0f);
+		Matrix4f scale;
+		scale.setIdentity();
+		scale(0, 0) = m_zoom;
+		scale(1, 1) = m_zoom;
 
-	Matrix4f trans;
-	trans.setIdentity();
-	trans.rightCols<1>() = Vector4f( 2 * m_offset.x() / screenSize.x(),
-	                                -2 * m_offset.y() / screenSize.y(),
-	                                 0.0f, 1.0f);
-	Matrix4f scale;
-	scale.setIdentity();
-	scale(0,0) = m_zoom;
-	scale(1,1) = m_zoom;
+		Matrix4f imageScale;
+		imageScale.setIdentity();
+		imageScale(0, 0) = float(m_image->size()[0]) / screenSize.x();
+		imageScale(1, 1) = float(m_image->size()[1]) / screenSize.y();
 
-	Matrix4f imageScale;
-	imageScale.setIdentity();
-	imageScale(0,0) = float(m_image->size()[0]) / screenSize.x();
-	imageScale(1,1) = float(m_image->size()[1]) / screenSize.y();
+		Matrix4f offset;
+		offset.setIdentity();
+		offset.rightCols<1>() = Vector4f(positionInScreen.x() / screenSize.x(),
+		                                 -positionInScreen.y() / screenSize.y(),
+		                                 0.0f, 1.0f);
 
-	Matrix4f offset;
-	offset.setIdentity();
-	offset.rightCols<1>() = Vector4f( positionInScreen.x() / screenSize.x(),
-	                                 -positionInScreen.y() / screenSize.y(),
-	                                 0.0f, 1.0f);
+		Matrix4f mvp;
+		mvp.setIdentity();
+		mvp = offset * scale * trans * imageScale;
 
-	Matrix4f mvp;
-	mvp.setIdentity();
-	mvp = offset * scale * trans * imageScale;
+		m_ditherer.bind();
+		m_image->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
 
-	m_ditherer.bind();
-	m_image->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
+		drawPixelLabels(ctx);
+		drawPixelGrid(ctx, mvp);
 
-	drawPixelLabels(ctx);
-	drawPixelGrid(ctx, mvp);
+		glDisable(GL_SCISSOR_TEST);
+	}
 
-	glDisable(GL_SCISSOR_TEST);
+	// Draw an inner drop shadow. (adapted from nanogui::Window) and tev
+	int ds = mTheme->mWindowDropShadowSize, cr = mTheme->mWindowCornerRadius;
+	NVGpaint shadowPaint = nvgBoxGradient(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), cr * 2, ds * 2,
+	                                      mTheme->mTransparent, mTheme->mDropShadow);
+
+	nvgSave(ctx);
+	nvgResetScissor(ctx);
+	nvgBeginPath(ctx);
+	nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
+	nvgRoundedRect(ctx, mPos.x() + ds, mPos.y() + ds, mSize.x() - 2 * ds, mSize.y() - 2 * ds, cr);
+	nvgPathWinding(ctx, NVG_HOLE);
+	nvgFillPaint(ctx, shadowPaint);
+	nvgFill(ctx);
+	nvgRestore(ctx);
 }
 
 void HDRImageViewer::drawPixelGrid(NVGcontext* ctx, const Matrix4f &mvp) const

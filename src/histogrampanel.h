@@ -14,13 +14,13 @@ class HistogramPanel : public Widget
 public:
 	HistogramPanel(Widget *parent);
 
-	void setImage(const HDRImage * img);
+	void setImage(const GLImage * img);
 	void clear();
 	void update();
 
 protected:
 	MultiGraph * m_graph = nullptr;
-	const HDRImage * m_image = nullptr;
+	const GLImage * m_image = nullptr;
 	float m_exposure = 1.0f;
 	bool m_linear = true;
 

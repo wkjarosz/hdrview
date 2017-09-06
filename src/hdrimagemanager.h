@@ -22,11 +22,11 @@ public:
 
 	// Const access to the loaded images. Modification only possible via modifyImage, undo, redo
 	int numImages() const {return m_images.size();}
-	const GLImage * image(int index) const;
-	GLImage * image(int index);
 	int currentImageIndex() const {return m_current;}
 	const GLImage * currentImage() const;
-	GLImage * currentImage();
+	      GLImage * currentImage();
+	const GLImage * image(int index) const;
+		  GLImage * image(int index);
 
 	// Loading, saving, closing, and rearranging the images in the image stack
 	void loadImages(const std::vector<std::string> & filenames);

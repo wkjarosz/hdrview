@@ -249,10 +249,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                                     m_layersPanel->enableDisableButtons();
 		                                     m_editPanel->enableDisableButtons();
 		                                     m_layersPanel->selectLayer(i);
-		                                     if (m_imageMgr->currentImage())
-			                                     m_histogramPanel->setImage(&m_imageMgr->currentImage()->image());
-		                                     else
-			                                     m_histogramPanel->clear();
+		                                     m_histogramPanel->setImage(m_imageMgr->currentImage());
 	                                     });
 
 	    m_imageMgr->setNumLayersCallback([&](void)

@@ -4,17 +4,12 @@
 
 #include "histogrampanel.h"
 #include "multigraph.h"
-#include "hdrimage.h"
+#include "glimage.h"
 #include <nanogui/nanogui.h>
 #include "common.h"
 
 using namespace std;
 using namespace Eigen;
-
-namespace
-{
-MatrixX3f makeHistograms(const HDRImage & img, int numBins, float exposure = 1.f, bool linear = true);
-}
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -77,7 +72,7 @@ HistogramPanel::HistogramPanel(Widget *parent)
 	});
 }
 
-void HistogramPanel::setImage(const HDRImage * img)
+void HistogramPanel::setImage(const GLImage * img)
 {
 	m_image = img;
 	update();
@@ -98,30 +93,11 @@ void HistogramPanel::update()
 		return;
 	}
 
-	MatrixX3f hist = makeHistograms(*m_image, 256, m_exposure, m_linear);
-	m_graph->setValues(hist.col(0)/hist.block(1,0,254,1).maxCoeff(), 0);
-	m_graph->setValues(hist.col(1)/hist.block(1,1,254,1).maxCoeff(), 1);
-	m_graph->setValues(hist.col(2)/hist.block(1,2,254,1).maxCoeff(), 2);
+	auto hist = m_image->histogram(m_linear, m_exposure);
+	int numBins = hist.rows();
+	m_graph->setValues(hist.col(0)/hist.block(1,0,numBins-2,1).maxCoeff(), 0);
+	m_graph->setValues(hist.col(1)/hist.block(1,1,numBins-2,1).maxCoeff(), 1);
+	m_graph->setValues(hist.col(2)/hist.block(1,2,numBins-2,1).maxCoeff(), 2);
 }
 
 NAMESPACE_END(nanogui)
-
-namespace
-{
-
-MatrixX3f makeHistograms(const HDRImage & img, int numBins, float exposure, bool linear)
-{
-	MatrixX3f hist = MatrixX3f::Zero(numBins, 3);
-	float d = 1.f / (img.width() * img.height());
-	for (int y = 0; y < img.height(); ++y)
-		for (int x = 0; x < img.width(); ++x)
-		{
-			Color4 c = (linear ? img(x,y) : toSRGB(img(x,y))) * exposure;
-			hist(clamp(int(floor(c[0] * numBins)), 0, numBins - 1), 0) += d;
-			hist(clamp(int(floor(c[1] * numBins)), 0, numBins - 1), 1) += d;
-			hist(clamp(int(floor(c[2] * numBins)), 0, numBins - 1), 2) += d;
-		}
-	return hist;
-}
-
-}
