@@ -30,6 +30,8 @@ public:
     bool scrollEvent(const Vector2i &p, const Vector2f &rel) override;
     void performLayout();
 
+	void saveImage();
+	void askCloseImage(int index);
 	void flipImage(bool h);
 	void clearFocusPath() {mFocusPath.clear();}
 
@@ -46,6 +48,7 @@ private:
 	Window * m_sidePanel = nullptr;
 	Window * m_statusBar = nullptr;
 	HDRImageViewer * m_imageView = nullptr;
+	HDRImageManager * m_imageMgr;
 
     Button * m_helpButton = nullptr;
     Button * m_layersButton = nullptr;

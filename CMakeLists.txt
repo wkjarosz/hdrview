@@ -50,6 +50,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/glimage.h
     src/hdrimage.cpp
     src/hdrimage.h
+    src/hdrimagemanager.cpp
+    src/hdrimagemanager.h
     src/hdrimageviewer.cpp
     src/hdrimageviewer.h
     src/hdrview.cpp

@@ -22,26 +22,7 @@ class HDRImageViewer : public Widget
 public:
 	HDRImageViewer(HDRViewScreen * parent);
 
-	// Const access to the loaded images. Modification only possible via modifyImage, undo, redo
-	int numImages() const {return m_images.size();}
-	const GLImage * image(int index) const;
-	GLImage * image(int index);
-	int currentImageIndex() const {return m_current;}
-	const GLImage * currentImage() const;
-	GLImage * currentImage();
-
-	// Loading, saving, closing, and rearranging the images in the image stack
-	bool loadImages(const std::vector<std::string> & filenames);
-	void saveImage();
-	void closeImage(int index);
-	void sendLayerBackward();
-	void bringLayerForward();
-	void selectLayer(int index);
-
-	// Modify the image data
-	void modifyImage(const std::function<ImageCommandUndo*(HDRImage & img)> & command);
-	void undo();
-	void redo();
+	void bindImage(const GLImage* image) {m_image = image;}
 
 	void draw(NVGcontext* ctx) override;
 
@@ -82,18 +63,6 @@ public:
 
 	// Callback functions
 
-	/// Callback executed whenever the image data has been modified, e.g. via @ref modifyImage
-	const std::function<void(int)>& imageChangedCallback() const { return m_imageChangedCallback; }
-	void setImageChangedCallback(const std::function<void(int)> &callback) { m_imageChangedCallback = callback; }
-
-	/// Callback executed whenever the number of layers/images has been changed, e.g. via @ref loadImages or closeImage
-	const std::function<void(void)>& numLayersCallback() const { return m_numLayersCallback; }
-	void setNumLayersCallback(const std::function<void(void)> &callback) { m_numLayersCallback = callback; }
-
-	/// Callback executed whenever the currently selected layer has been changed, e.g. via @ref selectLayer
-	const std::function<void(int)>& layerSelectedCallback() const { return m_layerSelectedCallback; }
-	void setLayerSelectedCallback(const std::function<void(int)> &callback) { m_layerSelectedCallback = callback; }
-
 	/// Callback executed whenever the gamma value has been changed, e.g. via @ref setGamma
 	const std::function<void(float)>& gammaCallback() const { return m_gammaCallback; }
 	void setGammaCallback(const std::function<void(float)> &callback) { m_gammaCallback = callback; }
@@ -111,6 +80,7 @@ private:
 	GLDitherTexture m_ditherer;
 
 	HDRViewScreen * m_screen = nullptr;
+	const GLImage * m_image = nullptr;
 	float m_exposure = 0.f,
 		  m_gamma = 2.2f;
 	bool m_sRGB = true,
@@ -123,15 +93,9 @@ private:
 	float m_zoom = 1.0f;                    ///< The scale/zoom of the image
 	Vector3f m_channels = Vector3f::Ones(); ///< Multiplied with the pixel values before display, allows visualizing individual color channels
 
-	std::vector<GLImage*> m_images;         ///< The loaded images
-	int m_current = -1;                     ///< The currently selected image/layer
-
 	// various callback functions
 	std::function<void(float)> m_exposureCallback;
 	std::function<void(float)> m_gammaCallback;
-	std::function<void(int)> m_imageChangedCallback;
-	std::function<void(void)> m_numLayersCallback;
-	std::function<void(int)> m_layerSelectedCallback;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

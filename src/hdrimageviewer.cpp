@@ -24,324 +24,73 @@ NAMESPACE_BEGIN(nanogui)
 HDRImageViewer::HDRImageViewer(HDRViewScreen * parent)
 	: Widget(parent), m_screen(parent),
 	  m_exposureCallback(std::function<void(bool)>()),
-	  m_gammaCallback(std::function<void(bool)>()),
-	  m_imageChangedCallback(std::function<void(int)>()),
-	  m_numLayersCallback(std::function<void(void)>()),
-	  m_layerSelectedCallback(std::function<void(int)>())
+	  m_gammaCallback(std::function<void(bool)>())
 {
 	m_ditherer.init();
 }
 
-
-const GLImage * HDRImageViewer::currentImage() const
-{
-	return image(m_current);
-}
-
-GLImage * HDRImageViewer::currentImage()
-{
-	return image(m_current);
-}
-
-const GLImage * HDRImageViewer::image(int index) const
-{
-	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
-}
-
-GLImage * HDRImageViewer::image(int index)
-{
-	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
-}
-
-void HDRImageViewer::selectLayer(int index)
-{
-	if (index != m_current)
-	{
-		m_current = index;
-		m_layerSelectedCallback(m_current);
-	}
-}
-
-bool HDRImageViewer::loadImages(const vector<string> & filenames)
-{
-	size_t numErrors = 0;
-	vector<pair<string, bool> > loadedOK;
-	for (auto i : filenames)
-	{
-		tinydir_dir dir;
-		if (tinydir_open(&dir, i.c_str()) != -1)
-		{
-			try
-			{
-				// filename is actually a directory, traverse it
-				spdlog::get("console")->info("Loading images in \"{}\"...", dir.path);
-				while (dir.has_next)
-				{
-					tinydir_file file;
-					if (tinydir_readfile(&dir, &file) == -1)
-						throw std::runtime_error("Error getting file");
-
-					if (!file.is_reg)
-					{
-						if (tinydir_next(&dir) == -1)
-							throw std::runtime_error("Error getting next file");
-						continue;
-					}
-
-					// only consider image files we support
-					string ext = file.extension;
-					transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-					if (ext != "exr" && ext != "png" && ext != "jpg" &&
-						ext != "jpeg" && ext != "hdr" && ext != "pic" &&
-						ext != "pfm" && ext != "ppm" && ext != "bmp" &&
-						ext != "tga" && ext != "psd")
-					{
-						if (tinydir_next(&dir) == -1)
-							throw std::runtime_error("Error getting next file");
-						continue;
-					}
-
-					GLImage* image = new GLImage();
-					if (image->load(file.path))
-					{
-						loadedOK.push_back({file.path, true});
-						image->init();
-						m_images.push_back(image);
-						spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}]", file.name,
-						                             image->width(), image->height());
-					}
-					else
-					{
-						loadedOK.push_back({file.name, false});
-						numErrors++;
-						delete image;
-					}
-
-					if (tinydir_next(&dir) == -1)
-						throw std::runtime_error("Error getting next file");
-				}
-
-				tinydir_close(&dir);
-			}
-			catch (const exception & e)
-			{
-				spdlog::get("console")->error("Error listing directory: ({}).", e.what());
-			}
-		}
-		else
-		{
-			GLImage* image = new GLImage();
-			if (image->load(i))
-			{
-				loadedOK.push_back({i, true});
-				image->init();
-				m_images.push_back(image);
-				spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}]", i, image->width(), image->height());
-			}
-			else
-			{
-				loadedOK.push_back({i, false});
-				numErrors++;
-				delete image;
-			}
-		}
-		tinydir_close(&dir);
-	}
-
-	m_numLayersCallback();
-	selectLayer(int(m_images.size()-1));
-
-	if (numErrors)
-	{
-		string badFiles;
-		for (size_t i = 0; i < loadedOK.size(); ++i)
-		{
-			if (!loadedOK[i].second)
-				badFiles += loadedOK[i].first + "\n";
-		}
-		new MessageDialog(m_screen, MessageDialog::Type::Warning, "Error", "Could not load:\n " + badFiles);
-		return numErrors == filenames.size();
-	}
-
-	return true;
-}
-
-void HDRImageViewer::saveImage()
-{
-	if (!currentImage())
-		return;
-
-	string filename = file_dialog({
-		                          {"png", "Portable Network Graphic"},
-		                          {"pfm", "Portable Float Map"},
-		                          {"ppm", "Portable PixMap"},
-		                          {"tga", "Targa image"},
-		                          {"bmp", "Windows Bitmap image"},
-		                          {"hdr", "Radiance rgbE format"},
-		                          {"exr", "OpenEXR image"}
-	                          }, true);
-
-	if (filename.size())
-	{
-		try
-		{
-			currentImage()->save(filename, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither);
-		}
-		catch (std::runtime_error &e)
-		{
-			new MessageDialog(m_screen, MessageDialog::Type::Warning, "Error",
-			                  string("Could not save image due to an error:\n") + e.what());
-		}
-
-		m_numLayersCallback();
-	}
-}
-
-void HDRImageViewer::closeImage(int index)
-{
-	const GLImage * img = image(index);
-
-	if (img)
-	{
-		auto closeIt = [&,index](int close = 0)
-		{
-			if (close != 0)
-				return;
-
-			delete m_images[index];
-			m_images.erase(m_images.begin()+index);
-
-			int newIndex = m_current;
-			if (index < m_current)
-				newIndex--;
-			else if (m_current >= int(m_images.size()))
-				newIndex = m_images.size()-1;
-
-			selectLayer(newIndex);
-			m_numLayersCallback();
-		};
-
-		if (img->isModified())
-		{
-			auto dialog = new MessageDialog(m_screen, MessageDialog::Type::Warning, "Warning!",
-			                                "Image is modified. Close anyway?", "Close", "Cancel", true);
-			dialog->setCallback(closeIt);
-		}
-		else
-			closeIt();
-	}
-}
-
-void HDRImageViewer::modifyImage(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
-{
-	if (currentImage())
-	{
-		m_images[m_current]->modify(command);
-		m_imageChangedCallback(m_current);
-	}
-}
-void HDRImageViewer::undo()
-{
-	if (currentImage() && m_images[m_current]->undo())
-		m_imageChangedCallback(m_current);
-}
-void HDRImageViewer::redo()
-{
-	if (currentImage() && m_images[m_current]->redo())
-		m_imageChangedCallback(m_current);
-}
-
-
-void HDRImageViewer::sendLayerBackward()
-{
-    if (m_images.empty() || m_current == 0)
-        // do nothing
-        return;
-
-    std::swap(m_images[m_current], m_images[m_current-1]);
-	m_current--;
-
-	m_imageChangedCallback(m_current);
-	m_layerSelectedCallback(m_current);
-}
-
-
-void HDRImageViewer::bringLayerForward()
-{
-    if (m_images.empty() || m_current == int(m_images.size()-1))
-        // do nothing
-        return;
-
-    std::swap(m_images[m_current], m_images[m_current+1]);
-	m_current++;
-
-	m_imageChangedCallback(m_current);
-	m_layerSelectedCallback(m_current);
-}
-
 void HDRImageViewer::draw(NVGcontext* ctx)
 {
+	if (!m_image)
+		return;
+
 	Widget::draw(ctx);
 	nvgEndFrame(ctx); // Flush the NanoVG draw stack, not necessary to call nvgBeginFrame afterwards.
 
-	const GLImage * img = currentImage();
-	if (img)
-	{
-		Vector2f screenSize = m_screen->size().cast<float>();
-		Vector2f positionInScreen = absolutePosition().cast<float>();
 
-		glEnable(GL_SCISSOR_TEST);
-		float r = m_screen->pixelRatio();
-		glScissor(positionInScreen.x() * r,
-		          (screenSize.y() - positionInScreen.y() - size().y()) * r,
-		          size().x() * r, size().y() * r);
+	Vector2f screenSize = m_screen->size().cast<float>();
+	Vector2f positionInScreen = absolutePosition().cast<float>();
 
-		Matrix4f trans;
-		trans.setIdentity();
-		trans.rightCols<1>() = Vector4f( 2 * m_offset.x() / screenSize.x(),
-		                                -2 * m_offset.y() / screenSize.y(),
-		                                 0.0f, 1.0f);
-		Matrix4f scale;
-		scale.setIdentity();
-		scale(0,0) = m_zoom;
-		scale(1,1) = m_zoom;
+	glEnable(GL_SCISSOR_TEST);
+	float r = m_screen->pixelRatio();
+	glScissor(positionInScreen.x() * r,
+	          (screenSize.y() - positionInScreen.y() - size().y()) * r,
+	          size().x() * r, size().y() * r);
 
-		Matrix4f imageScale;
-		imageScale.setIdentity();
-		imageScale(0,0) = float(img->size()[0]) / screenSize.x();
-		imageScale(1,1) = float(img->size()[1]) / screenSize.y();
+	Matrix4f trans;
+	trans.setIdentity();
+	trans.rightCols<1>() = Vector4f( 2 * m_offset.x() / screenSize.x(),
+	                                -2 * m_offset.y() / screenSize.y(),
+	                                 0.0f, 1.0f);
+	Matrix4f scale;
+	scale.setIdentity();
+	scale(0,0) = m_zoom;
+	scale(1,1) = m_zoom;
 
-		Matrix4f offset;
-		offset.setIdentity();
-		offset.rightCols<1>() = Vector4f( positionInScreen.x() / screenSize.x(),
-		                                 -positionInScreen.y() / screenSize.y(),
-		                                 0.0f, 1.0f);
+	Matrix4f imageScale;
+	imageScale.setIdentity();
+	imageScale(0,0) = float(m_image->size()[0]) / screenSize.x();
+	imageScale(1,1) = float(m_image->size()[1]) / screenSize.y();
 
-		Matrix4f mvp;
-		mvp.setIdentity();
-		mvp = offset * scale * trans * imageScale;
+	Matrix4f offset;
+	offset.setIdentity();
+	offset.rightCols<1>() = Vector4f( positionInScreen.x() / screenSize.x(),
+	                                 -positionInScreen.y() / screenSize.y(),
+	                                 0.0f, 1.0f);
 
-		m_ditherer.bind();
-		img->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
+	Matrix4f mvp;
+	mvp.setIdentity();
+	mvp = offset * scale * trans * imageScale;
 
-		drawPixelLabels(ctx);
-		drawPixelGrid(ctx, mvp);
+	m_ditherer.bind();
+	m_image->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
 
-		glDisable(GL_SCISSOR_TEST);
-	}
+	drawPixelLabels(ctx);
+	drawPixelGrid(ctx, mvp);
+
+	glDisable(GL_SCISSOR_TEST);
 }
 
 void HDRImageViewer::drawPixelGrid(NVGcontext* ctx, const Matrix4f &mvp) const
 {
-	const GLImage * img = currentImage();
-	if (!m_drawGrid || m_zoom < 8 || !img)
+	if (!m_drawGrid || m_zoom < 8 || !m_image)
 		return;
 
 	Vector2i xy0 = topLeftImageCorner2Screen();
 	int minJ = max(0, int(-xy0.y() / m_zoom));
-	int maxJ = min(img->height(), int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
+	int maxJ = min(m_image->height(), int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
 	int minI = max(0, int(-xy0.x() / m_zoom));
-	int maxI = min(img->width(), int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
+	int maxI = min(m_image->width(), int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
 
 	nvgBeginPath(ctx);
 
@@ -370,21 +119,20 @@ void HDRImageViewer::drawPixelGrid(NVGcontext* ctx, const Matrix4f &mvp) const
 
 void HDRImageViewer::drawPixelLabels(NVGcontext* ctx) const
 {
-	const GLImage * img = currentImage();
 	// if pixels are big enough, draw color labels on each visible pixel
-	if (!m_drawValues || m_zoom < 32 || !img)
+	if (!m_drawValues || m_zoom < 32 || !m_image)
 		return;
 
 	Vector2i xy0 = topLeftImageCorner2Screen();
 	int minJ = max(0, int(-xy0.y() / m_zoom));
-	int maxJ = min(img->height()-1, int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
+	int maxJ = min(m_image->height()-1, int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
 	int minI = max(0, int(-xy0.x() / m_zoom));
-	int maxI = min(img->width()-1, int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
+	int maxI = min(m_image->width()-1, int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
 	for (int j = minJ; j <= maxJ; ++j)
 	{
 		for (int i = minI; i <= maxI; ++i)
 		{
-			Color4 pixel = img->image()(i, j);
+			Color4 pixel = m_image->image()(i, j);
 
 			float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 
@@ -399,18 +147,16 @@ void HDRImageViewer::drawPixelLabels(NVGcontext* ctx) const
 
 Vector2i HDRImageViewer::topLeftImageCorner2Screen() const
 {
-	const GLImage * img = currentImage();
-	if (!img)
+	if (!m_image)
 		return Vector2i(0,0);
 
-	return Vector2i(int(m_offset[0] * m_zoom) + int(-img->size()[0] / 2.f * m_zoom) + int(m_screen->size().x() / 2.f) + absolutePosition().x() / 2,
-	                int(m_offset[1] * m_zoom) + int(-img->size()[1] / 2.f * m_zoom) + int(m_screen->size().y() / 2.f) + absolutePosition().y() / 2);
+	return Vector2i(int(m_offset[0] * m_zoom) + int(-m_image->size()[0] / 2.f * m_zoom) + int(m_screen->size().x() / 2.f) + absolutePosition().x() / 2,
+	                int(m_offset[1] * m_zoom) + int(-m_image->size()[1] / 2.f * m_zoom) + int(m_screen->size().y() / 2.f) + absolutePosition().y() / 2);
 }
 
 Vector2i HDRImageViewer::imageToScreen(const Vector2i & pixel) const
 {
-	const GLImage * img = currentImage();
-	if (!img)
+	if (!m_image)
 		return Vector2i(0,0);
 
 	return Vector2i(pixel.x() * m_zoom, pixel.y() * m_zoom) + topLeftImageCorner2Screen();
@@ -418,8 +164,7 @@ Vector2i HDRImageViewer::imageToScreen(const Vector2i & pixel) const
 
 Vector2i HDRImageViewer::screenToImage(const Vector2i & p) const
 {
-	const GLImage * img = currentImage();
-	if (!img)
+	if (!m_image)
 		return Vector2i(0,0);
 
 	Vector2i xy0 = topLeftImageCorner2Screen();
