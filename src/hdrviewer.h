@@ -28,7 +28,7 @@ public:
     bool mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
     bool resizeEvent(const Vector2i &) override;
     bool scrollEvent(const Vector2i &p, const Vector2f &rel) override;
-    void performLayout() override;
+    void performLayout();
 
 	void flipImage(bool h);
 	void clearFocusPath() {mFocusPath.clear();}
