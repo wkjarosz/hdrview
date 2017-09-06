@@ -12,12 +12,13 @@ NAMESPACE_BEGIN(nanogui)
 class EditImagePanel : public Widget
 {
 public:
-	EditImagePanel(Widget *parent, HDRViewScreen * screen);
+	EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imageView);
 
 	void enableDisableButtons();
 
 private:
 	HDRViewScreen * m_screen = nullptr;
+	HDRImageViewer * m_imageView = nullptr;
 	Button * m_undoButton = nullptr;
 	Button * m_redoButton = nullptr;
 	std::vector<Button*> m_filterButtons;

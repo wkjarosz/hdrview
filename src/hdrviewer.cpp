@@ -8,16 +8,15 @@
 #include "layerspanel.h"
 #include <iostream>
 #include "common.h"
-#include <spdlog/fmt/fmt.h>
+#include "commandhistory.h"
+#include "hdrimageviewer.h"
 #define NOMINMAX
 #include <tinydir.h>
-#include <algorithm>
 
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
-    m_exposure(0.0f), m_gamma(sRGB ? 2.2f : gamma),
     console(spdlog::get("console"))
 {
     setBackground(Vector3f(0.1f, 0.1f, 0.1f));
@@ -38,6 +37,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     thm->mWindowCornerRadius   = 0;
     thm->mWindowFillFocused    = Color(.2f,.2f,.2f,.9f);
     thm->mWindowFillUnfocused  = Color(.2f,.2f,.2f,.9f);
+
+	m_imageView = new HDRImageViewer(this);
 
     m_topPanel = new Window(this, "");
     m_topPanel->setId("top panel");
@@ -68,9 +69,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_sideScrollPanel = new VScrollPanel(m_sidePanel);
     m_sidePanelContents = new Widget(m_sideScrollPanel);
-    auto sideLayout = new BoxLayout(Orientation::Vertical,
-                                    Alignment::Fill, 4, 4);
-    m_sidePanelContents->setLayout(sideLayout);
+    m_sidePanelContents->setLayout(new BoxLayout(Orientation::Vertical,
+                                                 Alignment::Fill, 4, 4));
 
     //
     // create file/layers panel
@@ -81,14 +81,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         w->setFlags(Button::ToggleButton);
         w->setPushed(true);
         w->setIconPosition(Button::IconPosition::Right);
-        m_layersPanel = new LayersPanel(m_sidePanelContents, this);
+        m_layersPanel = new LayersPanel(m_sidePanelContents, this, m_imageView);
 
-        w->setChangeCallback([&,w,sideLayout](bool value)
+        w->setChangeCallback([&,w](bool value)
                              {
                                  w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
                                  m_layersPanel->setVisible(value);
-                                 m_sidePanelContents->performLayout(mNVGContext);
                                  performLayout();
+	                             m_sidePanelContents->performLayout(mNVGContext);
                              });
     }
 
@@ -113,8 +113,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
              {
                  w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
                  w2->setVisible(value);
-                 m_sidePanelContents->performLayout(mNVGContext);
                  performLayout();
+	             m_sidePanelContents->performLayout(mNVGContext);
              });
     }
 
@@ -127,7 +127,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         w->setFlags(Button::ToggleButton);
         w->setIconPosition(Button::IconPosition::Right);
 
-	    m_editPanel = new EditImagePanel(m_sidePanelContents, this);
+	    m_editPanel = new EditImagePanel(m_sidePanelContents, this, m_imageView);
         m_editPanel->setVisible(false);
 	    m_editPanel->setId("edit panel");
 
@@ -135,18 +135,27 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
          {
              w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
              m_editPanel->setVisible(value);
-             m_sidePanelContents->performLayout(mNVGContext);
              performLayout();
+	         m_sidePanelContents->performLayout(mNVGContext);
          });
     }
-
-    dropEvent(args);
 
     //
     // create top panel controls
     //
     {
         auto about = new Button(m_topPanel, "", ENTYPO_ICON_INFO);
+	    m_helpButton = new Button(m_topPanel, "", ENTYPO_ICON_CIRCLED_HELP);
+	    m_layersButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
+	    new Label(m_topPanel, "EV", "sans-bold");
+	    auto exposureSlider = new Slider(m_topPanel);
+	    auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
+
+	    auto sRGB = new CheckBox(m_topPanel, "sRGB   ");
+	    auto gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
+	    auto gammaSlider = new Slider(m_topPanel);
+	    auto gammaTextBox = new FloatBox<float>(m_topPanel);
+
         about->setFixedSize(Vector2i(25, 25));
         about->setCallback([&]() {
             auto dlg = new MessageDialog(
@@ -159,7 +168,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             dlg->center();
         });
 
-        m_helpButton = new Button(m_topPanel, "", ENTYPO_ICON_CIRCLED_HELP);
         m_helpButton->setTooltip("Bring up the help dialog.");
         m_helpButton->setFlags(Button::ToggleButton);
         m_helpButton->setFixedSize(Vector2i(25, 25));
@@ -170,7 +178,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_helpDialog->center();
         });
 
-        m_layersButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
         m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
         m_layersButton->setFlags(Button::ToggleButton);
         m_layersButton->setFixedSize(Vector2i(25, 25));
@@ -180,72 +187,111 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             performLayout();
         });
 
-        new Label(m_topPanel, "EV", "sans-bold");
-        m_exposureSlider = new Slider(m_topPanel);
-        m_exposureTextBox = new FloatBox<float>(m_topPanel, m_exposure);
 
-        m_exposureTextBox->numberFormat("%1.2f");
-        m_exposureTextBox->setEditable(true);
-        m_exposureTextBox->setFixedWidth(35);
-        m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
-        auto exposureTextBoxCB = [&](float value)
+
+        exposureTextBox->numberFormat("%1.2f");
+        exposureTextBox->setEditable(true);
+        exposureTextBox->setFixedWidth(35);
+        exposureTextBox->setAlignment(TextBox::Alignment::Right);
+        exposureTextBox->setCallback([&](float e)
+                                     {
+	                                       m_imageView->setExposure(e);
+                                     });
+        exposureSlider->setCallback([&](float v)
+							        {
+								        m_imageView->setExposure(round(4*v) / 4.0f);
+							        });
+        exposureSlider->setFixedWidth(100);
+        exposureSlider->setRange({-9.0f,9.0f});
+        exposureTextBox->setValue(exposure);
+
+        gammaTextBox->setEditable(true);
+        gammaTextBox->numberFormat("%1.3f");
+        gammaTextBox->setFixedWidth(40);
+        gammaTextBox->setAlignment(TextBox::Alignment::Right);
+        gammaTextBox->setCallback([&,gammaSlider](float value)
+                                    {
+	                                    m_imageView->setGamma(value);
+	                                    gammaSlider->setValue(value);
+                                    });
+        gammaSlider->setCallback([&,gammaSlider,gammaTextBox](float value)
         {
-            changeExposure(value);
-        };
-        m_exposureTextBox->setCallback(exposureTextBoxCB);
-        m_exposureSlider->setCallback([&](float value)
-        {
-            changeExposure(round(4*value) / 4.0f);
+	        float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
+	        m_imageView->setGamma(g);
+            gammaTextBox->setValue(g);
+            gammaSlider->setValue(g);       // snap values
         });
-        m_exposureSlider->setFixedWidth(100);
-        m_exposureSlider->setRange({-9.0f,9.0f});
-        m_exposureTextBox->setValue(m_exposure);
-        changeExposure(m_exposure);
+        gammaSlider->setFixedWidth(100);
+        gammaSlider->setRange({0.02f,9.0f});
+	    gammaSlider->setValue(gamma);
+	    gammaTextBox->setValue(gamma);
+
+	    m_imageView->setExposureCallback([exposureTextBox,exposureSlider](float e)
+	                                     {
+		                                     exposureTextBox->setValue(e);
+		                                     exposureSlider->setValue(e);
+	                                     });
+	    m_imageView->setGammaCallback([gammaTextBox,gammaSlider](float g)
+	                                  {
+		                                  gammaTextBox->setValue(g);
+		                                  gammaSlider->setValue(g);
+	                                  });
+	    m_imageView->setExposure(exposure);
+	    m_imageView->setGamma(gamma);
 
 
-        m_sRGB = new CheckBox(m_topPanel, "sRGB   ");
+	    m_imageView->setLayerSelectedCallback([&](int i)
+	                                     {
+		                                     updateCaption();
+		                                     m_layersPanel->enableDisableButtons();
+		                                     m_editPanel->enableDisableButtons();
+		                                     m_layersPanel->selectLayer(i);
+		                                     if (m_imageView->currentImage())
+			                                     m_histogramPanel->setImage(&m_imageView->currentImage()->image());
+		                                     else
+			                                     m_histogramPanel->clear();
+	                                     });
 
-        m_gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
-        m_gammaSlider = new Slider(m_topPanel);
-        m_gammaTextBox = new FloatBox<float>(m_topPanel);
+	    m_imageView->setNumLayersCallback([&](void)
+	                                      {
+		                                      updateCaption();
+		                                      m_layersPanel->enableDisableButtons();
+		                                      m_editPanel->enableDisableButtons();
+		                                      m_layersPanel->repopulateLayerList();
+		                                      m_layersPanel->selectLayer(m_imageView->currentImageIndex());
+	                                      });
+	    m_imageView->setImageChangedCallback([&](int i)
+	                                         {
+		                                         updateCaption();
+		                                         m_layersPanel->enableDisableButtons();
+		                                         m_editPanel->enableDisableButtons();
+		                                         m_layersPanel->repopulateLayerList();
+		                                         m_layersPanel->selectLayer(i);
+	                                         });
 
-        m_gammaTextBox->setEditable(true);
-        m_gammaTextBox->numberFormat("%1.3f");
-        m_gammaTextBox->setFixedWidth(40);
-        m_gammaTextBox->setAlignment(TextBox::Alignment::Right);
-        auto gammaTextBoxCB = [&](float value)
+
+	    sRGB->setCallback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
         {
-            m_gamma = value;
-            m_gammaSlider->setValue(m_gamma);
-        };
-        m_gammaTextBox->setCallback(gammaTextBoxCB);
-        m_gammaSlider->setCallback([&](float value)
-        {
-            m_gamma = max(m_gammaSlider->range().first, round(10*value) / 10.0f);
-            m_gammaTextBox->setValue(m_gamma);
-            m_gammaSlider->setValue(m_gamma);
-        });
-        m_gammaSlider->setFixedWidth(100);
-        m_gammaSlider->setRange({0.02f,9.0f});
-        m_gammaTextBox->setValue(m_gamma);
-        gammaTextBoxCB(m_gamma);
-
-        m_sRGB->setCallback([&](bool value)
-        {
-            m_gammaSlider->setEnabled(!value);
-            m_gammaTextBox->setEnabled(!value);
-            m_gammaLabel->setEnabled(!value);
-            m_gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);
+	        m_imageView->setSRGB(value);
+            gammaSlider->setEnabled(!value);
+            gammaTextBox->setEnabled(!value);
+            gammaLabel->setEnabled(!value);
+            gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);
             performLayout();
         });
 
-        m_dither = new CheckBox(m_topPanel, "Dither  ");
-        m_drawGrid = new CheckBox(m_topPanel, "Grid  ");
-        m_drawValues = new CheckBox(m_topPanel, "RGB values  ");
-        m_dither->setChecked(dither);
-        m_drawGrid->setChecked(true);
-        m_drawValues->setChecked(true);
+	    sRGB->setChecked(sRGB);
+	    sRGB->callback()(sRGB);
+
+	    (new CheckBox(m_topPanel, "Dither  ",
+                     [&](bool v) { m_imageView->setDithering(v); }))->setChecked(m_imageView->ditheringOn());
+	    (new CheckBox(m_topPanel, "Grid  ",
+                     [&](bool v) { m_imageView->setDrawGrid(v); }))->setChecked(m_imageView->drawGridOn());
+	    (new CheckBox(m_topPanel, "RGB values  ",
+                     [&](bool v) { m_imageView->setDrawValues(v); }))->setChecked(m_imageView->drawValuesOn());
     }
+
+	dropEvent(args);
 
     //
     // create help dialog
@@ -306,14 +352,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     updateZoomLabel();
 
 
-    m_ditherer.init();
-
-    m_sRGB->setChecked(sRGB);
-    m_sRGB->callback()(sRGB);
-
-    // m_topPanel->requestFocus();
-
     m_sidePanel->setVisible(false);
+	performLayout();
 
     drawAll();
     setVisible(true);
@@ -326,328 +366,35 @@ HDRViewScreen::~HDRViewScreen()
 }
 
 
-void HDRViewScreen::changeExposure(float newVal)
-{
-    if (newVal == m_exposure)
-        return;
-
-    m_exposure = newVal;
-    m_exposureTextBox->setValue(m_exposure);
-    m_exposureSlider->setValue(m_exposure);
-    if (m_histogramPanel)
-        m_histogramPanel->setImage(currentImage()->image());
-}
-
-void HDRViewScreen::runFilter(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
-{
-	if (!currentImage())
-		return;
-
-	currentImage()->modify(command);
-
-	updateCaption();
-	repopulateLayerList();
-	setSelectedLayer(m_current);
-}
-
-
-void HDRViewScreen::saveImage()
-{
-	if (!currentImage())
-		return;
-
-	string file = file_dialog(
-		{
-			{"png", "Portable Network Graphic"},
-			{"pfm", "Portable Float Map"},
-			{"ppm", "Portable PixMap"},
-			{"tga", "Targa image"},
-			{"bmp", "Windows Bitmap image"},
-			{"hdr", "Radiance rgbE format"},
-			{"exr", "OpenEXR image"}
-		}, true);
-
-	if (file.size())
-	{
-		try
-		{
-			currentImage()->save(file, powf(2.0f, m_exposure),
-			                     m_gamma, m_sRGB->checked(),
-			                     m_dither->checked());
-		}
-		catch (std::runtime_error &e)
-		{
-			new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-			                  string("Could not save image due to an error:\n") + e.what());
-		}
-		updateCaption();
-		repopulateLayerList();
-		setSelectedLayer(m_current);
-	}
-}
-
-GLImage * HDRViewScreen::currentImage()
-{
-    if (m_current < 0 || m_current >= int(m_images.size()))
-        return nullptr;
-    return m_images[m_current];
-}
-
-const GLImage * HDRViewScreen::currentImage() const
-{
-    if (m_current < 0 || m_current >= int(m_images.size()))
-        return nullptr;
-    return m_images[m_current];
-}
-
-
-void HDRViewScreen::closeImage(int index)
-{
-    GLImage * img = (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
-
-    if (img)
-    {
-        auto closeIt = [&,index](int close = 0)
-        {
-            if (close != 0)
-                return;
-
-            delete m_images[index];
-            m_images.erase(m_images.begin()+index);
-            repopulateLayerList();
-            if (index < m_current)
-                setSelectedLayer(m_current-1);
-            else
-                setSelectedLayer(m_current >= int(m_images.size()) ? int(m_images.size()-1) : m_current);
-            enableDisableButtons();
-        };
-
-        if (img->isModified())
-        {
-            auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                            "Image is modified. Close anyway?", "Close", "Cancel", true);
-            dialog->setCallback(closeIt);
-        }
-        else
-            closeIt();
-    }
-}
-
-void HDRViewScreen::closeCurrentImage()
-{
-    closeImage(m_current);
-}
-
-
 void HDRViewScreen::updateCaption()
 {
-    const GLImage * img = currentImage();
+    const GLImage * img = m_imageView->currentImage();
     if (img)
         setCaption(string("HDRView [") + img->filename() + (img->isModified() ? "*" : "") + "]");
     else
         setCaption(string("HDRView"));
 }
 
-void HDRViewScreen::setSelectedLayer(int index)
+bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 {
-    if (m_images.empty() || index < 0 || index >= int(m_images.size()))
-    {
-        m_current = -1;
-        updateCaption();
-        return;
-    }
-
-    m_layersPanel->selectLayer(index);
-    m_current = index;
-    updateCaption();
-    enableDisableButtons();
-
-	// update histogram
-	m_histogramPanel->setImage(currentImage()->image());
-}
-
-
-void HDRViewScreen::sendLayerBackward()
-{
-    if (m_images.empty() || m_current == 0)
-        // do nothing
-        return;
-
-    std::swap(m_images[m_current], m_images[m_current-1]);
-    repopulateLayerList();
-    m_current--;
-    setSelectedLayer(m_current);
-}
-
-
-void HDRViewScreen::bringLayerForeward()
-{
-    if (m_images.empty() || m_current == int(m_images.size()-1))
-        // do nothing
-        return;
-
-    std::swap(m_images[m_current], m_images[m_current+1]);
-    repopulateLayerList();
-    m_current++;
-    setSelectedLayer(m_current);
-}
-
-bool HDRViewScreen::undo()
-{
-    if (!currentImage())
-        return false;
-
-    currentImage()->undo();
-    updateCaption();
-    repopulateLayerList();
-    setSelectedLayer(m_current);
-    return true;
-}
-
-bool HDRViewScreen::redo()
-{
-    if (!currentImage())
-        return false;
-
-    currentImage()->redo();
-    updateCaption();
-    repopulateLayerList();
-    setSelectedLayer(m_current);
-    return true;
-}
-
-void HDRViewScreen::repopulateLayerList()
-{
-    m_layersPanel->repopulateLayerList();
-}
-
-void HDRViewScreen::enableDisableButtons()
-{
-    m_layersPanel->enableDisableButtons();
-	m_editPanel->enableDisableButtons();
-}
-
-bool HDRViewScreen::dropEvent(const vector<string> &filenames)
-{
-    size_t numErrors = 0;
-    vector<pair<string, bool> > loadedOK;
-    for (auto i : filenames)
-    {
-        tinydir_dir dir;
-    	if (tinydir_open(&dir, i.c_str()) != -1)
-    	{
-            try
-            {
-                // filename is actually a directory, traverse it
-                console->info("Loading images in \"{}\"...", dir.path);
-            	while (dir.has_next)
-            	{
-            		tinydir_file file;
-            		if (tinydir_readfile(&dir, &file) == -1)
-                        throw std::runtime_error("Error getting file");
-
-                    if (!file.is_reg)
-                    {
-                        if (tinydir_next(&dir) == -1)
-                            throw std::runtime_error("Error getting next file");
-                        continue;
-                    }
-
-                    // only consider image files we support
-                    string ext = file.extension;
-                    transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                    if (ext != "exr" && ext != "png" && ext != "jpg" &&
-                        ext != "jpeg" && ext != "hdr" && ext != "pic" &&
-                        ext != "pfm" && ext != "ppm" && ext != "bmp" &&
-                        ext != "tga" && ext != "psd")
-                    {
-                        if (tinydir_next(&dir) == -1)
-                            throw std::runtime_error("Error getting next file");
-                        continue;
-                    }
-
-                    GLImage* image = new GLImage();
-                    if (image->load(file.path))
-                    {
-                        loadedOK.push_back({file.path, true});
-                        image->init();
-                        m_images.push_back(image);
-                        console->info("Loaded \"{}\" [{:d}x{:d}]", file.name,
-                               image->width(), image->height());
-                    }
-                    else
-                    {
-                        loadedOK.push_back({file.name, false});
-                        numErrors++;
-                        delete image;
-                    }
-
-            		if (tinydir_next(&dir) == -1)
-                        throw std::runtime_error("Error getting next file");
-            	}
-
-                tinydir_close(&dir);
-            }
-            catch (const exception & e)
-            {
-                console->error("Error listing directory: ({}).", e.what());
-            }
-        }
-        else
-        {
-            GLImage* image = new GLImage();
-            if (image->load(i))
-            {
-                loadedOK.push_back({i, true});
-                image->init();
-                m_images.push_back(image);
-                console->info("Loaded \"{}\" [{:d}x{:d}]", i, image->width(), image->height());
-            }
-            else
-            {
-                loadedOK.push_back({i, false});
-                numErrors++;
-                delete image;
-            }
-        }
-        tinydir_close(&dir);
-    }
-
-    enableDisableButtons();
-    repopulateLayerList();
-    setSelectedLayer(int(m_images.size()-1));
-
-    if (numErrors)
-    {
-        string badFiles;
-        for (size_t i = 0; i < loadedOK.size(); ++i)
-        {
-            if (!loadedOK[i].second)
-                badFiles += loadedOK[i].first + "\n";
-        }
-        new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-                          "Could not load:\n " + badFiles);
-        return numErrors == filenames.size();
-    }
-
-    return true;
+	return m_imageView->loadImages(filenames);
 }
 
 
 void HDRViewScreen::flipImage(bool h)
 {
     if (h)
-        runFilter([](HDRImage & img)
-            {
-                img = img.flippedHorizontal();
-                return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedHorizontal();});
-            });
+	    m_imageView->modifyImage([](HDRImage &img)
+	                {
+		                img = img.flippedHorizontal();
+		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedHorizontal(); });
+	                });
     else
-        runFilter([](HDRImage & img)
-           {
-               img = img.flippedVertical();
-               return new LambdaUndo([](HDRImage & img2){img2 = img2.flippedVertical();});
-           });
+	    m_imageView->modifyImage([](HDRImage &img)
+	                {
+		                img = img.flippedVertical();
+		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedVertical(); });
+	                });
 }
 
 
@@ -707,70 +454,60 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             if (modifiers & GLFW_MOD_SUPER)
             {
                 if (modifiers & GLFW_MOD_SHIFT)
-                    return redo();
-                else
-                    return undo();
+	                m_imageView->redo();
+	            else
+	                m_imageView->undo();
+
+	            return true;
             }
             return false;
 
         case GLFW_KEY_BACKSPACE:
-            closeCurrentImage();
+	        m_imageView->closeImage(m_imageView->currentImageIndex());
             return true;
         case 'W':
             if (modifiers & GLFW_MOD_SUPER)
             {
-                closeCurrentImage();
+	            m_imageView->closeImage(m_imageView->currentImageIndex());
                 return true;
             }
             return false;
 
         case '=':
         case GLFW_KEY_KP_ADD:
-            if (m_zoom < 20) m_zoom++;
-            m_zoomf = powf(2.0f, m_zoom/2.0f);
+            m_imageView->setZoomLevel(m_imageView->zoomLevel()+1);
             updateZoomLabel();
             return true;
 
         case '-':
         case GLFW_KEY_KP_SUBTRACT:
-            if (m_zoom > -20) m_zoom--;
-            m_zoomf = powf(2.0f, m_zoom/2.0f);
+	        m_imageView->setZoomLevel(m_imageView->zoomLevel()-1);
             updateZoomLabel();
             return true;
         case '[':
             if (modifiers & GLFW_MOD_SUPER)
             {
-                sendLayerBackward();
+                m_imageView->sendLayerBackward();
                 return true;
             }
         case ']':
             if (modifiers & GLFW_MOD_SUPER)
             {
-                bringLayerForeward();
+	            m_imageView->bringLayerForward();
                 return true;
             }
         case 'G':
             if (modifiers & GLFW_MOD_SHIFT)
-                m_gamma += 0.02f;
+	            m_imageView->setGamma(m_imageView->gamma() + 0.02f);
             else
-            {
-                m_gamma -= 0.02f;
-                if (m_gamma <= 0.0f)
-                    m_gamma = 0.02f;
-            }
-            m_gammaSlider->setValue(m_gamma);
-            m_gammaTextBox->setValue(m_gamma);
+	            m_imageView->setGamma(max(0.02f, m_imageView->gamma() - 0.02f));
             return true;
 
         case 'E':
             if (modifiers & GLFW_MOD_SHIFT)
-                changeExposure(m_exposure + 0.25f);
+	            m_imageView->setExposure(m_imageView->exposure() + 0.25f);
             else
-                changeExposure(m_exposure - 0.25f);
-            return true;
-
-        case 'D':
-            m_dither->setChecked(!m_dither->checked());
+	            m_imageView->setExposure(m_imageView->exposure() - 0.25f);
             return true;
 
         case 'F':
@@ -782,21 +519,19 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             flipImage(true);
             return true;
 
-        case ' ':
-            m_imagePan = Vector2f::Zero();
+        case ' ': m_imageView->setOffset(Vector2f::Zero());
             drawAll();
             return true;
 
-        case GLFW_KEY_HOME:
-            m_imagePan = Vector2f::Zero();
-            m_zoom = 0;
-            m_zoomf = 1.0f;
+        case GLFW_KEY_HOME: m_imageView->setOffset(Vector2f::Zero());
+		    m_imageView->setZoomLevel(0);
             updateZoomLabel();
             drawAll();
             return true;
 
         case 'T':
             m_topPanel->setVisible(!m_topPanel->visible());
+		    performLayout();
             return true;
 
         case 'H':
@@ -808,30 +543,31 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case 'L':
             m_sidePanel->setVisible(!m_sidePanel->visible());
             m_layersButton->setPushed(m_sidePanel->visible());
+		    performLayout();
             return true;
 
         case GLFW_KEY_PAGE_DOWN:
         case GLFW_KEY_DOWN:
-            if (!m_images.empty())
-                setSelectedLayer((m_current+1) % int(m_images.size()));
+            if (m_imageView->numImages())
+	            m_imageView->selectLayer(mod(m_imageView->currentImageIndex()+1, m_imageView->numImages()));
             break;
 
         case GLFW_KEY_PAGE_UP:
         case GLFW_KEY_UP:
-            setSelectedLayer((m_current-1 < 0) ? int(m_images.size()-1) : (m_current-1) % int(m_images.size()));
+	        m_imageView->selectLayer(mod(m_imageView->currentImageIndex()-1, m_imageView->numImages()));
             break;
 
         case '1':
-            m_channels = Vector3f(1.0f, 0.0f, 0.0f);
+	        m_imageView->setChannel(Vector3f(1.0f, 0.0f, 0.0f));
             return true;
         case '2':
-            m_channels = Vector3f(0.0f, 1.0f, 0.0f);
+	        m_imageView->setChannel(Vector3f(0.0f, 1.0f, 0.0f));
             return true;
         case '3':
-            m_channels = Vector3f(0.0f, 0.0f, 1.0f);
+	        m_imageView->setChannel(Vector3f(0.0f, 0.0f, 1.0f));
             return true;
         case '4':
-            m_channels = Vector3f(1.0f, 1.0f, 1.0f);
+	        m_imageView->setChannel(Vector3f(1.0f, 1.0f, 1.0f));
             return true;
     }
     return false;
@@ -846,19 +582,21 @@ void HDRViewScreen::performLayout()
     int topPanelHeight = m_topPanel->preferredSize(mNVGContext).y();
     m_topPanel->setSize(Vector2i(width(), topPanelHeight));
 
+	topPanelHeight = m_topPanel->visible() ? topPanelHeight : 0;
+
     // put the status bar full-width at the bottom
     m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)));
     m_statusBar->setPosition(Vector2i(0, height()-m_statusBar->height()));
 
-    int sidePanelHeight = height() - m_topPanel->height() - m_statusBar->height();
+    int sidePanelHeight = height() - topPanelHeight - m_statusBar->height();
 
     m_sidePanelContents->setFixedWidth(195);
     m_sideScrollPanel->setFixedWidth(195+12);
 
     // put the side panel directly below the top panel on the left side
+	int sidePanelWidth = 195+12;
     m_sidePanel->setPosition(Vector2i(0, topPanelHeight));
-    m_sidePanel->setSize(Vector2i(195+12, sidePanelHeight));
-
+    m_sidePanel->setSize(Vector2i(sidePanelWidth, sidePanelHeight));
 
     int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
     m_zoomLabel->setWidth(zoomWidth);
@@ -866,6 +604,10 @@ void HDRViewScreen::performLayout()
 
     int lheight2 = std::min(sidePanelHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
     m_sideScrollPanel->setFixedHeight(lheight2);
+
+	sidePanelWidth = m_sidePanel->visible() ? sidePanelWidth : 0;
+	m_imageView->setPosition(Vector2i(sidePanelWidth, topPanelHeight));
+	m_imageView->setSize(Vector2i(std::max(0, width()-sidePanelWidth), sidePanelHeight));
 }
 
 
@@ -881,7 +623,7 @@ bool HDRViewScreen::resizeEvent(const Vector2i &)
 bool HDRViewScreen::scrollEvent(const Vector2i &p, const Vector2f &rel)
 {
     if (!Screen::scrollEvent(p, rel))
-        m_imagePan += (8 * rel) / m_zoomf;
+	    m_imageView->moveOffset((8 * rel).cast<int>());
     return false;
 }
 
@@ -908,19 +650,19 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
 {
     if (m_drag && button & (1 << GLFW_MOUSE_BUTTON_1))
     {
-        m_imagePan += rel.cast<float>() / m_zoomf;
+	    m_imageView->moveOffset(rel);
         return true;
     }
 
     if (Screen::mouseMotionEvent(p, rel, button, modifiers))
         return true;
 
-    Vector2i pixel = screenToImage(p);
-    const GLImage * img = currentImage();
+    Vector2i pixel = m_imageView->screenToImage(p);
+    const GLImage * img = m_imageView->currentImage();
     if (img && (pixel.array() >= 0).all() && (pixel.array() < img->size().array()).all())
     {
         Color4 pixelVal = img->image()(pixel.x(), pixel.y());
-        Color4 iPixelVal = (pixelVal * powf(2.0f, m_exposure) * 255).min(255.0f).max(0.0f);
+        Color4 iPixelVal = (pixelVal * powf(2.0f, m_imageView->exposure()) * 255).min(255.0f).max(0.0f);
         string s =
             fmt::format("({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
                  pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
@@ -937,7 +679,7 @@ bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int
 
 void HDRViewScreen::updateZoomLabel()
 {
-    float realZoom = m_zoomf * pixelRatio();
+    float realZoom = m_imageView->zoom() * pixelRatio();
     int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
     int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
     string cap = fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2);
@@ -947,162 +689,5 @@ void HDRViewScreen::updateZoomLabel()
 
 void HDRViewScreen::drawContents()
 {
-    performLayout();
-    const GLImage * img = currentImage();
-    if (img)
-    {
-
-        Matrix4f trans;
-        trans.setIdentity();
-        trans.rightCols<1>() = Vector4f( 2 * m_imagePan[0]/size().x(),
-                                        -2 * m_imagePan[1]/size().y(),
-                                         0.0f, 1.0f);
-        Matrix4f scale;
-        scale.setIdentity();
-        scale(0,0) = m_zoomf;
-        scale(1,1) = m_zoomf;
-
-        Matrix4f imageScale;
-        imageScale.setIdentity();
-        imageScale(0,0) = float(img->size()[0]) / size().x();
-        imageScale(1,1) = float(img->size()[1]) / size().y();
-
-        Matrix4f mvp;
-        mvp.setIdentity();
-        mvp = scale * trans * imageScale;
-
-        m_ditherer.bind();
-        img->draw(mvp, powf(2.0f, m_exposure), m_gamma, m_sRGB->checked(), m_dither->checked(), m_channels);
-
-        drawPixelLabels();
-        drawPixelGrid(mvp);
-    }
-}
-
-
-void HDRViewScreen::drawPixelGrid(const Matrix4f &mvp) const
-{
-    const GLImage * img = currentImage();
-    if (!m_drawGrid->checked() || m_zoomf < 8 || !img)
-        return;
-
-    Vector2i xy0 = topLeftImageCorner2Screen();
-    int minJ = max(0, int(-xy0.y() / m_zoomf));
-    int maxJ = min(img->height(), int(ceil((size().y() - xy0.y())/m_zoomf)));
-    int minI = max(0, int(-xy0.x() / m_zoomf));
-    int maxI = min(img->width(), int(ceil((size().x() - xy0.x())/m_zoomf)));
-
-    nvgBeginPath(mNVGContext);
-
-    // draw vertical lines
-    for (int i = minI; i <= maxI; ++i)
-    {
-        Vector2i sxy0 = imageToScreen(Vector2i(i,minJ));
-        Vector2i sxy1 = imageToScreen(Vector2i(i,maxJ));
-        nvgMoveTo(mNVGContext, sxy0.x(), sxy0.y());
-        nvgLineTo(mNVGContext, sxy1.x(), sxy1.y());
-    }
-
-    // draw horizontal lines
-    for (int j = minJ; j <= maxJ; ++j)
-    {
-        Vector2i sxy0 = imageToScreen(Vector2i(minI, j));
-        Vector2i sxy1 = imageToScreen(Vector2i(maxI, j));
-        nvgMoveTo(mNVGContext, sxy0.x(), sxy0.y());
-        nvgLineTo(mNVGContext, sxy1.x(), sxy1.y());
-    }
-
-    nvgStrokeWidth(mNVGContext, 2.0f);
-    nvgStrokeColor(mNVGContext, Color(1.0f, 1.0f, 1.0f, 0.2f));
-    nvgStroke(mNVGContext);
-}
-
-void
-HDRViewScreen::drawPixelLabels() const
-{
-    const GLImage * img = currentImage();
-    // if pixels are big enough, draw color labels on each visible pixel
-    if (!m_drawValues->checked() || m_zoomf < 32 || !img)
-        return;
-
-    Vector2i xy0 = topLeftImageCorner2Screen();
-    int minJ = max(0, int(-xy0.y() / m_zoomf));
-    int maxJ = min(img->height()-1, int(ceil((size().y() - xy0.y())/m_zoomf)));
-    int minI = max(0, int(-xy0.x() / m_zoomf));
-    int maxI = min(img->width()-1, int(ceil((size().x() - xy0.x())/m_zoomf)));
-    for (int j = minJ; j <= maxJ; ++j)
-    {
-        for (int i = minI; i <= maxI; ++i)
-        {
-            Color4 pixel = img->image()(i, j);
-
-            float luminance = pixel.luminance() * pow(2.0f, m_exposure);
-
-            string text = fmt::format("{:1.3f}\n{:1.3f}\n{:1.3f}", pixel[0], pixel[1], pixel[2]);
-
-            drawText(imageToScreen(Vector2i(i,j)), text,
-                     luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f),
-                     int(m_zoomf/32.0f * 10), int(m_zoomf));
-        }
-    }
-}
-
-
-void
-HDRViewScreen::drawText(const Vector2i & pos,
-                              const string & text,
-                              const Color & color,
-                              int fontSize,
-                              int fixedWidth) const
-{
-    nvgFontFace(mNVGContext, "sans");
-    nvgFontSize(mNVGContext, (float) fontSize);
-    nvgFillColor(mNVGContext, color);
-    if (fixedWidth > 0)
-    {
-        nvgTextAlign(mNVGContext, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-        nvgTextBox(mNVGContext, (float) pos.x(), (float) pos.y(), (float) fixedWidth, text.c_str(), nullptr);
-    }
-    else
-    {
-        nvgTextAlign(mNVGContext, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-        nvgText(mNVGContext, (float) pos.x(), (float) pos.y() + fontSize, text.c_str(), nullptr);
-    }
-}
-
-Vector2i HDRViewScreen::topLeftImageCorner2Screen() const
-{
-    const GLImage * img = currentImage();
-    if (!img)
-        return Vector2i(0,0);
-
-    return Vector2i(int(m_imagePan[0] * m_zoomf) + int(-img->size()[0] / 2.0 * m_zoomf) + int(size().x() / 2.0f),
-                    int(m_imagePan[1] * m_zoomf) + int(-img->size()[1] / 2.0 * m_zoomf) + int(size().y() / 2.0f));
-}
-
-Vector2i HDRViewScreen::imageToScreen(const Vector2i & pixel) const
-{
-    const GLImage * img = currentImage();
-    if (!img)
-        return Vector2i(0,0);
-
-    Vector2i sxy(pixel.x() * m_zoomf, pixel.y() * m_zoomf);
-    sxy += topLeftImageCorner2Screen();
-    return sxy;
-}
-
-Vector2i HDRViewScreen::screenToImage(const Vector2i & p) const
-{
-    const GLImage * img = currentImage();
-    if (!img)
-        return Vector2i(0,0);
-
-    Vector2i xy0 = topLeftImageCorner2Screen();
-
-    Vector2i xy(int(floor((p[0] - xy0.x()) / m_zoomf)),
-                int(floor((p[1] - xy0.y()) / m_zoomf)));
-    if (false) xy[0] = img->width() - 1 - xy[0];
-    if (false) xy[1] = img->height() - 1 - xy[1];
-
-    return xy;
+	performLayout();
 }

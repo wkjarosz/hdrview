@@ -12,7 +12,7 @@ NAMESPACE_BEGIN(nanogui)
 class LayersPanel : public Widget
 {
 public:
-	LayersPanel(Widget *parent, HDRViewScreen * screen);
+	LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imgView);
 
 	void repopulateLayerList();
 	void enableDisableButtons();
@@ -20,6 +20,7 @@ public:
 
 private:
 	HDRViewScreen * m_screen = nullptr;
+	HDRImageViewer * m_imageView = nullptr;
 	Button * m_saveButton = nullptr;
 	Widget * m_layerListWidget = nullptr;
 	std::vector<Button*> m_layerButtons;
