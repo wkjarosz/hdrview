@@ -5,9 +5,14 @@
 #include "layerspanel.h"
 #include "hdrviewer.h"
 #include "glimage.h"
+#include "hdrimageviewer.h"
 
-LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen)
-	: Widget(parent), m_screen(screen)
+using namespace std;
+
+NAMESPACE_BEGIN(nanogui)
+
+LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imgView)
+	: Widget(parent), m_screen(screen), m_imageView(imgView)
 {
 	setLayout(new GroupLayout(2, 4, 8, 10));
 
@@ -37,15 +42,15 @@ LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen)
 				{"psd", "Photoshop document"}
 			}, false);
 		if (file.size())
-			m_screen->dropEvent({file});
+			m_imageView->loadImages({file});
 	});
 
 	m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
-	m_saveButton->setEnabled(m_screen->currentImage());
+	m_saveButton->setEnabled(m_imageView->currentImage());
 	m_saveButton->setFixedWidth(84);
 	m_saveButton->setBackgroundColor(Color(0, 0, 100, 75));
 	m_saveButton->setTooltip("Save the image to disk.");
-	m_saveButton->setCallback([&]{m_screen->saveImage();});
+	m_saveButton->setCallback([&]{m_imageView->saveImage();});
 
 	new Label(this, "Opened images:", "sans-bold");
 
@@ -68,7 +73,7 @@ void LayersPanel::repopulateLayerList()
 
 	// a GridLayout seems to cause a floating point exception when there are no
 	// images, so use a BoxLayout instead, which seems to work fine
-	if (m_screen->images().size())
+	if (m_imageView->numImages())
 	{
 		GridLayout *grid = new GridLayout(Orientation::Horizontal, 2,
 		                                  Alignment::Fill, 0, 1);
@@ -83,8 +88,10 @@ void LayersPanel::repopulateLayerList()
 	m_layerButtons.clear();
 
 	int index = 0;
-	for (const auto img : m_screen->images())
+	for (int i = 0; i < m_imageView->numImages(); ++i)
 	{
+		auto img = m_imageView->image(i);
+
 		size_t start = img->filename().rfind("/")+1;
 		string filename = img->filename().substr(start == string::npos ? 0 : start);
 		string shortname = filename;
@@ -95,13 +102,13 @@ void LayersPanel::repopulateLayerList()
 		b->setFlags(Button::RadioButton);
 		b->setTooltip(filename);
 		b->setFixedSize(Vector2i(145,25));
-		b->setCallback([&, index]{m_screen->setSelectedLayer(index);});
+		b->setCallback([&, index]{m_imageView->selectLayer(index);});
 		m_layerButtons.push_back(b);
 
 		// create a close button for the layer
 		b = new Button(m_layerListWidget, "", ENTYPO_ICON_ERASE);
 		b->setFixedSize(Vector2i(25,25));
-		b->setCallback([&, index]{m_screen->closeImage(index);});
+		b->setCallback([&, index]{m_imageView->closeImage(index);});
 
 		index++;
 	}
@@ -116,7 +123,7 @@ void LayersPanel::repopulateLayerList()
 void LayersPanel::enableDisableButtons()
 {
 	if (m_saveButton)
-		m_saveButton->setEnabled(m_screen->currentImage());
+		m_saveButton->setEnabled(m_imageView->currentImage());
 }
 
 void LayersPanel::selectLayer(int newIndex)
@@ -129,3 +136,5 @@ void LayersPanel::selectLayer(int newIndex)
 	if (newIndex >= 0 && newIndex < int(m_layerButtons.size()))
 		m_layerButtons[newIndex]->setPushed(true);
 }
+
+NAMESPACE_END(nanogui)

@@ -77,9 +77,9 @@ HistogramPanel::HistogramPanel(Widget *parent)
 	});
 }
 
-void HistogramPanel::setImage(const HDRImage & img)
+void HistogramPanel::setImage(const HDRImage * img)
 {
-	m_image = &img;
+	m_image = img;
 	update();
 }
 

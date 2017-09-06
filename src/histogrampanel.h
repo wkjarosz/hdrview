@@ -14,7 +14,7 @@ class HistogramPanel : public Widget
 public:
 	HistogramPanel(Widget *parent);
 
-	void setImage(const HDRImage & img);
+	void setImage(const HDRImage * img);
 	void clear();
 	void update();
 

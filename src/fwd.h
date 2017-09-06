@@ -11,7 +11,7 @@ class GLDitherTexture;
 class ImageCommandUndo;
 class FullImageUndo;
 class LambdaUndo;
-class UndoHistory;
+class CommandHistory;
 class GLImage;
 class HDRImage;
 class HDRViewScreen;
@@ -32,6 +32,7 @@ namespace nanogui { class LayersPanel; }
 namespace nanogui { template <typename Scalar> class FloatBox; }
 namespace nanogui { class GLShader; }
 namespace nanogui { class MultiGraph; }
+namespace nanogui { class HDRImageViewer; }
 
 
 namespace spdlog { class logger; }
