@@ -44,8 +44,10 @@ public:
     int width() const               {return m_image.width();}
     int height() const              {return m_image.height();}
     Eigen::Vector2i size() const    {return Eigen::Vector2i(width(), height());}
+    bool contains(const Eigen::Vector2i& p) const {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
 
-    void draw(const Eigen::Matrix4f & mvp,
+    void draw(const Eigen::Vector2f & scale,
+              const Eigen::Vector2f & position,
               float gain, float gamma,
               bool sRGB, bool dither,
               const Eigen::Vector3f & channels) const;

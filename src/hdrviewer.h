@@ -24,11 +24,7 @@ public:
     void drawContents() override;
     bool dropEvent(const std::vector<std::string> &filenames) override;
     bool keyboardEvent(int key, int scancode, int action, int modifiers) override;
-    bool mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers) override;
-    bool mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
-    bool resizeEvent(const Vector2i &) override;
-    bool scrollEvent(const Vector2i &p, const Vector2f &rel) override;
-    void performLayout();
+//    void performLayout();
 
 	void saveImage();
 	void askCloseImage(int index);
@@ -36,17 +32,16 @@ public:
 	void clearFocusPath() {mFocusPath.clear();}
 
 private:
-
+	void updateLayout();
     void closeCurrentImage();
     void updateCaption();
 
-    void updateZoomLabel();
+	Widget * m_verticalScreenSplit = nullptr,
+		   * m_horizontalScreenSplit = nullptr;
 
-    bool m_drag = false;
-
-	Window * m_topPanel = nullptr;
-	Window * m_sidePanel = nullptr;
-	Window * m_statusBar = nullptr;
+	Widget * m_topPanel = nullptr;
+	Widget * m_sidePanel = nullptr;
+	Widget * m_statusBar = nullptr;
 	HDRImageViewer * m_imageView = nullptr;
 	HDRImageManager * m_imageMgr;
 

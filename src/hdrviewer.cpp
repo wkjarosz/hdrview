@@ -21,7 +21,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_imageMgr(new HDRImageManager()),
     console(spdlog::get("console"))
 {
-    setBackground(Vector3f(0.1f, 0.1f, 0.1f));
+    setBackground(Color(0.23f, 1.0f));
 
     Theme * thm = new Theme(mNVGContext);
     thm->mStandardFontSize     = 16;
@@ -29,31 +29,31 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     thm->mTextBoxFontSize      = 14;
     setTheme(thm);
 
-    thm = new Theme(mNVGContext);
-    thm->mStandardFontSize     = 16;
-    thm->mButtonFontSize       = 15;
-    thm->mTextBoxFontSize      = 14;
-    thm->mButtonCornerRadius   = 2;
-    thm->mWindowHeaderHeight   = 0;
-    thm->mWindowDropShadowSize = 0;
-    thm->mWindowCornerRadius   = 0;
-    thm->mWindowFillFocused    = Color(.2f,.2f,.2f,.9f);
-    thm->mWindowFillUnfocused  = Color(.2f,.2f,.2f,.9f);
+	m_verticalScreenSplit = new Widget(this);
+	m_verticalScreenSplit->setLayout(new BoxLayout{Orientation::Vertical, Alignment::Fill});
 
-	m_imageView = new HDRImageViewer(this);
+	m_topPanel = new Widget(m_verticalScreenSplit);
+	m_topPanel->setFixedHeight(30);
+	m_topPanel->setLayout(new BoxLayout(Orientation::Horizontal,
+	                                    Alignment::Middle, 5, 5));
 
-    m_topPanel = new Window(this, "");
-    m_topPanel->setId("top panel");
-    m_topPanel->setTheme(thm);
-    m_topPanel->setPosition(Vector2i(0, 0));
-    m_topPanel->setLayout(new BoxLayout(Orientation::Horizontal,
-                                            Alignment::Middle, 5, 5));
+	m_horizontalScreenSplit = new Widget(m_verticalScreenSplit);
+	m_horizontalScreenSplit->setLayout(new BoxLayout{Orientation::Horizontal, Alignment::Fill});
+
+	m_sidePanel = new Widget(m_horizontalScreenSplit);
+	m_sidePanel->setFixedWidth(207);
+	m_sidePanel->setVisible(false);
+
+	m_imageView = new HDRImageViewer(m_horizontalScreenSplit, this);
+	m_imageView->setGridThreshold(20);
+	m_imageView->setPixelInfoThreshold(20);
+
+	m_statusBar = new Widget(m_verticalScreenSplit);
+	m_statusBar->setFixedHeight(m_statusBar->theme()->mTextBoxFontSize+1);
 
     //
     // create status bar widgets
     //
-    m_statusBar = new Window(this, "");
-    m_statusBar->setTheme(thm);
 
     m_pixelInfoLabel = new Label(m_statusBar, "", "sans");
     m_pixelInfoLabel->setFontSize(thm->mTextBoxFontSize);
@@ -65,14 +65,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
     // create side panel
     //
-    m_sidePanel = new Window(this, "");
-    m_sidePanel->setId("layers");
-    m_sidePanel->setTheme(thm);
 
     m_sideScrollPanel = new VScrollPanel(m_sidePanel);
     m_sidePanelContents = new Widget(m_sideScrollPanel);
     m_sidePanelContents->setLayout(new BoxLayout(Orientation::Vertical,
                                                  Alignment::Fill, 4, 4));
+	m_sidePanelContents->setFixedWidth(195);
+    m_sideScrollPanel->setFixedWidth(195+12);
 
     //
     // create file/layers panel
@@ -89,7 +88,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                              {
                                  w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
                                  m_layersPanel->setVisible(value);
-                                 performLayout();
+	                             updateLayout();
 	                             m_sidePanelContents->performLayout(mNVGContext);
                              });
     }
@@ -115,7 +114,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
              {
                  w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
                  w2->setVisible(value);
-                 performLayout();
+	             updateLayout();
 	             m_sidePanelContents->performLayout(mNVGContext);
              });
     }
@@ -137,7 +136,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
          {
              w->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
              m_editPanel->setVisible(value);
-             performLayout();
+	         updateLayout();
 	         m_sidePanelContents->performLayout(mNVGContext);
          });
     }
@@ -166,7 +165,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 "HDRView is a simple research-oriented tool for examining, "
                 "comparing, and converting high-dynamic range images.\n\n"
                 "HDRView is freely available under a 3-clause BSD license.");
-            performLayout();
+	        updateLayout();
             dlg->center();
         });
 
@@ -186,7 +185,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_layersButton->setChangeCallback([&](bool value)
         {
             m_sidePanel->setVisible(value);
-            performLayout();
+	        updateLayout();
         });
 
 
@@ -240,6 +239,36 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                                  });
 	    m_imageView->setExposure(exposure);
 	    m_imageView->setGamma(gamma);
+	    m_imageView
+		    ->setPixelHoverCallback([&](const Vector2i &pixelCoord, const Color4 &pixelVal, const Color4 &iPixelVal)
+		                            {
+			                            auto img = m_imageMgr->currentImage();
+
+			                            if (img && img->contains(pixelCoord))
+			                            {
+				                            string s = fmt::format(
+					                            "({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
+					                            pixelCoord.x(), pixelCoord.y(),
+					                            pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
+					                            (int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
+					                            (int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
+				                            m_pixelInfoLabel->setCaption(s);
+			                            }
+			                            else
+				                            m_pixelInfoLabel->setCaption("");
+
+			                            m_statusBar->performLayout(mNVGContext);
+		                            });
+
+	    m_imageView->setZoomCallback([&](float zoom)
+                                    {
+	                                    float realZoom = zoom * pixelRatio();
+	                                    int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
+	                                    int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
+	                                    m_zoomLabel->setCaption(fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2));
+	                                    updateLayout();
+                                    });
+
 
 
 	    m_imageMgr->setLayerSelectedCallback([&](int i)
@@ -277,7 +306,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             gammaTextBox->setEnabled(!value);
             gammaLabel->setEnabled(!value);
             gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);
-            performLayout();
+	        updateLayout();
         });
 
 	    sRGB->setChecked(sRGB);
@@ -349,11 +378,15 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             });
     }
 
-    updateZoomLabel();
+	setResizeCallback([&](Vector2i)
+	                  {
+		                  if (m_helpDialog->visible())
+			                  m_helpDialog->center();
+		                  updateLayout();
+		                  drawAll();
+	                  });
 
-
-    m_sidePanel->setVisible(false);
-	performLayout();
+	this->setSize(Vector2i(1024, 800));
 
     drawAll();
     setVisible(true);
@@ -529,14 +562,12 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 
         case '=':
         case GLFW_KEY_KP_ADD:
-            m_imageView->setZoomLevel(m_imageView->zoomLevel()+1);
-            updateZoomLabel();
+		    m_imageView->zoomIn();
             return true;
 
         case '-':
         case GLFW_KEY_KP_SUBTRACT:
-	        m_imageView->setZoomLevel(m_imageView->zoomLevel()-1);
-            updateZoomLabel();
+		    m_imageView->zoomOut();
             return true;
         case '[':
             if (modifiers & GLFW_MOD_SUPER)
@@ -574,20 +605,19 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case ' ':
-	        m_imageView->setOffset(Vector2f::Zero());
+	        m_imageView->center();
             drawAll();
             return true;
 
         case GLFW_KEY_HOME:
-	        m_imageView->setOffset(Vector2f::Zero());
-		    m_imageView->setZoomLevel(0);
-            updateZoomLabel();
+	        m_imageView->center();
+		    m_imageView->fit();
             drawAll();
             return true;
 
         case 'T':
             m_topPanel->setVisible(!m_topPanel->visible());
-		    performLayout();
+		    updateLayout();
             return true;
 
         case 'H':
@@ -599,7 +629,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case 'L':
             m_sidePanel->setVisible(!m_sidePanel->visible());
             m_layersButton->setPushed(m_sidePanel->visible());
-		    performLayout();
+		    updateLayout();
             return true;
 
         case GLFW_KEY_PAGE_DOWN:
@@ -629,121 +659,31 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
     return false;
 }
 
-void HDRViewScreen::performLayout()
+
+void HDRViewScreen::updateLayout()
 {
-    Screen::performLayout();
+	int headerHeight = m_topPanel->visible() ? m_topPanel->fixedHeight() : 0;
+	int sidePanelWidth = m_sidePanel->visible() ? m_sidePanel->fixedWidth() : 0;
+	int footerHeight = m_statusBar->visible() ? m_statusBar->fixedHeight() : 0;
 
-    // make the top panel full-width
-    m_topPanel->setPosition(Vector2i(0,0));
-    int topPanelHeight = m_topPanel->preferredSize(mNVGContext).y();
-    m_topPanel->setSize(Vector2i(width(), topPanelHeight));
+	int middleHeight = height() - headerHeight - footerHeight;
 
-	topPanelHeight = m_topPanel->visible() ? topPanelHeight : 0;
+	m_imageView->setFixedSize(mSize - Vector2i(sidePanelWidth, headerHeight+footerHeight));
+	m_sidePanel->setFixedHeight(middleHeight);
 
-    // put the status bar full-width at the bottom
-    m_statusBar->setSize(Vector2i(width(), (m_statusBar->theme()->mTextBoxFontSize+4)));
-    m_statusBar->setPosition(Vector2i(0, height()-m_statusBar->height()));
+	m_verticalScreenSplit->setFixedSize(mSize);
 
-    int sidePanelHeight = height() - topPanelHeight - m_statusBar->height();
+	int lh = std::min(middleHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
+	m_sideScrollPanel->setFixedHeight(lh);
 
-    m_sidePanelContents->setFixedWidth(195);
-    m_sideScrollPanel->setFixedWidth(195+12);
-
-    // put the side panel directly below the top panel on the left side
-	int sidePanelWidth = 195+12;
-    m_sidePanel->setPosition(Vector2i(0, topPanelHeight));
-    m_sidePanel->setSize(Vector2i(sidePanelWidth, sidePanelHeight));
-
-    int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
+	int zoomWidth = m_zoomLabel->preferredSize(mNVGContext).x();
     m_zoomLabel->setWidth(zoomWidth);
     m_zoomLabel->setPosition(Vector2i(width()-zoomWidth-6, 0));
 
-    int lheight2 = std::min(sidePanelHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
-    m_sideScrollPanel->setFixedHeight(lheight2);
-
-	sidePanelWidth = m_sidePanel->visible() ? sidePanelWidth : 0;
-	m_imageView->setPosition(Vector2i(sidePanelWidth, topPanelHeight));
-	m_imageView->setSize(Vector2i(std::max(0, width()-sidePanelWidth), sidePanelHeight));
-}
-
-
-bool HDRViewScreen::resizeEvent(const Vector2i &)
-{
-    if (m_helpDialog->visible())
-        m_helpDialog->center();
-    performLayout();
-    drawAll();
-    return true;
-}
-
-bool HDRViewScreen::scrollEvent(const Vector2i &p, const Vector2f &rel)
-{
-    if (!Screen::scrollEvent(p, rel))
-	    m_imageView->moveOffset((8 * rel).cast<int>());
-    return false;
-}
-
-bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
-{
-    // only set drag state if the other widgets aren't taking the event and
-    // we are over the main canvas
-    if (Screen::mouseButtonEvent(p, button, down, modifiers) ||
-        (m_sidePanel->visible() && m_sidePanel->contains(p)) ||
-        (m_topPanel->visible() && m_topPanel->contains(p)) ||
-        (m_statusBar->visible() && m_statusBar->contains(p)))
-    {
-        m_drag = false;
-        return true;
-    }
-
-    m_drag = down && button == GLFW_MOUSE_BUTTON_1;
-
-    return true;
-}
-
-
-bool HDRViewScreen::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
-{
-    if (m_drag && button & (1 << GLFW_MOUSE_BUTTON_1))
-    {
-	    m_imageView->moveOffset(rel);
-        return true;
-    }
-
-    if (Screen::mouseMotionEvent(p, rel, button, modifiers))
-        return true;
-
-    Vector2i pixel = m_imageView->screenToImage(p);
-    auto img = m_imageMgr->currentImage();
-    if (img && (pixel.array() >= 0).all() && (pixel.array() < img->size().array()).all())
-    {
-        Color4 pixelVal = img->image()(pixel.x(), pixel.y());
-        Color4 iPixelVal = (pixelVal * powf(2.0f, m_imageView->exposure()) * 255).min(255.0f).max(0.0f);
-        string s =
-            fmt::format("({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
-                 pixel.x(), pixel.y(), pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
-                 (int)round(iPixelVal[0]), (int)round(iPixelVal[1]), (int)round(iPixelVal[2]), (int)round(iPixelVal[3]));
-        m_pixelInfoLabel->setCaption(s);
-    }
-    else
-        m_pixelInfoLabel->setCaption("");
-
-    m_statusBar->performLayout(mNVGContext);
-
-    return true;
-}
-
-void HDRViewScreen::updateZoomLabel()
-{
-    float realZoom = m_imageView->zoom() * pixelRatio();
-    int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
-    int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-    string cap = fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2);
-    m_zoomLabel->setCaption(cap);
-    performLayout();
+	performLayout();
 }
 
 void HDRViewScreen::drawContents()
 {
-	performLayout();
+	updateLayout();
 }
