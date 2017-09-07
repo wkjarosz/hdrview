@@ -33,9 +33,9 @@ public:
 	void saveImage(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
 	               bool sRGB = true, bool dither = true);
 	void closeImage(int index);
-	void sendLayerBackward();
-	void bringLayerForward();
-	void selectLayer(int index, bool forceCallback = false);
+	void sendImageBackward();
+	void bringImageForward();
+	void selectImage(int index, bool forceCallback = false);
 
 	// Modify the image data
 	void modifyImage(const std::function<ImageCommandUndo*(HDRImage & img)> & command);
@@ -48,21 +48,21 @@ public:
 	const std::function<void(int)>& imageChangedCallback() const { return m_imageChangedCallback; }
 	void setImageChangedCallback(const std::function<void(int)> &callback) { m_imageChangedCallback = callback; }
 
-	/// Callback executed whenever the number of layers/images has been changed, e.g. via @ref loadImages or closeImage
-	const std::function<void(void)>& numLayersCallback() const { return m_numLayersCallback; }
-	void setNumLayersCallback(const std::function<void(void)> &callback) { m_numLayersCallback = callback; }
+	/// Callback executed whenever the number of images has been changed, e.g. via @ref loadImages or closeImage
+	const std::function<void(void)>& numImagesCallback() const { return m_numImagesCallback; }
+	void setNumImagesCallback(const std::function<void(void)> &callback) { m_numImagesCallback = callback; }
 
-	/// Callback executed whenever the currently selected layer has been changed, e.g. via @ref selectLayer
-	const std::function<void(int)>& layerSelectedCallback() const { return m_layerSelectedCallback; }
-	void setLayerSelectedCallback(const std::function<void(int)> &callback) { m_layerSelectedCallback = callback; }
+	/// Callback executed whenever the currently selected image has been changed, e.g. via @ref selectImage
+	const std::function<void(int)>& imageSelectedCallback() const { return m_imageSelectedCallback; }
+	void setImageSelectedCallback(const std::function<void(int)> &callback) { m_imageSelectedCallback = callback; }
 
 private:
 
 	std::vector<GLImage*> m_images;         ///< The loaded images
-	int m_current = -1;                     ///< The currently selected image/layer
+	int m_current = -1;                     ///< The currently selected image
 
 	// various callback functions
 	std::function<void(int)> m_imageChangedCallback;
-	std::function<void(void)> m_numLayersCallback;
-	std::function<void(int)> m_layerSelectedCallback;
+	std::function<void(void)> m_numImagesCallback;
+	std::function<void(int)> m_imageSelectedCallback;
 };

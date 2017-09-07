@@ -31,7 +31,7 @@ namespace nanogui { class VScrollPanel; }
 namespace nanogui { class Window; }
 namespace nanogui { class EditImagePanel; }
 namespace nanogui { class HistogramPanel; }
-namespace nanogui { class LayersPanel; }
+namespace nanogui { class ImageListPanel; }
 namespace nanogui { template <typename Scalar> class FloatBox; }
 namespace nanogui { class GLShader; }
 namespace nanogui { class MultiGraph; }

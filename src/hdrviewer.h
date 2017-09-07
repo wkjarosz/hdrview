@@ -43,7 +43,7 @@ private:
 	HDRImageManager * m_imageMgr;
 
     Button * m_helpButton = nullptr;
-    Button * m_layersButton = nullptr;
+    Button * m_sidePanelButton = nullptr;
 	HelpWindow* m_helpWindow = nullptr;
 	Label * m_zoomLabel = nullptr;
 	Label * m_pixelInfoLabel = nullptr;

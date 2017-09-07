@@ -2,7 +2,7 @@
 // Created by Wojciech Jarosz on 9/4/17.
 //
 
-#include "layerspanel.h"
+#include "imagelistpanel.h"
 #include "hdrviewer.h"
 #include "glimage.h"
 #include "hdrimagemanager.h"
@@ -12,7 +12,7 @@ using namespace std;
 
 NAMESPACE_BEGIN(nanogui)
 
-LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr)
+ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr)
 	: Widget(parent), m_screen(screen), m_imageMgr(imgMgr)
 {
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
@@ -36,12 +36,12 @@ LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager
 	m_bringForwardButton = new Button(buttonRow, "", ENTYPO_ICON_UP_BOLD);
 	m_bringForwardButton->setFixedSize(Vector2i(25, 25));
 	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
-	m_bringForwardButton->setCallback([this]{m_imageMgr->bringLayerForward();});
+	m_bringForwardButton->setCallback([this]{ m_imageMgr->bringImageForward();});
 
 	m_sendBackwardButton = new Button(buttonRow, "", ENTYPO_ICON_DOWN_BOLD);
 	m_sendBackwardButton->setFixedSize(Vector2i(25, 25));
 	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
-	m_sendBackwardButton->setCallback([this]{m_imageMgr->sendLayerBackward();});
+	m_sendBackwardButton->setCallback([this]{ m_imageMgr->sendImageBackward();});
 
 	m_closeButton = new Button(buttonRow, "", ENTYPO_ICON_CIRCLED_CROSS);
 	m_closeButton->setFixedSize(Vector2i(25, 25));
@@ -50,32 +50,32 @@ LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager
 }
 
 
-void LayersPanel::repopulateLayerList()
+void ImageListPanel::repopulateImageList()
 {
 	// this currently just clears all the widgets and recreates all of them
 	// from scratch. this doesn't scale, but should be fine unless you have a
 	// lot of images, and makes the logic a lot simpler.
 
 	// clear everything
-	if (m_layerListWidget)
-		removeChild(m_layerListWidget);
+	if (m_imageListWidget)
+		removeChild(m_imageListWidget);
 
-	m_layerListWidget = new Widget(this);
-	m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+	m_imageListWidget = new Widget(this);
+	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
 
-	m_layerButtons.clear();
+	m_imageButtons.clear();
 
 	int index = 0;
 	for (int i = 0; i < m_imageMgr->numImages(); ++i)
 	{
 		auto img = m_imageMgr->image(i);
-		auto b = new ImageButton(m_layerListWidget, img->filename());
+		auto b = new ImageButton(m_imageListWidget, img->filename());
 		b->setId(i);
 		b->setIsModified(img->isModified());
 		b->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
 
-		b->setSelectedCallback([&, index]{m_imageMgr->selectLayer(index);});
-		m_layerButtons.push_back(b);
+		b->setSelectedCallback([&, index]{ m_imageMgr->selectImage(index);});
+		m_imageButtons.push_back(b);
 
 		index++;
 	}
@@ -83,7 +83,7 @@ void LayersPanel::repopulateLayerList()
 	m_screen->performLayout();
 }
 
-void LayersPanel::enableDisableButtons()
+void ImageListPanel::enableDisableButtons()
 {
 	m_saveButton->setEnabled(m_imageMgr->currentImage());
 	m_closeButton->setEnabled(m_imageMgr->currentImage());
@@ -91,15 +91,15 @@ void LayersPanel::enableDisableButtons()
 	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
 }
 
-void LayersPanel::selectLayer(int newIndex)
+void ImageListPanel::selectImage(int newIndex)
 {
-	// deselect the old layer
-	for (auto btn : m_layerButtons)
+	// deselect the old image
+	for (auto btn : m_imageButtons)
 		btn->setIsSelected(false);
 
-	// select the new layer
-	if (newIndex >= 0 && newIndex < int(m_layerButtons.size()))
-		m_layerButtons[newIndex]->setIsSelected(true);
+	// select the new image
+	if (newIndex >= 0 && newIndex < int(m_imageButtons.size()))
+		m_imageButtons[newIndex]->setIsSelected(true);
 }
 
 NAMESPACE_END(nanogui)

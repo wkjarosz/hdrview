@@ -9,14 +9,14 @@
 
 NAMESPACE_BEGIN(nanogui)
 
-class LayersPanel : public Widget
+class ImageListPanel : public Widget
 {
 public:
-	LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr);
+	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr);
 
-	void repopulateLayerList();
+	void repopulateImageList();
 	void enableDisableButtons();
-	void selectLayer(int newIndex);
+	void selectImage(int newIndex);
 
 private:
 	HDRViewScreen * m_screen = nullptr;
@@ -25,8 +25,8 @@ private:
 	Button * m_closeButton = nullptr;
 	Button * m_bringForwardButton = nullptr;
 	Button * m_sendBackwardButton = nullptr;
-	Widget * m_layerListWidget = nullptr;
-	std::vector<ImageButton*> m_layerButtons;
+	Widget * m_imageListWidget = nullptr;
+	std::vector<ImageButton*> m_imageButtons;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -63,8 +63,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/histogrampanel.h
     src/imagebutton.cpp
     src/imagebutton.h
-    src/layerspanel.cpp
-    src/layerspanel.h
+    src/imagelistpanel.cpp
+    src/imagelistpanel.h
     src/multigraph.cpp
     src/multigraph.h
     src/pfm.h

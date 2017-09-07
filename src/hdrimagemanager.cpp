@@ -11,8 +11,8 @@ using namespace nanogui;
 
 HDRImageManager::HDRImageManager()
 	: m_imageChangedCallback(std::function<void(int)>()),
-	  m_numLayersCallback(std::function<void(void)>()),
-	  m_layerSelectedCallback(std::function<void(int)>())
+	  m_numImagesCallback(std::function<void(void)>()),
+	  m_imageSelectedCallback(std::function<void(int)>())
 {
 
 }
@@ -37,12 +37,12 @@ GLImage * HDRImageManager::image(int index)
 	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 }
 
-void HDRImageManager::selectLayer(int index, bool forceCallback)
+void HDRImageManager::selectImage(int index, bool forceCallback)
 {
 	if (forceCallback || index != m_current)
 	{
 		m_current = index;
-		m_layerSelectedCallback(m_current);
+		m_imageSelectedCallback(m_current);
 	}
 }
 
@@ -132,8 +132,8 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 		tinydir_close(&dir);
 	}
 
-	m_numLayersCallback();
-	selectLayer(int(m_images.size()-1));
+	m_numImagesCallback();
+	selectImage(int(m_images.size() - 1));
 
 	if (numErrors)
 	{
@@ -172,8 +172,8 @@ void HDRImageManager::closeImage(int index)
 		else if (m_current >= int(m_images.size()))
 			newIndex = m_images.size() - 1;
 
-		selectLayer(newIndex, true);
-		m_numLayersCallback();
+		selectImage(newIndex, true);
+		m_numImagesCallback();
 	}
 }
 
@@ -198,7 +198,7 @@ void HDRImageManager::redo()
 		m_imageChangedCallback(m_current);
 }
 
-void HDRImageManager::bringLayerForward()
+void HDRImageManager::bringImageForward()
 {
 	if (m_images.empty() || m_current == 0)
 		// do nothing
@@ -208,10 +208,10 @@ void HDRImageManager::bringLayerForward()
 	m_current--;
 
 	m_imageChangedCallback(m_current);
-	m_layerSelectedCallback(m_current);
+	m_imageSelectedCallback(m_current);
 }
 
-void HDRImageManager::sendLayerBackward()
+void HDRImageManager::sendImageBackward()
 {
 	if (m_images.empty() || m_current == int(m_images.size()-1))
 		// do nothing
@@ -221,5 +221,5 @@ void HDRImageManager::sendLayerBackward()
 	m_current++;
 
 	m_imageChangedCallback(m_current);
-	m_layerSelectedCallback(m_current);
+	m_imageSelectedCallback(m_current);
 }

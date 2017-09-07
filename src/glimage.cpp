@@ -47,10 +47,10 @@ R"(
     out vec2 uv;
     void main()
     {
-        uv = vertex;
-        vec2 scaledVertex = (vertex * scaleFactor) + position;
-        gl_Position  = vec4(2.0*scaledVertex.x - 1.0,
-                            1.0 - 2.0*scaledVertex.y,
+        vec2 scaledVertex = (vertex/2.0 - position + 0.5) / scaleFactor;
+        uv = scaledVertex;
+        gl_Position  = vec4(vertex.x,
+                            -vertex.y,
                             0.0, 1.0);
     }
 )";
@@ -106,17 +106,18 @@ R"(
         float rn = sqrt(2*r+1)-1;   // negative triangle
         return (r < 0) ? rn : rp;
     }
-    float checkerboard(float period, vec2 xy)
-    {
-        return step(0.0, sin(xy.x * 3.1415926 / period) *
-                         sin(xy.y * 3.1415926 / period));
-    }
     void main()
     {
         vec4 fg = texture(source, uv);
+        if (uv.x > 1.0 || uv.x < 0.0 || uv.y > 1.0 || uv.y < 0.0)
+            fg.a = 0.0;
         fg.rgb *= gain;
         vec4 bg;
-        bg.rgb = vec3(checkerboard(8, gl_FragCoord.xy))*0.5 + 0.5;
+
+        vec3 darkGray = vec3(0.01, 0.01, 0.01);
+        vec3 lightGray = vec3(0.04, 0.04, 0.04);
+
+        bg.rgb = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? darkGray : lightGray;
         bg.a = 1.0;
         vec4 color = mix(bg, fg, fg.a);
         out_color.rgb = sRGB ? linearToSRGB(color.rgb) : pow(color.rgb, vec3(1.0/gamma));
@@ -155,10 +156,10 @@ void GLImage::init()
 	indices.col(1) << 2, 3, 1;
 
 	MatrixXf vertices(2, 4);
-	vertices.col(0) << 0, 0;
-	vertices.col(1) << 1, 0;
-	vertices.col(2) << 0, 1;
-	vertices.col(3) << 1, 1;
+	vertices.col(0) << -1, -1;
+	vertices.col(1) <<  1, -1;
+	vertices.col(2) << -1,  1;
+	vertices.col(3) <<  1,  1;
 
     m_shader->bind();
     m_shader->uploadIndices(indices);

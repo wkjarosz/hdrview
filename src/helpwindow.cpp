@@ -98,9 +98,10 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
     auto interface = new Widget(this);
     interface->setLayout(new BoxLayout{Orientation::Vertical, Alignment::Fill, 0, 0});
 
-    addRow(interface, "H", "Show Help (this Window)");
-    addRow(interface, "T", "Toggle the Top Toolbar");
-	addRow(interface, "L", "Toggle the Side Panel");
+    addRow(interface, "H", "Show/Hide Help (this Window)");
+    addRow(interface, "T", "Show/Hide the Top Toolbar");
+	addRow(interface, "Tab", "Show/Hide the Side Panel");
+	addRow(interface, "Shift+Tab", "Show/Hide All Panels");
     addRow(interface, COMMAND + "+Q or Esc", "Quit");
 }
 

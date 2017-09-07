@@ -5,7 +5,7 @@
 #include "histogrampanel.h"
 #include "glimage.h"
 #include "editimagepanel.h"
-#include "layerspanel.h"
+#include "imagelistpanel.h"
 #include <iostream>
 #include "common.h"
 #include "commandhistory.h"
@@ -78,7 +78,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
 
     //
-    // create file/layers panel
+    // create file/images panel
     //
 
     auto btn = new Button(m_sidePanelContents, "File", ENTYPO_ICON_CHEVRON_DOWN);
@@ -86,12 +86,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	btn->setFlags(Button::ToggleButton);
 	btn->setPushed(true);
 	btn->setIconPosition(Button::IconPosition::Right);
-    auto layersPanel = new LayersPanel(m_sidePanelContents, this, m_imageMgr);
+    auto imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr);
 
-	btn->setChangeCallback([this,btn,layersPanel](bool value)
+	btn->setChangeCallback([this,btn,imagesPanel](bool value)
                          {
 	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
-                             layersPanel->setVisible(value);
+                             imagesPanel->setVisible(value);
                              updateLayout();
                              m_sidePanelContents->performLayout(mNVGContext);
                          });
@@ -150,7 +150,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_helpButton->setTooltip("Information about using HDRView.");
 	m_helpButton->setFlags(Button::ToggleButton);
 
-    m_layersButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
+    m_sidePanelButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
     new Label(m_topPanel, "EV", "sans-bold");
     auto exposureSlider = new Slider(m_topPanel);
     auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
@@ -160,11 +160,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     auto gammaSlider = new Slider(m_topPanel);
     auto gammaTextBox = new FloatBox<float>(m_topPanel);
 
-    m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
-    m_layersButton->setFlags(Button::ToggleButton);
-	m_layersButton->setPushed(true);
-    m_layersButton->setFixedSize(Vector2i(25, 25));
-    m_layersButton->setChangeCallback([this](bool value)
+    m_sidePanelButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
+    m_sidePanelButton->setFlags(Button::ToggleButton);
+	m_sidePanelButton->setPushed(true);
+    m_sidePanelButton->setFixedSize(Vector2i(25, 25));
+    m_sidePanelButton->setChangeCallback([this](bool value)
     {
         m_sidePanel->setVisible(value);
         updateLayout();
@@ -249,33 +249,31 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     updateLayout();
                                 });
 
+	m_imageMgr->setImageSelectedCallback([this, imagesPanel, editPanel, histogramPanel](int i)
+	                                     {
+		                                     m_imageView->bindImage(m_imageMgr->currentImage());
+		                                     updateCaption();
+		                                     imagesPanel->enableDisableButtons();
+		                                     editPanel->enableDisableButtons();
+		                                     imagesPanel->selectImage(i);
+		                                     histogramPanel->setImage(m_imageMgr->currentImage());
+	                                     });
 
-
-    m_imageMgr->setLayerSelectedCallback([this,layersPanel,editPanel,histogramPanel](int i)
-                                     {
-	                                     m_imageView->bindImage(m_imageMgr->currentImage());
-	                                     updateCaption();
-	                                     layersPanel->enableDisableButtons();
-	                                     editPanel->enableDisableButtons();
-	                                     layersPanel->selectLayer(i);
-	                                     histogramPanel->setImage(m_imageMgr->currentImage());
-                                     });
-
-    m_imageMgr->setNumLayersCallback([this,layersPanel,editPanel](void)
-                                      {
-	                                      updateCaption();
-	                                      layersPanel->enableDisableButtons();
-	                                      editPanel->enableDisableButtons();
-	                                      layersPanel->repopulateLayerList();
-	                                      layersPanel->selectLayer(m_imageMgr->currentImageIndex());
-                                      });
-    m_imageMgr->setImageChangedCallback([this,layersPanel,editPanel,histogramPanel](int i)
+	m_imageMgr->setNumImagesCallback([this, imagesPanel, editPanel](void)
+	                                 {
+		                                 updateCaption();
+		                                 imagesPanel->enableDisableButtons();
+		                                 editPanel->enableDisableButtons();
+		                                 imagesPanel->repopulateImageList();
+		                                 imagesPanel->selectImage(m_imageMgr->currentImageIndex());
+	                                 });
+    m_imageMgr->setImageChangedCallback([this,imagesPanel,editPanel,histogramPanel](int i)
                                          {
 	                                         updateCaption();
-	                                         layersPanel->enableDisableButtons();
+	                                         imagesPanel->enableDisableButtons();
 	                                         editPanel->enableDisableButtons();
-	                                         layersPanel->repopulateLayerList();
-	                                         layersPanel->selectLayer(i);
+	                                         imagesPanel->repopulateImageList();
+	                                         imagesPanel->selectImage(i);
 	                                         histogramPanel->update();
                                          });
 
@@ -534,13 +532,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case '[':
             if (modifiers & GLFW_MOD_SUPER)
             {
-	            m_imageMgr->bringLayerForward();
+	            m_imageMgr->bringImageForward();
                 return true;
             }
         case ']':
             if (modifiers & GLFW_MOD_SUPER)
             {
-	            m_imageMgr->sendLayerBackward();
+	            m_imageMgr->sendImageBackward();
                 return true;
             }
         case 'G':
@@ -586,21 +584,31 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    toggleHelpWindow();
             return true;
 
-        case 'L':
-            m_sidePanel->setVisible(!m_sidePanel->visible());
-            m_layersButton->setPushed(m_sidePanel->visible());
+        case GLFW_KEY_TAB:
+	        if (modifiers & GLFW_MOD_SHIFT)
+	        {
+		        bool setVis = !(m_sidePanel->visible() || m_statusBar->visible() || m_topPanel->visible());
+		        m_statusBar->setVisible(setVis);
+		        m_topPanel->setVisible(setVis);
+		        m_sidePanel->setVisible(setVis);
+		        m_sidePanelButton->setPushed(setVis);
+	        }
+		    else
+	        {
+		        m_sidePanel->setVisible(!m_sidePanel->visible());
+		        m_sidePanelButton->setPushed(m_sidePanel->visible());
+	        }
 		    updateLayout();
             return true;
 
         case GLFW_KEY_PAGE_DOWN:
         case GLFW_KEY_DOWN:
             if (m_imageMgr->numImages())
-	            m_imageMgr->selectLayer(mod(m_imageMgr->currentImageIndex()+1, m_imageMgr->numImages()));
+	            m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
             break;
 
         case GLFW_KEY_PAGE_UP:
-        case GLFW_KEY_UP:
-	        m_imageMgr->selectLayer(mod(m_imageMgr->currentImageIndex()-1, m_imageMgr->numImages()));
+        case GLFW_KEY_UP: m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
             break;
 
         case '1':
