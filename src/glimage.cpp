@@ -114,8 +114,10 @@ R"(
         fg.rgb *= gain;
         vec4 bg;
 
-        vec3 darkGray = vec3(0.01, 0.01, 0.01);
-        vec3 lightGray = vec3(0.04, 0.04, 0.04);
+        vec3 darkGray = vec3(0.1, 0.1, 0.1);
+        vec3 lightGray = vec3(0.2, 0.2, 0.2);
+        darkGray = sRGB ? sRGBToLinear(darkGray.rgb) : pow(darkGray.rgb, vec3(gamma));
+        lightGray = sRGB ? sRGBToLinear(lightGray.rgb) : pow(lightGray.rgb, vec3(gamma));
 
         bg.rgb = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? darkGray : lightGray;
         bg.a = 1.0;
