@@ -225,7 +225,7 @@ bool GLImage::save(const std::string & filename,
 
 const MatrixX3f & GLImage::linearHistogram(float exposure) const
 {
-    if (exposure != m_histogramExposure)
+    if (m_histogramDirty || exposure != m_histogramExposure)
     {
         makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
         m_histogramExposure = exposure;
@@ -235,7 +235,7 @@ const MatrixX3f & GLImage::linearHistogram(float exposure) const
 
 const MatrixX3f & GLImage::sRGBHistogram(float exposure) const
 {
-    if (exposure != m_histogramExposure)
+    if (m_histogramDirty || exposure != m_histogramExposure)
     {
         makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
         m_histogramExposure = exposure;

@@ -16,6 +16,7 @@ class GLImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageManager;
+class HelpWindow;
 template<typename T> class Range;
 
 

@@ -12,10 +12,10 @@ NAMESPACE_BEGIN(nanogui)
 
 HDRImageViewer::HDRImageViewer(Widget * parent, HDRViewScreen * screen)
 	: Widget(parent), m_screen(screen),
+	  m_zoom(1.0f), m_offset(Vector2f::Zero()),
 	  m_exposureCallback(std::function<void(bool)>()),
 	  m_gammaCallback(std::function<void(bool)>()),
-	  m_pixelHoverCallback(std::function<void(const Vector2i &, const Color4 &, const Color4 &)>()),
-	  m_zoom(1.0f), m_offset(Vector2f::Zero())
+	  m_pixelHoverCallback(std::function<void(const Vector2i &, const Color4 &, const Color4 &)>())
 {
 	m_ditherer.init();
 }
@@ -273,7 +273,7 @@ void HDRImageViewer::drawImageBorder(NVGcontext* ctx) const {
 	nvgStrokeWidth(ctx, 1.0f);
 	nvgRect(ctx, borderPosition.x() - 0.5f, borderPosition.y() - 0.5f,
 	        borderSize.x() + 1, borderSize.y() + 1);
-	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, 0.3f));
+	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, 0.2f));
 	nvgStroke(ctx);
 	nvgResetScissor(ctx);
 	nvgRestore(ctx);

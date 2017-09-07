@@ -26,24 +26,7 @@ LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager
 	b->setFixedWidth(84);
 	b->setBackgroundColor(Color(0, 100, 0, 75));
 	b->setTooltip("Load an image and add it to the set of opened images.");
-	b->setCallback([&] {
-		string file = file_dialog(
-			{
-				{"exr", "OpenEXR image"},
-				{"png", "Portable Network Graphic"},
-				{"pfm", "Portable Float Map"},
-				{"ppm", "Portable PixMap"},
-				{"jpg", "Jpeg image"},
-				{"tga", "Targa image"},
-				{"bmp", "Windows Bitmap image"},
-				{"gif", "GIF image"},
-				{"hdr", "Radiance rgbE format"},
-				{"ppm", "Portable pixel map"},
-				{"psd", "Photoshop document"}
-			}, false);
-		if (file.size())
-			m_screen->dropEvent({file});
-	});
+	b->setCallback([&] {m_screen->loadImage();});
 
 	m_saveButton = new Button(buttonRow, "Save", ENTYPO_ICON_SAVE);
 	m_saveButton->setEnabled(m_imageMgr->currentImage());
@@ -53,8 +36,6 @@ LayersPanel::LayersPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager
 	m_saveButton->setCallback([&]{m_screen->saveImage();});
 
 	new Label(this, "Opened images:", "sans-bold");
-
-//	m_layerListWidget->performLayout(mNVGContext);
 }
 
 
@@ -100,7 +81,8 @@ void LayersPanel::repopulateLayerList()
 
 		Button *b = new Button(m_layerListWidget, shortname, img->isModified() ? ENTYPO_ICON_PENCIL : 0);
 		b->setFlags(Button::RadioButton);
-		b->setTooltip(filename);
+		b->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
+
 		b->setFixedSize(Vector2i(145,25));
 		b->setCallback([&, index]{m_imageMgr->selectLayer(index);});
 		m_layerButtons.push_back(b);
@@ -108,6 +90,7 @@ void LayersPanel::repopulateLayerList()
 		// create a close button for the layer
 		b = new Button(m_layerListWidget, "", ENTYPO_ICON_ERASE);
 		b->setFixedSize(Vector2i(25,25));
+		b->setTooltip("Close image");
 		b->setCallback([&, index]{m_screen->askCloseImage(index);});
 
 		index++;
@@ -116,7 +99,6 @@ void LayersPanel::repopulateLayerList()
 	for (auto b : m_layerButtons)
 		b->setButtonGroup(m_layerButtons);
 
-//	m_layerListWidget->performLayout(mNVGContext);
 	m_screen->performLayout();
 }
 

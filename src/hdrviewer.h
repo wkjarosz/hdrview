@@ -24,20 +24,18 @@ public:
     void drawContents() override;
     bool dropEvent(const std::vector<std::string> &filenames) override;
     bool keyboardEvent(int key, int scancode, int action, int modifiers) override;
-//    void performLayout();
 
+	bool loadImage();
 	void saveImage();
 	void askCloseImage(int index);
 	void flipImage(bool h);
 	void clearFocusPath() {mFocusPath.clear();}
 
 private:
+	void toggleHelpWindow();
 	void updateLayout();
     void closeCurrentImage();
     void updateCaption();
-
-	Widget * m_verticalScreenSplit = nullptr,
-		   * m_horizontalScreenSplit = nullptr;
 
 	Widget * m_topPanel = nullptr;
 	Widget * m_sidePanel = nullptr;
@@ -47,15 +45,12 @@ private:
 
     Button * m_helpButton = nullptr;
     Button * m_layersButton = nullptr;
-	Window * m_helpDialog = nullptr;
+	HelpWindow* m_helpWindow = nullptr;
 	Label * m_zoomLabel = nullptr;
 	Label * m_pixelInfoLabel = nullptr;
 
 	VScrollPanel * m_sideScrollPanel = nullptr;
 	Widget * m_sidePanelContents = nullptr;
-    LayersPanel * m_layersPanel = nullptr;
-	EditImagePanel * m_editPanel = nullptr;
-	HistogramPanel  * m_histogramPanel = nullptr;
 
     MessageDialog * m_okToQuitDialog = nullptr;
 

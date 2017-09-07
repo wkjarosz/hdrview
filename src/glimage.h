@@ -31,6 +31,7 @@ public:
     void modify(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
     {
         m_history.addCommand(command(m_image));
+        m_histogramDirty = true;
         init();
     }
     bool isModified() const         {return m_history.isModified();}
@@ -68,8 +69,9 @@ private:
     nanogui::GLShader * m_shader = nullptr;
     uint32_t m_texture = 0;
     HDRImage m_image;
-    mutable float m_histogramExposure;
-    mutable Eigen::MatrixX3f m_linearHistogram, m_sRGBHistogram;
     std::string m_filename;
+    mutable float m_histogramExposure;
+    mutable bool m_histogramDirty = true;
+    mutable Eigen::MatrixX3f m_linearHistogram, m_sRGBHistogram;
     mutable CommandHistory m_history;
 };
