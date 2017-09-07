@@ -457,17 +457,6 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
     if (!action)
         return false;
 
-    // disable events if there is a modal dialog
-    if (mFocusPath.size() > 1)
-    {
-        const Window *window = dynamic_cast<Window *>(mFocusPath[mFocusPath.size() - 2]);
-        if (window && window->modal())
-        {
-            if (!window->contains(mMousePos))
-                return false;
-        }
-    }
-
     switch (key)
     {
         case GLFW_KEY_ESCAPE:

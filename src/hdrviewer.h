@@ -29,7 +29,6 @@ public:
 	void saveImage();
 	void askCloseImage(int index);
 	void flipImage(bool h);
-	void clearFocusPath() {mFocusPath.clear();}
 
 private:
 	void toggleHelpWindow();

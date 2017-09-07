@@ -63,7 +63,6 @@ void LayersPanel::repopulateLayerList()
 	m_layerListWidget = new Widget(this);
 	m_layerListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
 
-	m_screen->clearFocusPath();
 	m_layerButtons.clear();
 
 	int index = 0;
