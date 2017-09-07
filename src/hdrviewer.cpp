@@ -46,7 +46,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	horizontalScreenSplit->setLayout(new BoxLayout{Orientation::Horizontal, Alignment::Fill});
 
 	m_sidePanel = new Widget(horizontalScreenSplit);
-	m_sidePanel->setVisible(false);
 
 	m_imageView = new HDRImageViewer(horizontalScreenSplit, this);
 	m_imageView->setGridThreshold(20);
@@ -163,6 +162,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_layersButton->setTooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
     m_layersButton->setFlags(Button::ToggleButton);
+	m_layersButton->setPushed(true);
     m_layersButton->setFixedSize(Vector2i(25, 25));
     m_layersButton->setChangeCallback([this](bool value)
     {
@@ -545,13 +545,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case '[':
             if (modifiers & GLFW_MOD_SUPER)
             {
-	            m_imageMgr->sendLayerBackward();
+	            m_imageMgr->bringLayerForward();
                 return true;
             }
         case ']':
             if (modifiers & GLFW_MOD_SUPER)
             {
-	            m_imageMgr->bringLayerForward();
+	            m_imageMgr->sendLayerBackward();
                 return true;
             }
         case 'G':

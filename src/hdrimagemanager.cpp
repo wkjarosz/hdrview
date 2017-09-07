@@ -198,7 +198,7 @@ void HDRImageManager::redo()
 		m_imageChangedCallback(m_current);
 }
 
-void HDRImageManager::sendLayerBackward()
+void HDRImageManager::bringLayerForward()
 {
 	if (m_images.empty() || m_current == 0)
 		// do nothing
@@ -211,7 +211,7 @@ void HDRImageManager::sendLayerBackward()
 	m_layerSelectedCallback(m_current);
 }
 
-void HDRImageManager::bringLayerForward()
+void HDRImageManager::sendLayerBackward()
 {
 	if (m_images.empty() || m_current == int(m_images.size()-1))
 		// do nothing

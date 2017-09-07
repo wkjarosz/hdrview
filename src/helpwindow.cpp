@@ -45,12 +45,6 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
         new Label{row, keys, "sans-bold"};
     };
 
-    auto addSpacer = [](Widget* current)
-    {
-        auto row = new Widget{current};
-        row->setHeight(10);
-    };
-
 	new Label(this, "About", "sans-bold", 20);
 
 	auto copyW = new Widget(this);
@@ -70,7 +64,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(imageLoading, COMMAND + "+O", "Open Image");
 	addRow(imageLoading, COMMAND + "+S", "Save Image");
 	addRow(imageLoading, COMMAND + "+W or Delete", "Close Image");
-	addRow(imageLoading, COMMAND + "+[ / " + COMMAND + "+]", "Send Image Backward/Forward");
+	addRow(imageLoading, COMMAND + "+[ / " + COMMAND + "+]", "Send Image Forward/Backward");
 	addRow(imageLoading, "Down / Up or Page Down / Up", "Select Previous/Next Image");
 
     new Label(this, "Display/Tonemapping Options", "sans-bold", 18);
@@ -98,6 +92,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	addRow(edits, "F", "Flip image about horizontal axis");
 	addRow(edits, "M", "Mirror image about vertical axis");
+	addRow(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
 
     new Label(this, "Interface", "sans-bold", 18);
     auto interface = new Widget(this);
