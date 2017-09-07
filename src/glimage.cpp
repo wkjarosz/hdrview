@@ -229,6 +229,7 @@ const MatrixX3f & GLImage::linearHistogram(float exposure) const
     if (m_histogramDirty || exposure != m_histogramExposure)
     {
         makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
+        m_histogramDirty = false;
         m_histogramExposure = exposure;
     }
     return m_linearHistogram;
@@ -239,6 +240,7 @@ const MatrixX3f & GLImage::sRGBHistogram(float exposure) const
     if (m_histogramDirty || exposure != m_histogramExposure)
     {
         makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
+        m_histogramDirty = false;
         m_histogramExposure = exposure;
     }
     return m_sRGBHistogram;

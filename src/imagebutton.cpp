@@ -5,6 +5,7 @@
 #include "imagebutton.h"
 #include <nanogui/opengl.h>
 #include <nanogui/entypo.h>
+#include <nanogui/theme.h>
 
 using namespace nanogui;
 using namespace std;
@@ -78,7 +79,7 @@ void ImageButton::draw(NVGcontext *ctx)
 
 		nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
 
-		nvgFillColor(ctx, m_isSelected ? Color(0.35f, 0.35f, 0.8f, 1.0f) : Color(1.0f, 0.1f));
+		nvgFillColor(ctx, m_isSelected ? mTheme->mButtonGradientBotPushed : mTheme->mButtonGradientBotFocused);
 		nvgFill(ctx);
 	}
 
@@ -92,7 +93,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	float iconSize = nvgTextBounds(ctx, 0, 0, utf8(ENTYPO_ICON_PENCIL).data(), nullptr, nullptr);
 
 	nvgFontSize(ctx, mFontSize);
-	nvgFontFace(ctx, "sans");
+	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 
 	if (mSize.x() == preferredSize(ctx).x())
 	{
@@ -121,12 +122,12 @@ void ImageButton::draw(NVGcontext *ctx)
 	NVGcolor textColor = Color(180, 255);
 	if (m_isSelected || mMouseFocus)
 	{
-		textColor = Color(1.0f, 1.0f, 1.0f, 1.0f);
+		textColor = mTheme->mTextColor;
 	}
 
 	// Image name
 	nvgFontSize(ctx, mFontSize);
-	nvgFontFace(ctx, "sans");
+	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(ctx, textColor);
 	nvgText(ctx, textPos.x(), textPos.y(), caption.c_str(), nullptr);

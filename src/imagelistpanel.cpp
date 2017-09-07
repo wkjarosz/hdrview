@@ -56,6 +56,10 @@ void ImageListPanel::repopulateImageList()
 	// from scratch. this doesn't scale, but should be fine unless you have a
 	// lot of images, and makes the logic a lot simpler.
 
+	// prevent crash when the focus path includes any of the widgets we are destroying
+	m_screen->clearFocusPath();
+	m_imageButtons.clear();
+
 	// clear everything
 	if (m_imageListWidget)
 		removeChild(m_imageListWidget);
@@ -63,7 +67,6 @@ void ImageListPanel::repopulateImageList()
 	m_imageListWidget = new Widget(this);
 	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
 
-	m_imageButtons.clear();
 
 	int index = 0;
 	for (int i = 0; i < m_imageMgr->numImages(); ++i)

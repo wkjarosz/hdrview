@@ -110,8 +110,8 @@ public:
 	void zoomOut();
 
 
-	int zoomLevel() const       {return m_zoomLevel;}
-	void setZoomLevel(int l);
+	float zoomLevel() const       {return m_zoomLevel;}
+	void setZoomLevel(float l);
 
 	const Vector3f & channel()  {return m_channels;}
 	void setChannel(const Vector3f & c) {m_channels = c;}
@@ -175,7 +175,7 @@ private:
 
 	// Image display parameters.
 	float m_zoom;                           ///< The scale/zoom of the image
-	int m_zoomLevel;                        ///< The zoom level
+	float m_zoomLevel;                      ///< The zoom level
 	Vector2f m_offset;                      ///< The panning offset of the
 	Vector3f m_channels = Vector3f::Ones(); ///< Multiplied with the pixel values before display, allows visualizing individual color channels
 

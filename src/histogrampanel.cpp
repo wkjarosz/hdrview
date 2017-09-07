@@ -95,9 +95,10 @@ void HistogramPanel::update()
 
 	auto hist = m_image->histogram(m_linear, m_exposure);
 	int numBins = hist.rows();
-	m_graph->setValues(hist.col(0)/hist.block(1,0,numBins-2,1).maxCoeff(), 0);
-	m_graph->setValues(hist.col(1)/hist.block(1,1,numBins-2,1).maxCoeff(), 1);
-	m_graph->setValues(hist.col(2)/hist.block(1,2,numBins-2,1).maxCoeff(), 2);
+	float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
+	m_graph->setValues(hist.col(0)/maxValue, 0);
+	m_graph->setValues(hist.col(1)/maxValue, 1);
+	m_graph->setValues(hist.col(2)/maxValue, 2);
 }
 
 NAMESPACE_END(nanogui)

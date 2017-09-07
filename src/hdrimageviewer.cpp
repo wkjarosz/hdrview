@@ -8,11 +8,17 @@
 
 using namespace std;
 
+namespace
+{
+const float MIN_ZOOM = 0.01f;
+const float MAX_ZOOM = 512.f;
+}
+
 NAMESPACE_BEGIN(nanogui)
 
 HDRImageViewer::HDRImageViewer(Widget * parent, HDRViewScreen * screen)
 	: Widget(parent), m_screen(screen),
-	  m_zoom(1.0f), m_offset(Vector2f::Zero()),
+	  m_zoom(1.f/m_screen->pixelRatio()), m_offset(Vector2f::Zero()),
 	  m_exposureCallback(std::function<void(bool)>()),
 	  m_gammaCallback(std::function<void(bool)>()),
 	  m_pixelHoverCallback(std::function<void(const Vector2i &, const Color4 &, const Color4 &)>())
@@ -85,11 +91,18 @@ void HDRImageViewer::moveOffset(const Vector2f& delta)
 		m_offset.y() = sizeF().y();
 }
 
+void HDRImageViewer::setZoomLevel(float level)
+{
+	m_zoom = clamp(std::pow(m_zoomSensitivity, level), MIN_ZOOM, MAX_ZOOM);
+	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoomCallback(m_zoom);
+}
+
 void HDRImageViewer::zoomBy(int amount, const Vector2f &focusPosition)
 {
 	auto focusedCoordinate = imageCoordinateAt(focusPosition);
 	float scaleFactor = std::pow(m_zoomSensitivity, amount);
-	m_zoom = clamp(scaleFactor * m_zoom, 0.01f, 512.f);
+	m_zoom = clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
 	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
 	setImageCoordinateAt(focusPosition, focusedCoordinate);
 	m_zoomCallback(m_zoom);
@@ -104,7 +117,7 @@ void HDRImageViewer::zoomIn()
 	// determine next higher power of 2 zoom level
 	float levelForPow2Sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
-	m_zoom = clamp(newScale, 0.01f, 512.f);
+	m_zoom = clamp(newScale, MIN_ZOOM, MAX_ZOOM);
 	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
 	setImageCoordinateAt(centerPosition, centerCoordinate);
 	m_zoomCallback(m_zoom);
@@ -119,7 +132,7 @@ void HDRImageViewer::zoomOut()
 	// determine next lower power of 2 zoom level
 	float levelForPow2Sensitivity = floor(log(m_zoom) / log(2.f) - 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
-	m_zoom = clamp(newScale, 0.01f, 512.f);
+	m_zoom = clamp(newScale, MIN_ZOOM, MAX_ZOOM);
 	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
 	setImageCoordinateAt(centerPosition, centerCoordinate);
 	m_zoomCallback(m_zoom);
