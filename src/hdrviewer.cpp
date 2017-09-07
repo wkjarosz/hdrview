@@ -308,6 +308,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	this->setSize(Vector2i(1024, 800));
 
+
     drawAll();
     setVisible(true);
     glfwSwapInterval(1);
