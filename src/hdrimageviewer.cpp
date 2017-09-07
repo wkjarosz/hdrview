@@ -270,10 +270,10 @@ void HDRImageViewer::drawImageBorder(NVGcontext* ctx) const {
 	nvgSave(ctx);
 	nvgBeginPath(ctx);
 	nvgScissor(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
-	nvgStrokeWidth(ctx, 1.0f);
+	nvgStrokeWidth(ctx, 2.0f);
 	nvgRect(ctx, borderPosition.x() - 0.5f, borderPosition.y() - 0.5f,
 	        borderSize.x() + 1, borderSize.y() + 1);
-	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, 0.5f));
+	nvgStrokeColor(ctx, Color(0.5f, 0.5f, 0.5f, 1.0f));
 	nvgStroke(ctx);
 	nvgResetScissor(ctx);
 	nvgRestore(ctx);

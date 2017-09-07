@@ -51,10 +51,12 @@ void MultiGraph::draw(NVGcontext *ctx)
 		}
 
 		nvgLineTo(ctx, mPos.x() + mSize.x(), mPos.y() + mSize.y());
-		nvgStrokeColor(ctx, Color(100, 255));
-		nvgStroke(ctx);
 		nvgFillColor(ctx, mForegroundColors[plot]);
 		nvgFill(ctx);
+		Color sColor = mForegroundColors[plot];
+		sColor.w() = (sColor.w() + 1.0f)/2.0f;
+		nvgStrokeColor(ctx, sColor);
+		nvgStroke(ctx);
 	}
 
 	nvgFontFace(ctx, "sans");
