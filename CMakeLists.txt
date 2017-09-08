@@ -45,7 +45,6 @@ add_executable(HDRView MACOSX_BUNDLE
     src/envmap.cpp
     src/envmap.h
     src/fwd.h
-    src/gldithertexture.h
     src/glimage.cpp
     src/glimage.h
     src/hdrimage.cpp
@@ -72,7 +71,7 @@ add_executable(HDRView MACOSX_BUNDLE
     src/ppm.h
     src/ppm.cpp
     src/range.h
-    ${EXTRA_SOURCE})
+    ${EXTRA_SOURCE} src/imageshader.cpp src/imageshader.h)
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
 

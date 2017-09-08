@@ -5,6 +5,7 @@
 #include "hdrimagemanager.h"
 #include <tinydir.h>
 #include <spdlog/spdlog.h>
+#include <set>
 
 using namespace std;
 using namespace nanogui;
@@ -50,6 +51,11 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 {
 	size_t numErrors = 0;
 	vector<pair<string, bool> > loadedOK;
+	vector<string> allFilenames;
+
+	const static set<string> extensions = {"exr", "png", "jpg", "jpeg", "hdr", "pic", "pfm", "ppm", "bmp", "tga", "psd"};
+
+	// first just assemble all the images we will need to load by traversing any directories
 	for (auto i : filenames)
 	{
 		tinydir_dir dir;
@@ -75,31 +81,14 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 					// only consider image files we support
 					string ext = file.extension;
 					transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-					if (ext != "exr" && ext != "png" && ext != "jpg" &&
-						ext != "jpeg" && ext != "hdr" && ext != "pic" &&
-						ext != "pfm" && ext != "ppm" && ext != "bmp" &&
-						ext != "tga" && ext != "psd")
+					if (!extensions.count(ext))
 					{
 						if (tinydir_next(&dir) == -1)
 							throw std::runtime_error("Error getting next file");
 						continue;
 					}
 
-					GLImage* image = new GLImage();
-					if (image->load(file.path))
-					{
-						loadedOK.push_back({file.path, true});
-						image->init();
-						m_images.push_back(image);
-						spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}]", file.name,
-						                             image->width(), image->height());
-					}
-					else
-					{
-						loadedOK.push_back({file.name, false});
-						numErrors++;
-						delete image;
-					}
+					allFilenames.push_back(file.path);
 
 					if (tinydir_next(&dir) == -1)
 						throw std::runtime_error("Error getting next file");
@@ -114,23 +103,36 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 		}
 		else
 		{
-			GLImage* image = new GLImage();
-			if (image->load(i))
-			{
-				loadedOK.push_back({i, true});
-				image->init();
-				m_images.push_back(image);
-				spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}]", i, image->width(), image->height());
-			}
-			else
-			{
-				loadedOK.push_back({i, false});
-				numErrors++;
-				delete image;
-			}
+			allFilenames.push_back(i);
 		}
 		tinydir_close(&dir);
 	}
+
+	// now actually load the images
+	auto allStart = chrono::system_clock::now();
+	for (auto i : allFilenames)
+	{
+		GLImage *image = new GLImage();
+		auto start = chrono::system_clock::now();
+		if (image->load(i))
+		{
+			loadedOK.push_back({i, true});
+			image->init();
+			m_images.push_back(image);
+			auto end = chrono::system_clock::now();
+			chrono::duration<double> elapsedSeconds = end - start;
+			spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", i, image->width(), image->height(), elapsedSeconds.count());
+		}
+		else
+		{
+			loadedOK.push_back({i, false});
+			numErrors++;
+			delete image;
+		}
+	}
+
+	chrono::duration<double> elapsedSeconds = chrono::system_clock::now() - allStart;
+	spdlog::get("console")->info("Loading all {:d} images took {} seconds", allFilenames.size(), elapsedSeconds.count());
 
 	m_numImagesCallback();
 	selectImage(int(m_images.size() - 1));

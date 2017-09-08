@@ -23,7 +23,7 @@ HDRImageViewer::HDRImageViewer(Widget * parent, HDRViewScreen * screen)
 	  m_gammaCallback(std::function<void(bool)>()),
 	  m_pixelHoverCallback(std::function<void(const Vector2i &, const Color4 &, const Color4 &)>())
 {
-	m_ditherer.init();
+
 }
 
 
@@ -225,8 +225,9 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 		Vector2f scaleFactor = m_zoom * imageSizeF().cwiseQuotient(screenSize);
 		Vector2f positionAfterOffset = positionInScreen + m_offset + centerOffset();
 		Vector2f imagePosition = positionAfterOffset.cwiseQuotient(screenSize);
-		m_ditherer.bind();
-		m_image->draw(scaleFactor, imagePosition, powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
+
+		m_shader.draw(m_image->glTextureId(), scaleFactor, imagePosition,
+		               powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
 
 		drawImageBorder(ctx);
 

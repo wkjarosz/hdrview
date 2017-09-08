@@ -82,15 +82,15 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
     auto btn = new Button(m_sidePanelContents, "File", ENTYPO_ICON_CHEVRON_DOWN);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
 	btn->setFlags(Button::ToggleButton);
 	btn->setPushed(true);
+	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
     auto imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr);
 
 	btn->setChangeCallback([this,btn,imagesPanel](bool value)
                          {
-	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
                              imagesPanel->setVisible(value);
                              updateLayout();
                              m_sidePanelContents->performLayout(mNVGContext);
@@ -100,9 +100,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create histogram panel
     //
 
-	btn = new Button(m_sidePanelContents, "Histogram", ENTYPO_ICON_CHEVRON_RIGHT);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
+	btn = new Button(m_sidePanelContents, "Histogram", ENTYPO_ICON_CHEVRON_LEFT);
 	btn->setFlags(Button::ToggleButton);
+	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
 
     auto w = new Widget(m_sidePanelContents);
@@ -114,7 +114,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	btn->setChangeCallback([this,btn,w](bool value)
          {
-	         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+	         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
              w->setVisible(value);
              updateLayout();
              m_sidePanelContents->performLayout(mNVGContext);
@@ -124,9 +124,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create edit panel
     //
 
-    btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_RIGHT);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
+    btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_LEFT);
 	btn->setFlags(Button::ToggleButton);
+	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
 
 	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imageMgr);
@@ -134,7 +134,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	btn->setChangeCallback([this,btn,editPanel](bool value)
      {
-	     btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+	     btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
          editPanel->setVisible(value);
          updateLayout();
          m_sidePanelContents->performLayout(mNVGContext);
@@ -251,7 +251,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	m_imageMgr->setImageSelectedCallback([this, imagesPanel, editPanel, histogramPanel](int i)
 	                                     {
-		                                     m_imageView->bindImage(m_imageMgr->currentImage());
+		                                     m_imageView->setImage(m_imageMgr->currentImage());
 		                                     updateCaption();
 		                                     imagesPanel->enableDisableButtons();
 		                                     editPanel->enableDisableButtons();

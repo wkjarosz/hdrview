@@ -8,8 +8,8 @@
 #include <vector>
 #include "fwd.h"
 #include "common.h"
-#include "gldithertexture.h"
 #include "glimage.h"
+#include "imageshader.h"
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -22,7 +22,7 @@ class HDRImageViewer : public Widget
 public:
 	HDRImageViewer(Widget * parent, HDRViewScreen * screen);
 
-	void bindImage(const GLImage* image) {m_image = image;}
+	void setImage(const GLImage *image) {m_image = image;}
 
 	// overridden Widget virtual functions
 	void draw(NVGcontext* ctx) override;
@@ -161,7 +161,7 @@ private:
 	void drawPixelInfo(NVGcontext *ctx) const;
 	Vector2f centerOffset() const;
 
-	GLDitherTexture m_ditherer;
+	ImageShader m_shader;
 
 	HDRViewScreen * m_screen = nullptr;
 	const GLImage * m_image = nullptr;

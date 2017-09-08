@@ -7,7 +7,6 @@
 #include <vector>
 #include <iostream>
 #include <spdlog/spdlog.h>
-#include "gldithertexture.h"
 #include "fwd.h"
 #include "commandhistory.h"
 

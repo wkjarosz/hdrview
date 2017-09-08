@@ -9,15 +9,14 @@
 #include <iosfwd>              // for string
 #include <type_traits>         // for swap
 #include <vector>              // for vector, allocator
+#include <nanogui/opengl.h>
 #include "hdrimage.h"          // for HDRImage
 #include "fwd.h"               // for HDRImage
 #include "commandhistory.h"
 
 /*!
-    A class which encapsulates a single image which is draw as a
-    textured GL quad to the screen.
-
-    Also stores a linear and sRGB histogram.
+    A class which encapsulates a single HDRImage, a corresponding OpenGL texture, and histogram.
+    Access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
 */
 class GLImage
 {
@@ -40,6 +39,7 @@ public:
     bool hasUndo() const            {return m_history.hasUndo();}
     bool hasRedo() const            {return m_history.hasRedo();}
 
+	GLuint glTextureId() const      {return m_texture;}
     std::string filename() const    {return m_filename;}
     const HDRImage & image() const  {return m_image;}
     int width() const               {return m_image.width();}
@@ -47,11 +47,6 @@ public:
     Eigen::Vector2i size() const    {return Eigen::Vector2i(width(), height());}
     bool contains(const Eigen::Vector2i& p) const {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
 
-    void draw(const Eigen::Vector2f & scale,
-              const Eigen::Vector2f & position,
-              float gain, float gamma,
-              bool sRGB, bool dither,
-              const Eigen::Vector3f & channels) const;
     bool load(const std::string & filename);
     bool save(const std::string & filename,
               float gain, float gamma,
@@ -66,8 +61,7 @@ public:
 
 
 private:
-    nanogui::GLShader * m_shader = nullptr;
-    uint32_t m_texture = 0;
+	GLuint m_texture = 0;
     HDRImage m_image;
     std::string m_filename;
     mutable float m_histogramExposure;
