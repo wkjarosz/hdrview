@@ -191,7 +191,7 @@ private:
 	float m_zoomLevel;                      ///< The zoom level
 	Vector2f m_offset;                      ///< The panning offset of the
 	EChannel m_channel = EChannel::RGB;     ///< Which channel to display
-	EBlendMode m_blendMode = EBlendMode::NORMAL;     ///< How to blend the current and reference images
+	EBlendMode m_blendMode = EBlendMode::NORMAL_BLEND;     ///< How to blend the current and reference images
 
 	// Fine-tuning parameters.
 	float m_zoomSensitivity = 1.0717734625f;

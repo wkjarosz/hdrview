@@ -181,14 +181,14 @@ constexpr char const *const fragmentShader =
 		float alpha = imageVal.a + referenceVal.a*(1-imageVal.a);
         switch (blendMode)
 		{
-			case NORMAL:              return vec4(imageVal.rgb*imageVal.a + referenceVal.rgb*referenceVal.a*(1-imageVal.a), alpha);
-			case MULTIPLY:            return vec4(imageVal.rgb * referenceVal.rgb, alpha);
-			case DIVIDE:              return vec4(imageVal.rgb / referenceVal.rgb, alpha);
-			case ADD:                 return vec4(imageVal.rgb + referenceVal.rgb, alpha);
-			case AVERAGE:             return vec4(0.5*(imageVal.rgb + referenceVal.rgb), 0.5 + referenceVal.a*0.5);
-			case SUBTRACT:            return vec4(diff, alpha);
-            case DIFFERENCE:          return vec4(abs(diff), alpha);
-            case RELATIVE_DIFFERENCE: return vec4(abs(diff) / (referenceVal.rgb + vec3(0.01)), alpha);
+			case NORMAL_BLEND:              return vec4(imageVal.rgb*imageVal.a + referenceVal.rgb*referenceVal.a*(1-imageVal.a), alpha);
+			case MULTIPLY_BLEND:            return vec4(imageVal.rgb * referenceVal.rgb, alpha);
+			case DIVIDE_BLEND:              return vec4(imageVal.rgb / referenceVal.rgb, alpha);
+			case ADD_BLEND:                 return vec4(imageVal.rgb + referenceVal.rgb, alpha);
+			case AVERAGE_BLEND:             return vec4(0.5*(imageVal.rgb + referenceVal.rgb), 0.5 + referenceVal.a*0.5);
+			case SUBTRACT_BLEND:            return vec4(diff, alpha);
+            case DIFFERENCE_BLEND:          return vec4(abs(diff), alpha);
+            case RELATIVE_DIFFERENCE_BLEND: return vec4(abs(diff) / (referenceVal.rgb + vec3(0.01)), alpha);
         }
         return vec4(0.0);
     }
@@ -306,14 +306,14 @@ ImageShader::ImageShader()
 	DEFINE_PARAMS2(EChannel, A, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, B, CHANNEL_);
 
-	DEFINE_PARAMS(EBlendMode, NORMAL);
-	DEFINE_PARAMS(EBlendMode, MULTIPLY);
-	DEFINE_PARAMS(EBlendMode, DIVIDE);
-	DEFINE_PARAMS(EBlendMode, ADD);
-	DEFINE_PARAMS(EBlendMode, AVERAGE);
-	DEFINE_PARAMS(EBlendMode, SUBTRACT);
-	DEFINE_PARAMS(EBlendMode, DIFFERENCE);
-	DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE);
+	DEFINE_PARAMS(EBlendMode, NORMAL_BLEND);
+	DEFINE_PARAMS(EBlendMode, MULTIPLY_BLEND);
+	DEFINE_PARAMS(EBlendMode, DIVIDE_BLEND);
+	DEFINE_PARAMS(EBlendMode, ADD_BLEND);
+	DEFINE_PARAMS(EBlendMode, AVERAGE_BLEND);
+	DEFINE_PARAMS(EBlendMode, SUBTRACT_BLEND);
+	DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
+	DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
 
 	// Gamma/exposure tonemapper with hasDither as a GLSL shader
 	m_shader.init("Tonemapper", vertexShader, fragmentShader);
