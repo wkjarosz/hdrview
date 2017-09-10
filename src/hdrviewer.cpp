@@ -2,7 +2,6 @@
     \author Wojciech Jarosz
 */
 #include "hdrviewer.h"
-#include "histogrampanel.h"
 #include "glimage.h"
 #include "editimagepanel.h"
 #include "imagelistpanel.h"
@@ -106,30 +105,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                              updateLayout();
                              m_sidePanelContents->performLayout(mNVGContext);
                          });
-
-    //
-    // create histogram panel
-    //
-
-	btn = new Button(m_sidePanelContents, "Histogram", ENTYPO_ICON_CHEVRON_LEFT);
-	btn->setFlags(Button::ToggleButton);
-	btn->setFontSize(18);
-	btn->setIconPosition(Button::IconPosition::Right);
-
-    auto w = new Widget(m_sidePanelContents);
-    w->setVisible(false);
-    w->setLayout(new GroupLayout(2, 4, 8, 10));
-
-    new Label(w, "Histogram", "sans-bold");
-    auto histogramPanel = new HistogramPanel(w);
-
-	btn->setChangeCallback([this,btn,w](bool value)
-         {
-	         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
-             w->setVisible(value);
-             updateLayout();
-             m_sidePanelContents->performLayout(mNVGContext);
-         });
 
     //
     // create edit panel
@@ -286,14 +261,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     updateLayout();
                                 });
 
-	m_imageMgr->setCurrentImageCallback([this, editPanel, histogramPanel](void)
+	m_imageMgr->setCurrentImageCallback([this, editPanel](void)
 	                                    {
 		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
 		                                    updateCaption();
 		                                    m_imagesPanel->enableDisableButtons();
 		                                    editPanel->enableDisableButtons();
 		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
-		                                    histogramPanel->setImage(m_imageMgr->currentImage());
 	                                    });
 
 	m_imageMgr->setReferenceImageCallback([this](void)
@@ -309,9 +283,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                                 editPanel->enableDisableButtons();
 		                                 m_imagesPanel->repopulateImageList();
 		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
-		                                 m_imagesPanel->setReferenceImage(-1);
+		                                 m_imageMgr->setReferenceImageIndex(-1);
 	                                 });
-    m_imageMgr->setImageChangedCallback([this,editPanel,histogramPanel](int i)
+    m_imageMgr->setImageChangedCallback([this,editPanel](int i)
                                          {
 	                                         updateCaption();
 	                                         m_imagesPanel->enableDisableButtons();
@@ -319,7 +293,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                                         m_imagesPanel->repopulateImageList();
 	                                         m_imagesPanel->setCurrentImage(i);
 	                                         m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
-	                                         histogramPanel->update();
                                          });
 
 

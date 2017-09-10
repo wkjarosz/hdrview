@@ -25,9 +25,9 @@ public:
 	EChannel channel() const;
 	void setChannel(EChannel channel);
 
-
-
 private:
+	void updateHistogram();
+
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageManager * m_imageMgr = nullptr;
 	HDRImageViewer * m_imageViewer = nullptr;
@@ -39,6 +39,14 @@ private:
 	ComboBox * m_blendModes = nullptr;
 	ComboBox * m_channels = nullptr;
 	std::vector<ImageButton*> m_imageButtons;
+
+	Slider * m_exposureSlider = nullptr;
+	FloatBox<float> * m_exposureTextBox = nullptr;
+	Button * m_linearToggle = nullptr;
+	Button * m_resetExposure = nullptr;
+	MultiGraph * m_graph = nullptr;
+	float m_exposure = 1.0f;
+	bool m_linear = true;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
