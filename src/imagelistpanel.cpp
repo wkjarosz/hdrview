@@ -23,64 +23,34 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	auto row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Vertical,
 	                             Alignment::Fill, 0, 4));
-	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 255));
-	m_graph->addPlot(Color(0, 255, 0, 128));
-	m_graph->addPlot(Color(0, 0, 255, 85));
 
 	auto w = new Widget(row);
 	w->setLayout(new BoxLayout(Orientation::Horizontal,
 	                           Alignment::Middle, 0, 2));
-
-	m_exposureSlider = new Slider(w);
-	m_exposureTextBox = new FloatBox<float>(w, 0.0f);
-	m_linearToggle = new Button(w, "", ENTYPO_ICON_VOLUME);
-	m_resetExposure = new Button(w, "", ENTYPO_ICON_CYCLE);
-
-	m_exposureTextBox->setTooltip("Set the histogram exposure.");
-	m_exposureTextBox->numberFormat("%1.2f");
-	m_exposureTextBox->setEditable(true);
-	m_exposureTextBox->setFixedWidth(35);
-	m_exposureTextBox->setAlignment(TextBox::Alignment::Right);
-	m_exposureTextBox->setCallback([this](float ev)
-	                             {
-		                             m_exposureSlider->setValue(ev);
-		                             m_exposure = pow(2.f, ev);
-		                             updateHistogram();
-	                             });
-	m_exposureSlider->setTooltip("Set the histogram exposure.");
-	m_exposureSlider->setCallback([this](float v)
-	                            {
-		                            float ev = round(4*v) / 4.0f;
-		                            m_exposureTextBox->setValue(ev);
-		                            m_exposure = pow(2.f, ev);
-	                            });
-	m_exposureSlider->setFinalCallback([this](float v)
-	                                 {
-		                                 updateHistogram();
-	                                 });
-	m_exposureSlider->setFixedWidth(98);
-	m_exposureSlider->setRange({-9.0f,9.0f});
-	m_exposureTextBox->setValue(0.0f);
+	new Label(w, "Histogram:", "sans", 14);
+	m_linearToggle = new Button(w, "Linear", ENTYPO_ICON_VOLUME);
+	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_CYCLE);
 
 	m_linearToggle->setFlags(Button::ToggleButton);
-	m_linearToggle->setFixedSize(Vector2i(19, 19));
-	m_linearToggle->setTooltip("Toggle between linear and sRGB histogram computation.");
+	m_linearToggle->setFixedSize(Vector2i(100, 19));
+	m_linearToggle->setTooltip("Toggle between linear and sRGB histogram.");
 	m_linearToggle->setPushed(true);
-	m_linearToggle->setChangeCallback([&](bool b)
-	                                {
-		                                m_linear = b;
-		                                updateHistogram();
-	                                });
-
-	m_resetExposure->setFixedSize(Vector2i(19, 19));
-	m_resetExposure->setTooltip("Reset histogram exposure.");
-	m_resetExposure->setCallback([&]()
+	m_linearToggle->setChangeCallback([this](bool b)
 	                                  {
-		                                  m_exposureSlider->setValue(0.0f);
-		                                  m_exposureTextBox->setValue(0.0f);
-		                                  m_exposure = 1.0f;
+		                                  m_linearToggle->setCaption(b ? "Linear" : "sRGB");
 		                                  updateHistogram();
 	                                  });
+
+	m_recomputeHistogram->setFixedSize(Vector2i(19,19));
+	m_recomputeHistogram->setTooltip("Recompute histogram at current exposure.");
+	m_recomputeHistogram->setCallback([&]()
+	                                  {
+		                                  updateHistogram();
+	                                  });
+
+	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 255));
+	m_graph->addPlot(Color(0, 255, 0, 128));
+	m_graph->addPlot(Color(0, 0, 255, 85));
 
 
 	row = new Widget(this);
@@ -198,11 +168,8 @@ void ImageListPanel::enableDisableButtons()
 	m_closeButton->setEnabled(m_imageMgr->currentImage());
 	m_bringForwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() > 0);
 	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
-
-	m_exposureSlider->setEnabled(m_imageMgr->currentImage());
-	m_exposureTextBox->setEnabled(m_imageMgr->currentImage());
 	m_linearToggle->setEnabled(m_imageMgr->currentImage());
-	m_resetExposure->setEnabled(m_imageMgr->currentImage());
+	m_recomputeHistogram->setEnabled(m_imageMgr->currentImage());
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
@@ -229,7 +196,7 @@ void ImageListPanel::updateHistogram()
 		return;
 	}
 
-	auto hist = m_imageMgr->currentImage()->histogram(m_linear, m_exposure);
+	auto hist = m_imageMgr->currentImage()->histogram(m_linearToggle->pushed(), pow(2.0f, m_imageViewer->exposure()));
 	int numBins = hist.rows();
 	float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
 	m_graph->setValues(hist.col(0)/maxValue, 0);
