@@ -14,7 +14,7 @@ using namespace std;
 
 namespace
 {
-void makeHistograms(MatrixX3f & linHist, MatrixX3f & rgbHist, const HDRImage & img, float exposure)
+void makeHistograms(MatrixX3f & linHist, MatrixX3f & rgbHist, const HDRImage & img, float gain)
 {
     const int numBins = 256;
     linHist = rgbHist = MatrixX3f::Zero(numBins, 3);
@@ -22,8 +22,8 @@ void makeHistograms(MatrixX3f & linHist, MatrixX3f & rgbHist, const HDRImage & i
     for (int y = 0; y < img.height(); ++y)
         for (int x = 0; x < img.width(); ++x)
         {
-            Color4 clin = img(x,y) * exposure;
-            Color4 crgb = toSRGB(img(x,y)) * exposure;
+            Color4 clin = img(x,y) * gain;
+            Color4 crgb = toSRGB(img(x,y)) * gain;
 
             linHist(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
             linHist(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;
@@ -38,7 +38,7 @@ void makeHistograms(MatrixX3f & linHist, MatrixX3f & rgbHist, const HDRImage & i
 }
 
 GLImage::GLImage() :
-    m_filename(), m_histogramExposure(NAN)
+    m_filename(), m_cachedHistogramExposure(NAN)
 {
     // empty
 }
@@ -108,22 +108,22 @@ bool GLImage::save(const std::string & filename,
 
 const MatrixX3f & GLImage::linearHistogram(float exposure) const
 {
-    if (m_histogramDirty || exposure != m_histogramExposure)
+    if (m_histogramDirty || exposure != m_cachedHistogramExposure)
     {
-        makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
+        makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, pow(2.0f, exposure));
         m_histogramDirty = false;
-        m_histogramExposure = exposure;
+        m_cachedHistogramExposure = exposure;
     }
     return m_linearHistogram;
 }
 
 const MatrixX3f & GLImage::sRGBHistogram(float exposure) const
 {
-    if (m_histogramDirty || exposure != m_histogramExposure)
+    if (m_histogramDirty || exposure != m_cachedHistogramExposure)
     {
-        makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, exposure);
+        makeHistograms(m_linearHistogram, m_sRGBHistogram, m_image, pow(2.0f, exposure));
         m_histogramDirty = false;
-        m_histogramExposure = exposure;
+        m_cachedHistogramExposure = exposure;
     }
     return m_sRGBHistogram;
 }

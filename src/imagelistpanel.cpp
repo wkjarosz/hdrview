@@ -29,7 +29,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	                           Alignment::Middle, 0, 2));
 	new Label(w, "Histogram:", "sans", 14);
 	m_linearToggle = new Button(w, "Linear", ENTYPO_ICON_VOLUME);
-	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_CYCLE);
+	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_WARNING);
 
 	m_linearToggle->setFlags(Button::ToggleButton);
 	m_linearToggle->setFixedSize(Vector2i(100, 19));
@@ -169,7 +169,9 @@ void ImageListPanel::enableDisableButtons()
 	m_bringForwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() > 0);
 	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
 	m_linearToggle->setEnabled(m_imageMgr->currentImage());
-	m_recomputeHistogram->setEnabled(m_imageMgr->currentImage());
+	bool showRecompute = m_imageMgr->currentImage() && m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure();
+	m_recomputeHistogram->setVisible(showRecompute);
+	m_linearToggle->setFixedWidth(showRecompute ? 100 : 121);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
@@ -193,15 +195,17 @@ void ImageListPanel::updateHistogram()
 		m_graph->setValues(VectorXf(), 0);
 		m_graph->setValues(VectorXf(), 1);
 		m_graph->setValues(VectorXf(), 2);
+		enableDisableButtons();
 		return;
 	}
 
-	auto hist = m_imageMgr->currentImage()->histogram(m_linearToggle->pushed(), pow(2.0f, m_imageViewer->exposure()));
+	auto hist = m_imageMgr->currentImage()->histogram(m_linearToggle->pushed(), m_imageViewer->exposure());
 	int numBins = hist.rows();
 	float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
 	m_graph->setValues(hist.col(0)/maxValue, 0);
 	m_graph->setValues(hist.col(1)/maxValue, 1);
 	m_graph->setValues(hist.col(2)/maxValue, 2);
+	enableDisableButtons();
 }
 
 NAMESPACE_END(nanogui)

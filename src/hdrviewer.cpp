@@ -151,7 +151,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             m_imageView->setExposure(log2(1.0f/mC));
 	                             });
 	normalizeButton->setTooltip("Normalize exposure.");
-	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_CYCLE);
+	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_BACK_IN_TIME);
 	resetButton->setFixedSize(Vector2i(19, 19));
 	resetButton->setCallback([this](void)
 	                             {
@@ -213,10 +213,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     gammaSlider->setValue(gamma);
     gammaTextBox->setValue(gamma);
 
-    m_imageView->setExposureCallback([exposureTextBox,exposureSlider](float e)
+    m_imageView->setExposureCallback([this,exposureTextBox,exposureSlider](float e)
                                      {
 	                                     exposureTextBox->setValue(e);
 	                                     exposureSlider->setValue(e);
+	                                     m_imagesPanel->enableDisableButtons();
                                      });
     m_imageView->setGammaCallback([gammaTextBox,gammaSlider](float g)
                                   {
@@ -265,9 +266,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                                    {
 		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
 		                                    updateCaption();
+		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
 		                                    m_imagesPanel->enableDisableButtons();
 		                                    editPanel->enableDisableButtons();
-		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
 	                                    });
 
 	m_imageMgr->setReferenceImageCallback([this](void)

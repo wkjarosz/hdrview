@@ -52,6 +52,8 @@ public:
               float gain, float gamma,
               bool sRGB, bool dither) const;
 
+	float histogramExposure() const {return m_cachedHistogramExposure;}
+
     const Eigen::MatrixX3f & linearHistogram(float exposure) const;
     const Eigen::MatrixX3f & sRGBHistogram(float exposure) const;
     const Eigen::MatrixX3f & histogram(bool linear, float exposure) const
@@ -64,7 +66,7 @@ private:
 	GLuint m_texture = 0;
     HDRImage m_image;
     std::string m_filename;
-    mutable float m_histogramExposure;
+    mutable float m_cachedHistogramExposure;
     mutable bool m_histogramDirty = true;
     mutable Eigen::MatrixX3f m_linearHistogram, m_sRGBHistogram;
     mutable CommandHistory m_history;
