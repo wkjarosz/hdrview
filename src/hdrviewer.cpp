@@ -298,7 +298,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	m_imageMgr->setReferenceImageCallback([this](void)
 	                                    {
-		                                    cout << "setting reference to: " << m_imageMgr->referenceImageIndex() << endl;
 		                                    m_imageView->setReferenceImage(m_imageMgr->referenceImage());
 		                                    m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
 	                                    });
@@ -535,7 +534,6 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
                 return true;
         }
 
-        // undo & redo
         case 'Z':
             if (modifiers & GLFW_MOD_SUPER)
             {
@@ -664,150 +662,30 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 			    return true;
 		    }
 		    return false;
-        case '1':
-	        if (modifiers & GLFW_MOD_SUPER)
-	        {
-		        m_imagesPanel->setChannel(EChannel(0));
-		        return true;
-	        }
-	        else if (modifiers & GLFW_MOD_SHIFT)
-	        {
-		        m_imagesPanel->setBlendMode(EBlendMode(0));
-		        return true;
-	        }
-		    else
-	        {
-		        if (m_imageMgr->numImages() > 0)
-			        m_imageMgr->setCurrentImageIndex(0);
-	        }
-		    return false;
-	    case '2':
-		    if (modifiers & GLFW_MOD_SUPER)
-		    {
-			    m_imagesPanel->setChannel(EChannel(1));
-			    return true;
-		    }
-		    else if (modifiers & GLFW_MOD_SHIFT)
-		    {
-			    m_imagesPanel->setBlendMode(EBlendMode(1));
-			    return true;
-		    }
-		    else
-		    {
-			    if (m_imageMgr->numImages() > 1)
-				    m_imageMgr->setCurrentImageIndex(1);
-		    }
-		    return false;
-        case '3':
-	        if (modifiers & GLFW_MOD_SUPER)
-	        {
-		        m_imagesPanel->setChannel(EChannel(2));
-		        return true;
-	        }
-	        else if (modifiers & GLFW_MOD_SHIFT)
-	        {
-		        m_imagesPanel->setBlendMode(EBlendMode(2));
-		        return true;
-	        }
-	        else
-	        {
-		        if (m_imageMgr->numImages() > 2)
-			        m_imageMgr->setCurrentImageIndex(2);
-	        }
-		    return false;
-        case '4':
-	        if (modifiers & GLFW_MOD_SUPER)
-	        {
-		        m_imagesPanel->setChannel(EChannel(3));
-		        return true;
-	        }
-	        else if (modifiers & GLFW_MOD_SHIFT)
-	        {
-		        m_imagesPanel->setBlendMode(EBlendMode(3));
-		        return true;
-	        }
-	        else
-	        {
-		        if (m_imageMgr->numImages() > 3)
-			        m_imageMgr->setCurrentImageIndex(3);
-	        }
-		    return false;
-        case '5':
-	        if (modifiers & GLFW_MOD_SUPER)
-	        {
-		        m_imagesPanel->setChannel(EChannel(4));
-		        return true;
-	        }
-	        else if (modifiers & GLFW_MOD_SHIFT)
-	        {
-		        m_imagesPanel->setBlendMode(EBlendMode(4));
-		        return true;
-	        }
-	        else
-	        {
-		        if (m_imageMgr->numImages() > 4)
-			        m_imageMgr->setCurrentImageIndex(4);
-	        }
-		    return false;
-	    case '6':
-		    if (modifiers & GLFW_MOD_SUPER)
-		    {
-			    m_imagesPanel->setChannel(EChannel(5));
-			    return true;
-		    }
-		    else if (modifiers & GLFW_MOD_SHIFT)
-		    {
-			    m_imagesPanel->setBlendMode(EBlendMode(5));
-			    return true;
-		    }
-		    else
-		    {
-			    if (m_imageMgr->numImages() > 5)
-				    m_imageMgr->setCurrentImageIndex(5);
-		    }
-		    return false;
-	    case '7':
-		    if (modifiers & GLFW_MOD_SUPER)
-		    {
-			    m_imagesPanel->setChannel(EChannel(6));
-			    return true;
-		    }
-		    else if (modifiers & GLFW_MOD_SHIFT)
-		    {
-			    m_imagesPanel->setBlendMode(EBlendMode(6));
-			    return true;
-		    }
-		    else
-		    {
-			    if (m_imageMgr->numImages() > 6)
-				    m_imageMgr->setCurrentImageIndex(6);
-		    }
-		    return false;
-	    case '8':
-		    if (modifiers & GLFW_MOD_SHIFT)
-		    {
-			    m_imagesPanel->setBlendMode(EBlendMode(7));
-			    return true;
-		    }
-		    else if (modifiers == 0)
-		    {
-			    if (m_imageMgr->numImages() > 7)
-				    m_imageMgr->setCurrentImageIndex(7);
-		    }
-		    return false;
-	    case '9':
-		    if (modifiers & GLFW_MOD_SHIFT)
-		    {
-			    m_imagesPanel->setBlendMode(EBlendMode(7));
-			    return true;
-		    }
-		    else if (modifiers == 0)
-		    {
-			    if (m_imageMgr->numImages() > 8)
-				    m_imageMgr->setCurrentImageIndex(8);
-		    }
-		    return false;
     }
+
+	if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)
+	{
+		int idx = (key - GLFW_KEY_1) % 10;
+
+		if (modifiers & GLFW_MOD_SUPER && idx <= 6)
+		{
+			m_imagesPanel->setChannel(EChannel(idx));
+			return true;
+		}
+		else if (modifiers & GLFW_MOD_SHIFT && idx <= 7)
+		{
+			m_imagesPanel->setBlendMode(EBlendMode(idx));
+			return true;
+		}
+		else
+		{
+			if (m_imageMgr->numImages() > idx)
+				m_imageMgr->setCurrentImageIndex(idx);
+		}
+		return false;
+	}
+
     return false;
 }
 

@@ -23,7 +23,7 @@ public:
 	HDRImageViewer(Widget * parent, HDRViewScreen * screen);
 
 	void setCurrentImage(const GLImage *cur)    {m_currentImage = cur;}
-	void setReferenceImage(const GLImage *ref)  {std::cout << "ref image = " << ref << std::endl; m_referenceImage = ref;}
+	void setReferenceImage(const GLImage *ref)  {m_referenceImage = ref;}
 
 	// overridden Widget virtual functions
 	void draw(NVGcontext* ctx) override;
