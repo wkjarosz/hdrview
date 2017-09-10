@@ -64,8 +64,9 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(imageLoading, COMMAND + "+O", "Open Image");
 	addRow(imageLoading, COMMAND + "+S", "Save Image");
 	addRow(imageLoading, COMMAND + "+W or Delete", "Close Image");
-	addRow(imageLoading, COMMAND + "+[ / " + COMMAND + "+]", "Send Image Forward/Backward");
-	addRow(imageLoading, "Down / Up or Page Down / Up", "Select Previous/Next Image");
+	addRow(imageLoading, "1…9", "Select the N-the Image");
+	addRow(imageLoading, "Down / Up", "Select Previous/Next Image");
+	addRow(imageLoading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
 
     new Label(this, "Display/Tonemapping Options", "sans-bold", 18);
     auto imageSelection = new Widget(this);
@@ -73,8 +74,10 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	addRow(imageSelection, "E / Shift+E", "Decrease/Increase Exposure");
 	addRow(imageSelection, "G / Shift+G", "Decrease/Increase Gamma");
-	addRow(imageSelection, "D", "Toggle Dithering");
-	addRow(imageSelection, "1/2/3/4", "View the R/G/B/RGB Channels");
+	addRow(imageSelection, "R", "Reset tonemapping");
+	addRow(imageSelection, "N", "Normalize Image to [0,1]");
+	addRow(imageSelection, COMMAND + "+1…7", "Cycle through Color Channels");
+	addRow(imageSelection, "Shift+1…8", "Cycle through Blend Modes");
 
 	new Label(this, "Panning/Zooming", "sans-bold", 18);
 	auto panningZooming = new Widget(this);
@@ -84,7 +87,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(panningZooming, "Left Click+Drag", "Pan image");
 	addRow(panningZooming, "- / +", "Zoom In and Out by Powers of 2");
 	addRow(panningZooming, "Space", "Re-Center View");
-    addRow(panningZooming, "Home", "Fit Image to Screen");
+    addRow(panningZooming, COMMAND + "+0", "Fit Image to Screen");
 
 	new Label(this, "Image Edits", "sans-bold", 18);
 	auto edits = new Widget(this);

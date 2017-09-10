@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include "fwd.h"
 
 template <typename T>
 inline T sign(T a) {return (a > 0) ? T (1) : (a < 0) ? T (-1) : 0;}
@@ -54,3 +55,9 @@ inline T mod(T a, T b)
 
 std::string getExtension(const std::string& filename);
 std::string getBasename(const std::string& filename);
+
+
+const std::vector<std::string> & channelNames();
+const std::vector<std::string> & blendModeNames();
+std::string channelToString(EChannel channel);
+std::string blendModeToString(EBlendMode mode);

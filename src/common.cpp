@@ -4,8 +4,10 @@
 */
 
 #include "common.h"
+#include <vector>
 
 using std::string;
+using std::vector;
 
 string getExtension(const string& filename)
 {
@@ -24,4 +26,46 @@ string getBasename(const string& filename)
     auto start = (lastSlash != string::npos) ? lastSlash + 1 : 0;
     auto length = (lastDot != string::npos) ? lastDot-start : filename.size()-start;
     return filename.substr(start, length);
+}
+
+
+const vector<string> & channelNames()
+{
+    static const vector<string> names =
+        {
+            "RGB",
+            "Red",
+            "Green",
+            "Blue",
+            "Luminance",
+            "A",
+            "B"
+        };
+    return names;
+}
+
+const vector<string> & blendModeNames()
+{
+    static const vector<string> names =
+        {
+            "Normal",
+            "Multiply",
+            "Divide",
+            "Add",
+            "Average",
+            "Subtract",
+            "Difference",
+            "Relative difference",
+        };
+    return names;
+}
+
+string channelToString(EChannel channel)
+{
+    return channelNames()[channel];
+}
+
+string blendModeToString(EBlendMode mode)
+{
+    return blendModeNames()[mode];
 }

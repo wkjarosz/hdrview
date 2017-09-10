@@ -25,10 +25,17 @@ public:
 	bool isModified() const                 { return m_isModified; }
 	bool isSelected() const                 { return m_isSelected; }
 	void setIsSelected(bool isSelected)     { m_isSelected = isSelected; }
+	bool isReference() const                { return m_isReference; }
+	void setIsReference(bool isReference)   { m_isReference = isReference; }
 
-	void setSelectedCallback(const std::function<void()> & callback)
+	void setSelectedCallback(const std::function<void(int)> & callback)
 	{
 		m_selectedCallback = callback;
+	}
+
+	void setReferenceCallback(const std::function<void(int)> & callback)
+	{
+		m_referenceCallback = callback;
 	}
 
 private:
@@ -36,7 +43,10 @@ private:
 
 	bool m_isModified = false;
 	bool m_isSelected = false;
-	std::function<void()> m_selectedCallback;
+	bool m_isReference = false;
+	bool m_canBeReference;
+	std::function<void(int)> m_selectedCallback;
+	std::function<void(int)> m_referenceCallback;
 
 	size_t m_id = 0;
 	size_t m_cutoff = 0;

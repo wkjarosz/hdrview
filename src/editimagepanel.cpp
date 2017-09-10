@@ -15,6 +15,48 @@ using namespace std;
 namespace
 {
 
+Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static string name = "Exposure/Gamma...";
+	static float exposure = 0.0f;
+	static float gamma = 1.0f;
+	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
+	b->setCallback([&, parent, screen, imageMgr]()
+       {
+           FormHelper *gui = new FormHelper(screen);
+           gui->setFixedSize(Vector2i(75, 20));
+
+           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+           auto w = gui->addVariable("Exposure:", exposure);
+           w->setSpinnable(true);
+           w->setMinValue(-10.f);
+		   w->setMaxValue( 10.f);
+           w = gui->addVariable("Gamma:", gamma);
+           w->setSpinnable(true);
+           w->setMinValue(0.0001f);
+		   w->setMaxValue(10.0f);
+
+           gui->addButton("Cancel", [&, window]() { window->dispose(); })
+              ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+           gui->addButton("OK", [&, window]()
+           {
+               imageMgr->modifyImage([&](HDRImage &img)
+                                     {
+	                                     auto undo = new FullImageUndo(img);
+	                                     img = (Color4(pow(2.0f, exposure)) * img).pow(Color4(1.0f/gamma));
+	                                     return undo;
+                                     });
+               window->dispose();
+           })->setIcon(ENTYPO_ICON_CHECK);
+
+           window->center();
+           window->requestFocus();
+       });
+	return b;
+}
+
 Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 {
 	static float width = 1.0f, height = 1.0f;
@@ -549,6 +591,9 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	// shift
 	m_filterButtons.push_back(createShiftButton(this, m_screen, m_imageMgr));
+
+	new Label(this, "Adjustments", "sans-bold");
+	m_filterButtons.push_back(createExposureGammaButton(this, m_screen, m_imageMgr));
 
 	new Label(this, "Resize/resample", "sans-bold");
 	m_filterButtons.push_back(createResizeButton(this, m_screen, m_imageMgr));

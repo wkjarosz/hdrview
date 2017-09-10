@@ -11,7 +11,7 @@ using namespace nanogui;
 using namespace std;
 
 ImageButton::ImageButton(Widget *parent, const string &caption)
-	: Widget (parent), m_caption(caption)
+	: Widget (parent), m_caption(caption), m_canBeReference(true)
 {
 	mFontSize = 15;
 }
@@ -46,7 +46,32 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 		return false;
 	}
 
-	if (button == GLFW_MOUSE_BUTTON_1)
+	if (m_canBeReference && (button == GLFW_MOUSE_BUTTON_2 ||
+		(button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT)))
+	{
+		// If we already were the reference, then let's disable using us a reference.
+		m_isReference = !m_isReference;
+
+		// If we newly became the reference, then we need to disable the existing reference
+		// if it exists.
+		if (m_isReference)
+		{
+			for (auto widget : parent()->children())
+			{
+				ImageButton* b = dynamic_cast<ImageButton*>(widget);
+				if (b && b != this)
+					b->m_isReference = false;
+			}
+		}
+
+		// Invoke the callback in any case, such that the surrounding code can
+		// react to new references or a loss of a reference image.
+		if (m_referenceCallback)
+			m_referenceCallback(m_isReference ? m_id : -1);
+
+		return true;
+	}
+	else if (button == GLFW_MOUSE_BUTTON_1)
 	{
 		if (!m_isSelected)
 		{
@@ -60,7 +85,7 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 
 			m_isSelected = true;
 			if (m_selectedCallback)
-				m_selectedCallback();
+				m_selectedCallback(m_id);
 		}
 		return true;
 	}
@@ -72,13 +97,22 @@ void ImageButton::draw(NVGcontext *ctx)
 {
 	Widget::draw(ctx);
 
+	int extraBorder = 0;
+	if (m_isReference)
+	{
+		extraBorder = 2;
+		nvgBeginPath(ctx);
+		nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
+		nvgFillColor(ctx, Color(0.7f, 0.4f, 0.4f, 1.0f));
+		nvgFill(ctx);
+	}
+
 	// Fill the button with color.
 	if (m_isSelected || mMouseFocus)
 	{
 		nvgBeginPath(ctx);
-
-		nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
-
+		nvgRect(ctx, mPos.x() + extraBorder, mPos.y() + extraBorder,
+		        mSize.x() - 2*extraBorder, mSize.y() - 2*extraBorder);
 		nvgFillColor(ctx, m_isSelected ? mTheme->mButtonGradientBotPushed : mTheme->mButtonGradientBotFocused);
 		nvgFill(ctx);
 	}
@@ -96,34 +130,24 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 
 	if (mSize.x() == preferredSize(ctx).x())
-	{
 		m_cutoff = 0;
-	}
 	else if (mSize != m_sizeForWhichCutoffWasComputed)
 	{
 		m_cutoff = 0;
 		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 25 - idSize - iconSize)
-		{
 			++m_cutoff;
-		}
 
 		m_sizeForWhichCutoffWasComputed = mSize;
 	}
 
 	string caption = m_caption.substr(m_cutoff);
 	if (m_cutoff > 0)
-	{
 		caption = string("…") + caption;
-	}
 
 	Vector2f center = mPos.cast<float>() + mSize.cast<float>() * 0.5f;
 	Vector2f bottomRight = mPos.cast<float>() + mSize.cast<float>();
 	Vector2f textPos(bottomRight.x() - 5, center.y());
-	NVGcolor textColor = Color(180, 255);
-	if (m_isSelected || mMouseFocus)
-	{
-		textColor = mTheme->mTextColor;
-	}
+	NVGcolor textColor = (m_isSelected || m_isReference || mMouseFocus) ? mTheme->mTextColor : Color(180, 255);
 
 	// Image name
 	nvgFontSize(ctx, mFontSize);

@@ -19,29 +19,36 @@ NAMESPACE_BEGIN(nanogui)
 HDRImageViewer::HDRImageViewer(Widget * parent, HDRViewScreen * screen)
 	: Widget(parent), m_screen(screen),
 	  m_zoom(1.f/m_screen->pixelRatio()), m_offset(Vector2f::Zero()),
-	  m_exposureCallback(std::function<void(bool)>()),
-	  m_gammaCallback(std::function<void(bool)>()),
+	  m_exposureCallback(std::function<void(float)>()),
+	  m_gammaCallback(std::function<void(float)>()),
+	  m_sRGBCallback(std::function<void(bool)>()),
+	  m_zoomCallback(std::function<void(float)>()),
 	  m_pixelHoverCallback(std::function<void(const Vector2i &, const Color4 &, const Color4 &)>())
 {
 
 }
 
+Vector2f HDRImageViewer::screenSizeF() const
+{
+	return m_screen->size().cast<float>();
+}
+
 
 Vector2f HDRImageViewer::imageCoordinateAt(const Vector2f& position) const
 {
-	auto imagePosition = position - (m_offset + centerOffset());
+	auto imagePosition = position - (m_offset + centerOffset(m_currentImage));
 	return imagePosition / m_zoom;
 }
 
 Vector2f HDRImageViewer::clampedImageCoordinateAt(const Vector2f& position) const
 {
 	auto imageCoordinate = imageCoordinateAt(position);
-	return imageCoordinate.cwiseMax(Vector2f::Zero()).cwiseMin(imageSizeF());
+	return imageCoordinate.cwiseMax(Vector2f::Zero()).cwiseMin(imageSizeF(m_currentImage));
 }
 
 Vector2f HDRImageViewer::positionForCoordinate(const Vector2f& imageCoordinate) const
 {
-	return m_zoom*imageCoordinate + (m_offset + centerOffset());
+	return m_zoom*imageCoordinate + (m_offset + centerOffset(m_currentImage));
 }
 
 Vector2f HDRImageViewer::screenPositionForCoordinate(const Vector2f& imageCoordinate) const
@@ -56,9 +63,9 @@ void HDRImageViewer::setImageCoordinateAt(const Vector2f& position, const Vector
 	m_offset = position - (imageCoordinate * m_zoom);
 
 	// Clamp offset so that the image remains near the screen.
-	m_offset = m_offset.cwiseMin(sizeF()).cwiseMax(-scaledImageSizeF());
+	m_offset = m_offset.cwiseMin(sizeF()).cwiseMax(-scaledImageSizeF(m_currentImage));
 
-	m_offset -= centerOffset();
+	m_offset -= centerOffset(m_currentImage);
 }
 
 void HDRImageViewer::center()
@@ -69,7 +76,7 @@ void HDRImageViewer::center()
 void HDRImageViewer::fit()
 {
 	// Calculate the appropriate scaling factor.
-	m_zoom = (sizeF().cwiseQuotient(imageSizeF())).minCoeff();
+	m_zoom = (sizeF().cwiseQuotient(imageSizeF(m_currentImage))).minCoeff();
 	center();
 	m_zoomCallback(m_zoom);
 }
@@ -80,7 +87,7 @@ void HDRImageViewer::moveOffset(const Vector2f& delta)
 	m_offset += delta;
 
 	// Prevent the image from going out of bounds.
-	auto scaledSize = scaledImageSizeF();
+	auto scaledSize = scaledImageSizeF(m_currentImage);
 	if (m_offset.x() + scaledSize.x() < 0)
 		m_offset.x() = -scaledSize.x();
 	if (m_offset.x() > sizeF().x())
@@ -153,15 +160,15 @@ bool HDRImageViewer::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, in
 	if (Widget::mouseMotionEvent(p, rel, button, modifiers))
 		return true;
 
-	if (!m_image)
+	if (!m_currentImage)
 		return false;
 
 	Vector2i pixel = imageCoordinateAt((p-mPos).cast<float>()).cast<int>();
 	Color4 pixelVal(0.f);
 	Color4 iPixelVal(0.f);
-	if (m_image->contains(pixel))
+	if (m_currentImage->contains(pixel))
 	{
-		pixelVal = m_image->image()(pixel.x(), pixel.y());
+		pixelVal = m_currentImage->image()(pixel.x(), pixel.y());
 		iPixelVal = (pixelVal * pow(2.f, m_exposure) * 255).min(255.f).max(0.f);
 	}
 
@@ -196,9 +203,9 @@ bool HDRImageViewer::helpersVisible() const
 	return gridVisible() || pixelInfoVisible();
 }
 
-Vector2f HDRImageViewer::centerOffset() const
+Vector2f HDRImageViewer::centerOffset(const GLImage * img) const
 {
-	return (sizeF() - scaledImageSizeF()) / 2;
+	return (sizeF() - scaledImageSizeF(img)) / 2;
 }
 
 void HDRImageViewer::draw(NVGcontext* ctx)
@@ -206,8 +213,6 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	Widget::draw(ctx);
 	nvgEndFrame(ctx); // Flush the NanoVG draw stack, not necessary to call nvgBeginFrame afterwards.
 
-	// Calculate several variables that need to be send to OpenGL in order for the image to be
-	// properly displayed inside the widget.
 	Vector2f screenSize = m_screen->size().cast<float>();
 	Vector2f positionInScreen = absolutePosition().cast<float>();
 
@@ -220,14 +225,24 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	if (m_image)
+	if (m_currentImage)
 	{
-		Vector2f scaleFactor = m_zoom * imageSizeF().cwiseQuotient(screenSize);
-		Vector2f positionAfterOffset = positionInScreen + m_offset + centerOffset();
-		Vector2f imagePosition = positionAfterOffset.cwiseQuotient(screenSize);
+		Vector2f pCurrent, sCurrent;
+		imagePositionAndScale(pCurrent, sCurrent, m_currentImage);
 
-		m_shader.draw(m_image->glTextureId(), scaleFactor, imagePosition,
-		               powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channels);
+		if (m_referenceImage)
+		{
+			Vector2f pReference, sReference;
+			imagePositionAndScale(pReference, sReference, m_referenceImage);
+			m_shader.draw(m_currentImage->glTextureId(), m_referenceImage->glTextureId(),
+			              sCurrent, pCurrent, sReference, pReference,
+			              powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channel, m_blendMode);
+		}
+		else
+		{
+			m_shader.draw(m_currentImage->glTextureId(), sCurrent, pCurrent,
+			              powf(2.0f, m_exposure), m_gamma, m_sRGB, m_dither, m_channel, m_blendMode);
+		}
 
 		drawImageBorder(ctx);
 
@@ -238,6 +253,12 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	glDisable(GL_SCISSOR_TEST);
 
 	drawWidgetBorder(ctx);
+}
+
+void HDRImageViewer::imagePositionAndScale(Vector2f & position, Vector2f & scale, const GLImage * image)
+{
+	scale = scaledImageSizeF(image).cwiseQuotient(screenSizeF());
+	position = (absolutePosition().cast<float>() + m_offset + centerOffset(image)).cwiseQuotient(screenSizeF());
 }
 
 void HDRImageViewer::drawWidgetBorder(NVGcontext* ctx) const
@@ -258,12 +279,18 @@ void HDRImageViewer::drawWidgetBorder(NVGcontext* ctx) const
 	nvgRestore(ctx);
 }
 
-void HDRImageViewer::drawImageBorder(NVGcontext* ctx) const {
-
+void HDRImageViewer::drawImageBorder(NVGcontext* ctx) const
+{
 	int ds = mTheme->mWindowDropShadowSize, cr = mTheme->mWindowCornerRadius;
 
-	Vector2i borderPosition = mPos + (m_offset + centerOffset()).cast<int>();
-	Vector2i borderSize = scaledImageSizeF().cast<int>();
+	Vector2i borderPosition = mPos + (m_offset + centerOffset(m_currentImage)).cast<int>();
+	Vector2i borderSize = scaledImageSizeF(m_currentImage).cast<int>();
+
+	if (m_referenceImage)
+	{
+		borderPosition = borderPosition.cwiseMin(mPos + (m_offset + centerOffset(m_referenceImage)).cast<int>());
+		borderSize = borderSize.cwiseMax(scaledImageSizeF(m_referenceImage).cast<int>());
+	}
 
 	// Draw a drop shadow
 	NVGpaint shadowPaint = nvgBoxGradient(ctx, borderPosition.x(), borderPosition.y(),
@@ -308,9 +335,9 @@ void HDRImageViewer::drawPixelGrid(NVGcontext* ctx) const
 {
 	Vector2f xy0 = screenPositionForCoordinate(Vector2f::Zero());
 	int minJ = max(0, int(-xy0.y() / m_zoom));
-	int maxJ = min(m_image->height(), int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
+	int maxJ = min(m_currentImage->height(), int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
 	int minI = max(0, int(-xy0.x() / m_zoom));
-	int maxI = min(m_image->width(), int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
+	int maxI = min(m_currentImage->width(), int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
 
 	nvgBeginPath(ctx);
 
@@ -342,14 +369,14 @@ void HDRImageViewer::drawPixelInfo(NVGcontext *ctx) const
 {
 	Vector2f xy0 = screenPositionForCoordinate(Vector2f::Zero());
 	int minJ = max(0, int(-xy0.y() / m_zoom));
-	int maxJ = min(m_image->height()-1, int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
+	int maxJ = min(m_currentImage->height()-1, int(ceil((m_screen->size().y() - xy0.y())/m_zoom)));
 	int minI = max(0, int(-xy0.x() / m_zoom));
-	int maxI = min(m_image->width()-1, int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
+	int maxI = min(m_currentImage->width()-1, int(ceil((m_screen->size().x() - xy0.x())/m_zoom)));
 	for (int j = minJ; j <= maxJ; ++j)
 	{
 		for (int i = minI; i <= maxI; ++i)
 		{
-			Color4 pixel = m_image->image()(i, j);
+			Color4 pixel = m_currentImage->image()(i, j);
 			float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 			string text = fmt::format("{:1.3f}\n{:1.3f}\n{:1.3f}", pixel[0], pixel[1], pixel[2]);
 

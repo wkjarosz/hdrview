@@ -39,3 +39,32 @@ namespace nanogui { class HDRImageViewer; }
 
 
 namespace spdlog { class logger; }
+
+
+enum EChannel : int
+{
+	RGB = 0,
+	RED,
+	GREEN,
+	BLUE,
+	LUMINANCE,
+	A,
+	B,
+
+	NUM_CHANNELS
+};
+
+
+enum EBlendMode : int
+{
+	NORMAL = 0,
+	MULTIPLY,
+	DIVIDE,
+	ADD,
+	AVERAGE,
+	SUBTRACT,
+	DIFFERENCE,
+	RELATIVE_DIFFERENCE,
+
+	NUM_BLEND_MODES
+};

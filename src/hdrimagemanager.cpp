@@ -13,19 +13,10 @@ using namespace nanogui;
 HDRImageManager::HDRImageManager()
 	: m_imageChangedCallback(std::function<void(int)>()),
 	  m_numImagesCallback(std::function<void(void)>()),
-	  m_imageSelectedCallback(std::function<void(int)>())
+	  m_currentImageCallback(std::function<void(void)>()),
+	  m_referenceImageCallback(std::function<void(void)>())
 {
 
-}
-
-const GLImage * HDRImageManager::currentImage() const
-{
-	return image(m_current);
-}
-
-GLImage * HDRImageManager::currentImage()
-{
-	return image(m_current);
 }
 
 const GLImage * HDRImageManager::image(int index) const
@@ -38,12 +29,21 @@ GLImage * HDRImageManager::image(int index)
 	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 }
 
-void HDRImageManager::selectImage(int index, bool forceCallback)
+void HDRImageManager::setCurrentImageIndex(int index, bool forceCallback)
 {
 	if (forceCallback || index != m_current)
 	{
 		m_current = index;
-		m_imageSelectedCallback(m_current);
+		m_currentImageCallback();
+	}
+}
+
+void HDRImageManager::setReferenceImageIndex(int index, bool forceCallback)
+{
+	if (forceCallback || index != m_reference)
+	{
+		m_reference = index;
+		m_referenceImageCallback();
 	}
 }
 
@@ -135,7 +135,7 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 	spdlog::get("console")->info("Loading all {:d} images took {} seconds", allFilenames.size(), elapsedSeconds.count());
 
 	m_numImagesCallback();
-	selectImage(int(m_images.size() - 1));
+	setCurrentImageIndex(int(m_images.size() - 1));
 
 	if (numErrors)
 	{
@@ -174,7 +174,7 @@ void HDRImageManager::closeImage(int index)
 		else if (m_current >= int(m_images.size()))
 			newIndex = m_images.size() - 1;
 
-		selectImage(newIndex, true);
+		setCurrentImageIndex(newIndex, true);
 		m_numImagesCallback();
 	}
 }
@@ -210,7 +210,7 @@ void HDRImageManager::bringImageForward()
 	m_current--;
 
 	m_imageChangedCallback(m_current);
-	m_imageSelectedCallback(m_current);
+	m_currentImageCallback();
 }
 
 void HDRImageManager::sendImageBackward()
@@ -223,5 +223,5 @@ void HDRImageManager::sendImageBackward()
 	m_current++;
 
 	m_imageChangedCallback(m_current);
-	m_imageSelectedCallback(m_current);
+	m_currentImageCallback();
 }

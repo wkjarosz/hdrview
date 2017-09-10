@@ -30,28 +30,39 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     thm->mTextBoxFontSize      = 14;
     setTheme(thm);
 
+	Theme * panelTheme = new Theme(mNVGContext);
+	panelTheme = new Theme(mNVGContext);
+	panelTheme->mStandardFontSize     = 16;
+	panelTheme->mButtonFontSize       = 15;
+	panelTheme->mTextBoxFontSize      = 14;
+	panelTheme->mButtonCornerRadius   = 2;
+	panelTheme->mWindowHeaderHeight   = 0;
+	panelTheme->mWindowDropShadowSize = 0;
+	panelTheme->mWindowCornerRadius   = 0;
+	panelTheme->mWindowFillFocused    = Color(.2f,.2f,.2f,.9f);
+	panelTheme->mWindowFillUnfocused  = Color(.2f,.2f,.2f,.9f);
+
+
 	//
 	// Construct the top-level widgets
 	//
 
-	auto verticalScreenSplit = new Widget(this);
-	verticalScreenSplit->setLayout(new BoxLayout{Orientation::Vertical, Alignment::Fill});
-
-	m_topPanel = new Widget(verticalScreenSplit);
+	m_topPanel = new Window(this, "");
+	m_topPanel->setTheme(panelTheme);
+	m_topPanel->setPosition(Vector2i(0,0));
 	m_topPanel->setFixedHeight(30);
 	m_topPanel->setLayout(new BoxLayout(Orientation::Horizontal,
 	                                    Alignment::Middle, 5, 5));
 
-	auto horizontalScreenSplit = new Widget(verticalScreenSplit);
-	horizontalScreenSplit->setLayout(new BoxLayout{Orientation::Horizontal, Alignment::Fill});
+	m_sidePanel = new Window(this, "");
+	m_sidePanel->setTheme(panelTheme);
 
-	m_sidePanel = new Widget(horizontalScreenSplit);
-
-	m_imageView = new HDRImageViewer(horizontalScreenSplit, this);
+	m_imageView = new HDRImageViewer(this, this);
 	m_imageView->setGridThreshold(20);
 	m_imageView->setPixelInfoThreshold(20);
 
-	m_statusBar = new Widget(verticalScreenSplit);
+	m_statusBar = new Window(this, "");
+	m_statusBar->setTheme(panelTheme);
 	m_statusBar->setFixedHeight(m_statusBar->theme()->mTextBoxFontSize+1);
 
     //
@@ -86,12 +97,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	btn->setPushed(true);
 	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
-    auto imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr);
+    m_imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr, m_imageView);
 
-	btn->setChangeCallback([this,btn,imagesPanel](bool value)
+	btn->setChangeCallback([this,btn](bool value)
                          {
 	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
-                             imagesPanel->setVisible(value);
+	                         m_imagesPanel->setVisible(value);
                              updateLayout();
                              m_sidePanelContents->performLayout(mNVGContext);
                          });
@@ -154,6 +165,26 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     new Label(m_topPanel, "EV", "sans-bold");
     auto exposureSlider = new Slider(m_topPanel);
     auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
+	auto normalizeButton = new Button(m_topPanel, "", ENTYPO_ICON_FLASH);
+	normalizeButton->setFixedSize(Vector2i(19, 19));
+	normalizeButton->setCallback([this](void)
+	                             {
+		                             auto img = m_imageMgr->currentImage();
+		                             if (!img)
+			                             return;
+		                             float mC = img->image().maxCoeff().max();
+		                             m_imageView->setExposure(log2(1.0f/mC));
+	                             });
+	normalizeButton->setTooltip("Normalize exposure.");
+	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_CYCLE);
+	resetButton->setFixedSize(Vector2i(19, 19));
+	resetButton->setCallback([this](void)
+	                             {
+		                             m_imageView->setExposure(0.0f);
+		                             m_imageView->setGamma(2.2f);
+		                             m_imageView->setSRGB(true);
+	                             });
+	resetButton->setTooltip("Reset tonemapping.");
 
     auto sRGBCheckbox = new CheckBox(m_topPanel, "sRGB   ");
     auto gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
@@ -217,6 +248,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                                  gammaTextBox->setValue(g);
 	                                  gammaSlider->setValue(g);
                                   });
+	m_imageView->setSRGBCallback([sRGBCheckbox,gammaTextBox,gammaSlider](bool b)
+	                              {
+		                              sRGBCheckbox->setChecked(b);
+		                              gammaTextBox->setEnabled(!b);
+		                              gammaSlider->setEnabled(!b);
+	                              });
     m_imageView->setExposure(exposure);
     m_imageView->setGamma(gamma);
     m_imageView
@@ -249,31 +286,40 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     updateLayout();
                                 });
 
-	m_imageMgr->setImageSelectedCallback([this, imagesPanel, editPanel, histogramPanel](int i)
-	                                     {
-		                                     m_imageView->setImage(m_imageMgr->currentImage());
-		                                     updateCaption();
-		                                     imagesPanel->enableDisableButtons();
-		                                     editPanel->enableDisableButtons();
-		                                     imagesPanel->selectImage(i);
-		                                     histogramPanel->setImage(m_imageMgr->currentImage());
-	                                     });
+	m_imageMgr->setCurrentImageCallback([this, editPanel, histogramPanel](void)
+	                                    {
+		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
+		                                    updateCaption();
+		                                    m_imagesPanel->enableDisableButtons();
+		                                    editPanel->enableDisableButtons();
+		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
+		                                    histogramPanel->setImage(m_imageMgr->currentImage());
+	                                    });
 
-	m_imageMgr->setNumImagesCallback([this, imagesPanel, editPanel](void)
+	m_imageMgr->setReferenceImageCallback([this](void)
+	                                    {
+		                                    cout << "setting reference to: " << m_imageMgr->referenceImageIndex() << endl;
+		                                    m_imageView->setReferenceImage(m_imageMgr->referenceImage());
+		                                    m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
+	                                    });
+
+	m_imageMgr->setNumImagesCallback([this, editPanel](void)
 	                                 {
 		                                 updateCaption();
-		                                 imagesPanel->enableDisableButtons();
+		                                 m_imagesPanel->enableDisableButtons();
 		                                 editPanel->enableDisableButtons();
-		                                 imagesPanel->repopulateImageList();
-		                                 imagesPanel->selectImage(m_imageMgr->currentImageIndex());
+		                                 m_imagesPanel->repopulateImageList();
+		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
+		                                 m_imagesPanel->setReferenceImage(-1);
 	                                 });
-    m_imageMgr->setImageChangedCallback([this,imagesPanel,editPanel,histogramPanel](int i)
+    m_imageMgr->setImageChangedCallback([this,editPanel,histogramPanel](int i)
                                          {
 	                                         updateCaption();
-	                                         imagesPanel->enableDisableButtons();
+	                                         m_imagesPanel->enableDisableButtons();
 	                                         editPanel->enableDisableButtons();
-	                                         imagesPanel->repopulateImageList();
-	                                         imagesPanel->selectImage(i);
+	                                         m_imagesPanel->repopulateImageList();
+	                                         m_imagesPanel->setCurrentImage(i);
+	                                         m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
 	                                         histogramPanel->update();
                                          });
 
@@ -530,25 +576,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_KP_SUBTRACT:
 		    m_imageView->zoomOut();
             return true;
-        case '[':
-            if (modifiers & GLFW_MOD_SUPER)
-            {
-	            m_imageMgr->bringImageForward();
-                return true;
-            }
-        case ']':
-            if (modifiers & GLFW_MOD_SUPER)
-            {
-	            m_imageMgr->sendImageBackward();
-                return true;
-            }
+
         case 'G':
             if (modifiers & GLFW_MOD_SHIFT)
 	            m_imageView->setGamma(m_imageView->gamma() + 0.02f);
             else
 	            m_imageView->setGamma(max(0.02f, m_imageView->gamma() - 0.02f));
             return true;
-
         case 'E':
             if (modifiers & GLFW_MOD_SHIFT)
 	            m_imageView->setExposure(m_imageView->exposure() + 0.25f);
@@ -560,19 +594,12 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             flipImage(false);
             return true;
 
-
         case 'M':
             flipImage(true);
             return true;
 
         case ' ':
 	        m_imageView->center();
-            drawAll();
-            return true;
-
-        case GLFW_KEY_HOME:
-	        m_imageView->center();
-		    m_imageView->fit();
             drawAll();
             return true;
 
@@ -602,28 +629,184 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    updateLayout();
             return true;
 
-        case GLFW_KEY_PAGE_DOWN:
         case GLFW_KEY_DOWN:
-            if (m_imageMgr->numImages())
-	            m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
-            break;
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imageMgr->sendImageBackward();
+		        return true;
+	        }
+	        else if (m_imageMgr->numImages())
+            {
+	            m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
+	            return true;
+            }
+		    return false;
 
-        case GLFW_KEY_PAGE_UP:
-        case GLFW_KEY_UP: m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
-            break;
+        case GLFW_KEY_UP:
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imageMgr->bringImageForward();
+		        return true;
+	        }
+	        else if (m_imageMgr->numImages())
+	        {
+		        m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
+		        return true;
+	        }
+		    return false;
 
+	    case '0':
+		    if (modifiers & GLFW_MOD_SUPER)
+		    {
+			    m_imageView->center();
+			    m_imageView->fit();
+			    drawAll();
+			    return true;
+		    }
+		    return false;
         case '1':
-	        m_imageView->setChannel(Vector3f(1.0f, 0.0f, 0.0f));
-            return true;
-        case '2':
-	        m_imageView->setChannel(Vector3f(0.0f, 1.0f, 0.0f));
-            return true;
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imagesPanel->setChannel(EChannel(0));
+		        return true;
+	        }
+	        else if (modifiers & GLFW_MOD_SHIFT)
+	        {
+		        m_imagesPanel->setBlendMode(EBlendMode(0));
+		        return true;
+	        }
+		    else
+	        {
+		        if (m_imageMgr->numImages() > 0)
+			        m_imageMgr->setCurrentImageIndex(0);
+	        }
+		    return false;
+	    case '2':
+		    if (modifiers & GLFW_MOD_SUPER)
+		    {
+			    m_imagesPanel->setChannel(EChannel(1));
+			    return true;
+		    }
+		    else if (modifiers & GLFW_MOD_SHIFT)
+		    {
+			    m_imagesPanel->setBlendMode(EBlendMode(1));
+			    return true;
+		    }
+		    else
+		    {
+			    if (m_imageMgr->numImages() > 1)
+				    m_imageMgr->setCurrentImageIndex(1);
+		    }
+		    return false;
         case '3':
-	        m_imageView->setChannel(Vector3f(0.0f, 0.0f, 1.0f));
-            return true;
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imagesPanel->setChannel(EChannel(2));
+		        return true;
+	        }
+	        else if (modifiers & GLFW_MOD_SHIFT)
+	        {
+		        m_imagesPanel->setBlendMode(EBlendMode(2));
+		        return true;
+	        }
+	        else
+	        {
+		        if (m_imageMgr->numImages() > 2)
+			        m_imageMgr->setCurrentImageIndex(2);
+	        }
+		    return false;
         case '4':
-	        m_imageView->setChannel(Vector3f(1.0f, 1.0f, 1.0f));
-            return true;
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imagesPanel->setChannel(EChannel(3));
+		        return true;
+	        }
+	        else if (modifiers & GLFW_MOD_SHIFT)
+	        {
+		        m_imagesPanel->setBlendMode(EBlendMode(3));
+		        return true;
+	        }
+	        else
+	        {
+		        if (m_imageMgr->numImages() > 3)
+			        m_imageMgr->setCurrentImageIndex(3);
+	        }
+		    return false;
+        case '5':
+	        if (modifiers & GLFW_MOD_SUPER)
+	        {
+		        m_imagesPanel->setChannel(EChannel(4));
+		        return true;
+	        }
+	        else if (modifiers & GLFW_MOD_SHIFT)
+	        {
+		        m_imagesPanel->setBlendMode(EBlendMode(4));
+		        return true;
+	        }
+	        else
+	        {
+		        if (m_imageMgr->numImages() > 4)
+			        m_imageMgr->setCurrentImageIndex(4);
+	        }
+		    return false;
+	    case '6':
+		    if (modifiers & GLFW_MOD_SUPER)
+		    {
+			    m_imagesPanel->setChannel(EChannel(5));
+			    return true;
+		    }
+		    else if (modifiers & GLFW_MOD_SHIFT)
+		    {
+			    m_imagesPanel->setBlendMode(EBlendMode(5));
+			    return true;
+		    }
+		    else
+		    {
+			    if (m_imageMgr->numImages() > 5)
+				    m_imageMgr->setCurrentImageIndex(5);
+		    }
+		    return false;
+	    case '7':
+		    if (modifiers & GLFW_MOD_SUPER)
+		    {
+			    m_imagesPanel->setChannel(EChannel(6));
+			    return true;
+		    }
+		    else if (modifiers & GLFW_MOD_SHIFT)
+		    {
+			    m_imagesPanel->setBlendMode(EBlendMode(6));
+			    return true;
+		    }
+		    else
+		    {
+			    if (m_imageMgr->numImages() > 6)
+				    m_imageMgr->setCurrentImageIndex(6);
+		    }
+		    return false;
+	    case '8':
+		    if (modifiers & GLFW_MOD_SHIFT)
+		    {
+			    m_imagesPanel->setBlendMode(EBlendMode(7));
+			    return true;
+		    }
+		    else if (modifiers == 0)
+		    {
+			    if (m_imageMgr->numImages() > 7)
+				    m_imageMgr->setCurrentImageIndex(7);
+		    }
+		    return false;
+	    case '9':
+		    if (modifiers & GLFW_MOD_SHIFT)
+		    {
+			    m_imagesPanel->setBlendMode(EBlendMode(7));
+			    return true;
+		    }
+		    else if (modifiers == 0)
+		    {
+			    if (m_imageMgr->numImages() > 8)
+				    m_imageMgr->setCurrentImageIndex(8);
+		    }
+		    return false;
     }
     return false;
 }
@@ -637,8 +820,15 @@ void HDRViewScreen::updateLayout()
 
 	int middleHeight = height() - headerHeight - footerHeight;
 
-	m_imageView->setFixedSize(mSize - Vector2i(sidePanelWidth, headerHeight+footerHeight));
+	int headerTop = 0;
+	int sidePanelLeft = 0;
+	m_topPanel->setFixedWidth(width());
+	m_sidePanel->setPosition(Vector2i(sidePanelLeft,headerTop+headerHeight));
 	m_sidePanel->setFixedHeight(middleHeight);
+	m_imageView->setPosition(Vector2i(sidePanelWidth,headerHeight));
+	m_imageView->setFixedSize(mSize - Vector2i(sidePanelWidth, headerHeight+footerHeight));
+	m_statusBar->setPosition(Vector2i(0,headerHeight+middleHeight));
+	m_statusBar->setFixedWidth(width());
 
 	int lh = std::min(middleHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
 	m_sideScrollPanel->setFixedHeight(lh);

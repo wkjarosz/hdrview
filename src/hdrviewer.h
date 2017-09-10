@@ -36,11 +36,12 @@ private:
     void closeCurrentImage();
     void updateCaption();
 
-	Widget * m_topPanel = nullptr;
-	Widget * m_sidePanel = nullptr;
-	Widget * m_statusBar = nullptr;
+	Window * m_topPanel = nullptr;
+	Window * m_sidePanel = nullptr;
+	Window * m_statusBar = nullptr;
 	HDRImageViewer * m_imageView = nullptr;
 	HDRImageManager * m_imageMgr;
+	ImageListPanel * m_imagesPanel = nullptr;
 
     Button * m_helpButton = nullptr;
     Button * m_sidePanelButton = nullptr;
