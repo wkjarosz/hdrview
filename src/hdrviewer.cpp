@@ -172,7 +172,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_sidePanelButton->setFixedSize(Vector2i(25, 25));
     m_sidePanelButton->setChangeCallback([this](bool value)
     {
-        m_sidePanel->setVisible(value);
+	    m_guiTimer.reset();
+	    m_guiTimerRunning = true;
+	    m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
         updateLayout();
     });
 
@@ -576,7 +578,9 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'T':
-            m_topPanel->setVisible(!m_topPanel->visible());
+		    m_guiTimer.reset();
+		    m_guiTimerRunning = true;
+		    m_animationGoal = EAnimationGoal(m_animationGoal ^ TOP_PANEL);
 		    updateLayout();
             return true;
 
@@ -587,16 +591,16 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_TAB:
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
-		        bool setVis = !(m_sidePanel->visible() || m_statusBar->visible() || m_topPanel->visible());
-		        m_statusBar->setVisible(setVis);
-		        m_topPanel->setVisible(setVis);
-		        m_sidePanel->setVisible(setVis);
-		        m_sidePanelButton->setPushed(setVis);
+		        bool setVis = !((m_animationGoal & SIDE_PANEL) || (m_animationGoal & TOP_PANEL) || (m_animationGoal & BOTTOM_PANEL));
+		        m_guiTimer.reset();
+		        m_guiTimerRunning = true;
+		        m_animationGoal = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
 	        }
 		    else
 	        {
-		        m_sidePanel->setVisible(!m_sidePanel->visible());
-		        m_sidePanelButton->setPushed(m_sidePanel->visible());
+		        m_guiTimer.reset();
+		        m_guiTimerRunning = true;
+		        m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
 	        }
 		    updateLayout();
             return true;
@@ -666,20 +670,73 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 
 void HDRViewScreen::updateLayout()
 {
-	int headerHeight = m_topPanel->visible() ? m_topPanel->fixedHeight() : 0;
-	int sidePanelWidth = m_sidePanel->visible() ? m_sidePanel->fixedWidth() : 0;
-	int footerHeight = m_statusBar->visible() ? m_statusBar->fixedHeight() : 0;
+	int headerHeight = m_topPanel->fixedHeight();
+	int sidePanelWidth = m_sidePanel->fixedWidth();
+	int footerHeight = m_statusBar->fixedHeight();
 
-	int middleHeight = height() - headerHeight - footerHeight;
+	static int headerShift = 0;
+	static int sidePanelShift = 0;
+	static int footerShift = 0;
 
-	int headerTop = 0;
-	int sidePanelLeft = 0;
+	if (m_guiTimerRunning)
+	{
+		float duration = 200.f;
+		float elapsed = m_guiTimer.elapsed();
+		// stop the animation after 2 seconds
+		if (elapsed > duration)
+		{
+			m_guiTimerRunning = false;
+			sidePanelShift = (m_animationGoal & SIDE_PANEL) ? 0 : -sidePanelWidth;
+			headerShift = (m_animationGoal & TOP_PANEL) ? 0 : -headerHeight;
+			footerShift = (m_animationGoal & BOTTOM_PANEL) ? 0 : footerHeight;
+
+			m_sidePanelButton->setPushed(m_animationGoal & SIDE_PANEL);
+		}
+		// animate the location of the panels
+		else
+		{
+			// only animate the sidepanel if it isn't already at the goal position
+			if (((m_animationGoal & SIDE_PANEL) && sidePanelShift != 0) ||
+				(!(m_animationGoal & SIDE_PANEL) && sidePanelShift != -sidePanelWidth))
+			{
+				float start = (m_animationGoal & SIDE_PANEL) ? float(-sidePanelWidth) : 0.f;
+				float end = (m_animationGoal & SIDE_PANEL) ? 0.f : float(-sidePanelWidth);
+				sidePanelShift = round(lerp(start, end, smoothStep(0.f, duration, elapsed)));
+				m_sidePanelButton->setPushed(true);
+			}
+			// only animate the header if it isn't already at the goal position
+			if (((m_animationGoal & TOP_PANEL) && headerShift != 0) ||
+				(!(m_animationGoal & TOP_PANEL) && headerShift != -headerHeight))
+			{
+				float start = (m_animationGoal & TOP_PANEL) ? float(-headerHeight) : 0.f;
+				float end = (m_animationGoal & TOP_PANEL) ? 0.f : float(-headerHeight);
+				headerShift = round(lerp(start, end, smoothStep(0.f, duration, elapsed)));
+			}
+
+			// only animate the footer if it isn't already at the goal position
+			if (((m_animationGoal & BOTTOM_PANEL) && footerShift != 0) ||
+				(!(m_animationGoal & BOTTOM_PANEL) && footerShift != footerHeight))
+			{
+				float start = (m_animationGoal & BOTTOM_PANEL) ? float(footerHeight) : 0.f;
+				float end = (m_animationGoal & BOTTOM_PANEL) ? 0.f : float(footerHeight);
+				footerShift = round(lerp(start, end, smoothStep(0.f, duration, elapsed)));
+			}
+		}
+	}
+
+	m_topPanel->setPosition(Vector2i(0,headerShift));
 	m_topPanel->setFixedWidth(width());
-	m_sidePanel->setPosition(Vector2i(sidePanelLeft,headerTop+headerHeight));
+
+	int middleHeight = height() - headerHeight - footerHeight - headerShift + footerShift;
+
+	m_sidePanel->setPosition(Vector2i(sidePanelShift,headerShift+headerHeight));
 	m_sidePanel->setFixedHeight(middleHeight);
-	m_imageView->setPosition(Vector2i(sidePanelWidth,headerHeight));
-	m_imageView->setFixedSize(mSize - Vector2i(sidePanelWidth, headerHeight+footerHeight));
-	m_statusBar->setPosition(Vector2i(0,headerHeight+middleHeight));
+
+
+	m_imageView->setPosition(Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
+	m_imageView->setFixedWidth(width() - sidePanelShift-sidePanelWidth);
+	m_imageView->setFixedHeight(middleHeight);
+	m_statusBar->setPosition(Vector2i(0,headerShift+headerHeight+middleHeight));
 	m_statusBar->setFixedWidth(width());
 
 	int lh = std::min(middleHeight, m_sidePanelContents->preferredSize(mNVGContext).y());

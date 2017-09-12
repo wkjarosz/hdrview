@@ -43,6 +43,39 @@ inline T lerp(T a, T b, S t)
 }
 
 
+//! Smoothly interpolates between a and b.
+/*!
+    Does a smooth s-curve (Hermite) interpolation between two values.
+    \param a A value.
+    \param b Another value.
+    \param x A number between \a a and \a b.
+    \return A value between 0.0 and 1.0.
+*/
+template <typename T>
+inline T
+smoothStep(T a, T b, T x)
+{
+    T t = clamp(T(x - a) / (b - a), T(0), T(1));
+    return t*t*(T(3) - T(2)*t);
+}
+
+//! Smoothly interpolates between a and b.
+/*!
+    Does a smooth s-curve (6th order) interpolation between two values.
+    \param a A value.
+    \param b Another value.
+    \param x A number between \a a and \a b.
+    \return A value between 0.0 and 1.0.
+*/
+template <typename T>
+inline T
+smoothStep6(T a, T b, T x)
+{
+    T t = clamp(T(x - a) / (b - a), T(0), T(1));
+    return t*t*t*(t*(t*T(6) - T(15)) + T(10));
+}
+
+
 //! Returns a modulus b.
 template <typename T>
 inline T mod(T a, T b)

@@ -105,7 +105,7 @@ void HDRImageViewer::setZoomLevel(float level)
 	m_zoomCallback(m_zoom);
 }
 
-void HDRImageViewer::zoomBy(int amount, const Vector2f &focusPosition)
+void HDRImageViewer::zoomBy(float amount, const Vector2f &focusPosition)
 {
 	auto focusedCoordinate = imageCoordinateAt(focusPosition);
 	float scaleFactor = std::pow(m_zoomSensitivity, amount);
@@ -180,11 +180,32 @@ bool HDRImageViewer::mouseMotionEvent(const Vector2i &p, const Vector2i &rel, in
 
 bool HDRImageViewer::scrollEvent(const Vector2i& p, const Vector2f& rel)
 {
-	float v = rel.y();
-	if (std::abs(v) < 1)
-		v = std::copysign(1.f, v);
-	zoomBy(v, (p - position()).cast<float>());
-	return true;
+	if (Widget::scrollEvent(p, rel))
+		return true;
+
+	// query glfw directly to check if a modifier key is pressed
+	int lState = glfwGetKey(m_screen->glfwWindow(), GLFW_KEY_LEFT_SHIFT);
+	int rState = glfwGetKey(m_screen->glfwWindow(), GLFW_KEY_RIGHT_SHIFT);
+
+	if (lState == GLFW_PRESS || rState == GLFW_PRESS)
+	{
+		// panning
+		setImageCoordinateAt(p.cast<float>() + rel*4.f, imageCoordinateAt(p.cast<float>()));
+		return true;
+	}
+	else if (m_screen->modifiers() == 0)
+	{
+		// zooming
+		float v = rel.y();
+		if (std::abs(v) < 1)
+			v = std::copysign(1.f, v);
+		zoomBy(v/4.f, (p - position()).cast<float>());
+
+		return true;
+
+	}
+
+	return false;
 }
 
 

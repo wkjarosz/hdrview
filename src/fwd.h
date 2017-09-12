@@ -18,6 +18,7 @@ class HDRViewScreen;
 class HDRImageManager;
 class HelpWindow;
 class ImageButton;
+class Timer;
 template<typename T> class Range;
 
 

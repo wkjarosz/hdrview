@@ -96,7 +96,7 @@ public:
 	 * The scaling occurs such that the image coordinate under the focused position remains in
 	 * the same position before and after the scaling.
 	 */
-	void zoomBy(int amount, const Vector2f &focusPosition);
+	void zoomBy(float amount, const Vector2f &focusPosition);
 
 	/// Zoom in to the next power of two
 	void zoomIn();

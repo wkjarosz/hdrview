@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 #include "fwd.h"
 #include "commandhistory.h"
+#include "timer.h"
 
 using namespace nanogui;
 using namespace Eigen;
@@ -29,6 +30,8 @@ public:
 	void askCloseImage(int index);
 	void flipImage(bool h);
 	void clearFocusPath() {mFocusPath.clear();}
+
+	int modifiers() const {return mModifiers;}
 
 private:
 	void toggleHelpWindow();
@@ -51,6 +54,15 @@ private:
 
 	VScrollPanel * m_sideScrollPanel = nullptr;
 	Widget * m_sidePanelContents = nullptr;
+
+	Timer m_guiTimer;
+	bool m_guiTimerRunning = false;
+	enum EAnimationGoal : int
+	{
+		TOP_PANEL       = 1 << 0,
+		SIDE_PANEL      = 1 << 1,
+		BOTTOM_PANEL    = 1 << 2,
+	} m_animationGoal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
 
     MessageDialog * m_okToQuitDialog = nullptr;
 

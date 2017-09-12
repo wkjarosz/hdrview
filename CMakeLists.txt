@@ -62,6 +62,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/imagebutton.h
     src/imagelistpanel.cpp
     src/imagelistpanel.h
+    src/imageshader.cpp
+    src/imageshader.h
     src/multigraph.cpp
     src/multigraph.h
     src/pfm.h
@@ -69,7 +71,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/ppm.h
     src/ppm.cpp
     src/range.h
-    ${EXTRA_SOURCE} src/imageshader.cpp src/imageshader.h)
+    src/timer.h
+    ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
 
