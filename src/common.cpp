@@ -38,7 +38,9 @@ const vector<string> & channelNames()
             "Blue",
             "Luminance",
             "A",
-            "B"
+            "B",
+            "False color",
+            "Negative-positive"
         };
     return names;
 }

@@ -51,6 +51,8 @@ enum EChannel : int
 	LUMINANCE,
 	A,
 	B,
+	FALSE_COLOR,
+	POSITIVE_NEGATIVE,
 
 	NUM_CHANNELS
 };

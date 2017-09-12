@@ -41,6 +41,10 @@ R"(#version 330
 constexpr char const *const fragmentShader =
 	R"(#version 330
 
+	#ifndef saturate
+	#define saturate(v) clamp(v, 0, 1)
+	#endif
+
     uniform sampler2D ditherImg;
     uniform vec2 randomness;
     uniform bool hasDither;
@@ -122,6 +126,16 @@ constexpr char const *const fragmentShader =
 	    return vec3(lab.x / 100.0, max(0.0, (lab.y-aRange.x)/(aRange.y-aRange.x)), max(0.0, (lab.z-bRange.x)/(bRange.y-bRange.x)));
 	}
 
+
+	// Converts from pure Hue to linear RGB
+	vec3 hue2rgb(float hue)
+	{
+	    float R = abs(hue * 6 - 3) - 1;
+	    float G = 2 - abs(hue * 6 - 2);
+	    float B = 2 - abs(hue * 6 - 4);
+	    return saturate(vec3(R,G,B));
+	}
+
     vec3 linearToSRGB(vec3 color)
     {
        float r = color.r < 0.0031308 ? 12.92 * color.r : 1.055 * pow(color.r, 1.0/2.4) - 0.055;
@@ -161,16 +175,37 @@ constexpr char const *const fragmentShader =
         return (r < 0) ? rn : rp;
     }
 
+	vec3 jetFalseColor(vec3 col)
+	{
+		float x = saturate(luminance(col).r);
+
+		float r = saturate((x < 0.7) ? 4.0 * x - 1.5 : -4.0 * x + 4.5);
+	    float g = saturate((x < 0.5) ? 4.0 * x - 0.5 : -4.0 * x + 3.5);
+	    float b = saturate((x < 0.3) ? 4.0 * x + 0.5 : -4.0 * x + 2.5);
+	    return vec3(r, g, b);
+	}
+
+	vec3 positiveNegative(vec3 col)
+	{
+		float x = dot(col, vec3(1.0)/3.0);
+		float r = saturate(mix(0.0, 1.0, max(x, 0.0)));
+		float g = 0.0;
+		float b = saturate(mix(0.0, 1.0, -min(x, 0.0)));
+		return vec3(r, g, b);
+	}
+
 	vec3 chooseChannel(vec3 col)
 	{
 		switch (channel)
 		{
-			case CHANNEL_RED:       return col.rrr;
-			case CHANNEL_GREEN:     return col.ggg;
-			case CHANNEL_BLUE:      return col.bbb;
-			case CHANNEL_LUMINANCE: return vec3(luminance(col));
-			case CHANNEL_A:         return rgb2lab(col).yyy;
-			case CHANNEL_B:         return rgb2lab(col).zzz;
+			case CHANNEL_RED:           return col.rrr;
+			case CHANNEL_GREEN:         return col.ggg;
+			case CHANNEL_BLUE:          return col.bbb;
+			case CHANNEL_LUMINANCE:     return vec3(luminance(col));
+			case CHANNEL_A:             return rgb2lab(col).yyy;
+			case CHANNEL_B:             return rgb2lab(col).zzz;
+			case CHANNEL_FALSE_COLOR:   return jetFalseColor(col);
+			case CHANNEL_POSITIVE_NEGATIVE:       return positiveNegative(col);
 		}
 		return col.rgb;
 	}
@@ -305,6 +340,8 @@ ImageShader::ImageShader()
 	DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, A, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, B, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
 
 	DEFINE_PARAMS(EBlendMode, NORMAL_BLEND);
 	DEFINE_PARAMS(EBlendMode, MULTIPLY_BLEND);

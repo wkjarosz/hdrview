@@ -646,7 +646,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	{
 		int idx = (key - GLFW_KEY_1) % 10;
 
-		if (modifiers & GLFW_MOD_SUPER && idx <= 6)
+		if (modifiers & GLFW_MOD_SUPER && idx <= 8)
 		{
 			m_imagesPanel->setChannel(EChannel(idx));
 			return true;
