@@ -220,20 +220,12 @@ constexpr char const *const fragmentShader =
 			case MULTIPLY_BLEND:            return vec4(imageVal.rgb * referenceVal.rgb, alpha);
 			case DIVIDE_BLEND:              return vec4(imageVal.rgb / referenceVal.rgb, alpha);
 			case ADD_BLEND:                 return vec4(imageVal.rgb + referenceVal.rgb, alpha);
-			case AVERAGE_BLEND:             return vec4(0.5*(imageVal.rgb + referenceVal.rgb), 0.5 + referenceVal.a*0.5);
+			case AVERAGE_BLEND:             return 0.5*(imageVal + referenceVal);
 			case SUBTRACT_BLEND:            return vec4(diff, alpha);
             case DIFFERENCE_BLEND:          return vec4(abs(diff), alpha);
             case RELATIVE_DIFFERENCE_BLEND: return vec4(abs(diff) / (referenceVal.rgb + vec3(0.01)), alpha);
         }
         return vec4(0.0);
-    }
-
-	vec4 lookup(sampler2D sampler, vec2 uv)
-	{
-        if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
-            return vec4(0.0);
-
-        return texture(sampler, uv);
     }
 
 	vec3 tonemap(vec3 color)
@@ -264,11 +256,11 @@ constexpr char const *const fragmentShader =
             return;
         }
 
-        vec4 imageVal = lookup(image, imageUV);
+        vec4 imageVal = texture(image, imageUV);
 
 		if (hasReference)
 		{
-			vec4 referenceVal = lookup(reference, referenceUV);
+			vec4 referenceVal = texture(reference, referenceUV);
 			imageVal = blend(imageVal, referenceVal);
 		}
 

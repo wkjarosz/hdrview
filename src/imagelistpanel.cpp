@@ -9,6 +9,7 @@
 #include "imagebutton.h"
 #include "hdrimageviewer.h"
 #include "multigraph.h"
+#include "well.h"
 
 using namespace std;
 
@@ -21,39 +22,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
 	auto row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Vertical,
-	                             Alignment::Fill, 0, 4));
-
-	auto w = new Widget(row);
-	w->setLayout(new BoxLayout(Orientation::Horizontal,
-	                           Alignment::Middle, 0, 2));
-	new Label(w, "Histogram:", "sans", 14);
-	m_linearToggle = new Button(w, "Linear", ENTYPO_ICON_VOLUME);
-	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_WARNING);
-
-	m_linearToggle->setFlags(Button::ToggleButton);
-	m_linearToggle->setFixedSize(Vector2i(100, 19));
-	m_linearToggle->setTooltip("Toggle between linear and sRGB histogram.");
-	m_linearToggle->setPushed(true);
-	m_linearToggle->setChangeCallback([this](bool b)
-	                                  {
-		                                  m_linearToggle->setCaption(b ? "Linear" : "sRGB");
-		                                  updateHistogram();
-	                                  });
-
-	m_recomputeHistogram->setFixedSize(Vector2i(19,19));
-	m_recomputeHistogram->setTooltip("Recompute histogram at current exposure.");
-	m_recomputeHistogram->setCallback([&]()
-	                                  {
-		                                  updateHistogram();
-	                                  });
-
-	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 255));
-	m_graph->addPlot(Color(0, 255, 0, 128));
-	m_graph->addPlot(Color(0, 0, 255, 85));
-
-
-	row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Horizontal,
 	                                   Alignment::Fill, 0, 2));
 
@@ -83,10 +51,44 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_closeButton->setTooltip("Close image");
 	m_closeButton->setCallback([this]{m_screen->askCloseImage(m_imageMgr->currentImageIndex());});
 
+
+	row = new Widget(this);
+	row->setLayout(new BoxLayout(Orientation::Vertical,
+	                             Alignment::Fill, 0, 4));
+
+	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 255));
+	m_graph->addPlot(Color(0, 255, 0, 128));
+	m_graph->addPlot(Color(0, 0, 255, 85));
+
+	auto w = new Widget(row);
+	w->setLayout(new BoxLayout(Orientation::Horizontal,
+	                           Alignment::Middle, 0, 2));
+	new Label(w, "Histogram:", "sans", 14);
+	m_linearToggle = new Button(w, "Linear", ENTYPO_ICON_VOLUME);
+	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_WARNING);
+
+	m_linearToggle->setFlags(Button::ToggleButton);
+	m_linearToggle->setFixedSize(Vector2i(100, 19));
+	m_linearToggle->setTooltip("Toggle between linear and sRGB histogram.");
+	m_linearToggle->setPushed(true);
+	m_linearToggle->setChangeCallback([this](bool b)
+	                                  {
+		                                  m_linearToggle->setCaption(b ? "Linear" : "sRGB");
+		                                  updateHistogram();
+	                                  });
+
+	m_recomputeHistogram->setFixedSize(Vector2i(19,19));
+	m_recomputeHistogram->setTooltip("Recompute histogram at current exposure.");
+	m_recomputeHistogram->setCallback([&]()
+	                                  {
+		                                  updateHistogram();
+	                                  });
+
+
 	row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Horizontal,
 	                                   Alignment::Fill, 0, 2));
-	(new Label(row, "Mode:"))->setFontSize(14);
+	new Label(row, "Mode:", "sans", 14);
 	m_blendModes = new ComboBox(row);
 	m_blendModes->setItems(blendModeNames());
 	m_blendModes->setFixedSize(Vector2i(144, 19));
@@ -95,7 +97,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Horizontal,
 	                             Alignment::Fill, 0, 2));
-	(new Label(row, "Channel:"))->setFontSize(14);
+	new Label(row, "Channel:", "sans", 14);
 	m_channels = new ComboBox(row, channelNames());
 	m_channels->setFixedSize(Vector2i(132, 19));
 	setChannel(EChannel::RGB);
@@ -139,8 +141,8 @@ void ImageListPanel::repopulateImageList()
 	if (m_imageListWidget)
 		removeChild(m_imageListWidget);
 
-	m_imageListWidget = new Widget(this);
-	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+	m_imageListWidget = new Well(this);
+	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
 
 
 	int index = 0;

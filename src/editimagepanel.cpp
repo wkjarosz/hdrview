@@ -390,7 +390,7 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 	static int samples = 1;
 
 	static string name = "Remap...";
-	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	auto b = new Button(parent, name, ENTYPO_ICON_MAP);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);

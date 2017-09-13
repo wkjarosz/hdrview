@@ -102,7 +102,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	{
 		extraBorder = 2;
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), mTheme->mButtonCornerRadius+1);
+		nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), 3+1);
 		nvgFillColor(ctx, Color(0.7f, 0.4f, 0.4f, 1.0f));
 		nvgFill(ctx);
 	}
@@ -112,7 +112,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	{
 		nvgBeginPath(ctx);
 		nvgRoundedRect(ctx, mPos.x() + extraBorder, mPos.y() + extraBorder,
-		        mSize.x() - 2*extraBorder, mSize.y() - 2*extraBorder, mTheme->mButtonCornerRadius);
+		        mSize.x() - 2*extraBorder, mSize.y() - 2*extraBorder, 3);
 		nvgFillColor(ctx, m_isSelected ? mTheme->mButtonGradientBotPushed : mTheme->mBorderMedium);
 		nvgFill(ctx);
 	}

@@ -10,6 +10,7 @@
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
 #include <nanogui/window.h>
+#include "well.h"
 
 using namespace nanogui;
 using namespace std;
@@ -56,8 +57,8 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(this, "Keybindings", "sans-bold", 18);
 
-	auto keyBindingsWidget = new Widget(this);
-	keyBindingsWidget->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+	auto keyBindingsWidget = new Well(this);
+	keyBindingsWidget->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
 
 	auto newColumn = [keyBindingsWidget]()
 	{

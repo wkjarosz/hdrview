@@ -71,6 +71,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/ppm.h
     src/ppm.cpp
     src/range.h
+    src/well.cpp
+    src/well.h
     src/timer.h
     ${EXTRA_SOURCE})
 
