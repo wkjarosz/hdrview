@@ -36,7 +36,10 @@ elseif(WIN32)
 endif()
 
 add_executable(HDRView MACOSX_BUNDLE
+    src/color.cpp
     src/color.h
+    src/colorspace.cpp
+    src/colorspace.h
     src/common.cpp
     src/common.h
     src/dither-matrix256.h
@@ -66,6 +69,8 @@ add_executable(HDRView MACOSX_BUNDLE
     src/imageshader.h
     src/multigraph.cpp
     src/multigraph.h
+    src/parallelfor.cpp
+    src/parallelfor.h
     src/pfm.h
     src/pfm.cpp
     src/ppm.h
@@ -111,7 +116,9 @@ add_executable(hdrbatch
     src/hdrimage.h
     src/hdrimage.cpp
     src/hdrbatch.cpp
-    src/range.h)
+    src/parallelfor.cpp
+    src/parallelfor.h
+    src/range.h src/color.cpp src/colorspace.h src/colorspace.cpp)
 
 
 add_executable(force-random-dither

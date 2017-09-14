@@ -3,6 +3,7 @@
 */
 #include "glimage.h"
 #include "common.h"
+#include "colorspace.h"
 #include <random>
 #include <nanogui/common.h>
 #include <nanogui/glutil.h>
@@ -23,7 +24,7 @@ void makeHistograms(MatrixX3f & linHist, MatrixX3f & rgbHist, const HDRImage & i
         for (int x = 0; x < img.width(); ++x)
         {
             Color4 clin = img(x,y) * gain;
-            Color4 crgb = toSRGB(img(x,y)) * gain;
+            Color4 crgb = LinearToSRGB(img(x, y)) * gain;
 
             linHist(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
             linHist(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;

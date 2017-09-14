@@ -42,6 +42,19 @@ namespace nanogui { class HDRImageViewer; }
 namespace spdlog { class logger; }
 
 
+enum EColorSpace : int
+{
+	LinearSRGB = 0,
+	LinearAdobeRGB,
+	CIEXYZ,
+	CIELab,
+	CIELuv,
+	CIExyY,
+	HLS,
+	HSV
+};
+
+
 enum EChannel : int
 {
 	RGB = 0,
@@ -49,6 +62,7 @@ enum EChannel : int
 	GREEN,
 	BLUE,
 	LUMINANCE,
+	LIGHTNESS,
 	A,
 	B,
 	FALSE_COLOR,

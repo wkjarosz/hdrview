@@ -67,90 +67,91 @@ constexpr char const *const fragmentShader =
 
     out vec4 out_color;
 
+	float linearToS(float a)
+	{
+		return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0/2.4) - 0.055;
+	}
 
-	const mat3 RGB2XYZ = (mat3(
-	    0.412453, 0.357580, 0.180423,
-	    0.212671, 0.715160, 0.072169,
-	    0.019334, 0.119193, 0.950227
-	));
+    vec3 linearToSRGB(vec3 color)
+    {
+       return vec3(linearToS(color.r), linearToS(color.g), linearToS(color.b));
+    }
 
-	const mat3 XYZ2RGB = (mat3(
-	     3.240479, -1.537150, -0.498535,
-	    -0.969256,  1.875992,  0.041556,
-	     0.055648, -0.204043,  1.057311
-	));
+	float sToLinear(float a)
+	{
+		return a < 0.04045 ? (1.0 / 12.92) * a : pow((a + 0.055) * (1.0 / 1.055), 2.4);
+	}
 
-	const vec3 RGB2Y = vec3(0.212671, 0.715160, 0.072169);
+    vec3 sRGBToLinear(vec3 color)
+    {
+       return vec3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b));
+    }
+
+	vec3 tonemap(vec3 color)
+	{
+		return sRGB ? gain * linearToSRGB(color) : gain * pow(color, vec3(1.0/gamma));
+	}
+
+	vec3 inverseTonemap(vec3 color)
+	{
+		return sRGB ? sRGBToLinear(color/gain) : pow(color/gain, vec3(gamma));
+	}
 
 	// returns the luminance of a linear rgb color
-	vec3 luminance(vec3 rgb)
+	vec3 RGBToLuminance(vec3 rgb)
 	{
+		const vec3 RGB2Y = vec3(0.212671, 0.715160, 0.072169);
 		return vec3(dot(RGB2Y, rgb));
 	}
 
 	// Converts a color from linear RGB to XYZ space
-	vec3 rgb2xyz(vec3 rgb)
+	vec3 RGBToXYZ(vec3 rgb)
 	{
+		const mat3 RGB2XYZ = mat3(
+		    0.412453, 0.212671, 0.019334,
+		    0.357580, 0.715160, 0.119193,
+		    0.180423, 0.072169, 0.950227);
 	    return RGB2XYZ * rgb;
 	}
 
 	// Converts a color from XYZ to linear RGB space
-	vec3 xyz2rgb(vec3 xyz)
+	vec3 XYZToRGB(vec3 xyz)
 	{
+		const mat3 XYZ2RGB = mat3(
+		     3.240479, -0.969256,  0.055648,
+		    -1.537150,  1.875992, -0.204043,
+		    -0.498535,  0.041556,  1.057311);
 	    return XYZ2RGB * xyz;
 	}
 
-	vec3 xyz2lab(vec3 xyz)
+	float labf(float t)
 	{
-		// N=normalize for D65 white point
-	    vec3 n = xyz / vec3(.95047, 1.0, 1.08883);
-	    vec3 v;
 		const float c1 = 0.008856451679;    // pow(6.0/29.0, 3.0);
 		const float c2 = 7.787037037;       // pow(29.0/6.0, 2.0)/3;
 		const float c3 = 0.1379310345;      // 16.0/116.0
-	    v.x = (n.x > c1) ? pow(n.x, 1.0/3.0) : c2*n.x + c3;
-	    v.y = (n.y > c1) ? pow(n.y, 1.0/3.0) : c2*n.y + c3;
-	    v.z = (n.z > c1) ? pow(n.z, 1.0/3.0) : c2*n.z + c3;
+		return (t > c1) ? pow(t, 1.0/3.0) : (c2*t) + c3;
+	}
+
+	vec3 XYZToLab(vec3 xyz)
+	{
+		// N=normalize for D65 white point
+	    xyz /= vec3(.95047, 1.000, 1.08883);
+
+	    vec3 v = vec3(labf(xyz.x), labf(xyz.y), labf(xyz.z));
 	    return vec3((116.0 * v.y) - 16.0,
 					500.0 * (v.x - v.y),
 					200.0 * (v.y - v.z));
 	}
 
-	vec3 rgb2lab(vec3 rgb)
+	vec3 RGBToLab(vec3 rgb)
 	{
-		vec3 lab = xyz2lab(rgb2xyz(rgb));
+		vec3 lab = XYZToLab(RGBToXYZ(rgb));
 
-		// renormalize from [0, 100],  [-86.185, 98.254], [-107.863, 94.482] to [0, 1]
-		vec2 aRange = vec2(-86.185, 98.254);
-		vec2 bRange = vec2(-107.863, 94.482);
-	    return vec3(lab.x / 100.0, max(0.0, (lab.y-aRange.x)/(aRange.y-aRange.x)), max(0.0, (lab.z-bRange.x)/(bRange.y-bRange.x)));
+		// renormalize
+		const vec3 minLab = vec3(0, -86.1846, -107.864);
+		const vec3 maxLab = vec3(100, 98.2542, 94.4825);
+	    return (lab-minLab)/(maxLab-minLab);
 	}
-
-
-	// Converts from pure Hue to linear RGB
-	vec3 hue2rgb(float hue)
-	{
-	    float R = abs(hue * 6 - 3) - 1;
-	    float G = 2 - abs(hue * 6 - 2);
-	    float B = 2 - abs(hue * 6 - 4);
-	    return saturate(vec3(R,G,B));
-	}
-
-    vec3 linearToSRGB(vec3 color)
-    {
-       float r = color.r < 0.0031308 ? 12.92 * color.r : 1.055 * pow(color.r, 1.0/2.4) - 0.055;
-       float g = color.g < 0.0031308 ? 12.92 * color.g : 1.055 * pow(color.g, 1.0/2.4) - 0.055;
-       float b = color.b < 0.0031308 ? 12.92 * color.b : 1.055 * pow(color.b, 1.0/2.4) - 0.055;
-       return vec3(r, g, b);
-    }
-
-    vec3 sRGBToLinear(vec3 color)
-    {
-       float r = color.r < 0.04045 ? (1.0 / 12.92) * color.r : pow((color.r + 0.055) * (1.0 / 1.055), 2.4);
-       float g = color.g < 0.04045 ? (1.0 / 12.92) * color.g : pow((color.g + 0.055) * (1.0 / 1.055), 2.4);
-       float b = color.b < 0.04045 ? (1.0 / 12.92) * color.b : pow((color.b + 0.055) * (1.0 / 1.055), 2.4);
-       return vec3(r, g, b);
-    }
 
     // note: uniformly distributed, normalized rand, [0;1[
     float nrand(vec2 n)
@@ -177,7 +178,7 @@ constexpr char const *const fragmentShader =
 
 	vec3 jetFalseColor(vec3 col)
 	{
-		float x = saturate(luminance(col).r);
+		float x = saturate(RGBToLuminance(col).r);
 
 		float r = saturate((x < 0.7) ? 4.0 * x - 1.5 : -4.0 * x + 4.5);
 	    float g = saturate((x < 0.5) ? 4.0 * x - 0.5 : -4.0 * x + 3.5);
@@ -201,9 +202,10 @@ constexpr char const *const fragmentShader =
 			case CHANNEL_RED:           return col.rrr;
 			case CHANNEL_GREEN:         return col.ggg;
 			case CHANNEL_BLUE:          return col.bbb;
-			case CHANNEL_LUMINANCE:     return vec3(luminance(col));
-			case CHANNEL_A:             return rgb2lab(col).yyy;
-			case CHANNEL_B:             return rgb2lab(col).zzz;
+			case CHANNEL_LUMINANCE:     return RGBToLuminance(col);
+			case CHANNEL_LIGHTNESS:     return RGBToLab(col).xxx;
+			case CHANNEL_A:             return RGBToLab(col).yyy;
+			case CHANNEL_B:             return RGBToLab(col).zzz;
 			case CHANNEL_FALSE_COLOR:   return jetFalseColor(col);
 			case CHANNEL_POSITIVE_NEGATIVE:       return positiveNegative(col);
 		}
@@ -227,11 +229,6 @@ constexpr char const *const fragmentShader =
         }
         return vec4(0.0);
     }
-
-	vec3 tonemap(vec3 color)
-	{
-		return sRGB ? gain * linearToSRGB(color) : gain * pow(color, vec3(1.0/gamma));
-	}
 
 	vec3 dither(vec3 color)
 	{
@@ -330,6 +327,7 @@ ImageShader::ImageShader()
 	DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, LIGHTNESS, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, A, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, B, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);

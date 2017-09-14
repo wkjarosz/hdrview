@@ -511,7 +511,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         }
 
         case 'Z':
-            if (modifiers & GLFW_MOD_SUPER)
+            if (modifiers & SYSTEM_COMMAND_MOD)
             {
                 if (modifiers & GLFW_MOD_SHIFT)
 	                m_imageMgr->redo();
@@ -526,7 +526,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	        askCloseImage(m_imageMgr->currentImageIndex());
             return true;
         case 'W':
-            if (modifiers & GLFW_MOD_SUPER)
+            if (modifiers & SYSTEM_COMMAND_MOD)
             {
 	            askCloseImage(m_imageMgr->currentImageIndex());
                 return true;
@@ -534,7 +534,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return false;
 
 	    case 'O':
-		    if (modifiers & GLFW_MOD_SUPER)
+		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    loadImage();
 			    return true;
@@ -606,7 +606,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case GLFW_KEY_DOWN:
-	        if (modifiers & GLFW_MOD_SUPER)
+	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
 		        m_imageMgr->sendImageBackward();
 		        return true;
@@ -619,7 +619,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    return false;
 
         case GLFW_KEY_UP:
-	        if (modifiers & GLFW_MOD_SUPER)
+	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
 		        m_imageMgr->bringImageForward();
 		        return true;
@@ -632,7 +632,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    return false;
 
 	    case '0':
-		    if (modifiers & GLFW_MOD_SUPER)
+		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    m_imageView->center();
 			    m_imageView->fit();
@@ -646,12 +646,12 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	{
 		int idx = (key - GLFW_KEY_1) % 10;
 
-		if (modifiers & GLFW_MOD_SUPER && idx <= 8)
+		if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
 		{
 			m_imagesPanel->setChannel(EChannel(idx));
 			return true;
 		}
-		else if (modifiers & GLFW_MOD_SHIFT && idx <= 7)
+		else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
 		{
 			m_imagesPanel->setBlendMode(EBlendMode(idx));
 			return true;

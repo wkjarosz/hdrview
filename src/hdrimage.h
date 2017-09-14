@@ -72,6 +72,7 @@ public:
         REPEAT,
         MIRROR
     };
+    static const std::vector<std::string> & borderModeNames();
     Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE);
     const Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     //@}
@@ -85,6 +86,7 @@ public:
         BILINEAR,
         BICUBIC
     };
+    static const std::vector<std::string> & samplerNames();
     Color4 sample(float sx, float sy, Sampler s, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     Color4 bilinear(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     Color4 bicubic(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
@@ -142,6 +144,18 @@ public:
     //@}
 
     bool load(const std::string & filename);
+    /*!
+     * @brief           Write the file to disk.
+     *
+     * The output image format is deduced from the filename extension.
+     *
+     * @param filename  Filename to save to on disk
+     * @param gain      Multiply all pixel values by gain before saving
+     * @param sRGB      If not saving to an HDR format, tonemap the image to sRGB
+     * @param gamma     If not saving to an HDR format, tonemap the image using this gamma value
+     * @param dither    If not saving to an HDR format, dither when tonemapping down to 8-bit
+     * @return          True if writing was successful
+     */
     bool save(const std::string & filename,
               float gain, float gamma,
               bool sRGB, bool dither) const;

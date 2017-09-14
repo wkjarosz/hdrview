@@ -9,11 +9,48 @@
 #include "hdrimage.h"
 #include "hdrimagemanager.h"
 #include "envmap.h"
+#include "colorspace.h"
 
 using namespace std;
 
 namespace
 {
+
+Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static string name = "Convert color space...";
+	static EColorSpace src = LinearSRGB, dst = CIEXYZ;
+	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
+	b->setCallback([&, parent, screen, imageMgr]()
+	               {
+		               FormHelper *gui = new FormHelper(screen);
+		               gui->setFixedSize(Vector2i(125, 20));
+
+		               auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+
+		               gui->addVariable("Source:", src, true)
+		                  ->setItems(colorSpaceNames());
+		               gui->addVariable("Destination:", dst, true)
+		                  ->setItems(colorSpaceNames());
+
+		               gui->addButton("Cancel", [&, window]() { window->dispose(); })
+		                  ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
+		               gui->addButton("OK", [&, window]()
+		               {
+			               imageMgr->modifyImage([&](HDRImage &img)
+			                                     {
+				                                     auto undo = new FullImageUndo(img);
+				                                     img = img.unaryExpr([](const Color4 & c){return c.convert(dst, src);}).eval();
+				                                     return undo;
+			                                     });
+			               window->dispose();
+		               })->setIcon(ENTYPO_ICON_CHECK);
+
+		               window->center();
+		               window->requestFocus();
+	               });
+	return b;
+}
 
 Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 {
@@ -79,9 +116,9 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
            w->setMinValue(0.0f);
 
            gui->addVariable("Border mode X:", borderModeX, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
            gui->addVariable("Border mode Y:", borderModeY, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
 
            gui->addButton("Cancel", [&, window]() { window->dispose(); })
               ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -125,9 +162,9 @@ Button * createFastGaussianFilterButton(Widget *parent, HDRViewScreen * screen, 
            w->setMinValue(0.0f);
 
            gui->addVariable("Border mode X:", borderModeX, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
            gui->addVariable("Border mode Y:", borderModeY, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
 
            gui->addButton("Cancel", [&, window]() { window->dispose(); })
               ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -171,9 +208,9 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
            w->setMinValue(0.0f);
 
            gui->addVariable("Border mode X:", borderModeX, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
            gui->addVariable("Border mode Y:", borderModeY, true)
-              ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+              ->setItems(HDRImage::borderModeNames());
 
            gui->addButton("Cancel", [&, window]() { window->dispose(); })
               ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -216,9 +253,9 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 		               w->setMinValue(0.0f);
 
 		               gui->addVariable("Border mode X:", borderModeX, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 		               gui->addVariable("Border mode Y:", borderModeY, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 
 		               gui->addButton("Cancel", [&, window]() { window->dispose(); })
 		                  ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -263,9 +300,9 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 		               w->setMinValue(0.0f);
 
 		               gui->addVariable("Border mode X:", borderModeX, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 		               gui->addVariable("Border mode Y:", borderModeY, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 
 		               gui->addButton("Cancel", [&, window]() { window->dispose(); })
 		                  ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -307,9 +344,9 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 		               w->setMinValue(0.0f);
 
 		               gui->addVariable("Border mode X:", borderModeX, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 		               gui->addVariable("Border mode Y:", borderModeY, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 
 		               gui->addButton("Cancel", [&, window]() { window->dispose(); })
 		                  ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -414,11 +451,11 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 		               gui->addVariable("Target parametrization:", to, true)
 		                  ->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
 		               gui->addVariable("Sampler:", sampler, true)
-		                  ->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
+		                  ->setItems(HDRImage::samplerNames());
 		               gui->addVariable("Border mode X:", borderModeX, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 		               gui->addVariable("Border mode Y:", borderModeY, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 
 		               w = gui->addVariable("Super-samples:", samples);
 		               w->setSpinnable(true);
@@ -496,11 +533,11 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 		               w->setSpinnable(true);
 
 		               gui->addVariable("Sampler:", sampler, true)
-		                  ->setItems({"Nearest neighbor", "Bilinear", "Bicubic"});
+		                  ->setItems(HDRImage::samplerNames());
 		               gui->addVariable("Border mode X:", borderModeX, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 		               gui->addVariable("Border mode Y:", borderModeY, true)
-		                  ->setItems({"Black", "Edge", "Repeat", "Mirror"});
+		                  ->setItems(HDRImage::borderModeNames());
 
 		               gui->addButton("Cancel", [&, window]() { window->dispose(); })
 		                  ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -594,6 +631,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	new Label(this, "Adjustments", "sans-bold");
 	m_filterButtons.push_back(createExposureGammaButton(this, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createColorSpaceButton(this, m_screen, m_imageMgr));
 
 	new Label(this, "Resize/resample", "sans-bold");
 	m_filterButtons.push_back(createResizeButton(this, m_screen, m_imageMgr));

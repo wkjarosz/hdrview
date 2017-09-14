@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 #include "fwd.h"
 
 template <typename T>
@@ -85,6 +86,44 @@ inline T mod(T a, T b)
     if (a < 0)
         a += b;
     return a;
+}
+
+
+
+template <typename T>
+inline const T& min(const T& a, const T& b, const T& c)
+{
+    return std::min(std::min(a, b), c);
+}
+
+template <typename T>
+inline const T& min(const T& a, const T& b, const T& c, const T& d)
+{
+    return std::min(std::min(a, b, c), d);
+}
+
+template <typename T>
+inline const T& min(const T& a, const T& b, const T& c, const T& d, const T& e)
+{
+    return std::min(std::min(a, b, c, d), e);
+}
+
+template <typename T>
+inline const T& max(const T& a, const T& b, const T& c)
+{
+    return std::max(std::max(a, b), c);
+}
+
+template <typename T>
+inline const T& max(const T& a, const T& b, const T& c, const T& d)
+{
+    return std::max(std::max(a, b, c), d);
+}
+
+template <typename T>
+inline const T& max(const T& a, const T& b, const T& c, const T& d, const T& e)
+{
+    return std::max(std::max(a, b, c, d), e);
 }
 
 std::string getExtension(const std::string& filename);
