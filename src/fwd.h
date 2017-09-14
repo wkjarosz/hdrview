@@ -44,14 +44,14 @@ namespace spdlog { class logger; }
 
 enum EColorSpace : int
 {
-	LinearSRGB = 0,
-	LinearAdobeRGB,
-	CIEXYZ,
-	CIELab,
-	CIELuv,
-	CIExyY,
-	HLS,
-	HSV
+	LinearSRGB_CS = 0,
+	LinearAdobeRGB_CS,
+	CIEXYZ_CS,
+	CIELab_CS,
+	CIELuv_CS,
+	CIExyY_CS,
+	HLS_CS,
+	HSV_CS
 };
 
 
@@ -62,9 +62,9 @@ enum EChannel : int
 	GREEN,
 	BLUE,
 	LUMINANCE,
-	LIGHTNESS,
-	A,
-	B,
+	CIEL,
+	CIEa,
+	CIEb,
 	FALSE_COLOR,
 	POSITIVE_NEGATIVE,
 

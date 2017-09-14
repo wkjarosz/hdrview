@@ -203,9 +203,9 @@ constexpr char const *const fragmentShader =
 			case CHANNEL_GREEN:         return col.ggg;
 			case CHANNEL_BLUE:          return col.bbb;
 			case CHANNEL_LUMINANCE:     return RGBToLuminance(col);
-			case CHANNEL_LIGHTNESS:     return RGBToLab(col).xxx;
-			case CHANNEL_A:             return RGBToLab(col).yyy;
-			case CHANNEL_B:             return RGBToLab(col).zzz;
+			case CHANNEL_CIEL:          return RGBToLab(col).xxx;
+			case CHANNEL_CIEa:          return RGBToLab(col).yyy;
+			case CHANNEL_CIEb:          return RGBToLab(col).zzz;
 			case CHANNEL_FALSE_COLOR:   return jetFalseColor(col);
 			case CHANNEL_POSITIVE_NEGATIVE:       return positiveNegative(col);
 		}
@@ -327,9 +327,9 @@ ImageShader::ImageShader()
 	DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, LIGHTNESS, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, A, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, B, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIEL, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIEa, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIEb, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
 

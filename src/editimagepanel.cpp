@@ -19,7 +19,7 @@ namespace
 Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 {
 	static string name = "Convert color space...";
-	static EColorSpace src = LinearSRGB, dst = CIEXYZ;
+	static EColorSpace src = LinearSRGB_CS, dst = CIEXYZ_CS;
 	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {

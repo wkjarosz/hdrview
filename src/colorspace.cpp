@@ -447,26 +447,26 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c,
 	float X, Y, Z;
 	switch (src)
 	{
-		case LinearSRGB: LinearSRGBToXYZ(&X, &Y, &Z, A, B, C); break;
-		case LinearAdobeRGB: LinearAdobeRGBToXYZ(&X, &Y, &Z, A, B, C); break;
-		case CIELab: unnormalizeLab(&A, &B, &C); LabToXYZ(&X, &Y, &Z, A, B, C); break;
-		case CIELuv: LuvToXYZ(&X, &Y, &Z, A, B, C); break;
-		case CIExyY: xyYToXZ(&X, &Z, A, B, C); Y = C; break;
-		case HLS: HSLToXYZ(&X, &Y, &Z, A, B, C); break;
-		case HSV: HSVToXYZ(&X, &Y, &Z, A, B, C); break;
+		case LinearSRGB_CS: LinearSRGBToXYZ(&X, &Y, &Z, A, B, C); break;
+		case LinearAdobeRGB_CS: LinearAdobeRGBToXYZ(&X, &Y, &Z, A, B, C); break;
+		case CIELab_CS: unnormalizeLab(&A, &B, &C); LabToXYZ(&X, &Y, &Z, A, B, C); break;
+		case CIELuv_CS: LuvToXYZ(&X, &Y, &Z, A, B, C); break;
+		case CIExyY_CS: xyYToXZ(&X, &Z, A, B, C); Y = C; break;
+		case HLS_CS: HSLToXYZ(&X, &Y, &Z, A, B, C); break;
+		case HSV_CS: HSVToXYZ(&X, &Y, &Z, A, B, C); break;
 		default:  X = A; Y = B; Z = C;              // XYZ
 	}
 
 	// now convert from XYZ to the destination color space
 	switch (dst)
 	{
-		case LinearSRGB: XYZToLinearSRGB(a, b, c, X, Y, Z); break;
-		case LinearAdobeRGB: XYZToLinearAdobeRGB(a, b, c, X, Y, Z); break;
-		case CIELab: XYZToLab(a, b, c, X, Y, Z); normalizeLab(a, b, c); break;
-		case CIELuv: XYZToLuv(a, b, c, X, Y, Z); break;
-		case CIExyY: XYZToxy(a, b, X, Y, Z); *c = Y; break;
-		case HLS: XYZToHSL(a, b, c, X, Y, Z); break;
-		case HSV: XYZToHSV(a, b, c, X, Y, Z); break;
+		case LinearSRGB_CS: XYZToLinearSRGB(a, b, c, X, Y, Z); break;
+		case LinearAdobeRGB_CS: XYZToLinearAdobeRGB(a, b, c, X, Y, Z); break;
+		case CIELab_CS: XYZToLab(a, b, c, X, Y, Z); normalizeLab(a, b, c); break;
+		case CIELuv_CS: XYZToLuv(a, b, c, X, Y, Z); break;
+		case CIExyY_CS: XYZToxy(a, b, X, Y, Z); *c = Y; break;
+		case HLS_CS: XYZToHSL(a, b, c, X, Y, Z); break;
+		case HSV_CS: XYZToHSV(a, b, c, X, Y, Z); break;
 		default:  *a = X; *b = Y; *c = Z;          // XYZ
 	}
 }
@@ -480,7 +480,7 @@ const vector<string> & colorSpaceNames()
 			"CIE XYZ",
 			"CIE L*a*b*",
 			"CIE L*u*v*",
-			"CIE CIExyY",
+			"CIE xyY",
 			"HSL",
 			"HSV"
 		};
