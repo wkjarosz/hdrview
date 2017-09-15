@@ -101,17 +101,17 @@ int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
 
 	switch (m)
 	{
-	case HDRImage::EDGE:
-		return clamp(p, 0, maxP - 1);
-	case HDRImage::REPEAT:
-		return mod(p, maxP);
-	case HDRImage::MIRROR:
-	{
-		int frac = mod(p, maxP);
-		return (::abs(p) / maxP % 2 != 0) ? maxP - 1 - frac : frac;
-	}
-	case HDRImage::BLACK:
-		return -1;
+		case HDRImage::EDGE:
+			return clamp(p, 0, maxP - 1);
+		case HDRImage::REPEAT:
+			return mod(p, maxP);
+		case HDRImage::MIRROR:
+		{
+			int frac = mod(p, maxP);
+			return (::abs(p) / maxP % 2 != 0) ? maxP - 1 - frac : frac;
+		}
+		case HDRImage::BLACK:
+			return -1;
 	}
 }
 
@@ -165,9 +165,9 @@ Color4 HDRImage::sample(float sx, float sy, Sampler s, BorderMode mX, BorderMode
 {
 	switch (s)
 	{
-	case NEAREST:  return nearest(sx, sy, mX, mY);
-	case BILINEAR: return bilinear(sx, sy, mX, mY);
-	case BICUBIC:  return bicubic(sx, sy, mX, mY);
+		case NEAREST:  return nearest(sx, sy, mX, mY);
+		case BILINEAR: return bilinear(sx, sy, mX, mY);
+		case BICUBIC:  return bicubic(sx, sy, mX, mY);
 	}
 }
 
@@ -239,7 +239,6 @@ HDRImage HDRImage::resampled(int w, int h,
     Timer timer;
     // for every pixel in the image
     parallel_for(0, result.height(), [this,w,h,&warpFn,&result,superSample,sampler,mX,mY](int y)
-//    for (int y = 0; y < result.height(); ++y)
     {
         for (int x = 0; x < result.width(); ++x)
         {
@@ -256,7 +255,6 @@ HDRImage HDRImage::resampled(int w, int h,
             }
             result(x, y) = sum / (superSample * superSample);
         }
-//    }
     });
     spdlog::get("console")->debug("Resampling took: {} seconds.", (timer.elapsed()/1000.f));
     return result;
@@ -272,8 +270,7 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mX, BorderMode m
 
     Timer timer;
     // for every pixel in the image
-//    parallel_for(0, imFilter.width(), [this,kernel,mX,mY,&imFilter,centerX,centerY](int x)
-    for (int x = 0; x < imFilter.width(); x++)
+    parallel_for(0, imFilter.width(), [this,kernel,mX,mY,&imFilter,centerX,centerY](int x)
     {
         for (int y = 0; y < imFilter.height(); y++)
         {
@@ -295,8 +292,7 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mX, BorderMode m
             // assign the pixel the value from convolution
             imFilter(x,y) = accum / weightSum;
         }
-    }
-//    });
+    });
     spdlog::get("console")->debug("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
 
     return imFilter;
@@ -337,7 +333,6 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, Bord
     Timer timer;
     // for every pixel in the image
     parallel_for(0, height(), [this,&tempBuffer,radius,radiusi,channel,mX,mY](int y)
-//    for (int y = 0; y < tempBuffer.height(); y++)
     {
         vector<float> mBuffer;
         mBuffer.reserve((2*radiusi)*(2*radiusi));
@@ -368,7 +363,6 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, Bord
                         mBuffer.begin() + mBuffer.size());
             tempBuffer(x,y)[channel] = mBuffer[med];
         }
-//    }
     });
     spdlog::get("console")->debug("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -386,7 +380,6 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, Border
     Timer timer;
     // for every pixel in the image
     parallel_for(0, imFilter.width(), [this,&imFilter,radius,sigmaRange,sigmaDomain,mX,mY,truncateDomain](int x)
-//    for (int x = 0; x < imFilter.width(); x++)
     {
         for (int y = 0; y < imFilter.height(); y++)
         {
@@ -416,7 +409,6 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, Border
             // set pixel in filtered image to weighted sum of values in the filter region
             imFilter(x,y) = accum/weightSum;
         }
-//    }
     });
     spdlog::get("console")->debug("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -508,7 +500,6 @@ HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, BorderMode mX) const
     Timer timer;
     // for every pixel in the image
     parallel_for(0, imFilter.height(), [this,&imFilter,leftSize,rightSize,mX](int y)
-//    for (int y = 0; y < imFilter.height(); ++y)
     {
         // fill up the accumulator
         imFilter(0, y) = 0;
@@ -519,7 +510,6 @@ HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, BorderMode mX) const
             imFilter(x, y) = imFilter(x-1, y) -
                              pixel(x-1-leftSize, y, mX, mX) +
                              pixel(x+rightSize, y, mX, mX);
-//    }
     });
     spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -534,7 +524,6 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, BorderMode mY) const
     Timer timer;
     // for every pixel in the image
     parallel_for(0, imFilter.width(), [this,&imFilter,leftSize,rightSize,mY](int x)
-//    for (int x = 0; x < imFilter.width(); ++x)
     {
         // fill up the accumulator
         imFilter(x, 0) = 0;
@@ -545,7 +534,6 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, BorderMode mY) const
             imFilter(x, y) = imFilter(x, y-1) -
                              pixel(x, y-1-leftSize, mY, mY) +
                              pixel(x, y+rightSize, mY, mY);
-//    }
     });
     spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -584,7 +572,6 @@ bool HDRImage::load(const string & filename)
         Timer timer;
         // for every pixel in the image
         parallel_for(0, h, [this,w,float_data,convert2Linear](int y)
-//        for (int y = 0; y < h; ++y)
         {
             for (int x = 0; x < w; ++x)
             {
@@ -594,7 +581,6 @@ bool HDRImage::load(const string & filename)
                          float_data[4 * (x + y * w) + 3]);
                 (*this)(x, y) = convert2Linear ? SRGBToLinear(c) : c;
             }
-//        }
         });
         spdlog::get("console")->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -625,14 +611,12 @@ bool HDRImage::load(const string & filename)
                 Timer timer;
                 // convert 3-channel pfm data to 4-channel internal representation
                 parallel_for(0, h, [this,w,float_data](int y)
-//                for (int y = 0; y < h; ++y)
                 {
                     for (int x = 0; x < w; ++x)
                         (*this)(x, y) = Color4(float_data[3 * (x + y * w) + 0],
                                                float_data[3 * (x + y * w) + 1],
                                                float_data[3 * (x + y * w) + 2],
                                                1.0f);
-//                }
                 });
                 spdlog::get("console")->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -675,14 +659,12 @@ bool HDRImage::load(const string & filename)
 
         // copy pixels over to the Image
         parallel_for(0, h, [this,w,&pixels](int y)
-//        for (int y = 0; y < h; ++y)
         {
             for (int x = 0; x < w; ++x)
             {
                 const Imf::Rgba &p = pixels[y][x];
                 (*this)(x, y) = Color4(p.r, p.g, p.b, p.a);
             }
-//        }
         });
 
         spdlog::get("console")->debug("Copying EXR image data took: {} seconds.", (timer.lap()/1000.f));
@@ -752,7 +734,6 @@ bool HDRImage::save(const string & filename,
             Timer timer;
             // copy image data over to Rgba pixels
             parallel_for(0, height(), [this,img,&pixels](int y)
-//            for (int y = 0; y < height(); ++y)
             {
                 for (int x = 0; x < width(); ++x)
                 {
@@ -763,7 +744,6 @@ bool HDRImage::save(const string & filename,
                     p.b = c[2];
                     p.a = c[3];
                 }
-//            }
             });
             spdlog::get("console")->debug("Copying pixel data took: {} seconds.", (timer.lap()/1000.f));
 
@@ -787,7 +767,6 @@ bool HDRImage::save(const string & filename,
         Timer timer;
         // convert 3-channel pfm data to 4-channel internal representation
         parallel_for(0, height(), [this,img,&data,dither](int y)
-//        for (int y = 0; y < height(); ++y)
         {
             for (int x = 0; x < width(); ++x)
             {
@@ -807,7 +786,6 @@ bool HDRImage::save(const string & filename,
                 data[3 * x + 3 * y * width() + 1] = (unsigned char) c[1];
                 data[3 * x + 3 * y * width() + 2] = (unsigned char) c[2];
             }
-//        }
         });
         spdlog::get("console")->debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -820,6 +798,8 @@ bool HDRImage::save(const string & filename,
             return stbi_write_bmp(filename.c_str(), width(), height(), 3, &data[0]) != 0;
         else if (extension == "tga")
             return stbi_write_tga(filename.c_str(), width(), height(), 3, &data[0]) != 0;
+        else if (extension == "jpg" || extension == "jpeg")
+            return stbi_write_jpg(filename.c_str(), width(), height(), 3, &data[0], 100) != 0;
         else
             throw runtime_error("Could not determine desired file type from extension.");
     }

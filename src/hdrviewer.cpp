@@ -432,13 +432,14 @@ void HDRViewScreen::saveImage()
 			return;
 
 		string filename = file_dialog({
+			                              {"exr", "OpenEXR image"},
+			                              {"hdr", "Radiance rgbE format"},
 			                              {"png", "Portable Network Graphic"},
 			                              {"pfm", "Portable Float Map"},
 			                              {"ppm", "Portable PixMap"},
+			                              {"jpg", "Jpeg image"},
 			                              {"tga", "Targa image"},
 			                              {"bmp", "Windows Bitmap image"},
-			                              {"hdr", "Radiance rgbE format"},
-			                              {"exr", "OpenEXR image"}
 		                              }, true);
 
 		if (filename.size())
