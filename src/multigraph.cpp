@@ -3,8 +3,6 @@
 #include <nanogui/opengl.h>
 #include <nanogui/serializer/core.h>
 
-NAMESPACE_BEGIN(nanogui)
-
 /*!
  * @param parent	The parent widget
  * @param caption 	Caption text
@@ -128,5 +126,3 @@ bool MultiGraph::load(Serializer &s)
 	}
 	return true;
 }
-
-NAMESPACE_END(nanogui)

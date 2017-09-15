@@ -6,7 +6,7 @@
 
 #include <nanogui/widget.h>
 
-NAMESPACE_BEGIN(nanogui)
+using namespace nanogui;
 
 /**
  * \class MultiGraph multigraph.h
@@ -61,5 +61,3 @@ protected:
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-NAMESPACE_END(nanogui)

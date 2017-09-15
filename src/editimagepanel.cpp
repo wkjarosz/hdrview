@@ -21,6 +21,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImage
 	static string name = "Convert color space...";
 	static EColorSpace src = LinearSRGB_CS, dst = CIEXYZ_CS;
 	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -58,6 +59,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 	static float exposure = 0.0f;
 	static float gamma = 1.0f;
 	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
        {
            FormHelper *gui = new FormHelper(screen);
@@ -98,15 +100,17 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 {
 	static float width = 1.0f, height = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static bool exact = false;
 	static string name = "Gaussian blur...";
 	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
        {
            FormHelper *gui = new FormHelper(screen);
            gui->setFixedSize(Vector2i(75, 20));
 
            auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+           // window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
            auto w = gui->addVariable("Width:", width);
            w->setSpinnable(true);
@@ -120,51 +124,7 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
            gui->addVariable("Border mode Y:", borderModeY, true)
               ->setItems(HDRImage::borderModeNames());
 
-           gui->addButton("Cancel", [&, window]() { window->dispose(); })
-              ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
-           gui->addButton("OK", [&, window]()
-           {
-	           imageMgr->modifyImage([&](HDRImage &img)
-	                               {
-		                               auto undo = new FullImageUndo(img);
-		                               img =
-			                               img.GaussianBlurred(width, height, borderModeX, borderModeY);
-		                               return undo;
-	                               });
-               window->dispose();
-           })->setIcon(ENTYPO_ICON_CHECK);
-
-           window->center();
-           window->requestFocus();
-       });
-	return b;
-}
-
-Button * createFastGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
-{
-	static float width = 1.0f, height = 1.0f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
-	static string name = "Fast Gaussian blur...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
-	b->setCallback([&, parent, screen, imageMgr]()
-       {
-           FormHelper *gui = new FormHelper(screen);
-           gui->setFixedSize(Vector2i(75, 20));
-
-           auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
-
-           auto w = gui->addVariable("Width:", width);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-           w = gui->addVariable("Height:", height);
-           w->setSpinnable(true);
-           w->setMinValue(0.0f);
-
-           gui->addVariable("Border mode X:", borderModeX, true)
-              ->setItems(HDRImage::borderModeNames());
-           gui->addVariable("Border mode Y:", borderModeY, true)
-              ->setItems(HDRImage::borderModeNames());
+	       gui->addVariable("Exact (slow!):", exact, true);
 
            gui->addButton("Cancel", [&, window]() { window->dispose(); })
               ->setIcon(ENTYPO_ICON_CIRCLED_CROSS);
@@ -173,8 +133,8 @@ Button * createFastGaussianFilterButton(Widget *parent, HDRViewScreen * screen, 
 	           imageMgr->modifyImage([&](HDRImage &img)
 	                               {
 		                               auto undo = new FullImageUndo(img);
-		                               img = img.fastGaussianBlurred(width, height, borderModeX,
-		                                                             borderModeY);
+		                               img = exact ? img.GaussianBlurred(width, height, borderModeX, borderModeY) :
+		                                     img.fastGaussianBlurred(width, height, borderModeX, borderModeY);
 		                               return undo;
 	                               });
                window->dispose();
@@ -192,6 +152,7 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Box blur...";
 	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
        {
            FormHelper *gui = new FormHelper(screen);
@@ -237,6 +198,7 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Bilateral filter...";
 	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -284,6 +246,7 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Unsharp mask...";
 	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -331,6 +294,7 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Median filter...";
 	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -373,6 +337,7 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 	static int width = 128, height = 128;
 	static string name = "Resize...";
 	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -428,6 +393,7 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 
 	static string name = "Remap...";
 	auto b = new Button(parent, name, ENTYPO_ICON_MAP);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -517,7 +483,8 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
 	static float dx = 0.f, dy = 0.f;
 	static string name = "Shift...";
-	auto b = new Button(parent, name, ENTYPO_ICON_HAIR_CROSS);
+	auto b = new Button(parent, name, ENTYPO_ICON_SWITCH);
+	b->setFixedHeight(21);
 	b->setCallback([&, parent, screen, imageMgr]()
 	               {
 		               FormHelper *gui = new FormHelper(screen);
@@ -569,7 +536,6 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 
 }
 
-NAMESPACE_BEGIN(nanogui)
 
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 	: Widget(parent), m_screen(screen), m_imageMgr(imageMgr)
@@ -579,30 +545,35 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	new Label(this, "History", "sans-bold");
 
 	auto buttonRow = new Widget(this);
-	buttonRow->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 4));
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
 
 	m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
-	m_undoButton->setFixedWidth(84);
+	m_undoButton->setFixedWidth(85);
 	m_undoButton->setCallback([&](){m_imageMgr->undo();});
 	m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
-	m_redoButton->setFixedWidth(84);
+	m_redoButton->setFixedWidth(85);
 	m_redoButton->setCallback([&](){m_imageMgr->redo();});
 
 	new Label(this, "Transformations", "sans-bold");
 
+	auto grid = new Widget(this);
+	grid->setLayout(new GridLayout(Orientation::Vertical, 2, Alignment::Fill, 0, 2));
+	grid->setFixedHeight(46);
+
 	// flip h
-	auto w = new Button(this, "Flip H", ENTYPO_ICON_LEFT_BOLD);
-	w->setCallback([&](){m_screen->flipImage(true);});
-	m_filterButtons.push_back(w);
+	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_LEFT_BOLD));
+	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(true);});
+	m_filterButtons.back()->setFixedSize(Vector2i(75, 21));
 
 	// flip v
-	w = new Button(this, "Flip V", ENTYPO_ICON_DOWN_BOLD);
-	w->setCallback([&](){m_screen->flipImage(false);});
-	m_filterButtons.push_back(w);
+	m_filterButtons.push_back(new Button(grid, "Flip V", ENTYPO_ICON_DOWN_BOLD));
+	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(false);});
+	m_filterButtons.back()->setFixedSize(Vector2i(75, 21));
 
 	// rotate cw
-	w = new Button(this, "Rotate CW", ENTYPO_ICON_CW);
-	w->setCallback([&]()
+	m_filterButtons.push_back(new Button(grid, "Rotate CW", ENTYPO_ICON_CW));
+	m_filterButtons.back()->setFixedSize(Vector2i(95, 21));
+	m_filterButtons.back()->setCallback([&]()
        {
 	       m_imageMgr->modifyImage([&](HDRImage &img)
 	                             {
@@ -611,11 +582,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		                                                   [](HDRImage &img2) { img2 = img2.rotated90CW(); });
 	                             });
        });
-	m_filterButtons.push_back(w);
 
 	// rotate ccw
-	w = new Button(this, "Rotate CCW", ENTYPO_ICON_CCW);
-	w->setCallback([&]()
+	m_filterButtons.push_back(new Button(grid, "Rotate CCW", ENTYPO_ICON_CCW));
+	m_filterButtons.back()->setFixedSize(Vector2i(95, 21));
+	m_filterButtons.back()->setCallback([&]()
        {
 	       m_imageMgr->modifyImage([&](HDRImage &img)
 	                             {
@@ -624,22 +595,27 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		                                                   [](HDRImage &img2) { img2 = img2.rotated90CCW(); });
 	                             });
        });
-	m_filterButtons.push_back(w);
 
 	// shift
 	m_filterButtons.push_back(createShiftButton(this, m_screen, m_imageMgr));
+	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
 
 	new Label(this, "Adjustments", "sans-bold");
 	m_filterButtons.push_back(createExposureGammaButton(this, m_screen, m_imageMgr));
+	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
 	m_filterButtons.push_back(createColorSpaceButton(this, m_screen, m_imageMgr));
+	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
 
 	new Label(this, "Resize/resample", "sans-bold");
-	m_filterButtons.push_back(createResizeButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createResampleButton(this, m_screen, m_imageMgr));
+	buttonRow = new Widget(this);
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
+	m_filterButtons.push_back(createResizeButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.back()->setFixedSize(Vector2i(85, 21));
+	m_filterButtons.push_back(createResampleButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.back()->setFixedSize(Vector2i(86, 21));
 
 	new Label(this, "Filters", "sans-bold");
 	m_filterButtons.push_back(createGaussianFilterButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createFastGaussianFilterButton(this, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBoxFilterButton(this, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBilateralFilterButton(this, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createUnsharpMaskFilterButton(this, m_screen, m_imageMgr));
@@ -657,5 +633,3 @@ void EditImagePanel::enableDisableButtons()
 	for_each(m_filterButtons.begin(), m_filterButtons.end(),
 	         [&](Widget * w){w->setEnabled(m_imageMgr->currentImage()); });
 }
-
-NAMESPACE_END(nanogui)

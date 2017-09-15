@@ -11,7 +11,8 @@
 #include "glimage.h"
 #include "imageshader.h"
 
-NAMESPACE_BEGIN(nanogui)
+using namespace nanogui;
+using namespace Eigen;
 
 /*!
  * @class 	HDRImageViewer hdrimageviewer.h
@@ -210,5 +211,3 @@ private:
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-NAMESPACE_END(nanogui)

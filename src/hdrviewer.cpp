@@ -125,6 +125,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
          updateLayout();
          m_sidePanelContents->performLayout(mNVGContext);
      });
+	editPanel->performLayout(mNVGContext);
 
     //
     // create top panel controls

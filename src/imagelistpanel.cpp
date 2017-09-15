@@ -13,8 +13,6 @@
 
 using namespace std;
 
-NAMESPACE_BEGIN(nanogui)
-
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr, HDRImageViewer * imgViewer)
 	: Widget(parent), m_screen(screen), m_imageMgr(imgMgr), m_imageViewer(imgViewer)
 {
@@ -209,5 +207,3 @@ void ImageListPanel::updateHistogram()
 	m_graph->setValues(hist.col(2)/maxValue, 2);
 	enableDisableButtons();
 }
-
-NAMESPACE_END(nanogui)

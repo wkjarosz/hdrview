@@ -7,7 +7,7 @@
 #include <nanogui/widget.h>
 #include "fwd.h"
 
-NAMESPACE_BEGIN(nanogui)
+using namespace nanogui;
 
 class EditImagePanel : public Widget
 {
@@ -26,5 +26,3 @@ private:
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-NAMESPACE_END(nanogui)

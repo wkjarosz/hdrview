@@ -14,8 +14,6 @@ const float MIN_ZOOM = 0.01f;
 const float MAX_ZOOM = 512.f;
 }
 
-NAMESPACE_BEGIN(nanogui)
-
 HDRImageViewer::HDRImageViewer(Widget * parent, HDRViewScreen * screen)
 	: Widget(parent), m_screen(screen),
 	  m_zoom(1.f/m_screen->pixelRatio()), m_offset(Vector2f::Zero()),
@@ -410,6 +408,3 @@ void HDRImageViewer::drawPixelInfo(NVGcontext *ctx) const
 		}
 	}
 }
-
-
-NAMESPACE_END(nanogui)
