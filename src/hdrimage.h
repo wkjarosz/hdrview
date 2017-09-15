@@ -7,7 +7,8 @@
 
 #include <Eigen/Core>            // for Array, CwiseUnaryOp, Dynamic, DenseC...
 #include <functional>            // for function
-#include <iosfwd>                // for string
+#include <vector>                // for vector
+#include <string>                // for string
 #include "color.h"               // for Color4, max, min
 
 
