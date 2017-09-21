@@ -491,20 +491,20 @@ namespace
 
 // Taken from http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
 const Matrix3f XYZD65TosRGB(
-	(Matrix3f() << 3.2406, -1.5372, -0.4986,
-		-0.9689,  1.8758,  0.0415,
-		0.0557, -0.2040,  1.0570).finished());
+	(Matrix3f() << 3.2406f, -1.5372f, -0.4986f,
+		-0.9689f,  1.8758f,  0.0415f,
+		0.0557f, -0.2040f,  1.0570f).finished());
 
 const Matrix3f XYZD50ToXYZD65(
-	(Matrix3f() << 0.9555766, -0.0230393, 0.0631636,
-		-0.0282895,  1.0099416, 0.0210077,
-		0.0122982, -0.0204830, 1.3299098).finished());
+	(Matrix3f() << 0.9555766f, -0.0230393f, 0.0631636f,
+		-0.0282895f,  1.0099416f, 0.0210077f,
+		0.0122982f, -0.0204830f, 1.3299098f).finished());
 
 // Taken from http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
 const Matrix3f XYZD50TosRGB(
-	(Matrix3f() << 3.2404542, -1.5371385, -0.4985314,
-		-0.9692660,  1.8760108,  0.0415560,
-		0.0556434, -0.2040259,  1.0572252).finished());
+	(Matrix3f() << 3.2404542f, -1.5371385f, -0.4985314f,
+		-0.9692660f,  1.8760108f,  0.0415560f,
+		0.0556434f, -0.2040259f,  1.0572252).finished());
 
 Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 {
@@ -524,15 +524,17 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 	// if the ForwardMatrix is included:
 	if (false)//param.has_forward_matrix2)
 	{
-		auto FM((Matrix3f() << param.forward_matrix2[0][0], param.forward_matrix2[0][1], param.forward_matrix2[0][2],
-			                   param.forward_matrix2[1][0], param.forward_matrix2[1][1], param.forward_matrix2[1][2],
-							   param.forward_matrix2[2][0], param.forward_matrix2[2][1], param.forward_matrix2[2][2]).finished());
-		auto CC((Matrix3f() << param.camera_calibration2[0][0], param.camera_calibration2[0][1], param.camera_calibration2[0][2],
-							   param.camera_calibration2[1][0], param.camera_calibration2[1][1], param.camera_calibration2[1][2],
-							   param.camera_calibration2[2][0], param.camera_calibration2[2][1], param.camera_calibration2[2][2]).finished());
-		auto AB = Vector3f(param.analog_balance[0], param.analog_balance[1], param.analog_balance[2]).asDiagonal();
+		auto FM((Matrix3f() << (float)param.forward_matrix2[0][0], (float)param.forward_matrix2[0][1], (float)param.forward_matrix2[0][2],
+			                   (float)param.forward_matrix2[1][0], (float)param.forward_matrix2[1][1], (float)param.forward_matrix2[1][2],
+							   (float)param.forward_matrix2[2][0], (float)param.forward_matrix2[2][1], (float)param.forward_matrix2[2][2]).finished());
+		auto CC((Matrix3f() << (float)param.camera_calibration2[0][0], (float)param.camera_calibration2[0][1], (float)param.camera_calibration2[0][2],
+							   (float)param.camera_calibration2[1][0], (float)param.camera_calibration2[1][1], (float)param.camera_calibration2[1][2],
+							   (float)param.camera_calibration2[2][0], (float)param.camera_calibration2[2][1], (float)param.camera_calibration2[2][2]).finished());
+		auto AB = Vector3f((float)param.analog_balance[0], (float)param.analog_balance[1], (float)param.analog_balance[2]).asDiagonal();
 
-		Vector3f CameraNeutral(param.as_shot_neutral[0], param.as_shot_neutral[1], param.as_shot_neutral[2]);
+		Vector3f CameraNeutral((float)param.as_shot_neutral[0],
+		                       (float)param.as_shot_neutral[1],
+		                       (float)param.as_shot_neutral[2]);
 		auto ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
 		auto D = (ReferenceNeutral.asDiagonal()).inverse();
 		auto CameraToXYZ = FM * D * (AB * CC).inverse();
@@ -541,9 +543,9 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 	}
 	else
 	{
-		auto CM((Matrix3f() << param.color_matrix2[0][0], param.color_matrix2[0][1], param.color_matrix2[0][2],
-							   param.color_matrix2[1][0], param.color_matrix2[1][1], param.color_matrix2[1][2],
-							   param.color_matrix2[2][0], param.color_matrix2[2][1], param.color_matrix2[2][2]).finished());
+		auto CM((Matrix3f() << (float)param.color_matrix2[0][0], (float)param.color_matrix2[0][1], (float)param.color_matrix2[0][2],
+			                   (float)param.color_matrix2[1][0], (float)param.color_matrix2[1][1], (float)param.color_matrix2[1][2],
+				               (float)param.color_matrix2[2][0], (float)param.color_matrix2[2][1], (float)param.color_matrix2[2][2]).finished());
 
 		auto CameraToXYZ = CM.inverse();
 
@@ -575,7 +577,7 @@ HDRImage develop(vector<float> & raw,
 	//
 	// we also apply white balance before demosaicing here because it increases the
 	// correlation between the color channels and reduces artifacts
-	Vector3f wb(param2.as_shot_neutral[0], param2.as_shot_neutral[1], param2.as_shot_neutral[2]);
+	Vector3f wb((float)param2.as_shot_neutral[0], (float)param2.as_shot_neutral[1], (float)param2.as_shot_neutral[2]);
 	const float invScale = 1.0f / (whiteLevel - blackLevel);
 	parallel_for(0, developed.height(), [&developed,&raw,blackLevel,invScale,&wb](int y)
 	{
