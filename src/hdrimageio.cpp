@@ -25,11 +25,6 @@
 #include <Eigen/Dense>
 #include <spdlog/spdlog.h>
 
-//#define STB_IMAGE_IMPLEMENTATION
-
-// since NanoVG includes an old version of stb_image, we declare it static here
-//#define STB_IMAGE_STATIC
-
 // these pragmas ignore warnings about unused static functions
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -41,8 +36,10 @@
 #pragma warning (push, 0)
 #endif
 
-#include "stb_image.h"           // for stbi_failure_reason, stbi_is_hdr
-
+// since NanoVG includes an old version of stb_image, we declare it static here
+#define STB_IMAGE_STATIC
+// tiny_dng_loader #includes stb_image.h, so we don't include it explicitly ourselves
+#define STB_IMAGE_IMPLEMENTATION
 #define TINY_DNG_LOADER_IMPLEMENTATION
 #include "tiny_dng_loader.h"
 
@@ -63,6 +60,7 @@
 
 using namespace Eigen;
 using namespace std;
+using namespace tinydng;
 
 // local functions
 namespace
