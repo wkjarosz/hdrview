@@ -217,7 +217,6 @@ bool HDRImage::load(const string & filename)
 				throw runtime_error("failed to load DNG");
 
 		}
-		assert(images.size() > 0);
 
 		// DNG files sometimes only store the orientation in one of the images,
 		// instead of all of them. find any set value and save it
