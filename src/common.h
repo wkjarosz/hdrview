@@ -43,6 +43,24 @@ inline T lerp(T a, T b, S t)
     return T((S(1)-t) * a + t * b);
 }
 
+//!
+/*!
+ * @brief Inverse linear interpolation.
+ *
+ * Given three values \a a, \a b, \a m, determines the parameter value
+ * \a t, such that m = lerp(a,b,lerpFactor(a,b,m))
+ *
+ * @param a     The start point
+ * @param b     The end point
+ * @param m     A third point (typically between \a a and \a b)
+ * @return      The interpolation factor \a t such that m = lerp(a,b,lerpFactor(a,b,m))
+ */
+template <typename T>
+inline T lerpFactor(T a, T b, T m)
+{
+    return (m - a) / (b - a);
+}
+
 
 //! Smoothly interpolates between a and b.
 /*!
@@ -99,13 +117,13 @@ inline const T& min(const T& a, const T& b, const T& c)
 template <typename T>
 inline const T& min(const T& a, const T& b, const T& c, const T& d)
 {
-    return std::min(std::min(a, b, c), d);
+    return std::min(min(a, b, c), d);
 }
 
 template <typename T>
 inline const T& min(const T& a, const T& b, const T& c, const T& d, const T& e)
 {
-    return std::min(std::min(a, b, c, d), e);
+    return std::min(min(a, b, c, d), e);
 }
 
 template <typename T>
@@ -117,13 +135,19 @@ inline const T& max(const T& a, const T& b, const T& c)
 template <typename T>
 inline const T& max(const T& a, const T& b, const T& c, const T& d)
 {
-    return std::max(std::max(a, b, c), d);
+    return std::max(max(a, b, c), d);
 }
 
 template <typename T>
 inline const T& max(const T& a, const T& b, const T& c, const T& d, const T& e)
 {
-    return std::max(std::max(a, b, c, d), e);
+    return std::max(max(a, b, c, d), e);
+}
+
+template <typename T>
+inline T square(T value)
+{
+    return value*value;
 }
 
 std::string getExtension(const std::string& filename);

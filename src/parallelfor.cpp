@@ -10,9 +10,9 @@ using namespace std;
 
 // adapted from http://www.andythomason.com/2016/08/21/c-multithreading-an-effective-parallel-for-loop/
 // license unknown, presumed public domain
-void parallel_for(size_t begin, size_t end, function<void(size_t, size_t)> body)
+void parallel_for(int begin, int end, int step, function<void(int, size_t)> body)
 {
-	atomic<size_t> nextIndex;
+	atomic<int> nextIndex;
 	nextIndex = begin;
 
 	size_t numCPUs = thread::hardware_concurrency();
@@ -21,12 +21,12 @@ void parallel_for(size_t begin, size_t end, function<void(size_t, size_t)> body)
 	{
 		futures[cpu] = async(
 			launch::async,
-			[cpu, &nextIndex, end, &body]()
+			[cpu, &nextIndex, end, step, &body]()
 			{
 				// just iterate, grabbing the next available atomic index in the range [begin, end)
 				while (true)
 				{
-					size_t i = nextIndex++;
+					int i = nextIndex+=step;
 					if (i >= end) break;
 					body(i, cpu);
 				}
@@ -36,7 +36,7 @@ void parallel_for(size_t begin, size_t end, function<void(size_t, size_t)> body)
 		futures[cpu].get();
 }
 
-void parallel_for(size_t begin, size_t end, function<void(size_t)> body)
+void parallel_for(int begin, int end, int step, function<void(int)> body)
 {
-	return parallel_for(begin, end, [&body](size_t i, size_t){body(i);});
+	parallel_for(begin, end, step, [&body](int i, size_t){body(i);});
 }

@@ -8,6 +8,10 @@ include_directories(
     ${GLFW_INCLUDE_DIR}
     # GLEW library for accessing OpenGL functions
     ${GLEW_INCLUDE_DIR}
+    # stb
+    ${STB_INCLUDE_DIR}
+    # tinydngloader
+    ${TINYDNG_INCLUDE_DIR}
     # NanoVG drawing library
     ${NANOVG_INCLUDE_DIR}
     # NanoGUI user interface library
@@ -17,8 +21,6 @@ include_directories(
     ${OPENEXR_INCLUDE_DIRS}
     # tinydir
     ${TINYDIR_INCLUDE_DIR}
-    # stb
-    ${STB_INCLUDE_DIR}
     # docopt
     ${DOCOPT_INCLUDE_DIR}
     # spdlog
@@ -36,50 +38,51 @@ elseif(WIN32)
 endif()
 
 add_executable(HDRView MACOSX_BUNDLE
-    src/color.cpp
-    src/color.h
-    src/colorspace.cpp
-    src/colorspace.h
-    src/common.cpp
-    src/common.h
-    src/dither-matrix256.h
-    src/editimagepanel.cpp
-    src/editimagepanel.h
-    src/envmap.cpp
-    src/envmap.h
-    src/fwd.h
-    src/glimage.cpp
-    src/glimage.h
-    src/hdrimage.cpp
-    src/hdrimage.h
-    src/hdrimagemanager.cpp
-    src/hdrimagemanager.h
-    src/hdrimageviewer.cpp
-    src/hdrimageviewer.h
-    src/hdrview.cpp
-    src/hdrviewer.cpp
-    src/hdrviewer.h
-    src/helpwindow.cpp
-    src/helpwindow.h
-    src/imagebutton.cpp
-    src/imagebutton.h
-    src/imagelistpanel.cpp
-    src/imagelistpanel.h
-    src/imageshader.cpp
-    src/imageshader.h
-    src/multigraph.cpp
-    src/multigraph.h
-    src/parallelfor.cpp
-    src/parallelfor.h
-    src/pfm.h
-    src/pfm.cpp
-    src/ppm.h
-    src/ppm.cpp
-    src/range.h
-    src/well.cpp
-    src/well.h
-    src/timer.h
-    ${EXTRA_SOURCE})
+               src/color.cpp
+               src/color.h
+               src/colorspace.cpp
+               src/colorspace.h
+               src/common.cpp
+               src/common.h
+               src/dither-matrix256.h
+               src/editimagepanel.cpp
+               src/editimagepanel.h
+               src/envmap.cpp
+               src/envmap.h
+               src/fwd.h
+               src/glimage.cpp
+               src/glimage.h
+               src/hdrimage.cpp
+               src/hdrimage.h
+               src/hdrimageio.cpp
+               src/hdrimagemanager.cpp
+               src/hdrimagemanager.h
+               src/hdrimageviewer.cpp
+               src/hdrimageviewer.h
+               src/hdrview.cpp
+               src/hdrviewer.cpp
+               src/hdrviewer.h
+               src/helpwindow.cpp
+               src/helpwindow.h
+               src/imagebutton.cpp
+               src/imagebutton.h
+               src/imagelistpanel.cpp
+               src/imagelistpanel.h
+               src/imageshader.cpp
+               src/imageshader.h
+               src/multigraph.cpp
+               src/multigraph.h
+               src/parallelfor.cpp
+               src/parallelfor.h
+               src/pfm.h
+               src/pfm.cpp
+               src/ppm.h
+               src/ppm.cpp
+               src/range.h
+               src/well.cpp
+               src/well.h
+               src/timer.h
+               ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
 
@@ -103,22 +106,22 @@ endif()
 
 
 add_executable(hdrbatch
-    src/common.cpp
-    src/common.h
-    src/envmap.cpp
-    src/envmap.h
-    src/pfm.h
-    src/pfm.cpp
-    src/ppm.h
-    src/ppm.cpp
-    src/dither-matrix256.h
-    src/color.h
-    src/hdrimage.h
-    src/hdrimage.cpp
-    src/hdrbatch.cpp
-    src/parallelfor.cpp
-    src/parallelfor.h
-    src/range.h src/color.cpp src/colorspace.h src/colorspace.cpp)
+               src/common.cpp
+               src/common.h
+               src/envmap.cpp
+               src/envmap.h
+               src/pfm.h
+               src/pfm.cpp
+               src/ppm.h
+               src/ppm.cpp
+               src/dither-matrix256.h
+               src/color.h
+               src/hdrimage.h
+               src/hdrimage.cpp
+               src/hdrbatch.cpp
+               src/parallelfor.cpp
+               src/parallelfor.h
+               src/range.h src/color.cpp src/colorspace.h src/colorspace.cpp src/hdrimageio.cpp)
 
 
 add_executable(force-random-dither

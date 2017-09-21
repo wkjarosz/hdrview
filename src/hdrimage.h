@@ -45,6 +45,11 @@ public:
         *this = unaryExpr([a](const Color4 & c){return Color4(c.r,c.g,c.b,a);});
     }
 
+    void setChannelFrom(int c, const HDRImage & other)
+    {
+        *this = binaryExpr(other, [c](const Color4 & a, const Color4 & b){Color4 ret = a; ret[c] = b[c]; return ret;});
+    }
+
     Color4 min() const
     {
         Color4 m = (*this)(0,0);
@@ -117,6 +122,46 @@ public:
 
 
     //-----------------------------------------------------------------------
+    //@{ \name Bayer demosaicing.
+    //-----------------------------------------------------------------------
+    void bayerMosaic(const Eigen::Vector2i &redOffset);
+
+    void demosaicLinear(const Eigen::Vector2i &redOffset)
+    {
+        demosaicGreenLinear(redOffset);
+        demosaicRedBlueLinear(redOffset);
+    }
+    void demosaicGreenGuidedLinear(const Eigen::Vector2i &redOffset)
+    {
+        demosaicGreenLinear(redOffset);
+        demosaicRedBlueGreenGuidedLinear(redOffset);
+    }
+    void demosaicMalvar(const Eigen::Vector2i &redOffset)
+    {
+        demosaicGreenMalvar(redOffset);
+        demosaicRedBlueMalvar(redOffset);
+    }
+    void demosaicAHD(const Eigen::Vector2i &redOffset, const Eigen::Matrix3f &cameraToXYZ);
+
+    // green channel
+    void demosaicGreenLinear(const Eigen::Vector2i &redOffset);
+    void demosaicGreenHorizontal(const HDRImage &raw, const Eigen::Vector2i &redOffset);
+    void demosaicGreenVertical(const HDRImage &raw, const Eigen::Vector2i &redOffset);
+    void demosaicGreenMalvar(const Eigen::Vector2i &redOffset);
+    void demosaicGreenPhelippeau(const Eigen::Vector2i &redOffset);
+
+    // red/blue channels
+    void demosaicRedBlueLinear(const Eigen::Vector2i &redOffset);
+    void demosaicRedBlueGreenGuidedLinear(const Eigen::Vector2i &redOffset);
+    void demosaicRedBlueMalvar(const Eigen::Vector2i &redOffset);
+
+    void demosaicBorder(size_t border);
+
+    HDRImage medianFilterBayerArtifacts() const;
+    //@}
+
+
+    //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
     HDRImage convolved(const Eigen::ArrayXXf &kernel, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
@@ -133,10 +178,10 @@ public:
     HDRImage boxBlurredY(int upSize, int downSize, BorderMode mode = EDGE) const;
     HDRImage boxBlurredY(int halfSize, BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, mode);}
     HDRImage unsharpMasked(float sigma, float strength, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage medianFiltered(float radius, int channel, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage medianFiltered(float r, BorderMode mX = EDGE, BorderMode mY = EDGE) const
+    HDRImage medianFiltered(float radius, int channel, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const;
+    HDRImage medianFiltered(float r, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const
     {
-        return medianFiltered(r, 0, mX, mY).medianFiltered(r, 1, mX, mY).medianFiltered(r, 2, mX, mY).medianFiltered(r, 3, mX, mY);
+        return medianFiltered(r, 0, mX, mY, round).medianFiltered(r, 1, mX, mY, round).medianFiltered(r, 2, mX, mY, round).medianFiltered(r, 3, mX, mY, round);
     }
     HDRImage bilateralFiltered(float sigmaRange = 0.1f,
                                float sigmaDomain = 1.0f,

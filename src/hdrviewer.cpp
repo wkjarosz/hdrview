@@ -27,6 +27,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     thm->mStandardFontSize     = 16;
     thm->mButtonFontSize       = 15;
     thm->mTextBoxFontSize      = 14;
+	thm->mWindowCornerRadius   = 4;
+	thm->mWindowFillUnfocused  = Color(40, 250);
+	thm->mWindowFillFocused    = Color(45, 250);
     setTheme(thm);
 
 	Theme * panelTheme = new Theme(mNVGContext);
@@ -34,12 +37,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	panelTheme->mStandardFontSize     = 16;
 	panelTheme->mButtonFontSize       = 15;
 	panelTheme->mTextBoxFontSize      = 14;
+	panelTheme->mWindowCornerRadius   = 0;
+	panelTheme->mWindowFillUnfocused  = Color(50, 255);
+	panelTheme->mWindowFillFocused    = Color(52, 255);
 	panelTheme->mButtonCornerRadius   = 2;
 	panelTheme->mWindowHeaderHeight   = 0;
 	panelTheme->mWindowDropShadowSize = 0;
-	panelTheme->mWindowCornerRadius   = 0;
-	panelTheme->mWindowFillFocused    = Color(.2f,.2f,.2f,.9f);
-	panelTheme->mWindowFillUnfocused  = Color(.2f,.2f,.2f,.9f);
 
 
 	//
@@ -407,6 +410,7 @@ bool HDRViewScreen::loadImage()
 	string file = file_dialog(
 		{
 			{"exr", "OpenEXR image"},
+			{"dng", "Digital Negative"},
 			{"png", "Portable Network Graphic"},
 			{"pfm", "Portable Float Map"},
 			{"ppm", "Portable PixMap"},

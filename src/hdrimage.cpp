@@ -4,14 +4,7 @@
     \author Wojciech Jarosz
 */
 #include "hdrimage.h"
-#include "dither-matrix256.h"    // for dither_matrix256
-#include <ImfArray.h>            // for Array2D
-#include <ImfRgbaFile.h>         // for RgbaInputFile, RgbaOutputFile
-#include <ImathBox.h>            // for Box2i
-#include <ImathVec.h>            // for Vec2
-#include <ImfRgba.h>             // for Rgba, RgbaChannels::WRITE_RGBA
 #include <ctype.h>               // for tolower
-#include <half.h>                // for half
 #include <stdlib.h>              // for abs
 #include <algorithm>             // for nth_element, transform
 #include <cmath>                 // for floor, pow, exp, ceil, round, sqrt
@@ -26,40 +19,10 @@
 #include "timer.h"
 #include <spdlog/spdlog.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-
-// since NanoVG includes an old version of stb_image, we declare it static here
-#define STB_IMAGE_STATIC
-
-// these pragmas ignore warnings about unused static functions
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunused-function"
-#elif defined(__GNUC__) || defined(__GNUG__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#elif defined(_MSC_VER)
-#pragma warning (push, 0)
-#endif
-
-#include "stb_image.h"           // for stbi_failure_reason, stbi_is_hdr
-
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#elif defined(__GNUC__) || defined(__GNUG__)
-#pragma GCC diagnostic pop
-#elif defined(_MSC_VER)
-#pragma warning (pop)
-#endif
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"     // for stbi_write_bmp, stbi_write_hdr, stbi...
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_resize.h"    // for stbir_resize_float
 
-#include "pfm.h"
-#include "ppm.h"
 
 using namespace std;
 using namespace Eigen;
@@ -71,50 +34,23 @@ namespace
 const Color4 g_blackPixel(0,0,0,0);
 
 // create a vector containing the normalized values of a 1D Gaussian filter
-ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
-{
-    // calculate the size of the filter
-    int offset = int(std::ceil(truncate * sigma));
-    int filterSize = 2*offset+1;
-
-    ArrayXXf fData(filterSize, 1);
-
-    // compute the un-normalized value of the Gaussian
-    float normalizer = 0.0f;
-    for (int i = 0; i < filterSize; i++)
-    {
-        fData(i,0) = std::exp(-pow(i - offset, 2) / (2.0f * pow(sigma, 2)));
-        normalizer += fData(i,0);
-    }
-
-    // normalize
-    for (int i = 0; i < filterSize; i++)
-        fData(i,0) /= normalizer;
-
-    return fData;
-}
-
-int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
-{
-	if (p >= 0 && p < maxP)
-		return p;
-
-	switch (m)
-	{
-		case HDRImage::EDGE:
-			return clamp(p, 0, maxP - 1);
-		case HDRImage::REPEAT:
-			return mod(p, maxP);
-		case HDRImage::MIRROR:
-		{
-			int frac = mod(p, maxP);
-			return (::abs(p) / maxP % 2 != 0) ? maxP - 1 - frac : frac;
-		}
-		case HDRImage::BLACK:
-			return -1;
-	}
-}
-
+ArrayXXf horizontalGaussianKernel(float sigma, float truncate);
+int wrapCoord(int p, int maxP, HDRImage::BorderMode m);
+void bilinearGreen(HDRImage &raw, int offsetX, int offsetY);
+void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset);
+void MalvarGreen(HDRImage &raw, int c, const Vector2i & redOffset);
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &redOffset, bool horizontal);
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &redOffset);
+void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & redOffset);
+void greenBasedRorB(HDRImage &raw, int c, const Vector2i &redOffset);
+inline float clamp2(float value, float mn, float mx);
+inline float clamp4(float value, float a, float b, float c, float d);
+inline float interpGreenH(const HDRImage &raw, int x, int y);
+inline float interpGreenV(const HDRImage &raw, int x, int y);
+inline float ghG(const ArrayXXf & G, int i, int j);
+inline float gvG(const ArrayXXf & G, int i, int j);
+inline int bayerColor(int x, int y);
+inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, const vector<float> & LUT);
 } // namespace
 
 
@@ -325,14 +261,14 @@ HDRImage HDRImage::unsharpMasked(float sigma, float strength, BorderMode mX, Bor
 
 
 
-HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, BorderMode mY, bool round) const
 {
     int radiusi = int(std::ceil(radius));
     HDRImage tempBuffer = *this;
 
     Timer timer;
     // for every pixel in the image
-    parallel_for(0, height(), [this,&tempBuffer,radius,radiusi,channel,mX,mY](int y)
+    parallel_for(0, height(), [this,&tempBuffer,radius,radiusi,channel,mX,mY,round](int y)
     {
         vector<float> mBuffer;
         mBuffer.reserve((2*radiusi)*(2*radiusi));
@@ -347,7 +283,7 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, Bord
                 xCoord = x + i;
                 for (int j = -radiusi; j <= radiusi; j++)
                 {
-                    if (i*i + j*j > radius*radius)
+                    if (round && i*i + j*j > radius*radius)
                         continue;
 
                     yCoord = y + j;
@@ -552,255 +488,665 @@ HDRImage HDRImage::resized(int w, int h) const
     return newImage;
 }
 
-
-bool HDRImage::load(const string & filename)
+/*!
+ * \brief Multiplies a raw image by the Bayer mosaic pattern so that only a single
+ * R, G, or B channel is non-zero for each pixel.
+ *
+ * We assume the canonical Bayer pattern looks like:
+ *
+ * \rst
+ * +---+---+
+ * | R | G |
+ * +---+---+
+ * | G | B |
+ * +---+---+
+ *
+ * \endrst
+ *
+ * and the pattern is tiled across the entire image.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern
+ */
+void HDRImage::bayerMosaic(const Vector2i &redOffset)
 {
-    string errors;
-
-    // try PNG, JPG, HDR, etc files first
-    int n, w, h;
-    // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
-    // we'll do our own srgb correction
-    stbi_ldr_to_hdr_scale(1.0f);
-    stbi_ldr_to_hdr_gamma(1.0f);
-
-    float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
-    if (float_data)
+    Color4 mosaic[2][2] = {{Color4(1.f, 0.f, 0.f, 1.f), Color4(0.f, 1.f, 0.f, 1.f)},
+                           {Color4(0.f, 1.f, 0.f, 1.f), Color4(0.f, 0.f, 1.f, 1.f)}};
+    for (int y = 0; y < height(); ++y)
     {
-        resize(w, h);
-        bool convert2Linear = !stbi_is_hdr(filename.c_str());
-        Timer timer;
-        // for every pixel in the image
-        parallel_for(0, h, [this,w,float_data,convert2Linear](int y)
+        int r = mod(y - redOffset.y(), 2);
+        for (int x = 0; x < width(); ++x)
         {
-            for (int x = 0; x < w; ++x)
+            int c = mod(x - redOffset.x(), 2);
+            (*this)(x,y) *= mosaic[r][c];
+        }
+    }
+}
+
+
+/*!
+ * \brief Compute the missing green pixels using a simple bilinear interpolation.
+ * from the 4 neighbors.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicGreenLinear(const Vector2i &redOffset)
+{
+    bilinearGreen(*this, redOffset.x(), redOffset.y());
+}
+
+/*!
+ * \brief Compute the missing green pixels using vertical linear interpolation.
+ *
+ * @param raw       The source raw pixel data.
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicGreenHorizontal(const HDRImage &raw, const Vector2i &redOffset)
+{
+    parallel_for(redOffset.y(), height(), 2, [this,&raw,&redOffset](int y)
+    {
+        for (int x = 2+redOffset.x(); x < width()-2; x += 2)
+        {
+            // populate the green channel into the red and blue pixels
+            (*this)(x  , y  ).g = interpGreenH(raw, x, y);
+            (*this)(x+1, y+1).g = interpGreenH(raw, x + 1, y + 1);
+        }
+    });
+}
+
+/*!
+ * \brief Compute the missing green pixels using horizontal linear interpolation.
+ *
+ * @param raw       The source raw pixel data.
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicGreenVertical(const HDRImage &raw, const Vector2i &redOffset)
+{
+    parallel_for(2+redOffset.y(), height()-2, 2, [this,&raw,&redOffset](int y)
+    {
+        for (int x = redOffset.x(); x < width(); x += 2)
+        {
+            (*this)(x  , y  ).g = interpGreenV(raw, x, y);
+            (*this)(x+1, y+1).g = interpGreenV(raw, x + 1, y + 1);
+        }
+    });
+}
+
+/*!
+ * \brief Interpolate the missing green pixels using the method by Malvar et al. 2004.
+ *
+ * The method uses a plus "+" shaped 5x5 filter, which is linear, except--to reduce
+ * ringing/over-shooting--the interpolation is not allowed to extrapolate higher or
+ * lower than the surrounding green pixels.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicGreenMalvar(const Vector2i &redOffset)
+{
+    // fill in missing green at red pixels
+    MalvarGreen(*this, 0, redOffset);
+    // fill in missing green at blue pixels
+    MalvarGreen(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+}
+
+/*!
+ * \brief Interpolate the missing green pixels using the method by Phelippeau et al. 2009.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicGreenPhelippeau(const Vector2i &redOffset)
+{
+    PhelippeauGreen(*this, redOffset);
+}
+
+/*!
+ * \brief Interpolate the missing red and blue pixels using a simple linear or bilinear interpolation.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicRedBlueLinear(const Vector2i &redOffset)
+{
+    bilinearRedBlue(*this, 0, redOffset);
+    bilinearRedBlue(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+}
+
+/*!
+ * \brief Interpolate the missing red and blue pixels using a linear or bilinear interpolation
+ * guided by the green channel, which is assumed already demosaiced.
+ *
+ * The interpolation is equivalent to performing (bi)linear interpolation of the red-green and
+ * blue-green differences, and then adding green back into the interpolated result. This inject
+ * some of the higher resolution of the green channel, and reduces color fringing under the
+ * assumption that the color channels in natural images are positively correlated.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicRedBlueGreenGuidedLinear(const Vector2i &redOffset)
+{
+    greenBasedRorB(*this, 0, redOffset);
+    greenBasedRorB(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+}
+
+/*!
+ * \brief Interpolate the missing red and blue pixels using the method by Malvar et al. 2004.
+ *
+ * The interpolation for each channel is guided by the available information from all other
+ * channels. The green channel is assumed to already be demosaiced.
+ *
+ * The method uses a 5x5 linear filter.
+ *
+ * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ */
+void HDRImage::demosaicRedBlueMalvar(const Vector2i &redOffset)
+{
+    // fill in missing red horizontally
+    MalvarRedOrBlueAtGreen(*this, 0, Vector2i((redOffset.x() + 1) % 2, redOffset.y()), true);
+    // fill in missing red vertically
+    MalvarRedOrBlueAtGreen(*this, 0, Vector2i(redOffset.x(), (redOffset.y() + 1) % 2), false);
+
+    // fill in missing blue horizontally
+    MalvarRedOrBlueAtGreen(*this, 2, Vector2i(redOffset.x(), (redOffset.y() + 1) % 2), true);
+    // fill in missing blue vertically
+    MalvarRedOrBlueAtGreen(*this, 2, Vector2i((redOffset.x() + 1) % 2, redOffset.y()), false);
+
+    // fill in missing red at blue
+    MalvarRedOrBlue(*this, 0, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+    // fill in missing blue at red
+    MalvarRedOrBlue(*this, 2, 0, redOffset);
+}
+
+/*!
+ * \brief Reduce some remaining color fringing and zipper artifacts by median-filtering the
+ * red-green and blue-green differences as originally proposed by Freeman.
+ */
+HDRImage HDRImage::medianFilterBayerArtifacts() const
+{
+    HDRImage colorDiff = unaryExpr([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
+    colorDiff = colorDiff.medianFiltered(1.f, 0).medianFiltered(1.f, 2);
+    return binaryExpr(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);}).eval();
+}
+
+/*!
+ * \brief Demosaic the image using the "Adaptive Homogeneity-Directed" interpolation
+ * approach proposed by Hirakawa et al. 2004.
+ *
+ * The approach is fairly expensive, but produces the best results.
+ *
+ * The method first creates two competing full-demosaiced images: one where the
+ * green channel is interpolated vertically, and the other horizontally. In both
+ * images the red and green are demosaiced using the corresponding green channel
+ * as a guide.
+ *
+ * The two candidate images are converted to XYZ (using the supplied \a cameraToXYZ
+ * matrix) subsequently to CIE L*a*b* space in order to determine how perceptually
+ * "homogeneous" each pixel neighborhood is.
+ *
+ * "Homogeneity maps" are created for the two candidate imates which count, for each
+ * pixel, the number of perceptually similar pixels among the 4 neighbors in the
+ * cardinal directions.
+ *
+ * Finally, the output image is formed by choosing for each pixel the demosaiced
+ * result which has the most homogeneous "votes" in the surrounding 3x3 neighborhood.
+ *
+ * @param redOffset     The x,y offset to the first red pixel in the Bayer pattern.
+ * @param cameraToXYZ   The matrix that transforms from sensor values to XYZ with
+ *                      D65 white point.
+ */
+void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXYZ)
+{
+    typedef Array<Vector3f,Dynamic,Dynamic> Image3f;
+    typedef Array<uint8_t,Dynamic,Dynamic> HomoMap;
+    HDRImage rgbH = *this;
+    HDRImage rgbV = *this;
+    Image3f labH(width(), height());
+    Image3f labV(width(), height());
+    HomoMap homoH = HomoMap::Zero(width(), height());
+    HomoMap homoV = HomoMap::Zero(width(), height());
+
+    // interpolate green channel both horizontally and vertically
+    rgbH.demosaicGreenHorizontal(*this, redOffset);
+    rgbV.demosaicGreenVertical(*this, redOffset);
+
+    // interpolate the red and blue using the green as a guide
+    rgbH.demosaicRedBlueGreenGuidedLinear(redOffset);
+    rgbV.demosaicRedBlueGreenGuidedLinear(redOffset);
+
+    // Scale factor to push XYZ values to [0,1] range
+    float scale = 1.0 / (maxCoeff().max() * cameraToXYZ.maxCoeff());
+
+    // Precompute a table for the nonlinear part of the CIELab conversion
+    vector<float> labLUT;
+    labLUT.reserve(0xFFFF);
+    parallel_for(0, labLUT.size(), [&labLUT](int i)
+    {
+        float r = i * 1.0f / (labLUT.size()-1);
+        labLUT[i] = r > 0.008856 ? std::pow(r, 1.0f / 3.0f) : 7.787f*r + 4.0f/29.0f;
+    });
+
+    // convert both interpolated images to CIE L*a*b* so we can compute perceptual differences
+    parallel_for(0, height(), [&rgbH,&labH,&cameraToXYZ,&labLUT,scale](int y)
+    {
+        for (int x = 0; x < rgbH.width(); ++x)
+            labH(x,y) = cameraToLab(Vector3f(rgbH(x,y)[0], rgbH(x,y)[1], rgbH(x,y)[2])*scale, cameraToXYZ, labLUT);
+    });
+    parallel_for(0, height(), [&rgbV,&labV,&cameraToXYZ,&labLUT,scale](int y)
+    {
+        for (int x = 0; x < rgbV.width(); ++x)
+            labV(x,y) = cameraToLab(Vector3f(rgbV(x,y)[0], rgbV(x,y)[1], rgbV(x,y)[2])*scale, cameraToXYZ, labLUT);
+    });
+
+    // Build homogeneity maps from the CIELab images which count, for each pixel,
+    // the number of visually similar neighboring pixels
+    static const int neighbor[4][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1} };
+    parallel_for(1, height()-1, [&homoH,&homoV,&labH,&labV](int y)
+    {
+        for (int x = 1; x < labH.rows()-1; ++x)
+        {
+            float ldiffH[4], ldiffV[4], abdiffH[4], abdiffV[4];
+
+            for (int i = 0; i < 4; i++)
             {
-                Color4 c(float_data[4 * (x + y * w) + 0],
-                         float_data[4 * (x + y * w) + 1],
-                         float_data[4 * (x + y * w) + 2],
-                         float_data[4 * (x + y * w) + 3]);
-                (*this)(x, y) = convert2Linear ? SRGBToLinear(c) : c;
+                int dx = neighbor[i][0];
+                int dy = neighbor[i][1];
+
+                // Local luminance and chromaticity differences to the 4 neighbors for both interpolations directions
+                ldiffH[i] = std::abs(labH(x,y)[0] - labH(x+dx,y+dy)[0]);
+                ldiffV[i] = std::abs(labV(x,y)[0] - labV(x+dx,y+dy)[0]);
+                abdiffH[i] = ::square(labH(x,y)[1] - labH(x+dx,y+dy)[1]) +
+                             ::square(labH(x,y)[2] - labH(x+dx,y+dy)[2]);
+                abdiffV[i] = ::square(labV(x,y)[1] - labV(x+dx,y+dy)[1]) +
+                             ::square(labV(x,y)[2] - labV(x+dx,y+dy)[2]);
             }
-        });
-        spdlog::get("console")->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 
-        stbi_image_free(float_data);
-        return true;
-    }
-    else
-    {
-        errors += string("\t") + stbi_failure_reason() + "\n";
-    }
+            float leps = std::min(std::max(ldiffH[0], ldiffH[1]),
+                                  std::max(ldiffV[2], ldiffV[3]));
+            float abeps = std::min(std::max(abdiffH[0], abdiffH[1]),
+                                   std::max(abdiffV[2], abdiffV[3]));
 
-    // then try pfm/ppm
-    try
-    {
-		w = 0;
-		h = 0;
-        if (is_pfm(filename.c_str()))
-            float_data = load_pfm(filename.c_str(), &w, &h, &n);
-        else if (is_ppm(filename.c_str()))
-            float_data = load_ppm(filename.c_str(), &w, &h, &n);
-
-        if (float_data)
-        {
-            if (n == 3)
+            // Count number of neighboring pixels that are visually similar
+            for (int i = 0; i < 4; i++)
             {
-                resize(w, h);
+                if (ldiffH[i] <= leps && abdiffH[i] <= abeps)
+                    homoH(x,y)++;
+                if (ldiffV[i] <= leps && abdiffV[i] <= abeps)
+                    homoV(x,y)++;
+            }
+        }
+    });
 
-                Timer timer;
-                // convert 3-channel pfm data to 4-channel internal representation
-                parallel_for(0, h, [this,w,float_data](int y)
+    // Combine the most homogenous pixels for the final result
+    parallel_for(1, height()-1, [this,&homoH,&homoV,&rgbH,&rgbV](int y)
+    {
+        for (int x = 1; x < this->width()-1; ++x)
+        {
+            // Sum up the homogeneity of both images in a 3x3 window
+            int hmH = 0, hmV = 0;
+            for (int j = y-1; j <= y+1; j++)
+                for (int i = x-1; i <= x+1; i++)
                 {
-                    for (int x = 0; x < w; ++x)
-                        (*this)(x, y) = Color4(float_data[3 * (x + y * w) + 0],
-                                               float_data[3 * (x + y * w) + 1],
-                                               float_data[3 * (x + y * w) + 2],
-                                               1.0f);
-                });
-                spdlog::get("console")->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+                    hmH += homoH(i, j);
+                    hmV += homoV(i, j);
+                }
 
-                delete [] float_data;
-                return true;
+            if (hmH > hmV)
+            {
+                // horizontal interpolation is more homogeneous
+                (*this)(x,y) = rgbH(x,y);
+            }
+            else if (hmV > hmH)
+            {
+                // vertical interpolation is more homogeneous
+                (*this)(x,y) = rgbV(x,y);
             }
             else
-                throw runtime_error("Unsupported number of channels in PFM/PPM");
-            return true;
-        }
-    }
-    catch (const exception &e)
-    {
-        delete [] float_data;
-        resize(0,0);
-        errors += string("\t") + e.what() + "\n";
-    }
-
-    // finally try exrs
-    try
-    {
-        Imf::setGlobalThreadCount(thread::hardware_concurrency());
-
-        Timer timer;
-
-        Imf::RgbaInputFile file(filename.c_str());
-        Imath::Box2i dw = file.dataWindow();
-
-        w = dw.max.x - dw.min.x + 1;
-        h = dw.max.y - dw.min.y + 1;
-
-        Imf::Array2D<Imf::Rgba> pixels(h, w);
-
-        file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
-        file.readPixels(dw.min.y, dw.max.y);
-
-        spdlog::get("console")->debug("Reading EXR image took: {} seconds.", (timer.lap()/1000.f));
-
-        resize(w,h);
-
-        // copy pixels over to the Image
-        parallel_for(0, h, [this,w,&pixels](int y)
-        {
-            for (int x = 0; x < w; ++x)
             {
-                const Imf::Rgba &p = pixels[y][x];
-                (*this)(x, y) = Color4(p.r, p.g, p.b, p.a);
+                // No clear winner, blend
+                Color4 blend = (rgbH(x,y) + rgbV(x,y)) * 0.5f;
+                (*this)(x,y) = blend;
             }
-        });
+        }
+    });
 
-        spdlog::get("console")->debug("Copying EXR image data took: {} seconds.", (timer.lap()/1000.f));
-        return true;
-    }
-    catch (const exception &e)
-    {
-        resize(0,0);
-        errors += string("\t") + e.what() + "\n";
-    }
-
-    spdlog::get("console")->error("ERROR: Unable to read image file \"{}\":\n{}", filename, errors);
-
-    return false;
+    // Now handle the boundary pixels
+    demosaicBorder(3);
 }
 
-bool HDRImage::save(const string & filename,
-                      float gain, float gamma,
-                      bool sRGB, bool dither) const
+/*!
+ * \brief   Demosaic the border of the image using naive averaging.
+ *
+ * Provides a results for all border pixels using a straight averge of the available pixels
+ * in the 3x3 neighborhood. Useful in combination with more sophisticated methods which
+ * require a larger window, and therefore cannot produce results at the image boundary.
+ *
+ * @param border    The size of the border in pixels.
+ */
+void HDRImage::demosaicBorder(size_t border)
 {
-    string extension = getExtension(filename);
-
-    transform(extension.begin(),
-              extension.end(),
-              extension.begin(),
-              ::tolower);
-
-    auto img = this;
-    HDRImage imgCopy;
-
-    bool hdrFormat = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
-
-    // if we need to tonemap, then modify a copy of the image data
-    if (gain != 1.0f || sRGB || gamma != 1.0f)
+    parallel_for(0, height(), [&](size_t y)
     {
-        Color4 gainC = Color4(gain, gain, gain, 1.0f);
-        Color4 gammaC = Color4(1.0f / gamma, 1.0f / gamma, 1.0f / gamma, 1.0f);
-
-        imgCopy = *this;
-        img = &imgCopy;
-
-        if (gain != 1.0f)
-            imgCopy *= gainC;
-
-        // only do gamma or sRGB tonemapping if we are saving to an LDR format
-        if (!hdrFormat)
+        for (size_t x = 0; x < (size_t)width(); ++x)
         {
-            if (sRGB)
-                imgCopy = imgCopy.unaryExpr(ptr_fun((Color4 (*)(const Color4 &)) LinearToSRGB));
-            else if (gamma != 1.0f)
-                imgCopy = imgCopy.pow(gammaC);
-        }
-    }
+            // skip the center of the image
+            if (x == border && y >= border && y < height() - border)
+                x = width() - border;
 
-    if (extension == "hdr")
-        return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
-    else if (extension == "pfm")
-        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
-    else if (extension == "exr")
-    {
-        try
-        {
-            Imf::setGlobalThreadCount(thread::hardware_concurrency());
-            Imf::RgbaOutputFile file(filename.c_str(), width(), height(), Imf::WRITE_RGBA);
-            Imf::Array2D<Imf::Rgba> pixels(height(), width());
+            Vector3f sum = Vector3f::Zero();
+            Vector3i count = Vector3i::Zero();
 
-            Timer timer;
-            // copy image data over to Rgba pixels
-            parallel_for(0, height(), [this,img,&pixels](int y)
+            for (size_t ys = y - 1; ys <= y + 1; ++ys)
             {
-                for (int x = 0; x < width(); ++x)
+                for (size_t xs = x - 1; xs <= x + 1; ++xs)
                 {
-                    Imf::Rgba &p = pixels[y][x];
-                    Color4 c = (*img)(x, y);
-                    p.r = c[0];
-                    p.g = c[1];
-                    p.b = c[2];
-                    p.a = c[3];
+                    // rely on xs and ys = -1 to wrap around to max value
+                    // since they are unsigned
+                    if (ys < (size_t)height() && xs < (size_t)width())
+                    {
+                        int c = bayerColor(xs, ys);
+                        sum(c) += (*this)(xs,ys)[c];
+                        ++count(c);
+                    }
                 }
-            });
-            spdlog::get("console")->debug("Copying pixel data took: {} seconds.", (timer.lap()/1000.f));
-
-            file.setFrameBuffer(&pixels[0][0], 1, width());
-            file.writePixels(height());
-
-            spdlog::get("console")->debug("Writing EXR image took: {} seconds.", (timer.lap()/1000.f));
-			return true;
-        }
-        catch (const exception &e)
-        {
-            spdlog::get("console")->error("ERROR: Unable to write image file \"{}\": {}", filename, e.what());
-            return false;
-        }
-    }
-    else
-    {
-        // convert floating-point image to 8-bit per channel with dithering
-        vector<unsigned char> data(size()*3, 0);
-
-        Timer timer;
-        // convert 3-channel pfm data to 4-channel internal representation
-        parallel_for(0, height(), [this,img,&data,dither](int y)
-        {
-            for (int x = 0; x < width(); ++x)
-            {
-                Color4 c = (*img)(x, y);
-                if (dither)
-                {
-                    int xmod = x % 256;
-                    int ymod = y % 256;
-                    float ditherValue = (dither_matrix256[xmod + ymod * 256] / 65536.0f - 0.5f) / 255.0f;
-                    c += Color4(Color3(ditherValue), 0.0f);
-                }
-
-                // convert to [0-255] range
-                c = (c * 255.0f).max(0.0f).min(255.0f);
-
-                data[3 * x + 3 * y * width() + 0] = (unsigned char) c[0];
-                data[3 * x + 3 * y * width() + 1] = (unsigned char) c[1];
-                data[3 * x + 3 * y * width() + 2] = (unsigned char) c[2];
             }
-        });
-        spdlog::get("console")->debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
 
-        if (extension == "ppm")
-            return write_ppm(filename.c_str(), width(), height(), 3, &data[0]);
-        else if (extension == "png")
-            return stbi_write_png(filename.c_str(), width(), height(),
-                                  3, &data[0], sizeof(unsigned char)*width()*3) != 0;
-        else if (extension == "bmp")
-            return stbi_write_bmp(filename.c_str(), width(), height(), 3, &data[0]) != 0;
-        else if (extension == "tga")
-            return stbi_write_tga(filename.c_str(), width(), height(), 3, &data[0]) != 0;
-        else if (extension == "jpg" || extension == "jpeg")
-            return stbi_write_jpg(filename.c_str(), width(), height(), 3, &data[0], 100) != 0;
-        else
-            throw runtime_error("Could not determine desired file type from extension.");
+            int col = bayerColor(x, y);
+            for (int c = 0; c < 3; ++c)
+            {
+                if (col != c)
+                    (*this)(x,y)[c] = count(c) ? (sum(c) / count(c)) : 1.0f;
+            }
+        }
+    });
+}
+
+
+
+// local functions
+namespace
+{
+
+// create a vector containing the normalized values of a 1D Gaussian filter
+ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
+{
+    // calculate the size of the filter
+    int offset = int(std::ceil(truncate * sigma));
+    int filterSize = 2*offset+1;
+
+    ArrayXXf fData(filterSize, 1);
+
+    // compute the un-normalized value of the Gaussian
+    float normalizer = 0.0f;
+    for (int i = 0; i < filterSize; i++)
+    {
+        fData(i,0) = std::exp(-pow(i - offset, 2) / (2.0f * pow(sigma, 2)));
+        normalizer += fData(i,0);
+    }
+
+    // normalize
+    for (int i = 0; i < filterSize; i++)
+        fData(i,0) /= normalizer;
+
+    return fData;
+}
+
+int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
+{
+    if (p >= 0 && p < maxP)
+        return p;
+
+    switch (m)
+    {
+        case HDRImage::EDGE:
+            return clamp(p, 0, maxP - 1);
+        case HDRImage::REPEAT:
+            return mod(p, maxP);
+        case HDRImage::MIRROR:
+        {
+            int frac = mod(p, maxP);
+            return (::abs(p) / maxP % 2 != 0) ? maxP - 1 - frac : frac;
+        }
+        case HDRImage::BLACK:
+            return -1;
     }
 }
+
+inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, const vector<float> & LUT)
+{
+    Vector3f xyz = cameraToXYZ * c;
+
+    for (int i = 0; i < 3; ++i)
+        xyz(i) = LUT[clamp((int) (xyz(i) * LUT.size()), 0, int(LUT.size()-1))];
+
+    return Vector3f(116.0f * xyz[1] - 16, 500.0f * (xyz[0] - xyz[1]), 200.0f * (xyz[1] - xyz[2]));
+}
+
+inline int bayerColor(int x, int y)
+{
+    const int bayer[2][2] = {{0,1},{1,2}};
+
+    return bayer[y % 2][x % 2];
+}
+
+inline float clamp2(float value, float mn, float mx)
+{
+    if (mn > mx)
+        std::swap(mn, mx);
+    return clamp(value, mn, mx);
+}
+
+inline float clamp4(float value, float a, float b, float c, float d)
+{
+    float mn = min(a, b, c, d);
+    float mx = max(a, b, c, d);
+    return clamp(value, mn, mx);
+}
+
+inline float interpGreenH(const HDRImage &raw, int x, int y)
+{
+    float v = 0.50f * (raw(x - 1, y).g + raw(x + 1, y).g + raw(x, y).g) -
+              0.25f * (raw(x - 2, y).g + raw(x + 2, y).g);
+    // Don't extrapolate past the neighboring green values
+    return clamp2(v, raw(x - 1, y).g, raw(x + 1, y).g);
+}
+
+inline float interpGreenV(const HDRImage &raw, int x, int y)
+{
+    float v = 0.50f * (raw(x, y - 1).g + raw(x, y + 1).g + raw(x, y).g) -
+              0.25f * (raw(x, y - 2).g + raw(x, y + 2).g);
+    // Don't extrapolate past the neighboring green values
+    return clamp2(v, raw(x, y - 1).g, raw(x, y + 1).g);
+}
+
+inline float ghG(const ArrayXXf & G, int i, int j)
+{
+    return fabs(G(i-1,j) - G(i,j)) + fabs(G(i+1,j) - G(i,j));
+}
+
+inline float gvG(const ArrayXXf & G, int i, int j)
+{
+    return fabs(G(i,j-1) - G(i,j)) + fabs(G(i,j+1) - G(i,j));
+}
+
+void bilinearGreen(HDRImage &raw, int offsetX, int offsetY)
+{
+    parallel_for(1, raw.height()-1-offsetY, 2, [&raw,offsetX,offsetY](int yy)
+    {
+        int t = yy + offsetY;
+        for (int xx = 1; xx < raw.width()-1-offsetX; xx += 2)
+        {
+            int l = xx + offsetX;
+
+            // coordinates of the missing green pixels (red and blue) in
+            // this Bayer tile are: (l,t) and (r,b)
+            int r = l+1;
+            int b = t+1;
+
+            raw(l, t).g = 0.25f * (raw(l, t - 1).g + raw(l, t + 1).g +
+                                   raw(l - 1, t).g + raw(l + 1, t).g);
+            raw(r, b).g = 0.25f * (raw(r, b - 1).g + raw(r, b + 1).g +
+                                   raw(r - 1, b).g + raw(r + 1, b).g);
+        }
+    });
+}
+
+
+void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset)
+{
+    ArrayXXf Gh(raw.width(), raw.height());
+    ArrayXXf Gv(raw.width(), raw.height());
+
+    // populate horizontally interpolated green
+    parallel_for(redOffset.y(), raw.height(), 2, [&raw,&Gh,&redOffset](int y)
+    {
+        for (int x = 2+redOffset.x(); x < raw.width() - 2; x += 2)
+        {
+            Gh(x  , y  ) = interpGreenH(raw, x, y);
+            Gh(x+1, y+1) = interpGreenH(raw, x + 1, y + 1);
+        }
+    });
+
+    // populate vertically interpolated green
+    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,&Gv,&redOffset](int y)
+    {
+        for (int x = redOffset.x(); x < raw.width(); x += 2)
+        {
+            Gv(x  , y  ) = interpGreenV(raw, x, y);
+            Gv(x+1, y+1) = interpGreenV(raw, x + 1, y + 1);
+        }
+    });
+
+    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,&Gh,&Gv,redOffset](int y)
+    {
+        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        {
+            float ghGh = ghG(Gh, x, y);
+            float ghGv = ghG(Gv, x, y);
+            float gvGh = gvG(Gh, x, y);
+            float gvGv = gvG(Gv, x, y);
+
+            raw(x, y).g = (ghGh + gvGh <= gvGv + ghGv) ? Gh(x, y) : Gv(x, y);
+
+            x++;
+            y++;
+
+            ghGh = ghG(Gh, x, y);
+            ghGv = ghG(Gv, x, y);
+            gvGh = gvG(Gh, x, y);
+            gvGv = gvG(Gv, x, y);
+
+            raw(x, y).g = (ghGh + gvGh <= gvGv + ghGv) ? Gh(x, y) : Gv(x, y);
+        }
+    });
+}
+
+
+void MalvarGreen(HDRImage &raw, int c, const Vector2i & redOffset)
+{
+    // fill in half of the missing locations (R or B)
+    parallel_for(2, raw.height()-2-redOffset.y(), 2, [&raw,c,&redOffset](int yy)
+    {
+        int y = yy + redOffset.y();
+        for (int xx = 2; xx < raw.width()-2-redOffset.x(); xx += 2)
+        {
+            int x = xx + redOffset.x();
+            float v = (4.f * raw(x,y)[c]
+                         + 2.f * (raw(x, y-1)[1] + raw(x-1, y)[1] +
+                                  raw(x, y+1)[1] + raw(x+1, y)[1])
+                         - 1.f * (raw(x, y-2)[c] + raw(x-2, y)[c] +
+                                  raw(x, y+2)[c] + raw(x+2, y)[c]))/8.f;
+            raw(x,y)[1] = clamp4(v, raw(x, y-1)[1], raw(x-1, y)[1],
+                                    raw(x, y+1)[1], raw(x+1, y)[1]);
+        }
+    });
+}
+
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &redOffset, bool horizontal)
+{
+    int dx = (horizontal) ? 1 : 0;
+    int dy = (horizontal) ? 0 : 1;
+    // fill in half of the missing locations (R or B)
+    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,c,&redOffset,dx,dy](int y)
+    {
+        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        {
+            raw(x,y)[c] = (5.f * raw(x,y)[1]
+                         - 1.f * (raw(x-1,y-1)[1] + raw(x+1,y-1)[1] + raw(x+1,y+1)[1] + raw(x-1,y+1)[1] + raw(x-2,y)[1] + raw(x+2,y)[1])
+                         + .5f * (raw(x,y-2)[1] + raw(x,y+2)[1])
+                         + 4.f * (raw(x-dx,y-dy)[c] + raw(x+dx,y+dy)[c]))/8.f;
+        }
+    });
+}
+
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &redOffset)
+{
+    // fill in half of the missing locations (R or B)
+    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,c1,c2,&redOffset](int y)
+    {
+        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        {
+            raw(x,y)[c1] = (6.f * raw(x,y)[c2]
+                          + 2.f * (raw(x-1,y-1)[c1] + raw(x+1,y-1)[c1] + raw(x+1,y+1)[c1] + raw(x-1,y+1)[c1])
+                          - 3/2.f * (raw(x,y-2)[c2] + raw(x,y+2)[c2] + raw(x-2,y)[c2] + raw(x+2,y)[c2]))/8.f;
+        }
+    });
+}
+
+
+// takes as input a raw image and returns a single-channel
+// 2D image corresponding to the red or blue channel using simple interpolation
+void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & redOffset)
+{
+    // diagonal interpolation
+    parallel_for(redOffset.y() + 1, raw.height()-1, 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+            raw(x, y)[c] = 0.25f * (raw(x - 1, y - 1)[c] + raw(x + 1, y - 1)[c] +
+                                    raw(x - 1, y + 1)[c] + raw(x + 1, y + 1)[c]);
+    });
+
+    // horizontal interpolation
+    parallel_for(redOffset.y(), raw.height(), 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+            raw(x, y)[c] = 0.5f * (raw(x - 1, y)[c] + raw(x + 1, y)[c]);
+    });
+
+    // vertical interpolation
+    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x(); x < raw.width(); x += 2)
+            raw(x, y)[c] = 0.5f * (raw(x, y - 1)[c] + raw(x, y + 1)[c]);
+    });
+}
+
+
+// takes as input a raw image and returns a single-channel
+// 2D image corresponding to the red or blue channel using green based interpolation
+void greenBasedRorB(HDRImage &raw, int c, const Vector2i &redOffset)
+{
+    // horizontal interpolation
+    parallel_for(redOffset.y(), raw.height(), 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+            raw(x, y)[c] = std::max(0.f, 0.5f * (raw(x - 1, y)[c] + raw(x + 1, y)[c] -
+                                                 raw(x - 1, y)[1] - raw(x + 1, y)[1]) + raw(x, y)[1]);
+    });
+
+    // vertical interpolation
+    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x(); x < raw.width(); x += 2)
+            raw(x, y)[c] = std::max(0.f, 0.5f * (raw(x, y - 1)[c] + raw(x, y + 1)[c] -
+                                                 raw(x, y - 1)[1] - raw(x, y + 1)[1]) + raw(x, y)[1]);
+    });
+
+    // diagonal interpolation
+    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    {
+        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+            raw(x, y)[c] = std::max(0.f, 0.25f * (raw(x - 1, y - 1)[c] + raw(x + 1, y - 1)[c] +
+                                                  raw(x - 1, y + 1)[c] + raw(x + 1, y + 1)[c] -
+                                                  raw(x - 1, y - 1)[1] - raw(x + 1, y - 1)[1] -
+                                                  raw(x - 1, y + 1)[1] - raw(x + 1, y + 1)[1]) + raw(x, y)[1]);
+    });
+}
+
+} // namespace

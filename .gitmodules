@@ -16,3 +16,6 @@
 [submodule "ext/spdlog"]
 	path = ext/spdlog
 	url = https://github.com/gabime/spdlog.git
+[submodule "ext/tinydngloader"]
+	path = ext/tinydngloader
+	url = https://github.com/syoyo/tinydngloader.git

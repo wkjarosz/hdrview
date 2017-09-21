@@ -14,14 +14,14 @@
  * Converts from a source color space \a src to a destination color space \a dst,
  * each specified using the \a EColorSpace enumeriation
  *
- * @param dst 	Destination color space
- * @param a 	First component of the destination color
- * @param b 	Second component of the destination color
- * @param c 	Third component of the destination color
- * @param src 	Source color space
- * @param A  	First component of the source color
- * @param B  	Second component of the source color
- * @param C  	Third component of the source color
+ * @param[in] dst 	Destination color space
+ * @param[out] a 	First component of the destination color
+ * @param[out] b	Second component of the destination color
+ * @param[out] c	Third component of the destination color
+ * @param[in] src	Source color space
+ * @param[in] A  	First component of the source color
+ * @param[in] B  	Second component of the source color
+ * @param[in] C  	Third component of the source color
  */
 void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
 
