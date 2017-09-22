@@ -25,7 +25,7 @@ public:
     ~GLImage();
     void clear();
 
-    void init();
+    void init() const;
 
     void modify(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
     {
@@ -39,7 +39,7 @@ public:
     bool hasUndo() const            {return m_history.hasUndo();}
     bool hasRedo() const            {return m_history.hasRedo();}
 
-	GLuint glTextureId() const      {return m_texture;}
+	GLuint glTextureId() const;
     std::string filename() const    {return m_filename;}
     const HDRImage & image() const  {return m_image;}
     int width() const               {return m_image.width();}
@@ -63,7 +63,7 @@ public:
 
 
 private:
-	GLuint m_texture = 0;
+	mutable GLuint m_texture = 0;
     HDRImage m_image;
     std::string m_filename;
     mutable float m_cachedHistogramExposure;

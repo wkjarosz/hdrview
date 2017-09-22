@@ -548,31 +548,28 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
 
 	m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
-	m_undoButton->setFixedWidth(85);
 	m_undoButton->setCallback([&](){m_imageMgr->undo();});
 	m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
-	m_redoButton->setFixedWidth(85);
 	m_redoButton->setCallback([&](){m_imageMgr->redo();});
 
 	new Label(this, "Transformations", "sans-bold");
 
 	auto grid = new Widget(this);
 	grid->setLayout(new GridLayout(Orientation::Vertical, 2, Alignment::Fill, 0, 2));
-	grid->setFixedHeight(46);
 
 	// flip h
 	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_LEFT_BOLD));
 	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(true);});
-	m_filterButtons.back()->setFixedSize(Vector2i(75, 21));
+	m_filterButtons.back()->setFixedHeight(21);
 
 	// flip v
 	m_filterButtons.push_back(new Button(grid, "Flip V", ENTYPO_ICON_DOWN_BOLD));
 	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(false);});
-	m_filterButtons.back()->setFixedSize(Vector2i(75, 21));
+	m_filterButtons.back()->setFixedHeight(21);
 
 	// rotate cw
 	m_filterButtons.push_back(new Button(grid, "Rotate CW", ENTYPO_ICON_CW));
-	m_filterButtons.back()->setFixedSize(Vector2i(95, 21));
+	m_filterButtons.back()->setFixedHeight(21);
 	m_filterButtons.back()->setCallback([&]()
        {
 	       m_imageMgr->modifyImage([&](HDRImage &img)
@@ -585,7 +582,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	// rotate ccw
 	m_filterButtons.push_back(new Button(grid, "Rotate CCW", ENTYPO_ICON_CCW));
-	m_filterButtons.back()->setFixedSize(Vector2i(95, 21));
+	m_filterButtons.back()->setFixedHeight(21);
 	m_filterButtons.back()->setCallback([&]()
        {
 	       m_imageMgr->modifyImage([&](HDRImage &img)
@@ -596,30 +593,32 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	                             });
        });
 
+	buttonRow = new Widget(this);
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+
 	// shift
-	m_filterButtons.push_back(createShiftButton(this, m_screen, m_imageMgr));
-	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
+	m_filterButtons.push_back(createShiftButton(buttonRow, m_screen, m_imageMgr));
 
 	new Label(this, "Adjustments", "sans-bold");
-	m_filterButtons.push_back(createExposureGammaButton(this, m_screen, m_imageMgr));
-	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
-	m_filterButtons.push_back(createColorSpaceButton(this, m_screen, m_imageMgr));
-	m_filterButtons.back()->setFixedSize(Vector2i(172, 19));
+	buttonRow = new Widget(this);
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createColorSpaceButton(buttonRow, m_screen, m_imageMgr));
 
 	new Label(this, "Resize/resample", "sans-bold");
 	buttonRow = new Widget(this);
 	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
 	m_filterButtons.push_back(createResizeButton(buttonRow, m_screen, m_imageMgr));
-	m_filterButtons.back()->setFixedSize(Vector2i(85, 21));
 	m_filterButtons.push_back(createResampleButton(buttonRow, m_screen, m_imageMgr));
-	m_filterButtons.back()->setFixedSize(Vector2i(86, 21));
 
 	new Label(this, "Filters", "sans-bold");
-	m_filterButtons.push_back(createGaussianFilterButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createBoxFilterButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createBilateralFilterButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createUnsharpMaskFilterButton(this, m_screen, m_imageMgr));
-	m_filterButtons.push_back(createMedianFilterButton(this, m_screen, m_imageMgr));
+	buttonRow = new Widget(this);
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+	m_filterButtons.push_back(createGaussianFilterButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createBoxFilterButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createBilateralFilterButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createUnsharpMaskFilterButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createMedianFilterButton(buttonRow, m_screen, m_imageMgr));
 }
 
 

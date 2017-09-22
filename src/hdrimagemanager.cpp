@@ -8,7 +8,6 @@
 #include <set>
 
 using namespace std;
-using namespace nanogui;
 
 HDRImageManager::HDRImageManager()
 	: m_imageChangedCallback(std::function<void(int)>()),
@@ -117,7 +116,6 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 		if (image->load(i))
 		{
 			loadedOK.push_back({i, true});
-			image->init();
 			m_images.push_back(image);
 			auto end = chrono::system_clock::now();
 			chrono::duration<double> elapsedSeconds = end - start;

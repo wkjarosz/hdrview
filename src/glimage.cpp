@@ -51,7 +51,14 @@ GLImage::~GLImage()
 }
 
 
-void GLImage::init()
+GLuint GLImage::glTextureId() const
+{
+    if (!m_texture)
+        init();
+    return m_texture;
+}
+
+void GLImage::init() const
 {
     // Allocate texture memory for the image
     glGenTextures(1, &m_texture);

@@ -61,7 +61,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	m_imageView = new HDRImageViewer(this, this);
 	m_imageView->setGridThreshold(20);
-	m_imageView->setPixelInfoThreshold(20);
+	m_imageView->setPixelInfoThreshold(40);
 
 	m_statusBar = new Window(this, "");
 	m_statusBar->setTheme(panelTheme);
@@ -86,7 +86,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanelContents = new Widget(m_sideScrollPanel);
 	m_sidePanelContents->setLayout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_sidePanelContents->setFixedWidth(195);
+	m_sidePanelContents->setFixedWidth(202);
 	m_sideScrollPanel->setFixedWidth(m_sidePanelContents->fixedWidth() + 12);
 	m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
 
@@ -325,16 +325,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	dropEvent(args);
 
+	this->setSize(Vector2i(1024, 800));
+	updateLayout();
 	setResizeCallback([&](Vector2i)
 	                  {
 		                  updateLayout();
 		                  drawAll();
 	                  });
 
-	this->setSize(Vector2i(1024, 800));
-
-
-    drawAll();
     setVisible(true);
     glfwSwapInterval(1);
 }
@@ -671,6 +669,44 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	}
 
     return false;
+}
+
+bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
+{
+	if (down)
+	{
+		if (atSidePanelEdge(p))
+		{
+			m_draggingSidePanel = true;
+			return true;
+		}
+	}
+	else
+		m_draggingSidePanel = false;
+
+	if (Screen::mouseButtonEvent(p, button, down, modifiers))
+		return true;
+
+	return false;
+}
+
+bool HDRViewScreen::mouseMotionEvent(const Eigen::Vector2i &p, const Eigen::Vector2i &rel, int button, int modifiers)
+{
+	setCursor((m_draggingSidePanel || atSidePanelEdge(p)) ? Cursor::HResize : Cursor::Arrow);
+
+	if (m_draggingSidePanel)
+	{
+		int w = clamp(p.x(), 205, mSize.x() - 10);
+		m_sidePanelContents->setFixedWidth(w);
+		m_sideScrollPanel->setFixedWidth(w + 12);
+		m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
+		updateLayout();
+	}
+
+	if (Screen::mouseMotionEvent(p, rel, button, modifiers))
+		return true;
+
+	return false;
 }
 
 

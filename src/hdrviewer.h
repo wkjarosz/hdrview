@@ -23,7 +23,9 @@ public:
 	// overridden virtual functions from Screen
     void drawContents() override;
     bool dropEvent(const std::vector<std::string> &filenames) override;
-    bool keyboardEvent(int key, int scancode, int action, int modifiers) override;
+	bool mouseButtonEvent(const Eigen::Vector2i &p, int button, bool down, int modifiers) override;
+	bool mouseMotionEvent(const Eigen::Vector2i& p, const Eigen::Vector2i& rel, int button, int modifiers) override;
+	bool keyboardEvent(int key, int scancode, int action, int modifiers) override;
 
 	bool loadImage();
 	void saveImage();
@@ -38,6 +40,10 @@ private:
 	void updateLayout();
     void closeCurrentImage();
     void updateCaption();
+	bool atSidePanelEdge(const Eigen::Vector2i& p)
+	{
+		return p.x() - m_sidePanel->fixedWidth() < 0 && p.x() - m_sidePanel->fixedWidth() > -5;
+	}
 
 	Window * m_topPanel = nullptr;
 	Window * m_sidePanel = nullptr;
@@ -65,6 +71,8 @@ private:
 	} m_animationGoal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
 
     MessageDialog * m_okToQuitDialog = nullptr;
+
+	bool m_draggingSidePanel = false;
 
     std::shared_ptr<spdlog::logger> console;
 };

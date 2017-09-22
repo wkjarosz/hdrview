@@ -2,6 +2,7 @@
 #include <nanogui/theme.h>
 #include <nanogui/opengl.h>
 #include <nanogui/serializer/core.h>
+#include "common.h"
 
 /*!
  * @param parent	The parent widget
@@ -27,41 +28,48 @@ void MultiGraph::draw(NVGcontext *ctx)
 {
 	Widget::draw(ctx);
 
+	NVGpaint paint = nvgBoxGradient(ctx, mPos.x() + 1, mPos.y() + 1,
+	                                mSize.x()-2, mSize.y()-2, 3, 4,
+	                                Color(0, 32), Color(0, 92));
 	nvgBeginPath(ctx);
-	nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
-	nvgFillColor(ctx, mBackgroundColor);
+	nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), 2.5);
+	nvgFillPaint(ctx, paint);
 	nvgFill(ctx);
 
-	nvgSave(ctx);
-	// Additive blending
-	nvgGlobalCompositeBlendFunc(ctx, NVGblendFactor::NVG_SRC_ALPHA, NVGblendFactor::NVG_ONE);
-
-	for (int plot = 0; plot < numPlots(); ++plot)
+	if (numPlots() && mValues[0].size() >= 2)
 	{
-		const VectorXf & v = mValues[plot];
-		if (v.size() < 2)
-			return;
+		nvgSave(ctx);
+		// Additive blending
+		nvgGlobalCompositeBlendFunc(ctx, NVGblendFactor::NVG_SRC_ALPHA, NVGblendFactor::NVG_ONE);
 
-		nvgBeginPath(ctx);
-		nvgMoveTo(ctx, mPos.x(), mPos.y() + mSize.y());
-		for (int i = 0; i < v.size(); ++i)
+		for (int plot = 0; plot < numPlots(); ++plot)
 		{
-			float value = v[i];
-			float vx = mPos.x() + i * mSize.x() / (float) (v.size() - 1);
-			float vy = mPos.y() + (1 - value) * mSize.y();
-			nvgLineTo(ctx, vx, vy);
+			const VectorXf &v = mValues[plot];
+			if (v.size() < 2)
+				return;
+
+			nvgBeginPath(ctx);
+			int pad = 5;
+			nvgMoveTo(ctx, mPos.x() + pad, mPos.y() + mSize.y());
+			for (int i = 0; i < v.size(); ++i)
+			{
+				float value = v[i];
+				float vx = mPos.x() + pad + i * (mSize.x() - 2 * pad) / (float) (v.size() - 1);
+				float vy = mPos.y() + mSize.y() - clamp(value, 0.0f, 1.0f) * (mSize.y() - pad);
+				nvgLineTo(ctx, vx, vy);
+			}
+
+			nvgLineTo(ctx, mPos.x() + mSize.x() - pad, mPos.y() + mSize.y());
+			nvgFillColor(ctx, mForegroundColors[plot]);
+			nvgFill(ctx);
+			Color sColor = mForegroundColors[plot];
+			sColor.w() = (sColor.w() + 1.0f)/2.0f;
+			nvgStrokeColor(ctx, sColor);
+			nvgStroke(ctx);
 		}
 
-		nvgLineTo(ctx, mPos.x() + mSize.x(), mPos.y() + mSize.y());
-		nvgFillColor(ctx, mForegroundColors[plot]);
-		nvgFill(ctx);
-		Color sColor = mForegroundColors[plot];
-		sColor.w() = (sColor.w() + 1.0f)/2.0f;
-		nvgStrokeColor(ctx, sColor);
-		nvgStroke(ctx);
-	}
-
 	nvgRestore(ctx);
+	}
 
 	nvgFontFace(ctx, "sans");
 
@@ -88,11 +96,6 @@ void MultiGraph::draw(NVGcontext *ctx)
 		nvgFillColor(ctx, mTextColor);
 		nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + mSize.y() - 1, mFooter.c_str(), NULL);
 	}
-
-	nvgBeginPath(ctx);
-	nvgRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y());
-	nvgStrokeColor(ctx, Color(100, 255));
-	nvgStroke(ctx);
 }
 
 void MultiGraph::save(Serializer &s) const

@@ -20,32 +20,31 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
 	auto row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Horizontal,
-	                                   Alignment::Fill, 0, 2));
+	row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
 
 	auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
-	b->setFixedSize(Vector2i(47, 25));
+	b->setFixedHeight(25);
 	b->setTooltip("Load an image and add it to the set of opened images.");
 	b->setCallback([this]{m_screen->loadImage();});
 
 	m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
 	m_saveButton->setEnabled(m_imageMgr->currentImage());
-	m_saveButton->setFixedSize(Vector2i(47, 25));
+	m_saveButton->setFixedHeight(25);
 	m_saveButton->setTooltip("Save the image to disk.");
 	m_saveButton->setCallback([this]{m_screen->saveImage();});
 
 	m_bringForwardButton = new Button(row, "", ENTYPO_ICON_UP_BOLD);
-	m_bringForwardButton->setFixedSize(Vector2i(25, 25));
+	m_bringForwardButton->setFixedHeight(25);
 	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
 	m_bringForwardButton->setCallback([this]{ m_imageMgr->bringImageForward();});
 
 	m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_DOWN_BOLD);
-	m_sendBackwardButton->setFixedSize(Vector2i(25, 25));
+	m_sendBackwardButton->setFixedHeight(25);
 	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
 	m_sendBackwardButton->setCallback([this]{ m_imageMgr->sendImageBackward();});
 
 	m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLED_CROSS);
-	m_closeButton->setFixedSize(Vector2i(25, 25));
+	m_closeButton->setFixedHeight(25);
 	m_closeButton->setTooltip("Close image");
 	m_closeButton->setCallback([this]{m_screen->askCloseImage(m_imageMgr->currentImageIndex());});
 
@@ -53,18 +52,27 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Vertical,
 	                             Alignment::Fill, 0, 4));
+	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 150));
+	m_graph->addPlot(Color(0, 255, 0, 150));
+	m_graph->addPlot(Color(0, 0, 255, 150));
 
-	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 255));
-	m_graph->addPlot(Color(0, 255, 0, 128));
-	m_graph->addPlot(Color(0, 0, 255, 85));
+	auto grid = new Widget(this);
+	auto agl = new AdvancedGridLayout({0, 4, 19, 4, 0, 4, 0});
+	grid->setLayout(agl);
+	agl->setColStretch(4, 1.0f);
+	agl->setColStretch(6, 1.0f);
 
-	auto w = new Widget(row);
-	w->setLayout(new BoxLayout(Orientation::Horizontal,
-	                           Alignment::Middle, 0, 2));
-	new Label(w, "Histogram:", "sans", 14);
-	m_linearToggle = new Button(w, "Linear");
-	m_sRGBToggle = new Button(w, "sRGB");
-	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_WARNING);
+	agl->appendRow(0);
+	agl->setAnchor(new Label(grid, "Histogram:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+
+	m_recomputeHistogram = new Button(grid, "", ENTYPO_ICON_WARNING);
+	agl->setAnchor(m_recomputeHistogram, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Maximum, Alignment::Fill));
+
+	m_linearToggle = new Button(grid, "Linear");
+	agl->setAnchor(m_linearToggle, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+
+	m_sRGBToggle = new Button(grid, "sRGB");
+	agl->setAnchor(m_sRGBToggle, AdvancedGridLayout::Anchor(6, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
 	m_linearToggle->setFlags(Button::RadioButton);
 	m_sRGBToggle->setFlags(Button::RadioButton);
@@ -85,24 +93,27 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		                                  updateHistogram();
 	                                  });
 
+	agl->appendRow(4);  // spacing
+	agl->appendRow(0);
 
-	row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Horizontal,
-	                                   Alignment::Fill, 0, 2));
-	new Label(row, "Mode:", "sans", 14);
-	m_blendModes = new ComboBox(row);
+	agl->setAnchor(new Label(grid, "Mode:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+
+	m_blendModes = new ComboBox(grid);
 	m_blendModes->setItems(blendModeNames());
-	m_blendModes->setFixedSize(Vector2i(144, 19));
+	m_blendModes->setFixedHeight(19);
 	m_blendModes->setCallback([imgViewer](int b){imgViewer->setBlendMode(EBlendMode(b));});
+	agl->setAnchor(m_blendModes, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 5, 1, Alignment::Fill, Alignment::Fill));
 
-	row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Horizontal,
-	                             Alignment::Fill, 0, 2));
-	new Label(row, "Channel:", "sans", 14);
-	m_channels = new ComboBox(row, channelNames());
-	m_channels->setFixedSize(Vector2i(132, 19));
+	agl->appendRow(4);  // spacing
+	agl->appendRow(0);
+
+	agl->setAnchor(new Label(grid, "Channel:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+
+	m_channels = new ComboBox(grid, channelNames());
+	m_channels->setFixedHeight(19);
 	setChannel(EChannel::RGB);
 	m_channels->setCallback([imgViewer](int c){imgViewer->setChannel(EChannel(c));});
+	agl->setAnchor(m_channels, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 5, 1, Alignment::Fill, Alignment::Fill));
 }
 
 EBlendMode ImageListPanel::blendMode() const
@@ -174,9 +185,10 @@ void ImageListPanel::enableDisableButtons()
 	m_linearToggle->setEnabled(m_imageMgr->currentImage());
 	m_sRGBToggle->setEnabled(m_imageMgr->currentImage());
 	bool showRecompute = m_imageMgr->currentImage() && m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure();
-	m_recomputeHistogram->setVisible(showRecompute);
-	m_linearToggle->setFixedWidth(showRecompute ? 49 : 59);
-	m_sRGBToggle->setFixedWidth(showRecompute ? 49 : 60);
+	m_recomputeHistogram->setEnabled(showRecompute);
+	m_recomputeHistogram->setIcon(showRecompute ? ENTYPO_ICON_WARNING : ENTYPO_ICON_CHECK);
+//	m_linearToggle->setFixedWidth(showRecompute ? 49 : 59);
+//	m_sRGBToggle->setFixedWidth(showRecompute ? 49 : 60);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)

@@ -9,7 +9,6 @@
 #include "common.h"
 #include "glimage.h"
 
-using namespace nanogui;
 
 /*!
  * @class 	HDRImageManager hdrimagemanager.h
