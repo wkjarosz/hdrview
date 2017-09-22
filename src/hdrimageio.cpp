@@ -536,7 +536,7 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 		Vector3f CameraNeutral(param.as_shot_neutral[0],
 		                       param.as_shot_neutral[1],
 		                       param.as_shot_neutral[2]);
-		auto ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
+		Vector3f ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
 		auto D = (ReferenceNeutral.asDiagonal()).inverse();
 		auto CameraToXYZ = FM * D * (AB * CC).inverse();
 

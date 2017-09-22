@@ -32,6 +32,10 @@ void MultiGraph::draw(NVGcontext *ctx)
 	nvgFillColor(ctx, mBackgroundColor);
 	nvgFill(ctx);
 
+	nvgSave(ctx);
+	// Additive blending
+	nvgGlobalCompositeBlendFunc(ctx, NVGblendFactor::NVG_SRC_ALPHA, NVGblendFactor::NVG_ONE);
+
 	for (int plot = 0; plot < numPlots(); ++plot)
 	{
 		const VectorXf & v = mValues[plot];
@@ -56,6 +60,8 @@ void MultiGraph::draw(NVGcontext *ctx)
 		nvgStrokeColor(ctx, sColor);
 		nvgStroke(ctx);
 	}
+
+	nvgRestore(ctx);
 
 	nvgFontFace(ctx, "sans");
 
