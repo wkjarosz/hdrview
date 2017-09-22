@@ -1,12 +1,12 @@
 [submodule "ext/nanogui"]
 	path = ext/nanogui
-	url = https://github.com/wjakob/nanogui.git
+	url = https://github.com/Tom94/nanogui.git
 [submodule "ext/openexr"]
 	path = ext/openexr
-	url = https://github.com/wjakob/openexr
+	url = https://github.com/mitsuba-renderer/openexr
 [submodule "ext/zlib"]
 	path = ext/zlib
-	url = https://github.com/madler/zlib
+	url = https://github.com/mitsuba-renderer/zlib
 [submodule "ext/tinydir"]
 	path = ext/tinydir
 	url = https://github.com/cxong/tinydir.git
@@ -19,3 +19,6 @@
 [submodule "ext/tinydngloader"]
 	path = ext/tinydngloader
 	url = https://github.com/syoyo/tinydngloader.git
+[submodule "nanogui"]
+	branch = tev
+	url = https://github.com/Tom94/nanogui.git
