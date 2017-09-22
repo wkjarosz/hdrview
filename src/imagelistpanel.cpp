@@ -62,16 +62,19 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	w->setLayout(new BoxLayout(Orientation::Horizontal,
 	                           Alignment::Middle, 0, 2));
 	new Label(w, "Histogram:", "sans", 14);
-	m_linearToggle = new Button(w, "Linear", ENTYPO_ICON_VOLUME);
+	m_linearToggle = new Button(w, "Linear");
+	m_sRGBToggle = new Button(w, "sRGB");
 	m_recomputeHistogram = new Button(w, "", ENTYPO_ICON_WARNING);
 
-	m_linearToggle->setFlags(Button::ToggleButton);
-	m_linearToggle->setFixedSize(Vector2i(100, 19));
-	m_linearToggle->setTooltip("Toggle between linear and sRGB histogram.");
+	m_linearToggle->setFlags(Button::RadioButton);
+	m_sRGBToggle->setFlags(Button::RadioButton);
+	m_linearToggle->setFixedHeight(19);
+	m_sRGBToggle->setFixedHeight(19);
+	m_linearToggle->setTooltip("Show sRGB histogram.");
+	m_sRGBToggle->setTooltip("Show linear histogram.");
 	m_linearToggle->setPushed(true);
 	m_linearToggle->setChangeCallback([this](bool b)
 	                                  {
-		                                  m_linearToggle->setCaption(b ? "Linear" : "sRGB");
 		                                  updateHistogram();
 	                                  });
 
@@ -169,9 +172,11 @@ void ImageListPanel::enableDisableButtons()
 	m_bringForwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() > 0);
 	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
 	m_linearToggle->setEnabled(m_imageMgr->currentImage());
+	m_sRGBToggle->setEnabled(m_imageMgr->currentImage());
 	bool showRecompute = m_imageMgr->currentImage() && m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure();
 	m_recomputeHistogram->setVisible(showRecompute);
-	m_linearToggle->setFixedWidth(showRecompute ? 100 : 121);
+	m_linearToggle->setFixedWidth(showRecompute ? 49 : 59);
+	m_sRGBToggle->setFixedWidth(showRecompute ? 49 : 60);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
