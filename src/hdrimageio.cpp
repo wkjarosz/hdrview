@@ -38,8 +38,10 @@
 
 // since NanoVG includes an old version of stb_image, we declare it static here
 #define STB_IMAGE_STATIC
-// tiny_dng_loader #includes stb_image.h, so we don't include it explicitly ourselves
 #define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#undef STB_IMAGE_IMPLEMENTATION
+
 #define TINY_DNG_LOADER_IMPLEMENTATION
 #include "tiny_dng_loader.h"
 
@@ -60,7 +62,6 @@
 
 using namespace Eigen;
 using namespace std;
-using namespace tinydng;
 
 // local functions
 namespace
@@ -524,17 +525,17 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 	// if the ForwardMatrix is included:
 	if (false)//param.has_forward_matrix2)
 	{
-		auto FM((Matrix3f() << (float)param.forward_matrix2[0][0], (float)param.forward_matrix2[0][1], (float)param.forward_matrix2[0][2],
-			                   (float)param.forward_matrix2[1][0], (float)param.forward_matrix2[1][1], (float)param.forward_matrix2[1][2],
-							   (float)param.forward_matrix2[2][0], (float)param.forward_matrix2[2][1], (float)param.forward_matrix2[2][2]).finished());
-		auto CC((Matrix3f() << (float)param.camera_calibration2[0][0], (float)param.camera_calibration2[0][1], (float)param.camera_calibration2[0][2],
-							   (float)param.camera_calibration2[1][0], (float)param.camera_calibration2[1][1], (float)param.camera_calibration2[1][2],
-							   (float)param.camera_calibration2[2][0], (float)param.camera_calibration2[2][1], (float)param.camera_calibration2[2][2]).finished());
-		auto AB = Vector3f((float)param.analog_balance[0], (float)param.analog_balance[1], (float)param.analog_balance[2]).asDiagonal();
+		auto FM((Matrix3f() << param.forward_matrix2[0][0], param.forward_matrix2[0][1], param.forward_matrix2[0][2],
+			                   param.forward_matrix2[1][0], param.forward_matrix2[1][1], param.forward_matrix2[1][2],
+							   param.forward_matrix2[2][0], param.forward_matrix2[2][1], param.forward_matrix2[2][2]).finished());
+		auto CC((Matrix3f() << param.camera_calibration2[0][0], param.camera_calibration2[0][1], param.camera_calibration2[0][2],
+							   param.camera_calibration2[1][0], param.camera_calibration2[1][1], param.camera_calibration2[1][2],
+							   param.camera_calibration2[2][0], param.camera_calibration2[2][1], param.camera_calibration2[2][2]).finished());
+		auto AB = Vector3f(param.analog_balance[0], param.analog_balance[1], param.analog_balance[2]).asDiagonal();
 
-		Vector3f CameraNeutral((float)param.as_shot_neutral[0],
-		                       (float)param.as_shot_neutral[1],
-		                       (float)param.as_shot_neutral[2]);
+		Vector3f CameraNeutral(param.as_shot_neutral[0],
+		                       param.as_shot_neutral[1],
+		                       param.as_shot_neutral[2]);
 		auto ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
 		auto D = (ReferenceNeutral.asDiagonal()).inverse();
 		auto CameraToXYZ = FM * D * (AB * CC).inverse();
@@ -543,9 +544,9 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 	}
 	else
 	{
-		auto CM((Matrix3f() << (float)param.color_matrix2[0][0], (float)param.color_matrix2[0][1], (float)param.color_matrix2[0][2],
-			                   (float)param.color_matrix2[1][0], (float)param.color_matrix2[1][1], (float)param.color_matrix2[1][2],
-				               (float)param.color_matrix2[2][0], (float)param.color_matrix2[2][1], (float)param.color_matrix2[2][2]).finished());
+		auto CM((Matrix3f() << param.color_matrix2[0][0], param.color_matrix2[0][1], param.color_matrix2[0][2],
+			                   param.color_matrix2[1][0], param.color_matrix2[1][1], param.color_matrix2[1][2],
+				               param.color_matrix2[2][0], param.color_matrix2[2][1], param.color_matrix2[2][2]).finished());
 
 		auto CameraToXYZ = CM.inverse();
 
@@ -577,7 +578,7 @@ HDRImage develop(vector<float> & raw,
 	//
 	// we also apply white balance before demosaicing here because it increases the
 	// correlation between the color channels and reduces artifacts
-	Vector3f wb((float)param2.as_shot_neutral[0], (float)param2.as_shot_neutral[1], (float)param2.as_shot_neutral[2]);
+	Vector3f wb(param2.as_shot_neutral[0], param2.as_shot_neutral[1], param2.as_shot_neutral[2]);
 	const float invScale = 1.0f / (whiteLevel - blackLevel);
 	parallel_for(0, developed.height(), [&developed,&raw,blackLevel,invScale,&wb](int y)
 	{
