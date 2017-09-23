@@ -1,9 +1,6 @@
 [submodule "ext/nanogui"]
 	path = ext/nanogui
 	url = https://github.com/Tom94/nanogui.git
-[submodule "ext/zlib"]
-	path = ext/zlib
-	url = https://github.com/mitsuba-renderer/zlib
 [submodule "ext/tinydir"]
 	path = ext/tinydir
 	url = https://github.com/cxong/tinydir.git
