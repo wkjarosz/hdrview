@@ -160,6 +160,30 @@
 		<dict>
 			<key>CFBundleTypeExtensions</key>
 			<array>
+				<string>DNG</string>
+				<string>dng</string>
+			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>Document-DNG</string>
+			<key>CFBundleTypeMIMETypes</key>
+			<array>
+				<string>image/x-adobe-dng</string>
+			</array>
+			<key>CFBundleTypeOSTypes</key>
+			<array>
+				<string>dng </string>
+				<string>DNG </string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.dng</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
 				<string>pfm</string>
 				<string>PFM</string>
 				<string>pnm</string>
