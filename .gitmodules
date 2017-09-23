@@ -16,3 +16,11 @@
 [submodule "nanogui"]
 	branch = tev
 	url = https://github.com/Tom94/nanogui.git
+[submodule "ext/openexr"]
+	path = ext/openexr
+	url = https://github.com/mitsuba-renderer/openexr.git
+	branch = master
+[submodule "ext/zlib"]
+	path = ext/zlib
+	url = https://github.com/mitsuba-renderer/zlib.git
+	branch = master
