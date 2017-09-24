@@ -6,12 +6,12 @@
 	Image Processing, 1994. Proceedings. ICIP-94., IEEE International Conference,
 	Austin, TX, 1994, pp. 1032-1035 vol.2.
 	doi: 10.1109/ICIP.1994.413512
-
-    \author Wojciech Jarosz
-
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
 */
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
 #include <iostream>
 #include <Eigen/Dense>

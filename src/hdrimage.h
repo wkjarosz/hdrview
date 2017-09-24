@@ -1,8 +1,9 @@
-/*!
-    \file hdrimage.h
-    \brief Contains the definition of a floating-point RGBA image class
-    \author Wojciech Jarosz
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
 #pragma once
 
 #include <Eigen/Core>            // for Array, CwiseUnaryOp, Dynamic, DenseC...

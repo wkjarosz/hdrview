@@ -1,9 +1,9 @@
-/*
-    hdrview.cpp -- HDRView application entry point
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
-*/
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>

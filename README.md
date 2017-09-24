@@ -58,9 +58,7 @@ Open the generated file ``HDRView.sln`` and proceed building as usual from withi
 
 ## Installing on macOS
 
-Compiling on macOS builds a mac bundle named ``HDRView`` which you can put into your ``/Applications/`` folder. If you'd like to easily launch HDRView also from the command-line, then you can add an alias to your ``.bash_profile``:
-
-    alias hdrview='/Applications/HDRView.app/Contents/MacOS/HDRView'
+This should be as easy as ``make install``. On macOS this will copy the application bundle into /Applications and create the symlink ``hdrview`` in ``/usr/local/bin`` so you can launch HDRView from the terminal.
 
 ## HDRView usage
 
@@ -84,3 +82,4 @@ HDRView depends on the following libraries (which are included explicitly or as 
 * The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
 * The [docopt.cpp](https://github.com/docopt/docopt.cpp) library, which is dual-licensed under MIT and Boost licenses.
 * Gabi Melman's [spdlog](https://github.com/gabime/spdlog) library, which is licensed under the MIT license.
+* syoyo's [tinydngloader](https://github.com/syoyo/tinydngloader) library, which is licensed under the MIT license.

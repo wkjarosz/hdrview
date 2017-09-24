@@ -1,6 +1,9 @@
 //
-// Created by Wojciech Jarosz on 9/16/17.
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
 //
+
 #include "hdrimage.h"
 #include "dither-matrix256.h"    // for dither_matrix256
 #include <ImfArray.h>            // for Array2D
