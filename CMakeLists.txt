@@ -188,6 +188,8 @@ if (APPLE)
     # Build an application bundle on OSX
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright 2017, Wojciech Jarosz. Freely available under the BSD license.")
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
@@ -206,6 +208,9 @@ if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
 endif()
 
 add_executable(hdrbatch
+               src/color.cpp
+               src/colorspace.h
+               src/colorspace.cpp
                src/common.cpp
                src/common.h
                src/envmap.cpp
@@ -218,10 +223,11 @@ add_executable(hdrbatch
                src/color.h
                src/hdrimage.h
                src/hdrimage.cpp
+               src/hdrimageio.cpp
                src/hdrbatch.cpp
                src/parallelfor.cpp
                src/parallelfor.h
-               src/range.h src/color.cpp src/colorspace.h src/colorspace.cpp src/hdrimageio.cpp)
+               src/range.h)
 
 
 add_executable(force-random-dither
