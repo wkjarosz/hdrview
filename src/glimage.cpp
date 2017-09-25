@@ -119,8 +119,8 @@ bool GLImage::load(const std::string & filename)
 }
 
 bool GLImage::save(const std::string & filename,
-          float gain, float gamma,
-          bool sRGB, bool dither) const
+                   float gain, float gamma,
+                   bool sRGB, bool dither) const
 {
     m_history.markSaved();
     return m_image.save(filename, gain, gamma, sRGB, dither);

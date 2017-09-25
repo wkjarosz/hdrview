@@ -361,7 +361,7 @@ bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 	{
 		m_imageMgr->loadImages(filenames);
 	}
-	catch (std::runtime_error &e)
+	catch (const exception &e)
 	{
 		new MessageDialog(this, MessageDialog::Type::Warning, "Error",
 		                  string("Could not load:\n ") + e.what());
@@ -408,24 +408,28 @@ void HDRViewScreen::toggleHelpWindow()
 
 bool HDRViewScreen::loadImage()
 {
-	string file = file_dialog(
+	vector<string> files = file_dialog(
 		{
 			{"exr", "OpenEXR image"},
-			{"dng", "Digital Negative"},
-			{"png", "Portable Network Graphic"},
-			{"pfm", "Portable Float Map"},
-			{"ppm", "Portable PixMap"},
-			{"jpg", "Jpeg image"},
-			{"tga", "Targa image"},
+			{"dng", "Digital Negative raw image"},
+			{"png", "Portable Network Graphic image"},
+			{"pfm", "Portable FloatMap image"},
+			{"ppm", "Portable PixMap image"},
+			{"pnm", "Portable AnyMap image"},
+			{"jpg", "JPEG image"},
+			{"tga", "Truevision Targa image"},
+			{"pic", "Softimage PIC image"},
 			{"bmp", "Windows Bitmap image"},
-			{"gif", "GIF image"},
-			{"hdr", "Radiance rgbE format"},
-			{"ppm", "Portable pixel map"},
+			{"gif", "Graphics Interchange Format image"},
+			{"hdr", "Radiance rgbE format image"},
 			{"psd", "Photoshop document"}
-		}, false);
+		}, false, true);
 
-	if (file.size())
-		return dropEvent({file});
+	// re-gain focus
+	glfwFocusWindow(mGLFWWindow);
+
+	if (files.size())
+		return dropEvent(files);
 	return false;
 }
 
@@ -436,22 +440,28 @@ void HDRViewScreen::saveImage()
 		if (!m_imageMgr->currentImage())
 			return;
 
-		string filename = file_dialog({
-			                              {"exr", "OpenEXR image"},
-			                              {"hdr", "Radiance rgbE format"},
-			                              {"png", "Portable Network Graphic"},
-			                              {"pfm", "Portable Float Map"},
-			                              {"ppm", "Portable PixMap"},
-			                              {"jpg", "Jpeg image"},
-			                              {"tga", "Targa image"},
-			                              {"bmp", "Windows Bitmap image"},
-		                              }, true);
+		string filename = file_dialog(
+			{
+				{"exr", "OpenEXR image"},
+				{"hdr", "Radiance rgbE format image"},
+				{"png", "Portable Network Graphic image"},
+				{"pfm", "Portable FloatMap image"},
+				{"ppm", "Portable PixMap image"},
+				{"pnm", "Portable AnyMap image"},
+				{"jpg", "JPEG image"},
+				{"jpeg", "JPEG image"},
+				{"tga", "Truevision Targa image"},
+				{"bmp", "Windows Bitmap image"},
+			}, true);
+
+		// re-gain focus
+		glfwFocusWindow(mGLFWWindow);
 
 		if (filename.size())
 			m_imageMgr->saveImage(filename, m_imageView->exposure(), m_imageView->gamma(),
 			                      m_imageView->sRGB(), m_imageView->ditheringOn());
 	}
-	catch (std::runtime_error &e)
+	catch (const exception &e)
 	{
 		new MessageDialog(this, MessageDialog::Type::Warning, "Error",
 		                  string("Could not save image due to an error:\n") + e.what());

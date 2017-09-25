@@ -9,6 +9,7 @@
 #include <ImfArray.h>            // for Array2D
 #include <ImfRgbaFile.h>         // for RgbaInputFile, RgbaOutputFile
 #include <ImathBox.h>            // for Box2i
+#include <ImfTestFile.h>         // for isOpenExrFile
 #include <ImathVec.h>            // for Vec2
 #include <ImfRgba.h>             // for Rgba, RgbaChannels::WRITE_RGBA
 #include <ctype.h>               // for tolower
@@ -78,6 +79,51 @@ void printImageInfo(const tinydng::DNGImage & image);
 HDRImage develop(vector<float> & raw,
                  const tinydng::DNGImage & param1,
                  const tinydng::DNGImage & param2);
+void copyPixelsFromArray(HDRImage & img, float * data, int w, int h, int n, bool convertToLinear)
+{
+	if (n != 3 && n != 4)
+		throw runtime_error("Only 3- and 4-channel images are supported.");
+
+	// for every pixel in the image
+	parallel_for(0, h, [&img,w,n,data,convertToLinear](int y)
+	{
+		for (int x = 0; x < w; ++x)
+		{
+			Color4 c(data[n * (x + y * w) + 0],
+			         data[n * (x + y * w) + 1],
+			         data[n * (x + y * w) + 2],
+			         (n == 3) ? 1.f : data[4 * (x + y * w) + 3]);
+			img(x, y) = convertToLinear ? SRGBToLinear(c) : c;
+		}
+	});
+}
+
+bool isSTBImage(const string & filename)
+{
+	FILE *f = stbi__fopen(filename.c_str(), "rb");
+	if (!f)
+		return false;
+
+	stbi__context s;
+	stbi__start_file(&s,f);
+
+	// try stb library first
+	if (stbi__jpeg_test(&s) ||
+		stbi__bmp_test(&s) ||
+		stbi__gif_test(&s) ||
+		stbi__psd_test(&s) ||
+		stbi__pic_test(&s) ||
+		stbi__pnm_test(&s) ||
+		stbi__hdr_test(&s) ||
+		stbi__tga_test(&s))
+	{
+		fclose(f);
+		return true;
+	}
+
+	fclose(f);
+	return false;
+}
 
 } // namespace
 
@@ -86,124 +132,120 @@ bool HDRImage::load(const string & filename)
 {
 	auto console = spdlog::get("console");
     string errors;
+	string extension = getExtension(filename);
+	transform(extension.begin(),
+	          extension.end(),
+	          extension.begin(),
+	          ::tolower);
 
-    // try PNG, JPG, HDR, etc files first
     int n, w, h;
-    // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
-    // we'll do our own srgb correction
-    stbi_ldr_to_hdr_scale(1.0f);
-    stbi_ldr_to_hdr_gamma(1.0f);
 
-    float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
-    if (float_data)
+	// try stb library first
+	if (isSTBImage(filename))
+	{
+		// stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
+		// we'll do our own srgb correction
+		stbi_ldr_to_hdr_scale(1.0f);
+		stbi_ldr_to_hdr_gamma(1.0f);
+
+		float * float_data = stbi_loadf(filename.c_str(), &w, &h, &n, 4);
+		if (float_data)
+		{
+			resize(w, h);
+			bool convertToLinear = !stbi_is_hdr(filename.c_str());
+			Timer timer;
+			copyPixelsFromArray(*this, float_data, w, h, 4, convertToLinear);
+			console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+
+			stbi_image_free(float_data);
+			return true;
+		}
+		else
+		{
+			errors += string("\t") + stbi_failure_reason() + "\n";
+		}
+	}
+
+
+    // then try pfm
+	if (isPFMImage(filename.c_str()))
     {
-        resize(w, h);
-        bool convert2Linear = !stbi_is_hdr(filename.c_str());
-        Timer timer;
-        // for every pixel in the image
-        parallel_for(0, h, [this,w,float_data,convert2Linear](int y)
-        {
-            for (int x = 0; x < w; ++x)
-            {
-                Color4 c(float_data[4 * (x + y * w) + 0],
-                         float_data[4 * (x + y * w) + 1],
-                         float_data[4 * (x + y * w) + 2],
-                         float_data[4 * (x + y * w) + 3]);
-                (*this)(x, y) = convert2Linear ? SRGBToLinear(c) : c;
-            }
-        });
-        console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+	    float * float_data = 0;
+	    try
+	    {
+		    w = 0;
+		    h = 0;
 
-        stbi_image_free(float_data);
-        return true;
-    }
-    else
-    {
-        errors += string("\t") + stbi_failure_reason() + "\n";
-    }
+		    if ((float_data = loadPFMImage(filename.c_str(), &w, &h, &n)))
+		    {
+			    if (n == 3)
+			    {
+				    resize(w, h);
 
-    // then try pfm/ppm
-    try
-    {
-		w = 0;
-		h = 0;
-        if (is_pfm(filename.c_str()))
-            float_data = load_pfm(filename.c_str(), &w, &h, &n);
-        else if (is_ppm(filename.c_str()))
-            float_data = load_ppm(filename.c_str(), &w, &h, &n);
+				    Timer timer;
+				    // convert 3-channel pfm data to 4-channel internal representation
+				    copyPixelsFromArray(*this, float_data, w, h, 3, false);
+				    console->debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
-        if (float_data)
-        {
-            if (n == 3)
-            {
-                resize(w, h);
-
-                Timer timer;
-                // convert 3-channel pfm data to 4-channel internal representation
-                parallel_for(0, h, [this,w,float_data](int y)
-                {
-                    for (int x = 0; x < w; ++x)
-                        (*this)(x, y) = Color4(float_data[3 * (x + y * w) + 0],
-                                               float_data[3 * (x + y * w) + 1],
-                                               float_data[3 * (x + y * w) + 2],
-                                               1.0f);
-                });
-                console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
-
-                delete [] float_data;
-                return true;
-            }
-            else
-                throw runtime_error("Unsupported number of channels in PFM/PPM");
-            return true;
-        }
-    }
-    catch (const exception &e)
-    {
-        delete [] float_data;
-        resize(0,0);
-        errors += string("\t") + e.what() + "\n";
+				    delete [] float_data;
+				    return true;
+			    }
+			    else
+				    throw runtime_error("Only 3-channel PFMs are currently supported.");
+			    return true;
+		    }
+		    else
+			    throw runtime_error("Could not load PFM image.");
+	    }
+	    catch (const exception &e)
+	    {
+		    delete [] float_data;
+		    resize(0, 0);
+		    errors += string("\t") + e.what() + "\n";
+	    }
     }
 
     // next try exrs
-    try
+	if (Imf::isOpenExrFile(filename.c_str()))
     {
-        Imf::setGlobalThreadCount(thread::hardware_concurrency());
+	    try
+	    {
+		    Imf::setGlobalThreadCount(thread::hardware_concurrency());
+		    Timer timer;
 
-        Timer timer;
+		    Imf::RgbaInputFile file(filename.c_str());
+		    Imath::Box2i dw = file.dataWindow();
 
-        Imf::RgbaInputFile file(filename.c_str());
-        Imath::Box2i dw = file.dataWindow();
+		    w = dw.max.x - dw.min.x + 1;
+		    h = dw.max.y - dw.min.y + 1;
 
-        w = dw.max.x - dw.min.x + 1;
-        h = dw.max.y - dw.min.y + 1;
+		    Imf::Array2D<Imf::Rgba> pixels(h, w);
 
-        Imf::Array2D<Imf::Rgba> pixels(h, w);
+		    file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
+		    file.readPixels(dw.min.y, dw.max.y);
 
-        file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
-        file.readPixels(dw.min.y, dw.max.y);
+		    console->debug("Reading EXR image took: {} seconds.", (timer.lap() / 1000.f));
 
-        console->debug("Reading EXR image took: {} seconds.", (timer.lap()/1000.f));
+		    resize(w, h);
 
-        resize(w,h);
+		    // copy pixels over to the Image
+		    parallel_for(0, h, [this, w, &pixels](int y)
+		    {
+			    for (int x = 0; x < w; ++x)
+			    {
+				    const Imf::Rgba &p = pixels[y][x];
+				    (*this)(x, y) = Color4(p.r, p.g, p.b, p.a);
+			    }
+		    });
 
-        // copy pixels over to the Image
-        parallel_for(0, h, [this,w,&pixels](int y)
-        {
-            for (int x = 0; x < w; ++x)
-            {
-                const Imf::Rgba &p = pixels[y][x];
-                (*this)(x, y) = Color4(p.r, p.g, p.b, p.a);
-            }
-        });
-
-        console->debug("Copying EXR image data took: {} seconds.", (timer.lap()/1000.f));
-        return true;
-    }
-    catch (const exception &e)
-    {
-        resize(0,0);
-        errors += string("\t") + e.what() + "\n";
+		    console->debug("Copying EXR image data took: {} seconds.", (timer.lap() / 1000.f));
+		    return true;
+	    }
+	    catch (const exception &e)
+	    {
+		    resize(0, 0);
+		    errors += string("\t") + e.what() + "\n";
+	    }
     }
 
 	try
@@ -214,12 +256,8 @@ bool HDRImage::load(const string & filename)
 			vector<tinydng::FieldInfo> customFields;
 			bool ret = tinydng::LoadDNG(filename.c_str(), customFields, &images, &err);
 
-			if (!err.empty())
-				cout << err << endl;
-
-			if (ret == false)
-				throw runtime_error("failed to load DNG");
-
+			if (ret == false || !err.empty())
+				throw runtime_error("Failed to load DNG. " + err);
 		}
 
 		// DNG files sometimes only store the orientation in one of the images,
@@ -354,7 +392,9 @@ bool HDRImage::load(const string & filename)
 	catch (const exception &e)
 	{
 		resize(0,0);
-		errors += string("\t") + e.what() + "\n";
+		// only report errors to the user if the extension was actually dng
+		if (extension == "dng")
+			errors += string("\t") + e.what() + "\n";
 	}
 
     console->error("ERROR: Unable to read image file \"{}\":\n{}", filename, errors);
@@ -404,7 +444,7 @@ bool HDRImage::save(const string & filename,
     if (extension == "hdr")
         return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "pfm")
-        return write_pfm(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
+        return writePFMImage(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "exr")
     {
         try
@@ -483,7 +523,7 @@ bool HDRImage::save(const string & filename,
         else if (extension == "jpg" || extension == "jpeg")
             return stbi_write_jpg(filename.c_str(), width(), height(), 3, &data[0], 100) != 0;
         else
-            throw runtime_error("Could not determine desired file type from extension.");
+            throw invalid_argument("Could not determine desired file type from extension.");
     }
 }
 
