@@ -12,7 +12,6 @@
 #include <spdlog/spdlog.h>
 #include "fwd.h"
 #include "commandhistory.h"
-#include "timer.h"
 
 using namespace nanogui;
 using namespace Eigen;
@@ -64,7 +63,7 @@ private:
 	VScrollPanel * m_sideScrollPanel = nullptr;
 	Widget * m_sidePanelContents = nullptr;
 
-	Timer m_guiTimer;
+	double m_guiAnimationStart;
 	bool m_guiTimerRunning = false;
 	enum EAnimationGoal : int
 	{

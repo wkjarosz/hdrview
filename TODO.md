@@ -11,11 +11,11 @@
   * [ ] Will require storing DNG metadata to apply correct color-correction matrix
 * [ ] Selection support
 * [ ] More image filters/transformations/adjustments 
+  * [X] Canvas size/cropping
   * [ ] White balance adjustment
   * [ ] Brightness/contrast
   * [ ] Luminance/chromaticity denoising 
   * [ ] Levels
-  * [ ] Cropping
   * [ ] Hue/Saturation
   * [ ] Convert to grayscale/desaturate
   * [ ] Invert

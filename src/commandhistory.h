@@ -32,6 +32,8 @@ public:
     virtual void undo(HDRImage & img) { std::swap(img, m_undoImage);}
     virtual void redo(HDRImage & img) {undo(img);}
 
+	const HDRImage & image() const {return m_undoImage;}
+
 private:
     HDRImage m_undoImage;
 };
