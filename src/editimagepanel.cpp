@@ -20,7 +20,9 @@ namespace
 {
 
 
-void addOKCancelButtons(FormHelper * gui, Window * window, const std::function<void()> &callback)
+void addOKCancelButtons(FormHelper * gui, Window * window,
+                        const std::function<void()> &OKCallback,
+                        const std::function<void()> &CancelCallback = std::function<void()>())
 {
 	auto spacer = new Widget(window);
 	spacer->setFixedHeight(15);
@@ -29,9 +31,19 @@ void addOKCancelButtons(FormHelper * gui, Window * window, const std::function<v
 	auto w = new Widget(window);
 	w->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
 	auto b = new Button(w, "Cancel", ENTYPO_ICON_CIRCLED_CROSS);
-	b->setCallback([&, window]() { window->dispose(); });
+	b->setCallback(
+		[window,CancelCallback]()
+		{
+			CancelCallback();
+			window->dispose();
+		});
 	b = new Button(w, "OK", ENTYPO_ICON_CHECK);
-	b->setCallback(callback);
+	b->setCallback(
+		[window,OKCallback]()
+		{
+			OKCallback();
+			window->dispose();
+		});
 	gui->addWidget("", w);
 }
 
@@ -64,7 +76,6 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImage
 							img = img.unaryExpr([](const Color4 & c){return c.convert(dst, src);}).eval();
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -108,7 +119,6 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 							img = (Color4(pow(2.0f, exposure)) * img).pow(Color4(1.0f/gamma));
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -160,7 +170,6 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 							      img.fastGaussianBlurred(width, height, borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -207,7 +216,6 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 							img = img.boxBlurred(width, height, borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -255,7 +263,6 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 							                            borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -303,7 +310,6 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 								img.unsharpMasked(sigma, strength, borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 
@@ -348,7 +354,6 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 							img = img.medianFiltered(radius, borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -426,7 +431,6 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 							img = img.resized(width, height);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -527,7 +531,6 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 							                    borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 
 			window->center();
@@ -584,7 +587,6 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 							                    borderModeX, borderModeY);
 							return undo;
 						});
-					window->dispose();
 				});
 			
 			window->center();
@@ -597,21 +599,10 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 {
 	static int width = 128, height = 128;
-	static Color4 bgColor(.8f, .8f, .8f, 1.f);
-	enum CanvasAnchor : int
-	{
-		TOP_LEFT = 0,
-		TOP_CENTER,
-		TOP_RIGHT,
-		MIDDLE_LEFT,
-		MIDDLE_CENTER,
-		MIDDLE_RIGHT,
-		BOTTOM_LEFT,
-		BOTTOM_CENTER,
-		BOTTOM_RIGHT,
-		NUM_CANVAS_ANCHORS
-	};
-	static CanvasAnchor anchor = MIDDLE_CENTER;
+	static Color bgColor(.8f, .8f, .8f, 1.f);
+	static float alpha = 1.f;
+	static float EV = 0.f;
+	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
 	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
@@ -684,7 +675,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 				b->setFlags(Button::RadioButton);
 				b->setFixedSize(Vector2i(25, 25));
 				b->setPushed(i == (size_t)anchor);
-				b->setChangeCallback([i](bool b){if (b) anchor = (CanvasAnchor)i;});
+				b->setChangeCallback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
 			}
 
 			gui->addWidget("Anchor:", w2);
@@ -694,25 +685,26 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			gui->addWidget("", spacer);
 
 			auto popupBtn = new PopupButton(window, "", 0);
-			popupBtn->setBackgroundColor(Color(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+			popupBtn->setBackgroundColor(Color(bgColor.head<3>(), alpha));
 			gui->addWidget("Extension color:", popupBtn);
 
 			auto popup = popupBtn->popup();
 			popup->setLayout(new GroupLayout());
 
 			auto colorwheel = new ColorWheel(popup);
-			colorwheel->setColor(Color(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+			colorwheel->setColor(Color(bgColor.head<3>(), alpha));
+
+			auto panel = new Widget(popup);
+			panel->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
+			auto colorBtn = new Button(popup, "Pick");
 
 			//
 			// opacity
 			//
-			auto panel = new Widget(popup);
-			panel->setLayout(new GridLayout(Orientation::Horizontal, 3,
-			                               Alignment::Fill, 0, 0));
 			new Label(panel, "Opacity:");
 
 			auto slider = new Slider(panel);
-			slider->setValue(bgColor.a);
+			slider->setValue(alpha);
 			slider->setFixedWidth(100);
 
 			auto floatBox = new FloatBox<float>(panel, 100.0f);
@@ -722,14 +714,16 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			floatBox->setFixedWidth(50);
 			floatBox->setAlignment(TextBox::Alignment::Right);
 
-			slider->setCallback([floatBox](float value) {
-				floatBox->setValue(value * 100);
-				bgColor.a = value;
+			slider->setCallback([floatBox,colorBtn](float a) {
+				alpha = a;
+				floatBox->setValue(a * 100);
+				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
-			floatBox->setCallback([slider](float value) {
-				slider->setValue(value / 100.f);
-				bgColor.a = value;
+			floatBox->setCallback([slider,colorBtn](float a) {
+				alpha = a;
+				slider->setValue(a / 100.f);
+				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
 			//
@@ -748,133 +742,55 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			floatBox->setFixedWidth(50);
 			floatBox->setAlignment(TextBox::Alignment::Right);
 
-			slider->setCallback([floatBox,colorwheel](float value) {
-				floatBox->setValue(value);
-				float gain = pow(2.f, value);
-				bgColor = Color4(colorwheel->color().r() * gain,
-				                 colorwheel->color().g() * gain,
-				                 colorwheel->color().b() * gain, bgColor.a);
+			slider->setCallback([floatBox,colorBtn](float ev) {
+				EV = ev;
+				floatBox->setValue(EV);
+				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
-			floatBox->setCallback([slider,colorwheel](float value) {
-				slider->setValue(value);
-				float gain = pow(2.f, value);
-				bgColor = Color4(colorwheel->color().r() * gain,
-				                 colorwheel->color().g() * gain,
-				                 colorwheel->color().b() * gain, bgColor.a);
+			floatBox->setCallback([slider,colorBtn](float ev) {
+				EV = ev;
+				slider->setValue(EV);
+				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
-			auto colorBtn = new Button(popup, "Pick");
-			colorBtn->setBackgroundColor(Color(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
 
-			colorwheel->setCallback([colorBtn,floatBox](const Color &value) {
-				float gain = pow(2.f, floatBox->value());
-				bgColor = Color4(value.r() * gain,
-				                 value.g() * gain,
-				                 value.b() * gain, bgColor.a);
-				colorBtn->setBackgroundColor(Color(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+			colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+
+			colorwheel->setCallback([colorBtn,floatBox](const Color &c) {
+				bgColor.head<3>() = c.head<3>();
+				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
 			colorBtn->setChangeCallback([colorBtn, popupBtn](bool pushed) {
 				if (pushed)
 				{
-					popupBtn->setBackgroundColor(Color(bgColor.r, bgColor.g, bgColor.b, bgColor.a));
+					float gain = pow(2.f, EV);
+					popupBtn->setBackgroundColor(Color(bgColor.head<3>() * gain, alpha));
 					popupBtn->setPushed(false);
 				}
 			});
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&, window, popup]()
 				{
-					cout << "anchor: " << anchor << endl;
+					popup->dispose();
 					imageMgr->modifyImage(
 						[&](HDRImage &img)
 						{
 							auto undo = new FullImageUndo(img);
 
-							int oldW = imageMgr->currentImage()->width();
-							int oldH = imageMgr->currentImage()->height();
+							int newW = relative ? width + imageMgr->currentImage()->width() : width;
+							int newH = relative ? height + imageMgr->currentImage()->height() : height;
 
-							int newW = relative ? width + oldW : width;
-							int newH = relative ? height + oldH : height;
+							float gain = pow(2.f, EV);
+							Color4 c(bgColor.r() * gain, bgColor.g() * gain, bgColor.b() * gain, alpha);
 
-							spdlog::get("console")->debug("oldW: {}, newW: {}; oldH: {}, newH: {}", oldW, newW, oldH, newH);
-							spdlog::get("console")->debug("relative: {}", relative);
-							spdlog::get("console")->debug("width: {}, height: {}", width, height);
-
-							// fill in new regions with border value
-							img = HDRImage::Constant(newW, newH, bgColor);
-
-							Vector2i tlDst(0,0);
-							// find top-left corner
-							switch (anchor)
-							{
-								case TOP_RIGHT:
-								case MIDDLE_RIGHT:
-								case BOTTOM_RIGHT:
-									tlDst.x() = newW-oldW;
-									break;
-
-								case TOP_CENTER:
-								case MIDDLE_CENTER:
-								case BOTTOM_CENTER:
-									tlDst.x() = (newW-oldW)/2;
-									break;
-
-								case TOP_LEFT:
-								case MIDDLE_LEFT:
-								case BOTTOM_LEFT:
-								default:
-									tlDst.x() = 0;
-									break;
-							}
-							switch (anchor)
-							{
-								case BOTTOM_LEFT:
-								case BOTTOM_CENTER:
-								case BOTTOM_RIGHT:
-									tlDst.y() = newH-oldH;
-									break;
-
-								case MIDDLE_LEFT:
-								case MIDDLE_CENTER:
-								case MIDDLE_RIGHT:
-									tlDst.y() = (newH-oldH)/2;
-									break;
-
-								case TOP_LEFT:
-								case TOP_CENTER:
-								case TOP_RIGHT:
-								default:
-									tlDst.y() = 0;
-									break;
-							}
-
-							Vector2i tlSrc(0,0);
-							if (tlDst.x() < 0)
-							{
-								tlSrc.x() = -tlDst.x();
-								tlDst.x() = 0;
-							}
-							if (tlDst.y() < 0)
-							{
-								tlSrc.y() = -tlDst.y();
-								tlDst.y() = 0;
-							}
-
-							Vector2i bs(min(oldW, newW), min(oldH, newH));
-
-
-							spdlog::get("console")->debug("dst.x0: {}, dst.y0: {}; src.x0: {}, src.y0: {}\ndst.w: {}, dst.h: {}",
-							                              tlDst.x(), tlDst.y(), tlSrc.x(), tlSrc.y(), bs.x(), bs.y());
-							img.block(tlDst.x(), tlDst.y(),
-							          bs.x(), bs.y()) = undo->image().block(tlSrc.x(), tlSrc.y(),
-							                                                bs.x(), bs.y());
-
+							img = img.resizedCanvas(newW, newH, anchor, c);
 							return undo;
 						});
-					window->dispose();
-				});
+				},
+				[popup](){ popup->dispose(); });
 			
 			window->center();
 			window->requestFocus();

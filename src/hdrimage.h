@@ -72,7 +72,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Pixel accessors.
     //-----------------------------------------------------------------------
-    enum BorderMode
+    enum BorderMode : int
     {
         BLACK = 0,
         EDGE,
@@ -87,7 +87,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Pixel samplers.
     //-----------------------------------------------------------------------
-    enum Sampler
+    enum Sampler : int
     {
         NEAREST = 0,
         BILINEAR,
@@ -104,6 +104,20 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Resizing.
     //-----------------------------------------------------------------------
+    enum CanvasAnchor : int
+    {
+        TOP_LEFT = 0,
+        TOP_CENTER,
+        TOP_RIGHT,
+        MIDDLE_LEFT,
+        MIDDLE_CENTER,
+        MIDDLE_RIGHT,
+        BOTTOM_LEFT,
+        BOTTOM_CENTER,
+        BOTTOM_RIGHT,
+        NUM_CANVAS_ANCHORS
+    };
+    HDRImage resizedCanvas(int width, int height, CanvasAnchor anchor, const Color4 & bgColor) const;
     HDRImage resized(int width, int height) const;
     HDRImage resampled(int width, int height,
                        std::function<Eigen::Vector2f(const Eigen::Vector2f &)> warpFn =

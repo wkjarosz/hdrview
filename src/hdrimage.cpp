@@ -477,6 +477,79 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, BorderMode mY) const
     return imFilter * Color4(1.f/(leftSize + rightSize + 1));
 }
 
+HDRImage HDRImage::resizedCanvas(int newW, int newH, CanvasAnchor anchor, const Color4 & bgColor) const
+{
+    int oldW = width();
+    int oldH = height();
+
+    // fill in new regions with border value
+    HDRImage img = HDRImage::Constant(newW, newH, bgColor);
+
+    Vector2i tlDst(0,0);
+    // find top-left corner
+    switch (anchor)
+    {
+        case HDRImage::TOP_RIGHT:
+        case HDRImage::MIDDLE_RIGHT:
+        case HDRImage::BOTTOM_RIGHT:
+            tlDst.x() = newW-oldW;
+            break;
+
+        case HDRImage::TOP_CENTER:
+        case HDRImage::MIDDLE_CENTER:
+        case HDRImage::BOTTOM_CENTER:
+            tlDst.x() = (newW-oldW)/2;
+            break;
+
+        case HDRImage::TOP_LEFT:
+        case HDRImage::MIDDLE_LEFT:
+        case HDRImage::BOTTOM_LEFT:
+        default:
+            tlDst.x() = 0;
+            break;
+    }
+    switch (anchor)
+    {
+        case HDRImage::BOTTOM_LEFT:
+        case HDRImage::BOTTOM_CENTER:
+        case HDRImage::BOTTOM_RIGHT:
+            tlDst.y() = newH-oldH;
+            break;
+
+        case HDRImage::MIDDLE_LEFT:
+        case HDRImage::MIDDLE_CENTER:
+        case HDRImage::MIDDLE_RIGHT:
+            tlDst.y() = (newH-oldH)/2;
+            break;
+
+        case HDRImage::TOP_LEFT:
+        case HDRImage::TOP_CENTER:
+        case HDRImage::TOP_RIGHT:
+        default:
+            tlDst.y() = 0;
+            break;
+    }
+
+    Vector2i tlSrc(0,0);
+    if (tlDst.x() < 0)
+    {
+        tlSrc.x() = -tlDst.x();
+        tlDst.x() = 0;
+    }
+    if (tlDst.y() < 0)
+    {
+        tlSrc.y() = -tlDst.y();
+        tlDst.y() = 0;
+    }
+
+    Vector2i bs(std::min(oldW, newW), std::min(oldH, newH));
+
+    img.block(tlDst.x(), tlDst.y(),
+              bs.x(), bs.y()) = block(tlSrc.x(), tlSrc.y(),
+                                                    bs.x(), bs.y());
+    return img;
+}
+
 
 HDRImage HDRImage::resized(int w, int h) const
 {
