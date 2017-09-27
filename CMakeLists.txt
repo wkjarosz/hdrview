@@ -175,9 +175,9 @@ add_executable(HDRView
                src/ppm.h
                src/ppm.cpp
                src/range.h
+               src/timer.h
                src/well.cpp
                src/well.h
-               src/timer.h
                ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})

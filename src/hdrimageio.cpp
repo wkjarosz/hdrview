@@ -256,7 +256,7 @@ bool HDRImage::load(const string & filename)
 			vector<tinydng::FieldInfo> customFields;
 			bool ret = tinydng::LoadDNG(filename.c_str(), customFields, &images, &err);
 
-			if (ret == false || !err.empty())
+			if (ret == false)
 				throw runtime_error("Failed to load DNG. " + err);
 		}
 
@@ -680,8 +680,9 @@ inline unsigned short endianSwap(unsigned short val)
 //
 void decode12BitToFloat(vector<float> &image, unsigned char *data, int width, int height, bool swapEndian)
 {
-	int offsets[2][2] = {{0, 1}, {1, 2}};
+	Timer timer;
 
+	int offsets[2][2] = {{0, 1}, {1, 2}};
 	int bitShifts[2] = {4, 0};
 
 	image.resize(static_cast<size_t>(width * height));
@@ -738,6 +739,8 @@ void decode12BitToFloat(vector<float> &image, unsigned char *data, int width, in
 			image[static_cast<size_t>(y * width + x)] = static_cast<float>(val);
 		}
 	});
+
+	spdlog::get("console")->debug("decode12BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 //
@@ -745,8 +748,9 @@ void decode12BitToFloat(vector<float> &image, unsigned char *data, int width, in
 //
 void decode14BitToFloat(vector<float> &image, unsigned char *data, int width, int height, bool swapEndian)
 {
-	int offsets[4][3] = {{0, 0, 1}, {1, 2, 3}, {3, 4, 5}, {5, 5, 6}};
+	Timer timer;
 
+	int offsets[4][3] = {{0, 0, 1}, {1, 2, 3}, {3, 4, 5}, {5, 5, 6}};
 	int bitShifts[4] = {2, 4, 6, 0};
 
 	image.resize(static_cast<size_t>(width * height));
@@ -814,6 +818,8 @@ void decode14BitToFloat(vector<float> &image, unsigned char *data, int width, in
 			image[static_cast<size_t>(y * width + x)] = static_cast<float>(val);
 		}
 	});
+
+	spdlog::get("console")->debug("decode14BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 //
@@ -821,6 +827,8 @@ void decode14BitToFloat(vector<float> &image, unsigned char *data, int width, in
 //
 void decode16BitToFloat(vector<float> &image, unsigned char *data, int width, int height, bool swapEndian)
 {
+	Timer timer;
+
 	image.resize(static_cast<size_t>(width * height));
 	unsigned short *ptr = reinterpret_cast<unsigned short *>(data);
 
@@ -836,6 +844,8 @@ void decode16BitToFloat(vector<float> &image, unsigned char *data, int width, in
 			image[static_cast<size_t>(y * width + x)] = static_cast<float>(val);
 		}
 	});
+
+	spdlog::get("console")->debug("decode16BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 char get_colorname(int c)
