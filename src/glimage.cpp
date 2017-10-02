@@ -6,12 +6,14 @@
 
 #include "glimage.h"
 #include "common.h"
+#include "timer.h"
 #include "colorspace.h"
 #include "parallelfor.h"
 #include <random>
 #include <nanogui/common.h>
 #include <nanogui/glutil.h>
 #include <cmath>
+#include <spdlog/spdlog.h>
 
 using namespace nanogui;
 using namespace Eigen;
@@ -48,6 +50,7 @@ GLImage::MatrixPair makeHistograms(const HDRImage & img, float gain)
 } // namespace
 
 GLImage::GLImage() :
+    m_image(make_shared<HDRImage>()),
     m_filename(),
     m_cachedHistogramExposure(NAN), m_histogramDirty(true)
 {
@@ -79,7 +82,7 @@ bool GLImage::waitForAsyncResult() const
 	auto result = m_asyncCommand->get();
 
 	m_history.addCommand(result.second);
-	m_image.swap(result.first);
+	m_image = result.first;
 	m_histogramDirty = true;
 
 	// now that we grabbed the results, destroy the task
@@ -100,14 +103,19 @@ GLuint GLImage::glTextureId() const
 
 void GLImage::init() const
 {
+	Timer timer;
     // Allocate texture memory for the image
     glGenTextures(1, &m_texture);
+	spdlog::get("console")->trace("generating texture took: {} ms", timer.lap());
     glBindTexture(GL_TEXTURE_2D, m_texture);
+	spdlog::get("console")->trace("binding texture took: {} ms", timer.lap());
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width(), height(),
-                 0, GL_RGBA, GL_FLOAT, (const GLvoid *) m_image.data());
+                 0, GL_RGBA, GL_FLOAT, (const GLvoid *) m_image->data());
+	spdlog::get("console")->trace("uploading texture data took: {} ms", timer.lap());
 
 	glGenerateMipmap(GL_TEXTURE_2D);  //Generate num_mipmaps number of mipmaps here.
+	spdlog::get("console")->trace("generating mipmaps took: {} ms", timer.lap());
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 //	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -144,13 +152,17 @@ void GLImage::asyncModify(const ImageCommand &command)
 
 bool GLImage::undo()
 {
+	Timer timer;
     // make sure any pending edits are done
 	waitForAsyncResult();
+	spdlog::get("console")->debug("getting result took: {} ms", timer.lap());
 
 	if (m_history.undo(m_image))
     {
+	    spdlog::get("console")->debug("undoing took: {} ms", timer.lap());
         m_histogramDirty = true;
 	    init();
+	    spdlog::get("console")->debug("initializing GL texture took: {} ms", timer.lap());
         return true;
     }
     return false;
@@ -178,7 +190,7 @@ bool GLImage::load(const std::string & filename)
     m_history = CommandHistory();
     m_filename = filename;
     m_histogramDirty = true;
-    return m_image.load(filename);
+    return m_image->load(filename);
 }
 
 bool GLImage::save(const std::string & filename,
@@ -189,7 +201,7 @@ bool GLImage::save(const std::string & filename,
 	waitForAsyncResult();
 
     m_history.markSaved();
-    return m_image.save(filename, gain, gamma, sRGB, dither);
+    return m_image->save(filename, gain, gamma, sRGB, dither);
 }
 
 void GLImage::recomputeHistograms(float exposure) const
@@ -201,7 +213,7 @@ void GLImage::recomputeHistograms(float exposure) const
         m_histograms = make_shared<LazyHistograms>(
 	        [this,exposure](void)
 	        {
-		        return makeHistograms(m_image, pow(2.0f, exposure));
+		        return makeHistograms(*m_image, pow(2.0f, exposure));
 	        });
         m_histograms->compute();
         m_histogramDirty = false;

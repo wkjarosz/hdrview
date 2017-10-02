@@ -477,17 +477,19 @@ void HDRViewScreen::saveImage()
 void HDRViewScreen::flipImage(bool h)
 {
     if (h)
-	    m_imageMgr->modifyImage([](const HDRImage &img) -> ImageCommandResult
-	                {
-		                return {img.flippedHorizontal(),
-		                        new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedHorizontal(); })};
-	                });
+	    m_imageMgr->modifyImage(
+		    [](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flippedHorizontal()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedHorizontal(); })};
+		    });
     else
-	    m_imageMgr->modifyImage([](const HDRImage &img) -> ImageCommandResult
-	                {
-		                return {img.flippedVertical(),
-		                        new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedVertical(); })};
-	                });
+	    m_imageMgr->modifyImage(
+		    [](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flippedVertical()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedVertical(); })};
+		    });
 }
 
 

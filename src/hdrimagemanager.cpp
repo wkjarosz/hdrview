@@ -190,7 +190,7 @@ void HDRImageManager::modifyImage(const ImageCommand & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[&command, this](const HDRImage &img)
+			[&command, this](std::shared_ptr<HDRImage> img)
 			{
 				auto ret = command(img);
 				m_imageModifyDoneRequested = true;
@@ -205,7 +205,7 @@ void HDRImageManager::modifyImage(const ImageCommandWithProgress & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[&command, this](const HDRImage &img, AtomicProgress &progress)
+			[&command, this](std::shared_ptr<HDRImage> img, AtomicProgress &progress)
 			{
 				auto ret = command(img, progress);
 				m_imageModifyDoneRequested = true;

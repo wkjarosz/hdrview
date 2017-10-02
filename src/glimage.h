@@ -48,9 +48,9 @@ public:
 
 	GLuint glTextureId() const;
     std::string filename() const                {return m_filename;}
-    const HDRImage & image() const              {return m_image;}
-    int width() const                           {checkAsyncResult(); return m_image.width();}
-    int height() const                          {checkAsyncResult(); return m_image.height();}
+    const HDRImage & image() const              {return *m_image;}
+    int width() const                           {checkAsyncResult(); return m_image->width();}
+    int height() const                          {checkAsyncResult(); return m_image->height();}
     Eigen::Vector2i size() const                {return Eigen::Vector2i(width(), height());}
     bool contains(const Eigen::Vector2i& p) const {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
 
@@ -71,7 +71,9 @@ private:
 	bool waitForAsyncResult() const;
 
 	mutable GLuint m_texture = 0;
-    mutable HDRImage m_image;
+
+	mutable std::shared_ptr<HDRImage> m_image;
+
     std::string m_filename;
     mutable float m_cachedHistogramExposure;
     mutable std::atomic<bool> m_histogramDirty;
