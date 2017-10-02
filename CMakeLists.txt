@@ -218,10 +218,6 @@ add_executable(hdrbatch
                src/common.h
                src/envmap.cpp
                src/envmap.h
-               src/pfm.h
-               src/pfm.cpp
-               src/ppm.h
-               src/ppm.cpp
                src/dither-matrix256.h
                src/color.h
                src/hdrimage.h
@@ -230,6 +226,12 @@ add_executable(hdrbatch
                src/hdrbatch.cpp
                src/parallelfor.cpp
                src/parallelfor.h
+               src/pfm.h
+               src/pfm.cpp
+               src/ppm.h
+               src/ppm.cpp
+               src/progress.cpp
+               src/progress.h
                src/range.h)
 
 

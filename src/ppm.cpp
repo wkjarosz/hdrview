@@ -25,7 +25,7 @@ struct RGB
 
 } // end namespace
 
-bool is_ppm(const char * filename)
+bool isPPMImage(const char *filename)
 {
     FILE *infile = 0;
     int numInputsRead = 0;
@@ -74,7 +74,7 @@ bool is_ppm(const char * filename)
 }
 
 
-float * load_ppm(const char * filename, int * width, int * height, int * numChannels)
+float * loadPPMImage(const char *filename, int *width, int *height, int *numChannels)
 {
     FILE *infile = 0;
     float * img = 0;
@@ -145,7 +145,7 @@ float * load_ppm(const char * filename, int * width, int * height, int * numChan
         delete [] img;
         if (infile)
             fclose(infile);
-        throw std::runtime_error(string("ERROR in load_ppm: ") +
+        throw std::runtime_error(string("ERROR in loadPPMImage: ") +
                                  string(e.what()) +
                                  string(" Unable to read PPM file '") +
                                  filename + "'");
@@ -153,7 +153,7 @@ float * load_ppm(const char * filename, int * width, int * height, int * numChan
 }
 
 
-bool write_ppm(const char * filename, int width, int height, int numChannels, const unsigned char * data)
+bool writePPMImage(const char *filename, int width, int height, int numChannels, const unsigned char *data)
 {
     FILE *outfile = 0;
 
@@ -179,7 +179,7 @@ bool write_ppm(const char * filename, int width, int height, int numChannels, co
     {
         if (outfile)
             fclose (outfile);
-        throw std::runtime_error(string("ERROR in write_ppm: ") +
+        throw std::runtime_error(string("ERROR in writePPMImage: ") +
                                  string(e.what()) +
                                  string(" Unable to write PPM file '") +
                                  string(filename) + "'");

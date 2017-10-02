@@ -512,7 +512,7 @@ bool HDRImage::save(const string & filename,
         console->debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
 
         if (extension == "ppm")
-            return write_ppm(filename.c_str(), width(), height(), 3, &data[0]);
+            return writePPMImage(filename.c_str(), width(), height(), 3, &data[0]);
         else if (extension == "png")
             return stbi_write_png(filename.c_str(), width(), height(),
                                   3, &data[0], sizeof(unsigned char)*width()*3) != 0;

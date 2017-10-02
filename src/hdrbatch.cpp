@@ -308,24 +308,25 @@ int main(int argc, char **argv)
             filterType = type;
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
 
+            AtomicProgress progress;
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .GaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .GaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .boxBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .boxBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .fastGaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .fastGaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .medianFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .medianFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .bilateralFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .bilateralFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .unsharpMasked(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .unsharpMasked(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
