@@ -88,15 +88,16 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(imageLoading, "Down / Up", "Select Previous/Next Image");
 	addRow(imageLoading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
 
-	new Label(column, "Interface", "sans-bold", 16);
-	auto interface = new Widget(column);
-	interface->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
+	auto imageSelection = new Widget(column);
+	imageSelection->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(interface, "H", "Show/Hide Help (this Window)");
-	addRow(interface, "T", "Show/Hide the Top Toolbar");
-	addRow(interface, "Tab", "Show/Hide the Side Panel");
-	addRow(interface, "Shift+Tab", "Show/Hide All Panels");
-	addRow(interface, COMMAND + "+Q or Esc", "Quit");
+	addRow(imageSelection, "E / Shift+E", "Decrease/Increase Exposure");
+	addRow(imageSelection, "G / Shift+G", "Decrease/Increase Gamma");
+	addRow(imageSelection, "R", "Reset tonemapping");
+	addRow(imageSelection, "N", "Normalize Image to [0,1]");
+	addRow(imageSelection, COMMAND + "+1…7", "Cycle through Color Channels");
+	addRow(imageSelection, "Shift+1…8", "Cycle through Blend Modes");
 
 	column = newColumn();
 
@@ -118,16 +119,15 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(panningZooming, "Space", "Re-Center View");
     addRow(panningZooming, COMMAND + "+0", "Fit Image to Screen");
 
-	new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
-	auto imageSelection = new Widget(column);
-	imageSelection->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	new Label(column, "Interface", "sans-bold", 16);
+	auto interface = new Widget(column);
+	interface->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(imageSelection, "E / Shift+E", "Decrease/Increase Exposure");
-	addRow(imageSelection, "G / Shift+G", "Decrease/Increase Gamma");
-	addRow(imageSelection, "R", "Reset tonemapping");
-	addRow(imageSelection, "N", "Normalize Image to [0,1]");
-	addRow(imageSelection, COMMAND + "+1…7", "Cycle through Color Channels");
-	addRow(imageSelection, "Shift+1…8", "Cycle through Blend Modes");
+	addRow(interface, "H", "Show/Hide Help (this Window)");
+	addRow(interface, "T", "Show/Hide the Top Toolbar");
+	addRow(interface, "Tab", "Show/Hide the Side Panel");
+	addRow(interface, "Shift+Tab", "Show/Hide All Panels");
+	addRow(interface, COMMAND + "+Q or Esc", "Quit");
 }
 
 bool HelpWindow::keyboardEvent(int key, int scancode, int action, int modifiers)

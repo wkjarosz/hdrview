@@ -11,6 +11,7 @@
 #include <vector>                // for vector
 #include <string>                // for string
 #include "color.h"               // for Color4, max, min
+#include "progress.h"
 
 
 //! Floating point image
@@ -179,27 +180,51 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
-    HDRImage convolved(const Eigen::ArrayXXf &kernel, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage GaussianBlurred(float sigmaX, float sigmaY, BorderMode mX = EDGE, BorderMode mY = EDGE,
+    HDRImage convolved(const Eigen::ArrayXXf &kernel,
+                       AtomicProgress progress,
+                       BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage GaussianBlurred(float sigmaX, float sigmaY,
+                             AtomicProgress progress,
+                             BorderMode mX = EDGE, BorderMode mY = EDGE,
                              float truncateX = 6.0f, float truncateY = 6.0f) const;
-    HDRImage GaussianBlurredX(float sigmaX, BorderMode mode = EDGE, float truncateX = 6.0f) const;
-    HDRImage GaussianBlurredY(float sigmaY, BorderMode mode = EDGE, float truncateY = 6.0f) const;
-    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage boxBlurred(int w, BorderMode mX = EDGE, BorderMode mY = EDGE) const{return boxBlurred(w, w, mX, mY);}
-    HDRImage boxBlurred(int hw, int hh, BorderMode mX = EDGE, BorderMode mY = EDGE) const{return boxBlurredX(hw, mX).boxBlurredY(hh, mY);}
-    HDRImage boxBlurredX(int leftSize, int rightSize, BorderMode mode = EDGE) const;
-    HDRImage boxBlurredX(int halfSize, BorderMode mode = EDGE) const {return boxBlurredX(halfSize, halfSize, mode);}
-    HDRImage boxBlurredY(int upSize, int downSize, BorderMode mode = EDGE) const;
-    HDRImage boxBlurredY(int halfSize, BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, mode);}
-    HDRImage unsharpMasked(float sigma, float strength, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage medianFiltered(float radius, int channel, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const;
-    HDRImage medianFiltered(float r, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const
+    HDRImage GaussianBlurredX(float sigmaX,
+                              AtomicProgress progress,
+                              BorderMode mode = EDGE, float truncateX = 6.0f) const;
+    HDRImage GaussianBlurredY(float sigmaY,
+                              AtomicProgress progress,
+                              BorderMode mode = EDGE, float truncateY = 6.0f) const;
+    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, AtomicProgress progress = AtomicProgress(), BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY,
+                                 AtomicProgress progress,
+                                 BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage boxBlurred(int w, AtomicProgress progress,
+                        BorderMode mX = EDGE, BorderMode mY = EDGE) const
     {
-        return medianFiltered(r, 0, mX, mY, round).medianFiltered(r, 1, mX, mY, round).medianFiltered(r, 2, mX, mY, round).medianFiltered(r, 3, mX, mY, round);
+        return boxBlurred(w, w, progress, mX, mY);
     }
-    HDRImage bilateralFiltered(float sigmaRange = 0.1f,
-                               float sigmaDomain = 1.0f,
+    HDRImage boxBlurred(int hw, int hh, AtomicProgress progress,
+                        BorderMode mX = EDGE, BorderMode mY = EDGE) const
+    {
+        return boxBlurredX(hw, AtomicProgress(progress, 0.5f), mX).boxBlurredY(hh, AtomicProgress(progress, 0.5f), mY);
+    }
+    HDRImage boxBlurredX(int leftSize, int rightSize, AtomicProgress progress, BorderMode mode = EDGE) const;
+    HDRImage boxBlurredX(int halfSize, AtomicProgress progress,
+                         BorderMode mode = EDGE) const {return boxBlurredX(halfSize, halfSize, progress, mode);}
+    HDRImage boxBlurredY(int upSize, int downSize, AtomicProgress progress, BorderMode mode = EDGE) const;
+    HDRImage boxBlurredY(int halfSize, AtomicProgress progress,
+                         BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, progress, mode);}
+    HDRImage unsharpMasked(float sigma, float strength, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage medianFiltered(float radius, int channel, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const;
+    HDRImage medianFiltered(float r, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const
+    {
+        return medianFiltered(r, 0, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .medianFiltered(r, 1, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .medianFiltered(r, 2, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .medianFiltered(r, 3, AtomicProgress(progress, 0.25f), mX, mY, round);
+    }
+    HDRImage bilateralFiltered(float sigmaRange/* = 0.1f*/,
+                               float sigmaDomain/* = 1.0f*/,
+                               AtomicProgress progress,
                                BorderMode mX = EDGE, BorderMode mY = EDGE,
                                float truncateDomain = 6.0f) const;
     //@}

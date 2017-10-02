@@ -275,7 +275,7 @@ bool HDRImage::load(const string & filename)
 		size_t imageIndex = size_t(-1);
 		{
 			size_t largest = 0;
-			size_t largestWidth = images[0].width;
+			int largestWidth = images[0].width;
 			for (size_t i = 0; i < images.size(); i++)
 			{
 				if (largestWidth < images[i].width)

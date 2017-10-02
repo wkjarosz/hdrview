@@ -224,7 +224,7 @@ bool HDRImageViewer::helpersVisible() const
 	return gridVisible() || pixelInfoVisible();
 }
 
-Vector2f HDRImageViewer::centerOffset(const GLImage * img) const
+Vector2f HDRImageViewer::centerOffset(shared_ptr<const GLImage> img) const
 {
 	return (sizeF() - scaledImageSizeF(img)) / 2;
 }
@@ -276,7 +276,7 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	drawWidgetBorder(ctx);
 }
 
-void HDRImageViewer::imagePositionAndScale(Vector2f & position, Vector2f & scale, const GLImage * image)
+void HDRImageViewer::imagePositionAndScale(Vector2f & position, Vector2f & scale, shared_ptr<const GLImage> image)
 {
 	scale = scaledImageSizeF(image).cwiseQuotient(screenSizeF());
 	position = (absolutePosition().cast<float>() + m_offset + centerOffset(image)).cwiseQuotient(screenSizeF());
@@ -397,7 +397,7 @@ void HDRImageViewer::drawPixelInfo(NVGcontext *ctx) const
 	{
 		for (int i = minI; i <= maxI; ++i)
 		{
-			Color4 pixel = m_currentImage->image()(i, j);
+			Color4 pixel;// = m_currentImage->image()(i, j);
 			float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 			string text = fmt::format("{:1.3f}\n{:1.3f}\n{:1.3f}", pixel[0], pixel[1], pixel[2]);
 

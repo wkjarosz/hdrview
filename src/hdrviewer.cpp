@@ -295,15 +295,20 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
 		                                 m_imageMgr->setReferenceImageIndex(-1);
 	                                 });
-    m_imageMgr->setImageChangedCallback([this,editPanel](int i)
-                                         {
-	                                         updateCaption();
-	                                         m_imagesPanel->enableDisableButtons();
-	                                         editPanel->enableDisableButtons();
-	                                         m_imagesPanel->repopulateImageList();
-	                                         m_imagesPanel->setCurrentImage(i);
-	                                         m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
-                                         });
+	m_imageMgr->setImageModifyStartCallback([this, editPanel](int i)
+	                                       {
+		                                       updateCaption();
+		                                       m_imagesPanel->enableDisableButtons();
+		                                       editPanel->enableDisableButtons();
+		                                       m_imagesPanel->updateImagesInfo();
+	                                       });
+	m_imageMgr->setImageModifyDoneCallback([this, editPanel](int i)
+	                                       {
+		                                       updateCaption();
+		                                       m_imagesPanel->enableDisableButtons();
+		                                       editPanel->enableDisableButtons();
+		                                       m_imagesPanel->updateImagesInfo();
+	                                       });
 
 
 	sRGBCheckbox->setCallback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
@@ -472,16 +477,16 @@ void HDRViewScreen::saveImage()
 void HDRViewScreen::flipImage(bool h)
 {
     if (h)
-	    m_imageMgr->modifyImage([](HDRImage &img)
+	    m_imageMgr->modifyImage([](const HDRImage &img) -> ImageCommandResult
 	                {
-		                img = img.flippedHorizontal();
-		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedHorizontal(); });
+		                return {img.flippedHorizontal(),
+		                        new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedHorizontal(); })};
 	                });
     else
-	    m_imageMgr->modifyImage([](HDRImage &img)
+	    m_imageMgr->modifyImage([](const HDRImage &img) -> ImageCommandResult
 	                {
-		                img = img.flippedVertical();
-		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedVertical(); });
+		                return {img.flippedVertical(),
+		                        new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedVertical(); })};
 	                });
 }
 
@@ -806,5 +811,6 @@ void HDRViewScreen::updateLayout()
 
 void HDRViewScreen::drawContents()
 {
+	m_imageMgr->runRequestedCallbacks();
 	updateLayout();
 }

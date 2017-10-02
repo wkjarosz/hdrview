@@ -24,6 +24,9 @@ public:
 	bool mouseButtonEvent(const Eigen::Vector2i &p, int button, bool down, int modifiers) override;
 	void draw(NVGcontext *ctx) override;
 
+	float progress()                        { return m_progress; }
+	void setProgress(float progress)        { m_progress = progress; }
+
 	const std::string & caption() const     { return m_caption; }
 	void setId(size_t id)                   { m_id = id; }
 	void setIsModified(bool b)              { m_isModified = b; }
@@ -56,4 +59,6 @@ private:
 	size_t m_id = 0;
 	size_t m_cutoff = 0;
 	Eigen::Vector2i m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+
+	float m_progress = -1.f;
 };

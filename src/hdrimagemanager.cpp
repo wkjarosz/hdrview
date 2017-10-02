@@ -5,6 +5,7 @@
 //
 
 #include "hdrimagemanager.h"
+#include "timer.h"
 #include <tinydir.h>
 #include <spdlog/spdlog.h>
 #include <set>
@@ -12,7 +13,8 @@
 using namespace std;
 
 HDRImageManager::HDRImageManager()
-	: m_imageChangedCallback(std::function<void(int)>()),
+	: m_imageModifyDoneRequested(false),
+	  m_imageModifyDoneCallback(std::function<void(int)>()),
 	  m_numImagesCallback(std::function<void(void)>()),
 	  m_currentImageCallback(std::function<void(void)>()),
 	  m_referenceImageCallback(std::function<void(void)>())
@@ -20,12 +22,21 @@ HDRImageManager::HDRImageManager()
 
 }
 
-const GLImage * HDRImageManager::image(int index) const
+void HDRImageManager::runRequestedCallbacks()
+{
+	if (m_imageModifyDoneRequested)
+	{
+		m_imageModifyDoneRequested = false;
+		m_imageModifyDoneCallback(m_current);
+	}
+}
+
+shared_ptr<const GLImage> HDRImageManager::image(int index) const
 {
 	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 }
 
-GLImage * HDRImageManager::image(int index)
+shared_ptr<GLImage> HDRImageManager::image(int index)
 {
 	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 }
@@ -110,29 +121,25 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 	}
 
 	// now actually load the images
-	auto allStart = chrono::system_clock::now();
+	Timer allTimer;
 	for (auto i : allFilenames)
 	{
-		GLImage *image = new GLImage();
-		auto start = chrono::system_clock::now();
+		shared_ptr<GLImage> image = make_shared<GLImage>();
+		Timer timer;
 		if (image->load(i))
 		{
 			loadedOK.push_back({i, true});
 			m_images.push_back(image);
-			auto end = chrono::system_clock::now();
-			chrono::duration<double> elapsedSeconds = end - start;
-			spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", i, image->width(), image->height(), elapsedSeconds.count());
+			spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", i, image->width(), image->height(), timer.elapsed() / 1000.f);
 		}
 		else
 		{
 			loadedOK.push_back({i, false});
 			numErrors++;
-			delete image;
 		}
 	}
 
-	chrono::duration<double> elapsedSeconds = chrono::system_clock::now() - allStart;
-	spdlog::get("console")->info("Loading all {:d} images took {} seconds", allFilenames.size(), elapsedSeconds.count());
+	spdlog::get("console")->info("Loading all {:d} images took {} seconds", allFilenames.size(), allTimer.elapsed() / 1000.f);
 
 	m_numImagesCallback();
 	setCurrentImageIndex(int(m_images.size() - 1));
@@ -157,7 +164,7 @@ void HDRImageManager::saveImage(const string & filename, float exposure, float g
 	if (filename.size())
 	{
 		currentImage()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
-		m_imageChangedCallback(m_current);
+		m_imageModifyDoneCallback(m_current);
 	}
 }
 
@@ -165,7 +172,6 @@ void HDRImageManager::closeImage(int index)
 {
 	if (image(index))
 	{
-		delete m_images[index];
 		m_images.erase(m_images.begin() + index);
 
 		int newIndex = m_current;
@@ -179,25 +185,46 @@ void HDRImageManager::closeImage(int index)
 	}
 }
 
-void HDRImageManager::modifyImage(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
+void HDRImageManager::modifyImage(const ImageCommand & command)
 {
 	if (currentImage())
 	{
-		m_images[m_current]->modify(command);
-		m_imageChangedCallback(m_current);
+		m_images[m_current]->asyncModify(
+			[&command, this](const HDRImage &img)
+			{
+				auto ret = command(img);
+				m_imageModifyDoneRequested = true;
+				return ret;
+			});
+		m_imageModifyStartCallback(m_current);
+	}
+}
+
+void HDRImageManager::modifyImage(const ImageCommandWithProgress & command)
+{
+	if (currentImage())
+	{
+		m_images[m_current]->asyncModify(
+			[&command, this](const HDRImage &img, AtomicProgress &progress)
+			{
+				auto ret = command(img, progress);
+				m_imageModifyDoneRequested = true;
+				return ret;
+			});
+		m_imageModifyStartCallback(m_current);
 	}
 }
 
 void HDRImageManager::undo()
 {
 	if (currentImage() && m_images[m_current]->undo())
-		m_imageChangedCallback(m_current);
+		m_imageModifyDoneCallback(m_current);
 }
 
 void HDRImageManager::redo()
 {
 	if (currentImage() && m_images[m_current]->redo())
-		m_imageChangedCallback(m_current);
+		m_imageModifyDoneCallback(m_current);
 }
 
 void HDRImageManager::bringImageForward()
@@ -209,7 +236,7 @@ void HDRImageManager::bringImageForward()
 	std::swap(m_images[m_current], m_images[m_current-1]);
 	m_current--;
 
-	m_imageChangedCallback(m_current);
+	m_imageModifyDoneCallback(m_current);
 	m_currentImageCallback();
 }
 
@@ -222,6 +249,6 @@ void HDRImageManager::sendImageBackward()
 	std::swap(m_images[m_current], m_images[m_current+1]);
 	m_current++;
 
-	m_imageChangedCallback(m_current);
+	m_imageModifyDoneCallback(m_current);
 	m_currentImageCallback();
 }

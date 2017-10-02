@@ -19,18 +19,19 @@
 class HDRImageManager
 {
 public:
+
 	HDRImageManager();
 
 	// Const access to the loaded images. Modification only possible via modifyImage, undo, redo
-	int numImages() const                   {return m_images.size();}
-	int currentImageIndex() const           {return m_current;}
-	int referenceImageIndex() const         {return m_reference;}
-	const GLImage * currentImage() const    {return image(m_current);}
-	      GLImage * currentImage()          {return image(m_current);}
-	const GLImage * referenceImage() const  {return image(m_reference);}
-		  GLImage * referenceImage()        {return image(m_reference);}
-	const GLImage * image(int index) const;
-		  GLImage * image(int index);
+	int numImages() const                  {return m_images.size();}
+	int currentImageIndex() const          {return m_current;}
+	int referenceImageIndex() const        {return m_reference;}
+	ConstImagePtr currentImage() const     {return image(m_current);}
+		 ImagePtr currentImage()           {return image(m_current);}
+	ConstImagePtr referenceImage() const   {return image(m_reference);}
+		 ImagePtr referenceImage()         {return image(m_reference);}
+	ConstImagePtr image(int index) const;
+		 ImagePtr image(int index);
 
 	// Loading, saving, closing, and rearranging the images in the image stack
 	void loadImages(const std::vector<std::string> & filenames);
@@ -43,15 +44,23 @@ public:
 	void setReferenceImageIndex(int index, bool forceCallback = false);
 
 	// Modify the image data
-	void modifyImage(const std::function<ImageCommandUndo*(HDRImage & img)> & command);
+	void modifyImage(const ImageCommand & command);
+	void modifyImage(const ImageCommandWithProgress & command);
 	void undo();
 	void redo();
 
+	//
+	void runRequestedCallbacks();
+
 	// Callback functions
 
-	/// Callback executed whenever the image data has been modified, e.g. via @ref modifyImage
-	const std::function<void(int)>& imageChangedCallback() const { return m_imageChangedCallback; }
-	void setImageChangedCallback(const std::function<void(int)> &callback) { m_imageChangedCallback = callback; }
+	/// Callback executed whenever an image starts being modified, e.g. via @ref modifyImage
+	const std::function<void(int)>& imageModifyStartCallback() const { return m_imageModifyStartCallback; }
+	void setImageModifyStartCallback(const std::function<void(int)> &callback) { m_imageModifyStartCallback = callback; }
+
+	/// Callback executed whenever an image finishes being modified, e.g. via @ref modifyImage
+	const std::function<void(int)>& imageModifyDoneCallback() const { return m_imageModifyDoneCallback; }
+	void setImageModifyDoneCallback(const std::function<void(int)> &callback) { m_imageModifyDoneCallback = callback; }
 
 	/// Callback executed whenever the number of images has been changed, e.g. via @ref loadImages or closeImage
 	const std::function<void()>& numImagesCallback() const { return m_numImagesCallback; }
@@ -67,12 +76,15 @@ public:
 
 private:
 
-	std::vector<GLImage*> m_images;         ///< The loaded images
-	int m_current = -1;                     ///< The currently selected image
-	int m_reference = -1;                   ///< The currently selected reference image
+	std::vector<ImagePtr> m_images; ///< The loaded images
+	int m_current = -1;             ///< The currently selected image
+	int m_reference = -1;           ///< The currently selected reference image
+
+	std::atomic<bool> m_imageModifyDoneRequested;
 
 	// various callback functions
-	std::function<void(int)> m_imageChangedCallback;
+	std::function<void(int)> m_imageModifyStartCallback;
+	std::function<void(int)> m_imageModifyDoneCallback;
 	std::function<void()> m_numImagesCallback;
 	std::function<void()> m_currentImageCallback;
 	std::function<void()> m_referenceImageCallback;

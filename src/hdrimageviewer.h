@@ -25,8 +25,8 @@ class HDRImageViewer : public Widget
 public:
 	HDRImageViewer(Widget * parent, HDRViewScreen * screen);
 
-	void setCurrentImage(const GLImage *cur)    {m_currentImage = cur;}
-	void setReferenceImage(const GLImage *ref)  {m_referenceImage = ref;}
+	void setCurrentImage(ConstImagePtr cur)    {m_currentImage = cur;}
+	void setReferenceImage(ConstImagePtr ref)  {m_referenceImage = ref;}
 
 	// overridden Widget virtual functions
 	void draw(NVGcontext* ctx) override;
@@ -158,13 +158,13 @@ public:
 	void setPixelHoverCallback(const std::function<void(const Vector2i &, const Color4 &, const Color4 &)> &callback) { m_pixelHoverCallback = callback; }
 
 private:
-	Vector2f positionF() const                              { return mPos.cast<float>(); }
-	Vector2f sizeF() const                                  { return mSize.cast<float>(); }
+	Vector2f positionF() const                            { return mPos.cast<float>(); }
+	Vector2f sizeF() const                                { return mSize.cast<float>(); }
 	Vector2f screenSizeF() const;
 
-	Vector2i imageSize(const GLImage * img) const           { return img ? img->size() : Vector2i(0,0); }
-	Vector2f imageSizeF(const GLImage * img) const          { return imageSize(img).cast<float>(); }
-	Vector2f scaledImageSizeF(const GLImage * img) const    { return m_zoom * imageSizeF(img); }
+	Vector2i imageSize(ConstImagePtr img) const           { return img ? img->size() : Vector2i(0,0); }
+	Vector2f imageSizeF(ConstImagePtr img) const          { return imageSize(img).cast<float>(); }
+	Vector2f scaledImageSizeF(ConstImagePtr img) const    { return m_zoom * imageSizeF(img); }
 
 	// Helper drawing methods.
 	void drawWidgetBorder(NVGcontext* ctx) const;
@@ -172,15 +172,16 @@ private:
 	void drawHelpers(NVGcontext* ctx) const;
 	void drawPixelGrid(NVGcontext* ctx) const;
 	void drawPixelInfo(NVGcontext *ctx) const;
-	void imagePositionAndScale(Vector2f & position, Vector2f & scale, const GLImage * image);
+	void imagePositionAndScale(Vector2f & position, Vector2f & scale,
+	                           ConstImagePtr image);
 
-	Vector2f centerOffset(const GLImage * img) const;
+	Vector2f centerOffset(ConstImagePtr img) const;
 
 	ImageShader m_shader;
 
 	HDRViewScreen * m_screen = nullptr;
-	const GLImage * m_currentImage = nullptr;
-	const GLImage * m_referenceImage = nullptr;
+	ConstImagePtr m_currentImage = nullptr;
+	ConstImagePtr m_referenceImage = nullptr;
 	float m_exposure = 0.f,
 		  m_gamma = 2.2f;
 	bool m_sRGB = true,

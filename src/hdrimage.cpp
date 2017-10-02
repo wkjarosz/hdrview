@@ -198,7 +198,8 @@ HDRImage HDRImage::resampled(int w, int h,
 }
 
 
-HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
+                             BorderMode mX, BorderMode mY) const
 {
     HDRImage imFilter(width(), height());
 
@@ -206,8 +207,9 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mX, BorderMode m
     int centerY = int((kernel.cols()-1.0)/2.0);
 
     Timer timer;
+	progress.setNumSteps(imFilter.width());
     // for every pixel in the image
-    parallel_for(0, imFilter.width(), [this,kernel,mX,mY,&imFilter,centerX,centerY](int x)
+    parallel_for(0, imFilter.width(), [this,&progress,kernel,mX,mY,&imFilter,centerX,centerY](int x)
     {
         for (int y = 0; y < imFilter.height(); y++)
         {
@@ -229,47 +231,51 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, BorderMode mX, BorderMode m
             // assign the pixel the value from convolution
             imFilter(x,y) = accum / weightSum;
         }
+        ++progress;
     });
     spdlog::get("console")->debug("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
 
     return imFilter;
 }
 
-HDRImage HDRImage::GaussianBlurredX(float sigmaX, BorderMode mX, float truncateX) const
+HDRImage HDRImage::GaussianBlurredX(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX) const
 {
-    return convolved(horizontalGaussianKernel(sigmaX, truncateX), mX, mX);
+    return convolved(horizontalGaussianKernel(sigmaX, truncateX), progress, mX, mX);
 }
 
-HDRImage HDRImage::GaussianBlurredY(float sigmaY, BorderMode mY, float truncateY) const
+HDRImage HDRImage::GaussianBlurredY(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY) const
 {
-    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), mY, mY);
+    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), progress, mY, mY);
 }
 
 // Use principles of separability to blur an image using 2 1D Gaussian Filters
-HDRImage HDRImage::GaussianBlurred(float sigmaX, float sigmaY, BorderMode mX, BorderMode mY,
+HDRImage HDRImage::GaussianBlurred(float sigmaX, float sigmaY, AtomicProgress progress,
+                                   BorderMode mX, BorderMode mY,
                                    float truncateX, float truncateY) const
 {
     // blur using 2, 1D filters in the x and y directions
-    return GaussianBlurredX(sigmaX, mX, truncateX).GaussianBlurredY(sigmaY, mY, truncateY);
+    return GaussianBlurredX(sigmaX, AtomicProgress(progress, .5f), mX, truncateX).GaussianBlurredY(sigmaY, AtomicProgress(progress, .5f), mY, truncateY);
 }
 
 
 // sharpen an image
-HDRImage HDRImage::unsharpMasked(float sigma, float strength, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::unsharpMasked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY) const
 {
-    return *this + Color4(strength) * (*this - fastGaussianBlurred(sigma, sigma, mX, mY));
+    return *this + Color4(strength) * (*this - fastGaussianBlurred(sigma, sigma, progress, mX, mY));
 }
 
 
 
-HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, BorderMode mY, bool round) const
+HDRImage HDRImage::medianFiltered(float radius, int channel, AtomicProgress progress,
+                                  BorderMode mX, BorderMode mY, bool round) const
 {
     int radiusi = int(std::ceil(radius));
     HDRImage tempBuffer = *this;
 
     Timer timer;
+    progress.setNumSteps(height());
     // for every pixel in the image
-    parallel_for(0, height(), [this,&tempBuffer,radius,radiusi,channel,mX,mY,round](int y)
+    parallel_for(0, height(), [this,&tempBuffer,&progress,radius,radiusi,channel,mX,mY,round](int y)
     {
         vector<float> mBuffer;
         mBuffer.reserve((2*radiusi)*(2*radiusi));
@@ -300,6 +306,7 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, Bord
                         mBuffer.begin() + mBuffer.size());
             tempBuffer(x,y)[channel] = mBuffer[med];
         }
+        ++progress;
     });
     spdlog::get("console")->debug("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
 
@@ -307,30 +314,32 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, BorderMode mX, Bord
 }
 
 
-HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, BorderMode mX, BorderMode mY, float truncateDomain) const
+HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
+                                     AtomicProgress progress,
+                                     BorderMode mX, BorderMode mY, float truncateDomain) const
 {
-    HDRImage imFilter(width(), height());
+    HDRImage filtered(width(), height());
 
     // calculate the filter size
     int radius = int(std::ceil(truncateDomain * sigmaDomain));
 
     Timer timer;
+    progress.setNumSteps(height());
     // for every pixel in the image
-    parallel_for(0, imFilter.width(), [this,&imFilter,radius,sigmaRange,sigmaDomain,mX,mY,truncateDomain](int x)
+    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigmaDomain,mX,mY,truncateDomain](int y)
     {
-        for (int y = 0; y < imFilter.height(); y++)
+        for (int x = 0; x < filtered.width(); x++)
         {
             // initilize normalizer and sum value to 0 for every pixel location
             float weightSum = 0.0f;
             Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
 
-            for (int xFilter = -radius; xFilter <= radius; xFilter++)
+            for (int yFilter = -radius; yFilter <= radius; yFilter++)
             {
-                int xx = x+xFilter;
-                for (int yFilter = -radius; yFilter <= radius; yFilter++)
+                int yy = y+yFilter;
+                for (int xFilter = -radius; xFilter <= radius; xFilter++)
                 {
-                    int yy = y+yFilter;
-
+                    int xx = x+xFilter;
                     // calculate the squared distance between the 2 pixels (in range)
                     float rangeExp = ::pow(pixel(xx,yy,mX,mY) - (*this)(x,y), 2).sum();
                     float domainExp = std::pow(xFilter,2) + std::pow(yFilter,2);
@@ -344,12 +353,13 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain, Border
             }
 
             // set pixel in filtered image to weighted sum of values in the filter region
-            imFilter(x,y) = accum/weightSum;
+            filtered(x,y) = accum/weightSum;
         }
+        ++progress;
     });
     spdlog::get("console")->debug("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return imFilter;
+    return filtered;
 }
 
 
@@ -359,7 +369,7 @@ static int nextOddInt(int i)
 }
 
 
-HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX, BorderMode mY) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -394,12 +404,14 @@ HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, BorderMode mX
 
     HDRImage imFilter = *this;
     for (int i = 0; i < iterations; i++)
-        imFilter = imFilter.boxBlurred(hw, mX, mY);
+        imFilter = imFilter.boxBlurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
 
     return imFilter;
 }
 
-HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY,
+                                       AtomicProgress progress,
+                                       BorderMode mX, BorderMode mY) const
 {
     Timer timer;
     // See comments in HDRImage::iteratedBoxBlurred for derivation of width
@@ -410,71 +422,83 @@ HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY, BorderMode mX
     // do horizontal blurs
     if (hw < 3)
         // for small blurs, just use a separable Gaussian
-        im = GaussianBlurredX(sigmaX, mX);
+        im = GaussianBlurredX(sigmaX, AtomicProgress(progress, 0.5f), mX);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = boxBlurredX(hw, mX).boxBlurredX(hw, mX).boxBlurredX(hw, mX).
-            boxBlurredX(hw, mX).boxBlurredX(hw, mX).boxBlurredX(hw, mX);
+        im = boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX);
 
     // now do vertical blurs
     if (hh < 3)
         // for small blurs, just use a separable Gaussian
-        im = im.GaussianBlurredY(sigmaY, mY);
+        im = im.GaussianBlurredY(sigmaY, AtomicProgress(progress, 0.5f), mY);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = im.boxBlurredY(hh, mY).boxBlurredY(hh, mY).boxBlurredY(hh, mY).
-            boxBlurredY(hh, mY).boxBlurredY(hh, mY).boxBlurredY(hh, mY);
+        im = im.boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY);
 
     spdlog::get("console")->debug("fastGaussianBlurred filter took: {} seconds.", (timer.elapsed()/1000.f));
     return im;
 }
 
 
-HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, BorderMode mX) const
+HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, AtomicProgress progress, BorderMode mX) const
 {
-    HDRImage imFilter(width(), height());
+    HDRImage filtered(width(), height());
 
     Timer timer;
+	progress.setNumSteps(filtered.height());
     // for every pixel in the image
-    parallel_for(0, imFilter.height(), [this,&imFilter,leftSize,rightSize,mX](int y)
+    parallel_for(0, filtered.height(), [this,&filtered,&progress,leftSize,rightSize,mX](int y)
     {
         // fill up the accumulator
-        imFilter(0, y) = 0;
+        filtered(0, y) = 0;
         for (int dx = -leftSize; dx <= rightSize; ++dx)
-            imFilter(0, y) += pixel(dx, y, mX, mX);
+            filtered(0, y) += pixel(dx, y, mX, mX);
 
         for (int x = 1; x < width(); ++x)
-            imFilter(x, y) = imFilter(x-1, y) -
+            filtered(x, y) = filtered(x-1, y) -
                              pixel(x-1-leftSize, y, mX, mX) +
                              pixel(x+rightSize, y, mX, mX);
+	    ++progress;
     });
     spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return imFilter * Color4(1.f/(leftSize + rightSize + 1));
+    return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
 
 
-HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, BorderMode mY) const
+HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, AtomicProgress progress, BorderMode mY) const
 {
-    HDRImage imFilter(width(), height());
+    HDRImage filtered(width(), height());
 
     Timer timer;
+	progress.setNumSteps(filtered.width());
     // for every pixel in the image
-    parallel_for(0, imFilter.width(), [this,&imFilter,leftSize,rightSize,mY](int x)
+    parallel_for(0, filtered.width(), [this,&filtered,&progress,leftSize,rightSize,mY](int x)
     {
         // fill up the accumulator
-        imFilter(x, 0) = 0;
+        filtered(x, 0) = 0;
         for (int dy = -leftSize; dy <= rightSize; ++dy)
-            imFilter(x, 0) += pixel(x, dy, mY, mY);
+            filtered(x, 0) += pixel(x, dy, mY, mY);
 
         for (int y = 1; y < height(); ++y)
-            imFilter(x, y) = imFilter(x, y-1) -
+            filtered(x, y) = filtered(x, y-1) -
                              pixel(x, y-1-leftSize, mY, mY) +
                              pixel(x, y+rightSize, mY, mY);
+	    ++progress;
     });
     spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return imFilter * Color4(1.f/(leftSize + rightSize + 1));
+    return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
 
 HDRImage HDRImage::resizedCanvas(int newW, int newH, CanvasAnchor anchor, const Color4 & bgColor) const
@@ -734,8 +758,10 @@ void HDRImage::demosaicRedBlueMalvar(const Vector2i &redOffset)
  */
 HDRImage HDRImage::medianFilterBayerArtifacts() const
 {
+    AtomicProgress progress;
     HDRImage colorDiff = unaryExpr([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
-    colorDiff = colorDiff.medianFiltered(1.f, 0).medianFiltered(1.f, 2);
+    colorDiff = colorDiff.medianFiltered(1.f, 0, AtomicProgress(progress, .5f))
+                         .medianFiltered(1.f, 2, AtomicProgress(progress, .5f));
     return binaryExpr(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);}).eval();
 }
 

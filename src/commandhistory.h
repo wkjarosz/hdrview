@@ -22,6 +22,12 @@ public:
     virtual void redo(HDRImage & img) = 0;
 };
 
+typedef std::pair<HDRImage, ImageCommandUndo*> ImageCommandResult;
+
+typedef std::function<ImageCommandResult(const HDRImage &)> ImageCommand;
+typedef std::function<ImageCommandResult(const HDRImage &, AtomicProgress &)> ImageCommandWithProgress;
+
+
 //! Brute-force undo: Saves the entire image data so that we can copy it back
 class FullImageUndo : public ImageCommandUndo
 {
@@ -29,13 +35,13 @@ public:
     FullImageUndo(const HDRImage & img) : m_undoImage(img) {}
     virtual ~FullImageUndo() {}
 
-    virtual void undo(HDRImage & img) { std::swap(img, m_undoImage);}
+    virtual void undo(HDRImage & img) {img.swap(m_undoImage);}
     virtual void redo(HDRImage & img) {undo(img);}
 
 	const HDRImage & image() const {return m_undoImage;}
 
 private:
-    HDRImage m_undoImage;
+    const HDRImage m_undoImage;
 };
 
 //! Specify the undo and redo commands using lambda expressions
@@ -90,14 +96,31 @@ public:
         m_history.push_back(cmd);
         m_currentState++;
     }
+
+    ImageCommandUndo * grabUndo(HDRImage & img)
+    {
+        // check if there is anything to undo
+        if (!hasUndo() || m_currentState > size())
+            return nullptr;
+
+        return m_history[--m_currentState];
+    }
+    ImageCommandUndo * grabRedo(HDRImage & img)
+    {
+        // check if there is anything to redo
+        if (!hasRedo() || m_currentState < 0)
+            return nullptr;
+
+        return m_history[m_currentState++];
+    }
+
     bool undo(HDRImage & img)
     {
         // check if there is anything to undo
         if (!hasUndo() || m_currentState > size())
             return false;
 
-        m_currentState--;
-        m_history[m_currentState]->undo(img);
+        m_history[--m_currentState]->undo(img);
         return true;
     }
     bool redo(HDRImage & img)
@@ -106,8 +129,7 @@ public:
         if (!hasRedo() || m_currentState < 0)
             return false;
 
-        m_history[m_currentState]->redo(img);
-        m_currentState++;
+        m_history[m_currentState++]->redo(img);
         return true;
     }
 

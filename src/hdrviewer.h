@@ -40,7 +40,6 @@ public:
 private:
 	void toggleHelpWindow();
 	void updateLayout();
-    void closeCurrentImage();
     void updateCaption();
 	bool atSidePanelEdge(const Eigen::Vector2i& p)
 	{

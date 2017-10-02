@@ -11,6 +11,7 @@
 #include <nanogui/opengl.h>
 #include <nanogui/entypo.h>
 #include <nanogui/theme.h>
+#include <iostream>
 
 using namespace nanogui;
 using namespace std;
@@ -119,6 +120,43 @@ void ImageButton::draw(NVGcontext *ctx)
 		nvgRoundedRect(ctx, mPos.x() + extraBorder, mPos.y() + extraBorder,
 		        mSize.x() - 2*extraBorder, mSize.y() - 2*extraBorder, 3);
 		nvgFillColor(ctx, m_isSelected ? mTheme->mButtonGradientBotPushed : mTheme->mBorderMedium);
+		nvgFill(ctx);
+	}
+
+	// percent progress bar
+	if (m_progress >= 0.f && m_progress < 1.f)
+	{
+		int barPos = (int) std::round((mSize.x() - 4) * m_progress);
+
+		auto paint = nvgBoxGradient(
+			ctx, mPos.x() + 2 - 1, mPos.y() + 2 -1,
+			barPos + 1.5f, mSize.y() - 2*extraBorder + 1, 3, 4,
+			Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
+
+		nvgBeginPath(ctx);
+		nvgRoundedRect(ctx, mPos.x() + 2, mPos.y() + 2,
+		               barPos, mSize.y() - 2*2, 3);
+		nvgFillPaint(ctx, paint);
+		nvgFill(ctx);
+	}
+	// busy progress bar
+	else if (m_progress < 0.f)
+	{
+		int barSize = (int) std::round((mSize.x() - 4) * 0.25f);
+
+		int leftEdge  = mPos.x() + 2;
+		float time = glfwGetTime();
+		int left = (int) std::round(lerp((float)leftEdge, float(mSize.x() - 2 - barSize), sin(time * 3.f) * 0.5f + 0.5f));
+
+		auto paint = nvgBoxGradient(
+			ctx, left - 1, mPos.y() + 2 -1,
+			barSize + 1.5f, mSize.y() - 2*extraBorder + 1, 3, 4,
+			Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
+
+		nvgBeginPath(ctx);
+		nvgRoundedRect(ctx, left, mPos.y() + 2,
+		               barSize, mSize.y() - 2*2, 3);
+		nvgFillPaint(ctx, paint);
 		nvgFill(ctx);
 	}
 

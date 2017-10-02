@@ -12,6 +12,7 @@
 #include "hdrimageviewer.h"
 #include "multigraph.h"
 #include "well.h"
+#include <spdlog/spdlog.h>
 
 using namespace std;
 
@@ -30,7 +31,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	b->setCallback([this]{m_screen->loadImage();});
 
 	m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
-	m_saveButton->setEnabled(m_imageMgr->currentImage());
+	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
 	m_saveButton->setFixedHeight(25);
 	m_saveButton->setTooltip("Save the image to disk.");
 	m_saveButton->setCallback([this]{m_screen->saveImage();});
@@ -140,6 +141,26 @@ void ImageListPanel::setChannel(EChannel channel)
 	m_imageViewer->setChannel(channel);
 }
 
+void ImageListPanel::updateImagesInfo()
+{
+	if (m_imageMgr->numImages() != (int)m_imageButtons.size())
+	{
+		spdlog::get("console")->error("Number of buttons and images don't match!");
+		return;
+	}
+
+	for (int i = 0; i < m_imageMgr->numImages(); ++i)
+	{
+		auto img = m_imageMgr->image(i);
+		auto btn = m_imageButtons[i];
+
+		btn->setIsModified(img->isModified());
+		btn->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
+	}
+
+	m_screen->performLayout();
+}
+
 
 void ImageListPanel::repopulateImageList()
 {
@@ -158,8 +179,6 @@ void ImageListPanel::repopulateImageList()
 	m_imageListWidget = new Well(this);
 	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
 
-
-	int index = 0;
 	for (int i = 0; i < m_imageMgr->numImages(); ++i)
 	{
 		auto img = m_imageMgr->image(i);
@@ -171,8 +190,6 @@ void ImageListPanel::repopulateImageList()
 		b->setSelectedCallback([&](int i){m_imageMgr->setCurrentImageIndex(i-1);});
 		b->setReferenceCallback([&](int i){m_imageMgr->setReferenceImageIndex(i-1);});
 		m_imageButtons.push_back(b);
-
-		index++;
 	}
 
 	m_screen->performLayout();
@@ -180,13 +197,15 @@ void ImageListPanel::repopulateImageList()
 
 void ImageListPanel::enableDisableButtons()
 {
-	m_saveButton->setEnabled(m_imageMgr->currentImage());
-	m_closeButton->setEnabled(m_imageMgr->currentImage());
+	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
+	m_closeButton->setEnabled(m_imageMgr->currentImage() != nullptr);
 	m_bringForwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() > 0);
 	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
-	m_linearToggle->setEnabled(m_imageMgr->currentImage());
-	m_sRGBToggle->setEnabled(m_imageMgr->currentImage());
-	bool showRecompute = m_imageMgr->currentImage() && m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure();
+	m_linearToggle->setEnabled(m_imageMgr->currentImage() != nullptr);
+	m_sRGBToggle->setEnabled(m_imageMgr->currentImage() != nullptr);
+	bool showRecompute = m_imageMgr->currentImage() &&
+		(m_imageMgr->currentImage()->histogramDirty() ||
+		 m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure());
 	m_recomputeHistogram->setEnabled(showRecompute);
 	m_recomputeHistogram->setIcon(showRecompute ? ENTYPO_ICON_WARNING : ENTYPO_ICON_CHECK);
 //	m_linearToggle->setFixedWidth(showRecompute ? 49 : 59);
@@ -207,6 +226,46 @@ void ImageListPanel::setReferenceImage(int newIndex)
 		m_imageButtons[i]->setIsReference(i == newIndex ? true : false);
 }
 
+void ImageListPanel::draw(NVGcontext *ctx)
+{
+	// update everything
+	//updateHistogram();
+
+	if (m_imageMgr->currentImage() &&
+		m_imageMgr->currentImage()->histograms() &&
+		m_imageMgr->currentImage()->histograms()->ready())
+	{
+		auto lazyHist = m_imageMgr->currentImage()->histograms();
+		auto hist = m_linearToggle->pushed() ? lazyHist->get().first : lazyHist->get().second;
+		int numBins = hist.rows();
+		float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
+		m_graph->setValues(hist.col(0)/maxValue, 0);
+		m_graph->setValues(hist.col(1)/maxValue, 1);
+		m_graph->setValues(hist.col(2)/maxValue, 2);
+	}
+	enableDisableButtons();
+
+	if (m_imageMgr->numImages() != (int)m_imageButtons.size())
+		spdlog::get("console")->error("Number of buttons and images don't match!");
+	else
+	{
+		for (int i = 0; i < m_imageMgr->numImages(); ++i)
+		{
+			auto img = m_imageMgr->image(i);
+			auto btn = m_imageButtons[i];
+			if (img->canModify())
+			{
+				btn->setProgress(1.f);
+				continue;
+			}
+
+			btn->setProgress(img->modifyingTask()->progress());
+		}
+	}
+
+	Widget::draw(ctx);
+}
+
 void ImageListPanel::updateHistogram()
 {
 	if (!m_imageMgr->currentImage())
@@ -218,11 +277,6 @@ void ImageListPanel::updateHistogram()
 		return;
 	}
 
-	auto hist = m_imageMgr->currentImage()->histogram(m_linearToggle->pushed(), m_imageViewer->exposure());
-	int numBins = hist.rows();
-	float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
-	m_graph->setValues(hist.col(0)/maxValue, 0);
-	m_graph->setValues(hist.col(1)/maxValue, 1);
-	m_graph->setValues(hist.col(2)/maxValue, 2);
+	m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());
 	enableDisableButtons();
 }

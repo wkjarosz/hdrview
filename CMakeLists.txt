@@ -134,6 +134,7 @@ elseif(WIN32)
 endif()
 
 add_executable(HDRView
+               src/async.h
                src/color.cpp
                src/color.h
                src/colorspace.cpp
@@ -174,6 +175,8 @@ add_executable(HDRView
                src/pfm.cpp
                src/ppm.h
                src/ppm.cpp
+               src/progress.cpp
+               src/progress.h
                src/range.h
                src/timer.h
                src/well.cpp

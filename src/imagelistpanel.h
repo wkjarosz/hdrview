@@ -16,6 +16,9 @@ class ImageListPanel : public Widget
 public:
 	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr, HDRImageViewer * imgViewer);
 
+	void draw(NVGcontext *ctx) override;
+
+	void updateImagesInfo();
 	void repopulateImageList();
 	void enableDisableButtons();
 	void setCurrentImage(int newIndex);

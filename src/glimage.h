@@ -16,6 +16,9 @@
 #include "hdrimage.h"          // for HDRImage
 #include "fwd.h"               // for HDRImage
 #include "commandhistory.h"
+#include "async.h"
+#include <utility>
+#include <memory>
 
 /*!
     A class which encapsulates a single HDRImage, a corresponding OpenGL texture, and histogram.
@@ -24,30 +27,31 @@
 class GLImage
 {
 public:
+	typedef std::pair<Eigen::MatrixX3f,Eigen::MatrixX3f> MatrixPair;
+	typedef AsyncTask<MatrixPair> LazyHistograms;
+	typedef std::shared_ptr<const AsyncTask<ImageCommandResult>> ConstModifyingTask;
+	typedef std::shared_ptr<AsyncTask<ImageCommandResult>> ModifyingTask;
+
+
     GLImage();
     ~GLImage();
-    void clear();
 
-    void init() const;
-
-    void modify(const std::function<ImageCommandUndo*(HDRImage & img)> & command)
-    {
-        m_history.addCommand(command(m_image));
-        m_histogramDirty = true;
-        init();
-    }
-    bool isModified() const         {return m_history.isModified();}
+	bool canModify() const;
+	ConstModifyingTask modifyingTask() const    {return m_asyncCommand;}
+    void asyncModify(const ImageCommand & command);
+	void asyncModify(const ImageCommandWithProgress & command);
+    bool isModified() const                     {checkAsyncResult(); return m_history.isModified();}
     bool undo();
     bool redo();
-    bool hasUndo() const            {return m_history.hasUndo();}
-    bool hasRedo() const            {return m_history.hasRedo();}
+    bool hasUndo() const                        {checkAsyncResult(); return m_history.hasUndo();}
+    bool hasRedo() const                        {checkAsyncResult(); return m_history.hasRedo();}
 
 	GLuint glTextureId() const;
-    std::string filename() const    {return m_filename;}
-    const HDRImage & image() const  {return m_image;}
-    int width() const               {return m_image.width();}
-    int height() const              {return m_image.height();}
-    Eigen::Vector2i size() const    {return Eigen::Vector2i(width(), height());}
+    std::string filename() const                {return m_filename;}
+    const HDRImage & image() const              {return m_image;}
+    int width() const                           {checkAsyncResult(); return m_image.width();}
+    int height() const                          {checkAsyncResult(); return m_image.height();}
+    Eigen::Vector2i size() const                {return Eigen::Vector2i(width(), height());}
     bool contains(const Eigen::Vector2i& p) const {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
 
     bool load(const std::string & filename);
@@ -56,21 +60,26 @@ public:
               bool sRGB, bool dither) const;
 
 	float histogramExposure() const {return m_cachedHistogramExposure;}
-
-    const Eigen::MatrixX3f & linearHistogram(float exposure) const;
-    const Eigen::MatrixX3f & sRGBHistogram(float exposure) const;
-    const Eigen::MatrixX3f & histogram(bool linear, float exposure) const
-    {
-        return linear ? linearHistogram(exposure) : sRGBHistogram(exposure);
-    }
+	bool histogramDirty() const {return m_histogramDirty;}
+	std::shared_ptr<LazyHistograms> histograms() const {return m_histograms;}
+	void recomputeHistograms(float exposure) const;
 
 
 private:
+	void init() const;
+	bool checkAsyncResult() const;
+	bool waitForAsyncResult() const;
+
 	mutable GLuint m_texture = 0;
-    HDRImage m_image;
+    mutable HDRImage m_image;
     std::string m_filename;
     mutable float m_cachedHistogramExposure;
-    mutable bool m_histogramDirty = true;
-    mutable Eigen::MatrixX3f m_linearHistogram, m_sRGBHistogram;
+    mutable std::atomic<bool> m_histogramDirty;
+	mutable std::shared_ptr<LazyHistograms> m_histograms;
     mutable CommandHistory m_history;
+
+	mutable ModifyingTask m_asyncCommand = nullptr;
 };
+
+typedef std::shared_ptr<const GLImage> ConstImagePtr;
+typedef std::shared_ptr<GLImage> ImagePtr;
