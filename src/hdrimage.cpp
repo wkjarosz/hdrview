@@ -201,17 +201,17 @@ HDRImage HDRImage::resampled(int w, int h,
 HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
                              BorderMode mX, BorderMode mY) const
 {
-    HDRImage imFilter(width(), height());
+    HDRImage result(width(), height());
 
     int centerX = int((kernel.rows()-1.0)/2.0);
     int centerY = int((kernel.cols()-1.0)/2.0);
 
     Timer timer;
-	progress.setNumSteps(imFilter.width());
+	progress.setNumSteps(result.width());
     // for every pixel in the image
-    parallel_for(0, imFilter.width(), [this,&progress,kernel,mX,mY,&imFilter,centerX,centerY](int x)
+    parallel_for(0, result.width(), [this,&progress,kernel,mX,mY,&result,centerX,centerY](int x)
     {
-        for (int y = 0; y < imFilter.height(); y++)
+        for (int y = 0; y < result.height(); y++)
         {
             Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
             float weightSum = 0.0f;
@@ -229,13 +229,13 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
             }
 
             // assign the pixel the value from convolution
-            imFilter(x,y) = accum / weightSum;
+            result(x,y) = accum / weightSum;
         }
         ++progress;
     });
     spdlog::get("console")->debug("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return imFilter;
+    return result;
 }
 
 HDRImage HDRImage::GaussianBlurredX(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX) const
@@ -402,11 +402,11 @@ HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, AtomicProgres
     // up to next odd width
     int hw = (w-1)/2;
 
-    HDRImage imFilter = *this;
+    HDRImage result = *this;
     for (int i = 0; i < iterations; i++)
-        imFilter = imFilter.boxBlurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
+        result = result.boxBlurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
 
-    return imFilter;
+    return result;
 }
 
 HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY,

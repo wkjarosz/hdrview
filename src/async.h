@@ -10,10 +10,17 @@
 #include <chrono>
 #include "progress.h"
 
+
 template <typename T>
 class AsyncTask
 {
 public:
+#if FORCE_SERIAL
+	static const auto policy = std::launch::deferred;
+#else
+	static const auto policy = std::launch::async;
+#endif
+
 	typedef std::function<T(AtomicProgress & progress)> TaskFunc;
 	typedef std::function<T(void)> NoProgressTaskFunc;
 
@@ -44,7 +51,7 @@ public:
 	{
 		// start only if not done and not already started
 		if (!m_future.valid() && !m_ready)
-			m_future = std::async(std::launch::async, m_compute, std::ref(m_progress));
+			m_future = std::async(policy, m_compute, std::ref(m_progress));
 	}
 
 	/*!
@@ -86,7 +93,11 @@ public:
 		if (!m_future.valid())
 			return false;
 
-		return m_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+		auto status = m_future.wait_for(std::chrono::seconds(0));
+
+		// predent that the computation is ready for deferred execution since we will compute it on-demand in
+		// get() anyway
+		return (status == std::future_status::ready || status == std::future_status::deferred);
 	}
 
 private:
