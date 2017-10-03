@@ -210,7 +210,9 @@ bool HDRImage::load(const string & filename)
     {
 	    try
 	    {
-		    Imf::setGlobalThreadCount(thread::hardware_concurrency());
+		    // FIXME: the threading below seems to cause issues, but shouldn't.
+		    // turning off for now
+		    Imf::setGlobalThreadCount(1);//thread::hardware_concurrency());
 		    Timer timer;
 
 		    Imf::RgbaInputFile file(filename.c_str());
@@ -229,14 +231,16 @@ bool HDRImage::load(const string & filename)
 		    resize(w, h);
 
 		    // copy pixels over to the Image
-		    parallel_for(0, h, [this, w, &pixels](int y)
+//		    parallel_for(0, h, [this, w, &pixels](int y)
+		    for (int y = 0; y < h; ++y)
 		    {
 			    for (int x = 0; x < w; ++x)
 			    {
 				    const Imf::Rgba &p = pixels[y][x];
 				    (*this)(x, y) = Color4(p.r, p.g, p.b, p.a);
 			    }
-		    });
+		    }
+//		    );
 
 		    console->debug("Copying EXR image data took: {} seconds.", (timer.lap() / 1000.f));
 		    return true;

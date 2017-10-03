@@ -397,7 +397,7 @@ void HDRImageViewer::drawPixelInfo(NVGcontext *ctx) const
 	{
 		for (int i = minI; i <= maxI; ++i)
 		{
-			Color4 pixel;// = m_currentImage->image()(i, j);
+			Color4 pixel = m_currentImage->image()(i, j);
 			float luminance = pixel.luminance() * pow(2.0f, m_exposure);
 			string text = fmt::format("{:1.3f}\n{:1.3f}\n{:1.3f}", pixel[0], pixel[1], pixel[2]);
 
