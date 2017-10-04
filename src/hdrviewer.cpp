@@ -190,7 +190,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     exposureTextBox->numberFormat("%1.2f");
     exposureTextBox->setEditable(true);
 	exposureTextBox->setSpinnable(true);
-    exposureTextBox->setFixedWidth(45);
+    exposureTextBox->setFixedWidth(50);
 	exposureTextBox->setMinValue(-9.0f);
 	exposureTextBox->setMaxValue( 9.0f);
     exposureTextBox->setAlignment(TextBox::Alignment::Right);

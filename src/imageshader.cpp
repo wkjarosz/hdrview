@@ -91,7 +91,7 @@ constexpr char const *const fragmentShader =
 
 	vec3 tonemap(vec3 color)
 	{
-		return sRGB ? linearToSRGB(gain * color) : pow(gain * color, vec3(1.0/gamma));
+		return sRGB ? linearToSRGB(color) : pow(color, vec3(1.0/gamma));
 	}
 
 	vec3 inverseTonemap(vec3 color)
@@ -263,7 +263,7 @@ constexpr char const *const fragmentShader =
 			imageVal = blend(imageVal, referenceVal);
 		}
 
-		out_color.rgb = mix(checker, dither(tonemap(chooseChannel(imageVal.rgb))), imageVal.a);
+		out_color.rgb = mix(checker, dither(tonemap(chooseChannel(gain * imageVal.rgb))), imageVal.a);
     }
 )";
 
