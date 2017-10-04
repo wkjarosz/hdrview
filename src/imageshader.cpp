@@ -234,7 +234,7 @@ constexpr char const *const fragmentShader =
 
 	vec3 dither(vec3 color)
 	{
-		if (hasDither)
+		if (!hasDither)
 			return color;
 
 		return color + vec3(randZeroMeanTriangle(gl_FragCoord.xy + randomness)/255.0);
