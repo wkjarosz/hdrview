@@ -154,8 +154,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             auto img = m_imageMgr->currentImage();
 		                             if (!img)
 			                             return;
-		                             float mC = img->image().maxCoeff().max();
-		                             m_imageView->setExposure(log2(1.0f/mC));
+		                             Color4 mC = img->image().max();
+		                             float mCf = max(mC[0], mC[1], mC[2]);
+		                             console->debug("max value: {}", mCf);
+		                             m_imageView->setExposure(log2(1.0f/mCf));
 	                             });
 	normalizeButton->setTooltip("Normalize exposure.");
 	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_BACK_IN_TIME);
@@ -187,7 +189,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     exposureTextBox->numberFormat("%1.2f");
     exposureTextBox->setEditable(true);
-    exposureTextBox->setFixedWidth(35);
+	exposureTextBox->setSpinnable(true);
+    exposureTextBox->setFixedWidth(45);
+	exposureTextBox->setMinValue(-9.0f);
+	exposureTextBox->setMaxValue( 9.0f);
     exposureTextBox->setAlignment(TextBox::Alignment::Right);
     exposureTextBox->setCallback([this](float e)
                                  {
@@ -202,8 +207,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     exposureTextBox->setValue(exposure);
 
     gammaTextBox->setEditable(true);
+	gammaTextBox->setSpinnable(true);
     gammaTextBox->numberFormat("%1.3f");
-    gammaTextBox->setFixedWidth(40);
+    gammaTextBox->setFixedWidth(55);
+	gammaTextBox->setMinValue(0.02f);
+	gammaTextBox->setMaxValue(9.0f);
+
     gammaTextBox->setAlignment(TextBox::Alignment::Right);
     gammaTextBox->setCallback([this,gammaSlider](float value)
                                 {
@@ -237,6 +246,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                              {
 		                              sRGBCheckbox->setChecked(b);
 		                              gammaTextBox->setEnabled(!b);
+		                              gammaTextBox->setSpinnable(!b);
 		                              gammaSlider->setEnabled(!b);
 	                              });
     m_imageView->setExposure(exposure);
@@ -315,6 +325,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     {
         m_imageView->setSRGB(value);
         gammaSlider->setEnabled(!value);
+	    gammaTextBox->setSpinnable(!value);
         gammaTextBox->setEnabled(!value);
         gammaLabel->setEnabled(!value);
         gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);

@@ -91,12 +91,12 @@ constexpr char const *const fragmentShader =
 
 	vec3 tonemap(vec3 color)
 	{
-		return sRGB ? gain * linearToSRGB(color) : gain * pow(color, vec3(1.0/gamma));
+		return sRGB ? linearToSRGB(gain * color) : pow(gain * color, vec3(1.0/gamma));
 	}
 
 	vec3 inverseTonemap(vec3 color)
 	{
-		return sRGB ? sRGBToLinear(color/gain) : pow(color/gain, vec3(gamma));
+		return sRGB ? sRGBToLinear(color)/gain : pow(color, vec3(gamma))/gain;
 	}
 
 	// returns the luminance of a linear rgb color

@@ -115,7 +115,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 					imageMgr->modifyImage(
 						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure)) * (*img)).pow(Color4(1.0f/gamma))),
+							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure), 1.f) * (*img)).pow(Color4(1.0f/gamma))),
 							        make_shared<FullImageUndo>(*img)};
 						});
 				});
@@ -146,9 +146,11 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 			auto w = gui->addVariable("Width:", width);
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
+			w->setValueIncrement(5.f);
 			w = gui->addVariable("Height:", height);
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
+			w->setValueIncrement(5.f);
 
 			gui->addVariable("Border mode X:", borderModeX, true)
 			   ->setItems(HDRImage::borderModeNames());

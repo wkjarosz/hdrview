@@ -236,12 +236,17 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		m_imageMgr->currentImage()->histograms()->ready())
 	{
 		auto lazyHist = m_imageMgr->currentImage()->histograms();
-		auto hist = m_linearToggle->pushed() ? lazyHist->get().first : lazyHist->get().second;
+		auto hist = m_linearToggle->pushed() ? lazyHist->get()->linearHistogram : lazyHist->get()->sRGBHistogram;
 		int numBins = hist.rows();
-		float maxValue = hist.block(1,0,numBins-2,3).maxCoeff();
+		float maxValue = hist.block(1,0,numBins-2,3).maxCoeff() * 1.3f;
 		m_graph->setValues(hist.col(0)/maxValue, 0);
 		m_graph->setValues(hist.col(1)/maxValue, 1);
 		m_graph->setValues(hist.col(2)/maxValue, 2);
+		m_graph->setMinimum(lazyHist->get()->minimum);
+		m_graph->setAverage(lazyHist->get()->average);
+		m_graph->setMaximum(lazyHist->get()->maximum);
+		m_graph->setLinear(m_linearToggle->pushed());
+		m_graph->setDisplayMax(pow(2.f, -lazyHist->get()->exposure));
 	}
 	enableDisableButtons();
 

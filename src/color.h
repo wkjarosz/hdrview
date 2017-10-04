@@ -212,6 +212,7 @@ public:
     //-----------------------------------------------------------------------
     Color4() {}
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
+    Color4(float g, float a) : Color3(g), a(a) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}
     explicit Color4(float x) : Color3(x), a(x) {}
     Color4(const float* c) : Color3(c), a(c[3]) {}

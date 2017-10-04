@@ -21,30 +21,52 @@ using namespace std;
 
 namespace
 {
-GLImage::MatrixPair makeHistograms(const HDRImage & img, float gain)
+shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
 {
-	MatrixX3f linHist, rgbHist;
 	static const int numBins = 256;
-    linHist = rgbHist = MatrixX3f::Zero(numBins, 3);
-    float d = 1.f / (img.width() * img.height());
-    parallel_for(0, img.height(), [&linHist, &rgbHist, &img, gain, d](int y)
+
+	auto ret = make_shared<ImageHistogram>();
+    ret->linearHistogram = ret->sRGBHistogram = MatrixX3f::Zero(numBins, 3);
+	ret->exposure = exposure;
+	ret->average = 0;
+	ret->maximum = -numeric_limits<float>::infinity();
+	ret->minimum = numeric_limits<float>::infinity();
+
+	Color4 gain(pow(2.f, exposure), 1.f);
+	float d = 1.f / (img.width() * img.height());
+
+//    parallel_for(0, img.height(), [&ret, &img, gain, d](int y)
+    for (int y = 0; y < img.height(); ++y)
     {
         for (int x = 0; x < img.width(); ++x)
         {
-            Color4 clin = img(x,y) * gain;
-            Color4 crgb = LinearToSRGB(img(x, y)) * gain;
+            Color4 clin = img(x,y);
+            Color4 crgb = LinearToSRGB(img(x, y) * gain);
 
-            linHist(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
-            linHist(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;
-            linHist(clamp(int(floor(clin[2] * numBins)), 0, numBins - 1), 2) += d;
+	        for (int c = 0; c < 3; ++c)
+	        {
+		        float val = clin[c];
+		        ret->average += val;
+		        ret->maximum = max(ret->maximum, val);
+		        ret->minimum = min(ret->minimum, val);
+	        }
 
-            rgbHist(clamp(int(floor(crgb[0] * numBins)), 0, numBins - 1), 0) += d;
-            rgbHist(clamp(int(floor(crgb[1] * numBins)), 0, numBins - 1), 1) += d;
-            rgbHist(clamp(int(floor(crgb[2] * numBins)), 0, numBins - 1), 2) += d;
+	        clin *= gain;
+
+	        ret->linearHistogram(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
+	        ret->linearHistogram(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;
+	        ret->linearHistogram(clamp(int(floor(clin[2] * numBins)), 0, numBins - 1), 2) += d;
+
+	        ret->sRGBHistogram(clamp(int(floor(crgb[0] * numBins)), 0, numBins - 1), 0) += d;
+	        ret->sRGBHistogram(clamp(int(floor(crgb[1] * numBins)), 0, numBins - 1), 1) += d;
+	        ret->sRGBHistogram(clamp(int(floor(crgb[2] * numBins)), 0, numBins - 1), 2) += d;
         }
-    });
+    }
+//	);
 
-	return {linHist, rgbHist};
+	ret->average /= img.width() * img.height();
+
+	return ret;
 }
 
 } // namespace
@@ -213,7 +235,7 @@ void GLImage::recomputeHistograms(float exposure) const
         m_histograms = make_shared<LazyHistograms>(
 	        [this,exposure](void)
 	        {
-		        return makeHistograms(*m_image, pow(2.0f, exposure));
+		        return makeHistograms(*m_image, exposure);
 	        });
         m_histograms->compute();
         m_histogramDirty = false;

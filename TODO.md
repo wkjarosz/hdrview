@@ -1,8 +1,9 @@
 ## TODO
 
 - [ ] Improve responsiveness during long operations
-   - [ ] Add progress bars (maybe in the status bar)
-   - [ ] Run them in a separate thread and avoid freezing the main application
+   - [x] Add progress bars
+   - [x] Run them in a separate thread and avoid freezing the main application
+   - [ ] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
 - [ ] Add log-linear and log-log histogram options?
 - [ ] Improved DNG/demosaicing pipeline
    - [ ] Improve DNG color correction
@@ -38,7 +39,6 @@
    - [ ] Save all
    - [ ] Close all
    - [ ] Show command history and allow undoing/redoing multiple steps at once
-   - [ ] 
 
 ## Known bugs
 - ``stb_image`` seemingly does not properly handle sRGB's non-gamma curve. loading an sRGB image, saving as sRGB, and loading back in as sRGB should result in same image but doesn't (at least for PNGs). ``stb_image`` seems to assume just a simple gamma curve for sRGB (defaulting to gamma=2.2), and excludes the linear regions near black

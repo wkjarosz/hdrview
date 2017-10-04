@@ -48,6 +48,13 @@ public:
 	VectorXf &values(int plot = 0) { return mValues[plot]; }
 	void setValues(const VectorXf &values, int plot = 0) { mValues[plot] = values; }
 
+
+	void setLinear(bool b)          { m_linear = b; }
+	void setMinimum(float minimum)  { m_minimum = minimum; }
+	void setAverage(float average)  { m_average = average; }
+	void setMaximum(float maximum)  { m_maximum = maximum; }
+	void setDisplayMax(float dmax)  { m_displayMax = dmax; }
+
 	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
 
@@ -59,6 +66,8 @@ protected:
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
+	float m_minimum = 0, m_average = 0, m_maximum = 0, m_displayMax = 0;
+	bool m_linear = true;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -109,6 +109,7 @@ bool isSTBImage(const string & filename)
 
 	// try stb library first
 	if (stbi__jpeg_test(&s) ||
+		stbi__png_test(&s) ||
 		stbi__bmp_test(&s) ||
 		stbi__gif_test(&s) ||
 		stbi__psd_test(&s) ||
@@ -165,6 +166,8 @@ bool HDRImage::load(const string & filename)
 			errors += string("\t") + stbi_failure_reason() + "\n";
 		}
 	}
+	else
+		console->debug("Not an STB image");
 
 
     // then try pfm

@@ -20,6 +20,19 @@
 #include <utility>
 #include <memory>
 
+
+struct ImageHistogram
+{
+	float minimum;
+	float average;
+	float maximum;
+
+	Eigen::MatrixX3f linearHistogram;
+	Eigen::MatrixX3f sRGBHistogram;
+
+	float exposure;
+};
+
 /*!
     A class which encapsulates a single HDRImage, a corresponding OpenGL texture, and histogram.
     Access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
@@ -27,8 +40,7 @@
 class GLImage
 {
 public:
-	typedef std::pair<Eigen::MatrixX3f,Eigen::MatrixX3f> MatrixPair;
-	typedef AsyncTask<MatrixPair> LazyHistograms;
+	typedef AsyncTask<std::shared_ptr<ImageHistogram>> LazyHistograms;
 	typedef std::shared_ptr<const AsyncTask<ImageCommandResult>> ConstModifyingTask;
 	typedef std::shared_ptr<AsyncTask<ImageCommandResult>> ModifyingTask;
 
