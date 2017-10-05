@@ -127,14 +127,49 @@ void GLImage::init() const
 {
 	Timer timer;
     // Allocate texture memory for the image
-    glGenTextures(1, &m_texture);
+	if (!m_texture)
+        glGenTextures(1, &m_texture);
 	spdlog::get("console")->trace("generating texture took: {} ms", timer.lap());
     glBindTexture(GL_TEXTURE_2D, m_texture);
 	spdlog::get("console")->trace("binding texture took: {} ms", timer.lap());
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width(), height(),
-                 0, GL_RGBA, GL_FLOAT, (const GLvoid *) m_image->data());
-	spdlog::get("console")->trace("uploading texture data took: {} ms", timer.lap());
+//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width(), height(),
+//                 0, GL_RGBA, GL_FLOAT, (const GLvoid *) m_image->data());
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width(), height(), 0, GL_RGBA, GL_FLOAT, nullptr);
+
+	spdlog::get("console")->trace("allocating GPU texture data took: {} ms", timer.lap());
+
+	glPixelStorei(GL_UNPACK_ROW_LENGTH, width());
+
+	Vector2i tileSize(512, 512);
+	Vector2i numTiles(std::ceil(float(width()) / tileSize.x()),
+	                  std::ceil(float(height()) / tileSize.y()));
+	Vector2i tile;
+	Timer tileTimer;
+	for (tile.y() = 0; tile.y() < numTiles.y(); ++tile.y())
+	{
+		for (tile.x() = 0; tile.x() < numTiles.x(); ++tile.x())
+		{
+			Vector2i tlCorner = tile.cwiseProduct(tileSize);
+
+			// compute tile size, accounting for partial tiles at boundary
+			Vector2i remaining = size() - tlCorner;
+			Vector2i tSize = tileSize.cwiseMin(remaining);
+
+			glPixelStorei(GL_UNPACK_SKIP_PIXELS, tlCorner.x());
+			glPixelStorei(GL_UNPACK_SKIP_ROWS, tlCorner.y());
+
+			glTexSubImage2D(GL_TEXTURE_2D,
+			                0,				             // level
+			                tlCorner.x(), tlCorner.y(),	 // xoffset, yoffset
+			                tSize.x(), tSize.y(),        // tile width and height
+			                GL_RGBA,			         // format
+			                GL_FLOAT,		             // type
+							(const GLvoid *) m_image->data());
+		}
+	}
+	spdlog::get("console")->trace("uploading texture data to GPU took: {} ms", timer.lap());
 
 	glGenerateMipmap(GL_TEXTURE_2D);  //Generate num_mipmaps number of mipmaps here.
 	spdlog::get("console")->trace("generating mipmaps took: {} ms", timer.lap());
