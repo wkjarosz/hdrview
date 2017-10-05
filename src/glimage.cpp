@@ -299,7 +299,7 @@ void GLImage::recomputeHistograms(float exposure) const
 {
 	checkAsyncResult();
 
-    if ((!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure) && canModify())
+    if (!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure)
     {
         m_histograms = make_shared<LazyHistograms>(
 	        [this,exposure](void)

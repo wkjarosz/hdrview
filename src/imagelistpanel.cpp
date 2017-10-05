@@ -258,13 +258,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		{
 			auto img = m_imageMgr->image(i);
 			auto btn = m_imageButtons[i];
-			if (img->canModify())
-			{
-				btn->setProgress(1.f);
-				continue;
-			}
-
-			btn->setProgress(img->modifyingTask()->progress());
+			btn->setProgress(img->progress());
 		}
 	}
 

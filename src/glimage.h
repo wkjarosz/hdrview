@@ -77,7 +77,7 @@ public:
     ~GLImage();
 
 	bool canModify() const;
-	ConstModifyingTask modifyingTask() const    {return m_asyncCommand;}
+	float progress() const {return m_asyncCommand ? m_asyncCommand->progress() : 1.0f;}
     void asyncModify(const ImageCommand & command);
 	void asyncModify(const ImageCommandWithProgress & command);
     bool isModified() const                     {checkAsyncResult(); return m_history.isModified();}
