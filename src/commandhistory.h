@@ -25,8 +25,8 @@ public:
 typedef std::shared_ptr<ImageCommandUndo> UndoPtr;
 typedef std::pair<std::shared_ptr<HDRImage>, UndoPtr> ImageCommandResult;
 
-typedef std::function<ImageCommandResult(const std::shared_ptr<HDRImage> &)> ImageCommand;
-typedef std::function<ImageCommandResult(const std::shared_ptr<HDRImage> &, AtomicProgress &)> ImageCommandWithProgress;
+typedef std::function<ImageCommandResult(const std::shared_ptr<const HDRImage> &)> ImageCommand;
+typedef std::function<ImageCommandResult(const std::shared_ptr<const HDRImage> &, AtomicProgress &)> ImageCommandWithProgress;
 
 
 //! Brute-force undo: Saves the entire image data so that we can copy it back

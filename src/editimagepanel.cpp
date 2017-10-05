@@ -71,10 +71,10 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImage
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->unaryExpr([](const Color4 & c){return c.convert(dst, src);}).eval()),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -113,10 +113,10 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure), 1.f) * (*img)).pow(Color4(1.0f/gamma))),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -164,11 +164,11 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(exact ? img->GaussianBlurred(width, height, progress, borderModeX, borderModeY) :
 							        img->fastGaussianBlurred(width, height, progress, borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -210,10 +210,10 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->boxBlurred(width, height, progress, borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -255,11 +255,11 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->bilateralFiltered(valueSigma, rangeSigma,
 							                              progress, borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -301,10 +301,10 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->unsharpMasked(sigma, strength, progress, borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -344,10 +344,10 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->medianFiltered(radius, progress, borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -420,10 +420,10 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->resized(width, height)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -518,11 +518,11 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 					}
 
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->resampled(width, height, warp, samples, sampler,
 							                                            borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -566,7 +566,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							// by default use a no-op passthrough warp function
 							function<Vector2f(const Vector2f &)> shift =
@@ -576,7 +576,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(), shift, 1, sampler,
 							                                            borderModeX, borderModeY)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				});
 
@@ -767,7 +767,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 				{
 					popup->dispose();
 					imageMgr->modifyImage(
-						[&](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							int newW = relative ? width + img->width() : width;
 							int newH = relative ? height + img->height() : height;
@@ -776,7 +776,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 							Color4 c(bgColor.r() * gain, bgColor.g() * gain, bgColor.b() * gain, alpha);
 
 							return {make_shared<HDRImage>(img->resizedCanvas(newW, newH, anchor, c)),
-							        make_shared<FullImageUndo>(*img)};
+							        nullptr};
 						});
 				},
 				[popup](){ popup->dispose(); });
@@ -822,7 +822,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		[&]()
 		{
 			m_imageMgr->modifyImage(
-				[](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->rotated90CW()),
 					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->rotated90CCW(); },
@@ -842,7 +842,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		[&]()
 		{
 			m_imageMgr->modifyImage(
-				[](const shared_ptr<HDRImage> & img) -> ImageCommandResult
+				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->rotated90CCW()),
 					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->rotated90CW(); },
@@ -878,14 +878,22 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 }
 
 
-void EditImagePanel::enableDisableButtons()
+void EditImagePanel::draw(NVGcontext *ctx)
 {
 	auto img = m_imageMgr->currentImage();
-//	if (m_undoButton)
-	m_undoButton->setEnabled(img && img->hasUndo() && img->canModify());
-//	if (m_redoButton)
-	m_redoButton->setEnabled(img && img->hasRedo() && img->canModify());
 
-	for (auto btn : m_filterButtons)
-		btn->setEnabled(img && img->canModify());
+	bool canModify = img && img->canModify();
+
+	if (enabled() != canModify)
+	{
+		setEnabled(canModify);
+		for (auto btn : m_filterButtons)
+			btn->setEnabled(canModify);
+	}
+
+	m_undoButton->setEnabled(canModify && img->hasUndo());
+	m_redoButton->setEnabled(canModify && img->hasRedo());
+
+
+	Widget::draw(ctx);
 }

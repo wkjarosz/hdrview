@@ -14,10 +14,10 @@ using namespace std;
 
 HDRImageManager::HDRImageManager()
 	: m_imageModifyDoneRequested(false),
-	  m_imageModifyDoneCallback(std::function<void(int)>()),
-	  m_numImagesCallback(std::function<void(void)>()),
-	  m_currentImageCallback(std::function<void(void)>()),
-	  m_referenceImageCallback(std::function<void(void)>())
+	  m_imageModifyDoneCallback(function<void(int)>()),
+	  m_numImagesCallback(function<void(void)>()),
+	  m_currentImageCallback(function<void(void)>()),
+	  m_referenceImageCallback(function<void(void)>())
 {
 
 }
@@ -81,12 +81,12 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 				{
 					tinydir_file file;
 					if (tinydir_readfile(&dir, &file) == -1)
-						throw std::runtime_error("Error getting file");
+						throw runtime_error("Error getting file");
 
 					if (!file.is_reg)
 					{
 						if (tinydir_next(&dir) == -1)
-							throw std::runtime_error("Error getting next file");
+							throw runtime_error("Error getting next file");
 						continue;
 					}
 
@@ -96,14 +96,14 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 					if (!extensions.count(ext))
 					{
 						if (tinydir_next(&dir) == -1)
-							throw std::runtime_error("Error getting next file");
+							throw runtime_error("Error getting next file");
 						continue;
 					}
 
 					allFilenames.push_back(file.path);
 
 					if (tinydir_next(&dir) == -1)
-						throw std::runtime_error("Error getting next file");
+						throw runtime_error("Error getting next file");
 				}
 
 				tinydir_close(&dir);
@@ -190,9 +190,14 @@ void HDRImageManager::modifyImage(const ImageCommand & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[command, this](std::shared_ptr<HDRImage> img)
+			[command, this](const shared_ptr<const HDRImage> & img)
 			{
 				auto ret = command(img);
+
+				// if no undo was provided, just create a FullImageUndo
+				if (!ret.second)
+					ret.second = make_shared<FullImageUndo>(*img);
+
 				m_imageModifyDoneRequested = true;
 				return ret;
 			});
@@ -205,9 +210,14 @@ void HDRImageManager::modifyImage(const ImageCommandWithProgress & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[command, this](std::shared_ptr<HDRImage> img, AtomicProgress &progress)
+			[command, this](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
 			{
 				auto ret = command(img, progress);
+
+				// if no undo was provided, just create a FullImageUndo
+				if (!ret.second)
+					ret.second = make_shared<FullImageUndo>(*img);
+
 				m_imageModifyDoneRequested = true;
 				return ret;
 			});
@@ -233,7 +243,7 @@ void HDRImageManager::bringImageForward()
 		// do nothing
 		return;
 
-	std::swap(m_images[m_current], m_images[m_current-1]);
+	swap(m_images[m_current], m_images[m_current-1]);
 	m_current--;
 
 	m_imageModifyDoneCallback(m_current);
@@ -246,7 +256,7 @@ void HDRImageManager::sendImageBackward()
 		// do nothing
 		return;
 
-	std::swap(m_images[m_current], m_images[m_current+1]);
+	swap(m_images[m_current], m_images[m_current+1]);
 	m_current++;
 
 	m_imageModifyDoneCallback(m_current);

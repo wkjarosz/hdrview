@@ -101,7 +101,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 
 		// tick
 		nvgBeginPath(ctx);
-		nvgMoveTo(ctx, mPos.x() + hpad, mPos.y() + 4*tpad);
+		nvgMoveTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad - 3);
 		nvgLineTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad + 3);
 		nvgStroke(ctx);
 
@@ -134,7 +134,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 
 		// tick
 		nvgBeginPath(ctx);
-		nvgMoveTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + 4*tpad);
+		nvgMoveTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad - 3);
 		nvgLineTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad + 3);
 		nvgStroke(ctx);
 

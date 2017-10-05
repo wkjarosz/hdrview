@@ -33,6 +33,34 @@ struct ImageHistogram
 	float exposure;
 };
 
+
+/*!
+ * A helper class that uploads a texture to the GPU incrementally in smaller chunks.
+ * To avoid stalling the main rendering thread, chunks are uploaded until a
+ * timeout has been reached.
+ */
+class LazyGLTextureLoader
+{
+public:
+	~LazyGLTextureLoader();
+
+	bool dirty() const {return m_dirty;}
+	void setDirty() {m_dirty = true; m_nextScanline = 0; m_uploadTime = 0;}
+
+	bool uploadToGPU(const std::shared_ptr<const HDRImage> & img,
+	                 int milliseconds = 100,
+	                 int mipLevel = 0,
+	                 int chunkSize = 128 * 128);
+
+	GLuint textureID() const {return m_texture;}
+
+private:
+	GLuint m_texture = 0;
+	int m_nextScanline = -1;
+	bool m_dirty = false;
+	double m_uploadTime = 0.0;
+};
+
 /*!
     A class which encapsulates a single HDRImage, a corresponding OpenGL texture, and histogram.
     Access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
@@ -78,11 +106,11 @@ public:
 
 
 private:
-	void init() const;
 	bool checkAsyncResult() const;
 	bool waitForAsyncResult() const;
+	void uploadToGPU() const;
 
-	mutable GLuint m_texture = 0;
+	mutable LazyGLTextureLoader m_texture;
 
 	mutable std::shared_ptr<HDRImage> m_image;
 
@@ -93,6 +121,7 @@ private:
     mutable CommandHistory m_history;
 
 	mutable ModifyingTask m_asyncCommand = nullptr;
+	mutable bool m_asyncRetrieved = false;
 };
 
 typedef std::shared_ptr<const GLImage> ConstImagePtr;

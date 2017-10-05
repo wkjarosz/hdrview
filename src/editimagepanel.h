@@ -16,7 +16,7 @@ class EditImagePanel : public Widget
 public:
 	EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr);
 
-	void enableDisableButtons();
+	void draw(NVGcontext *ctx) override;
 
 private:
 	HDRViewScreen * m_screen = nullptr;

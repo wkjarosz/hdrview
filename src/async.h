@@ -79,7 +79,12 @@ public:
 	 */
 	float progress() const
 	{
-		return m_ready ? 1.f : m_progress.progress();
+		return m_progress.progress();
+	}
+
+	void setProgress(float p)
+	{
+		m_progress.resetProgress(p);
 	}
 
 	/*!
