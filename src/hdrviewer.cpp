@@ -235,7 +235,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                      {
 	                                     exposureTextBox->setValue(e);
 	                                     exposureSlider->setValue(e);
-	                                     m_imagesPanel->enableDisableButtons();
                                      });
     m_imageView->setGammaCallback([gammaTextBox,gammaSlider](float g)
                                   {
@@ -286,7 +285,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
 		                                    updateCaption();
 		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
-		                                    m_imagesPanel->enableDisableButtons();
 	                                    });
 
 	m_imageMgr->setReferenceImageCallback([this](void)
@@ -298,7 +296,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_imageMgr->setNumImagesCallback([this, editPanel](void)
 	                                 {
 		                                 updateCaption();
-		                                 m_imagesPanel->enableDisableButtons();
 		                                 m_imagesPanel->repopulateImageList();
 		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
 		                                 m_imageMgr->setReferenceImageIndex(-1);
@@ -306,14 +303,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_imageMgr->setImageModifyStartCallback([this, editPanel](int i)
 	                                       {
 		                                       updateCaption();
-		                                       m_imagesPanel->enableDisableButtons();
-		                                       m_imagesPanel->updateImagesInfo();
 	                                       });
 	m_imageMgr->setImageModifyDoneCallback([this, editPanel](int i)
 	                                       {
 		                                       updateCaption();
-		                                       m_imagesPanel->enableDisableButtons();
-		                                       m_imagesPanel->updateImagesInfo();
+		                                       m_imagesPanel->updateHistogram();
 	                                       });
 
 
@@ -389,12 +383,28 @@ void HDRViewScreen::askCloseImage(int index)
 		if (img->isModified())
 		{
 			auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-			                                "Image has unsaved modifications. Close anyway?", "Close anyway", "Cancel", true);
-			dialog->setCallback([&,index](int close){if (close == 0) m_imageMgr->closeImage(index);});
+			                                "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
+			dialog->setCallback([this,index](int close){if (close == 0) m_imageMgr->closeImage(index);});
 		}
 		else
 			m_imageMgr->closeImage(index);
 	}
+}
+
+void HDRViewScreen::askCloseAllImages()
+{
+	bool anyModified = false;
+	for (int i = 0; i < m_imageMgr->numImages(); ++i)
+		anyModified |= m_imageMgr->image(i)->isModified();
+
+	if (anyModified)
+	{
+		auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
+		                                "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
+		dialog->setCallback([this](int close){if (close == 0) m_imageMgr->closeAllImages();});
+	}
+	else
+		m_imageMgr->closeAllImages();
 }
 
 
@@ -559,7 +569,10 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case 'W':
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
-	            askCloseImage(m_imageMgr->currentImageIndex());
+	            if (modifiers & GLFW_MOD_SHIFT)
+		            askCloseAllImages();
+	            else
+	                askCloseImage(m_imageMgr->currentImageIndex());
                 return true;
             }
             return false;

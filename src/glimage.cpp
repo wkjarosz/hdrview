@@ -84,6 +84,12 @@ bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img
                                       int mipLevel,
                                       int chunkSize)
 {
+	if (img->isNull())
+	{
+		m_dirty = false;
+		return false;
+	}
+
 	// check if we need to upload the image to the GPU
 	if (!m_dirty && m_texture)
 		return false;
@@ -148,10 +154,10 @@ bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img
 
 	if (!m_dirty)
 	{
-		spdlog::get("console")->debug("Uploading texture to GPU took {} ms", m_uploadTime);
+		spdlog::get("console")->trace("Uploading texture to GPU took {} ms", m_uploadTime);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
 		glGenerateMipmap(GL_TEXTURE_2D);  //Generate num_mipmaps number of mipmaps here.
-		spdlog::get("console")->debug("Generating mipmaps took {} ms", timer.lap());
+		spdlog::get("console")->trace("Generating mipmaps took {} ms", timer.lap());
 	}
 
 	return !m_dirty;
@@ -173,6 +179,15 @@ GLImage::~GLImage()
 
 }
 
+float GLImage::progress() const
+{
+	checkAsyncResult();
+	return m_asyncCommand ? m_asyncCommand->progress() : 1.0f;
+}
+bool GLImage::isModified() const    { checkAsyncResult(); return m_history.isModified(); }
+bool GLImage::hasUndo() const       { checkAsyncResult(); return m_history.hasUndo(); }
+bool GLImage::hasRedo() const       { checkAsyncResult(); return m_history.hasRedo(); }
+
 bool GLImage::canModify() const
 {
 	return !m_asyncCommand;
@@ -183,7 +198,7 @@ void GLImage::asyncModify(const ImageCommandWithProgress & command)
 	// make sure any pending edits are done
 	waitForAsyncResult();
 
-	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,&command](AtomicProgress & prog){return command(m_image, prog);});
+	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,command](AtomicProgress & prog){return command(m_image, prog);});
 	m_asyncRetrieved = false;
 	m_asyncCommand->compute();
 }
@@ -193,7 +208,7 @@ void GLImage::asyncModify(const ImageCommand &command)
 	// make sure any pending edits are done
 	waitForAsyncResult();
 
-	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,&command](void){return command(m_image);});
+	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,command](void){return command(m_image);});
 	m_asyncRetrieved = false;
 	m_asyncCommand->compute();
 }
@@ -237,16 +252,41 @@ bool GLImage::checkAsyncResult() const
 
 bool GLImage::waitForAsyncResult() const
 {
-	if (!m_asyncCommand || m_asyncRetrieved)
+	// nothing to wait for
+	if (!m_asyncCommand)
 		return false;
 
-	auto result = m_asyncCommand->get();
-	m_history.addCommand(result.second);
-	m_image = result.first;
-	m_asyncRetrieved = true;
+	if (!m_asyncRetrieved)
+	{
+		// now retrieve the result and copy it out of the async task
+		auto result = m_asyncCommand->get();
 
-	m_histogramDirty = true;
-	m_texture.setDirty();
+		// if there is no undo, treat this as an image load
+		if (!result.second)
+		{
+			if (result.first)
+			{
+				m_history = CommandHistory();
+				m_image = result.first;
+			}
+		}
+		else
+		{
+			m_history.addCommand(result.second);
+			m_image = result.first;
+		}
+
+		m_asyncRetrieved = true;
+		m_histogramDirty = true;
+		m_texture.setDirty();
+
+		if (!result.first)
+		{
+			// image loading failed
+			m_asyncCommand = nullptr;
+			return false;
+		}
+	}
 
 	// now set the progress bar to busy as we upload to GPU
 	m_asyncCommand->setProgress(-1.f);
@@ -267,7 +307,8 @@ void GLImage::uploadToGPU() const
 
 GLuint GLImage::glTextureId() const
 {
-    uploadToGPU();
+	checkAsyncResult();
+	uploadToGPU();
     return m_texture.textureID();
 }
 

@@ -32,6 +32,7 @@ public:
 	bool loadImage();
 	void saveImage();
 	void askCloseImage(int index);
+	void askCloseAllImages();
 	void flipImage(bool h);
 	void clearFocusPath() {mFocusPath.clear();}
 

@@ -29,11 +29,7 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
 				// just iterate, grabbing the next available atomic index in the range [begin, end)
 				while (true)
 				{
-					// the following cryptic line performs an atomic increment,
-					// and stores the result *prior* to the increment in i.
-					// This is like the prefixed version of the ++ operator, but with a custom
-					// step size
-					int i = (nextIndex+=step) - step;
+					int i = nextIndex.fetch_add(step);
 					if (i >= end) break;
 					body(i, cpu);
 				}

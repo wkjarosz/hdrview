@@ -166,8 +166,6 @@ bool HDRImage::load(const string & filename)
 			errors += string("\t") + stbi_failure_reason() + "\n";
 		}
 	}
-	else
-		console->debug("Not an STB image");
 
 
     // then try pfm
@@ -406,6 +404,16 @@ bool HDRImage::load(const string & filename)
 
     return false;
 }
+
+
+shared_ptr<HDRImage> loadImage(const string & filename)
+{
+	shared_ptr<HDRImage> ret = make_shared<HDRImage>();
+	if (ret->load(filename))
+		return ret;
+	return nullptr;
+}
+
 
 bool HDRImage::save(const string & filename,
                     float gain, float gamma,

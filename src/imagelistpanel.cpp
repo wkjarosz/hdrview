@@ -141,26 +141,6 @@ void ImageListPanel::setChannel(EChannel channel)
 	m_imageViewer->setChannel(channel);
 }
 
-void ImageListPanel::updateImagesInfo()
-{
-	if (m_imageMgr->numImages() != (int)m_imageButtons.size())
-	{
-		spdlog::get("console")->error("Number of buttons and images don't match!");
-		return;
-	}
-
-	for (int i = 0; i < m_imageMgr->numImages(); ++i)
-	{
-		auto img = m_imageMgr->image(i);
-		auto btn = m_imageButtons[i];
-
-		btn->setIsModified(img->isModified());
-		btn->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
-	}
-
-	m_screen->performLayout();
-}
-
 
 void ImageListPanel::repopulateImageList()
 {
@@ -197,19 +177,19 @@ void ImageListPanel::repopulateImageList()
 
 void ImageListPanel::enableDisableButtons()
 {
-	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
-	m_closeButton->setEnabled(m_imageMgr->currentImage() != nullptr);
-	m_bringForwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() > 0);
-	m_sendBackwardButton->setEnabled(m_imageMgr->currentImage() && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
-	m_linearToggle->setEnabled(m_imageMgr->currentImage() != nullptr);
-	m_sRGBToggle->setEnabled(m_imageMgr->currentImage() != nullptr);
-	bool showRecompute = m_imageMgr->currentImage() &&
+	bool hasImage = m_imageMgr->currentImage() != nullptr;
+	bool hasValidImage = hasImage && !m_imageMgr->currentImage()->isNull();
+	m_saveButton->setEnabled(hasValidImage);
+	m_closeButton->setEnabled(hasImage);
+	m_bringForwardButton->setEnabled(hasImage && m_imageMgr->currentImageIndex() > 0);
+	m_sendBackwardButton->setEnabled(hasImage && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
+	m_linearToggle->setEnabled(hasValidImage);
+	m_sRGBToggle->setEnabled(hasValidImage);
+	bool showRecompute = hasValidImage &&
 		(m_imageMgr->currentImage()->histogramDirty() ||
 		 m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure());
 	m_recomputeHistogram->setEnabled(showRecompute);
 	m_recomputeHistogram->setIcon(showRecompute ? ENTYPO_ICON_WARNING : ENTYPO_ICON_CHECK);
-//	m_linearToggle->setFixedWidth(showRecompute ? 49 : 59);
-//	m_sRGBToggle->setFixedWidth(showRecompute ? 49 : 60);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
@@ -228,10 +208,9 @@ void ImageListPanel::setReferenceImage(int newIndex)
 
 void ImageListPanel::draw(NVGcontext *ctx)
 {
-	// update everything
-	//updateHistogram();
-
-	if (m_imageMgr->currentImage() &&
+	if (m_histogramDirty &&
+		m_imageMgr->currentImage() &&
+		!m_imageMgr->currentImage()->isNull() &&
 		m_imageMgr->currentImage()->histograms() &&
 		m_imageMgr->currentImage()->histograms()->ready())
 	{
@@ -247,6 +226,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		m_graph->setMaximum(lazyHist->get()->maximum);
 		m_graph->setLinear(m_linearToggle->pushed());
 		m_graph->setDisplayMax(pow(2.f, -lazyHist->get()->exposure));
+		m_histogramDirty = false;
 	}
 	enableDisableButtons();
 
@@ -259,6 +239,8 @@ void ImageListPanel::draw(NVGcontext *ctx)
 			auto img = m_imageMgr->image(i);
 			auto btn = m_imageButtons[i];
 			btn->setProgress(img->progress());
+			btn->setIsModified(img->isModified());
+			btn->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
 		}
 	}
 
@@ -267,15 +249,19 @@ void ImageListPanel::draw(NVGcontext *ctx)
 
 void ImageListPanel::updateHistogram()
 {
-	if (!m_imageMgr->currentImage())
-	{
-		m_graph->setValues(VectorXf(), 0);
-		m_graph->setValues(VectorXf(), 1);
-		m_graph->setValues(VectorXf(), 2);
-		enableDisableButtons();
-		return;
-	}
+	m_histogramDirty = true;
 
-	m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());
+	m_graph->setValues(VectorXf(), 0);
+	m_graph->setValues(VectorXf(), 1);
+	m_graph->setValues(VectorXf(), 2);
+	m_graph->setMinimum(0.f);
+	m_graph->setAverage(0.5f);
+	m_graph->setMaximum(1.f);
+	m_graph->setLinear(m_linearToggle->pushed());
+	m_graph->setDisplayMax(1.f);
+
+	if (m_imageMgr->currentImage())
+		m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());
+
 	enableDisableButtons();
 }

@@ -3,7 +3,8 @@
 - [ ] Improve responsiveness during long operations
    - [x] Add progress bars
    - [x] Run them in a separate thread and avoid freezing the main application
-   - [ ] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
+   - [x] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
+- [ ] Refactor Color3 and Color4 classes as subclasses of Eigen Matrices, so we can more easily do color conversion.
 - [ ] Add log-linear and log-log histogram options?
 - [ ] Improved DNG/demosaicing pipeline
    - [ ] Improve DNG color correction
@@ -37,7 +38,7 @@
    - [ ] Allow error logging to output to a debug status panel in the GUI.
    - [ ] Improved drop-down menus
    - [ ] Save all
-   - [ ] Close all
+   - [x] Close all
    - [ ] Show command history and allow undoing/redoing multiple steps at once
 
 ## Known bugs

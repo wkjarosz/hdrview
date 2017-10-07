@@ -246,7 +246,7 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	if (m_currentImage)
+	if (m_currentImage && !m_currentImage->isNull())
 	{
 		Vector2f pCurrent, sCurrent;
 		imagePositionAndScale(pCurrent, sCurrent, m_currentImage);

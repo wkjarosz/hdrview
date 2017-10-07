@@ -45,15 +45,15 @@ void MultiGraph::draw(NVGcontext *ctx)
 	nvgFillPaint(ctx, paint);
 	nvgFill(ctx);
 
+	const int hpad = 10;
+	const int bpad = 12;
+	const int tpad = 5;
+
 	if (numPlots() && mValues[0].size() >= 2)
 	{
 		nvgSave(ctx);
 		// Additive blending
 		nvgGlobalCompositeBlendFunc(ctx, NVGblendFactor::NVG_SRC_ALPHA, NVGblendFactor::NVG_ONE);
-
-		int hpad = 10;
-		int bpad = 12;
-		int tpad = 5;
 
 		nvgLineJoin(ctx, NVG_BEVEL);
 		for (int plot = 0; plot < numPlots(); ++plot)
@@ -76,85 +76,84 @@ void MultiGraph::draw(NVGcontext *ctx)
 			nvgFillColor(ctx, mForegroundColors[plot]);
 			nvgFill(ctx);
 			Color sColor = mForegroundColors[plot];
-			sColor.w() = (sColor.w() + 1.0f)/2.0f;
+			sColor.w() = (sColor.w() + 1.0f) / 2.0f;
 			nvgStrokeColor(ctx, sColor);
 			nvgStroke(ctx);
 		}
 
 		nvgRestore(ctx);
-
-		nvgFontFace(ctx, "sans");
-
-		Color axisColor = Color(0.8f, 0.8f);
-
-		// draw horizontal axis, ticks, and labels
-		nvgBeginPath(ctx);
-		nvgStrokeColor(ctx, axisColor);
-		nvgMoveTo(ctx, mPos.x() + hpad/2, mPos.y() + mSize.y() - bpad);
-		nvgLineTo(ctx, mPos.x() + mSize.x() - hpad/2, mPos.y() + mSize.y() - bpad);
-		nvgStroke(ctx);
-
-		nvgFontSize(ctx, 9.0f);
-		nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, axisColor);
-		nvgText(ctx, mPos.x() + 3, mPos.y() + mSize.y() - bpad + 2, "0.000", NULL);
-
-		// tick
-		nvgBeginPath(ctx);
-		nvgMoveTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad - 3);
-		nvgLineTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad + 3);
-		nvgStroke(ctx);
-
-		int numTicks = 4;
-		for (int i = 1; i < numTicks; ++i)
-		{
-			if (!m_linear && i > numTicks/2)
-				break;
-
-			float frac = float(i) / numTicks;
-			float locFrac = m_linear ? frac : LinearToSRGB(frac);
-			nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
-			nvgFillColor(ctx, axisColor);
-			std::string midString = fmt::format("{:.3f}", m_displayMax * frac);
-			float textWidth = nvgTextBounds(ctx, 0, 0, midString.c_str(), nullptr, nullptr);
-			int xPos = mPos.x() + std::round(mSize.x() * locFrac - textWidth / 2.f);
-			nvgText(ctx, xPos, mPos.y() + mSize.y() - bpad + 2, midString.c_str(), NULL);
-
-			// tick
-			xPos = mPos.x() + std::round(mSize.x() * locFrac);
-			nvgBeginPath(ctx);
-			nvgMoveTo(ctx, xPos, mPos.y() + mSize.y() - bpad - 3);
-			nvgLineTo(ctx, xPos, mPos.y() + mSize.y() - bpad + 3);
-			nvgStroke(ctx);
-		}
-
-		nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, axisColor);
-		nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + mSize.y() - bpad + 2, fmt::format("{:.3f}", m_displayMax).c_str(), NULL);
-
-		// tick
-		nvgBeginPath(ctx);
-		nvgMoveTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad - 3);
-		nvgLineTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad + 3);
-		nvgStroke(ctx);
-
-		// show top stats
-		nvgFontSize(ctx, 12.0f);
-		nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		nvgText(ctx, mPos.x() + 3, mPos.y() + 1, fmt::format("{:.3f}", m_minimum).c_str(), NULL);
-
-		nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		std::string avgString = fmt::format("{:.3f}", m_average);
-		float textWidth = nvgTextBounds(ctx, 0, 0, avgString.c_str(), nullptr, nullptr);
-		nvgText(ctx, mPos.x() + mSize.x() / 2 - textWidth / 2, mPos.y() + 1, avgString.c_str(), NULL);
-
-		nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + 1, fmt::format("{:.3f}", m_maximum).c_str(), NULL);
-
 	}
+
+	nvgFontFace(ctx, "sans");
+
+	Color axisColor = Color(0.8f, 0.8f);
+
+	// draw horizontal axis, ticks, and labels
+	nvgBeginPath(ctx);
+	nvgStrokeColor(ctx, axisColor);
+	nvgMoveTo(ctx, mPos.x() + hpad/2, mPos.y() + mSize.y() - bpad);
+	nvgLineTo(ctx, mPos.x() + mSize.x() - hpad/2, mPos.y() + mSize.y() - bpad);
+	nvgStroke(ctx);
+
+	nvgFontSize(ctx, 9.0f);
+	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+	nvgFillColor(ctx, axisColor);
+	nvgText(ctx, mPos.x() + 3, mPos.y() + mSize.y() - bpad + 2, "0.000", NULL);
+
+	// tick
+	nvgBeginPath(ctx);
+	nvgMoveTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad - 3);
+	nvgLineTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad + 3);
+	nvgStroke(ctx);
+
+	int numTicks = 4;
+	for (int i = 1; i < numTicks; ++i)
+	{
+		if (!m_linear && i > numTicks/2)
+			break;
+
+		float frac = float(i) / numTicks;
+		float locFrac = m_linear ? frac : LinearToSRGB(frac);
+		nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
+		nvgFillColor(ctx, axisColor);
+		std::string midString = fmt::format("{:.3f}", m_displayMax * frac);
+		float textWidth = nvgTextBounds(ctx, 0, 0, midString.c_str(), nullptr, nullptr);
+		int xPos = mPos.x() + std::round(mSize.x() * locFrac - textWidth / 2.f);
+		nvgText(ctx, xPos, mPos.y() + mSize.y() - bpad + 2, midString.c_str(), NULL);
+
+		// tick
+		xPos = mPos.x() + std::round(mSize.x() * locFrac);
+		nvgBeginPath(ctx);
+		nvgMoveTo(ctx, xPos, mPos.y() + mSize.y() - bpad - 3);
+		nvgLineTo(ctx, xPos, mPos.y() + mSize.y() - bpad + 3);
+		nvgStroke(ctx);
+	}
+
+	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgFillColor(ctx, axisColor);
+	nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + mSize.y() - bpad + 2, fmt::format("{:.3f}", m_displayMax).c_str(), NULL);
+
+	// tick
+	nvgBeginPath(ctx);
+	nvgMoveTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad - 3);
+	nvgLineTo(ctx, mPos.x() + mSize.x() - hpad, mPos.y() + mSize.y() - bpad + 3);
+	nvgStroke(ctx);
+
+	// show top stats
+	nvgFontSize(ctx, 12.0f);
+	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+	nvgFillColor(ctx, mTextColor);
+	nvgText(ctx, mPos.x() + 3, mPos.y() + 1, fmt::format("{:.3f}", m_minimum).c_str(), NULL);
+
+	nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
+	nvgFillColor(ctx, mTextColor);
+	std::string avgString = fmt::format("{:.3f}", m_average);
+	float textWidth = nvgTextBounds(ctx, 0, 0, avgString.c_str(), nullptr, nullptr);
+	nvgText(ctx, mPos.x() + mSize.x() / 2 - textWidth / 2, mPos.y() + 1, avgString.c_str(), NULL);
+
+	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgFillColor(ctx, mTextColor);
+	nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + 1, fmt::format("{:.3f}", m_maximum).c_str(), NULL);
 
 	nvgFontFace(ctx, "sans");
 

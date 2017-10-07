@@ -130,7 +130,8 @@ public:
 	// access to the atomic internal storage
 	void resetProgress(float p = 0.f);
 	float progress() const;
-	void setDone()                              {resetProgress(-1.f);}
+	void setDone()                              {resetProgress(1.f);}
+	void setBusy()                              {resetProgress(-1.f);}
 
 	// access to the discrete stepping
 	void setAvailablePercent(float percent);

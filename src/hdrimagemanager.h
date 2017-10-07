@@ -38,6 +38,7 @@ public:
 	void saveImage(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
 	               bool sRGB = true, bool dither = true);
 	void closeImage(int index);
+	void closeAllImages();
 	void sendImageBackward();
 	void bringImageForward();
 	void setCurrentImageIndex(int index, bool forceCallback = false);

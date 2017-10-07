@@ -99,6 +99,18 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 	return false;
 }
 
+
+static float triangleWave(float t, float period = 1.f)
+{
+	float a = period/2.f;
+	return fabs(2 * (t/a - floor(t/a + 0.5f)));
+}
+
+static float cosWave(float t, float period = 1.f)
+{
+	return cos(t/period * 2.0f * M_PI) * 0.5f + 0.5f;
+}
+
 void ImageButton::draw(NVGcontext *ctx)
 {
 	Widget::draw(ctx);
@@ -142,11 +154,13 @@ void ImageButton::draw(NVGcontext *ctx)
 	// busy progress bar
 	else if (m_progress < 0.f)
 	{
-		int barSize = (int) std::round((mSize.x() - 4) * 0.25f);
-
 		int leftEdge  = mPos.x() + 2;
 		float time = glfwGetTime();
-		int left = (int) std::round(lerp((float)leftEdge, float(mSize.x() - 2 - barSize), sin(time * 3.f) * 0.5f + 0.5f));
+		float anim1 = smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, triangleWave(time/4.f))));
+		float anim2 = smoothStep(0.0f, 1.0f, triangleWave(time/4.f*2.f));
+
+		int barSize = (int) std::round(lerp(float(mSize.x() - 4) * 0.05f, float(mSize.x() - 4) * 0.25f, anim2));
+		int left = (int) std::round(lerp((float)leftEdge, float(mSize.x() - 2 - barSize), anim1));
 
 		auto paint = nvgBoxGradient(
 			ctx, left - 1, mPos.y() + 2 -1,

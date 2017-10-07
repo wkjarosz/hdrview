@@ -39,8 +39,9 @@ public:
     }
     //@}
 
-    int width() const {return (int)rows();}
-    int height() const {return (int)cols();}
+    int width() const       { return (int)rows(); }
+    int height() const      { return (int)cols(); }
+    bool isNull() const     { return rows() == 0 || cols() == 0; }
 
     void setAlpha(float a)
     {
@@ -246,3 +247,6 @@ public:
               float gain, float gamma,
               bool sRGB, bool dither) const;
 };
+
+
+std::shared_ptr<HDRImage> loadImage(const std::string & filename);

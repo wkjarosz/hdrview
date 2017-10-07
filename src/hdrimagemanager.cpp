@@ -24,11 +24,32 @@ HDRImageManager::HDRImageManager()
 
 void HDRImageManager::runRequestedCallbacks()
 {
-	if (m_imageModifyDoneRequested)
+	// remove any images that are not being modified and are null
+	bool numImagesChanged = false;
+	for (int i = 0; i < (int) m_images.size(); ++i)
 	{
-		m_imageModifyDoneRequested = false;
-		m_imageModifyDoneCallback(m_current);
+		auto img = m_images[i];
+		if (img && img->canModify() && img->isNull())
+		{
+			m_images.erase(m_images.begin() + i);
+
+			if (i < m_current)
+				m_current--;
+			else if (m_current >= int(m_images.size()))
+				m_current = m_images.size() - 1;
+
+			numImagesChanged = true;
+		}
 	}
+
+	if (numImagesChanged)
+	{
+		m_currentImageCallback();
+		m_numImagesCallback();
+	}
+
+	if (m_imageModifyDoneRequested.exchange(false))
+		m_imageModifyDoneCallback(m_current);
 }
 
 shared_ptr<const GLImage> HDRImageManager::image(int index) const
@@ -43,11 +64,14 @@ shared_ptr<GLImage> HDRImageManager::image(int index)
 
 void HDRImageManager::setCurrentImageIndex(int index, bool forceCallback)
 {
-	if (forceCallback || index != m_current)
+	if (index != m_current)
 	{
 		m_current = index;
-		m_currentImageCallback();
+		forceCallback = true;
 	}
+
+	if (forceCallback)
+		m_currentImageCallback();
 }
 
 void HDRImageManager::setReferenceImageIndex(int index, bool forceCallback)
@@ -61,8 +85,6 @@ void HDRImageManager::setReferenceImageIndex(int index, bool forceCallback)
 
 void HDRImageManager::loadImages(const vector<string> & filenames)
 {
-	size_t numErrors = 0;
-	vector<pair<string, bool> > loadedOK;
 	vector<string> allFilenames;
 
 	const static set<string> extensions = {"exr", "png", "jpg", "jpeg", "hdr", "pic", "pfm", "ppm", "bmp", "tga", "psd"};
@@ -120,40 +142,30 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 		tinydir_close(&dir);
 	}
 
-	// now actually load the images
-	Timer allTimer;
-	for (auto i : allFilenames)
+	// now start a bunch of asynchronous image loads
+	for (auto filename : allFilenames)
 	{
 		shared_ptr<GLImage> image = make_shared<GLImage>();
-		Timer timer;
-		if (image->load(i))
-		{
-			loadedOK.push_back({i, true});
-			m_images.push_back(image);
-			spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", i, image->width(), image->height(), timer.elapsed() / 1000.f);
-		}
-		else
-		{
-			loadedOK.push_back({i, false});
-			numErrors++;
-		}
+		image->setFilename(filename);
+		image->asyncModify(
+			[this,filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
+			{
+				Timer timer;
+				spdlog::get("console")->info("Trying to load image \"{}\"", filename);
+				shared_ptr<HDRImage> ret = loadImage(filename);
+				if (ret)
+					spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
+				else
+					spdlog::get("console")->info("Loading \"{}\" failed", filename);
+				m_imageModifyDoneRequested = true;
+				return {ret, nullptr};
+			});
+		m_images.emplace_back(image);
+		m_imageModifyStartCallback(m_images.size()-1);
 	}
-
-	spdlog::get("console")->info("Loading all {:d} images took {} seconds", allFilenames.size(), allTimer.elapsed() / 1000.f);
 
 	m_numImagesCallback();
 	setCurrentImageIndex(int(m_images.size() - 1));
-
-	if (numErrors)
-	{
-		string badFiles;
-		for (size_t i = 0; i < loadedOK.size(); ++i)
-		{
-			if (!loadedOK[i].second)
-				badFiles += loadedOK[i].first + "\n";
-		}
-		throw runtime_error(badFiles);
-	}
 }
 
 void HDRImageManager::saveImage(const string & filename, float exposure, float gamma, bool sRGB, bool dither)
@@ -183,6 +195,17 @@ void HDRImageManager::closeImage(int index)
 		setCurrentImageIndex(newIndex, true);
 		m_numImagesCallback();
 	}
+}
+
+void HDRImageManager::closeAllImages()
+{
+	m_images.clear();
+
+	m_current = -1;
+	m_reference = -1;
+
+	m_currentImageCallback();
+	m_numImagesCallback();
 }
 
 void HDRImageManager::modifyImage(const ImageCommand & command)

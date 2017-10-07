@@ -81,6 +81,15 @@ smoothStep(T a, T b, T x)
     return t*t*(T(3) - T(2)*t);
 }
 
+//! The inverse of the smoothstep function.
+template <typename T>
+inline T
+inverseSmoothStep(T a, T b, T x)
+{
+    T t = clamp(T(x - a) / (b - a), T(0), T(1));
+    return t + t - t*t*(T(3) - T(2)*t);
+}
+
 //! Smoothly interpolates between a and b.
 /*!
     Does a smooth s-curve (6th order) interpolation between two values.

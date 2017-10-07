@@ -18,11 +18,10 @@ public:
 
 	void draw(NVGcontext *ctx) override;
 
-	void updateImagesInfo();
 	void repopulateImageList();
-	void enableDisableButtons();
 	void setCurrentImage(int newIndex);
 	void setReferenceImage(int newIndex);
+	void updateHistogram();
 
 	EBlendMode blendMode() const;
 	void setBlendMode(EBlendMode mode);
@@ -31,7 +30,7 @@ public:
 	void setChannel(EChannel channel);
 
 private:
-	void updateHistogram();
+	void enableDisableButtons();
 
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageManager * m_imageMgr = nullptr;
@@ -49,6 +48,7 @@ private:
 	Button * m_sRGBToggle = nullptr;
 	Button * m_recomputeHistogram = nullptr;
 	MultiGraph * m_graph = nullptr;
+	bool m_histogramDirty = false;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
