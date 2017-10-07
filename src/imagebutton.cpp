@@ -7,6 +7,7 @@
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
+#define _USE_MATH_DEFINES
 #include "imagebutton.h"
 #include <nanogui/opengl.h>
 #include <nanogui/entypo.h>
@@ -104,11 +105,6 @@ static float triangleWave(float t, float period = 1.f)
 {
 	float a = period/2.f;
 	return fabs(2 * (t/a - floor(t/a + 0.5f)));
-}
-
-static float cosWave(float t, float period = 1.f)
-{
-	return cos(t/period * 2.0f * M_PI) * 0.5f + 0.5f;
 }
 
 void ImageButton::draw(NVGcontext *ctx)
