@@ -117,10 +117,17 @@ public:
 	void recomputeHistograms(float exposure) const;
 
 
+	typedef std::function<void(void)> VoidVoidFunc;
+
+	/// Callback executed whenever an image finishes being modified, e.g. via @ref asyncModify
+	const VoidVoidFunc & imageModifyDoneCallback() const            { return m_imageModifyDoneCallback; }
+	void setImageModifyDoneCallback(const VoidVoidFunc & callback)  { m_imageModifyDoneCallback = callback; }
+
 private:
 	bool checkAsyncResult() const;
 	bool waitForAsyncResult() const;
 	void uploadToGPU() const;
+	void modifyFinished() const;
 
 	mutable LazyGLTextureLoader m_texture;
 
@@ -134,6 +141,9 @@ private:
 
 	mutable ModifyingTask m_asyncCommand = nullptr;
 	mutable bool m_asyncRetrieved = false;
+
+	// various callback functions
+	VoidVoidFunc m_imageModifyDoneCallback;
 };
 
 typedef std::shared_ptr<const GLImage> ConstImagePtr;

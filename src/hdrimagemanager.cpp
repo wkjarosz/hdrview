@@ -24,32 +24,40 @@ HDRImageManager::HDRImageManager()
 
 void HDRImageManager::runRequestedCallbacks()
 {
-	// remove any images that are not being modified and are null
-	bool numImagesChanged = false;
-	for (int i = 0; i < (int) m_images.size(); ++i)
-	{
-		auto img = m_images[i];
-		if (img && img->canModify() && img->isNull())
-		{
-			m_images.erase(m_images.begin() + i);
-
-			if (i < m_current)
-				m_current--;
-			else if (m_current >= int(m_images.size()))
-				m_current = m_images.size() - 1;
-
-			numImagesChanged = true;
-		}
-	}
-
-	if (numImagesChanged)
-	{
-		m_currentImageCallback();
-		m_numImagesCallback();
-	}
-
 	if (m_imageModifyDoneRequested.exchange(false))
+	{
+		// remove any images that are not being modified and are null
+		bool numImagesChanged = false;
+
+		// iterate through the images, and remove the ones that didn't load properly
+		auto it = m_images.begin();
+		while (it != m_images.end())
+		{
+			int i = it - m_images.begin();
+			auto img = m_images[i];
+			if (img && img->canModify() && img->isNull())
+			{
+				it = m_images.erase(it);
+
+				if (i < m_current)
+					m_current--;
+				else if (m_current >= int(m_images.size()))
+					m_current = m_images.size() - 1;
+
+				numImagesChanged = true;
+			}
+			else
+				++it;
+		}
+
+		if (numImagesChanged)
+		{
+			m_currentImageCallback();
+			m_numImagesCallback();
+		}
+
 		m_imageModifyDoneCallback(m_current);
+	}
 }
 
 shared_ptr<const GLImage> HDRImageManager::image(int index) const
@@ -146,6 +154,7 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 	for (auto filename : allFilenames)
 	{
 		shared_ptr<GLImage> image = make_shared<GLImage>();
+		image->setImageModifyDoneCallback([this](){m_imageModifyDoneRequested = true;});
 		image->setFilename(filename);
 		image->asyncModify(
 			[this,filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
@@ -157,7 +166,6 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 					spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
 				else
 					spdlog::get("console")->info("Loading \"{}\" failed", filename);
-				m_imageModifyDoneRequested = true;
 				return {ret, nullptr};
 			});
 		m_images.emplace_back(image);
@@ -221,7 +229,6 @@ void HDRImageManager::modifyImage(const ImageCommand & command)
 				if (!ret.second)
 					ret.second = make_shared<FullImageUndo>(*img);
 
-				m_imageModifyDoneRequested = true;
 				return ret;
 			});
 		m_imageModifyStartCallback(m_current);
@@ -241,7 +248,6 @@ void HDRImageManager::modifyImage(const ImageCommandWithProgress & command)
 				if (!ret.second)
 					ret.second = make_shared<FullImageUndo>(*img);
 
-				m_imageModifyDoneRequested = true;
 				return ret;
 			});
 		m_imageModifyStartCallback(m_current);

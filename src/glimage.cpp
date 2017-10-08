@@ -168,7 +168,9 @@ bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img
 GLImage::GLImage() :
     m_image(make_shared<HDRImage>()),
     m_filename(),
-    m_cachedHistogramExposure(NAN), m_histogramDirty(true)
+    m_cachedHistogramExposure(NAN),
+    m_histogramDirty(true),
+    m_imageModifyDoneCallback(GLImage::VoidVoidFunc())
 {
     // empty
 }
@@ -249,6 +251,13 @@ bool GLImage::checkAsyncResult() const
 	return waitForAsyncResult();
 }
 
+void GLImage::modifyFinished() const
+{
+	m_asyncCommand = nullptr;
+	if (m_imageModifyDoneCallback)
+		m_imageModifyDoneCallback();
+}
+
 
 bool GLImage::waitForAsyncResult() const
 {
@@ -283,7 +292,7 @@ bool GLImage::waitForAsyncResult() const
 		if (!result.first)
 		{
 			// image loading failed
-			m_asyncCommand = nullptr;
+			modifyFinished();
 			return false;
 		}
 	}
@@ -301,7 +310,7 @@ void GLImage::uploadToGPU() const
 {
 	if (m_texture.uploadToGPU(m_image))
 		// now that we grabbed the results and uploaded to GPU, destroy the task
-		m_asyncCommand = nullptr;
+		modifyFinished();
 }
 
 
