@@ -82,6 +82,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(imageLoading, COMMAND + "+O", "Open Image");
 	addRow(imageLoading, COMMAND + "+S", "Save Image");
 	addRow(imageLoading, COMMAND + "+W or Delete", "Close Image");
+	addRow(imageLoading, COMMAND + "+Shift+W", "Close All Images");
 	addRow(imageLoading, "Left Click", "Select Image");
 	addRow(imageLoading, "Shift+Left Click", "Select/Deselect Reference Image");
 	addRow(imageLoading, "1…9", "Select the N-th Image");
