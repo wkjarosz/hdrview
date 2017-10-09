@@ -375,8 +375,8 @@ int main(int argc, char **argv)
 
             remap = true;
 
-            UV2XYZFn dst2xyz;
-            XYZ2UVFn xyz2src;
+            UV2XYZFn * dst2xyz;
+            XYZ2UVFn * xyz2src;
 
             string from = s1, to = s2;
 
