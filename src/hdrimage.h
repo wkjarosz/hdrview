@@ -17,7 +17,7 @@
 //! Floating point image
 class HDRImage : public Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>
 {
-typedef Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic> Base;
+using Base = Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>;
 public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors, destructors, etc.

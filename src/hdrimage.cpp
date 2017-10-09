@@ -793,8 +793,8 @@ HDRImage HDRImage::medianFilterBayerArtifacts() const
  */
 void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXYZ)
 {
-    typedef Array<Vector3f,Dynamic,Dynamic> Image3f;
-    typedef Array<uint8_t,Dynamic,Dynamic> HomoMap;
+    using Image3f = Array<Vector3f,Dynamic,Dynamic>;
+    using HomoMap = Array<uint8_t,Dynamic,Dynamic>;
     HDRImage rgbH = *this;
     HDRImage rgbV = *this;
     Image3f labH(width(), height());

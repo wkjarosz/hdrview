@@ -8,8 +8,8 @@
 
 #include <Eigen/Core>
 
-typedef Eigen::Vector3f (*UV2XYZFn)(const Eigen::Vector2f &);
-typedef Eigen::Vector2f (*XYZ2UVFn)(const Eigen::Vector3f &);
+using UV2XYZFn = Eigen::Vector3f(const Eigen::Vector2f &);
+using XYZ2UVFn = Eigen::Vector2f(const Eigen::Vector3f &);
 
 // functions that convert from UV image plane coordinates to
 // XYZ world coordinates for the various light probe representations

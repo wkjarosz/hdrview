@@ -491,8 +491,8 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 					// by default use a no-op passthrough warp function
 					function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
 
-					UV2XYZFn dst2xyz;
-					XYZ2UVFn xyz2src;
+					UV2XYZFn * dst2xyz;
+					XYZ2UVFn * xyz2src;
 
 					if (from != to)
 					{

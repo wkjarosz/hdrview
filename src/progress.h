@@ -103,8 +103,8 @@ public:
 };
 
 
-typedef AtomicFixed<std::int16_t, std::int32_t, 8> AtomicFixed16;
-typedef AtomicFixed<std::int32_t, std::int64_t, 16> AtomicFixed32;
+using AtomicFixed16 = AtomicFixed<std::int16_t, std::int32_t, 8>;
+using AtomicFixed32 = AtomicFixed<std::int32_t, std::int64_t, 16>;
 
 
 /*!
@@ -122,7 +122,7 @@ typedef AtomicFixed<std::int32_t, std::int64_t, 16> AtomicFixed32;
 class AtomicProgress
 {
 public:
-	typedef AtomicFixed<std::int32_t, std::int64_t, 30> AtomicPercent32;
+	using AtomicPercent32 = AtomicFixed<std::int32_t, std::int64_t, 30>;
 
 	explicit AtomicProgress(bool createState = false, float totalPercentage = 1.f);
 	AtomicProgress(const AtomicProgress & parent, float percentageOfParent = 1.f);

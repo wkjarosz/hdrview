@@ -59,7 +59,6 @@ public:
 	 */
 	bool uploadToGPU(const std::shared_ptr<const HDRImage> & img,
 	                 int timeout = 100,
-	                 int mipLevel = 0,
 	                 int chunkSize = 128 * 128);
 
 	GLuint textureID() const {return m_texture;}
@@ -78,9 +77,11 @@ private:
 class GLImage
 {
 public:
-	typedef AsyncTask<std::shared_ptr<ImageHistogram>> LazyHistograms;
-	typedef std::shared_ptr<const AsyncTask<ImageCommandResult>> ConstModifyingTask;
-	typedef std::shared_ptr<AsyncTask<ImageCommandResult>> ModifyingTask;
+	using LazyHistogram = AsyncTask<std::shared_ptr<ImageHistogram>>;
+	using LazyHistogramPtr = std::shared_ptr<LazyHistogram>;
+	using ConstModifyingTask = std::shared_ptr<const AsyncTask<ImageCommandResult>>;
+	using ModifyingTask = std::shared_ptr<AsyncTask<ImageCommandResult>>;
+	using VoidVoidFunc = std::function<void(void)>;
 
 
     GLImage();
@@ -113,11 +114,8 @@ public:
 
 	float histogramExposure() const             { return m_cachedHistogramExposure; }
 	bool histogramDirty() const                 { return m_histogramDirty; }
-	std::shared_ptr<LazyHistograms> histograms() const {return m_histograms;}
+	LazyHistogramPtr histograms() const         { return m_histograms; }
 	void recomputeHistograms(float exposure) const;
-
-
-	typedef std::function<void(void)> VoidVoidFunc;
 
 	/// Callback executed whenever an image finishes being modified, e.g. via @ref asyncModify
 	const VoidVoidFunc & imageModifyDoneCallback() const            { return m_imageModifyDoneCallback; }
@@ -129,14 +127,12 @@ private:
 	void uploadToGPU() const;
 	void modifyFinished() const;
 
-	mutable LazyGLTextureLoader m_texture;
-
 	mutable std::shared_ptr<HDRImage> m_image;
-
     std::string m_filename;
+	mutable LazyGLTextureLoader m_texture;
     mutable float m_cachedHistogramExposure;
     mutable std::atomic<bool> m_histogramDirty;
-	mutable std::shared_ptr<LazyHistograms> m_histograms;
+	mutable LazyHistogramPtr m_histograms;
     mutable CommandHistory m_history;
 
 	mutable ModifyingTask m_asyncCommand = nullptr;
@@ -146,5 +142,5 @@ private:
 	VoidVoidFunc m_imageModifyDoneCallback;
 };
 
-typedef std::shared_ptr<const GLImage> ConstImagePtr;
-typedef std::shared_ptr<GLImage> ImagePtr;
+using ConstImagePtr = std::shared_ptr<const GLImage>;
+using ImagePtr = std::shared_ptr<GLImage>;

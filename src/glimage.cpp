@@ -81,7 +81,6 @@ LazyGLTextureLoader::~LazyGLTextureLoader()
 
 bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img,
                                       int milliseconds,
-                                      int mipLevel,
                                       int chunkSize)
 {
 	if (img->isNull())
@@ -112,13 +111,14 @@ bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img
 //		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 
+		glPixelStorei(GL_UNPACK_ROW_LENGTH, img->width());
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 		const GLfloat borderColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 	}
 
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, mipLevel);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
 
 	int maxLines = max(1, chunkSize / img->width());
 	while (true)
@@ -128,9 +128,8 @@ bool LazyGLTextureLoader::uploadToGPU(const std::shared_ptr<const HDRImage> &img
 		int numLines = std::min(maxLines, remaining);
 
 		glPixelStorei(GL_UNPACK_SKIP_ROWS, m_nextScanline);
-
 		glTexSubImage2D(GL_TEXTURE_2D,
-		                mipLevel,		             // level
+		                0,		                     // level
 		                0, m_nextScanline,	         // xoffset, yoffset
 		                img->width(), numLines,      // tile width and height
 		                GL_RGBA,			         // format
@@ -351,7 +350,7 @@ void GLImage::recomputeHistograms(float exposure) const
 
     if (!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure)
     {
-        m_histograms = make_shared<LazyHistograms>(
+        m_histograms = make_shared<LazyHistogram>(
 	        [this,exposure](void)
 	        {
 		        return makeHistograms(*m_image, exposure);

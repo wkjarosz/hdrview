@@ -21,8 +21,8 @@ public:
 	static const auto policy = std::launch::async;
 #endif
 
-	typedef std::function<T(AtomicProgress & progress)> TaskFunc;
-	typedef std::function<T(void)> NoProgressTaskFunc;
+	using TaskFunc = std::function<T(AtomicProgress & progress)>;
+	using NoProgressTaskFunc = std::function<T(void)>;
 
 	/*!
 	 * Create an asyncronous task that can report back on its progress
