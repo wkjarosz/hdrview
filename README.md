@@ -8,7 +8,6 @@ Develop status:
 [![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/develop/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/bitbucket/wkjarosz/hdrview?svg=true&branch=develop&passingText=develop%20-%20OK&failingText=develop%20-%20failed&pendingText=develop%20-%20pending)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
 
-
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
 ## Example screenshots
@@ -20,6 +19,11 @@ Displaying HDR images naively on a 24 bit display leads to visible banding in sm
 ![Screenshot](resources/screenshot3.png "Screenshot3")
 HDRView supports high-quality dithering (both when viewing and when saving to an LDR file) to reduce these artifacts.
 ![Screenshot](resources/screenshot4.png "Screenshot4")
+
+## Obtaining HDRView
+
+If you are running a recent version of macOS, you can download the pre-built binary installer [DMG](https://bitbucket.org/wkjarosz/hdrview/downloads/HDRView.dmg) from the [releases page](https://bitbucket.org/wkjarosz/hdrview/downloads).
+For other platforms, you will need to build HDRView from source for now.
 
 ## Compiling
 
