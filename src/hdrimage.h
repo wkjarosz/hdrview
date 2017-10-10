@@ -246,6 +246,9 @@ public:
     bool save(const std::string & filename,
               float gain, float gamma,
               bool sRGB, bool dither) const;
+
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 

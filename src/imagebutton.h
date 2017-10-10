@@ -61,4 +61,7 @@ private:
 	Eigen::Vector2i m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
 
 	float m_progress = -1.f;
+
+public:
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
