@@ -713,21 +713,19 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 
 bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
 {
-	if (down)
+	if (button == GLFW_MOUSE_BUTTON_1 && down && atSidePanelEdge(p))
 	{
-		if (atSidePanelEdge(p))
-		{
-			m_draggingSidePanel = true;
-			return true;
-		}
+		m_draggingSidePanel = true;
+
+		// prevent Screen::cursorPosCallbackEvent from calling dragEvent on other widgets
+		mDragActive = false;
+		mDragWidget = nullptr;
+		return true;
 	}
 	else
 		m_draggingSidePanel = false;
 
-	if (Screen::mouseButtonEvent(p, button, down, modifiers))
-		return true;
-
-	return false;
+	return Screen::mouseButtonEvent(p, button, down, modifiers);
 }
 
 bool HDRViewScreen::mouseMotionEvent(const Eigen::Vector2i &p, const Eigen::Vector2i &rel, int button, int modifiers)
@@ -741,12 +739,10 @@ bool HDRViewScreen::mouseMotionEvent(const Eigen::Vector2i &p, const Eigen::Vect
 		m_sideScrollPanel->setFixedWidth(w + 12);
 		m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
 		updateLayout();
+		return true;
 	}
 
-	if (Screen::mouseMotionEvent(p, rel, button, modifiers))
-		return true;
-
-	return false;
+	return Screen::mouseMotionEvent(p, rel, button, modifiers);
 }
 
 

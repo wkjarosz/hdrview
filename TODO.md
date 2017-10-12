@@ -40,6 +40,3 @@
    - [ ] Save all
    - [x] Close all
    - [ ] Show command history and allow undoing/redoing multiple steps at once
-
-## Known bugs
-- ``stb_image`` seemingly does not properly handle sRGB's non-gamma curve. loading an sRGB image, saving as sRGB, and loading back in as sRGB should result in same image but doesn't (at least for PNGs). ``stb_image`` seems to assume just a simple gamma curve for sRGB (defaulting to gamma=2.2), and excludes the linear regions near black

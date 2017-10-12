@@ -27,6 +27,8 @@ public:
 	float progress()                        { return m_progress; }
 	void setProgress(float progress)        { m_progress = progress; }
 
+	/// Set the button's text caption/filename
+	void setCaption(const std::string &caption) { m_caption = caption; }
 	const std::string & caption() const     { return m_caption; }
 	void setId(size_t id)                   { m_id = id; }
 	void setIsModified(bool b)              { m_isModified = b; }

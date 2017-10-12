@@ -22,43 +22,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	setId("image list panel");
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
-	auto row = new Widget(this);
-	row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
-
-	auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
-	b->setFixedHeight(25);
-	b->setTooltip("Load an image and add it to the set of opened images.");
-	b->setCallback([this]{m_screen->loadImage();});
-
-	m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
-	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
-	m_saveButton->setFixedHeight(25);
-	m_saveButton->setTooltip("Save the image to disk.");
-	m_saveButton->setCallback([this]{m_screen->saveImage();});
-
-	m_bringForwardButton = new Button(row, "", ENTYPO_ICON_UP_BOLD);
-	m_bringForwardButton->setFixedHeight(25);
-	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
-	m_bringForwardButton->setCallback([this]{ m_imageMgr->bringImageForward();});
-
-	m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_DOWN_BOLD);
-	m_sendBackwardButton->setFixedHeight(25);
-	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
-	m_sendBackwardButton->setCallback([this]{ m_imageMgr->sendImageBackward();});
-
-	m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLED_CROSS);
-	m_closeButton->setFixedHeight(25);
-	m_closeButton->setTooltip("Close image");
-	m_closeButton->setCallback([this]{m_screen->askCloseImage(m_imageMgr->currentImageIndex());});
-
-
-	row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Vertical,
-	                             Alignment::Fill, 0, 4));
-	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 150));
-	m_graph->addPlot(Color(0, 255, 0, 150));
-	m_graph->addPlot(Color(0, 0, 255, 150));
-
 	auto grid = new Widget(this);
 	auto agl = new AdvancedGridLayout({0, 4, 19, 4, 0, 4, 0});
 	grid->setLayout(agl);
@@ -96,9 +59,51 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		                                  updateHistogram();
 	                                  });
 
-	agl->appendRow(4);  // spacing
-	agl->appendRow(0);
 
+	auto row = new Widget(this);
+	row->setLayout(new BoxLayout(Orientation::Vertical,
+	                             Alignment::Fill, 0, 4));
+	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 150));
+	m_graph->addPlot(Color(0, 255, 0, 150));
+	m_graph->addPlot(Color(0, 0, 255, 150));
+
+	row = new Widget(this);
+	row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+
+	auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
+	b->setFixedHeight(25);
+	b->setTooltip("Load an image and add it to the set of opened images.");
+	b->setCallback([this]{m_screen->loadImage();});
+
+	m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
+	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
+	m_saveButton->setFixedHeight(25);
+	m_saveButton->setTooltip("Save the image to disk.");
+	m_saveButton->setCallback([this]{m_screen->saveImage();});
+
+	m_bringForwardButton = new Button(row, "", ENTYPO_ICON_UP_BOLD);
+	m_bringForwardButton->setFixedHeight(25);
+	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
+	m_bringForwardButton->setCallback([this]{ m_imageMgr->bringImageForward();});
+
+	m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_DOWN_BOLD);
+	m_sendBackwardButton->setFixedHeight(25);
+	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
+	m_sendBackwardButton->setCallback([this]{ m_imageMgr->sendImageBackward();});
+
+	m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLED_CROSS);
+	m_closeButton->setFixedHeight(25);
+	m_closeButton->setTooltip("Close image");
+	m_closeButton->setCallback([this]{m_screen->askCloseImage(m_imageMgr->currentImageIndex());});
+
+
+	grid = new Widget(this);
+	agl = new AdvancedGridLayout({0, 4, 19, 4, 0, 4, 0});
+	grid->setLayout(agl);
+	agl->setColStretch(4, 1.0f);
+	agl->setColStretch(6, 1.0f);
+
+	agl->appendRow(0);
 	agl->setAnchor(new Label(grid, "Mode:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
 	m_blendModes = new ComboBox(grid);
@@ -240,6 +245,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 			auto btn = m_imageButtons[i];
 			btn->setProgress(img->progress());
 			btn->setIsModified(img->isModified());
+			btn->setCaption(img->filename());
 			btn->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
 		}
 	}

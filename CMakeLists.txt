@@ -139,6 +139,7 @@ add_executable(HDRView
                src/color.h
                src/colorspace.cpp
                src/colorspace.h
+               src/commandhistory.h
                src/common.cpp
                src/common.h
                src/dither-matrix256.h
