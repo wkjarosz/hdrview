@@ -23,22 +23,19 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
 	auto grid = new Widget(this);
-	auto agl = new AdvancedGridLayout({0, 4, 19, 4, 0, 4, 0});
+	auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
 	grid->setLayout(agl);
+	agl->setColStretch(2, 1.0f);
 	agl->setColStretch(4, 1.0f);
-	agl->setColStretch(6, 1.0f);
 
 	agl->appendRow(0);
 	agl->setAnchor(new Label(grid, "Histogram:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
-	m_recomputeHistogram = new Button(grid, "", ENTYPO_ICON_WARNING);
-	agl->setAnchor(m_recomputeHistogram, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Maximum, Alignment::Fill));
-
 	m_linearToggle = new Button(grid, "Linear");
-	agl->setAnchor(m_linearToggle, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+	agl->setAnchor(m_linearToggle, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
 	m_sRGBToggle = new Button(grid, "sRGB");
-	agl->setAnchor(m_sRGBToggle, AdvancedGridLayout::Anchor(6, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+	agl->setAnchor(m_sRGBToggle, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
 	m_linearToggle->setFlags(Button::RadioButton);
 	m_sRGBToggle->setFlags(Button::RadioButton);
@@ -49,14 +46,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_linearToggle->setPushed(true);
 	m_linearToggle->setChangeCallback([this](bool b)
 	                                  {
-		                                  updateHistogram();
-	                                  });
-
-	m_recomputeHistogram->setFixedSize(Vector2i(19,19));
-	m_recomputeHistogram->setTooltip("Recompute histogram at current exposure.");
-	m_recomputeHistogram->setCallback([&]()
-	                                  {
-		                                  updateHistogram();
+		                                  requestHistogramUpdate(true);
 	                                  });
 
 
@@ -190,11 +180,6 @@ void ImageListPanel::enableDisableButtons()
 	m_sendBackwardButton->setEnabled(hasImage && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
 	m_linearToggle->setEnabled(hasValidImage);
 	m_sRGBToggle->setEnabled(hasValidImage);
-	bool showRecompute = hasValidImage &&
-		(m_imageMgr->currentImage()->histogramDirty() ||
-		 m_imageViewer->exposure() != m_imageMgr->currentImage()->histogramExposure());
-	m_recomputeHistogram->setEnabled(showRecompute);
-	m_recomputeHistogram->setIcon(showRecompute ? ENTYPO_ICON_WARNING : ENTYPO_ICON_CHECK);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
@@ -202,7 +187,7 @@ void ImageListPanel::setCurrentImage(int newIndex)
 	for (int i = 0; i < (int) m_imageButtons.size(); ++i)
 		m_imageButtons[i]->setIsSelected(i == newIndex ? true : false);
 
-	updateHistogram();
+	requestHistogramUpdate(true);
 }
 
 void ImageListPanel::setReferenceImage(int newIndex)
@@ -213,6 +198,11 @@ void ImageListPanel::setReferenceImage(int newIndex)
 
 void ImageListPanel::draw(NVGcontext *ctx)
 {
+	// if it has been more than 2 seconds since we requested a histogram update, then update it
+	if (m_histogramUpdateRequested &&
+		(glfwGetTime() - m_histogramRequestTime) > 1.0)
+		updateHistogram();
+
 	if (m_histogramDirty &&
 		m_imageMgr->currentImage() &&
 		!m_imageMgr->currentImage()->isNull() &&
@@ -269,5 +259,19 @@ void ImageListPanel::updateHistogram()
 	if (m_imageMgr->currentImage())
 		m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());
 
-	enableDisableButtons();
+	m_histogramUpdateRequested = false;
+	m_histogramRequestTime = glfwGetTime();
+}
+
+void ImageListPanel::requestHistogramUpdate(bool force)
+{
+
+	if (force)
+		updateHistogram();
+	else// if (!m_histogramUpdateRequested)
+	{
+		// if no histogram update is pending, then queue one up, and start the timer
+		m_histogramUpdateRequested = true;
+		m_histogramRequestTime = glfwGetTime();
+	}
 }

@@ -158,6 +158,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             float mCf = max(mC[0], mC[1], mC[2]);
 		                             console->debug("max value: {}", mCf);
 		                             m_imageView->setExposure(log2(1.0f/mCf));
+		                             m_imagesPanel->requestHistogramUpdate(true);
 	                             });
 	normalizeButton->setTooltip("Normalize exposure.");
 	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_BACK_IN_TIME);
@@ -167,6 +168,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             m_imageView->setExposure(0.0f);
 		                             m_imageView->setGamma(2.2f);
 		                             m_imageView->setSRGB(true);
+		                             m_imagesPanel->requestHistogramUpdate(true);
 	                             });
 	resetButton->setTooltip("Reset tonemapping.");
 
@@ -196,12 +198,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     exposureTextBox->setAlignment(TextBox::Alignment::Right);
     exposureTextBox->setCallback([this](float e)
                                  {
-                                       m_imageView->setExposure(e);
+	                                 m_imageView->setExposure(e);
                                  });
     exposureSlider->setCallback([this](float v)
 						        {
 							        m_imageView->setExposure(round(4*v) / 4.0f);
 						        });
+	exposureSlider->setFinalCallback([this](float v)
+	                                 {
+		                                 m_imageView->setExposure(round(4*v) / 4.0f);
+		                                 m_imagesPanel->requestHistogramUpdate(true);
+	                                 });
     exposureSlider->setFixedWidth(100);
     exposureSlider->setRange({-9.0f,9.0f});
     exposureTextBox->setValue(exposure);
@@ -219,13 +226,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     m_imageView->setGamma(value);
                                     gammaSlider->setValue(value);
                                 });
-    gammaSlider->setCallback([&,gammaSlider,gammaTextBox](float value)
-    {
-        float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
-        m_imageView->setGamma(g);
-        gammaTextBox->setValue(g);
-        gammaSlider->setValue(g);       // snap values
-    });
+    gammaSlider->setCallback(
+	    [&,gammaSlider,gammaTextBox](float value)
+	    {
+		    float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
+		    m_imageView->setGamma(g);
+		    gammaTextBox->setValue(g);
+		    gammaSlider->setValue(g);       // snap values
+	    });
     gammaSlider->setFixedWidth(100);
     gammaSlider->setRange({0.02f,9.0f});
     gammaSlider->setValue(gamma);
@@ -235,6 +243,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                      {
 	                                     exposureTextBox->setValue(e);
 	                                     exposureSlider->setValue(e);
+	                                     m_imagesPanel->requestHistogramUpdate();
                                      });
     m_imageView->setGammaCallback([gammaTextBox,gammaSlider](float g)
                                   {
@@ -307,7 +316,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_imageMgr->setImageModifyDoneCallback([this, editPanel](int i)
 	                                       {
 		                                       updateCaption();
-		                                       m_imagesPanel->updateHistogram();
+		                                       m_imagesPanel->requestHistogramUpdate(true);
 	                                       });
 
 

@@ -21,7 +21,7 @@ public:
 	void repopulateImageList();
 	void setCurrentImage(int newIndex);
 	void setReferenceImage(int newIndex);
-	void updateHistogram();
+	void requestHistogramUpdate(bool force = false);
 
 	EBlendMode blendMode() const;
 	void setBlendMode(EBlendMode mode);
@@ -31,6 +31,7 @@ public:
 
 private:
 	void enableDisableButtons();
+	void updateHistogram();
 
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageManager * m_imageMgr = nullptr;
@@ -46,9 +47,10 @@ private:
 
 	Button * m_linearToggle = nullptr;
 	Button * m_sRGBToggle = nullptr;
-	Button * m_recomputeHistogram = nullptr;
 	MultiGraph * m_graph = nullptr;
 	bool m_histogramDirty = false;
+	bool m_histogramUpdateRequested = false;
+	double m_histogramRequestTime;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
