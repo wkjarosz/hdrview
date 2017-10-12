@@ -64,10 +64,12 @@ void MultiGraph::draw(NVGcontext *ctx)
 
 			nvgBeginPath(ctx);
 			nvgMoveTo(ctx, mPos.x() + hpad, mPos.y() + mSize.y() - bpad);
+			float invSize = 1.f / v.size();
 			for (int i = 0; i < v.size(); ++i)
 			{
 				float value = v[i];
-				float vx = mPos.x() + hpad + i * (mSize.x() - 2 * hpad) / (float) (v.size() - 1);
+				float xfrac = (i+0.5f) * invSize;
+				float vx = mPos.x() + hpad + xfrac * (mSize.x() - 2 * hpad);
 				float vy = mPos.y() + mSize.y() - clamp(value, 0.0f, 1.0f) * (mSize.y() - tpad - bpad) - bpad;
 				nvgLineTo(ctx, vx, vy);
 			}
