@@ -29,6 +29,7 @@ struct ImageHistogram
 
 	Eigen::MatrixX3f linearHistogram;
 	Eigen::MatrixX3f sRGBHistogram;
+	Eigen::MatrixX3f logHistogram;
 
 	float exposure;
 };

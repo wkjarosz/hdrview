@@ -8,6 +8,7 @@
 
 #include <string>
 #include <vector>
+#include <cmath>
 #include <algorithm>
 #include <memory>
 #include "fwd.h"
@@ -118,6 +119,31 @@ inline T mod(T a, T b)
     return a;
 }
 
+
+template <typename T>
+inline T logScale(T val)
+{
+    static const T eps = T(0.001);
+    static const T logeps = std::log(eps);
+
+    return val > 0 ? (std::log(val + eps) - logeps) : -(std::log(-val + eps) - logeps);
+}
+
+
+template <typename T>
+inline T normalizedLogScale(T val, T minLog, T diffLog)
+{
+    return (logScale(val) - minLog) / diffLog;
+}
+
+
+template <typename T>
+inline T normalizedLogScale(T val)
+{
+    static const T minLog = logScale(T(0));
+    static const T diffLog = logScale(T(1)) - minLog;
+    return normalizedLogScale(val, minLog, diffLog);
+}
 
 
 template <typename T>

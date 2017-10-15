@@ -45,8 +45,8 @@ private:
 	ComboBox * m_channels = nullptr;
 	std::vector<ImageButton*> m_imageButtons;
 
-	Button * m_linearToggle = nullptr;
-	Button * m_sRGBToggle = nullptr;
+	ComboBox * m_xAxisScale = nullptr,
+			 * m_yAxisScale = nullptr;
 	MultiGraph * m_graph = nullptr;
 	bool m_histogramDirty = false;
 	bool m_histogramUpdateRequested = false;

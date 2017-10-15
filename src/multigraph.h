@@ -22,15 +22,6 @@ public:
 	           const Color & fg = Color(255, 192, 0, 128),
 	           const VectorXf & v = VectorXf());
 
-	const std::string &caption() const { return mCaption; }
-	void setCaption(const std::string &caption) { mCaption = caption; }
-
-	const std::string &header() const { return mHeader; }
-	void setHeader(const std::string &header) { mHeader = header; }
-
-	const std::string &footer() const { return mFooter; }
-	void setFooter(const std::string &footer) { mFooter = footer; }
-
 	const Color &backgroundColor() const { return mBackgroundColor; }
 	void setBackgroundColor(const Color &backgroundColor) { mBackgroundColor = backgroundColor; }
 
@@ -49,7 +40,15 @@ public:
 	void setValues(const VectorXf &values, int plot = 0) { mValues[plot] = values; }
 
 
-	void setLinear(bool b)          { m_linear = b; }
+	enum AxisScale : int
+	{
+		ELinear = 0,
+		ESRGB = 1,
+		ELog = 2
+	};
+
+	void setXScale(AxisScale s)     { m_xAxisScale = s; }
+	void setYScale(AxisScale s)     { m_yAxisScale = s; }
 	void setMinimum(float minimum)  { m_minimum = minimum; }
 	void setAverage(float average)  { m_average = average; }
 	void setMaximum(float maximum)  { m_maximum = maximum; }
@@ -62,12 +61,11 @@ public:
 	virtual bool load(Serializer &s) override;
 
 protected:
-	std::string mCaption, mHeader, mFooter;
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
 	float m_minimum = 0, m_average = 0, m_maximum = 0, m_displayMax = 0;
-	bool m_linear = true;
+	AxisScale m_yAxisScale = ELinear, m_xAxisScale = ELinear;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

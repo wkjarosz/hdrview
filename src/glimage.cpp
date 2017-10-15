@@ -26,32 +26,24 @@ shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
 	static const int numBins = 256;
 
 	auto ret = make_shared<ImageHistogram>();
-    ret->linearHistogram = ret->sRGBHistogram = MatrixX3f::Zero(numBins, 3);
+    ret->linearHistogram = ret->sRGBHistogram = ret->logHistogram = MatrixX3f::Zero(numBins, 3);
 	ret->exposure = exposure;
 	ret->average = 0;
-	ret->maximum = -numeric_limits<float>::infinity();
-	ret->minimum = numeric_limits<float>::infinity();
+
+	ret->maximum = img.max().Color3::max();
+	ret->minimum = img.min().Color3::min();
 
 	Color4 gain(pow(2.f, exposure), 1.f);
 	float d = 1.f / (img.width() * img.height());
 
-//    parallel_for(0, img.height(), [&ret, &img, gain, d](int y)
     for (int y = 0; y < img.height(); ++y)
     {
         for (int x = 0; x < img.width(); ++x)
         {
-            Color4 clin = img(x,y);
-            Color4 crgb = LinearToSRGB(img(x, y) * gain);
+            Color4 clin = gain * img(x,y);
+            Color4 crgb = LinearToSRGB(clin);
 
-	        for (int c = 0; c < 3; ++c)
-	        {
-		        float val = clin[c];
-		        ret->average += val;
-		        ret->maximum = max(ret->maximum, val);
-		        ret->minimum = min(ret->minimum, val);
-	        }
-
-	        clin *= gain;
+	        ret->average += clin[0] + clin[1] + clin[2];
 
 	        ret->linearHistogram(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
 	        ret->linearHistogram(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;
@@ -60,11 +52,26 @@ shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
 	        ret->sRGBHistogram(clamp(int(floor(crgb[0] * numBins)), 0, numBins - 1), 0) += d;
 	        ret->sRGBHistogram(clamp(int(floor(crgb[1] * numBins)), 0, numBins - 1), 1) += d;
 	        ret->sRGBHistogram(clamp(int(floor(crgb[2] * numBins)), 0, numBins - 1), 2) += d;
+
+	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[0]) * numBins)), 0, numBins - 1), 0) += d;
+	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[1]) * numBins)), 0, numBins - 1), 1) += d;
+	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[2]) * numBins)), 0, numBins - 1), 2) += d;
         }
     }
-//	);
 
-	ret->average /= img.width() * img.height();
+	ret->average /= 3 * img.width() * img.height();
+
+
+	// Normalize each histogram according to its 10th-largest bin
+	MatrixX3f * hists[3] = {&ret->linearHistogram, &ret->sRGBHistogram, &ret->logHistogram};
+	MatrixXf temp;
+	for (int i = 0; i < 3; ++i)
+	{
+		temp = *(hists[i]);
+		DenseIndex idx = temp.size() - 10;
+		nth_element(temp.data(), temp.data() + idx, temp.data() + temp.size());
+		*(hists[i]) /= temp(idx);
+	}
 
 	return ret;
 }
@@ -348,7 +355,7 @@ void GLImage::recomputeHistograms(float exposure) const
 {
 	checkAsyncResult();
 
-    if (!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure)
+    if ((!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure) && !m_image->isNull())
     {
         m_histograms = make_shared<LazyHistogram>(
 	        [this,exposure](void)

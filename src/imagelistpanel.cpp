@@ -31,23 +31,22 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	agl->appendRow(0);
 	agl->setAnchor(new Label(grid, "Histogram:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
-	m_linearToggle = new Button(grid, "Linear");
-	agl->setAnchor(m_linearToggle, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+	m_yAxisScale = new ComboBox(grid);
+	m_yAxisScale->setTooltip("Set the scale for the Y axis.");
+	m_yAxisScale->setItems({"Linear", "Log"});
+	m_yAxisScale->setFixedHeight(19);
+	agl->setAnchor(m_yAxisScale, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-	m_sRGBToggle = new Button(grid, "sRGB");
-	agl->setAnchor(m_sRGBToggle, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+	m_xAxisScale = new ComboBox(grid);
+	m_xAxisScale->setTooltip("Set the scale for the X axis.");
+	m_xAxisScale->setItems({"Linear", "sRGB", "Log"});
+	m_xAxisScale->setFixedHeight(19);
+	agl->setAnchor(m_xAxisScale, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-	m_linearToggle->setFlags(Button::RadioButton);
-	m_sRGBToggle->setFlags(Button::RadioButton);
-	m_linearToggle->setFixedHeight(19);
-	m_sRGBToggle->setFixedHeight(19);
-	m_linearToggle->setTooltip("Show sRGB histogram.");
-	m_sRGBToggle->setTooltip("Show linear histogram.");
-	m_linearToggle->setPushed(true);
-	m_linearToggle->setChangeCallback([this](bool b)
-	                                  {
-		                                  requestHistogramUpdate(true);
-	                                  });
+	m_xAxisScale->setSelectedIndex(1);
+	m_yAxisScale->setSelectedIndex(0);
+	m_xAxisScale->setCallback([this](int){ updateHistogram(); });
+	m_yAxisScale->setCallback([this](int){ updateHistogram(); });
 
 
 	auto row = new Widget(this);
@@ -88,10 +87,9 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 
 	grid = new Widget(this);
-	agl = new AdvancedGridLayout({0, 4, 19, 4, 0, 4, 0});
+	agl = new AdvancedGridLayout({0, 4, 0});
 	grid->setLayout(agl);
-	agl->setColStretch(4, 1.0f);
-	agl->setColStretch(6, 1.0f);
+	agl->setColStretch(2, 1.0f);
 
 	agl->appendRow(0);
 	agl->setAnchor(new Label(grid, "Mode:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
@@ -100,7 +98,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_blendModes->setItems(blendModeNames());
 	m_blendModes->setFixedHeight(19);
 	m_blendModes->setCallback([imgViewer](int b){imgViewer->setBlendMode(EBlendMode(b));});
-	agl->setAnchor(m_blendModes, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 5, 1, Alignment::Fill, Alignment::Fill));
+	agl->setAnchor(m_blendModes, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 
 	agl->appendRow(4);  // spacing
 	agl->appendRow(0);
@@ -111,7 +109,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_channels->setFixedHeight(19);
 	setChannel(EChannel::RGB);
 	m_channels->setCallback([imgViewer](int c){imgViewer->setChannel(EChannel(c));});
-	agl->setAnchor(m_channels, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 5, 1, Alignment::Fill, Alignment::Fill));
+	agl->setAnchor(m_channels, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
 }
 
 EBlendMode ImageListPanel::blendMode() const
@@ -178,8 +176,6 @@ void ImageListPanel::enableDisableButtons()
 	m_closeButton->setEnabled(hasImage);
 	m_bringForwardButton->setEnabled(hasImage && m_imageMgr->currentImageIndex() > 0);
 	m_sendBackwardButton->setEnabled(hasImage && m_imageMgr->currentImageIndex() < m_imageMgr->numImages()-1);
-	m_linearToggle->setEnabled(hasValidImage);
-	m_sRGBToggle->setEnabled(hasValidImage);
 }
 
 void ImageListPanel::setCurrentImage(int newIndex)
@@ -210,16 +206,17 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		m_imageMgr->currentImage()->histograms()->ready())
 	{
 		auto lazyHist = m_imageMgr->currentImage()->histograms();
-		auto hist = m_linearToggle->pushed() ? lazyHist->get()->linearHistogram : lazyHist->get()->sRGBHistogram;
-		int numBins = hist.rows();
-		float maxValue = hist.block(1,0,numBins-2,3).maxCoeff() * 1.3f;
-		m_graph->setValues(hist.col(0)/maxValue, 0);
-		m_graph->setValues(hist.col(1)/maxValue, 1);
-		m_graph->setValues(hist.col(2)/maxValue, 2);
+		int idx = m_xAxisScale->selectedIndex();
+		int idxY = m_yAxisScale->selectedIndex();
+		auto hist = idx == 0 ? lazyHist->get()->linearHistogram : (idx == 1 ? lazyHist->get()->sRGBHistogram : lazyHist->get()->logHistogram);
+		m_graph->setValues(hist.col(0), 0);
+		m_graph->setValues(hist.col(1), 1);
+		m_graph->setValues(hist.col(2), 2);
 		m_graph->setMinimum(lazyHist->get()->minimum);
 		m_graph->setAverage(lazyHist->get()->average);
 		m_graph->setMaximum(lazyHist->get()->maximum);
-		m_graph->setLinear(m_linearToggle->pushed());
+		m_graph->setXScale(MultiGraph::AxisScale(idx));
+		m_graph->setYScale(idxY == 0 ? MultiGraph::ELinear : MultiGraph::ELog);
 		m_graph->setDisplayMax(pow(2.f, -lazyHist->get()->exposure));
 		m_histogramDirty = false;
 	}
@@ -253,7 +250,8 @@ void ImageListPanel::updateHistogram()
 	m_graph->setMinimum(0.f);
 	m_graph->setAverage(0.5f);
 	m_graph->setMaximum(1.f);
-	m_graph->setLinear(m_linearToggle->pushed());
+	int idx = m_xAxisScale->selectedIndex();
+	m_graph->setXScale(MultiGraph::AxisScale(idx));
 	m_graph->setDisplayMax(1.f);
 
 	if (m_imageMgr->currentImage())
@@ -265,7 +263,6 @@ void ImageListPanel::updateHistogram()
 
 void ImageListPanel::requestHistogramUpdate(bool force)
 {
-
 	if (force)
 		updateHistogram();
 	else// if (!m_histogramUpdateRequested)

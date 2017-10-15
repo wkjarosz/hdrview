@@ -89,7 +89,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanelContents = new Widget(m_sideScrollPanel);
 	m_sidePanelContents->setLayout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_sidePanelContents->setFixedWidth(202);
+	m_sidePanelContents->setFixedWidth(213);
 	m_sideScrollPanel->setFixedWidth(m_sidePanelContents->fixedWidth() + 12);
 	m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
 
