@@ -39,20 +39,10 @@ public:
 	VectorXf &values(int plot = 0) { return mValues[plot]; }
 	void setValues(const VectorXf &values, int plot = 0) { mValues[plot] = values; }
 
-
-	enum AxisScale : int
-	{
-		ELinear = 0,
-		ESRGB = 1,
-		ELog = 2
-	};
-
-	void setXScale(AxisScale s)     { m_xAxisScale = s; }
-	void setYScale(AxisScale s)     { m_yAxisScale = s; }
+	void setXTicks(const VectorXf & ticks, const std::vector<std::string> & labels);
 	void setMinimum(float minimum)  { m_minimum = minimum; }
 	void setAverage(float average)  { m_average = average; }
 	void setMaximum(float maximum)  { m_maximum = maximum; }
-	void setDisplayMax(float dmax)  { m_displayMax = dmax; }
 
 	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
@@ -64,8 +54,9 @@ protected:
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
-	float m_minimum = 0, m_average = 0, m_maximum = 0, m_displayMax = 0;
-	AxisScale m_yAxisScale = ELinear, m_xAxisScale = ELinear;
+	float m_minimum = 0, m_average = 0, m_maximum = 0;
+	VectorXf mXTicks;
+	std::vector<std::string> mXTickLabels;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

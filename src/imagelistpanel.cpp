@@ -208,16 +208,16 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		auto lazyHist = m_imageMgr->currentImage()->histograms();
 		int idx = m_xAxisScale->selectedIndex();
 		int idxY = m_yAxisScale->selectedIndex();
-		auto hist = idx == 0 ? lazyHist->get()->linearHistogram : (idx == 1 ? lazyHist->get()->sRGBHistogram : lazyHist->get()->logHistogram);
-		m_graph->setValues(hist.col(0), 0);
-		m_graph->setValues(hist.col(1), 1);
-		m_graph->setValues(hist.col(2), 2);
+		auto hist = lazyHist->get()->histogram[idx].values;
+		auto ticks = lazyHist->get()->histogram[idx].xTicks;
+		auto labels = lazyHist->get()->histogram[idx].xTickLabels;
+		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(0) : hist.col(0).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 0);
+		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(1) : hist.col(1).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 1);
+		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(2) : hist.col(2).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 2);
+		m_graph->setXTicks(ticks, labels);
 		m_graph->setMinimum(lazyHist->get()->minimum);
 		m_graph->setAverage(lazyHist->get()->average);
 		m_graph->setMaximum(lazyHist->get()->maximum);
-		m_graph->setXScale(MultiGraph::AxisScale(idx));
-		m_graph->setYScale(idxY == 0 ? MultiGraph::ELinear : MultiGraph::ELog);
-		m_graph->setDisplayMax(pow(2.f, -lazyHist->get()->exposure));
 		m_histogramDirty = false;
 	}
 	enableDisableButtons();
@@ -250,9 +250,6 @@ void ImageListPanel::updateHistogram()
 	m_graph->setMinimum(0.f);
 	m_graph->setAverage(0.5f);
 	m_graph->setMaximum(1.f);
-	int idx = m_xAxisScale->selectedIndex();
-	m_graph->setXScale(MultiGraph::AxisScale(idx));
-	m_graph->setDisplayMax(1.f);
 
 	if (m_imageMgr->currentImage())
 		m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());

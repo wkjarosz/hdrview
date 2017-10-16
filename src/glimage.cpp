@@ -14,19 +14,26 @@
 #include <nanogui/glutil.h>
 #include <cmath>
 #include <spdlog/spdlog.h>
+#include "multigraph.h"
 
 using namespace nanogui;
 using namespace Eigen;
 using namespace std;
 
-namespace
-{
-shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
+shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &img, float exposure)
 {
 	static const int numBins = 256;
+	static const int numTicks = 8;
+	float displayMax = pow(2.f, -exposure);
 
-	auto ret = make_shared<ImageHistogram>();
-    ret->linearHistogram = ret->sRGBHistogram = ret->logHistogram = MatrixX3f::Zero(numBins, 3);
+	auto ret = make_shared<ImageStatistics>();
+	for (int i = 0; i < ENumAxisScales; ++i)
+	{
+		ret->histogram[i].values = MatrixX3f::Zero(numBins, 3);
+		ret->histogram[i].xTicks.resize(numTicks + 1);
+		ret->histogram[i].xTickLabels.resize(numTicks + 1);
+	}
+
 	ret->exposure = exposure;
 	ret->average = 0;
 
@@ -36,26 +43,16 @@ shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
 	Color4 gain(pow(2.f, exposure), 1.f);
 	float d = 1.f / (img.width() * img.height());
 
-    for (int y = 0; y < img.height(); ++y)
+	for (Eigen::DenseIndex i = 0; i < img.size(); ++i)
     {
-        for (int x = 0; x < img.width(); ++x)
+        Color4 val = gain * img(i);
+        ret->average += val[0] + val[1] + val[2];
+
+        for (int c = 0; c < 3; ++c)
         {
-            Color4 clin = gain * img(x,y);
-            Color4 crgb = LinearToSRGB(clin);
-
-	        ret->average += clin[0] + clin[1] + clin[2];
-
-	        ret->linearHistogram(clamp(int(floor(clin[0] * numBins)), 0, numBins - 1), 0) += d;
-	        ret->linearHistogram(clamp(int(floor(clin[1] * numBins)), 0, numBins - 1), 1) += d;
-	        ret->linearHistogram(clamp(int(floor(clin[2] * numBins)), 0, numBins - 1), 2) += d;
-
-	        ret->sRGBHistogram(clamp(int(floor(crgb[0] * numBins)), 0, numBins - 1), 0) += d;
-	        ret->sRGBHistogram(clamp(int(floor(crgb[1] * numBins)), 0, numBins - 1), 1) += d;
-	        ret->sRGBHistogram(clamp(int(floor(crgb[2] * numBins)), 0, numBins - 1), 2) += d;
-
-	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[0]) * numBins)), 0, numBins - 1), 0) += d;
-	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[1]) * numBins)), 0, numBins - 1), 1) += d;
-	        ret->logHistogram(clamp(int(floor(normalizedLogScale(clin[2]) * numBins)), 0, numBins - 1), 2) += d;
+	        ret->histogram[ELinear].values(clamp(int(floor(val[c] * numBins)), 0, numBins - 1), c) += d;
+	        ret->histogram[ESRGB].values(clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1), c) += d;
+	        ret->histogram[ELog].values(clamp(int(floor(normalizedLogScale(val[c]) * numBins)), 0, numBins - 1), c) += d;
         }
     }
 
@@ -63,20 +60,36 @@ shared_ptr<ImageHistogram> makeHistograms(const HDRImage & img, float exposure)
 
 
 	// Normalize each histogram according to its 10th-largest bin
-	MatrixX3f * hists[3] = {&ret->linearHistogram, &ret->sRGBHistogram, &ret->logHistogram};
 	MatrixXf temp;
-	for (int i = 0; i < 3; ++i)
+	for (int i = 0; i < ENumAxisScales; ++i)
 	{
-		temp = *(hists[i]);
+		temp = ret->histogram[i].values;
 		DenseIndex idx = temp.size() - 10;
 		nth_element(temp.data(), temp.data() + idx, temp.data() + temp.size());
-		*(hists[i]) /= temp(idx);
+		ret->histogram[i].values /= temp(idx);
+	}
+
+	// create the tick marks and tick labels
+	for (int i = 0; i <= numTicks; ++i)
+	{
+		for (int j = 0; j < ENumAxisScales; ++j)
+		{
+			float frac = float(i) / numTicks;
+			string text = fmt::format("{:.3f}", displayMax * frac);
+
+			ret->histogram[ELinear].xTickLabels[i] = text;
+			ret->histogram[ELinear].xTicks(i) = frac;
+
+			ret->histogram[ESRGB].xTickLabels[i] = text;
+			ret->histogram[ESRGB].xTicks(i) = LinearToSRGB(frac);
+
+			ret->histogram[ELog].xTickLabels[i] = text;
+			ret->histogram[ELog].xTicks(i) = normalizedLogScale(frac);
+		}
 	}
 
 	return ret;
 }
-
-} // namespace
 
 
 
@@ -360,7 +373,7 @@ void GLImage::recomputeHistograms(float exposure) const
         m_histograms = make_shared<LazyHistogram>(
 	        [this,exposure](void)
 	        {
-		        return makeHistograms(*m_image, exposure);
+		        return ImageStatistics::computeStatistics(*m_image, exposure);
 	        });
         m_histograms->compute();
         m_histogramDirty = false;

@@ -21,17 +21,32 @@
 #include <memory>
 
 
-struct ImageHistogram
+struct ImageStatistics
 {
 	float minimum;
 	float average;
 	float maximum;
-
-	Eigen::MatrixX3f linearHistogram;
-	Eigen::MatrixX3f sRGBHistogram;
-	Eigen::MatrixX3f logHistogram;
-
 	float exposure;
+
+	enum AxisScale : int
+	{
+		ELinear = 0,
+		ESRGB = 1,
+		ELog = 2,
+		ENumAxisScales = 3
+	};
+
+	struct Histogram
+	{
+		Eigen::MatrixX3f values;
+		Eigen::VectorXf xTicks;
+		std::vector<std::string> xTickLabels;
+	};
+
+	Histogram histogram[ENumAxisScales];
+
+
+	static std::shared_ptr<ImageStatistics> computeStatistics(const HDRImage &img, float exposure);
 };
 
 
@@ -78,7 +93,7 @@ private:
 class GLImage
 {
 public:
-	using LazyHistogram = AsyncTask<std::shared_ptr<ImageHistogram>>;
+	using LazyHistogram = AsyncTask<std::shared_ptr<ImageStatistics>>;
 	using LazyHistogramPtr = std::shared_ptr<LazyHistogram>;
 	using ConstModifyingTask = std::shared_ptr<const AsyncTask<ImageCommandResult>>;
 	using ModifyingTask = std::shared_ptr<AsyncTask<ImageCommandResult>>;
