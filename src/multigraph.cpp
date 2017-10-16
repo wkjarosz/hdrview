@@ -51,7 +51,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 
 	static const int hpad = 10;
 	static const int bpad = 12;
-	static const int tpad = 5;
+	static const int tpad = 15;
 	static const int textPad = 4;
 
 	auto xPosition = [this](float xfrac)
@@ -64,6 +64,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 	};
 
 	float y0 = yPosition(0.0f);
+	float y1 = yPosition(1.0f);
 	float x0 = xPosition(0.0f);
 	float x1 = xPosition(1.0f);
 
@@ -116,6 +117,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 	float prevTextBound = 0;
 	float lastTextBound = 0;
 	float xPos = 0;
+	float yPos = 0;
 	float textWidth = 0.0f;
 
 	if (mXTicks.size() >= 2)
@@ -161,8 +163,8 @@ void MultiGraph::draw(NVGcontext *ctx)
 			// tick
 			xPos = xPosition(mXTicks[i]);
 			nvgBeginPath(ctx);
-			nvgMoveTo(ctx, xPos, y0 - 3);
-			nvgLineTo(ctx, xPos, y0 + 3);
+			nvgMoveTo(ctx, xPos, y0 - 2);
+			nvgLineTo(ctx, xPos, y0 + 2);
 			nvgStroke(ctx);
 
 			// tick label
@@ -177,6 +179,30 @@ void MultiGraph::draw(NVGcontext *ctx)
 				nvgText(ctx, xPos, y0 + 2, mXTickLabels[i].c_str(), NULL);
 				prevTextBound = xPos + textWidth;
 			}
+		}
+	}
+
+	if (mYTicks.size() >= 2)
+	{
+		// draw vertical axis
+		nvgBeginPath(ctx);
+		nvgStrokeColor(ctx, axisColor);
+		nvgMoveTo(ctx, x0, y0);
+		nvgLineTo(ctx, x0, y1);
+		nvgStroke(ctx);
+
+		nvgFillColor(ctx, axisColor);
+
+		int numTicks = mYTicks.size();
+		for (int i = 0; i < numTicks; ++i)
+		{
+			// tick
+			yPos = yPosition(mYTicks[i]);
+			nvgBeginPath(ctx);
+			int w2 = (i == 0 || i == numTicks-1) ? 3 : 2;
+			nvgMoveTo(ctx, x0 - w2, yPos);
+			nvgLineTo(ctx, x0 + w2, yPos);
+			nvgStroke(ctx);
 		}
 	}
 

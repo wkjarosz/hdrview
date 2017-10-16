@@ -211,10 +211,13 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		auto hist = lazyHist->get()->histogram[idx].values;
 		auto ticks = lazyHist->get()->histogram[idx].xTicks;
 		auto labels = lazyHist->get()->histogram[idx].xTickLabels;
-		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(0) : hist.col(0).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 0);
-		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(1) : hist.col(1).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 1);
-		m_graph->setValues(0.75f*(idxY == 0 ? hist.col(2) : hist.col(2).unaryExpr([](float v){return normalizedLogScale(v);}).eval()), 2);
+		m_graph->setValues(idxY == 0 ? hist.col(0) : hist.col(0).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 0);
+		m_graph->setValues(idxY == 0 ? hist.col(1) : hist.col(1).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 1);
+		m_graph->setValues(idxY == 0 ? hist.col(2) : hist.col(2).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 2);
 		m_graph->setXTicks(ticks, labels);
+		VectorXf yTicks = VectorXf::LinSpaced(9,0.0f,1.0f);
+		if (idxY != 0) yTicks = yTicks.unaryExpr([](float v){return normalizedLogScale(v);});
+		m_graph->setYTicks(yTicks);
 		m_graph->setMinimum(lazyHist->get()->minimum);
 		m_graph->setAverage(lazyHist->get()->average);
 		m_graph->setMaximum(lazyHist->get()->maximum);

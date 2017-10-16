@@ -28,11 +28,7 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 
 	auto ret = make_shared<ImageStatistics>();
 	for (int i = 0; i < ENumAxisScales; ++i)
-	{
 		ret->histogram[i].values = MatrixX3f::Zero(numBins, 3);
-		ret->histogram[i].xTicks.resize(numTicks + 1);
-		ret->histogram[i].xTickLabels.resize(numTicks + 1);
-	}
 
 	ret->exposure = exposure;
 	ret->average = 0;
@@ -69,24 +65,17 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 		ret->histogram[i].values /= temp(idx);
 	}
 
-	// create the tick marks and tick labels
+	// create the tick marks
+	ret->histogram[ELinear].xTicks.setLinSpaced(numTicks+1, 0.0f, 1.0f);
+	ret->histogram[ESRGB].xTicks = ret->histogram[ELinear].xTicks.unaryExpr([](float v){return LinearToSRGB(v);});
+	ret->histogram[ELog].xTicks = ret->histogram[ELinear].xTicks.unaryExpr([](float v){return normalizedLogScale(v);});
+
+	// create the tick labels
+	auto & hist = ret->histogram[ELinear];
+	hist.xTickLabels.resize(numTicks + 1);
 	for (int i = 0; i <= numTicks; ++i)
-	{
-		for (int j = 0; j < ENumAxisScales; ++j)
-		{
-			float frac = float(i) / numTicks;
-			string text = fmt::format("{:.3f}", displayMax * frac);
-
-			ret->histogram[ELinear].xTickLabels[i] = text;
-			ret->histogram[ELinear].xTicks(i) = frac;
-
-			ret->histogram[ESRGB].xTickLabels[i] = text;
-			ret->histogram[ESRGB].xTicks(i) = LinearToSRGB(frac);
-
-			ret->histogram[ELog].xTickLabels[i] = text;
-			ret->histogram[ELog].xTicks(i) = normalizedLogScale(frac);
-		}
-	}
+		hist.xTickLabels[i] = fmt::format("{:.3f}", displayMax * hist.xTicks[i]);
+	ret->histogram[ESRGB].xTickLabels = ret->histogram[ELog].xTickLabels = hist.xTickLabels;
 
 	return ret;
 }
