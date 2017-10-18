@@ -41,6 +41,7 @@ const vector<string> & channelNames()
             "CIE L*",
             "CIE a*",
             "CIE b*",
+            "CIE chromaticity",
             "False color",
             "Negative-positive"
         };

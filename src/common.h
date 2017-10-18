@@ -128,6 +128,66 @@ inline T inverseCosStep(T a, T b, T x)
 	return acos(T(1) - T(2)*t)*T(M_1_PI);
 }
 
+
+/*!
+ * @brief  Evaluates Perlin's bias function to control the mean/midpoint of a function.
+ *
+ * Remaps the value t to increase/decrease the midpoint while preserving the values at t=0 and t=1.
+ *
+ * As described in:
+ * "Hypertexture"
+ * Ken Perlin and Eric M. Hoffert: Computer Graphics, v23, n3, p287-296, 1989.
+ *
+ * Properties:
+ *    bias(0.0, a) = 0,
+ *    bias(0.5, a) = a,
+ *    bias(1.0, a) = 1, and
+ *    bias(t  , a) remaps the value t using a power curve.
+ *
+ * @tparam T The template parameter (typically float or double)
+ * @param  t The percentage value in [0,1]
+ * @param  a The shape parameter in [0,1]
+ * @return   The remapped result in [0,1]
+ */
+template <typename T>
+inline T biasPerlin(T t, T a)
+{
+	return pow(t, -log2(a));
+}
+
+/*!
+ * @brief  Perlin's gain function to increase/decrease the gradient/slope of the input at the midpoint.
+ *
+ * Remaps the value t to increase or decrease contrast using an s-curve (or inverse s-curve) function.
+ *
+ * As described in:
+ * "Hypertexture"
+ * Ken Perlin and Eric M. Hoffert: Computer Graphics, v23, n3, p287-296, 1989.
+ *
+ * Properties:
+ *    gain(0.0, P) = 0.0,
+ *    gain(0.5, P) = 0.5,
+ *    gain(1.0, P) = 1.0,
+ *    gain(t  , 1) = t.
+ *    gain(gain(t, P, 1/P) = t.
+ *
+ * @tparam T The template parameter (typically float or double)
+ * @param  t The percentage value in [0,1]
+ * @param  P The shape exponent. In Perlin's original version the exponent P = -log2(a).
+ * 			 In this version we pass the exponent directly to avoid the logarithm.
+ * 			 P > 1 creates an s-curve, and P < 1 an inverse s-curve.
+ * 			 If the input is a linear ramp, the slope of the output at the midpoint 0.5 becomes P.
+ * @return   The remapped result in [0,1]
+ */
+template <typename T>
+inline T gainPerlin(T t, T P)
+{
+	if (t > T(0.5))
+		return T(1) - T(0.5)*pow(T(2) - T(2)*t, P);
+	else
+		return T(0.5)*pow(T(2)*t, P);
+}
+
 /*!
  * @brief  Evaluates Schlick's rational version of Perlin's bias function.
  *
@@ -141,9 +201,9 @@ inline T inverseCosStep(T a, T b, T x)
  * @return   The remapped result
  */
 template <typename T>
-inline T bias(T t, T a)
+inline T biasSchlick(T t, T a)
 {
-    return t / ((((T(1)/a) - T(2)) * (T(1) - t)) + T(1));
+	return t / ((((T(1)/a) - T(2)) * (T(1) - t)) + T(1));
 }
 
 /*!
@@ -159,34 +219,12 @@ inline T bias(T t, T a)
  * @return   The remapped result
  */
 template <typename T>
-inline T gain(T t, T a)
+inline T gainSchlick(T t, T a)
 {
-    if (t < T(0.5))
-        return bias(t * T(2), a)/T(2);
-    else
-        return bias(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
-}
-
-/*!
- * @brief  A Perlin gain-like s-curve function that is invertible.
- *
- * Useful for taking a linear ramp (x) and turning it into an s-curve (or inverse s-curve) function.
- *
- * @tparam T The template parameter (typically float or double)
- * @param  x The percentage value (between 0 and 1)
- * @param  P The shape exponent. P > 1 creates an s-curve, and P < 1 an inverse s-curve.
- * 			 A value of 1 results in a linear, no-op, function.
- *           In general, passing in P and 1/P result in inverse mappings, so
- *           x = rslGain(rslGain(x, P), 1/P).
- * @return   The remapped result
- */
-template <typename T>
-inline float rslGain(T x, T P)
-{
-	if (x > T(0.5))
-		return T(1) - T(0.5)*pow(T(2) - T(2)*x, P);
+	if (t < T(0.5))
+		return biasSchlick(t * T(2), a)/T(2);
 	else
-		return T(0.5)*pow(T(2)*x, P);
+		return biasSchlick(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
 }
 
 

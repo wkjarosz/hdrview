@@ -71,6 +71,8 @@ constexpr char const *const fragmentShader =
 
 	const vec3 minLab = vec3(0, -128, -128);
 	const vec3 maxLab = vec3(100, 128, 128);
+	const vec3 rangeLab = maxLab-minLab;
+	const vec3 LabD65Wts = vec3(.95047, 1.000, 1.08883);
 
 	float linearToS(float a)
 	{
@@ -139,8 +141,8 @@ constexpr char const *const fragmentShader =
 
 	vec3 XYZToLab(vec3 xyz)
 	{
-		// N=normalize for D65 white point
-	    xyz /= vec3(.95047, 1.000, 1.08883);
+		// normalize for D65 white point
+	    xyz /= LabD65Wts;
 
 	    vec3 v = vec3(labf(xyz.x), labf(xyz.y), labf(xyz.z));
 	    return vec3((116.0 * v.y) - 16.0,
@@ -148,12 +150,41 @@ constexpr char const *const fragmentShader =
 					200.0 * (v.y - v.z));
 	}
 
+	vec3 LabToXYZ(vec3 lab)
+	{
+		const float eps = 216.0 / 24389.0;
+		const float kappa = 24389.0 / 27.0;
+		float yr = (lab.x > kappa*eps) ? pow((lab.x + 16.0) / 116.0, 3.) : lab.x / kappa;
+		float fy = (yr > eps) ? (lab.x + 16.0) / 116.0 : (kappa*yr + 16.0) / 116.0;
+		float fx = lab.y / 500.0 + fy;
+		float fz = fy - lab.z / 200.0;
+
+		float fx3 = pow(fx, 3.);
+		float fz3 = pow(fz, 3.);
+
+		vec3 xyz = vec3((fx3 > eps) ? fx3 : (116.0 * fx - 16.0) / kappa,
+					    yr,
+					    (fz3 > eps) ? fz3 : (116.0 * fz - 16.0) / kappa);
+
+		// unnormalize for D65 white point
+	    xyz *= LabD65Wts;
+		return xyz;
+	}
+
 	vec3 RGBToLab(vec3 rgb)
 	{
 		vec3 lab = XYZToLab(RGBToXYZ(rgb));
 
 		// renormalize
-	    return (lab-minLab)/(maxLab-minLab);
+	    return (lab-minLab)/rangeLab;
+	}
+
+	vec3 LabToRGB(vec3 lab)
+	{
+		// unnormalize
+	    lab = lab*rangeLab + minLab;
+
+		return XYZToRGB(LabToXYZ(lab));
 	}
 
     // note: uniformly distributed, normalized rand, [0;1[
@@ -202,17 +233,18 @@ constexpr char const *const fragmentShader =
 	{
 		switch (channel)
 		{
-			case CHANNEL_RED:           return col.rrr;
-			case CHANNEL_GREEN:         return col.ggg;
-			case CHANNEL_BLUE:          return col.bbb;
-			case CHANNEL_LUMINANCE:     return RGBToLuminance(col);
-			case CHANNEL_CIEL:          return RGBToLab(col).xxx;
-			case CHANNEL_CIEa:          return RGBToLab(col).yyy;
-			case CHANNEL_CIEb:          return RGBToLab(col).zzz;
-			case CHANNEL_FALSE_COLOR:   return jetFalseColor(col);
-			case CHANNEL_POSITIVE_NEGATIVE:       return positiveNegative(col);
+			case CHANNEL_RED:               return col.rrr;
+			case CHANNEL_GREEN:             return col.ggg;
+			case CHANNEL_BLUE:              return col.bbb;
+			case CHANNEL_LUMINANCE:         return RGBToLuminance(col);
+			case CHANNEL_CIE_L:             return RGBToLab(col).xxx;
+			case CHANNEL_CIE_a:             return RGBToLab(col).yyy;
+			case CHANNEL_CIE_b:             return RGBToLab(col).zzz;
+			case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(vec3(0.5, RGBToLab(col).yz));
+			case CHANNEL_FALSE_COLOR:       return jetFalseColor(col);
+			case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(col);
 		}
-		return col.rgb;
+		return col;
 	}
 
 	vec4 blend(vec4 imageVal, vec4 referenceVal)
@@ -330,9 +362,10 @@ ImageShader::ImageShader()
 	DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIEL, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIEa, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIEb, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIE_L, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIE_a, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIE_b, CHANNEL_);
+	DEFINE_PARAMS2(EChannel, CIE_CHROMATICITY, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
 	DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
 

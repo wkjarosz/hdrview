@@ -957,6 +957,102 @@ void HDRImage::demosaicBorder(size_t border)
     });
 }
 
+/*!
+ * @brief           Apply a global brightness+contrast adjustment to the RGB pixel values.
+ *
+ * @param b         The brightness in the range [-1,1] where 0 means no change.
+ *                  Changes the brightness by shifting the midpoint by b/2.
+ * @param c         The contrast in the range [-1,1] where 0 means no change.
+ *                  c sets the slope of the mapping at the midpoint where
+ *                   -1 -> all gray/no contrast; horizontal line;
+ *                    0 -> no change; 45 degree diagonal line;
+ *                    1 -> no gray/black & white; vertical line.
+ *                  If linear is False, this changes the contrast by shifting the 0.25 value by c/4.
+ * @param linear    Whether to linear or non-linear remapping.
+ *                  The non-linear mapping keeps values within [0,1], while
+ *                  the linear mapping may produce negative values and values > 1.
+ * @param channel   Apply the adjustment to the specified channel(s).
+ *                  Valid values are RGB, LUMINANCE or CIE_L, and CIE_CHROMATICITY.
+ *                  All other values result in a no-op.
+ * @return          The adjusted image.
+ */
+HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel channel) const
+{
+    float slope = float(std::tan(lerp(0.0, M_PI_2, c/2.0 + 0.5)));
+    // Perlin's version
+    //float slope = c >= 0 ? -log2(1.f - c) + 1.f : 1.f / (-log2(1.f + c) + 1.f);
+    
+    if (linear)
+    {
+        float midpoint = (1.f-b)/2.f;
+
+        if (channel == RGB)
+            return unaryExpr(
+                [slope,midpoint](const Color4 &c)
+                {
+                    return Color4((c.r - midpoint) * slope + 0.5f,
+                                  (c.g - midpoint) * slope + 0.5f,
+                                  (c.b - midpoint) * slope + 0.5f, c.a);
+                });
+        else if (channel == LUMINANCE || channel == CIE_L)
+            return unaryExpr(
+                [slope,midpoint](const Color4 &c)
+                {
+                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
+                    return Color4((lab.r - midpoint) * slope + 0.5f,
+                                  lab.g,
+                                  lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                });
+        else if (channel == CIE_CHROMATICITY)
+            return unaryExpr(
+                [slope,midpoint](const Color4 &c)
+                {
+                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
+                    return Color4(lab.r,
+                                  (lab.g - midpoint) * slope + 0.5f,
+                                  (lab.b - midpoint) * slope + 0.5f,
+                                  c.a).convert(LinearSRGB_CS, CIELab_CS);
+                });
+        else
+            return *this;
+    }
+    else
+    {
+        float aB = (b + 1.f) / 2.f;
+
+        if (channel == RGB)
+            return unaryExpr(
+                [aB, slope](const Color4 &c)
+                {
+                    return Color4(gainPerlin(biasSchlick(clamp(c.r, 0.f, 1.f), aB), slope),
+                                  gainPerlin(biasSchlick(clamp(c.g, 0.f, 1.f), aB), slope),
+                                  gainPerlin(biasSchlick(clamp(c.b, 0.f, 1.f), aB), slope),
+                                  c.a);
+                });
+        else if (channel == LUMINANCE || channel == CIE_L)
+            return unaryExpr(
+                [aB, slope](const Color4 &c)
+                {
+                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
+                    return Color4(gainPerlin(biasSchlick(clamp(lab.r, 0.f, 1.f), aB), slope),
+                                  lab.g,
+                                  lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                });
+        else if (channel == CIE_CHROMATICITY)
+            return unaryExpr(
+                [aB, slope](const Color4 &c)
+                {
+                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
+                    return Color4(lab.r,
+                                  gainPerlin(biasSchlick(clamp(lab.g, 0.f, 1.f), aB), slope),
+                                  gainPerlin(biasSchlick(clamp(lab.b, 0.f, 1.f), aB), slope),
+                                  c.a).convert(LinearSRGB_CS, CIELab_CS);
+                });
+        else
+            return *this;
+    }
+}
+
 
 
 // local functions

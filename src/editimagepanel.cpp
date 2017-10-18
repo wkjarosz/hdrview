@@ -173,9 +173,10 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 	static enum EChannel
 	{
 		RGB = 0,
-		LUMINANCE = 1,
-		CHROMATICITY = 2
+		LUMINANCE,
+		CHROMATICITY
 	} channel = RGB;
+	static ::EChannel channelMap[] = { ::EChannel::RGB, ::EChannel::LUMINANCE, ::EChannel::CIE_CHROMATICITY };
 	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
 	b->setFixedHeight(21);
 	b->setCallback(
@@ -188,30 +189,36 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 			// brightness
+			string help = "Shift the midpoint up or down.";
 			auto wB = gui->addVariable("Brightness:", brightness);
 			wB->setSpinnable(true);
 			wB->numberFormat("%1.2f");
 			wB->setValueIncrement(0.01f);
 			wB->setMinMaxValues(-1.f, 1.f);
+			wB->setTooltip(help);
 
 			auto slider = new Slider(window);
 			slider->setValue(brightness);
 			slider->setRange({-1.f, 1.f});
+			slider->setTooltip(help);
 			gui->addWidget("", slider);
 
 			slider->setCallback([wB](float b){ brightness = b; wB->setValue(b); });
 			wB->setCallback([slider](float b){ brightness = b; slider->setValue(b); });
 
 			// contrast
+			help = "Change the slope/gradient at the midpoint.";
 			auto wC = gui->addVariable("Contrast:", contrast);
 			wC->setSpinnable(true);
 			wC->numberFormat("%1.2f");
 			wC->setValueIncrement(0.01f);
 			wC->setMinMaxValues(-1.f, 1.f);
+			wC->setTooltip(help);
 
 			slider = new Slider(window);
 			slider->setValue(contrast);
 			slider->setRange({-1.f, 1.f});
+			slider->setTooltip(help);
 			gui->addWidget("", slider);
 
 			slider->setCallback([wC](float c){ contrast = c; wC->setValue(c); });
@@ -223,74 +230,12 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			addOKCancelButtons(gui, window,
                [&, window]()
                {
-                   imageMgr->modifyImage(
-	                   [&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
-	                   {
-		                   spdlog::get("console")->debug("{}; {}", contrast, brightness);
-
-		                   if (linear)
-		                   {
-			                   // -1 -> all gray/no contrast; horizontal line;
-			                   //  0 -> no change; 45 degree diagonal line
-			                   //  1 -> no gray/black & white; vertical line
-			                   double slope = float(tan(lerp(0.0, M_PI_2, contrast/2.0 + 0.5)));
-			                   float midpoint = (1.f-brightness)/2.f;
-
-			                   return {make_shared<HDRImage>(
-				                   img->unaryExpr(
-					                   [slope,midpoint](const Color4 &c)
-					                   {
-						                   if (channel == RGB)
-							                   return Color4((c.r - midpoint) * slope + 0.5f,
-									                         (c.g - midpoint) * slope + 0.5f,
-									                         (c.b - midpoint) * slope + 0.5f, c.a);
-						                   else
-						                   {
-							                   Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-							                   if (channel == LUMINANCE)
-								                   return Color4((lab.r - midpoint) * slope + 0.5f,
-								                                 lab.g,
-								                                 lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
-							                   else
-								                   return Color4(lab.r,
-								                                 (lab.g - midpoint) * slope + 0.5f,
-								                                 (lab.b - midpoint) * slope + 0.5f,
-								                                 c.a).convert(LinearSRGB_CS, CIELab_CS);
-						                   }
-					                   }).eval()),
-			                           nullptr};
-		                   }
-		                   else
-		                   {
-			                   float aB = (brightness + 1.f)/2.f;
-//			                   float aG = (1.f - contrast)/2.f;     // for Schlick's gain function
-			                   float aG = contrast >= 0 ? contrast+1 : 1.f/(1-contrast);
-			                   return {make_shared<HDRImage>(
-				                   img->unaryExpr(
-					                   [aB, aG](const Color4 &c)
-					                   {
-						                   if (channel == RGB)
-							                   return Color4(rslGain(bias(clamp(c.r, 0.f, 1.f), aB), aG),
-							                                 rslGain(bias(clamp(c.g, 0.f, 1.f), aB), aG),
-							                                 rslGain(bias(clamp(c.b, 0.f, 1.f), aB), aG),
-							                                 c.a);
-						                   else
-						                   {
-							                   Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-							                   if (channel == LUMINANCE)
-								                   return Color4(rslGain(bias(clamp(lab.r, 0.f, 1.f), aB), aG),
-								                                 lab.g,
-								                                 lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
-							                   else
-								                   return Color4(lab.r,
-								                                 rslGain(bias(clamp(lab.g, 0.f, 1.f), aB), aG),
-								                                 rslGain(bias(clamp(lab.b, 0.f, 1.f), aB), aG),
-								                                 c.a).convert(LinearSRGB_CS, CIELab_CS);
-						                   }
-					                   }).eval()),
-			                           nullptr};
-		                   }
-	                   });
+	               imageMgr->modifyImage(
+		               [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+		               {
+			               return {make_shared<HDRImage>(img->brightnessContrast(brightness, contrast, linear, channelMap[channel])),
+			                       nullptr};
+		               });
                });
 
 			window->center();

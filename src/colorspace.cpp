@@ -145,6 +145,7 @@ void LinearAdobeRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B
 
 void XYZToLab(float *L, float *a, float *b, float X, float Y, float Z)
 {
+	// normalize for D65 whitepoint
 	X *= 1.0f / 0.95047f;
 	Z *= 1.0f / 1.08883f;
 
@@ -172,8 +173,9 @@ void LabToXYZ(float *X, float *Y, float *Z, float L, float a, float b)
 	*Y = yr;
 	*Z = (fz3 > eps) ? fz3 : (116.0f * fz - 16.0f) / kappa;
 
-	*X *= 0.950456f;
-	*Z *= 1.08875f;
+	// unnormalize for D65 whitepoint
+	*X *= 0.95047f;
+	*Z *= 1.08883f;
 }
 
 void normalizeLab(float * L, float * a, float * b)
