@@ -263,27 +263,28 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 		                   else
 		                   {
 			                   float aB = (brightness + 1.f)/2.f;
-			                   float aG = (1.f - contrast)/2.f;
+//			                   float aG = (1.f - contrast)/2.f;     // for Schlick's gain function
+			                   float aG = contrast >= 0 ? contrast+1 : 1.f/(1-contrast);
 			                   return {make_shared<HDRImage>(
 				                   img->unaryExpr(
 					                   [aB, aG](const Color4 &c)
 					                   {
 						                   if (channel == RGB)
-							                   return Color4(gain(bias(clamp(c.r, 0.f, 1.f), aB), aG),
-							                                 gain(bias(clamp(c.g, 0.f, 1.f), aB), aG),
-							                                 gain(bias(clamp(c.b, 0.f, 1.f), aB), aG),
+							                   return Color4(rslGain(bias(clamp(c.r, 0.f, 1.f), aB), aG),
+							                                 rslGain(bias(clamp(c.g, 0.f, 1.f), aB), aG),
+							                                 rslGain(bias(clamp(c.b, 0.f, 1.f), aB), aG),
 							                                 c.a);
 						                   else
 						                   {
 							                   Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
 							                   if (channel == LUMINANCE)
-								                   return Color4(gain(bias(clamp(lab.r, 0.f, 1.f), aB), aG),
+								                   return Color4(rslGain(bias(clamp(lab.r, 0.f, 1.f), aB), aG),
 								                                 lab.g,
 								                                 lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
 							                   else
 								                   return Color4(lab.r,
-								                                 gain(bias(clamp(lab.g, 0.f, 1.f), aB), aG),
-								                                 gain(bias(clamp(lab.b, 0.f, 1.f), aB), aG),
+								                                 rslGain(bias(clamp(lab.g, 0.f, 1.f), aB), aG),
+								                                 rslGain(bias(clamp(lab.b, 0.f, 1.f), aB), aG),
 								                                 c.a).convert(LinearSRGB_CS, CIELab_CS);
 						                   }
 					                   }).eval()),

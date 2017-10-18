@@ -17,15 +17,16 @@
 template <typename T>
 inline T sign(T a) {return (a > 0) ? T (1) : (a < 0) ? T (-1) : 0;}
 
-//! Clamps a double between two bounds.
 /*!
-    \param a The value to test.
-    \param l The lower bound.
-    \param h The upper bound.
-    \return The value \a a clamped to the lower and upper bounds.
-
-    This function has been specially crafted to prevent NaNs from propagating.
-*/
+ * @brief   Clamps a double between two bounds.
+ *
+ * This function has been specially crafted to prevent NaNs from propagating.
+ *
+ * @param a The value to clamp.
+ * @param l The lower bound.
+ * @param h The upper bound.
+ * @return  The value \a a clamped to the lower and upper bounds.
+ */
 template <typename T>
 inline T clamp(T a, T l, T h)
 {
@@ -33,32 +34,34 @@ inline T clamp(T a, T l, T h)
 }
 
 
-//! Linear interpolation.
 /*!
-    Linearly interpolates between \a a and \a b, using parameter t.
-    \param a A value.
-    \param b Another value.
-    \param t A blending factor of \a a and \a b.
-    \return Linear interpolation of \a a and \b -
-            a value between a and b if \a t is between 0 and 1.
-*/
+ * @brief  Linear interpolation.
+ *
+ * Linearly interpolates between \a a and \a b, using parameter t.
+ *
+ * @param a A value.
+ * @param b Another value.
+ * @param t A blending factor of \a a and \a b.
+ * @return  Linear interpolation of \a a and \b -
+ *          a value between a and b if \a t is between 0 and 1.
+ */
 template <typename T, typename S>
 inline T lerp(T a, T b, S t)
 {
     return T((S(1)-t) * a + t * b);
 }
 
-//!
+
 /*!
  * @brief Inverse linear interpolation.
  *
  * Given three values \a a, \a b, \a m, determines the parameter value
  * \a t, such that m = lerp(a,b,lerpFactor(a,b,m))
  *
- * @param a     The start point
- * @param b     The end point
- * @param m     A third point (typically between \a a and \a b)
- * @return      The interpolation factor \a t such that m = lerp(a,b,lerpFactor(a,b,m))
+ * @param a The start point
+ * @param b The end point
+ * @param m A third point (typically between \a a and \a b)
+ * @return  The interpolation factor \a t such that m = lerp(a,b,lerpFactor(a,b,m))
  */
 template <typename T>
 inline T lerpFactor(T a, T b, T m)
@@ -67,46 +70,66 @@ inline T lerpFactor(T a, T b, T m)
 }
 
 
-//! Smoothly interpolates between a and b.
 /*!
-    Does a smooth s-curve (Hermite) interpolation between two values.
-    \param a A value.
-    \param b Another value.
-    \param x A number between \a a and \a b.
-    \return A value between 0.0 and 1.0.
-*/
+ * @brief Smoothly interpolates between 0 and 1 as x moves between a and b.
+ *
+ * Does a smooth s-curve (Hermite) interpolation between two values.
+ *
+ * @param a A value.
+ * @param b Another value.
+ * @param x A number between \a a and \a b.
+ * @return  A value between 0.0 and 1.0.
+ */
 template <typename T>
 inline T smoothStep(T a, T b, T x)
 {
-    T t = clamp(T(x - a) / (b - a), T(0), T(1));
+    T t = clamp(lerpFactor(a,b,x), T(0), T(1));
     return t*t*(T(3) - T(2)*t);
 }
 
-//! The inverse of the smoothstep function.
-template <typename T>
-inline T inverseSmoothStep(T a, T b, T x)
-{
-    T t = clamp(T(x - a) / (b - a), T(0), T(1));
-    return t + t - t*t*(T(3) - T(2)*t);
-}
-
-//! Smoothly interpolates between a and b.
 /*!
-    Does a smooth s-curve (6th order) interpolation between two values.
-    \param a A value.
-    \param b Another value.
-    \param x A number between \a a and \a b.
-    \return A value between 0.0 and 1.0.
-*/
+ * @brief Smoothly interpolates between 0 and 1 as x moves between a and b.
+ *
+ * Does a smooth s-curve interpolation between two values using the
+ * 6th-order polynomial proposed by Perlin.
+ *
+ * @param a A value.
+ * @param b Another value.
+ * @param x A number between \a a and \a b.
+ * @return  A value between 0.0 and 1.0.
+ */
 template <typename T>
-inline T smoothStep6(T a, T b, T x)
+inline T smootherStep(T a, T b, T x)
 {
-    T t = clamp(T(x - a) / (b - a), T(0), T(1));
+    T t = clamp(lerpFactor(a,b,x), T(0), T(1));
     return t*t*t*(t*(t*T(6) - T(15)) + T(10));
 }
 
 /*!
- * \brief  Evaluates Schlick's rational version of Perlin's bias function.
+ * @brief Cosine interpolation between between 0 and 1 as x moves between a and b.
+ *
+ * @param a A value.
+ * @param b Another value.
+ * @param x A number between \a a and \a b.
+ * @return  A value between 0.0 and 1.0.
+*/
+template <typename T>
+inline T cosStep(T a, T b, T x)
+{
+	T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+	return T(0.5)*(T(1)-cos(t*T(M_PI)));
+}
+
+//! The inverse of the cosStep function.
+template <typename T>
+inline T inverseCosStep(T a, T b, T x)
+{
+	T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+	return acos(T(1) - T(2)*t)*T(M_1_PI);
+}
+
+/*!
+ * @brief  Evaluates Schlick's rational version of Perlin's bias function.
  *
  * As described in:
  * "Fast Alternatives to Perlin's Bias and Gain Functions"
@@ -115,7 +138,7 @@ inline T smoothStep6(T a, T b, T x)
  * @tparam T The template parameter (typically float or double)
  * @param  t The percentage value (between 0 and 1)
  * @param  a The shape parameter (between 0 and 1)
- * @return
+ * @return   The remapped result
  */
 template <typename T>
 inline T bias(T t, T a)
@@ -124,7 +147,7 @@ inline T bias(T t, T a)
 }
 
 /*!
- * \brief  Evaluates Schlick's rational version of Perlin's gain function.
+ * @brief  Evaluates Schlick's rational version of Perlin's gain function.
  *
  * As described in:
  * "Fast Alternatives to Perlin's Bias and Gain Functions"
@@ -133,7 +156,7 @@ inline T bias(T t, T a)
  * @tparam T The template parameter (typically float or double)
  * @param  t The percentage value (between 0 and 1)
  * @param  a The shape parameter (between 0 and 1)
- * @return
+ * @return   The remapped result
  */
 template <typename T>
 inline T gain(T t, T a)
@@ -142,6 +165,28 @@ inline T gain(T t, T a)
         return bias(t * T(2), a)/T(2);
     else
         return bias(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
+}
+
+/*!
+ * @brief  A Perlin gain-like s-curve function that is invertible.
+ *
+ * Useful for taking a linear ramp (x) and turning it into an s-curve (or inverse s-curve) function.
+ *
+ * @tparam T The template parameter (typically float or double)
+ * @param  x The percentage value (between 0 and 1)
+ * @param  P The shape exponent. P > 1 creates an s-curve, and P < 1 an inverse s-curve.
+ * 			 A value of 1 results in a linear, no-op, function.
+ *           In general, passing in P and 1/P result in inverse mappings, so
+ *           x = rslGain(rslGain(x, P), 1/P).
+ * @return   The remapped result
+ */
+template <typename T>
+inline float rslGain(T x, T P)
+{
+	if (x > T(0.5))
+		return T(1) - T(0.5)*pow(T(2) - T(2)*x, P);
+	else
+		return T(0.5)*pow(T(2)*x, P);
 }
 
 

@@ -4,8 +4,9 @@
    - [x] Add progress bars
    - [x] Run them in a separate thread and avoid freezing the main application
    - [x] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
+   - [ ] Allow canceling/aborting long operations
 - [ ] Refactor Color3 and Color4 classes as subclasses of Eigen Matrices, so we can more easily do color conversion.
-- [ ] Add log-linear and log-log histogram options?
+- [x] Add log-linear and log-log histogram options?
 - [ ] Improved DNG/demosaicing pipeline
    - [ ] Improve DNG color correction
    - [ ] Allow skipping DNG demosaicing during load
@@ -15,11 +16,11 @@
 - [ ] More image filters/transformations/adjustments 
    - [x] Canvas size/cropping
    - [ ] White balance adjustment
-   - [ ] Brightness/contrast
+   - [x] Brightness/contrast
    - [ ] Luminance/chromaticity denoising 
    - [ ] Levels
    - [ ] Hue/Saturation
-   - [ ] Convert to grayscale/desaturate
+   - [x] Convert to grayscale/desaturate
    - [ ] Invert
    - [ ] Equalize/normalize histogram
    - [ ] Match color/histogram matching
