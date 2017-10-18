@@ -69,6 +69,9 @@ constexpr char const *const fragmentShader =
 
     out vec4 out_color;
 
+	const vec3 minLab = vec3(0, -128, -128);
+	const vec3 maxLab = vec3(100, 128, 128);
+
 	float linearToS(float a)
 	{
 		return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0/2.4) - 0.055;
@@ -150,8 +153,6 @@ constexpr char const *const fragmentShader =
 		vec3 lab = XYZToLab(RGBToXYZ(rgb));
 
 		// renormalize
-		const vec3 minLab = vec3(0, -86.1846, -107.864);
-		const vec3 maxLab = vec3(100, 98.2542, 94.4825);
 	    return (lab-minLab)/(maxLab-minLab);
 	}
 

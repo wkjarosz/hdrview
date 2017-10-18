@@ -17,6 +17,12 @@ const float refX = 0.950456f;
 const float refZ = 1.08875f;
 const float refU = (4.0f * refX) / (refX + 15.0f + 3.0f * refZ);
 const float refV = 9.0f / (refX + 15.0f + 3.0f * refZ);
+//const float minLab[] = {0, -86.1846, -107.864};
+//const float maxLab[] = {100, 98.2542, 94.4825};
+// use symmetric range so that scaling contrast of chromaticity
+// channels to 0 results in neutral gray
+const float minLab[] = {  0, -128, -128};
+const float maxLab[] = {100,  128,  128};
 
 } // namespace
 
@@ -172,8 +178,6 @@ void LabToXYZ(float *X, float *Y, float *Z, float L, float a, float b)
 
 void normalizeLab(float * L, float * a, float * b)
 {
-	const float minLab[] = {0, -86.1846, -107.864};
-	const float maxLab[] = {100, 98.2542, 94.4825};
 	*L -= minLab[0];
 	*a -= minLab[1];
 	*b -= minLab[2];
@@ -185,9 +189,6 @@ void normalizeLab(float * L, float * a, float * b)
 
 void unnormalizeLab(float * L, float * a, float * b)
 {
-	const float minLab[] = {0, -86.1846, -107.864};
-	const float maxLab[] = {100, 98.2542, 94.4825};
-
 	*L *= maxLab[0]-minLab[0];
 	*a *= maxLab[1]-minLab[1];
 	*b *= maxLab[2]-minLab[2];
