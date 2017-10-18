@@ -89,6 +89,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 	static string name = "Exposure/Gamma...";
 	static float exposure = 0.0f;
 	static float gamma = 1.0f;
+	static float offset = 0.0f;
 	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
 	b->setFixedHeight(21);
 	b->setCallback(
@@ -100,14 +101,50 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Exposure:", exposure);
-			w->setSpinnable(true);
-			w->setMinValue(-10.f);
-			w->setMaxValue( 10.f);
-			w = gui->addVariable("Gamma:", gamma);
-			w->setSpinnable(true);
-			w->setMinValue(0.0001f);
-			w->setMaxValue(10.0f);
+			// exposure
+			auto wE = gui->addVariable("Exposure:", exposure);
+			wE->setSpinnable(true);
+			wE->numberFormat("%1.2f");
+			wE->setValueIncrement(0.1f);
+			wE->setMinMaxValues(-10.f, 10.f);
+
+			auto slider = new Slider(window);
+			slider->setValue(exposure);
+			slider->setRange({-10.f, 10.f});
+			gui->addWidget("", slider);
+
+			slider->setCallback([wE](float e){ exposure = e; wE->setValue(e); });
+			wE->setCallback([slider](float e){ exposure = e; slider->setValue(e); });
+
+			// offset
+			auto wO = gui->addVariable("Offset:", offset);
+			wO->setSpinnable(true);
+			wO->numberFormat("%1.2f");
+			wO->setValueIncrement(0.01);
+			wO->setMinMaxValues(-1.f, 1.f);
+
+			slider = new Slider(window);
+			slider->setValue(offset);
+			slider->setRange({-1.f, 1.f});
+			gui->addWidget("", slider);
+
+			slider->setCallback([wO](float o){ offset = o; wO->setValue(o); });
+			wO->setCallback([slider](float o){ offset = o; slider->setValue(o); });
+
+			// gamma
+			auto wG = gui->addVariable("Gamma:", gamma);
+			wG->setSpinnable(true);
+			wG->numberFormat("%1.2f");
+			wG->setValueIncrement(0.1f);
+			wG->setMinMaxValues(0.0001f, 10.f);
+
+			slider = new Slider(window);
+			slider->setValue(gamma);
+			slider->setRange({0.0001f, 10.f});
+			gui->addWidget("", slider);
+
+			slider->setCallback([wG](float g){ gamma = g; wG->setValue(g); });
+			wG->setCallback([slider](float g){ gamma = g; slider->setValue(g); });
 
 			addOKCancelButtons(gui, window,
 				[&, window]()
@@ -115,10 +152,112 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure), 1.f) * (*img)).pow(Color4(1.0f/gamma))),
+							spdlog::get("console")->debug("{}; {}; {}", exposure, offset, gamma);
+							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure), 1.f) * (*img) + Color4(offset, 0.f)).pow(Color4(1.0f/gamma))),
 							        nullptr};
 						});
 				});
+
+			window->center();
+			window->requestFocus();
+		});
+	return b;
+}
+
+Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static string name = "Brightness/Contrast...";
+	static float brightness = 0.0f;
+	static float contrast = 0.0f;
+	static bool linear = false;
+	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
+	b->setFixedHeight(21);
+	b->setCallback(
+		[&, parent, screen, imageMgr]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->setFixedSize(Vector2i(75, 20));
+
+			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+			// brightness
+			auto wB = gui->addVariable("Brightness:", brightness);
+			wB->setSpinnable(true);
+			wB->numberFormat("%1.2f");
+			wB->setValueIncrement(0.01f);
+			wB->setMinMaxValues(-1.f, 1.f);
+
+			auto slider = new Slider(window);
+			slider->setValue(brightness);
+			slider->setRange({-1.f, 1.f});
+			gui->addWidget("", slider);
+
+			slider->setCallback([wB](float b){ brightness = b; wB->setValue(b); });
+			wB->setCallback([slider](float b){ brightness = b; slider->setValue(b); });
+
+			// contrast
+			auto wC = gui->addVariable("Contrast:", contrast);
+			wC->setSpinnable(true);
+			wC->numberFormat("%1.2f");
+			wC->setValueIncrement(0.01f);
+			wC->setMinMaxValues(-1.f, 1.f);
+
+			slider = new Slider(window);
+			slider->setValue(contrast);
+			slider->setRange({-1.f, 1.f});
+			gui->addWidget("", slider);
+
+			slider->setCallback([wC](float c){ contrast = c; wC->setValue(c); });
+			wC->setCallback([slider](float c){ contrast = c; slider->setValue(c); });
+
+			gui->addVariable("Linear:", linear, true);
+
+			addOKCancelButtons(gui, window,
+			                   [&, window]()
+			                   {
+				                   imageMgr->modifyImage(
+					                   [&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+					                   {
+						                   spdlog::get("console")->debug("{}; {}", contrast, brightness);
+
+						                   if (linear)
+						                   {
+							                   // -1 -> all gray/no contrast; horizontal line;
+							                   //  0 -> no change; 45 degree diagonal line
+							                   //  1 -> no gray/black & white; vertical line
+							                   double slope = float(tan(lerp(0.0, M_PI_2, contrast/2.0 + 0.5)));
+							                   float midpoint = (1.f-brightness)/2.f;
+
+							                   spdlog::get("console")->debug("slope: {}", slope);
+							                   return {make_shared<HDRImage>(
+								                   img->unaryExpr(
+									                   [slope,midpoint](const Color4 &c)
+									                   {
+										                   return Color4((c.r - midpoint) * slope + 0.5f,
+										                                 (c.g - midpoint) * slope + 0.5f,
+										                                 (c.b - midpoint) * slope + 0.5f,
+										                                 c.a);
+									                   }).eval()),
+							                           nullptr};
+						                   }
+						                   else
+						                   {
+							                   float aB = (brightness + 1.f)/2.f;
+							                   float aG = (1.f - contrast)/2.f;
+							                   return {make_shared<HDRImage>(
+								                   img->unaryExpr(
+									                   [aB, aG](const Color4 &c)
+									                   {
+										                   return Color4(gain(bias(clamp(c.r, 0.f, 1.f), aB), aG),
+										                                 gain(bias(clamp(c.g, 0.f, 1.f), aB), aG),
+										                                 gain(bias(clamp(c.b, 0.f, 1.f), aB), aG),
+										                                 c.a);
+									                   }).eval()),
+							                           nullptr};
+						                   }
+					                   });
+			                   });
 
 			window->center();
 			window->requestFocus();
@@ -686,52 +825,71 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			colorwheel->setColor(Color(bgColor.head<3>(), alpha));
 
 			auto panel = new Widget(popup);
-			panel->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
+//			panel->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
+			auto agrid = new AdvancedGridLayout({0, 20, 0}, {});
+			agrid->setMargin(0);
+			agrid->setColStretch(1, 1);
+			panel->setLayout(agrid);
+
 			auto colorBtn = new Button(popup, "Pick");
 
 			//
 			// opacity
 			//
-			new Label(panel, "Opacity:");
 
-			auto slider = new Slider(panel);
-			slider->setValue(alpha);
-			slider->setFixedWidth(100);
+			agrid->appendRow(0);
+			agrid->setAnchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
 
-			auto floatBox = new FloatBox<float>(panel, 100.0f);
+			auto floatBox = new FloatBox<float>(panel, alpha * 100.0f);
+			agrid->setAnchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
 			floatBox->setUnits("%");
 			floatBox->numberFormat("%3.1f");
 			floatBox->setEditable(true);
-			floatBox->setFixedWidth(50);
+			floatBox->setMinValue(0.f);
+			floatBox->setMaxValue(100.f);
+			floatBox->setSpinnable(true);
+			floatBox->setFixedWidth(60);
 			floatBox->setAlignment(TextBox::Alignment::Right);
 
+			agrid->appendRow(0);
+			auto slider = new Slider(panel);
+			agrid->setAnchor(slider, AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+			slider->setValue(alpha * 100.0f);
+			slider->setRange({0.0f,100.0f});
+
 			slider->setCallback([floatBox,colorBtn](float a) {
-				alpha = a;
-				floatBox->setValue(a * 100);
+				alpha = a / 100.f;
+				floatBox->setValue(a);
 				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
 			floatBox->setCallback([slider,colorBtn](float a) {
-				alpha = a;
-				slider->setValue(a / 100.f);
+				alpha = a / 100.f;
+				slider->setValue(a);
 				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
+
+			agrid->appendRow(10);
 
 			//
 			// EV
 			//
-			new Label(panel, "EV:");
-
-			slider = new Slider(panel);
-			slider->setValue(0.0f);
-			slider->setRange({-9.0f,9.0f});
-			slider->setFixedWidth(100);
+			agrid->appendRow(0);
+			agrid->setAnchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
 
 			floatBox = new FloatBox<float>(panel, 0.f);
+			agrid->setAnchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
 			floatBox->numberFormat("%1.2f");
 			floatBox->setEditable(true);
-			floatBox->setFixedWidth(50);
+			floatBox->setSpinnable(true);
+			floatBox->setFixedWidth(60);
 			floatBox->setAlignment(TextBox::Alignment::Right);
+
+			agrid->appendRow(0);
+			slider = new Slider(panel);
+			agrid->setAnchor(slider, AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+			slider->setValue(0.0f);
+			slider->setRange({-9.0f,9.0f});
 
 			slider->setCallback([floatBox,colorBtn](float ev) {
 				EV = ev;
@@ -865,6 +1023,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	buttonRow = new Widget(this);
 	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
 	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createColorSpaceButton(buttonRow, m_screen, m_imageMgr));
 
 	new Label(this, "Filters", "sans-bold");

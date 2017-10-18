@@ -75,8 +75,7 @@ inline T lerpFactor(T a, T b, T m)
     \return A value between 0.0 and 1.0.
 */
 template <typename T>
-inline T
-smoothStep(T a, T b, T x)
+inline T smoothStep(T a, T b, T x)
 {
     T t = clamp(T(x - a) / (b - a), T(0), T(1));
     return t*t*(T(3) - T(2)*t);
@@ -84,8 +83,7 @@ smoothStep(T a, T b, T x)
 
 //! The inverse of the smoothstep function.
 template <typename T>
-inline T
-inverseSmoothStep(T a, T b, T x)
+inline T inverseSmoothStep(T a, T b, T x)
 {
     T t = clamp(T(x - a) / (b - a), T(0), T(1));
     return t + t - t*t*(T(3) - T(2)*t);
@@ -100,11 +98,49 @@ inverseSmoothStep(T a, T b, T x)
     \return A value between 0.0 and 1.0.
 */
 template <typename T>
-inline T
-smoothStep6(T a, T b, T x)
+inline T smoothStep6(T a, T b, T x)
 {
     T t = clamp(T(x - a) / (b - a), T(0), T(1));
     return t*t*t*(t*(t*T(6) - T(15)) + T(10));
+}
+
+/*!
+ * \brief  Evaluates Schlick's rational version of Perlin's bias function.
+ *
+ * As described in:
+ * "Fast Alternatives to Perlin's Bias and Gain Functions"
+ * Christophe Schlick: Graphics Gems IV, p379-382, April 1994.
+ *
+ * @tparam T The template parameter (typically float or double)
+ * @param  t The percentage value (between 0 and 1)
+ * @param  a The shape parameter (between 0 and 1)
+ * @return
+ */
+template <typename T>
+inline T bias(T t, T a)
+{
+    return t / ((((T(1)/a) - T(2)) * (T(1) - t)) + T(1));
+}
+
+/*!
+ * \brief  Evaluates Schlick's rational version of Perlin's gain function.
+ *
+ * As described in:
+ * "Fast Alternatives to Perlin's Bias and Gain Functions"
+ * Christophe Schlick: Graphics Gems IV, p379-382, April 1994.
+ *
+ * @tparam T The template parameter (typically float or double)
+ * @param  t The percentage value (between 0 and 1)
+ * @param  a The shape parameter (between 0 and 1)
+ * @return
+ */
+template <typename T>
+inline T gain(T t, T a)
+{
+    if (t < T(0.5))
+        return bias(t * T(2), a)/T(2);
+    else
+        return bias(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
 }
 
 
