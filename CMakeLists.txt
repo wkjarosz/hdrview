@@ -147,6 +147,8 @@ add_executable(HDRView
                src/editimagepanel.h
                src/envmap.cpp
                src/envmap.h
+               src/FilmicToneCurve.cpp
+               src/FilmicToneCurve.h
                src/fwd.h
                src/glimage.cpp
                src/glimage.h

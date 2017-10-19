@@ -14,6 +14,7 @@
 #include "colorspace.h"
 #include "hslgradient.h"
 #include "multigraph.h"
+#include "FilmicToneCurve.h"
 #include <spdlog/spdlog.h>
 
 using namespace std;
@@ -385,6 +386,218 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			                       nullptr};
 		               });
                });
+
+			window->center();
+			window->requestFocus();
+		});
+	return b;
+}
+
+Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static string name = "Filmic tonemapping...";
+	static FilmicToneCurve::FullCurve fCurve;
+	static FilmicToneCurve::CurveParamsUser params;
+	static const auto activeColor = Color(255, 255, 255, 200);
+	auto b = new Button(parent, name, ENTYPO_ICON_VOLUME);
+	b->setFixedHeight(21);
+	b->setCallback(
+		[&, parent, screen, imageMgr]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->setFixedSize(Vector2i(100, 20));
+
+			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+			// toe strength
+			auto tsFloat = gui->addVariable("Toe Strength:", params.toeStrength);
+			tsFloat->setSpinnable(true);
+			tsFloat->numberFormat("%1.2f");
+			tsFloat->setValueIncrement(0.01f);
+			tsFloat->setMinMaxValues(0.f, 1.f);
+
+			auto tsSlider = new Slider(window);
+			tsSlider->setValue(params.toeStrength);
+			tsSlider->setRange({0.f, 1.f});
+			gui->addWidget("", tsSlider);
+
+			// toe length
+			auto tlFloat = gui->addVariable("Toe length:", params.toeLength);
+			tlFloat->setSpinnable(true);
+			tlFloat->numberFormat("%1.2f");
+			tlFloat->setValueIncrement(0.01f);
+			tlFloat->setMinMaxValues(0.f, 1.f);
+
+			auto tlSlider = new Slider(window);
+			tlSlider->setValue(params.toeLength);
+			tlSlider->setRange({0.f, 1.f});
+			gui->addWidget("", tlSlider);
+
+			// shoulder strength
+			auto ssFloat = gui->addVariable("Shoulder strength:", params.shoulderStrength);
+			ssFloat->setSpinnable(true);
+			ssFloat->numberFormat("%1.2f");
+			ssFloat->setValueIncrement(0.1f);
+			ssFloat->setMinMaxValues(0.f, 10.f);
+
+			auto ssSlider = new Slider(window);
+			ssSlider->setValue(params.shoulderStrength);
+			ssSlider->setRange({0.f, 10.f});
+			gui->addWidget("", ssSlider);
+
+			// shoulder length
+			auto slFloat = gui->addVariable("Shoulder length:", params.shoulderLength);
+			slFloat->setSpinnable(true);
+			slFloat->numberFormat("%1.2f");
+			slFloat->setValueIncrement(0.01f);
+			slFloat->setMinMaxValues(0.f, 1.f);
+
+			auto slSlider = new Slider(window);
+			slSlider->setValue(params.shoulderLength);
+			slSlider->setRange({0.f, 1.f});
+			gui->addWidget("", slSlider);
+
+			// shoulder angle
+			auto saFloat = gui->addVariable("Shoulder angle:", params.shoulderAngle);
+			saFloat->setSpinnable(true);
+			saFloat->numberFormat("%1.2f");
+			saFloat->setValueIncrement(0.01f);
+			saFloat->setMinMaxValues(0.f, 1.f);
+
+			auto saSlider = new Slider(window);
+			saSlider->setValue(params.shoulderAngle);
+			saSlider->setRange({0.f, 1.f});
+			gui->addWidget("", saSlider);
+
+			// gamma
+			auto gFloat = gui->addVariable("Gamma:", params.gamma);
+			gFloat->setSpinnable(true);
+			gFloat->numberFormat("%1.2f");
+			gFloat->setValueIncrement(0.01f);
+			gFloat->setMinMaxValues(0.01f, 5.f);
+
+			auto gSlider = new Slider(window);
+			gSlider->setValue(params.gamma);
+			gSlider->setRange({0.01f, 5.f});
+			gui->addWidget("", gSlider);
+
+
+			auto spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			// graph
+			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
+			graph->addPlot(activeColor);
+			graph->setFixedSize(Vector2i(200, 150));
+			graph->setFilled(false);
+			graph->setWell(false);
+			gui->addWidget("", graph);
+
+			auto graphCb = [graph]()
+			{
+				float range = pow(2.f, params.shoulderStrength);
+				FilmicToneCurve::CurveParamsDirect directParams;
+				FilmicToneCurve::calcDirectParamsFromUser(directParams, params);
+				FilmicToneCurve::createCurve(fCurve, directParams);
+				graph->setValues(VectorXf::LinSpaced(257, 0.0f, range), 0);
+				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, range).unaryExpr(
+					[](float v)
+					{
+						return fCurve.eval(v);
+					});
+				graph->setValues(lCurve, 1);
+
+				int numTicks = 5;
+				// create the x tick marks
+				VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+				// create the x tick labels
+				vector<string> xTickLabels(numTicks);
+				for (int i = 0; i < numTicks; ++i)
+					xTickLabels[i] = fmt::format("{:.2f}", range*xTicks[i]);
+				graph->setXTicks(xTicks, xTickLabels);
+				graph->setYTicks(VectorXf::LinSpaced(3, 0.0f, 1.0f));
+			};
+
+			graphCb();
+
+			auto tsCb = [tsFloat,tsSlider,graphCb](float v)
+			{
+				params.toeStrength = v;
+				tsFloat->setValue(v);
+				tsSlider->setValue(v);
+				graphCb();
+			};
+			tsSlider->setCallback(tsCb);
+			tsFloat->setCallback(tsCb);
+			
+			auto tlCb = [tlFloat,tlSlider,graphCb](float v)
+			{
+				params.toeLength = v;
+				tlFloat->setValue(v);
+				tlSlider->setValue(v);
+				graphCb();
+			};
+			tlSlider->setCallback(tlCb);
+			tlFloat->setCallback(tlCb);
+			
+			auto ssCb = [ssFloat,ssSlider,graphCb](float v)
+			{
+				params.shoulderStrength = v;
+				ssFloat->setValue(v);
+				ssSlider->setValue(v);
+				graphCb();
+			};
+			ssSlider->setCallback(ssCb);
+			ssFloat->setCallback(ssCb);
+
+			auto slCb = [slFloat,slSlider,graphCb](float v)
+			{
+				params.shoulderLength = v;
+				slFloat->setValue(v);
+				slSlider->setValue(v);
+				graphCb();
+			};
+			slSlider->setCallback(slCb);
+			slFloat->setCallback(slCb);
+
+			auto saCb = [saFloat,saSlider,graphCb](float v)
+			{
+				params.shoulderAngle = v;
+				saFloat->setValue(v);
+				saSlider->setValue(v);
+				graphCb();
+			};
+			saSlider->setCallback(saCb);
+			saFloat->setCallback(saCb);
+
+			auto gCb = [gFloat,gSlider,graphCb](float v)
+			{
+				params.gamma = v;
+				gFloat->setValue(v);
+				gSlider->setValue(v);
+				graphCb();
+			};
+			gSlider->setCallback(gCb);
+			gFloat->setCallback(gCb);
+
+			addOKCancelButtons(gui, window,
+			                   [&, window]()
+			                   {
+				                   imageMgr->modifyImage(
+					                   [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+					                   {
+						                   return {make_shared<HDRImage>(img->unaryExpr(
+							                   [](const Color4 & c)
+							                   {
+								                   return Color4(fCurve.eval(c.r),
+								                                 fCurve.eval(c.g),
+								                                 fCurve.eval(c.b),
+								                                 c.a);
+							                   }).eval()), nullptr};
+					                   });
+			                   });
 
 			window->center();
 			window->requestFocus();
@@ -1299,6 +1512,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	agrid->appendRow(spacing);  // spacing
 	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imageMgr));
+	agrid->appendRow(0);
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+
+	agrid->appendRow(spacing);  // spacing
+	m_filterButtons.push_back(createFilmicTonemappingButton(buttonRow, m_screen, m_imageMgr));
 	agrid->appendRow(0);
 	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
 
