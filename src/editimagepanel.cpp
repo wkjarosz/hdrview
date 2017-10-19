@@ -12,6 +12,7 @@
 #include "hdrimagemanager.h"
 #include "envmap.h"
 #include "colorspace.h"
+#include "hslgradient.h"
 #include <spdlog/spdlog.h>
 
 using namespace std;
@@ -177,7 +178,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 		CHROMATICITY
 	} channel = RGB;
 	static ::EChannel channelMap[] = { ::EChannel::RGB, ::EChannel::LUMINANCE, ::EChannel::CIE_CHROMATICITY };
-	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
+	auto b = new Button(parent, name, ENTYPO_ICON_VOLUME);
 	b->setFixedHeight(21);
 	b->setCallback(
 		[&, parent, screen, imageMgr]()
@@ -237,6 +238,106 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			                       nullptr};
 		               });
                });
+
+			window->center();
+			window->requestFocus();
+		});
+	return b;
+}
+
+Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static string name = "Hue/Saturation...";
+	static float hue = 0.0f;
+	static float saturation = 0.0f;
+	static float lightness = 0.0f;
+	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
+	b->setFixedHeight(21);
+	b->setCallback(
+		[&, parent, screen, imageMgr]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->setFixedSize(Vector2i(75, 20));
+
+			Widget* spacer = nullptr;
+
+			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+
+			// hue
+			auto hFloat = gui->addVariable("Hue:", hue);
+			hFloat->setSpinnable(true);
+			hFloat->numberFormat("%1.1f");
+			hFloat->setValueIncrement(1.f);
+			hFloat->setMinMaxValues(-180.f, 180.f);
+
+			auto hSlider = new Slider(window);
+			hSlider->setValue(hue);
+			hSlider->setRange({-180.f, 180.f});
+			gui->addWidget("", hSlider);
+
+			// saturation
+			auto sFloat = gui->addVariable("Saturation:", saturation);
+			sFloat->setSpinnable(true);
+			sFloat->numberFormat("%1.1f");
+			sFloat->setValueIncrement(1.f);
+			sFloat->setMinMaxValues(-100.f, 100.f);
+
+			auto sSlider = new Slider(window);
+			sSlider->setValue(saturation);
+			sSlider->setRange({-100.f, 100.f});
+			gui->addWidget("", sSlider);
+
+			// lightness
+			auto lFloat = gui->addVariable("Lightness:", lightness);
+			lFloat->setSpinnable(true);
+			lFloat->numberFormat("%1.1f");
+			lFloat->setValueIncrement(1.f);
+			lFloat->setMinMaxValues(-100.f, 100.f);
+
+			auto lSlider = new Slider(window);
+			lSlider->setValue(lightness);
+			lSlider->setRange({-100.f, 100.f});
+			gui->addWidget("", lSlider);
+
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			auto fixedRainbow = new HSLGradient(window);
+			gui->addWidget("", fixedRainbow);
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			auto dynamicRainbow = new HSLGradient(window);
+			gui->addWidget("", dynamicRainbow);
+
+			hSlider->setCallback([hFloat,dynamicRainbow](float h){ hue = h; hFloat->setValue(h); dynamicRainbow->setHueOffset(h); });
+			hFloat->setCallback([hSlider,dynamicRainbow](float h){ hue = h; hSlider->setValue(h); dynamicRainbow->setHueOffset(h);});
+
+			sSlider->setCallback([sFloat,dynamicRainbow](float s){ saturation = s; sFloat->setValue(s); dynamicRainbow->setSaturation((s + 100.f)/200.f); });
+			sFloat->setCallback([sSlider,dynamicRainbow](float s){ saturation = s; sSlider->setValue(s); dynamicRainbow->setSaturation((s + 100.f)/200.f);});
+
+			lSlider->setCallback([lFloat,dynamicRainbow](float l){ lightness = l; lFloat->setValue(l); dynamicRainbow->setLightness((l + 100.f)/200.f); });
+			lFloat->setCallback([lSlider,dynamicRainbow](float l){ lightness = l; lSlider->setValue(l); dynamicRainbow->setLightness((l + 100.f)/200.f);});
+
+			addOKCancelButtons(gui, window,
+			                   [&, window]()
+			                   {
+				                   imageMgr->modifyImage(
+					                   [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+					                   {
+						                   return {make_shared<HDRImage>(
+							                   img->unaryExpr(
+								                   [](const Color4 & c)
+								                   {
+									                   return c.HSLAdjust(hue, (saturation+100.f)/100.f, (lightness)/100.f);
+								                   }).eval()), nullptr};
+					                   });
+			                   });
 
 			window->center();
 			window->requestFocus();
@@ -1003,6 +1104,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
 	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imageMgr));
+	m_filterButtons.push_back(createHueSaturationButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createColorSpaceButton(buttonRow, m_screen, m_imageMgr));
 
 	new Label(this, "Filters", "sans-bold");

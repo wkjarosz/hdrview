@@ -72,7 +72,9 @@ void RGBToHSL(float *H, float *L, float *S, float R, float G, float B);
 void HSLToRGB(float *R, float *G, float *B, float H, float L, float S);
 void RGBToHSV(float *H, float *S, float *V, float R, float G, float B);
 void HSVToRGB(float *R, float *G, float *B, float H, float S, float V);
-
+void HSIAdjust(float *R, float *G, float *B, float h, float s, float i);
+void HSLAdjust(float *R, float *G, float *B, float h, float s, float l);
+void SatAdjust(float *R, float *G, float *B, float s);
 
 
 

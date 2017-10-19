@@ -162,6 +162,8 @@ add_executable(HDRView
                src/hdrviewer.h
                src/helpwindow.cpp
                src/helpwindow.h
+               src/hslgradient.cpp
+               src/hslgradient.h
                src/imagebutton.cpp
                src/imagebutton.h
                src/imagelistpanel.cpp

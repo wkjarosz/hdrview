@@ -34,6 +34,12 @@ inline T clamp(T a, T l, T h)
 }
 
 
+template <typename T>
+inline T clamp01(T a)
+{
+	return clamp(a, T(0), T(1));
+}
+
 /*!
  * @brief  Linear interpolation.
  *

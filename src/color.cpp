@@ -82,6 +82,18 @@ Color3 Color3::HLSToRGB() const
     ::HSLToRGB(&ret[0], &ret[1], &ret[2], r, g, b);
     return ret;
 }
+Color3 Color3::HSIAdjust(float h, float s, float i) const
+{
+    Color3 ret(r,g,b);
+    ::HSIAdjust(&ret[0], &ret[1], &ret[2], h, s, i);
+    return ret;
+}
+Color3 Color3::HSLAdjust(float h, float s, float l) const
+{
+    Color3 ret(r,g,b);
+    ::HSLAdjust(&ret[0], &ret[1], &ret[2], h, s, l);
+    return ret;
+}
 Color3 Color3::convert(EColorSpace dst, EColorSpace src) const
 {
 	Color3 ret;

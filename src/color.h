@@ -178,6 +178,8 @@ public:
     Color3 HSVToRGB() const;
     Color3 RGBToHLS() const;
     Color3 HLSToRGB() const;
+    Color3 HSIAdjust(float h, float s, float i) const;
+    Color3 HSLAdjust(float h, float s, float l) const;
 
     friend std::ostream& operator<<(std::ostream& out, const Color3& c)
     {
@@ -348,6 +350,8 @@ public:
 	Color4 HSVToRGB() const {return Color4(Color3::HSVToRGB(), a);}
 	Color4 RGBToHLS() const {return Color4(Color3::RGBToHLS(), a);}
 	Color4 HLSToRGB() const {return Color4(Color3::HLSToRGB(), a);}
+    Color4 HSIAdjust(float h, float s, float i) const {return Color4(Color3::HSIAdjust(h,s,i), a);}
+    Color4 HSLAdjust(float h, float s, float l) const {return Color4(Color3::HSLAdjust(h,s,l), a);}
 
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)
