@@ -71,14 +71,17 @@ void MultiGraph::draw(NVGcontext *ctx)
 
 	nvgStrokeWidth(ctx, 1.0f);
 
-	// draw a background well
-	NVGpaint paint = nvgBoxGradient(ctx, mPos.x() + 1, mPos.y() + 1,
-	                                mSize.x()-2, mSize.y()-2, 3, 4,
-	                                Color(0, 32), Color(0, 92));
-	nvgBeginPath(ctx);
-	nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), 2.5);
-	nvgFillPaint(ctx, paint);
-	nvgFill(ctx);
+	if (mInWell)
+	{
+		// draw a background well
+		NVGpaint paint = nvgBoxGradient(ctx, mPos.x() + 1, mPos.y() + 1,
+		                                mSize.x() - 2, mSize.y() - 2, 3, 4,
+		                                Color(0, 32), Color(0, 92));
+		nvgBeginPath(ctx);
+		nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), 2.5);
+		nvgFillPaint(ctx, paint);
+		nvgFill(ctx);
+	}
 
 	if (numPlots() && mValues[0].size() >= 2)
 	{

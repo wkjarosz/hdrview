@@ -104,49 +104,111 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 			// exposure
-			auto wE = gui->addVariable("Exposure:", exposure);
-			wE->setSpinnable(true);
-			wE->numberFormat("%1.2f");
-			wE->setValueIncrement(0.1f);
-			wE->setMinMaxValues(-10.f, 10.f);
+			auto eFloat = gui->addVariable("Exposure:", exposure);
+			eFloat->setSpinnable(true);
+			eFloat->numberFormat("%1.2f");
+			eFloat->setValueIncrement(0.1f);
+			eFloat->setMinMaxValues(-10.f, 10.f);
 
-			auto slider = new Slider(window);
-			slider->setValue(exposure);
-			slider->setRange({-10.f, 10.f});
-			gui->addWidget("", slider);
-
-			slider->setCallback([wE](float e){ exposure = e; wE->setValue(e); });
-			wE->setCallback([slider](float e){ exposure = e; slider->setValue(e); });
+			auto eSlider = new Slider(window);
+			eSlider->setValue(exposure);
+			eSlider->setRange({-10.f, 10.f});
+			gui->addWidget("", eSlider);
 
 			// offset
-			auto wO = gui->addVariable("Offset:", offset);
-			wO->setSpinnable(true);
-			wO->numberFormat("%1.2f");
-			wO->setValueIncrement(0.01);
-			wO->setMinMaxValues(-1.f, 1.f);
+			auto oFloat = gui->addVariable("Offset:", offset);
+			oFloat->setSpinnable(true);
+			oFloat->numberFormat("%1.2f");
+			oFloat->setValueIncrement(0.01);
+			oFloat->setMinMaxValues(-1.f, 1.f);
 
-			slider = new Slider(window);
-			slider->setValue(offset);
-			slider->setRange({-1.f, 1.f});
-			gui->addWidget("", slider);
-
-			slider->setCallback([wO](float o){ offset = o; wO->setValue(o); });
-			wO->setCallback([slider](float o){ offset = o; slider->setValue(o); });
+			auto oSlider = new Slider(window);
+			oSlider->setValue(offset);
+			oSlider->setRange({-1.f, 1.f});
+			gui->addWidget("", oSlider);
 
 			// gamma
-			auto wG = gui->addVariable("Gamma:", gamma);
-			wG->setSpinnable(true);
-			wG->numberFormat("%1.2f");
-			wG->setValueIncrement(0.1f);
-			wG->setMinMaxValues(0.0001f, 10.f);
+			auto gFloat = gui->addVariable("Gamma:", gamma);
+			gFloat->setSpinnable(true);
+			gFloat->numberFormat("%1.2f");
+			gFloat->setValueIncrement(0.1f);
+			gFloat->setMinMaxValues(0.0001f, 10.f);
 
-			slider = new Slider(window);
-			slider->setValue(gamma);
-			slider->setRange({0.0001f, 10.f});
-			gui->addWidget("", slider);
+			auto gSlider = new Slider(window);
+			gSlider->setValue(gamma);
+			gSlider->setRange({0.0001f, 10.f});
+			gui->addWidget("", gSlider);
 
-			slider->setCallback([wG](float g){ gamma = g; wG->setValue(g); });
-			wG->setCallback([slider](float g){ gamma = g; slider->setValue(g); });
+
+
+			auto spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			// graph
+			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
+			graph->addPlot(Color(255, 255, 255, 200));
+			graph->addPlot(Color(255, 255, 255, 50));
+			graph->setFixedSize(Vector2i(200, 200));
+			graph->setFilled(false);
+			graph->setWell(false);
+			graph->setValues(VectorXf::LinSpaced(257, 0.0f, 1.0f), 0);
+			graph->setValues(VectorXf::Constant(2, 0.5f), 2);
+			int numTicks = 5;
+			// create the x tick marks
+			VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+			// create the x tick labels
+			vector<string> xTickLabels(numTicks);
+			for (int i = 0; i < numTicks; ++i)
+				xTickLabels[i] = fmt::format("{:.2f}", xTicks[i]);
+			graph->setXTicks(xTicks, xTickLabels);
+			graph->setYTicks(xTicks);
+
+			gui->addWidget("", graph);
+
+			auto graphCb = [graph]()
+			{
+				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
+					[](float v)
+					{
+						return pow(pow(2.0f, exposure) * v + offset, 1.0f/gamma);
+					});
+				graph->setValues(lCurve, 1);
+			};
+
+			graphCb();
+
+
+			auto eCb = [eFloat,eSlider,graphCb](float e)
+			{
+				exposure = e;
+				eFloat->setValue(e);
+				eSlider->setValue(e);
+				graphCb();
+			};
+
+			auto oCb = [oFloat,oSlider,graphCb](float o)
+			{
+				offset = o;
+				oFloat->setValue(o);
+				oSlider->setValue(o);
+				graphCb();
+			};
+
+			auto gCb = [gFloat,gSlider,graphCb](float g)
+			{
+				gamma = g;
+				gFloat->setValue(g);
+				gSlider->setValue(g);
+				graphCb();
+			};
+
+			eSlider->setCallback(eCb);
+			eFloat->setCallback(eCb);
+			oSlider->setCallback(oCb);
+			oFloat->setCallback(oCb);
+			gSlider->setCallback(gCb);
+			gFloat->setCallback(gCb);
 
 			addOKCancelButtons(gui, window,
 				[&, window]()
@@ -193,7 +255,10 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 			// brightness
-			string help = "Shift the midpoint up or down.";
+			string help = "Shift the 50% gray midpoint.\n\n"
+						  "Setting brightness > 0 boosts a previously darker value to 50%, "
+						  "while brightness < 0 dims a previously brighter value to 50%.";
+
 			auto bFloat = gui->addVariable("Brightness:", brightness);
 			bFloat->setSpinnable(true);
 			bFloat->numberFormat("%1.2f");
@@ -208,7 +273,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			gui->addWidget("", bSlider);
 
 			// contrast
-			help = "Change the slope/gradient at the midpoint.";
+			help = "Change the slope/gradient at the new 50% midpoint.";
 			auto cFloat = gui->addVariable("Contrast:", contrast);
 			cFloat->setSpinnable(true);
 			cFloat->numberFormat("%1.2f");
@@ -236,6 +301,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			graph->addPlot(Color(255, 255, 255, 50));
 			graph->setFixedSize(Vector2i(200, 200));
 			graph->setFilled(false);
+			graph->setWell(false);
 			graph->setValues(VectorXf::LinSpaced(257, 0.0f, 1.0f), 0);
 			graph->setValues(VectorXf::Constant(2, 0.5f), 3);
 			int numTicks = 5;
@@ -1105,12 +1171,13 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 	: Widget(parent), m_screen(screen), m_imageMgr(imageMgr)
 {
+	const int spacing = 2;
 	setLayout(new GroupLayout(2, 4, 8, 10));
 
 	new Label(this, "History", "sans-bold");
 
 	auto buttonRow = new Widget(this);
-	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
 	m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
 	m_undoButton->setCallback([&](){m_imageMgr->undo();});
@@ -1120,7 +1187,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	new Label(this, "Pixel/domain transformations", "sans-bold");
 
 	auto grid = new Widget(this);
-	grid->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 2));
+	grid->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
 	// flip h
 	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_LEFT_BOLD));
@@ -1175,7 +1242,12 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	new Label(this, "Color/range adjustments", "sans-bold");
 	buttonRow = new Widget(this);
-	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+	auto agrid = new AdvancedGridLayout({0, spacing, 0}, {}, 0);
+	agrid->setColStretch(0, 1.0f);
+	agrid->setColStretch(2, 1.0f);
+	buttonRow->setLayout(agrid);
+
+	agrid->appendRow(0);
 	// invert
 	m_filterButtons.push_back(new Button(buttonRow, "Invert", ENTYPO_ICON_ADJUST));
 	m_filterButtons.back()->setFixedHeight(21);
@@ -1189,14 +1261,53 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->inverted(); })};
 				});
 		});
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
+
+	// clamp
+	m_filterButtons.push_back(new Button(buttonRow, "Clamp", ENTYPO_ICON_ADJUST));
+	m_filterButtons.back()->setFixedHeight(21);
+	m_filterButtons.back()->setCallback(
+		[this]()
+		{
+			m_imageMgr->modifyImage(
+				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				{
+					return {make_shared<HDRImage>(img->unaryExpr(
+						[](const Color4 & c)
+						{
+							return Color4(clamp01(c.r), clamp01(c.g), clamp01(c.b), clamp01(c.a));
+						}).eval()), nullptr };
+				});
+		});
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
+
+//	buttonRow = new Widget(this);
+//	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+
+	agrid->appendRow(spacing);  // spacing
+
 	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imageMgr));
+	agrid->appendRow(0);
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+
+	agrid->appendRow(spacing);  // spacing
 	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imageMgr));
+	agrid->appendRow(0);
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+
+	agrid->appendRow(spacing);  // spacing
 	m_filterButtons.push_back(createHueSaturationButton(buttonRow, m_screen, m_imageMgr));
+	agrid->appendRow(0);
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+
+	agrid->appendRow(spacing);  // spacing
 	m_filterButtons.push_back(createColorSpaceButton(buttonRow, m_screen, m_imageMgr));
+	agrid->appendRow(0);
+	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
 
 	new Label(this, "Filters", "sans-bold");
 	buttonRow = new Widget(this);
-	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
 	m_filterButtons.push_back(createGaussianFilterButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBoxFilterButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBilateralFilterButton(buttonRow, m_screen, m_imageMgr));

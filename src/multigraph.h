@@ -31,8 +31,11 @@ public:
 	void addPlot(const Color & fg = Color(), const VectorXf & v = VectorXf()) {mValues.push_back(v); mForegroundColors.push_back(fg);}
 	void popPlot() {mValues.pop_back(); mForegroundColors.pop_back();}
 
-	bool filled(bool b) const { return mFilled; }
-	void setFilled(bool b) { mFilled = b; }
+	bool well() const       { return mInWell; }
+	void setWell(bool b)    { mInWell = b; }
+
+	bool filled() const     { return mFilled; }
+	void setFilled(bool b)  { mFilled = b; }
 
 	const Color &foregroundColor(int plot = 0) const { return mForegroundColors[plot]; }
 	void setForegroundColor(const Color &foregroundColor, int plot = 0) { mForegroundColors[plot] = foregroundColor; }
@@ -57,7 +60,7 @@ protected:
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
-	bool mFilled = true;
+	bool mFilled = true, mInWell = true;
 	std::string mLeftHeader, mCenterHeader, mRightHeader;
 	VectorXf mXTicks, mYTicks;
 	std::vector<std::string> mXTickLabels;
