@@ -233,6 +233,18 @@ inline T gainSchlick(T t, T a)
 		return biasSchlick(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
 }
 
+template <typename T>
+inline T brightnessContrastL(T v, T slope, T midpoint)
+{
+	return (v - midpoint) * slope + T(0.5);
+}
+
+template <typename T>
+inline T brightnessContrastNL(T v, T slope, T bias)
+{
+	return gainPerlin(biasSchlick(clamp01(v), bias), slope);
+}
+
 
 //! Returns a modulus b.
 template <typename T>

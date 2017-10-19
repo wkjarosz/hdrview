@@ -52,7 +52,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	auto row = new Widget(this);
 	row->setLayout(new BoxLayout(Orientation::Vertical,
 	                             Alignment::Fill, 0, 4));
-	m_graph = new MultiGraph(row, "", Color(255, 0, 0, 150));
+	m_graph = new MultiGraph(row, Color(255, 0, 0, 150));
 	m_graph->addPlot(Color(0, 255, 0, 150));
 	m_graph->addPlot(Color(0, 0, 255, 150));
 
@@ -218,9 +218,9 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		VectorXf yTicks = VectorXf::LinSpaced(9,0.0f,1.0f);
 		if (idxY != 0) yTicks = yTicks.unaryExpr([](float v){return normalizedLogScale(v);});
 		m_graph->setYTicks(yTicks);
-		m_graph->setMinimum(lazyHist->get()->minimum);
-		m_graph->setAverage(lazyHist->get()->average);
-		m_graph->setMaximum(lazyHist->get()->maximum);
+		m_graph->setLeftHeader(fmt::format("{:.3f}", lazyHist->get()->minimum));
+		m_graph->setCenterHeader(fmt::format("{:.3f}", lazyHist->get()->average));
+		m_graph->setRightHeader(fmt::format("{:.3f}", lazyHist->get()->maximum));
 		m_histogramDirty = false;
 	}
 	enableDisableButtons();
@@ -250,9 +250,13 @@ void ImageListPanel::updateHistogram()
 	m_graph->setValues(VectorXf(), 0);
 	m_graph->setValues(VectorXf(), 1);
 	m_graph->setValues(VectorXf(), 2);
-	m_graph->setMinimum(0.f);
-	m_graph->setAverage(0.5f);
-	m_graph->setMaximum(1.f);
+
+	m_graph->setLeftHeader("");
+	m_graph->setCenterHeader("");
+	m_graph->setRightHeader("");
+
+	m_graph->setXTicks(VectorXf(), {});
+	m_graph->setYTicks(VectorXf());
 
 	if (m_imageMgr->currentImage())
 		m_imageMgr->currentImage()->recomputeHistograms(m_imageViewer->exposure());

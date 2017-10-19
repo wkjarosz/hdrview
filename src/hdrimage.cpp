@@ -990,18 +990,17 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
             return unaryExpr(
                 [slope,midpoint](const Color4 &c)
                 {
-                    return Color4((c.r - midpoint) * slope + 0.5f,
-                                  (c.g - midpoint) * slope + 0.5f,
-                                  (c.b - midpoint) * slope + 0.5f, c.a);
+                    return Color4(brightnessContrastL(c.r, slope, midpoint),
+                                  brightnessContrastL(c.g, slope, midpoint),
+                                  brightnessContrastL(c.b, slope, midpoint), c.a);
                 });
         else if (channel == LUMINANCE || channel == CIE_L)
             return unaryExpr(
                 [slope,midpoint](const Color4 &c)
                 {
                     Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4((lab.r - midpoint) * slope + 0.5f,
-                                  lab.g,
-                                  lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                    return Color4(brightnessContrastL(lab.r, slope, midpoint),
+                                  lab.g, lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
                 });
         else if (channel == CIE_CHROMATICITY)
             return unaryExpr(
@@ -1009,8 +1008,8 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
                 {
                     Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
                     return Color4(lab.r,
-                                  (lab.g - midpoint) * slope + 0.5f,
-                                  (lab.b - midpoint) * slope + 0.5f,
+                                  brightnessContrastL(lab.g, slope, midpoint),
+                                  brightnessContrastL(lab.b, slope, midpoint),
                                   c.a).convert(LinearSRGB_CS, CIELab_CS);
                 });
         else
@@ -1024,9 +1023,9 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
             return unaryExpr(
                 [aB, slope](const Color4 &c)
                 {
-                    return Color4(gainPerlin(biasSchlick(clamp(c.r, 0.f, 1.f), aB), slope),
-                                  gainPerlin(biasSchlick(clamp(c.g, 0.f, 1.f), aB), slope),
-                                  gainPerlin(biasSchlick(clamp(c.b, 0.f, 1.f), aB), slope),
+                    return Color4(brightnessContrastNL(c.r, slope, aB),
+                                  brightnessContrastNL(c.g, slope, aB),
+                                  brightnessContrastNL(c.b, slope, aB),
                                   c.a);
                 });
         else if (channel == LUMINANCE || channel == CIE_L)
@@ -1034,9 +1033,8 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
                 [aB, slope](const Color4 &c)
                 {
                     Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4(gainPerlin(biasSchlick(clamp(lab.r, 0.f, 1.f), aB), slope),
-                                  lab.g,
-                                  lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                    return Color4(brightnessContrastNL(lab.r, slope, aB),
+                                  lab.g, lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
                 });
         else if (channel == CIE_CHROMATICITY)
             return unaryExpr(
@@ -1044,8 +1042,8 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
                 {
                     Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
                     return Color4(lab.r,
-                                  gainPerlin(biasSchlick(clamp(lab.g, 0.f, 1.f), aB), slope),
-                                  gainPerlin(biasSchlick(clamp(lab.b, 0.f, 1.f), aB), slope),
+                                  brightnessContrastNL(lab.g, slope, aB),
+                                  brightnessContrastNL(lab.b, slope, aB),
                                   c.a).convert(LinearSRGB_CS, CIELab_CS);
                 });
         else

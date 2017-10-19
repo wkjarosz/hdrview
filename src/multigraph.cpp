@@ -18,12 +18,10 @@ using std::vector;
 
 /*!
  * @param parent	The parent widget
- * @param caption 	Caption text
  * @param fg 		The foreground color of the first plot
  * @param v 		The value vector for the first plot
  */
-MultiGraph::MultiGraph(Widget *parent, const std::string &caption,
-                       const Color & fg, const VectorXf & v)
+MultiGraph::MultiGraph(Widget *parent, const Color & fg, const VectorXf & v)
 	: Widget(parent), mBackgroundColor(20, 128), mTextColor(240, 192)
 {
 	mForegroundColors.push_back(fg);
@@ -49,16 +47,19 @@ void MultiGraph::draw(NVGcontext *ctx)
 {
 	Widget::draw(ctx);
 
+	bool hasHeaders = (mLeftHeader.size() + mCenterHeader.size() + mRightHeader.size()) != 0;
+	bool hasFooters = mXTicks.size() >= 2;
+
 	static const int hpad = 10;
-	static const int bpad = 12;
-	static const int tpad = 15;
 	static const int textPad = 4;
+	int bpad = hasFooters ? 12 : 5;
+	int tpad = hasHeaders ? 15 : 5;
 
 	auto xPosition = [this](float xfrac)
 	{
 		return mPos.x() + hpad + xfrac * (mSize.x() - 2 * hpad);
 	};
-	auto yPosition = [this](float value)
+	auto yPosition = [this,tpad,bpad](float value)
 	{
 		return mPos.y() + mSize.y() - clamp(value, 0.0f, 1.0f) * (mSize.y() - tpad - bpad) - bpad;
 	};
@@ -92,15 +93,25 @@ void MultiGraph::draw(NVGcontext *ctx)
 			if (v.size() < 2)
 				return;
 
+			float invSize = 1.f / (v.size()-1);
 			nvgBeginPath(ctx);
-			nvgMoveTo(ctx, x0, y0);
-			float invSize = 1.f / v.size();
-			for (int i = 0; i < v.size(); ++i)
-				nvgLineTo(ctx, xPosition((i+0.5f)*invSize), yPosition(v[i]));
+			if (mFilled)
+			{
+				nvgMoveTo(ctx, x0, y0);
+				nvgLineTo(ctx, x0, yPosition(v[0]));
+			}
+			else
+				nvgMoveTo(ctx, x0, yPosition(v[0]));
 
-			nvgLineTo(ctx, x1, y0);
-			nvgFillColor(ctx, mForegroundColors[plot]);
-			nvgFill(ctx);
+			for (int i = 1; i < v.size(); ++i)
+				nvgLineTo(ctx, xPosition(i*invSize), yPosition(v[i]));
+
+			if (mFilled)
+			{
+				nvgLineTo(ctx, x1, y0);
+				nvgFillColor(ctx, mForegroundColors[plot]);
+				nvgFill(ctx);
+			}
 			Color sColor = mForegroundColors[plot];
 			sColor.w() = (sColor.w() + 1.0f) / 2.0f;
 			nvgStrokeColor(ctx, sColor);
@@ -120,7 +131,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 	float yPos = 0;
 	float textWidth = 0.0f;
 
-	if (mXTicks.size() >= 2)
+	if (hasFooters)
 	{
 		// draw horizontal axis
 		nvgBeginPath(ctx);
@@ -206,27 +217,21 @@ void MultiGraph::draw(NVGcontext *ctx)
 		}
 	}
 
-	if (numPlots() && mValues[0].size() >= 2)
-	{
-		// show top stats
-		nvgFontSize(ctx, 12.0f);
-		nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		nvgText(ctx, mPos.x() + 3, mPos.y() + 1, fmt::format("{:.3f}", m_minimum).c_str(), NULL);
+	// show the headers
+	nvgFontSize(ctx, 12.0f);
+	nvgFillColor(ctx, mTextColor);
 
-		nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		std::string avgString = fmt::format("{:.3f}", m_average);
-		textWidth = nvgTextBounds(ctx, 0, 0, avgString.c_str(), nullptr, nullptr);
-		nvgText(ctx, mPos.x() + mSize.x() / 2 - textWidth / 2, mPos.y() + 1, avgString.c_str(), NULL);
+	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+	nvgText(ctx, mPos.x() + 3, mPos.y() + 1, mLeftHeader.c_str(), NULL);
 
-		nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
-		nvgFillColor(ctx, mTextColor);
-		nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + 1, fmt::format("{:.3f}", m_maximum).c_str(), NULL);
-	}
+	nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
+	textWidth = nvgTextBounds(ctx, 0, 0, mCenterHeader.c_str(), nullptr, nullptr);
+	nvgText(ctx, mPos.x() + mSize.x() / 2 - textWidth / 2, mPos.y() + 1, mCenterHeader.c_str(), NULL);
+
+	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+	nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + 1, mRightHeader.c_str(), NULL);
 
 	nvgFontFace(ctx, "sans");
-
 }
 
 void MultiGraph::save(Serializer &s) const

@@ -18,8 +18,7 @@ using namespace nanogui;
 class MultiGraph : public Widget
 {
 public:
-	MultiGraph(Widget *parent, const std::string &caption = "Untitled",
-	           const Color & fg = Color(255, 192, 0, 128),
+	MultiGraph(Widget *parent, const Color & fg = Color(255, 192, 0, 128),
 	           const VectorXf & v = VectorXf());
 
 	const Color &backgroundColor() const { return mBackgroundColor; }
@@ -32,6 +31,9 @@ public:
 	void addPlot(const Color & fg = Color(), const VectorXf & v = VectorXf()) {mValues.push_back(v); mForegroundColors.push_back(fg);}
 	void popPlot() {mValues.pop_back(); mForegroundColors.pop_back();}
 
+	bool filled(bool b) const { return mFilled; }
+	void setFilled(bool b) { mFilled = b; }
+
 	const Color &foregroundColor(int plot = 0) const { return mForegroundColors[plot]; }
 	void setForegroundColor(const Color &foregroundColor, int plot = 0) { mForegroundColors[plot] = foregroundColor; }
 
@@ -40,10 +42,10 @@ public:
 	void setValues(const VectorXf &values, int plot = 0) { mValues[plot] = values; }
 
 	void setXTicks(const VectorXf & ticks, const std::vector<std::string> & labels);
-	void setYTicks(const VectorXf & ticks)  { mYTicks = ticks; }
-	void setMinimum(float minimum)  { m_minimum = minimum; }
-	void setAverage(float average)  { m_average = average; }
-	void setMaximum(float maximum)  { m_maximum = maximum; }
+	void setYTicks(const VectorXf & ticks)      { mYTicks = ticks; }
+	void setLeftHeader(const std::string & s)   { mLeftHeader = s; }
+	void setCenterHeader(const std::string & s) { mCenterHeader = s; }
+	void setRightHeader(const std::string & s)  { mRightHeader = s; }
 
 	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
@@ -55,7 +57,8 @@ protected:
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
-	float m_minimum = 0, m_average = 0, m_maximum = 0;
+	bool mFilled = true;
+	std::string mLeftHeader, mCenterHeader, mRightHeader;
 	VectorXf mXTicks, mYTicks;
 	std::vector<std::string> mXTickLabels;
 

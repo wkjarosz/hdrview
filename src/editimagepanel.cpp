@@ -13,6 +13,7 @@
 #include "envmap.h"
 #include "colorspace.h"
 #include "hslgradient.h"
+#include "multigraph.h"
 #include <spdlog/spdlog.h>
 
 using namespace std;
@@ -171,6 +172,8 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 	static float brightness = 0.0f;
 	static float contrast = 0.0f;
 	static bool linear = false;
+	static const auto activeColor = Color(255, 255, 255, 200);
+	static const auto inactiveColor = Color(255, 255, 255, 25);
 	static enum EChannel
 	{
 		RGB = 0,
@@ -191,42 +194,113 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 
 			// brightness
 			string help = "Shift the midpoint up or down.";
-			auto wB = gui->addVariable("Brightness:", brightness);
-			wB->setSpinnable(true);
-			wB->numberFormat("%1.2f");
-			wB->setValueIncrement(0.01f);
-			wB->setMinMaxValues(-1.f, 1.f);
-			wB->setTooltip(help);
+			auto bFloat = gui->addVariable("Brightness:", brightness);
+			bFloat->setSpinnable(true);
+			bFloat->numberFormat("%1.2f");
+			bFloat->setValueIncrement(0.01f);
+			bFloat->setMinMaxValues(-1.f, 1.f);
+			bFloat->setTooltip(help);
 
-			auto slider = new Slider(window);
-			slider->setValue(brightness);
-			slider->setRange({-1.f, 1.f});
-			slider->setTooltip(help);
-			gui->addWidget("", slider);
-
-			slider->setCallback([wB](float b){ brightness = b; wB->setValue(b); });
-			wB->setCallback([slider](float b){ brightness = b; slider->setValue(b); });
+			auto bSlider = new Slider(window);
+			bSlider->setValue(brightness);
+			bSlider->setRange({-1.f, 1.f});
+			bSlider->setTooltip(help);
+			gui->addWidget("", bSlider);
 
 			// contrast
 			help = "Change the slope/gradient at the midpoint.";
-			auto wC = gui->addVariable("Contrast:", contrast);
-			wC->setSpinnable(true);
-			wC->numberFormat("%1.2f");
-			wC->setValueIncrement(0.01f);
-			wC->setMinMaxValues(-1.f, 1.f);
-			wC->setTooltip(help);
+			auto cFloat = gui->addVariable("Contrast:", contrast);
+			cFloat->setSpinnable(true);
+			cFloat->numberFormat("%1.2f");
+			cFloat->setValueIncrement(0.01f);
+			cFloat->setMinMaxValues(-1.f, 1.f);
+			cFloat->setTooltip(help);
 
-			slider = new Slider(window);
-			slider->setValue(contrast);
-			slider->setRange({-1.f, 1.f});
-			slider->setTooltip(help);
-			gui->addWidget("", slider);
+			auto cSlider = new Slider(window);
+			cSlider->setValue(contrast);
+			cSlider->setRange({-1.f, 1.f});
+			cSlider->setTooltip(help);
+			gui->addWidget("", cSlider);
 
-			slider->setCallback([wC](float c){ contrast = c; wC->setValue(c); });
-			wC->setCallback([slider](float c){ contrast = c; slider->setValue(c); });
-
-			gui->addVariable("Linear:", linear, true);
+			auto lCheck = gui->addVariable("Linear:", linear, true);
 			gui->addVariable("Channel:", channel, true)->setItems({"RGB", "Luminance", "Chromaticity"});
+
+			auto spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			// graph
+			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
+			graph->addPlot(inactiveColor);
+			graph->addPlot(activeColor);
+			graph->addPlot(Color(255, 255, 255, 50));
+			graph->setFixedSize(Vector2i(200, 200));
+			graph->setFilled(false);
+			graph->setValues(VectorXf::LinSpaced(257, 0.0f, 1.0f), 0);
+			graph->setValues(VectorXf::Constant(2, 0.5f), 3);
+			int numTicks = 5;
+			// create the x tick marks
+			VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+			// create the x tick labels
+			vector<string> xTickLabels(numTicks);
+			for (int i = 0; i < numTicks; ++i)
+				xTickLabels[i] = fmt::format("{:.2f}", xTicks[i]);
+			graph->setXTicks(xTicks, xTickLabels);
+			graph->setYTicks(xTicks);
+
+			gui->addWidget("", graph);
+
+			auto graphCb = [graph]()
+			{
+				float slope = float(std::tan(lerp(0.0, M_PI_2, contrast/2.0 + 0.5)));
+				float midpoint = (1.f-brightness)/2.f;
+				float bias = (brightness + 1.f) / 2.f;
+				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
+					[slope, midpoint](float v)
+					{
+						return brightnessContrastL(v, slope, midpoint);
+					});
+				lCurve.tail<1>()(0) = 1;
+				graph->setValues(lCurve, 1);
+
+				VectorXf nlCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
+					[slope, bias](float v)
+					{
+						return brightnessContrastNL(v, slope, bias);
+					});
+				nlCurve.tail<1>()(0) = 1;
+				graph->setValues(nlCurve, 2);
+			};
+
+			graphCb();
+
+			auto bCb = [bFloat,bSlider,graphCb](float b)
+			{
+				brightness = b;
+				bFloat->setValue(b);
+				bSlider->setValue(b);
+				graphCb();
+			};
+			bSlider->setCallback(bCb);
+			bFloat->setCallback(bCb);
+
+			auto cCb = [cFloat,cSlider,graphCb](float c)
+			{
+				contrast = c;
+				cFloat->setValue(c);
+				cSlider->setValue(c);
+				graphCb();
+			};
+			cSlider->setCallback(cCb);
+			cFloat->setCallback(cCb);
+
+			lCheck->setCallback(
+				[graph,graphCb](bool b)
+				{
+					linear = b;
+					graph->setForegroundColor(linear ? activeColor : inactiveColor, 1);
+					graph->setForegroundColor(linear ? inactiveColor : activeColor, 2);
+				});
 
 			addOKCancelButtons(gui, window,
                [&, window]()
