@@ -50,13 +50,25 @@ public:
 	void setCenterHeader(const std::string & s) { mCenterHeader = s; }
 	void setRightHeader(const std::string & s)  { mRightHeader = s; }
 
+	std::function<void(const Vector2f &)> dragCallback() const { return mDragCallback; }
+	void setDragCallback(const std::function<void(const Vector2f &)> &callback) { mDragCallback = callback; }
+//
+//	std::function<void(const Vector2f &)> finalCallback() const { return mFinalCallback; }
+//	void setFinalCallback(const std::function<void(const Vector2f &)> &callback) { mFinalCallback = callback; }
+
 	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
+	virtual bool mouseDragEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+	virtual bool mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers) override;
 
 	virtual void save(Serializer &s) const override;
 	virtual bool load(Serializer &s) override;
 
 protected:
+	Vector2f graphCoordinateAt(const Vector2f& position) const;
+	float xPosition(float xfrac) const;
+	float yPosition(float yfrac) const;
+
 	Color mBackgroundColor, mTextColor;
 	std::vector<Color> mForegroundColors;
 	std::vector<VectorXf> mValues;
@@ -64,6 +76,9 @@ protected:
 	std::string mLeftHeader, mCenterHeader, mRightHeader;
 	VectorXf mXTicks, mYTicks;
 	std::vector<std::string> mXTickLabels;
+
+	std::function<void(const Vector2f &)> mDragCallback;
+//	std::function<void(const Vector2f &)> mFinalCallback;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -16,6 +16,12 @@
 using std::string;
 using std::vector;
 
+namespace
+{
+const int hpad = 10;
+const int textPad = 4;
+}
+
 /*!
  * @param parent	The parent widget
  * @param fg 		The foreground color of the first plot
@@ -33,6 +39,14 @@ Vector2i MultiGraph::preferredSize(NVGcontext *) const
 	return Vector2i(256, 75);
 }
 
+Vector2f MultiGraph::graphCoordinateAt(const Vector2f& position) const
+{
+	Vector2f topLeft(xPosition(0), yPosition(0));
+	Vector2f bottomRight(xPosition(1), yPosition(1));
+	Vector2f graphSize = bottomRight-topLeft;
+	return (position-topLeft).cwiseQuotient(graphSize);
+}
+
 void MultiGraph::setXTicks(const VectorXf & ticks,
                            const vector<string> & labels)
 {
@@ -43,26 +57,28 @@ void MultiGraph::setXTicks(const VectorXf & ticks,
 	}
 }
 
+float MultiGraph::xPosition(float xfrac) const
+{
+	return mPos.x() + hpad + xfrac * (mSize.x() - 2 * hpad);
+}
+
+float MultiGraph::yPosition(float value) const
+{
+	bool hasHeaders = (mLeftHeader.size() + mCenterHeader.size() + mRightHeader.size()) != 0;
+	bool hasFooters = mXTicks.size() >= 2;
+
+	int bpad = hasFooters ? 12 : 5;
+	int tpad = hasHeaders ? 15 : 5;
+
+	return mPos.y() + mSize.y() - clamp01(value) * (mSize.y() - tpad - bpad) - bpad;
+}
+
+
 void MultiGraph::draw(NVGcontext *ctx)
 {
 	Widget::draw(ctx);
 
-	bool hasHeaders = (mLeftHeader.size() + mCenterHeader.size() + mRightHeader.size()) != 0;
 	bool hasFooters = mXTicks.size() >= 2;
-
-	static const int hpad = 10;
-	static const int textPad = 4;
-	int bpad = hasFooters ? 12 : 5;
-	int tpad = hasHeaders ? 15 : 5;
-
-	auto xPosition = [this](float xfrac)
-	{
-		return mPos.x() + hpad + xfrac * (mSize.x() - 2 * hpad);
-	};
-	auto yPosition = [this,tpad,bpad](float value)
-	{
-		return mPos.y() + mSize.y() - clamp(value, 0.0f, 1.0f) * (mSize.y() - tpad - bpad) - bpad;
-	};
 
 	float y0 = yPosition(0.0f);
 	float y1 = yPosition(1.0f);
@@ -235,6 +251,29 @@ void MultiGraph::draw(NVGcontext *ctx)
 	nvgText(ctx, mPos.x() + mSize.x() - 3, mPos.y() + 1, mRightHeader.c_str(), NULL);
 
 	nvgFontFace(ctx, "sans");
+}
+
+bool MultiGraph::mouseDragEvent(const Vector2i &p, const Vector2i & /* rel */,
+                                int /* button */, int /* modifiers */)
+{
+	if (!mEnabled)
+		return false;
+
+	if (mDragCallback)
+		mDragCallback(graphCoordinateAt(p.cast<float>()));
+
+	return true;
+}
+
+bool MultiGraph::mouseButtonEvent(const Vector2i &p, int /* button */, bool down, int /* modifiers */)
+{
+	if (!mEnabled)
+		return false;
+
+	if (mDragCallback)
+		mDragCallback(graphCoordinateAt(p.cast<float>()));
+
+	return true;
 }
 
 void MultiGraph::save(Serializer &s) const

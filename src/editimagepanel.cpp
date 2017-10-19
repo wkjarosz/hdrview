@@ -368,6 +368,13 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 					graph->setForegroundColor(linear ? inactiveColor : activeColor, 2);
 				});
 
+			graph->setDragCallback(
+				[bCb,cCb](const Vector2f & frac)
+				{
+					bCb(lerp(1.f, -1.f, clamp01(frac.x())));
+					cCb(lerp(-1.f, 1.f, clamp01(frac.y())));
+				});
+
 			addOKCancelButtons(gui, window,
                [&, window]()
                {
