@@ -22,6 +22,38 @@ using namespace std;
 namespace
 {
 
+std::function<void(float)> createFloatBoxAndSlider(
+	FormHelper * gui, Widget * parent,
+	string name, float & variable,
+	float mn, float mx, float step,
+	std::function<void(void)> cb,
+	string help = "")
+{
+	auto fBox = gui->addVariable(name, variable);
+	fBox->setSpinnable(true);
+	fBox->numberFormat("%1.2f");
+	fBox->setValueIncrement(step);
+	fBox->setMinMaxValues(mn, mx);
+	fBox->setTooltip(help);
+
+	auto fSlider = new Slider(parent);
+	fSlider->setValue(variable);
+	fSlider->setRange({mn, mx});
+	fSlider->setTooltip(help);
+	gui->addWidget("", fSlider);
+
+	auto fCb = [fBox,fSlider,cb,&variable](float v)
+	{
+		variable = v;
+		fBox->setValue(v);
+		fSlider->setValue(v);
+		cb();
+	};
+	fSlider->setCallback(fCb);
+	fBox->setCallback(fCb);
+	return fCb;
+}
+
 
 void addOKCancelButtons(FormHelper * gui, Window * window,
                         const function<void()> &OKCallback,
@@ -99,52 +131,11 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 		[&, parent, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->setFixedSize(Vector2i(55, 20));
 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			// exposure
-			auto eFloat = gui->addVariable("Exposure:", exposure);
-			eFloat->setSpinnable(true);
-			eFloat->numberFormat("%1.2f");
-			eFloat->setValueIncrement(0.1f);
-			eFloat->setMinMaxValues(-10.f, 10.f);
-
-			auto eSlider = new Slider(window);
-			eSlider->setValue(exposure);
-			eSlider->setRange({-10.f, 10.f});
-			gui->addWidget("", eSlider);
-
-			// offset
-			auto oFloat = gui->addVariable("Offset:", offset);
-			oFloat->setSpinnable(true);
-			oFloat->numberFormat("%1.2f");
-			oFloat->setValueIncrement(0.01);
-			oFloat->setMinMaxValues(-1.f, 1.f);
-
-			auto oSlider = new Slider(window);
-			oSlider->setValue(offset);
-			oSlider->setRange({-1.f, 1.f});
-			gui->addWidget("", oSlider);
-
-			// gamma
-			auto gFloat = gui->addVariable("Gamma:", gamma);
-			gFloat->setSpinnable(true);
-			gFloat->numberFormat("%1.2f");
-			gFloat->setValueIncrement(0.1f);
-			gFloat->setMinMaxValues(0.0001f, 10.f);
-
-			auto gSlider = new Slider(window);
-			gSlider->setValue(gamma);
-			gSlider->setRange({0.0001f, 10.f});
-			gui->addWidget("", gSlider);
-
-
-
-			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
 
 			// graph
 			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
@@ -164,7 +155,6 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 				xTickLabels[i] = fmt::format("{:.2f}", xTicks[i]);
 			graph->setXTicks(xTicks, xTickLabels);
 			graph->setYTicks(xTicks);
-
 			gui->addWidget("", graph);
 
 			auto graphCb = [graph]()
@@ -180,36 +170,17 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			graphCb();
 
 
-			auto eCb = [eFloat,eSlider,graphCb](float e)
-			{
-				exposure = e;
-				eFloat->setValue(e);
-				eSlider->setValue(e);
-				graphCb();
-			};
+			createFloatBoxAndSlider(gui, window,
+			                        "Exposure:", exposure,
+			                        -10.f, 10.f, 0.1f, graphCb);
 
-			auto oCb = [oFloat,oSlider,graphCb](float o)
-			{
-				offset = o;
-				oFloat->setValue(o);
-				oSlider->setValue(o);
-				graphCb();
-			};
+			createFloatBoxAndSlider(gui, window,
+			                        "Offset:", offset,
+			                        -1.f, 1.f, 0.01f, graphCb);
 
-			auto gCb = [gFloat,gSlider,graphCb](float g)
-			{
-				gamma = g;
-				gFloat->setValue(g);
-				gSlider->setValue(g);
-				graphCb();
-			};
-
-			eSlider->setCallback(eCb);
-			eFloat->setCallback(eCb);
-			oSlider->setCallback(oCb);
-			oFloat->setCallback(oCb);
-			gSlider->setCallback(gCb);
-			gFloat->setCallback(gCb);
+			createFloatBoxAndSlider(gui, window,
+			                        "Gamma:", gamma,
+			                        0.0001f, 10.f, 0.1f, graphCb);
 
 			addOKCancelButtons(gui, window,
 				[&, window]()
@@ -255,45 +226,6 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			// brightness
-			string help = "Shift the 50% gray midpoint.\n\n"
-						  "Setting brightness > 0 boosts a previously darker value to 50%, "
-						  "while brightness < 0 dims a previously brighter value to 50%.";
-
-			auto bFloat = gui->addVariable("Brightness:", brightness);
-			bFloat->setSpinnable(true);
-			bFloat->numberFormat("%1.2f");
-			bFloat->setValueIncrement(0.01f);
-			bFloat->setMinMaxValues(-1.f, 1.f);
-			bFloat->setTooltip(help);
-
-			auto bSlider = new Slider(window);
-			bSlider->setValue(brightness);
-			bSlider->setRange({-1.f, 1.f});
-			bSlider->setTooltip(help);
-			gui->addWidget("", bSlider);
-
-			// contrast
-			help = "Change the slope/gradient at the new 50% midpoint.";
-			auto cFloat = gui->addVariable("Contrast:", contrast);
-			cFloat->setSpinnable(true);
-			cFloat->numberFormat("%1.2f");
-			cFloat->setValueIncrement(0.01f);
-			cFloat->setMinMaxValues(-1.f, 1.f);
-			cFloat->setTooltip(help);
-
-			auto cSlider = new Slider(window);
-			cSlider->setValue(contrast);
-			cSlider->setRange({-1.f, 1.f});
-			cSlider->setTooltip(help);
-			gui->addWidget("", cSlider);
-
-			auto lCheck = gui->addVariable("Linear:", linear, true);
-			gui->addVariable("Channel:", channel, true)->setItems({"RGB", "Luminance", "Chromaticity"});
-
-			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
 
 			// graph
 			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
@@ -341,25 +273,22 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 
 			graphCb();
 
-			auto bCb = [bFloat,bSlider,graphCb](float b)
-			{
-				brightness = b;
-				bFloat->setValue(b);
-				bSlider->setValue(b);
-				graphCb();
-			};
-			bSlider->setCallback(bCb);
-			bFloat->setCallback(bCb);
+			// brightness
+			string help = "Shift the 50% gray midpoint.\n\n"
+						  "Setting brightness > 0 boosts a previously darker value to 50%, "
+						  "while brightness < 0 dims a previously brighter value to 50%.";
 
-			auto cCb = [cFloat,cSlider,graphCb](float c)
-			{
-				contrast = c;
-				cFloat->setValue(c);
-				cSlider->setValue(c);
-				graphCb();
-			};
-			cSlider->setCallback(cCb);
-			cFloat->setCallback(cCb);
+			auto bCb = createFloatBoxAndSlider(gui, window,
+			                        "Brightness:", brightness,
+			                        -1.f, 1.f, 0.01f, graphCb, help);
+
+			help = "Change the slope/gradient at the new 50% midpoint.";
+			auto cCb = createFloatBoxAndSlider(gui, window,
+			                        "Contrast:", contrast,
+			                        -1.f, 1.f, 0.01f, graphCb, help);
+
+			auto lCheck = gui->addVariable("Linear:", linear, true);
+			gui->addVariable("Channel:", channel, true)->setItems({"RGB", "Luminance", "Chromaticity"});
 
 			lCheck->setCallback(
 				[graph,graphCb](bool b)
@@ -405,92 +334,15 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 		[&, parent, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(100, 20));
+			gui->setFixedSize(Vector2i(55, 20));
 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			// toe strength
-			auto tsFloat = gui->addVariable("Toe Strength:", params.toeStrength);
-			tsFloat->setSpinnable(true);
-			tsFloat->numberFormat("%1.2f");
-			tsFloat->setValueIncrement(0.01f);
-			tsFloat->setMinMaxValues(0.f, 1.f);
-
-			auto tsSlider = new Slider(window);
-			tsSlider->setValue(params.toeStrength);
-			tsSlider->setRange({0.f, 1.f});
-			gui->addWidget("", tsSlider);
-
-			// toe length
-			auto tlFloat = gui->addVariable("Toe length:", params.toeLength);
-			tlFloat->setSpinnable(true);
-			tlFloat->numberFormat("%1.2f");
-			tlFloat->setValueIncrement(0.01f);
-			tlFloat->setMinMaxValues(0.f, 1.f);
-
-			auto tlSlider = new Slider(window);
-			tlSlider->setValue(params.toeLength);
-			tlSlider->setRange({0.f, 1.f});
-			gui->addWidget("", tlSlider);
-
-			// shoulder strength
-			auto ssFloat = gui->addVariable("Shoulder strength:", params.shoulderStrength);
-			ssFloat->setSpinnable(true);
-			ssFloat->numberFormat("%1.2f");
-			ssFloat->setValueIncrement(0.1f);
-			ssFloat->setMinMaxValues(0.f, 10.f);
-
-			auto ssSlider = new Slider(window);
-			ssSlider->setValue(params.shoulderStrength);
-			ssSlider->setRange({0.f, 10.f});
-			gui->addWidget("", ssSlider);
-
-			// shoulder length
-			auto slFloat = gui->addVariable("Shoulder length:", params.shoulderLength);
-			slFloat->setSpinnable(true);
-			slFloat->numberFormat("%1.2f");
-			slFloat->setValueIncrement(0.01f);
-			slFloat->setMinMaxValues(0.f, 1.f);
-
-			auto slSlider = new Slider(window);
-			slSlider->setValue(params.shoulderLength);
-			slSlider->setRange({0.f, 1.f});
-			gui->addWidget("", slSlider);
-
-			// shoulder angle
-			auto saFloat = gui->addVariable("Shoulder angle:", params.shoulderAngle);
-			saFloat->setSpinnable(true);
-			saFloat->numberFormat("%1.2f");
-			saFloat->setValueIncrement(0.01f);
-			saFloat->setMinMaxValues(0.f, 1.f);
-
-			auto saSlider = new Slider(window);
-			saSlider->setValue(params.shoulderAngle);
-			saSlider->setRange({0.f, 1.f});
-			gui->addWidget("", saSlider);
-
-			// gamma
-			auto gFloat = gui->addVariable("Gamma:", params.gamma);
-			gFloat->setSpinnable(true);
-			gFloat->numberFormat("%1.2f");
-			gFloat->setValueIncrement(0.01f);
-			gFloat->setMinMaxValues(0.01f, 5.f);
-
-			auto gSlider = new Slider(window);
-			gSlider->setValue(params.gamma);
-			gSlider->setRange({0.01f, 5.f});
-			gui->addWidget("", gSlider);
-
-
-			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
-
 			// graph
-			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
+			MultiGraph* graph = new MultiGraph(window, Color(255, 255, 255, 30));
 			graph->addPlot(activeColor);
-			graph->setFixedSize(Vector2i(200, 150));
+			graph->setFixedSize(Vector2i(200, 200));
 			graph->setFilled(false);
 			graph->setWell(false);
 			gui->addWidget("", graph);
@@ -522,65 +374,29 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 
 			graphCb();
 
-			auto tsCb = [tsFloat,tsSlider,graphCb](float v)
-			{
-				params.toeStrength = v;
-				tsFloat->setValue(v);
-				tsSlider->setValue(v);
-				graphCb();
-			};
-			tsSlider->setCallback(tsCb);
-			tsFloat->setCallback(tsCb);
-			
-			auto tlCb = [tlFloat,tlSlider,graphCb](float v)
-			{
-				params.toeLength = v;
-				tlFloat->setValue(v);
-				tlSlider->setValue(v);
-				graphCb();
-			};
-			tlSlider->setCallback(tlCb);
-			tlFloat->setCallback(tlCb);
-			
-			auto ssCb = [ssFloat,ssSlider,graphCb](float v)
-			{
-				params.shoulderStrength = v;
-				ssFloat->setValue(v);
-				ssSlider->setValue(v);
-				graphCb();
-			};
-			ssSlider->setCallback(ssCb);
-			ssFloat->setCallback(ssCb);
+			createFloatBoxAndSlider(gui, window,
+			                        "Toe strength:", params.toeStrength,
+			                        0.f, 1.f, 0.01f, graphCb);
 
-			auto slCb = [slFloat,slSlider,graphCb](float v)
-			{
-				params.shoulderLength = v;
-				slFloat->setValue(v);
-				slSlider->setValue(v);
-				graphCb();
-			};
-			slSlider->setCallback(slCb);
-			slFloat->setCallback(slCb);
+			createFloatBoxAndSlider(gui, window,
+			                        "Toe length:", params.toeLength,
+			                        0.f, 1.f, 0.01f, graphCb);
 
-			auto saCb = [saFloat,saSlider,graphCb](float v)
-			{
-				params.shoulderAngle = v;
-				saFloat->setValue(v);
-				saSlider->setValue(v);
-				graphCb();
-			};
-			saSlider->setCallback(saCb);
-			saFloat->setCallback(saCb);
+			createFloatBoxAndSlider(gui, window,
+			                        "Shoulder strength:", params.shoulderStrength,
+			                        0.f, 10.f, 0.1f, graphCb);
 
-			auto gCb = [gFloat,gSlider,graphCb](float v)
-			{
-				params.gamma = v;
-				gFloat->setValue(v);
-				gSlider->setValue(v);
-				graphCb();
-			};
-			gSlider->setCallback(gCb);
-			gFloat->setCallback(gCb);
+			createFloatBoxAndSlider(gui, window,
+			                        "Shoulder length:", params.shoulderLength,
+			                        0.f, 1.f, 0.01f, graphCb);
+
+			createFloatBoxAndSlider(gui, window,
+			                        "Shoulder angle:", params.shoulderAngle,
+			                        0.f, 1.f, 0.01f, graphCb);
+
+			createFloatBoxAndSlider(gui, window,
+			                        "Gamma:", params.gamma,
+			                        0.f, 5.f, 0.01f, graphCb);
 
 			addOKCancelButtons(gui, window,
 			                   [&, window]()
@@ -617,72 +433,50 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, HDRIm
 		[&, parent, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->setFixedSize(Vector2i(55, 20));
 
 			Widget* spacer = nullptr;
 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			// hue
-			auto hFloat = gui->addVariable("Hue:", hue);
-			hFloat->setSpinnable(true);
-			hFloat->numberFormat("%1.1f");
-			hFloat->setValueIncrement(1.f);
-			hFloat->setMinMaxValues(-180.f, 180.f);
 
-			auto hSlider = new Slider(window);
-			hSlider->setValue(hue);
-			hSlider->setRange({-180.f, 180.f});
-			gui->addWidget("", hSlider);
 
-			// saturation
-			auto sFloat = gui->addVariable("Saturation:", saturation);
-			sFloat->setSpinnable(true);
-			sFloat->numberFormat("%1.1f");
-			sFloat->setValueIncrement(1.f);
-			sFloat->setMinMaxValues(-100.f, 100.f);
+			auto fixedRainbow = new HSLGradient(window);
+			auto dynamicRainbow = new HSLGradient(window);
+			fixedRainbow->setFixedWidth(256);
+			dynamicRainbow->setFixedWidth(256);
 
-			auto sSlider = new Slider(window);
-			sSlider->setValue(saturation);
-			sSlider->setRange({-100.f, 100.f});
-			gui->addWidget("", sSlider);
+			auto cb = [dynamicRainbow]()
+			{
+				dynamicRainbow->setHueOffset(hue);
+				dynamicRainbow->setSaturation((saturation + 100.f)/200.f);
+				dynamicRainbow->setLightness((lightness + 100.f)/200.f);
+			};
 
-			// lightness
-			auto lFloat = gui->addVariable("Lightness:", lightness);
-			lFloat->setSpinnable(true);
-			lFloat->numberFormat("%1.1f");
-			lFloat->setValueIncrement(1.f);
-			lFloat->setMinMaxValues(-100.f, 100.f);
+			createFloatBoxAndSlider(gui, window,
+			                        "Hue:", hue,
+			                        -180.f, 180.f, 1.f, cb);
 
-			auto lSlider = new Slider(window);
-			lSlider->setValue(lightness);
-			lSlider->setRange({-100.f, 100.f});
-			gui->addWidget("", lSlider);
+			createFloatBoxAndSlider(gui, window,
+			                        "Saturation:", saturation,
+			                        -100.f, 100.f, 1.f, cb);
 
+			createFloatBoxAndSlider(gui, window,
+			                        "Lightness:", lightness,
+			                        -100.f, 100.f, 1.f, cb);
 
 			spacer = new Widget(window);
 			spacer->setFixedHeight(5);
 			gui->addWidget("", spacer);
 
-			auto fixedRainbow = new HSLGradient(window);
 			gui->addWidget("", fixedRainbow);
 
 			spacer = new Widget(window);
 			spacer->setFixedHeight(5);
 			gui->addWidget("", spacer);
 
-			auto dynamicRainbow = new HSLGradient(window);
 			gui->addWidget("", dynamicRainbow);
-
-			hSlider->setCallback([hFloat,dynamicRainbow](float h){ hue = h; hFloat->setValue(h); dynamicRainbow->setHueOffset(h); });
-			hFloat->setCallback([hSlider,dynamicRainbow](float h){ hue = h; hSlider->setValue(h); dynamicRainbow->setHueOffset(h);});
-
-			sSlider->setCallback([sFloat,dynamicRainbow](float s){ saturation = s; sFloat->setValue(s); dynamicRainbow->setSaturation((s + 100.f)/200.f); });
-			sFloat->setCallback([sSlider,dynamicRainbow](float s){ saturation = s; sSlider->setValue(s); dynamicRainbow->setSaturation((s + 100.f)/200.f);});
-
-			lSlider->setCallback([lFloat,dynamicRainbow](float l){ lightness = l; lFloat->setValue(l); dynamicRainbow->setLightness((l + 100.f)/200.f); });
-			lFloat->setCallback([lSlider,dynamicRainbow](float l){ lightness = l; lSlider->setValue(l); dynamicRainbow->setLightness((l + 100.f)/200.f);});
 
 			addOKCancelButtons(gui, window,
 			                   [&, window]()
