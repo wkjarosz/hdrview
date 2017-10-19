@@ -19,9 +19,9 @@
    - [x] Brightness/contrast
    - [ ] Luminance/chromaticity denoising 
    - [ ] Levels
-   - [ ] Hue/Saturation
+   - [x] Hue/Saturation
    - [x] Convert to grayscale/desaturate
-   - [ ] Invert
+   - [x] Invert
    - [ ] Equalize/normalize histogram
    - [ ] Match color/histogram matching
    - [ ] FFT-based convolution/blur

@@ -1057,7 +1057,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_filterButtons.push_back(new Button(grid, "Rotate CW", ENTYPO_ICON_CW));
 	m_filterButtons.back()->setFixedHeight(21);
 	m_filterButtons.back()->setCallback(
-		[&]()
+		[this]()
 		{
 			m_imageMgr->modifyImage(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1077,7 +1077,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_filterButtons.push_back(new Button(grid, "Rotate CCW", ENTYPO_ICON_CCW));
 	m_filterButtons.back()->setFixedHeight(21);
 	m_filterButtons.back()->setCallback(
-		[&]()
+		[this]()
 		{
 			m_imageMgr->modifyImage(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1102,6 +1102,19 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	new Label(this, "Color/range adjustments", "sans-bold");
 	buttonRow = new Widget(this);
 	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+	// invert
+	m_filterButtons.push_back(new Button(buttonRow, "Invert", ENTYPO_ICON_ADJUST));
+	m_filterButtons.back()->setFixedHeight(21);
+	m_filterButtons.back()->setCallback(
+		[this]()
+		{
+			m_imageMgr->modifyImage(
+				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				{
+					return {make_shared<HDRImage>(img->inverted()),
+					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->inverted(); })};
+				});
+		});
 	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imageMgr));
 	m_filterButtons.push_back(createHueSaturationButton(buttonRow, m_screen, m_imageMgr));

@@ -181,6 +181,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
+    HDRImage inverted() const;
 	HDRImage brightnessContrast(float brightness, float contrast, bool linear, EChannel c) const;
     HDRImage convolved(const Eigen::ArrayXXf &kernel,
                        AtomicProgress progress,

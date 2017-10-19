@@ -1053,6 +1053,11 @@ HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel ch
     }
 }
 
+HDRImage HDRImage::inverted() const
+{
+	return unaryExpr([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); });
+}
+
 
 
 // local functions
