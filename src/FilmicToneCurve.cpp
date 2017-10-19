@@ -17,7 +17,7 @@ float FilmicToneCurve::CurveSegment::eval(float x) const
 	// log(0) is undefined but our function should evaluate to 0. There are better ways to handle this,
 	// but it's doing it the slow way here for clarity.
 	if (x0 > 0)
-		y0 = exp(lnA + B*log(x0));
+		y0 = std::exp(lnA + B*std::log(x0));
 
 	return y0*scaleY + offsetY;
 }
@@ -29,7 +29,7 @@ float FilmicToneCurve::CurveSegment::evalInv(float y) const
 	
 	// watch out for log(0) again
 	if (y0 > 0)
-		x0 = exp((log(y0) - lnA)/B);
+		x0 = std::exp((std::log(y0) - lnA)/B);
 	float x = x0/scaleX + offsetX;
 
 	return x;
@@ -62,7 +62,7 @@ float FilmicToneCurve::FullCurve::evalInv(float y) const
 static void solveAB(float &lnA, float &B, float x0, float y0, float m)
 {
 	B = (m*x0)/y0;
-	lnA = log(y0) - B*log(x0);
+	lnA = std::log(y0) - B*std::log(x0);
 }
 
 // convert to y=mx+b
@@ -126,7 +126,7 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		midSegment.offsetY = 0.0f;
 		midSegment.scaleX = 1.0f;
 		midSegment.scaleY = 1.0f;
-		midSegment.lnA = g * log(m);
+		midSegment.lnA = g * std::log(m);
 		midSegment.B = g;
 
 		dstCurve.m_segments[1] = midSegment;
@@ -135,10 +135,10 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		shoulderM = evalDerivativeLinearGamma(m,b,g,params.x1);
 
 		// apply gamma to endpoints
-		params.y0 = std::max(1e-5f,pow(params.y0,params.gamma));
-		params.y1 = std::max(1e-5f,pow(params.y1,params.gamma));
+		params.y0 = std::max(1e-5f, std::pow(params.y0,params.gamma));
+		params.y1 = std::max(1e-5f, std::pow(params.y1,params.gamma));
 
-		params.overshootY = pow(1.0f + params.overshootY,params.gamma) - 1.0f;
+		params.overshootY = std::pow(1.0f + params.overshootY,params.gamma) - 1.0f;
 	}
 
 	dstCurve.x0 = params.x0;
