@@ -8,6 +8,7 @@
 // which was released into the public domain through the CC0 Universal license
 
 #include "FilmicToneCurve.h"
+#include <spdlog/spdlog.h>
 
 float FilmicToneCurve::CurveSegment::eval(float x) const
 {
@@ -135,11 +136,30 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		shoulderM = evalDerivativeLinearGamma(m,b,g,params.x1);
 
 		// apply gamma to endpoints
-		params.y0 = std::max(1e-5f, std::pow(params.y0,params.gamma));
-		params.y1 = std::max(1e-5f, std::pow(params.y1,params.gamma));
+		params.y0 = std::max(0.f, std::pow(params.y0, params.gamma));
+		params.y1 = std::max(1e-5f, std::pow(params.y1, params.gamma));
 
-		params.overshootY = std::pow(1.0f + params.overshootY,params.gamma) - 1.0f;
+		params.overshootY = std::pow(1.0f + params.overshootY, params.gamma) - 1.0f;
 	}
+
+	spdlog::get("console")->debug(
+		"\n"
+			"x0:         {}\t\t{}\n"
+			"y0:         {}\t\t{}\n"
+			"x1:         {}\t\t{}\n"
+			"y1:         {}\t\t{}\n"
+			"W:          {}\t\t{}\n"
+			"gamma:      {}\t\t{}\n"
+			"overshootX: {}\t\t{}\n"
+			"overshootY: {}\t\t{}\n",
+		srcParams.x0,params.x0,
+		srcParams.y0,params.y0,
+		srcParams.x1,params.x1,
+		srcParams.y1,params.y1,
+		srcParams.W ,params.W ,
+		srcParams.gamma,params.gamma,
+		srcParams.overshootX,params.overshootX,
+		srcParams.overshootY,params.overshootY);
 
 	dstCurve.x0 = params.x0;
 	dstCurve.x1 = params.x1;
@@ -221,9 +241,9 @@ void FilmicToneCurve::calcDirectParamsFromUser(CurveParamsDirect & dstParams, co
 		toeLength = pow(clamp01(toeLength), perceptualGamma);
 		toeStrength = clamp01(toeStrength);
 		shoulderAngle = clamp01(shoulderAngle);
-		shoulderLength = std::max(1e-5f,clamp01(shoulderLength));
+		shoulderLength = std::max(1e-5f, clamp01(shoulderLength));
 
-		shoulderStrength = std::max(0.0f,shoulderStrength);
+		shoulderStrength = std::max(0.0f, shoulderStrength);
 	}
 
 	// apply base params

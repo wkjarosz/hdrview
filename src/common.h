@@ -6,7 +6,11 @@
 
 #pragma once
 
-#define _USE_MATH_DEFINES
+#if defined(_MSC_VER)
+	// Make MS cmath define M_PI
+	#define _USE_MATH_DEFINES
+#endif
+
 #include <cmath>
 #include <string>
 #include <vector>

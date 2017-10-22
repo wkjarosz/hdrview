@@ -122,6 +122,7 @@ public:
     HDRImage resizedCanvas(int width, int height, CanvasAnchor anchor, const Color4 & bgColor) const;
     HDRImage resized(int width, int height) const;
     HDRImage resampled(int width, int height,
+                       AtomicProgress progress = AtomicProgress(),
                        std::function<Eigen::Vector2f(const Eigen::Vector2f &)> warpFn =
                        [](const Eigen::Vector2f &uv) { return uv; },
                        int superSample = 1, Sampler s = NEAREST, BorderMode mX = REPEAT, BorderMode mY = REPEAT) const;

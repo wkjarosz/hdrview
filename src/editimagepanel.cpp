@@ -327,6 +327,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 	static string name = "Filmic tonemapping...";
 	static FilmicToneCurve::FullCurve fCurve;
 	static FilmicToneCurve::CurveParamsUser params;
+	static float vizFstops = 1.f;
 	static const auto activeColor = Color(255, 255, 255, 200);
 	auto b = new Button(parent, name, ENTYPO_ICON_VOLUME);
 	b->setFixedHeight(21);
@@ -349,10 +350,30 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 
 			auto graphCb = [graph]()
 			{
-				float range = pow(2.f, params.shoulderStrength);
+				float range = pow(2.f, vizFstops);
 				FilmicToneCurve::CurveParamsDirect directParams;
 				FilmicToneCurve::calcDirectParamsFromUser(directParams, params);
 				FilmicToneCurve::createCurve(fCurve, directParams);
+
+//				spdlog::get("console")->debug(
+//					"\n"
+//				    "x0: {}\n"
+//				    "y0: {}\n"
+//					"x1: {}\n"
+//					"y1: {}\n"
+//					"W: {}\n"
+//					"gamma: {}\n"
+//					"overshootX: {}\n"
+//					"overshootY: {}\n",
+//				    directParams.x0,
+//				    directParams.y0,
+//				    directParams.x1,
+//				    directParams.y1,
+//				    directParams.W ,
+//				    directParams.gamma,
+//				    directParams.overshootX,
+//				    directParams.overshootY);
+
 				graph->setValues(VectorXf::LinSpaced(257, 0.0f, range), 0);
 				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, range).unaryExpr(
 					[](float v)
@@ -373,6 +394,10 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 			};
 
 			graphCb();
+
+			createFloatBoxAndSlider(gui, window,
+			                        "Graph F-stops:", vizFstops,
+			                        0.f, 10.f, 0.1f, graphCb);
 
 			createFloatBoxAndSlider(gui, window,
 			                        "Toe strength:", params.toeStrength,
@@ -399,21 +424,28 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 			                        0.f, 5.f, 0.01f, graphCb);
 
 			addOKCancelButtons(gui, window,
-			                   [&, window]()
-			                   {
-				                   imageMgr->modifyImage(
-					                   [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
-					                   {
-						                   return {make_shared<HDRImage>(img->unaryExpr(
-							                   [](const Color4 & c)
-							                   {
-								                   return Color4(fCurve.eval(c.r),
-								                                 fCurve.eval(c.g),
-								                                 fCurve.eval(c.b),
-								                                 c.a);
-							                   }).eval()), nullptr};
-					                   });
-			                   });
+				[&, window]()
+				{
+				   imageMgr->modifyImage(
+				       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+				       {
+				           return {make_shared<HDRImage>(img->unaryExpr(
+				               [](const Color4 & c)
+				               {
+//					               float srcLum = c.average();
+//					               float dstLum = fCurve.eval(srcLum);
+////					               return c * (dstLum/srcLum);
+//					               return Color4(c.r * (dstLum/srcLum),
+//					                             c.g * (dstLum/srcLum),
+//					                             c.b * (dstLum/srcLum),
+//					                             c.a);
+				                   return Color4(fCurve.eval(c.r),
+				                                 fCurve.eval(c.g),
+				                                 fCurve.eval(c.b),
+				                                 c.a);
+				               }).eval()), nullptr};
+				       });
+				});
 
 			window->center();
 			window->requestFocus();
@@ -808,27 +840,30 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 
 Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
 {
-	enum MappingMode
-	{
-		ANGULAR_MAP = 0,
-		MIRROR_BALL,
-		LAT_LONG,
-		CUBE_MAP
-	};
-	static MappingMode from = ANGULAR_MAP, to = ANGULAR_MAP;
+	static EEnvMappingUVMode from = ANGULAR_MAP, to = ANGULAR_MAP;
 	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
 	static int width = 128, height = 128;
+	static bool autoAspect = true;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static int samples = 1;
 
+	static float autoAspects[] =
+		{
+			1.f,
+			1.f,
+			2.f,
+			2.f,
+			0.75f
+		};
+
 	static string name = "Remap...";
-	auto b = new Button(parent, name, ENTYPO_ICON_MAP);
+	auto b = new Button(parent, name, ENTYPO_ICON_GLOBE);
 	b->setFixedHeight(21);
 	b->setCallback(
 		[&, parent, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(125, 20));
+			gui->setFixedSize(Vector2i(135, 20));
 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 //           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
@@ -839,14 +874,79 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 			w->setMinValue(1);
 
 			height = imageMgr->currentImage()->height();
-			w = gui->addVariable("Height:", height);
-			w->setSpinnable(true);
-			w->setMinValue(1);
+			auto h = gui->addVariable("Height:", height);
+			h->setSpinnable(true);
+			h->setMinValue(1);
 
-			gui->addVariable("Source parametrization:", from, true)
-			   ->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
-			gui->addVariable("Target parametrization:", to, true)
-			   ->setItems({"Angular map", "Mirror ball", "Longitude-latitude", "Cube map"});
+			auto recomputeW = []()
+			{
+				if (autoAspect)
+					width = max(1, (int)round(height * autoAspects[to]));
+			};
+			auto recomputeH = []()
+			{
+				if (autoAspect)
+					height = max(1, (int)round(width / autoAspects[to]));
+			};
+
+			w->setCallback(
+				[h,recomputeH](int w)
+				{
+					width = w;
+					recomputeH();
+					h->setValue(height);
+				});
+
+			h->setCallback(
+				[w,recomputeW](int h)
+				{
+					height = h;
+					recomputeW();
+					w->setValue(width);
+				});
+
+
+			auto autoAspectCheckbox = gui->addVariable("Auto aspect ratio:", autoAspect, true);
+
+			auto src = gui->addVariable("Source map:", from, true);
+			auto dst = gui->addVariable("Target map:", to, true);
+
+			src->setItems(envMappingNames());
+			src->setCallback([gui,recomputeW](EEnvMappingUVMode m)
+			                 {
+				                 from = m;
+				                 recomputeW();
+				                 gui->refresh();
+			                 });
+			dst->setItems(envMappingNames());
+			dst->setCallback([gui,recomputeW](EEnvMappingUVMode m)
+			                 {
+				                 to = m;
+				                 recomputeW();
+				                 gui->refresh();
+			                 });
+
+			auto spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+			auto btn = new Button(window, "Swap source/target", ENTYPO_ICON_SWITCH);
+			btn->setCallback([gui,recomputeW,recomputeH](){std::swap(from,to);recomputeW();recomputeH();gui->refresh();});
+			btn->setFixedSize(gui->fixedSize());
+			gui->addWidget(" ", btn);
+
+			autoAspectCheckbox->setCallback(
+				[w,recomputeW](bool preserve)
+				{
+					autoAspect = preserve;
+					recomputeW();
+					w->setValue(width);
+				});
+
+			recomputeW();
+			gui->refresh();
+
+
 			gui->addVariable("Sampler:", sampler, true)
 			   ->setItems(HDRImage::samplerNames());
 			gui->addVariable("Border mode X:", borderModeX, true)
@@ -861,39 +961,15 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 			addOKCancelButtons(gui, window,
 				[&, window]()
 				{
-					// by default use a no-op passthrough warp function
-					function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
-
-					UV2XYZFn * dst2xyz;
-					XYZ2UVFn * xyz2src;
-
-					if (from != to)
-					{
-						if (from == ANGULAR_MAP)
-							xyz2src = XYZToAngularMap;
-						else if (from == MIRROR_BALL)
-							xyz2src = XYZToMirrorBall;
-						else if (from == LAT_LONG)
-							xyz2src = XYZToLatLong;
-						else if (from == CUBE_MAP)
-							xyz2src = XYZToCubeMap;
-
-						if (to == ANGULAR_MAP)
-							dst2xyz = angularMapToXYZ;
-						else if (to == MIRROR_BALL)
-							dst2xyz = mirrorBallToXYZ;
-						else if (to == LAT_LONG)
-							dst2xyz = latLongToXYZ;
-						else if (to == CUBE_MAP)
-							dst2xyz = cubeMapToXYZ;
-
-						warp = [&](const Vector2f &uv) { return xyz2src(dst2xyz(Vector2f(uv(0), uv(1)))); };
-					}
+//					auto dst2xyz = envMapUVToXYZ(to);
+//					auto xyz2src = XYZToEnvMapUV(from);
+//					auto warp = [dst2xyz,xyz2src](const Vector2f &uv) { return xyz2src(dst2xyz(uv)); };
+					auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
 
 					imageMgr->modifyImage(
-						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->resampled(width, height, warp, samples, sampler,
+							return {make_shared<HDRImage>(img->resampled(width, height, progress, warp, samples, sampler,
 							                                            borderModeX, borderModeY)),
 							        nullptr};
 						});
@@ -939,7 +1015,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 				[&, window]()
 				{
 					imageMgr->modifyImage(
-						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							// by default use a no-op passthrough warp function
 							function<Vector2f(const Vector2f &)> shift =
@@ -947,8 +1023,9 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 								{
 									return (uv + Vector2f(dx / img->width(), dy / img->height())).eval();
 								};
-							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(), shift, 1, sampler,
-							                                            borderModeX, borderModeY)),
+							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
+							                                             progress, shift, 1, sampler,
+							                                             borderModeX, borderModeY)),
 							        nullptr};
 						});
 				});

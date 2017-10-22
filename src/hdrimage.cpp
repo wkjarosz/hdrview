@@ -168,14 +168,16 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
 
 
 HDRImage HDRImage::resampled(int w, int h,
+                             AtomicProgress progress,
                              function<Vector2f(const Vector2f &)> warpFn,
                              int superSample, Sampler sampler, BorderMode mX, BorderMode mY) const
 {
     HDRImage result(w, h);
 
     Timer timer;
+    progress.setNumSteps(result.height());
     // for every pixel in the image
-    parallel_for(0, result.height(), [this,w,h,&warpFn,&result,superSample,sampler,mX,mY](int y)
+    parallel_for(0, result.height(), [this,w,h,&progress,&warpFn,&result,superSample,sampler,mX,mY](int y)
     {
         for (int x = 0; x < result.width(); ++x)
         {
@@ -192,8 +194,9 @@ HDRImage HDRImage::resampled(int w, int h,
             }
             result(x, y) = sum / (superSample * superSample);
         }
+        ++progress;
     });
-    spdlog::get("console")->debug("Resampling took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("Resampling took: {} seconds.", (timer.elapsed()/1000.f));
     return result;
 }
 
@@ -233,7 +236,7 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
         }
         ++progress;
     });
-    spdlog::get("console")->debug("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
 
     return result;
 }
@@ -308,7 +311,7 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, AtomicProgress prog
         }
         ++progress;
     });
-    spdlog::get("console")->debug("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return tempBuffer;
 }
@@ -357,7 +360,7 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
         }
         ++progress;
     });
-    spdlog::get("console")->debug("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered;
 }
@@ -445,7 +448,7 @@ HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY,
                .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
                .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY);
 
-    spdlog::get("console")->debug("fastGaussianBlurred filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("fastGaussianBlurred filter took: {} seconds.", (timer.elapsed()/1000.f));
     return im;
 }
 
@@ -470,7 +473,7 @@ HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, AtomicProgress progr
                              pixel(x+rightSize, y, mX, mX);
 	    ++progress;
     });
-    spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
@@ -496,7 +499,7 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, AtomicProgress progr
                              pixel(x, y+rightSize, mY, mY);
 	    ++progress;
     });
-    spdlog::get("console")->debug("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
