@@ -16,6 +16,7 @@
 #include "multigraph.h"
 #include "FilmicToneCurve.h"
 #include <spdlog/spdlog.h>
+#include <Eigen/Geometry>
 
 using namespace std;
 
@@ -552,10 +553,12 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
 			w->setValueIncrement(5.f);
+			w->setUnits("px");
 			w = gui->addVariable("Height:", height);
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
 			w->setValueIncrement(5.f);
+			w->setUnits("px");
 
 			gui->addVariable("Border mode X:", borderModeX, true)
 			   ->setItems(HDRImage::borderModeNames());
@@ -602,9 +605,11 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 			auto w = gui->addVariable("Width:", width);
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
+			w->setUnits("px");
 			w = gui->addVariable("Height:", height);
 			w->setSpinnable(true);
 			w->setMinValue(0.0f);
+			w->setUnits("px");
 
 			gui->addVariable("Border mode X:", borderModeX, true)
 			   ->setItems(HDRImage::borderModeNames());
@@ -782,11 +787,13 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 			auto w = gui->addVariable("Width:", width);
 			w->setSpinnable(true);
 			w->setMinValue(1);
+			w->setUnits("px");
 
 			height = imageMgr->currentImage()->height();
 			auto h = gui->addVariable("Height:", height);
 			h->setSpinnable(true);
 			h->setMinValue(1);
+			h->setUnits("px");
 
 			auto preserveCheckbox = gui->addVariable("Preserve aspect ratio:", aspect, true);
 			preserveCheckbox->setCallback(
@@ -838,7 +845,7 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 	return b;
 }
 
-Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+Button * createRemapButton(Widget *parent, HDRViewScreen *screen, HDRImageManager *imageMgr)
 {
 	static EEnvMappingUVMode from = ANGULAR_MAP, to = ANGULAR_MAP;
 	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
@@ -872,11 +879,13 @@ Button * createResampleButton(Widget *parent, HDRViewScreen * screen, HDRImageMa
 			auto w = gui->addVariable("Width:", width);
 			w->setSpinnable(true);
 			w->setMinValue(1);
+			w->setUnits("px");
 
 			height = imageMgr->currentImage()->height();
 			auto h = gui->addVariable("Height:", height);
 			h->setSpinnable(true);
 			h->setMinValue(1);
+			h->setUnits("px");
 
 			auto recomputeW = []()
 			{
@@ -1000,9 +1009,11 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 
 			auto w = gui->addVariable("X offset:", dx);
 			w->setSpinnable(true);
+			w->setUnits("px");
 
 			w = gui->addVariable("Y offset:", dy);
 			w->setSpinnable(true);
+			w->setUnits("px");
 
 			gui->addVariable("Sampler:", sampler, true)
 			   ->setItems(HDRImage::samplerNames());
@@ -1061,11 +1072,13 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			auto w = gui->addVariable("Width:", width);
 			w->setSpinnable(true);
 			w->setMinValue(1);
+			w->setUnits("px");
 
 			height = imageMgr->currentImage()->height();
 			auto h = gui->addVariable("Height:", height);
 			h->setSpinnable(true);
 			h->setMinValue(1);
+			h->setUnits("px");
 
 			relative = false;
 			auto r = gui->addVariable("Relative:", relative, true);
@@ -1256,6 +1269,342 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 	return b;
 }
 
+
+
+Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr)
+{
+	static float translateX = 0, translateY = 0;
+	static float scaleX = 100.0f, scaleY = 100.0f;
+	static bool uniformScale = true;
+	static float angle = 0.0f;
+	static bool cw = false;
+	static float shearX = 0, shearY = 0;
+	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
+	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
+	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
+	static int samples = 1;
+	static string name = "Transform...";
+	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	b->setFixedHeight(21);
+	b->setCallback(
+		[&, parent, screen, imageMgr]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->setFixedSize(Vector2i(0, 20));
+
+			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+//			window->setModal(true);
+
+			auto row = new Widget(window);
+			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+			auto x = new FloatBox<float>(row, translateX);
+			x->setSpinnable(true);
+			x->setEnabled(true);
+			x->setEditable(true);
+			x->setFontSize(gui->widgetFontSize());
+			x->setFixedSize(Vector2i(65+12, gui->fixedSize().y()));
+			x->setAlignment(TextBox::Alignment::Right);
+			x->setUnits("px");
+			x->setCallback([](float v){translateX = v;});
+			x->setTooltip("Set horizontal translation.");
+
+			auto y = new FloatBox<float>(row, translateY);
+			y->setSpinnable(true);
+			y->setEnabled(true);
+			y->setEditable(true);
+			y->setFontSize(gui->widgetFontSize());
+			y->setFixedSize(Vector2i(65+13, gui->fixedSize().y()));
+			y->setAlignment(TextBox::Alignment::Right);
+			y->setUnits("px");
+			y->setCallback([](float v){translateY = v;});
+			y->setTooltip("Set vertical translation.");
+
+			gui->addWidget("Translate:", row);
+
+
+			auto spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+
+			row = new Widget(window);
+			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+			auto w = new FloatBox<float>(row, scaleX);
+			auto link = new ToolButton(row, ENTYPO_ICON_LINK);
+			auto h = new FloatBox<float>(row, scaleY);
+
+			w->setSpinnable(true);
+			w->setEnabled(true);
+			w->setEditable(true);
+			w->setFontSize(gui->widgetFontSize());
+			w->setFixedSize(Vector2i(65, gui->fixedSize().y()));
+			w->setAlignment(TextBox::Alignment::Right);
+			w->setUnits("%");
+			w->setTooltip("Set horizontal scale.");
+			w->setCallback(
+				[h](float v)
+				{
+					scaleX = v;
+					if (uniformScale) scaleY = scaleX;
+					h->setValue(scaleY);
+				});
+
+			link->setFixedSize(Vector2i(20,20));
+			link->setPushed(uniformScale);
+			link->setTooltip("Lock the X and Y scale factors to maintain aspect ratio.");
+			link->setChangeCallback(
+				[w,h](bool b)
+				{
+					uniformScale = b;
+					if (uniformScale) scaleX = scaleY;
+					w->setValue(scaleX);
+					h->setValue(scaleY);
+				});
+
+			h->setSpinnable(true);
+			h->setEnabled(true);
+			h->setEditable(true);
+			h->setFontSize(gui->widgetFontSize());
+			h->setFixedSize(Vector2i(65, gui->fixedSize().y()));
+			h->setAlignment(TextBox::Alignment::Right);
+			h->setUnits("%");
+			h->setTooltip("Set vertical scale.");
+			h->setCallback(
+				[w](float v)
+				{
+					scaleY = v;
+					if (uniformScale) scaleX = scaleY;
+					w->setValue(scaleX);
+				});
+
+			gui->addWidget("Scale:", row);
+
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+
+			row = new Widget(window);
+			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+			auto a = new FloatBox<float>(row, angle);
+			a->setSpinnable(true);
+			a->setEnabled(true);
+			a->setEditable(true);
+			a->setFontSize(gui->widgetFontSize());
+			a->setFixedSize(Vector2i(160-2*25, gui->fixedSize().y()));
+			a->setAlignment(TextBox::Alignment::Right);
+			a->setUnits("°");
+			a->setTooltip("Set rotation angle in degrees.");
+			a->setCallback([](float v){angle = v;});
+
+			auto ccww = new Button(row, "", ENTYPO_ICON_CCW);
+			ccww->setFixedSize(Vector2i(20,20));
+			ccww->setFlags(Button::Flags::RadioButton);
+			ccww->setPushed(!cw);
+			ccww->setTooltip("Rotate in the counter-clockwise direction.");
+			ccww->setChangeCallback([](bool b){cw = !b;});
+
+			auto cww = new Button(row, "", ENTYPO_ICON_CW);
+			cww->setFixedSize(Vector2i(20,20));
+			cww->setFlags(Button::Flags::RadioButton);
+			cww->setPushed(cw);
+			cww->setTooltip("Rotate in the clockwise direction.");
+			cww->setChangeCallback([](bool b){cw = b;});
+
+			gui->addWidget("Rotate:", row);
+
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+
+			row = new Widget(window);
+			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+			auto shx = new FloatBox<float>(row, shearX);
+			shx->setSpinnable(true);
+			shx->setEnabled(true);
+			shx->setEditable(true);
+			shx->setFontSize(gui->widgetFontSize());
+			shx->setFixedSize(Vector2i(65+12, gui->fixedSize().y()));
+			shx->setAlignment(TextBox::Alignment::Right);
+			shx->setUnits("°");
+			shx->setTooltip("Set horizontal skew/shear in degrees.");
+			shx->setCallback([](float v){shearX = v;});
+
+			auto shy = new FloatBox<float>(row, shearY);
+			shy->setSpinnable(true);
+			shy->setEnabled(true);
+			shy->setEditable(true);
+			shy->setFontSize(gui->widgetFontSize());
+			shy->setFixedSize(Vector2i(65+13, gui->fixedSize().y()));
+			shy->setAlignment(TextBox::Alignment::Right);
+			shy->setUnits("°");
+			shy->setTooltip("Set vertical skew/shear in degrees.");
+			shy->setCallback([](float v){shearY = v;});
+
+			gui->addWidget("Shear:", row);
+
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(5);
+			gui->addWidget("", spacer);
+
+
+			row = new Widget(window);
+			row->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
+			vector<Button *> buttonGroup;
+
+			buttonGroup.push_back(new Button(row, "+"));
+			buttonGroup.push_back(new Button(row, "–"));
+			buttonGroup.push_back(new Button(row, "+"));
+
+			buttonGroup.push_back(new Button(row, "|"));
+			buttonGroup.push_back(new Button(row, "+"));
+			buttonGroup.push_back(new Button(row, "|"));
+
+			buttonGroup.push_back(new Button(row, "+"));
+			buttonGroup.push_back(new Button(row, "–"));
+			buttonGroup.push_back(new Button(row, "+"));
+
+			for (size_t i = 0; i < buttonGroup.size(); ++i)
+			{
+				Button * btn = buttonGroup[i];
+				btn->setFlags(Button::RadioButton);
+				btn->setFixedSize(Vector2i(16, 16));
+				btn->setPushed(i == (size_t)anchor);
+				btn->setIcon(i == (size_t)anchor ? ENTYPO_ICON_STOP : 0);
+				if (i == (size_t)anchor)
+					btn->setCaption("");
+				btn->setChangeCallback(
+					[i,btn](bool b)
+					{
+						if (b)
+						{
+							anchor = (HDRImage::CanvasAnchor) i;
+							btn->setIcon(ENTYPO_ICON_STOP);
+							btn->setCaption("");
+						}
+						else
+						{
+							btn->setCaption(i % 2 ? "–" : "+");
+							if (i == 3 || i == 5)
+								btn->setCaption("|");
+							btn->setIcon(0);
+						}
+					});
+			}
+
+			row->setFixedSize(Vector2i(52, 52));
+			gui->addWidget("Reference point:", row);
+
+
+			spacer = new Widget(window);
+			spacer->setFixedHeight(10);
+			gui->addWidget("", spacer);
+
+
+			gui->addVariable("Sampler:", sampler, true)
+			   ->setItems(HDRImage::samplerNames());
+			gui->addVariable("Border mode X:", borderModeX, true)
+			   ->setItems(HDRImage::borderModeNames());
+			gui->addVariable("Border mode Y:", borderModeY, true)
+			   ->setItems(HDRImage::borderModeNames());
+
+			auto s = gui->addVariable("Super-samples:", samples);
+			s->setSpinnable(true);
+			s->setMinValue(1);
+
+			addOKCancelButtons(gui, window,
+			                   [&, window]()
+			                   {
+				                   imageMgr->modifyImage(
+					                   [&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+					                   {
+						                   Affine2f t(Affine2f::Identity());
+
+						                   Vector2f origin(0.f, 0.f);
+
+						                   // find top-left corner
+						                   switch (anchor)
+						                   {
+							                   case HDRImage::TOP_RIGHT:
+							                   case HDRImage::MIDDLE_RIGHT:
+							                   case HDRImage::BOTTOM_RIGHT:
+								                   origin.x() = 1.f;
+								                   break;
+
+							                   case HDRImage::TOP_CENTER:
+							                   case HDRImage::MIDDLE_CENTER:
+							                   case HDRImage::BOTTOM_CENTER:
+								                   origin.x() = 0.5f;
+								                   break;
+
+							                   case HDRImage::TOP_LEFT:
+							                   case HDRImage::MIDDLE_LEFT:
+							                   case HDRImage::BOTTOM_LEFT:
+							                   default:
+								                   origin.x() = 0.f;
+								                   break;
+						                   }
+						                   switch (anchor)
+						                   {
+							                   case HDRImage::BOTTOM_LEFT:
+							                   case HDRImage::BOTTOM_CENTER:
+							                   case HDRImage::BOTTOM_RIGHT:
+								                   origin.y() = 1.f;
+								                   break;
+
+							                   case HDRImage::MIDDLE_LEFT:
+							                   case HDRImage::MIDDLE_CENTER:
+							                   case HDRImage::MIDDLE_RIGHT:
+								                   origin.y() = 0.5f;
+								                   break;
+
+							                   case HDRImage::TOP_LEFT:
+							                   case HDRImage::TOP_CENTER:
+							                   case HDRImage::TOP_RIGHT:
+							                   default:
+								                   origin.y() = 0.f;
+								                   break;
+						                   }
+
+						                   t.translate(origin);
+						                   t.scale(Vector2f(1.f/img->width(), 1.f/img->height()));
+						                   t.translate(Vector2f(translateX, translateY));
+						                   t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+						                   Matrix2f sh;
+						                   sh << 1, tan(shearX/180.f * M_PI), tan(shearY/180.f * M_PI), 1;
+						                   t.linear() *= sh;
+						                   t.scale(Vector2f(scaleX, scaleY)*.01f);
+						                   t.scale(Vector2f(img->width(), img->height()));
+						                   t.translate(-origin);
+
+						                   t = t.inverse();
+
+						                   function<Vector2f(const Vector2f &)> warp =
+							                   [t](const Vector2f &uv)
+							                   {
+								                   return (t * uv).eval();
+							                   };
+						                   return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
+						                                                                progress, warp, samples, sampler,
+						                                                                borderModeX, borderModeY)),
+						                           nullptr};
+					                   });
+			                   });
+
+			window->center();
+			window->requestFocus();
+		});
+	return b;
+}
+
 }
 
 
@@ -1325,10 +1674,14 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	// canvas size
 	m_filterButtons.push_back(createCanvasSizeButton(grid, m_screen, m_imageMgr));
 
-
+	// resize
 	m_filterButtons.push_back(createResizeButton(grid, m_screen, m_imageMgr));
-	// resample
-	m_filterButtons.push_back(createResampleButton(grid, m_screen, m_imageMgr));
+
+	// free transform
+	m_filterButtons.push_back(createFreeTransformButton(grid, m_screen, m_imageMgr));
+
+	// remap
+	m_filterButtons.push_back(createRemapButton(grid, m_screen, m_imageMgr));
 
 
 	new Label(this, "Color/range adjustments", "sans-bold");
