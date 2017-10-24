@@ -778,25 +778,43 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 		[&, parent, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->setFixedSize(Vector2i(0, 20));
 
 			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
 			window->setModal(true);
 
+			auto row = new Widget(window);
+			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
 			width = imageMgr->currentImage()->width();
-			auto w = gui->addVariable("Width:", width);
+			height = imageMgr->currentImage()->height();
+
+			auto w = new IntBox<int>(row, width);
+			auto link = new ToolButton(row, ENTYPO_ICON_LINK);
+			auto h = new IntBox<int>(row, height);
+
 			w->setSpinnable(true);
+			w->setEnabled(true);
+			w->setEditable(true);
 			w->setMinValue(1);
+			w->setFontSize(gui->widgetFontSize());
+			w->setFixedSize(Vector2i(80, gui->fixedSize().y()));
+			w->setAlignment(TextBox::Alignment::Right);
 			w->setUnits("px");
 
-			height = imageMgr->currentImage()->height();
-			auto h = gui->addVariable("Height:", height);
+			link->setFixedSize(Vector2i(20,20));
+			link->setPushed(aspect);
+
 			h->setSpinnable(true);
+			h->setEnabled(true);
+			h->setEditable(true);
 			h->setMinValue(1);
+			h->setFontSize(gui->widgetFontSize());
+			h->setFixedSize(Vector2i(80, gui->fixedSize().y()));
+			h->setAlignment(TextBox::Alignment::Right);
 			h->setUnits("px");
 
-			auto preserveCheckbox = gui->addVariable("Preserve aspect ratio:", aspect, true);
-			preserveCheckbox->setCallback(
+			link->setChangeCallback(
 				[w,imageMgr](bool preserve)
 				{
 					if (preserve)
@@ -808,25 +826,32 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 					aspect = preserve;
 				});
 
-			w->setCallback([h,preserveCheckbox,imageMgr](int w) {
-				width = w;
-				if (preserveCheckbox->checked())
+			w->setCallback(
+				[h,link,imageMgr](int w)
 				{
-					float aspect = imageMgr->currentImage()->width() / (float)imageMgr->currentImage()->height();
-					height = max(1, (int)round(w / aspect));
-					h->setValue(height);
-				}
-			});
+					width = w;
+					if (link->pushed())
+					{
+						float aspect = imageMgr->currentImage()->width() / (float)imageMgr->currentImage()->height();
+						height = max(1, (int)round(w / aspect));
+						h->setValue(height);
+					}
+				});
 
-			h->setCallback([w,preserveCheckbox,imageMgr](int h) {
-				height = h;
-				if (preserveCheckbox->checked())
+			h->setCallback(
+				[w,link,imageMgr](int h)
 				{
-					float aspect = imageMgr->currentImage()->width() / (float)imageMgr->currentImage()->height();
-					width = max(1, (int)round(height * aspect));
-					w->setValue(width);
-				}
-			});
+					height = h;
+					if (link->pushed())
+					{
+						float aspect = imageMgr->currentImage()->width() / (float)imageMgr->currentImage()->height();
+						width = max(1, (int)round(height * aspect));
+						w->setValue(width);
+					}
+				});
+
+
+			gui->addWidget("", row);
 
 			addOKCancelButtons(gui, window,
 				[&, window]()

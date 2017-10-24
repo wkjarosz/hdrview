@@ -529,7 +529,8 @@ int main(int argc, char **argv)
                 else
                 {
                     console->info("Remapping image to {:d}x{:d}...", w, h);
-                    image = image.resampled(w, h, warp, samples,
+                    AtomicProgress progress;
+                    image = image.resampled(w, h, progress, warp, samples,
                                             sampler, borderModeX, borderModeY);
                 }
             }
