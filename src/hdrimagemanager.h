@@ -39,8 +39,8 @@ public:
 	               bool sRGB = true, bool dither = true);
 	void closeImage(int index);
 	void closeAllImages();
-	void sendImageBackward();
-	void bringImageForward();
+	bool sendImageBackward();
+	bool bringImageForward();
 	void setCurrentImageIndex(int index, bool forceCallback = false);
 	void setReferenceImageIndex(int index, bool forceCallback = false);
 

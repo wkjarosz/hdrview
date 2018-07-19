@@ -23,6 +23,12 @@ ImageButton::ImageButton(Widget *parent, const string &caption)
 	mFontSize = 15;
 }
 
+void ImageButton::recomputeStringClipping()
+{
+	m_cutoff = 0;
+	m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+}
+
 Vector2i ImageButton::preferredSize(NVGcontext *ctx) const
 {
 	// calculate size of the image iD number

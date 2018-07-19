@@ -73,12 +73,26 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	m_bringForwardButton = new Button(row, "", ENTYPO_ICON_UP_BOLD);
 	m_bringForwardButton->setFixedHeight(25);
 	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
-	m_bringForwardButton->setCallback([this]{ m_imageMgr->bringImageForward();});
+	m_bringForwardButton->setCallback([this]
+		{
+			if (m_imageMgr->bringImageForward())
+			{
+				m_imageButtons[m_imageMgr->currentImageIndex()]->recomputeStringClipping();
+				m_imageButtons[m_imageMgr->currentImageIndex()+1]->recomputeStringClipping();
+			}
+		});
 
 	m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_DOWN_BOLD);
 	m_sendBackwardButton->setFixedHeight(25);
 	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
-	m_sendBackwardButton->setCallback([this]{ m_imageMgr->sendImageBackward();});
+	m_sendBackwardButton->setCallback([this]
+		{
+			if (m_imageMgr->sendImageBackward())
+			{
+				m_imageButtons[m_imageMgr->currentImageIndex()]->recomputeStringClipping();
+				m_imageButtons[m_imageMgr->currentImageIndex()-1]->recomputeStringClipping();
+			}
+		});
 
 	m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLED_CROSS);
 	m_closeButton->setFixedHeight(25);

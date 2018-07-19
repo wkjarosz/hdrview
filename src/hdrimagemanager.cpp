@@ -266,28 +266,32 @@ void HDRImageManager::redo()
 		m_imageModifyDoneCallback(m_current);
 }
 
-void HDRImageManager::bringImageForward()
+bool HDRImageManager::bringImageForward()
 {
 	if (m_images.empty() || m_current == 0)
 		// do nothing
-		return;
+		return false;
 
 	swap(m_images[m_current], m_images[m_current-1]);
 	m_current--;
 
 	m_imageModifyDoneCallback(m_current);
 	m_currentImageCallback();
+
+	return true;
 }
 
-void HDRImageManager::sendImageBackward()
+bool HDRImageManager::sendImageBackward()
 {
 	if (m_images.empty() || m_current == int(m_images.size()-1))
 		// do nothing
-		return;
+		return false;
 
 	swap(m_images[m_current], m_images[m_current+1]);
 	m_current++;
 
 	m_imageModifyDoneCallback(m_current);
 	m_currentImageCallback();
+
+	return true;
 }

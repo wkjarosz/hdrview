@@ -28,7 +28,7 @@ public:
 	void setProgress(float progress)        { m_progress = progress; }
 
 	/// Set the button's text caption/filename
-	void setCaption(const std::string &caption) { m_caption = caption; }
+	void setCaption(const std::string &caption) { m_caption = caption; recomputeStringClipping(); }
 	const std::string & caption() const     { return m_caption; }
 	void setId(size_t id)                   { m_id = id; }
 	void setIsModified(bool b)              { m_isModified = b; }
@@ -37,6 +37,8 @@ public:
 	void setIsSelected(bool isSelected)     { m_isSelected = isSelected; }
 	bool isReference() const                { return m_isReference; }
 	void setIsReference(bool isReference)   { m_isReference = isReference; }
+
+	void recomputeStringClipping();
 
 	void setSelectedCallback(const std::function<void(int)> & callback)
 	{
