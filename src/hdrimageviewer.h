@@ -1,5 +1,7 @@
 //
-// Created by Wojciech Jarosz on 9/4/17.
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
 //
 
 #pragma once
@@ -8,10 +10,11 @@
 #include <vector>
 #include "fwd.h"
 #include "common.h"
-#include "gldithertexture.h"
 #include "glimage.h"
+#include "imageshader.h"
 
-NAMESPACE_BEGIN(nanogui)
+using namespace nanogui;
+using namespace Eigen;
 
 /*!
  * @class 	HDRImageViewer hdrimageviewer.h
@@ -22,7 +25,8 @@ class HDRImageViewer : public Widget
 public:
 	HDRImageViewer(Widget * parent, HDRViewScreen * screen);
 
-	void bindImage(const GLImage* image) {m_image = image;}
+	void setCurrentImage(ConstImagePtr cur)    {m_currentImage = cur;}
+	void setReferenceImage(ConstImagePtr ref)  {m_referenceImage = ref;}
 
 	// overridden Widget virtual functions
 	void draw(NVGcontext* ctx) override;
@@ -31,12 +35,6 @@ public:
 	bool scrollEvent(const Vector2i &p, const Vector2f &rel) override;
 
 	// Getters and setters
-	Vector2f positionF() const                              { return mPos.cast<float>(); }
-	Vector2f sizeF() const                                  { return mSize.cast<float>(); }
-
-	Vector2i imageSize() const                              { return m_image ? m_image->size() : Vector2i(0,0); }
-	Vector2f imageSizeF() const                             { return imageSize().cast<float>(); }
-	Vector2f scaledImageSizeF() const                       { return (m_zoom * imageSize().cast<float>()); }
 
 	float scale() const                                     { return m_zoom; }
 
@@ -101,7 +99,7 @@ public:
 	 * The scaling occurs such that the image coordinate under the focused position remains in
 	 * the same position before and after the scaling.
 	 */
-	void zoomBy(int amount, const Vector2f &focusPosition);
+	void zoomBy(float amount, const Vector2f &focusPosition);
 
 	/// Zoom in to the next power of two
 	void zoomIn();
@@ -110,11 +108,14 @@ public:
 	void zoomOut();
 
 
-	float zoomLevel() const       {return m_zoomLevel;}
+	float zoomLevel() const     {return m_zoomLevel;}
 	void setZoomLevel(float l);
 
-	const Vector3f & channel()  {return m_channels;}
-	void setChannel(const Vector3f & c) {m_channels = c;}
+	EChannel channel()          {return m_channel;}
+	void setChannel(EChannel c) {m_channel = c;}
+
+	EBlendMode blendMode()      {return m_blendMode;}
+	void setBlendMode(EBlendMode b) {m_blendMode = b;}
 
 	float gamma() const         {return m_gamma;}
 	void setGamma(float g)      {if (m_gamma != g) {m_gamma = g; m_gammaCallback(g);}}
@@ -123,7 +124,7 @@ public:
 	void setExposure(float e)   {if (m_exposure != e) {m_exposure = e; m_exposureCallback(e);}}
 
 	bool sRGB() const           {return m_sRGB;}
-	void setSRGB(bool b)        {m_sRGB = b;}
+	void setSRGB(bool b)        {m_sRGB = b; m_sRGBCallback(b);}
 
 	bool ditheringOn() const    {return m_dither;}
 	void setDithering(bool b)   {m_dither = b;}
@@ -144,6 +145,10 @@ public:
 	const std::function<void(float)>& exposureCallback() const { return m_exposureCallback; }
 	void setExposureCallback(const std::function<void(float)> &callback) { m_exposureCallback = callback; }
 
+	/// Callback executed whenever the sRGB setting has been changed, e.g. via @ref setSRGB
+	const std::function<void(bool)>& sRGBCallback() const { return m_sRGBCallback; }
+	void setSRGBCallback(const std::function<void(bool)> &callback) { m_sRGBCallback = callback; }
+
 	/// Callback executed when the zoom level changes
 	const std::function<void(float)>& zoomCallback() const { return m_zoomCallback; }
 	void setZoomCallback(const std::function<void(float)> &callback) { m_zoomCallback = callback; }
@@ -153,18 +158,30 @@ public:
 	void setPixelHoverCallback(const std::function<void(const Vector2i &, const Color4 &, const Color4 &)> &callback) { m_pixelHoverCallback = callback; }
 
 private:
+	Vector2f positionF() const                            { return mPos.cast<float>(); }
+	Vector2f sizeF() const                                { return mSize.cast<float>(); }
+	Vector2f screenSizeF() const;
+
+	Vector2i imageSize(ConstImagePtr img) const           { return img ? img->size() : Vector2i(0,0); }
+	Vector2f imageSizeF(ConstImagePtr img) const          { return imageSize(img).cast<float>(); }
+	Vector2f scaledImageSizeF(ConstImagePtr img) const    { return m_zoom * imageSizeF(img); }
+
 	// Helper drawing methods.
 	void drawWidgetBorder(NVGcontext* ctx) const;
 	void drawImageBorder(NVGcontext* ctx) const;
 	void drawHelpers(NVGcontext* ctx) const;
 	void drawPixelGrid(NVGcontext* ctx) const;
 	void drawPixelInfo(NVGcontext *ctx) const;
-	Vector2f centerOffset() const;
+	void imagePositionAndScale(Vector2f & position, Vector2f & scale,
+	                           ConstImagePtr image);
 
-	GLDitherTexture m_ditherer;
+	Vector2f centerOffset(ConstImagePtr img) const;
+
+	ImageShader m_shader;
 
 	HDRViewScreen * m_screen = nullptr;
-	const GLImage * m_image = nullptr;
+	ConstImagePtr m_currentImage = nullptr;
+	ConstImagePtr m_referenceImage = nullptr;
 	float m_exposure = 0.f,
 		  m_gamma = 2.2f;
 	bool m_sRGB = true,
@@ -177,7 +194,8 @@ private:
 	float m_zoom;                           ///< The scale/zoom of the image
 	float m_zoomLevel;                      ///< The zoom level
 	Vector2f m_offset;                      ///< The panning offset of the
-	Vector3f m_channels = Vector3f::Ones(); ///< Multiplied with the pixel values before display, allows visualizing individual color channels
+	EChannel m_channel = EChannel::RGB;     ///< Which channel to display
+	EBlendMode m_blendMode = EBlendMode::NORMAL_BLEND;     ///< How to blend the current and reference images
 
 	// Fine-tuning parameters.
 	float m_zoomSensitivity = 1.0717734625f;
@@ -189,11 +207,10 @@ private:
 	// various callback functions
 	std::function<void(float)> m_exposureCallback;
 	std::function<void(float)> m_gammaCallback;
+	std::function<void(bool)> m_sRGBCallback;
 	std::function<void(float)> m_zoomCallback;
 	std::function<void(const Vector2i &, const Color4 &, const Color4 &)> m_pixelHoverCallback;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-NAMESPACE_END(nanogui)

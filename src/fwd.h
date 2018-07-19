@@ -1,5 +1,7 @@
 //
-// Created by Wojciech Jarosz on 9/4/17.
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
 //
 
 #pragma once
@@ -8,6 +10,7 @@
 class Color3;
 class Color4;
 class GLDitherTexture;
+class ImageButton;
 class ImageCommandUndo;
 class FullImageUndo;
 class LambdaUndo;
@@ -16,8 +19,13 @@ class GLImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageManager;
+class HDRImageViewer;
 class HelpWindow;
-class ImageButton;
+class MultiGraph;
+class EditImagePanel;
+class HistogramPanel;
+class ImageListPanel;
+class Timer;
 template<typename T> class Range;
 
 
@@ -29,13 +37,54 @@ namespace nanogui { class MessageDialog; }
 namespace nanogui { class Slider; }
 namespace nanogui { class VScrollPanel; }
 namespace nanogui { class Window; }
-namespace nanogui { class EditImagePanel; }
-namespace nanogui { class HistogramPanel; }
-namespace nanogui { class ImageListPanel; }
 namespace nanogui { template <typename Scalar> class FloatBox; }
 namespace nanogui { class GLShader; }
-namespace nanogui { class MultiGraph; }
-namespace nanogui { class HDRImageViewer; }
 
 
 namespace spdlog { class logger; }
+
+
+enum EColorSpace : int
+{
+	LinearSRGB_CS = 0,
+	LinearAdobeRGB_CS,
+	CIEXYZ_CS,
+	CIELab_CS,
+	CIELuv_CS,
+	CIExyY_CS,
+	HLS_CS,
+	HSV_CS
+};
+
+
+enum EChannel : int
+{
+	RGB = 0,
+	RED,
+	GREEN,
+	BLUE,
+	LUMINANCE,
+	CIE_L,
+	CIE_a,
+	CIE_b,
+	CIE_CHROMATICITY,
+	FALSE_COLOR,
+	POSITIVE_NEGATIVE,
+
+	NUM_CHANNELS
+};
+
+
+enum EBlendMode : int
+{
+	NORMAL_BLEND = 0,
+	MULTIPLY_BLEND,
+	DIVIDE_BLEND,
+	ADD_BLEND,
+	AVERAGE_BLEND,
+	SUBTRACT_BLEND,
+	DIFFERENCE_BLEND,
+	RELATIVE_DIFFERENCE_BLEND,
+
+	NUM_BLEND_MODES
+};

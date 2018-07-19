@@ -1,5 +1,7 @@
 //
-// Created by Wojciech Jarosz on 9/3/17.
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
 //
 
 #pragma once
@@ -7,14 +9,14 @@
 #include <nanogui/widget.h>
 #include "fwd.h"
 
-NAMESPACE_BEGIN(nanogui)
+using namespace nanogui;
 
 class EditImagePanel : public Widget
 {
 public:
 	EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr);
 
-	void enableDisableButtons();
+	void draw(NVGcontext *ctx) override;
 
 private:
 	HDRViewScreen * m_screen = nullptr;
@@ -26,5 +28,3 @@ private:
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
-
-NAMESPACE_END(nanogui)

@@ -1,8 +1,10 @@
-/*! \file hdrviewer.cpp
-    \author Wojciech Jarosz
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
 #include "hdrviewer.h"
-#include "histogrampanel.h"
 #include "glimage.h"
 #include "editimagepanel.h"
 #include "imagelistpanel.h"
@@ -28,30 +30,44 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     thm->mStandardFontSize     = 16;
     thm->mButtonFontSize       = 15;
     thm->mTextBoxFontSize      = 14;
+	thm->mWindowCornerRadius   = 4;
+	thm->mWindowFillUnfocused  = Color(40, 250);
+	thm->mWindowFillFocused    = Color(45, 250);
     setTheme(thm);
+
+	Theme * panelTheme = new Theme(mNVGContext);
+	panelTheme = new Theme(mNVGContext);
+	panelTheme->mStandardFontSize     = 16;
+	panelTheme->mButtonFontSize       = 15;
+	panelTheme->mTextBoxFontSize      = 14;
+	panelTheme->mWindowCornerRadius   = 0;
+	panelTheme->mWindowFillUnfocused  = Color(50, 255);
+	panelTheme->mWindowFillFocused    = Color(52, 255);
+	panelTheme->mButtonCornerRadius   = 2;
+	panelTheme->mWindowHeaderHeight   = 0;
+	panelTheme->mWindowDropShadowSize = 0;
+
 
 	//
 	// Construct the top-level widgets
 	//
 
-	auto verticalScreenSplit = new Widget(this);
-	verticalScreenSplit->setLayout(new BoxLayout{Orientation::Vertical, Alignment::Fill});
-
-	m_topPanel = new Widget(verticalScreenSplit);
+	m_topPanel = new Window(this, "");
+	m_topPanel->setTheme(panelTheme);
+	m_topPanel->setPosition(Vector2i(0,0));
 	m_topPanel->setFixedHeight(30);
 	m_topPanel->setLayout(new BoxLayout(Orientation::Horizontal,
 	                                    Alignment::Middle, 5, 5));
 
-	auto horizontalScreenSplit = new Widget(verticalScreenSplit);
-	horizontalScreenSplit->setLayout(new BoxLayout{Orientation::Horizontal, Alignment::Fill});
+	m_sidePanel = new Window(this, "");
+	m_sidePanel->setTheme(panelTheme);
 
-	m_sidePanel = new Widget(horizontalScreenSplit);
-
-	m_imageView = new HDRImageViewer(horizontalScreenSplit, this);
+	m_imageView = new HDRImageViewer(this, this);
 	m_imageView->setGridThreshold(20);
-	m_imageView->setPixelInfoThreshold(20);
+	m_imageView->setPixelInfoThreshold(40);
 
-	m_statusBar = new Widget(verticalScreenSplit);
+	m_statusBar = new Window(this, "");
+	m_statusBar->setTheme(panelTheme);
 	m_statusBar->setFixedHeight(m_statusBar->theme()->mTextBoxFontSize+1);
 
     //
@@ -73,7 +89,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanelContents = new Widget(m_sideScrollPanel);
 	m_sidePanelContents->setLayout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_sidePanelContents->setFixedWidth(195);
+	m_sidePanelContents->setFixedWidth(213);
 	m_sideScrollPanel->setFixedWidth(m_sidePanelContents->fixedWidth() + 12);
 	m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
 
@@ -82,51 +98,27 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
     auto btn = new Button(m_sidePanelContents, "File", ENTYPO_ICON_CHEVRON_DOWN);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
 	btn->setFlags(Button::ToggleButton);
 	btn->setPushed(true);
+	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
-    auto imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr);
+    m_imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr, m_imageView);
 
-	btn->setChangeCallback([this,btn,imagesPanel](bool value)
+	btn->setChangeCallback([this,btn](bool value)
                          {
-	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
-                             imagesPanel->setVisible(value);
+	                         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
+	                         m_imagesPanel->setVisible(value);
                              updateLayout();
                              m_sidePanelContents->performLayout(mNVGContext);
                          });
 
     //
-    // create histogram panel
-    //
-
-	btn = new Button(m_sidePanelContents, "Histogram", ENTYPO_ICON_CHEVRON_RIGHT);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
-	btn->setFlags(Button::ToggleButton);
-	btn->setIconPosition(Button::IconPosition::Right);
-
-    auto w = new Widget(m_sidePanelContents);
-    w->setVisible(false);
-    w->setLayout(new GroupLayout(2, 4, 8, 10));
-
-    new Label(w, "Histogram", "sans-bold");
-    auto histogramPanel = new HistogramPanel(w);
-
-	btn->setChangeCallback([this,btn,w](bool value)
-         {
-	         btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
-             w->setVisible(value);
-             updateLayout();
-             m_sidePanelContents->performLayout(mNVGContext);
-         });
-
-    //
     // create edit panel
     //
 
-    btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_RIGHT);
-	btn->setBackgroundColor(Color(15, 100, 185, 75));
+    btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_LEFT);
 	btn->setFlags(Button::ToggleButton);
+	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
 
 	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imageMgr);
@@ -134,11 +126,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	btn->setChangeCallback([this,btn,editPanel](bool value)
      {
-	     btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_RIGHT);
+	     btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
          editPanel->setVisible(value);
          updateLayout();
          m_sidePanelContents->performLayout(mNVGContext);
      });
+	editPanel->performLayout(mNVGContext);
 
     //
     // create top panel controls
@@ -154,6 +147,30 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     new Label(m_topPanel, "EV", "sans-bold");
     auto exposureSlider = new Slider(m_topPanel);
     auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
+	auto normalizeButton = new Button(m_topPanel, "", ENTYPO_ICON_FLASH);
+	normalizeButton->setFixedSize(Vector2i(19, 19));
+	normalizeButton->setCallback([this](void)
+	                             {
+		                             auto img = m_imageMgr->currentImage();
+		                             if (!img)
+			                             return;
+		                             Color4 mC = img->image().max();
+		                             float mCf = max(mC[0], mC[1], mC[2]);
+		                             console->debug("max value: {}", mCf);
+		                             m_imageView->setExposure(log2(1.0f/mCf));
+		                             m_imagesPanel->requestHistogramUpdate(true);
+	                             });
+	normalizeButton->setTooltip("Normalize exposure.");
+	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_BACK_IN_TIME);
+	resetButton->setFixedSize(Vector2i(19, 19));
+	resetButton->setCallback([this](void)
+	                             {
+		                             m_imageView->setExposure(0.0f);
+		                             m_imageView->setGamma(2.2f);
+		                             m_imageView->setSRGB(true);
+		                             m_imagesPanel->requestHistogramUpdate(true);
+	                             });
+	resetButton->setTooltip("Reset tonemapping.");
 
     auto sRGBCheckbox = new CheckBox(m_topPanel, "sRGB   ");
     auto gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
@@ -166,57 +183,80 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_sidePanelButton->setFixedSize(Vector2i(25, 25));
     m_sidePanelButton->setChangeCallback([this](bool value)
     {
-        m_sidePanel->setVisible(value);
+	    m_guiAnimationStart = glfwGetTime();
+	    m_guiTimerRunning = true;
+	    m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
         updateLayout();
     });
 
     exposureTextBox->numberFormat("%1.2f");
     exposureTextBox->setEditable(true);
-    exposureTextBox->setFixedWidth(35);
+	exposureTextBox->setSpinnable(true);
+    exposureTextBox->setFixedWidth(50);
+	exposureTextBox->setMinValue(-9.0f);
+	exposureTextBox->setMaxValue( 9.0f);
     exposureTextBox->setAlignment(TextBox::Alignment::Right);
     exposureTextBox->setCallback([this](float e)
                                  {
-                                       m_imageView->setExposure(e);
+	                                 m_imageView->setExposure(e);
                                  });
     exposureSlider->setCallback([this](float v)
 						        {
 							        m_imageView->setExposure(round(4*v) / 4.0f);
 						        });
+	exposureSlider->setFinalCallback([this](float v)
+	                                 {
+		                                 m_imageView->setExposure(round(4*v) / 4.0f);
+		                                 m_imagesPanel->requestHistogramUpdate(true);
+	                                 });
     exposureSlider->setFixedWidth(100);
     exposureSlider->setRange({-9.0f,9.0f});
     exposureTextBox->setValue(exposure);
 
     gammaTextBox->setEditable(true);
+	gammaTextBox->setSpinnable(true);
     gammaTextBox->numberFormat("%1.3f");
-    gammaTextBox->setFixedWidth(40);
+    gammaTextBox->setFixedWidth(55);
+	gammaTextBox->setMinValue(0.02f);
+	gammaTextBox->setMaxValue(9.0f);
+
     gammaTextBox->setAlignment(TextBox::Alignment::Right);
     gammaTextBox->setCallback([this,gammaSlider](float value)
                                 {
                                     m_imageView->setGamma(value);
                                     gammaSlider->setValue(value);
                                 });
-    gammaSlider->setCallback([&,gammaSlider,gammaTextBox](float value)
-    {
-        float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
-        m_imageView->setGamma(g);
-        gammaTextBox->setValue(g);
-        gammaSlider->setValue(g);       // snap values
-    });
+    gammaSlider->setCallback(
+	    [&,gammaSlider,gammaTextBox](float value)
+	    {
+		    float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
+		    m_imageView->setGamma(g);
+		    gammaTextBox->setValue(g);
+		    gammaSlider->setValue(g);       // snap values
+	    });
     gammaSlider->setFixedWidth(100);
     gammaSlider->setRange({0.02f,9.0f});
     gammaSlider->setValue(gamma);
     gammaTextBox->setValue(gamma);
 
-    m_imageView->setExposureCallback([exposureTextBox,exposureSlider](float e)
+    m_imageView->setExposureCallback([this,exposureTextBox,exposureSlider](float e)
                                      {
 	                                     exposureTextBox->setValue(e);
 	                                     exposureSlider->setValue(e);
+	                                     m_imagesPanel->requestHistogramUpdate();
                                      });
     m_imageView->setGammaCallback([gammaTextBox,gammaSlider](float g)
                                   {
 	                                  gammaTextBox->setValue(g);
 	                                  gammaSlider->setValue(g);
                                   });
+	m_imageView->setSRGBCallback([sRGBCheckbox,gammaTextBox,gammaSlider](bool b)
+	                              {
+		                              sRGBCheckbox->setChecked(b);
+		                              gammaTextBox->setEnabled(!b);
+		                              gammaTextBox->setSpinnable(!b);
+		                              gammaSlider->setEnabled(!b);
+	                              });
     m_imageView->setExposure(exposure);
     m_imageView->setGamma(gamma);
     m_imageView
@@ -249,39 +289,42 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     updateLayout();
                                 });
 
-	m_imageMgr->setImageSelectedCallback([this, imagesPanel, editPanel, histogramPanel](int i)
-	                                     {
-		                                     m_imageView->bindImage(m_imageMgr->currentImage());
-		                                     updateCaption();
-		                                     imagesPanel->enableDisableButtons();
-		                                     editPanel->enableDisableButtons();
-		                                     imagesPanel->selectImage(i);
-		                                     histogramPanel->setImage(m_imageMgr->currentImage());
-	                                     });
+	m_imageMgr->setCurrentImageCallback([this, editPanel](void)
+	                                    {
+		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
+		                                    updateCaption();
+		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
+	                                    });
 
-	m_imageMgr->setNumImagesCallback([this, imagesPanel, editPanel](void)
+	m_imageMgr->setReferenceImageCallback([this](void)
+	                                    {
+		                                    m_imageView->setReferenceImage(m_imageMgr->referenceImage());
+		                                    m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
+	                                    });
+
+	m_imageMgr->setNumImagesCallback([this, editPanel](void)
 	                                 {
 		                                 updateCaption();
-		                                 imagesPanel->enableDisableButtons();
-		                                 editPanel->enableDisableButtons();
-		                                 imagesPanel->repopulateImageList();
-		                                 imagesPanel->selectImage(m_imageMgr->currentImageIndex());
+		                                 m_imagesPanel->repopulateImageList();
+		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
+		                                 m_imageMgr->setReferenceImageIndex(-1);
 	                                 });
-    m_imageMgr->setImageChangedCallback([this,imagesPanel,editPanel,histogramPanel](int i)
-                                         {
-	                                         updateCaption();
-	                                         imagesPanel->enableDisableButtons();
-	                                         editPanel->enableDisableButtons();
-	                                         imagesPanel->repopulateImageList();
-	                                         imagesPanel->selectImage(i);
-	                                         histogramPanel->update();
-                                         });
+	m_imageMgr->setImageModifyStartCallback([this, editPanel](int i)
+	                                       {
+		                                       updateCaption();
+	                                       });
+	m_imageMgr->setImageModifyDoneCallback([this, editPanel](int i)
+	                                       {
+		                                       updateCaption();
+		                                       m_imagesPanel->requestHistogramUpdate(true);
+	                                       });
 
 
 	sRGBCheckbox->setCallback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
     {
         m_imageView->setSRGB(value);
         gammaSlider->setEnabled(!value);
+	    gammaTextBox->setSpinnable(!value);
         gammaTextBox->setEnabled(!value);
         gammaLabel->setEnabled(!value);
         gammaLabel->setColor(value ? mTheme->mDisabledTextColor : mTheme->mTextColor);
@@ -300,16 +343,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	dropEvent(args);
 
+	this->setSize(Vector2i(1024, 800));
+	updateLayout();
 	setResizeCallback([&](Vector2i)
 	                  {
 		                  updateLayout();
 		                  drawAll();
 	                  });
 
-	this->setSize(Vector2i(1024, 800));
-
-
-    drawAll();
     setVisible(true);
     glfwSwapInterval(1);
 }
@@ -335,7 +376,7 @@ bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 	{
 		m_imageMgr->loadImages(filenames);
 	}
-	catch (std::runtime_error &e)
+	catch (const exception &e)
 	{
 		new MessageDialog(this, MessageDialog::Type::Warning, "Error",
 		                  string("Could not load:\n ") + e.what());
@@ -351,12 +392,28 @@ void HDRViewScreen::askCloseImage(int index)
 		if (img->isModified())
 		{
 			auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-			                                "Image has unsaved modifications. Close anyway?", "Close anyway", "Cancel", true);
-			dialog->setCallback([&,index](int close){if (close == 0) m_imageMgr->closeImage(index);});
+			                                "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
+			dialog->setCallback([this,index](int close){if (close == 0) m_imageMgr->closeImage(index);});
 		}
 		else
 			m_imageMgr->closeImage(index);
 	}
+}
+
+void HDRViewScreen::askCloseAllImages()
+{
+	bool anyModified = false;
+	for (int i = 0; i < m_imageMgr->numImages(); ++i)
+		anyModified |= m_imageMgr->image(i)->isModified();
+
+	if (anyModified)
+	{
+		auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
+		                                "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
+		dialog->setCallback([this](int close){if (close == 0) m_imageMgr->closeAllImages();});
+	}
+	else
+		m_imageMgr->closeAllImages();
 }
 
 
@@ -382,23 +439,28 @@ void HDRViewScreen::toggleHelpWindow()
 
 bool HDRViewScreen::loadImage()
 {
-	string file = file_dialog(
+	vector<string> files = file_dialog(
 		{
 			{"exr", "OpenEXR image"},
-			{"png", "Portable Network Graphic"},
-			{"pfm", "Portable Float Map"},
-			{"ppm", "Portable PixMap"},
-			{"jpg", "Jpeg image"},
-			{"tga", "Targa image"},
+			{"dng", "Digital Negative raw image"},
+			{"png", "Portable Network Graphic image"},
+			{"pfm", "Portable FloatMap image"},
+			{"ppm", "Portable PixMap image"},
+			{"pnm", "Portable AnyMap image"},
+			{"jpg", "JPEG image"},
+			{"tga", "Truevision Targa image"},
+			{"pic", "Softimage PIC image"},
 			{"bmp", "Windows Bitmap image"},
-			{"gif", "GIF image"},
-			{"hdr", "Radiance rgbE format"},
-			{"ppm", "Portable pixel map"},
+			{"gif", "Graphics Interchange Format image"},
+			{"hdr", "Radiance rgbE format image"},
 			{"psd", "Photoshop document"}
-		}, false);
+		}, false, true);
 
-	if (file.size())
-		return dropEvent({file});
+	// re-gain focus
+	glfwFocusWindow(mGLFWWindow);
+
+	if (files.size())
+		return dropEvent(files);
 	return false;
 }
 
@@ -409,21 +471,28 @@ void HDRViewScreen::saveImage()
 		if (!m_imageMgr->currentImage())
 			return;
 
-		string filename = file_dialog({
-			                              {"png", "Portable Network Graphic"},
-			                              {"pfm", "Portable Float Map"},
-			                              {"ppm", "Portable PixMap"},
-			                              {"tga", "Targa image"},
-			                              {"bmp", "Windows Bitmap image"},
-			                              {"hdr", "Radiance rgbE format"},
-			                              {"exr", "OpenEXR image"}
-		                              }, true);
+		string filename = file_dialog(
+			{
+				{"exr", "OpenEXR image"},
+				{"hdr", "Radiance rgbE format image"},
+				{"png", "Portable Network Graphic image"},
+				{"pfm", "Portable FloatMap image"},
+				{"ppm", "Portable PixMap image"},
+				{"pnm", "Portable AnyMap image"},
+				{"jpg", "JPEG image"},
+				{"jpeg", "JPEG image"},
+				{"tga", "Truevision Targa image"},
+				{"bmp", "Windows Bitmap image"},
+			}, true);
+
+		// re-gain focus
+		glfwFocusWindow(mGLFWWindow);
 
 		if (filename.size())
 			m_imageMgr->saveImage(filename, m_imageView->exposure(), m_imageView->gamma(),
 			                      m_imageView->sRGB(), m_imageView->ditheringOn());
 	}
-	catch (std::runtime_error &e)
+	catch (const exception &e)
 	{
 		new MessageDialog(this, MessageDialog::Type::Warning, "Error",
 		                  string("Could not save image due to an error:\n") + e.what());
@@ -434,17 +503,19 @@ void HDRViewScreen::saveImage()
 void HDRViewScreen::flipImage(bool h)
 {
     if (h)
-	    m_imageMgr->modifyImage([](HDRImage &img)
-	                {
-		                img = img.flippedHorizontal();
-		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedHorizontal(); });
-	                });
+	    m_imageMgr->modifyImage(
+		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flippedHorizontal()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedHorizontal(); })};
+		    });
     else
-	    m_imageMgr->modifyImage([](HDRImage &img)
-	                {
-		                img = img.flippedVertical();
-		                return new LambdaUndo([](HDRImage &img2) { img2 = img2.flippedVertical(); });
-	                });
+	    m_imageMgr->modifyImage(
+		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flippedVertical()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedVertical(); })};
+		    });
 }
 
 
@@ -489,9 +560,8 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
                 return true;
         }
 
-        // undo & redo
         case 'Z':
-            if (modifiers & GLFW_MOD_SUPER)
+            if (modifiers & SYSTEM_COMMAND_MOD)
             {
                 if (modifiers & GLFW_MOD_SHIFT)
 	                m_imageMgr->redo();
@@ -506,15 +576,18 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	        askCloseImage(m_imageMgr->currentImageIndex());
             return true;
         case 'W':
-            if (modifiers & GLFW_MOD_SUPER)
+            if (modifiers & SYSTEM_COMMAND_MOD)
             {
-	            askCloseImage(m_imageMgr->currentImageIndex());
+	            if (modifiers & GLFW_MOD_SHIFT)
+		            askCloseAllImages();
+	            else
+	                askCloseImage(m_imageMgr->currentImageIndex());
                 return true;
             }
             return false;
 
 	    case 'O':
-		    if (modifiers & GLFW_MOD_SUPER)
+		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    loadImage();
 			    return true;
@@ -530,25 +603,13 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_KP_SUBTRACT:
 		    m_imageView->zoomOut();
             return true;
-        case '[':
-            if (modifiers & GLFW_MOD_SUPER)
-            {
-	            m_imageMgr->bringImageForward();
-                return true;
-            }
-        case ']':
-            if (modifiers & GLFW_MOD_SUPER)
-            {
-	            m_imageMgr->sendImageBackward();
-                return true;
-            }
+
         case 'G':
             if (modifiers & GLFW_MOD_SHIFT)
 	            m_imageView->setGamma(m_imageView->gamma() + 0.02f);
             else
 	            m_imageView->setGamma(max(0.02f, m_imageView->gamma() - 0.02f));
             return true;
-
         case 'E':
             if (modifiers & GLFW_MOD_SHIFT)
 	            m_imageView->setExposure(m_imageView->exposure() + 0.25f);
@@ -560,7 +621,6 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             flipImage(false);
             return true;
 
-
         case 'M':
             flipImage(true);
             return true;
@@ -570,14 +630,10 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             drawAll();
             return true;
 
-        case GLFW_KEY_HOME:
-	        m_imageView->center();
-		    m_imageView->fit();
-            drawAll();
-            return true;
-
         case 'T':
-            m_topPanel->setVisible(!m_topPanel->visible());
+		    m_guiAnimationStart = glfwGetTime();
+		    m_guiTimerRunning = true;
+		    m_animationGoal = EAnimationGoal(m_animationGoal ^ TOP_PANEL);
 		    updateLayout();
             return true;
 
@@ -588,57 +644,187 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_TAB:
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
-		        bool setVis = !(m_sidePanel->visible() || m_statusBar->visible() || m_topPanel->visible());
-		        m_statusBar->setVisible(setVis);
-		        m_topPanel->setVisible(setVis);
-		        m_sidePanel->setVisible(setVis);
-		        m_sidePanelButton->setPushed(setVis);
+		        bool setVis = !((m_animationGoal & SIDE_PANEL) || (m_animationGoal & TOP_PANEL) || (m_animationGoal & BOTTOM_PANEL));
+		        m_guiAnimationStart = glfwGetTime();
+		        m_guiTimerRunning = true;
+		        m_animationGoal = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
 	        }
 		    else
 	        {
-		        m_sidePanel->setVisible(!m_sidePanel->visible());
-		        m_sidePanelButton->setPushed(m_sidePanel->visible());
+		        m_guiAnimationStart = glfwGetTime();
+		        m_guiTimerRunning = true;
+		        m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
 	        }
 		    updateLayout();
             return true;
 
-        case GLFW_KEY_PAGE_DOWN:
         case GLFW_KEY_DOWN:
-            if (m_imageMgr->numImages())
-	            m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
-            break;
+	        if (modifiers & SYSTEM_COMMAND_MOD)
+	        {
+		        m_imageMgr->sendImageBackward();
+		        return true;
+	        }
+	        else if (m_imageMgr->numImages())
+            {
+	            m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
+	            return true;
+            }
+		    return false;
 
-        case GLFW_KEY_PAGE_UP:
-        case GLFW_KEY_UP: m_imageMgr->selectImage(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
-            break;
+        case GLFW_KEY_UP:
+	        if (modifiers & SYSTEM_COMMAND_MOD)
+	        {
+		        m_imageMgr->bringImageForward();
+		        return true;
+	        }
+	        else if (m_imageMgr->numImages())
+	        {
+		        m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
+		        return true;
+	        }
+		    return false;
 
-        case '1':
-	        m_imageView->setChannel(Vector3f(1.0f, 0.0f, 0.0f));
-            return true;
-        case '2':
-	        m_imageView->setChannel(Vector3f(0.0f, 1.0f, 0.0f));
-            return true;
-        case '3':
-	        m_imageView->setChannel(Vector3f(0.0f, 0.0f, 1.0f));
-            return true;
-        case '4':
-	        m_imageView->setChannel(Vector3f(1.0f, 1.0f, 1.0f));
-            return true;
+	    case '0':
+		    if (modifiers & SYSTEM_COMMAND_MOD)
+		    {
+			    m_imageView->center();
+			    m_imageView->fit();
+			    drawAll();
+			    return true;
+		    }
+		    return false;
     }
+
+	if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)
+	{
+		int idx = (key - GLFW_KEY_1) % 10;
+
+		if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
+		{
+			m_imagesPanel->setChannel(EChannel(idx));
+			return true;
+		}
+		else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
+		{
+			m_imagesPanel->setBlendMode(EBlendMode(idx));
+			return true;
+		}
+		else
+		{
+			if (m_imageMgr->numImages() > idx)
+				m_imageMgr->setCurrentImageIndex(idx);
+		}
+		return false;
+	}
+
     return false;
+}
+
+bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
+{
+	if (button == GLFW_MOUSE_BUTTON_1 && down && atSidePanelEdge(p))
+	{
+		m_draggingSidePanel = true;
+
+		// prevent Screen::cursorPosCallbackEvent from calling dragEvent on other widgets
+		mDragActive = false;
+		mDragWidget = nullptr;
+		return true;
+	}
+	else
+		m_draggingSidePanel = false;
+
+	return Screen::mouseButtonEvent(p, button, down, modifiers);
+}
+
+bool HDRViewScreen::mouseMotionEvent(const Eigen::Vector2i &p, const Eigen::Vector2i &rel, int button, int modifiers)
+{
+	setCursor((m_draggingSidePanel || atSidePanelEdge(p)) ? Cursor::HResize : Cursor::Arrow);
+
+	if (m_draggingSidePanel)
+	{
+		int w = clamp(p.x(), 205, mSize.x() - 10);
+		m_sidePanelContents->setFixedWidth(w);
+		m_sideScrollPanel->setFixedWidth(w + 12);
+		m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());
+		updateLayout();
+		return true;
+	}
+
+	return Screen::mouseMotionEvent(p, rel, button, modifiers);
 }
 
 
 void HDRViewScreen::updateLayout()
 {
-	int headerHeight = m_topPanel->visible() ? m_topPanel->fixedHeight() : 0;
-	int sidePanelWidth = m_sidePanel->visible() ? m_sidePanel->fixedWidth() : 0;
-	int footerHeight = m_statusBar->visible() ? m_statusBar->fixedHeight() : 0;
+	int headerHeight = m_topPanel->fixedHeight();
+	int sidePanelWidth = m_sidePanel->fixedWidth();
+	int footerHeight = m_statusBar->fixedHeight();
 
-	int middleHeight = height() - headerHeight - footerHeight;
+	static int headerShift = 0;
+	static int sidePanelShift = 0;
+	static int footerShift = 0;
 
-	m_imageView->setFixedSize(mSize - Vector2i(sidePanelWidth, headerHeight+footerHeight));
+	if (m_guiTimerRunning)
+	{
+		const double duration = 0.2;
+		double elapsed = glfwGetTime() - m_guiAnimationStart;
+		// stop the animation after 2 seconds
+		if (elapsed > duration)
+		{
+			m_guiTimerRunning = false;
+			sidePanelShift = (m_animationGoal & SIDE_PANEL) ? 0 : -sidePanelWidth;
+			headerShift = (m_animationGoal & TOP_PANEL) ? 0 : -headerHeight;
+			footerShift = (m_animationGoal & BOTTOM_PANEL) ? 0 : footerHeight;
+
+			m_sidePanelButton->setPushed(m_animationGoal & SIDE_PANEL);
+		}
+		// animate the location of the panels
+		else
+		{
+			// only animate the sidepanel if it isn't already at the goal position
+			if (((m_animationGoal & SIDE_PANEL) && sidePanelShift != 0) ||
+				(!(m_animationGoal & SIDE_PANEL) && sidePanelShift != -sidePanelWidth))
+			{
+				double start = (m_animationGoal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
+				double end = (m_animationGoal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
+				sidePanelShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+				m_sidePanelButton->setPushed(true);
+			}
+			// only animate the header if it isn't already at the goal position
+			if (((m_animationGoal & TOP_PANEL) && headerShift != 0) ||
+				(!(m_animationGoal & TOP_PANEL) && headerShift != -headerHeight))
+			{
+				double start = (m_animationGoal & TOP_PANEL) ? double(-headerHeight) : 0.0;
+				double end = (m_animationGoal & TOP_PANEL) ? 0.0 : double(-headerHeight);
+				headerShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+			}
+
+			// only animate the footer if it isn't already at the goal position
+			if (((m_animationGoal & BOTTOM_PANEL) && footerShift != 0) ||
+				(!(m_animationGoal & BOTTOM_PANEL) && footerShift != footerHeight))
+			{
+				double start = (m_animationGoal & BOTTOM_PANEL) ? double(footerHeight) : 0.0;
+				double end = (m_animationGoal & BOTTOM_PANEL) ? 0.0 : double(footerHeight);
+				footerShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+			}
+		}
+	}
+
+	m_topPanel->setPosition(Vector2i(0,headerShift));
+	m_topPanel->setFixedWidth(width());
+
+	int middleHeight = height() - headerHeight - footerHeight - headerShift + footerShift;
+
+	m_sidePanel->setPosition(Vector2i(sidePanelShift,headerShift+headerHeight));
 	m_sidePanel->setFixedHeight(middleHeight);
+
+
+	m_imageView->setPosition(Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
+	m_imageView->setFixedWidth(width() - sidePanelShift-sidePanelWidth);
+	m_imageView->setFixedHeight(middleHeight);
+	m_statusBar->setPosition(Vector2i(0,headerShift+headerHeight+middleHeight));
+	m_statusBar->setFixedWidth(width());
 
 	int lh = std::min(middleHeight, m_sidePanelContents->preferredSize(mNVGContext).y());
 	m_sideScrollPanel->setFixedHeight(lh);
@@ -652,5 +838,6 @@ void HDRViewScreen::updateLayout()
 
 void HDRViewScreen::drawContents()
 {
+	m_imageMgr->runRequestedCallbacks();
 	updateLayout();
 }

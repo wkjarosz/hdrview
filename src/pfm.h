@@ -1,13 +1,11 @@
-/*!
-    pfm.h -- Declaration of routines to read and write a PFM images
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
-    \author Wojciech Jarosz
-
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
-*/
 #pragma once
 
-bool is_pfm(const char * filename);
-bool write_pfm(const char * filename, int width, int height, int numChannels, const float * data);
-float * load_pfm(const char * filename, int * width, int * height, int * numChannels);
+bool isPFMImage(const char *filename) noexcept;
+bool writePFMImage(const char *filename, int width, int height, int numChannels, const float *data);
+float * loadPFMImage(const char *filename, int *width, int *height, int *numChannels);

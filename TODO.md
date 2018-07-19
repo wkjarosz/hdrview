@@ -1,13 +1,43 @@
-## Todo/Wishlist
+## TODO
 
-* allow error logging to output to a debug status panel in the GUI.
-* add basic HDR merging capabilities (i.e. assuming registered, sRGB images)
-* add image processing operations (e.g. filtering, resizing) to GUI mode
-* add support for resizing layer panel (once resizing support is added to nanogui)
-* add basic selection support with min/max/mean/std statistics
-* enable processing/filtering images passed on command-line even in GUI mode (e.g. load many images, blur them, and then display them in the GUI, possibly without saving)
-* long-term: add simple painting/clone-stamp support
-
-
-## Known bugs
-* ``stb_image`` seemingly does not properly handle sRGB's non-gamma curve. loading an sRGB image, saving as sRGB, and loading back in as sRGB should result in same image but doesn't (at least for PNGs). ``stb_image`` seems to assume just a simple gamma curve for sRGB (defaulting to gamma=2.2), and excludes the linear regions near black
+- [ ] Improve responsiveness during long operations
+   - [x] Add progress bars
+   - [x] Run them in a separate thread and avoid freezing the main application
+   - [x] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
+   - [ ] Allow canceling/aborting long operations
+- [ ] Refactor Color3 and Color4 classes as subclasses of Eigen Matrices, so we can more easily do color conversion.
+- [x] Add log-linear and log-log histogram options?
+- [ ] Improved DNG/demosaicing pipeline
+   - [ ] Improve DNG color correction
+   - [ ] Allow skipping DNG demosaicing during load
+   - [ ] Add demosaicing/color correction/white balancing post-load filters
+   - [ ] Will require storing DNG metadata to apply correct color-correction matrix
+- [ ] Selection support
+- [ ] More image filters/transformations/adjustments 
+   - [x] Canvas size/cropping
+   - [ ] White balance adjustment
+   - [x] Brightness/contrast
+   - [ ] Luminance/chromaticity denoising 
+   - [ ] Levels
+   - [x] Hue/Saturation
+   - [x] Convert to grayscale/desaturate
+   - [x] Invert
+   - [ ] Equalize/normalize histogram
+   - [ ] Match color/histogram matching
+   - [ ] FFT-based convolution/blur
+   - [ ] Motion blur
+   - [ ] Merge down/flatten layers
+- [ ] Enable processing/filtering images passed on command-line even in GUI mode (e.g. load many images, blur them, and then display them in the GUI, possibly without saving)
+- [ ] HDR merging
+- [ ] HDR tonemapping
+- [ ] General image editing
+   - [ ] Clone stamp
+   - [ ] Airbrush
+   - [ ] Cropping
+- [ ] GUI improvements
+   - [x] Add support for resizing side panel
+   - [ ] Allow error logging to output to a debug status panel in the GUI.
+   - [ ] Improved drop-down menus
+   - [ ] Save all
+   - [x] Close all
+   - [ ] Show command history and allow undoing/redoing multiple steps at once

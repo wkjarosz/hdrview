@@ -1,9 +1,9 @@
-/*
-    hdrview.cpp -- HDRView application entry point
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
-*/
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
@@ -37,8 +37,8 @@ Options:
   -v T, --verbose=T        Set verbosity threshold with lower values meaning
                            more verbose and higher values removing low-priority
                            messages.
-                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 2].
-                           All messages with severity > T are displayed, where
+                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 1].
+                           All messages with severity >= T are displayed, where
                            the severities are:
                                 trace    = 0
                                 debug    = 1

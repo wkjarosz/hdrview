@@ -1,9 +1,9 @@
-/*
-    hdrbatch.cpp -- HDRBatch application entry point
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
-*/
 #include <ctype.h>                       // for tolower
 #include <docopt.h>                      // for docopt
 #include <Eigen/Core>                    // for Vector2f
@@ -308,24 +308,25 @@ int main(int argc, char **argv)
             filterType = type;
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
 
+            AtomicProgress progress;
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .GaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .GaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .boxBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .boxBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .fastGaussianBlurred(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .fastGaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .medianFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .medianFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .bilateralFiltered(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .bilateralFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .unsharpMasked(filterArg1, filterArg2, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
+                    .unsharpMasked(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -374,8 +375,8 @@ int main(int argc, char **argv)
 
             remap = true;
 
-            UV2XYZFn dst2xyz;
-            XYZ2UVFn xyz2src;
+            UV2XYZFn * dst2xyz;
+            XYZ2UVFn * xyz2src;
 
             string from = s1, to = s2;
 
@@ -528,7 +529,8 @@ int main(int argc, char **argv)
                 else
                 {
                     console->info("Remapping image to {:d}x{:d}...", w, h);
-                    image = image.resampled(w, h, warp, samples,
+                    AtomicProgress progress;
+                    image = image.resampled(w, h, progress, warp, samples,
                                             sampler, borderModeX, borderModeY);
                 }
             }

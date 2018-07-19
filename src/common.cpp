@@ -1,11 +1,13 @@
-/*!
-    \file common.cpp
-    \author Wojciech Jarosz
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
 #include "common.h"
 
 using std::string;
+using std::vector;
 
 string getExtension(const string& filename)
 {
@@ -24,4 +26,50 @@ string getBasename(const string& filename)
     auto start = (lastSlash != string::npos) ? lastSlash + 1 : 0;
     auto length = (lastDot != string::npos) ? lastDot-start : filename.size()-start;
     return filename.substr(start, length);
+}
+
+
+const vector<string> & channelNames()
+{
+    static const vector<string> names =
+        {
+            "RGB",
+            "Red",
+            "Green",
+            "Blue",
+            "Luminance",
+            "CIE L*",
+            "CIE a*",
+            "CIE b*",
+            "CIE chromaticity",
+            "False color",
+            "Negative-positive"
+        };
+    return names;
+}
+
+const vector<string> & blendModeNames()
+{
+    static const vector<string> names =
+        {
+            "Normal",
+            "Multiply",
+            "Divide",
+            "Add",
+            "Average",
+            "Subtract",
+            "Difference",
+            "Relative difference",
+        };
+    return names;
+}
+
+string channelToString(EChannel channel)
+{
+    return channelNames()[channel];
+}
+
+string blendModeToString(EBlendMode mode)
+{
+    return blendModeNames()[mode];
 }

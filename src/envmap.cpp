@@ -1,14 +1,109 @@
-/*!
-    \file envmap.cpp
-    \author Wojciech Jarosz
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
-#define _USE_MATH_DEFINES
-#include <cmath>
-#include "envmap.h"
 #include "common.h"
+#include "envmap.h"
 
 using namespace Eigen;
+using std::vector;
+using std::string;
+
+Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const Vector2f & srcUV)
+{
+    Vector2f uv;
+    Vector3f xyz;
+
+    switch (src)
+    {
+        case ANGULAR_MAP:
+            xyz = angularMapToXYZ(srcUV);
+            break;
+        case MIRROR_BALL:
+            xyz = mirrorBallToXYZ(srcUV);
+            break;
+        case LAT_LONG:
+            xyz = latLongToXYZ(srcUV);
+            break;
+	    case CYLINDRICAL:
+		    xyz = cylindricalToXYZ(srcUV);
+		    break;
+        case CUBE_MAP:
+            xyz = cubeMapToXYZ(srcUV);
+            break;
+    }
+
+    switch (dst)
+    {
+        case ANGULAR_MAP:
+            uv = XYZToAngularMap(xyz);
+            break;
+        case MIRROR_BALL:
+            uv = XYZToMirrorBall(xyz);
+            break;
+        case LAT_LONG:
+            uv = XYZToLatLong(xyz);
+            break;
+	    case CYLINDRICAL:
+		    uv = XYZToCylindrical(xyz);
+		    break;
+        case CUBE_MAP:
+            uv = XYZToCubeMap(xyz);
+            break;
+    }
+
+    return uv;
+}
+
+
+const vector<string> & envMappingNames()
+{
+    static const vector<string> names =
+        {
+            "Angular map",
+            "Mirror ball",
+            "Longitude-latitude",
+            "Cylindrical",
+            "Cube map"
+        };
+    return names;
+}
+
+UV2XYZFn * envMapUVToXYZ(EEnvMappingUVMode mode)
+{
+    switch (mode)
+    {
+        case ANGULAR_MAP:
+            return angularMapToXYZ;
+        case MIRROR_BALL:
+            return mirrorBallToXYZ;
+        case LAT_LONG:
+            return latLongToXYZ;
+	    case CYLINDRICAL:
+		    return cylindricalToXYZ;
+        case CUBE_MAP:
+            return cubeMapToXYZ;
+    }
+}
+
+XYZ2UVFn * XYZToEnvMapUV(EEnvMappingUVMode mode)
+{
+    switch (mode)
+    {
+        case ANGULAR_MAP:
+            return XYZToAngularMap;
+        case MIRROR_BALL:
+            return XYZToMirrorBall;
+        case LAT_LONG:
+            return XYZToLatLong;
+	    case CYLINDRICAL:
+		    return XYZToCylindrical;
+        case CUBE_MAP:
+            return XYZToCubeMap;
+    }
+}
 
 Vector3f angularMapToXYZ(const Vector2f& UV)
 {
@@ -46,12 +141,26 @@ Vector3f latLongToXYZ(const Vector2f& UV)
 {
     // theta varies linearly with U,
     // and phi varies linearly with V
-    float theta = (UV(0)-0.25f)*2*M_PI;
+    float theta = lerp<float>(1.5f*M_PI, -M_PI_2, UV(0));
     float phi   = UV(1)*M_PI;
 
     float sinPhi = std::sin(phi);
-    return Vector3f(-sinPhi*std::cos(theta),
+    return Vector3f( sinPhi*std::cos(theta),
                      std::cos(phi),
+                     sinPhi*std::sin(theta));
+}
+
+
+Vector3f cylindricalToXYZ(const Vector2f& UV)
+{
+    // theta varies linearly with U,
+    // and y=cosPhi varies linearly with V
+    float theta  = lerp<float>(1.5f*M_PI, -M_PI_2, UV(0));
+    float cosPhi = lerp<float>(1.f, -1.f, UV(1));
+
+    float sinPhi = std::sqrt(1.f-cosPhi*cosPhi);
+    return Vector3f( sinPhi*std::cos(theta),
+                     cosPhi,
                      sinPhi*std::sin(theta));
 }
 
@@ -136,8 +245,20 @@ Vector2f XYZToLatLong(const Vector3f& xyz)
     float phi   = std::acos(xyz(1));
     float theta = std::atan2(xyz(2), xyz(0));
 
-    return Vector2f(mod(float(0.5f - theta*M_1_PI*0.5f)+0.25f, 1.0f), phi/M_PI);
+    return Vector2f(mod(lerpFactor<float>(1.5f*M_PI, -M_PI_2, theta), 1.0f),
+                    phi/M_PI);
 }
+
+
+Vector2f XYZToCylindrical(const Vector3f& xyz)
+{
+    // U varies linearly with theta,
+    // and V varies linearly with y=cosPhi
+    float theta = std::atan2(xyz(2), xyz(0));
+    return Vector2f(mod(lerpFactor<float>(1.5f*M_PI, -M_PI_2, theta), 1.0f),
+                    lerpFactor(1.f, -1.f, xyz(1)));
+}
+
 
 Vector2f XYZToCubeMap(const Vector3f& xyz)
 {

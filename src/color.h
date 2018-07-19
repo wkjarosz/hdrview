@@ -1,11 +1,16 @@
-/*! \file color.h
-    \brief Contains the definition of Color classes
-    \author Wojciech Jarosz
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
 #pragma once
 
 #include <iostream>
 #include <cmath>
+#include <Eigen/Core>
+#include "fwd.h"
+
 
 class Color3
 {
@@ -132,11 +137,19 @@ public:
         return 0.212671f * r + 0.715160f * g + 0.072169f * b;
     }
     float min() const {return std::min(std::min(r, g), b);}
+    Color3 min(const Color3 & m) const
+    {
+        return Color3(std::min(r,m.r), std::min(g,m.g), std::min(b,m.b));
+    }
     Color3 min(float m) const
     {
         return Color3(std::min(r,m), std::min(g,m), std::min(b,m));
     }
     float max() const {return std::max(std::max(r, g), b);}
+    Color3 max(const Color3 & m) const
+    {
+        return Color3(std::max(r,m.r), std::max(g,m.g), std::max(b,m.b));
+    }
     Color3 max(float m) const
     {
         return Color3(std::max(r,m), std::max(g,m), std::max(b,m));
@@ -148,6 +161,25 @@ public:
             res[i] = (*this)[i] > 0.0f ? powf((*this)[i], exp[i]) : 0.0f;
         return res;
     }
+
+	Color3 convert(EColorSpace dst, EColorSpace src) const;
+    Color3 LinearSRGBToXYZ() const;
+    Color3 XYZToLinearSRGB() const;
+    Color3 LinearAdobeRGBToXYZ() const;
+    Color3 XYZToLinearAdobeRGB() const;
+    Color3 XYZToLab() const;
+    Color3 LabToXYZ() const;
+    Color3 XYZToLuv() const;
+    Color3 LuvToXYZ() const;
+    Color3 xyYToXYZ() const;
+    Color3 XYZToxyY() const;
+
+    Color3 RGBToHSV() const;
+    Color3 HSVToRGB() const;
+    Color3 RGBToHLS() const;
+    Color3 HLSToRGB() const;
+    Color3 HSIAdjust(float h, float s, float i) const;
+    Color3 HSLAdjust(float h, float s, float l) const;
 
     friend std::ostream& operator<<(std::ostream& out, const Color3& c)
     {
@@ -182,6 +214,7 @@ public:
     //-----------------------------------------------------------------------
     Color4() {}
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
+    Color4(float g, float a) : Color3(g), a(a) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}
     explicit Color4(float x) : Color3(x), a(x) {}
     Color4(const float* c) : Color3(c), a(c[3]) {}
@@ -293,9 +326,32 @@ public:
     float sum() const       {return r + g + b + a;}
     float average() const   {return sum() / 4.0f;}
     float min() const {return std::min(Color3::min(), a);}
+    Color4 min(const Color4 & m) const {return Color4(Color3::min(m), std::min(a,m.a));}
     Color4 min(float m) const {return Color4(Color3::min(m), std::min(a,m));}
     float max() const {return std::max(Color3::max(), a);}
+    Color4 max(const Color4 & m) const {return Color4(Color3::max(m), std::max(a,m.a));}
     Color4 max(float m) const {return Color4(Color3::max(m), std::max(a,m));}
+
+
+
+	Color4 convert(EColorSpace dst, EColorSpace src) const {return Color4(Color3::convert(dst, src), a);}
+	Color4 LinearSRGBToXYZ() const {return Color4(Color3::LinearSRGBToXYZ(), a);}
+	Color4 XYZToLinearSRGB() const {return Color4(Color3::XYZToLinearSRGB(), a);}
+    Color3 LinearAdobeRGBToXYZ() const {return Color4(Color3::LinearAdobeRGBToXYZ(), a);}
+    Color3 XYZToLinearAdobeRGB() const {return Color4(Color3::XYZToLinearAdobeRGB(), a);}
+	Color4 XYZToLab() const {return Color4(Color3::XYZToLab(), a);}
+	Color4 LabToXYZ() const {return Color4(Color3::LabToXYZ(), a);}
+	Color4 XYZToLuv() const {return Color4(Color3::XYZToLuv(), a);}
+	Color4 LuvToXYZ() const {return Color4(Color3::LuvToXYZ(), a);}
+	Color4 xyYToXYZ() const {return Color4(Color3::xyYToXYZ(), a);}
+	Color4 XYZToxyY() const {return Color4(Color3::XYZToxyY(), a);}
+
+	Color4 RGBToHSV() const {return Color4(Color3::RGBToHSV(), a);}
+	Color4 HSVToRGB() const {return Color4(Color3::HSVToRGB(), a);}
+	Color4 RGBToHLS() const {return Color4(Color3::RGBToHLS(), a);}
+	Color4 HLSToRGB() const {return Color4(Color3::HLSToRGB(), a);}
+    Color4 HSIAdjust(float h, float s, float i) const {return Color4(Color3::HSIAdjust(h,s,i), a);}
+    Color4 HSLAdjust(float h, float s, float l) const {return Color4(Color3::HSLAdjust(h,s,l), a);}
 
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)
@@ -364,9 +420,6 @@ public:
                       std:: FUNC(c[3], e)); \
     }
 
-// namespace std
-// {
-
 //
 // create vectorized versions of the math functions across the elements of
 // a Color3 or Color4
@@ -401,38 +454,6 @@ COLOR_FUNCTION_WRAPPER2(fmin)
 COLOR_FUNCTION_WRAPPER2(fmax)
 COLOR_FUNCTION_WRAPPER2(min)
 COLOR_FUNCTION_WRAPPER2(max)
-
-// }
-
-template<typename T> T toSRGB(const T &);
-template<> inline Color3 toSRGB(const Color3 & c)
-{
-    Color3 powed = pow(c, Color3(1.0f/2.4f));
-    float r = c.r < 0.0031308f ? 12.92f * c.r : 1.055f * powed.r - 0.055f;
-    float g = c.g < 0.0031308f ? 12.92f * c.g : 1.055f * powed.g - 0.055f;
-    float b = c.b < 0.0031308f ? 12.92f * c.b : 1.055f * powed.b - 0.055f;
-    return Color3(r, g, b);
-}
-
-template<> inline Color4 toSRGB(const Color4 & c)
-{
-    return Color4(toSRGB(reinterpret_cast<const Color3&>(c)), c.a);
-}
-
-template<typename T> T toLinear(const T &);
-template<> inline Color3 toLinear(const Color3 & c)
-{
-   float r = c.r < 0.04045f ? (1.f / 12.92f) * c.r : pow((c.r + 0.055f) * (1.f / 1.055f), 2.4f);
-   float g = c.g < 0.04045f ? (1.f / 12.92f) * c.g : pow((c.g + 0.055f) * (1.f / 1.055f), 2.4f);
-   float b = c.b < 0.04045f ? (1.f / 12.92f) * c.b : pow((c.b + 0.055f) * (1.f / 1.055f), 2.4f);
-   return Color3(r, g, b);
-}
-
-template<> inline Color4 toLinear(const Color4 & c)
-{
-    return Color4(toLinear(reinterpret_cast<const Color3&>(c)), c.a);
-}
-
 
 namespace Eigen
 {
