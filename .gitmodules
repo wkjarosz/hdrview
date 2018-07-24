@@ -10,9 +10,6 @@
 [submodule "ext/tinydngloader"]
 	path = ext/tinydngloader
 	url = https://github.com/syoyo/tinydngloader.git
-[submodule "nanogui"]
-	branch = tev
-	url = https://github.com/Tom94/nanogui.git
 [submodule "ext/openexr"]
 	path = ext/openexr
 	url = https://github.com/mitsuba-renderer/openexr.git
@@ -23,5 +20,5 @@
 	branch = master
 [submodule "ext/nanogui"]
 	path = ext/nanogui
-	url = https://github.com/Tom94/nanogui.git
-	branch = tev
+	url = https://github.com/wjakob/nanogui.git
+	branch = master
