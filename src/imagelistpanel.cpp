@@ -22,108 +22,166 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	setId("image list panel");
 	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
-	auto grid = new Widget(this);
-	auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
-	grid->setLayout(agl);
-	agl->setColStretch(2, 1.0f);
-	agl->setColStretch(4, 1.0f);
+	// histogram mode selection GUI elements
+	{
+		auto grid = new Widget(this);
+		auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
+		grid->setLayout(agl);
+		agl->setColStretch(2, 1.0f);
+		agl->setColStretch(4, 1.0f);
 
-	agl->appendRow(0);
-	agl->setAnchor(new Label(grid, "Histogram:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+		agl->appendRow(0);
+		agl->setAnchor(new Label(grid, "Histogram:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
 
-	m_yAxisScale = new ComboBox(grid);
-	m_yAxisScale->setTooltip("Set the scale for the Y axis.");
-	m_yAxisScale->setItems({"Linear", "Log"});
-	m_yAxisScale->setFixedHeight(19);
-	agl->setAnchor(m_yAxisScale, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, 1, 1, Alignment::Fill, Alignment::Fill));
+		m_yAxisScale = new ComboBox(grid);
+		m_yAxisScale->setTooltip("Set the scale for the Y axis.");
+		m_yAxisScale->setItems({"Linear", "Log"});
+		m_yAxisScale->setFixedHeight(19);
+		agl->setAnchor(m_yAxisScale,
+		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-	m_xAxisScale = new ComboBox(grid);
-	m_xAxisScale->setTooltip("Set the scale for the X axis.");
-	m_xAxisScale->setItems({"Linear", "sRGB", "Log"});
-	m_xAxisScale->setFixedHeight(19);
-	agl->setAnchor(m_xAxisScale, AdvancedGridLayout::Anchor(4, agl->rowCount()-1, 1, 1, Alignment::Fill, Alignment::Fill));
+		m_xAxisScale = new ComboBox(grid);
+		m_xAxisScale->setTooltip("Set the scale for the X axis.");
+		m_xAxisScale->setItems({"Linear", "sRGB", "Log"});
+		m_xAxisScale->setFixedHeight(19);
+		agl->setAnchor(m_xAxisScale,
+		               AdvancedGridLayout::Anchor(4, agl->rowCount() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-	m_xAxisScale->setSelectedIndex(1);
-	m_yAxisScale->setSelectedIndex(0);
-	m_xAxisScale->setCallback([this](int){ updateHistogram(); });
-	m_yAxisScale->setCallback([this](int){ updateHistogram(); });
+		m_xAxisScale->setSelectedIndex(1);
+		m_yAxisScale->setSelectedIndex(0);
+		m_xAxisScale->setCallback([this](int) { updateHistogram(); });
+		m_yAxisScale->setCallback([this](int) { updateHistogram(); });
+	}
+
+	// histogram and file buttons
+	{
+		auto row = new Widget(this);
+		row->setLayout(new BoxLayout(Orientation::Vertical,
+		                             Alignment::Fill, 0, 4));
+		m_graph = new MultiGraph(row, Color(255, 0, 0, 150));
+		m_graph->addPlot(Color(0, 255, 0, 150));
+		m_graph->addPlot(Color(0, 0, 255, 150));
+
+		row = new Widget(this);
+		row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+
+		auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
+		b->setFixedHeight(25);
+		b->setTooltip("Load an image and add it to the set of opened images.");
+		b->setCallback([this] { m_screen->loadImage(); });
+
+		m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
+		m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
+		m_saveButton->setFixedHeight(25);
+		m_saveButton->setTooltip("Save the image to disk.");
+		m_saveButton->setCallback([this] { m_screen->saveImage(); });
+
+		m_bringForwardButton = new Button(row, "", ENTYPO_ICON_ARROW_BOLD_UP);
+		m_bringForwardButton->setFixedHeight(25);
+		m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
+		m_bringForwardButton->setCallback([this]
+		                                  {
+			                                  if (m_imageMgr->bringImageForward())
+			                                  {
+				                                  m_imageButtons[m_imageMgr->currentImageIndex()]
+					                                  ->recomputeStringClipping();
+				                                  m_imageButtons[m_imageMgr->currentImageIndex() + 1]
+					                                  ->recomputeStringClipping();
+			                                  }
+		                                  });
+
+		m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_ARROW_BOLD_DOWN);
+		m_sendBackwardButton->setFixedHeight(25);
+		m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
+		m_sendBackwardButton->setCallback([this]
+		                                  {
+			                                  if (m_imageMgr->sendImageBackward())
+			                                  {
+				                                  m_imageButtons[m_imageMgr->currentImageIndex()]
+					                                  ->recomputeStringClipping();
+				                                  m_imageButtons[m_imageMgr->currentImageIndex() - 1]
+					                                  ->recomputeStringClipping();
+			                                  }
+		                                  });
+
+		m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLE_WITH_CROSS);
+		m_closeButton->setFixedHeight(25);
+		m_closeButton->setTooltip("Close image");
+		m_closeButton->setCallback([this] { m_screen->askCloseImage(m_imageMgr->currentImageIndex()); });
+	}
+
+	// channel and blend mode GUI elements
+	{
+		auto grid = new Widget(this);
+		auto agl = new AdvancedGridLayout({0, 4, 0});
+		grid->setLayout(agl);
+		agl->setColStretch(2, 1.0f);
+
+		agl->appendRow(0);
+		agl->setAnchor(new Label(grid, "Mode:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+
+		m_blendModes = new ComboBox(grid);
+		m_blendModes->setItems(blendModeNames());
+		m_blendModes->setFixedHeight(19);
+		m_blendModes->setCallback([imgViewer](int b) { imgViewer->setBlendMode(EBlendMode(b)); });
+		agl->setAnchor(m_blendModes,
+		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+
+		agl->appendRow(4);  // spacing
+		agl->appendRow(0);
+
+		agl->setAnchor(new Label(grid, "Channel:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+
+		m_channels = new ComboBox(grid, channelNames());
+		m_channels->setFixedHeight(19);
+		setChannel(EChannel::RGB);
+		m_channels->setCallback([imgViewer](int c) { imgViewer->setChannel(EChannel(c)); });
+		agl->setAnchor(m_channels,
+		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+	}
+
+	// filter/search of open images GUI elemen ts
+	{
+		auto grid = new Widget(this);
+		auto agl = new AdvancedGridLayout({0, 4, 0});
+		grid->setLayout(agl);
+		agl->setColStretch(0, 1.0f);
+
+		agl->appendRow(0);
+
+		m_filter = new TextBox(grid, "");
+		m_filter->setEditable(true);
+		m_filter->setAlignment(TextBox::Alignment::Left);
+//		m_filter->setCallback([this](const string& filter) {
+//			return setFilter(filter);
+//		});
+
+		m_filter->setPlaceholder("Find");
+		m_filter->setTooltip("Filter open image list so that only images with a filename containing the search string will be visible.");
+
+		agl->setAnchor(m_filter,
+		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
 
 
-	auto row = new Widget(this);
-	row->setLayout(new BoxLayout(Orientation::Vertical,
-	                             Alignment::Fill, 0, 4));
-	m_graph = new MultiGraph(row, Color(255, 0, 0, 150));
-	m_graph->addPlot(Color(0, 255, 0, 150));
-	m_graph->addPlot(Color(0, 0, 255, 150));
+		m_useShortButton = new Button(grid, "", ENTYPO_ICON_FUNNEL);
+		m_useShortButton->setFixedWidth(19);
+		m_useShortButton->setFixedHeight(19);
+		m_useShortButton->setTooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
+		m_useShortButton->setFlags(Button::ToggleButton);
+		m_useShortButton->setPushed(false);
+		m_useShortButton->setChangeCallback([this](bool b)
+		                                    {
+			                                    for (auto ib : m_imageButtons)
+				                                    ib->setUseShortCaption(b);
+		                                    });
 
-	row = new Widget(this);
-	row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+		agl->setAnchor(m_useShortButton,
+		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Minimum, Alignment::Fill));
 
-	auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
-	b->setFixedHeight(25);
-	b->setTooltip("Load an image and add it to the set of opened images.");
-	b->setCallback([this]{m_screen->loadImage();});
-
-	m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
-	m_saveButton->setEnabled(m_imageMgr->currentImage() != nullptr);
-	m_saveButton->setFixedHeight(25);
-	m_saveButton->setTooltip("Save the image to disk.");
-	m_saveButton->setCallback([this]{m_screen->saveImage();});
-
-	m_bringForwardButton = new Button(row, "", ENTYPO_ICON_UP_BOLD);
-	m_bringForwardButton->setFixedHeight(25);
-	m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
-	m_bringForwardButton->setCallback([this]
-		{
-			if (m_imageMgr->bringImageForward())
-			{
-				m_imageButtons[m_imageMgr->currentImageIndex()]->recomputeStringClipping();
-				m_imageButtons[m_imageMgr->currentImageIndex()+1]->recomputeStringClipping();
-			}
-		});
-
-	m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_DOWN_BOLD);
-	m_sendBackwardButton->setFixedHeight(25);
-	m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
-	m_sendBackwardButton->setCallback([this]
-		{
-			if (m_imageMgr->sendImageBackward())
-			{
-				m_imageButtons[m_imageMgr->currentImageIndex()]->recomputeStringClipping();
-				m_imageButtons[m_imageMgr->currentImageIndex()-1]->recomputeStringClipping();
-			}
-		});
-
-	m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLED_CROSS);
-	m_closeButton->setFixedHeight(25);
-	m_closeButton->setTooltip("Close image");
-	m_closeButton->setCallback([this]{m_screen->askCloseImage(m_imageMgr->currentImageIndex());});
-
-
-	grid = new Widget(this);
-	agl = new AdvancedGridLayout({0, 4, 0});
-	grid->setLayout(agl);
-	agl->setColStretch(2, 1.0f);
-
-	agl->appendRow(0);
-	agl->setAnchor(new Label(grid, "Mode:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
-
-	m_blendModes = new ComboBox(grid);
-	m_blendModes->setItems(blendModeNames());
-	m_blendModes->setFixedHeight(19);
-	m_blendModes->setCallback([imgViewer](int b){imgViewer->setBlendMode(EBlendMode(b));});
-	agl->setAnchor(m_blendModes, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
-
-	agl->appendRow(4);  // spacing
-	agl->appendRow(0);
-
-	agl->setAnchor(new Label(grid, "Channel:", "sans", 14), AdvancedGridLayout::Anchor(0, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
-
-	m_channels = new ComboBox(grid, channelNames());
-	m_channels->setFixedHeight(19);
-	setChannel(EChannel::RGB);
-	m_channels->setCallback([imgViewer](int c){imgViewer->setChannel(EChannel(c));});
-	agl->setAnchor(m_channels, AdvancedGridLayout::Anchor(2, agl->rowCount()-1, Alignment::Fill, Alignment::Fill));
+	}
 }
 
 EBlendMode ImageListPanel::blendMode() const
@@ -179,7 +237,84 @@ void ImageListPanel::repopulateImageList()
 		m_imageButtons.push_back(b);
 	}
 
+	recomputeShortFilenames();
+
 	m_screen->performLayout();
+}
+
+void ImageListPanel::recomputeShortFilenames()
+{
+	vector<string> activeImageNames;
+	for (int i = 0; i < m_imageMgr->numImages(); ++i)
+	{
+		auto img = m_imageMgr->image(i);
+		activeImageNames.emplace_back(img->filename());
+	}
+
+	// determine common parts of filenames
+	// taken from tev
+	m_beginShortOffset = 0;
+	m_endShortOffset = 0;
+	if (!activeImageNames.empty())
+	{
+		string first = activeImageNames.front();
+		int firstSize = (int)first.size();
+		if (firstSize > 0)
+		{
+			bool allStartWithSameChar = false;
+			do
+			{
+				int len = codePointLength(first[m_beginShortOffset]);
+
+				allStartWithSameChar = all_of
+					(
+						begin(activeImageNames),
+						end(activeImageNames),
+						[&first, this, len](const string& name)
+						{
+							if (m_beginShortOffset + len > (int)name.size())
+								return false;
+
+							for (int i = m_beginShortOffset; i < m_beginShortOffset + len; ++i)
+								if (name[i] != first[i])
+									return false;
+
+							return true;
+						}
+					);
+
+				if (allStartWithSameChar)
+					m_beginShortOffset += len;
+			}
+			while (allStartWithSameChar && m_beginShortOffset < firstSize);
+
+			bool allEndWithSameChar;
+			do
+			{
+				char lastChar = first[firstSize - m_endShortOffset - 1];
+				allEndWithSameChar = all_of
+					(
+						begin(activeImageNames),
+						end(activeImageNames),
+						[lastChar, this](const string& name)
+						{
+							int index = (int)name.size() - m_endShortOffset - 1;
+							return index >= 0 && name[index] == lastChar;
+						}
+					);
+
+				if (allEndWithSameChar)
+					++m_endShortOffset;
+			}
+			while (allEndWithSameChar && m_endShortOffset < firstSize);
+		}
+	}
+
+	for (auto ib : m_imageButtons)
+	{
+		ib->setUseShortCaption(m_useShortButton->pushed());
+		ib->setHighlightRange(m_beginShortOffset, m_endShortOffset);
+	}
 }
 
 void ImageListPanel::enableDisableButtons()
@@ -250,6 +385,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 			btn->setProgress(img->progress());
 			btn->setIsModified(img->isModified());
 			btn->setCaption(img->filename());
+			btn->setHighlightRange(m_beginShortOffset, m_endShortOffset);
 			btn->setTooltip(fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
 		}
 	}

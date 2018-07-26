@@ -143,7 +143,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_helpButton->setTooltip("Information about using HDRView.");
 	m_helpButton->setFlags(Button::ToggleButton);
 
-    m_sidePanelButton = new Button(m_topPanel, "", ENTYPO_ICON_LIST);
+    m_sidePanelButton = new Button(m_topPanel, "", ENTYPO_ICON_MENU);
     new Label(m_topPanel, "EV", "sans-bold");
     auto exposureSlider = new Slider(m_topPanel);
     auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
@@ -161,7 +161,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             m_imagesPanel->requestHistogramUpdate(true);
 	                             });
 	normalizeButton->setTooltip("Normalize exposure.");
-	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_BACK_IN_TIME);
+	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_CYCLE);
 	resetButton->setFixedSize(Vector2i(19, 19));
 	resetButton->setCallback([this](void)
 	                             {
@@ -289,7 +289,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     updateLayout();
                                 });
 
-	m_imageMgr->setCurrentImageCallback([this, editPanel](void)
+	m_imageMgr->setCurrentImageCallback([this](void)
 	                                    {
 		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
 		                                    updateCaption();
@@ -302,18 +302,18 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                                    m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
 	                                    });
 
-	m_imageMgr->setNumImagesCallback([this, editPanel](void)
+	m_imageMgr->setNumImagesCallback([this](void)
 	                                 {
 		                                 updateCaption();
 		                                 m_imagesPanel->repopulateImageList();
 		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
 		                                 m_imageMgr->setReferenceImageIndex(-1);
 	                                 });
-	m_imageMgr->setImageModifyStartCallback([this, editPanel](int i)
+	m_imageMgr->setImageModifyStartCallback([this](int i)
 	                                       {
 		                                       updateCaption();
 	                                       });
-	m_imageMgr->setImageModifyDoneCallback([this, editPanel](int i)
+	m_imageMgr->setImageModifyDoneCallback([this](int i)
 	                                       {
 		                                       updateCaption();
 		                                       m_imagesPanel->requestHistogramUpdate(true);
@@ -739,11 +739,24 @@ bool HDRViewScreen::mouseButtonEvent(const Vector2i &p, int button, bool down, i
 
 bool HDRViewScreen::mouseMotionEvent(const Eigen::Vector2i &p, const Eigen::Vector2i &rel, int button, int modifiers)
 {
-	setCursor((m_draggingSidePanel || atSidePanelEdge(p)) ? Cursor::HResize : Cursor::Arrow);
+	if (m_draggingSidePanel || atSidePanelEdge(p))
+	{
+		m_sidePanel->setCursor(Cursor::HResize);
+		m_sideScrollPanel->setCursor(Cursor::HResize);
+		m_sidePanelContents->setCursor(Cursor::HResize);
+		m_imageView->setCursor(Cursor::HResize);
+	}
+	else
+	{
+		m_sidePanel->setCursor(Cursor::Arrow);
+		m_sideScrollPanel->setCursor(Cursor::Arrow);
+		m_sidePanelContents->setCursor(Cursor::Arrow);
+		m_imageView->setCursor(Cursor::Arrow);
+	}
 
 	if (m_draggingSidePanel)
 	{
-		int w = clamp(p.x(), 205, mSize.x() - 10);
+		int w = clamp(p.x(), 206, mSize.x() - 10);
 		m_sidePanelContents->setFixedWidth(w);
 		m_sideScrollPanel->setFixedWidth(w + 12);
 		m_sidePanel->setFixedWidth(m_sideScrollPanel->fixedWidth());

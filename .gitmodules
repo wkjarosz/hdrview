@@ -18,3 +18,6 @@
 	path = ext/zlib
 	url = https://github.com/mitsuba-renderer/zlib.git
 	branch = master
+[submodule "ext/nanogui"]
+	path = ext/nanogui
+	url = https://github.com/wjakob/nanogui.git

@@ -66,7 +66,7 @@ void addOKCancelButtons(FormHelper * gui, Window * window,
 
 	auto w = new Widget(window);
 	w->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
-	auto b = new Button(w, "Cancel", ENTYPO_ICON_CIRCLED_CROSS);
+	auto b = new Button(w, "Cancel", ENTYPO_ICON_CIRCLE_WITH_CROSS);
 	b->setCallback(
 		[window,cancelCallback]()
 		{
@@ -91,7 +91,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImage
 	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(125, 20));
@@ -104,7 +104,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			   ->setItems(colorSpaceNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -129,7 +129,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(55, 20));
@@ -184,7 +184,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			                        0.0001f, 10.f, 0.1f, graphCb);
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -216,10 +216,10 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 		CHROMATICITY
 	} channel = RGB;
 	static ::EChannel channelMap[] = { ::EChannel::RGB, ::EChannel::LUMINANCE, ::EChannel::CIE_CHROMATICITY };
-	auto b = new Button(parent, name, ENTYPO_ICON_VOLUME);
+	auto b = new Button(parent, name, ENTYPO_ICON_CONTROLLER_VOLUME);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(100, 20));
@@ -292,7 +292,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			gui->addVariable("Channel:", channel, true)->setItems({"RGB", "Luminance", "Chromaticity"});
 
 			lCheck->setCallback(
-				[graph,graphCb](bool b)
+				[graph](bool b)
 				{
 					linear = b;
 					graph->setForegroundColor(linear ? activeColor : inactiveColor, 1);
@@ -307,7 +307,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 				});
 
 			addOKCancelButtons(gui, window,
-               [&, window]()
+               [&]()
                {
 	               imageMgr->modifyImage(
 		               [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
@@ -330,10 +330,10 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 	static FilmicToneCurve::CurveParamsUser params;
 	static float vizFstops = 1.f;
 	static const auto activeColor = Color(255, 255, 255, 200);
-	auto b = new Button(parent, name, ENTYPO_ICON_VOLUME);
+	auto b = new Button(parent, name, ENTYPO_ICON_CONTROLLER_VOLUME);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(55, 20));
@@ -425,7 +425,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, H
 			                        0.f, 5.f, 0.01f, graphCb);
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 				   imageMgr->modifyImage(
 				       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
@@ -463,7 +463,7 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, HDRIm
 	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(55, 20));
@@ -512,7 +512,7 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			gui->addWidget("", dynamicRainbow);
 
 			addOKCancelButtons(gui, window,
-			                   [&, window]()
+			                   [&]()
 			                   {
 				                   imageMgr->modifyImage(
 					                   [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
@@ -538,10 +538,10 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static bool exact = false;
 	static string name = "Gaussian blur...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -569,7 +569,7 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, HDRI
 
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -591,10 +591,10 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 	static float width = 1.0f, height = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Box blur...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -617,7 +617,7 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, HDRImageM
 			   ->setItems(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -638,10 +638,10 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 	static float rangeSigma = 1.0f, valueSigma = 0.1f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Bilateral filter...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -662,7 +662,7 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, HDR
 			   ->setItems(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -684,10 +684,10 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 	static float sigma = 1.0f, strength = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Unsharp mask...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -708,7 +708,7 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, H
 			   ->setItems(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -730,10 +730,10 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 	static float radius = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Median filter...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROPLET);
+	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -751,7 +751,7 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, HDRIma
 			   ->setItems(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -772,10 +772,10 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 	static int width = 128, height = 128;
 	static string name = "Resize...";
 	static bool aspect = true;
-	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL_SCREEN);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(0, 20));
@@ -854,7 +854,7 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, HDRImageMana
 			gui->addWidget("", row);
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -892,7 +892,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, HDRImageManage
 	auto b = new Button(parent, name, ENTYPO_ICON_GLOBE);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(135, 20));
@@ -964,7 +964,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, HDRImageManage
 			spacer->setFixedHeight(5);
 			gui->addWidget("", spacer);
 
-			auto btn = new Button(window, "Swap source/target", ENTYPO_ICON_SWITCH);
+			auto btn = new Button(window, "Swap source/target", ENTYPO_ICON_SWAP);
 			btn->setCallback([gui,recomputeW,recomputeH](){std::swap(from,to);recomputeW();recomputeH();gui->refresh();});
 			btn->setFixedSize(gui->fixedSize());
 			gui->addWidget(" ", btn);
@@ -993,7 +993,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, HDRImageManage
 			w->setMinValue(1);
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 //					auto dst2xyz = envMapUVToXYZ(to);
 //					auto xyz2src = XYZToEnvMapUV(from);
@@ -1021,10 +1021,10 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
 	static float dx = 0.f, dy = 0.f;
 	static string name = "Shift...";
-	auto b = new Button(parent, name, ENTYPO_ICON_SWITCH);
+	auto b = new Button(parent, name, ENTYPO_ICON_POPUP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(125, 20));
@@ -1048,7 +1048,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, HDRImageManag
 			   ->setItems(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
-				[&, window]()
+				[&]()
 				{
 					imageMgr->modifyImage(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -1082,10 +1082,10 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
-	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	auto b = new Button(parent, name, ENTYPO_ICON_CROP);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(75, 20));
@@ -1139,13 +1139,13 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			w2->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Minimum, 0, 0));
 			vector<Button *> buttonGroup;
 			buttonGroup.push_back(new Button(w2, ""));
-			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_UP));
+			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_ALIGN_TOP));
 			buttonGroup.push_back(new Button(w2, ""));
-			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_LEFT));
-			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_DOT));
-			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_RIGHT));
+			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_ALIGN_LEFT));
+			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_DOT_SINGLE));
+			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_ALIGN_RIGHT));
 			buttonGroup.push_back(new Button(w2, ""));
-			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_DOWN));
+			buttonGroup.push_back(new Button(w2, "", ENTYPO_ICON_ALIGN_BOTTOM));
 			buttonGroup.push_back(new Button(w2, ""));
 
 			for (size_t i = 0; i < buttonGroup.size(); ++i)
@@ -1255,12 +1255,12 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 
 			colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 
-			colorwheel->setCallback([colorBtn,floatBox](const Color &c) {
+			colorwheel->setCallback([colorBtn](const Color &c) {
 				bgColor.head<3>() = c.head<3>();
 				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
 			});
 
-			colorBtn->setChangeCallback([colorBtn, popupBtn](bool pushed) {
+			colorBtn->setChangeCallback([popupBtn](bool pushed) {
 				if (pushed)
 				{
 					float gain = pow(2.f, EV);
@@ -1270,7 +1270,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, HDRImage
 			});
 
 			addOKCancelButtons(gui, window,
-				[&, window, popup]()
+				[&, popup]()
 				{
 					popup->dispose();
 					imageMgr->modifyImage(
@@ -1309,10 +1309,10 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static int samples = 1;
 	static string name = "Transform...";
-	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL);
+	auto b = new Button(parent, name, ENTYPO_ICON_DOCUMENTS);
 	b->setFixedHeight(21);
 	b->setCallback(
-		[&, parent, screen, imageMgr]()
+		[&, screen, imageMgr]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->setFixedSize(Vector2i(0, 20));
@@ -1485,44 +1485,33 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			row->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
 			vector<Button *> buttonGroup;
 
-			buttonGroup.push_back(new Button(row, "+"));
-			buttonGroup.push_back(new Button(row, "–"));
-			buttonGroup.push_back(new Button(row, "+"));
+			int icons[] = {ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_TOP, ENTYPO_ICON_PLUS,
+			               ENTYPO_ICON_ALIGN_LEFT, ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_RIGHT,
+			               ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_BOTTOM, ENTYPO_ICON_PLUS};
 
-			buttonGroup.push_back(new Button(row, "|"));
-			buttonGroup.push_back(new Button(row, "+"));
-			buttonGroup.push_back(new Button(row, "|"));
-
-			buttonGroup.push_back(new Button(row, "+"));
-			buttonGroup.push_back(new Button(row, "–"));
-			buttonGroup.push_back(new Button(row, "+"));
-
-			for (size_t i = 0; i < buttonGroup.size(); ++i)
+			for (size_t i = 0; i < 9; ++i)
 			{
-				Button * btn = buttonGroup[i];
+				Button * btn = new Button(row, "", i == (size_t)anchor ? ENTYPO_ICON_CONTROLLER_STOP : icons[i]);
+
 				btn->setFlags(Button::RadioButton);
 				btn->setFixedSize(Vector2i(16, 16));
 				btn->setPushed(i == (size_t)anchor);
-				btn->setIcon(i == (size_t)anchor ? ENTYPO_ICON_STOP : 0);
-				if (i == (size_t)anchor)
-					btn->setCaption("");
+
 				btn->setChangeCallback(
-					[i,btn](bool b)
+					[i,btn,icons](bool b)
 					{
 						if (b)
 						{
 							anchor = (HDRImage::CanvasAnchor) i;
-							btn->setIcon(ENTYPO_ICON_STOP);
-							btn->setCaption("");
+							btn->setIcon(ENTYPO_ICON_CONTROLLER_STOP);
 						}
 						else
 						{
-							btn->setCaption(i % 2 ? "–" : "+");
-							if (i == 3 || i == 5)
-								btn->setCaption("|");
-							btn->setIcon(0);
+							btn->setIcon(icons[i]);
 						}
 					});
+
+				buttonGroup.push_back(btn);
 			}
 
 			row->setFixedSize(Vector2i(52, 52));
@@ -1546,7 +1535,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			s->setMinValue(1);
 
 			addOKCancelButtons(gui, window,
-			                   [&, window]()
+			                   [&]()
 			                   {
 				                   imageMgr->modifyImage(
 					                   [&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -1655,7 +1644,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 	grid->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
 	// flip h
-	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_LEFT_BOLD));
+	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_ALIGN_HORIZONTAL_MIDDLE));
 	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(true);});
 	m_filterButtons.back()->setFixedHeight(21);
 
@@ -1675,7 +1664,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 		});
 
 	// flip v
-	m_filterButtons.push_back(new Button(grid, "Flip V", ENTYPO_ICON_DOWN_BOLD));
+	m_filterButtons.push_back(new Button(grid, "Flip V", ENTYPO_ICON_ALIGN_VERTICAL_MIDDLE));
 	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(false);});
 	m_filterButtons.back()->setFixedHeight(21);
 
@@ -1718,7 +1707,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageM
 
 	agrid->appendRow(0);
 	// invert
-	m_filterButtons.push_back(new Button(buttonRow, "Invert", ENTYPO_ICON_ADJUST));
+	m_filterButtons.push_back(new Button(buttonRow, "Invert", ENTYPO_ICON_IMAGE_INVERTED));
 	m_filterButtons.back()->setFixedHeight(21);
 	m_filterButtons.back()->setCallback(
 		[this]()

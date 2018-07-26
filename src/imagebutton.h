@@ -27,16 +27,22 @@ public:
 	float progress()                        { return m_progress; }
 	void setProgress(float progress)        { m_progress = progress; }
 
+
+	bool useShortCaption() const                { return m_useShort; }
+	void setUseShortCaption(bool b)             { if (m_useShort != b){m_useShort = b; recomputeStringClipping();}}
+
 	/// Set the button's text caption/filename
 	void setCaption(const std::string &caption) { m_caption = caption; recomputeStringClipping(); }
-	const std::string & caption() const     { return m_caption; }
-	void setId(size_t id)                   { m_id = id; }
-	void setIsModified(bool b)              { m_isModified = b; }
-	bool isModified() const                 { return m_isModified; }
-	bool isSelected() const                 { return m_isSelected; }
-	void setIsSelected(bool isSelected)     { m_isSelected = isSelected; }
-	bool isReference() const                { return m_isReference; }
-	void setIsReference(bool isReference)   { m_isReference = isReference; }
+	const std::string & caption() const         { return m_caption; }
+	void setId(size_t id)                       { m_id = id; }
+	void setIsModified(bool b)                  { m_isModified = b; }
+	bool isModified() const                     { return m_isModified; }
+	bool isSelected() const                     { return m_isSelected; }
+	void setIsSelected(bool isSelected)         { m_isSelected = isSelected; }
+	bool isReference() const                    { return m_isReference; }
+	void setIsReference(bool isReference)       { m_isReference = isReference; }
+
+	void setHighlightRange(size_t begin, size_t end);
 
 	void recomputeStringClipping();
 
@@ -53,6 +59,8 @@ public:
 private:
 	std::string m_caption;
 
+	bool m_useShort = false;
+
 	bool m_isModified = false;
 	bool m_isSelected = false;
 	bool m_isReference = false;
@@ -63,6 +71,9 @@ private:
 	size_t m_id = 0;
 	size_t m_cutoff = 0;
 	Eigen::Vector2i m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+
+	size_t m_highlightBegin = 0;
+	size_t m_highlightEnd = 0;
 
 	float m_progress = -1.f;
 

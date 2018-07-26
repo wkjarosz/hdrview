@@ -13,6 +13,7 @@
 #include <nanogui/entypo.h>
 #include <nanogui/theme.h>
 #include <iostream>
+#include <spdlog/fmt/ostr.h>
 
 using namespace nanogui;
 using namespace std;
@@ -188,38 +189,76 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontSize(ctx, mFontSize);
 	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 
+	string fullCaption = m_useShort ? m_caption.substr(m_highlightBegin, m_highlightEnd - m_highlightBegin) : m_caption;
+
+	// trim caption to available space
 	if (mSize.x() == preferredSize(ctx).x())
 		m_cutoff = 0;
 	else if (mSize != m_sizeForWhichCutoffWasComputed)
 	{
 		m_cutoff = 0;
-		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 25 - idSize - iconSize)
+		while (nvgTextBounds(ctx, 0, 0, fullCaption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 15 - idSize - iconSize)
 			++m_cutoff;
 
 		m_sizeForWhichCutoffWasComputed = mSize;
 	}
 
-	string caption = m_caption.substr(m_cutoff);
-	if (m_cutoff > 0)
-		caption = string("…") + caption;
+	// Image name
+	string trimmedCaption = fullCaption.substr(m_cutoff);
+
+
+	vector<string> pieces;
+
+	if (!m_useShort)
+	{
+		if (m_highlightBegin <= m_cutoff)
+		{
+			if (m_highlightEnd <= m_cutoff)
+				pieces.emplace_back(trimmedCaption);
+			else
+			{
+				size_t offset = m_highlightEnd - m_cutoff;
+				pieces.emplace_back(trimmedCaption.substr(offset));
+				pieces.emplace_back(trimmedCaption.substr(0, offset));
+			}
+		}
+		else
+		{
+			size_t beginOffset = m_highlightBegin - m_cutoff;
+			size_t endOffset = m_highlightEnd - m_cutoff;
+			pieces.emplace_back(trimmedCaption.substr(endOffset));
+			pieces.emplace_back(trimmedCaption.substr(beginOffset, endOffset - beginOffset));
+			pieces.emplace_back(trimmedCaption.substr(0, beginOffset));
+		}
+	}
+	else
+		pieces.emplace_back(trimmedCaption);
+
+	if (m_cutoff > 0 && m_cutoff < m_caption.size())
+		pieces.back() = string{"…"} + pieces.back();
 
 	Vector2f center = mPos.cast<float>() + mSize.cast<float>() * 0.5f;
 	Vector2f bottomRight = mPos.cast<float>() + mSize.cast<float>();
 	Vector2f textPos(bottomRight.x() - 5, center.y());
-	NVGcolor textColor = (m_isSelected || m_isReference || mMouseFocus) ? mTheme->mTextColor : Color(180, 255);
+	NVGcolor regularTextColor = (m_isSelected || m_isReference || mMouseFocus) ? mTheme->mTextColor : Color(190, 100);
+	NVGcolor hightlightedTextColor = Color(190, 255);
 
-	// Image name
 	nvgFontSize(ctx, mFontSize);
-	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
-	nvgFillColor(ctx, textColor);
-	nvgText(ctx, textPos.x(), textPos.y(), caption.c_str(), nullptr);
+
+	for (size_t i = 0; i < pieces.size(); ++i)
+	{
+		nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
+		nvgFillColor(ctx, i == 1 ? hightlightedTextColor : regularTextColor);
+		nvgText(ctx, textPos.x(), textPos.y(), pieces[i].c_str(), nullptr);
+		textPos.x() -= nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+	}
 
 	// isModified icon
 	auto icon = utf8(m_isModified ? ENTYPO_ICON_PENCIL : ENTYPO_ICON_SAVE);
-	nvgFontSize(ctx, mFontSize * 1.5f);
+	nvgFontSize(ctx, mFontSize * 0.8f);
 	nvgFontFace(ctx, "icons");
-	nvgFillColor(ctx, textColor);
+	nvgFillColor(ctx, mTheme->mTextColor);
 	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 	nvgText(ctx, mPos.x() + 5, textPos.y(), icon.data(), nullptr);
 
@@ -227,6 +266,33 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontSize(ctx, mFontSize);
 	nvgFontFace(ctx, "sans-bold");
 	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	nvgFillColor(ctx, textColor);
+	nvgFillColor(ctx, mTheme->mTextColor);
 	nvgText(ctx, mPos.x() + 20, textPos.y(), idString.c_str(), nullptr);
+}
+
+
+void ImageButton::setHighlightRange(size_t begin, size_t end)
+{
+	size_t beginIndex = begin;
+	if (end > m_caption.size())
+	{
+		throw std::invalid_argument{fmt::format(
+			"end ({:d}) must not be larger than m_caption.size() ({:d})",
+			end, m_caption.size())};
+	}
+
+	m_highlightBegin = beginIndex;
+	m_highlightEnd = max(m_caption.size() - end, beginIndex);
+
+	if (m_highlightBegin == m_highlightEnd || m_caption.empty())
+		return;
+
+	// Extend beginning and ending of highlighted region to entire word/number
+	if (isalnum(m_caption[m_highlightBegin]))
+		while (m_highlightBegin > 0 && isalnum(m_caption[m_highlightBegin - 1]))
+			--m_highlightBegin;
+
+	if (isalnum(m_caption[m_highlightEnd - 1]))
+		while (m_highlightEnd < m_caption.size() && isalnum(m_caption[m_highlightEnd]))
+			++m_highlightEnd;
 }

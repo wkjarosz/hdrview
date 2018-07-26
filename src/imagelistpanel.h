@@ -32,6 +32,7 @@ public:
 private:
 	void enableDisableButtons();
 	void updateHistogram();
+	void recomputeShortFilenames();
 
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageManager * m_imageMgr = nullptr;
@@ -40,10 +41,14 @@ private:
 	Button * m_closeButton = nullptr;
 	Button * m_bringForwardButton = nullptr;
 	Button * m_sendBackwardButton = nullptr;
+	TextBox * m_filter = nullptr;
+	Button * m_useShortButton = nullptr;
 	Widget * m_imageListWidget = nullptr;
 	ComboBox * m_blendModes = nullptr;
 	ComboBox * m_channels = nullptr;
 	std::vector<ImageButton*> m_imageButtons;
+
+	int m_beginShortOffset = 0, m_endShortOffset = 0;
 
 	ComboBox * m_xAxisScale = nullptr,
 			 * m_yAxisScale = nullptr;

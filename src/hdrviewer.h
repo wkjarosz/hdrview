@@ -44,7 +44,7 @@ private:
     void updateCaption();
 	bool atSidePanelEdge(const Eigen::Vector2i& p)
 	{
-		return p.x() - m_sidePanel->fixedWidth() < 0 && p.x() - m_sidePanel->fixedWidth() > -5;
+		return p.x() - m_sidePanel->fixedWidth() < 10 && p.x() - m_sidePanel->fixedWidth() > -5;
 	}
 
 	Window * m_topPanel = nullptr;
