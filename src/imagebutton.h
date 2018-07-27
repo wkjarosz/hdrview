@@ -27,14 +27,11 @@ public:
 	float progress()                        { return m_progress; }
 	void setProgress(float progress)        { m_progress = progress; }
 
-
-	bool useShortCaption() const                { return m_useShort; }
-	void setUseShortCaption(bool b)             { if (m_useShort != b){m_useShort = b; recomputeStringClipping();}}
-
 	/// Set the button's text caption/filename
 	void setCaption(const std::string &caption) { m_caption = caption; recomputeStringClipping(); }
 	const std::string & caption() const         { return m_caption; }
 	void setId(size_t id)                       { m_id = id; }
+	size_t id() const                           { return m_id; }
 	void setIsModified(bool b)                  { m_isModified = b; }
 	bool isModified() const                     { return m_isModified; }
 	bool isSelected() const                     { return m_isSelected; }
@@ -42,6 +39,8 @@ public:
 	bool isReference() const                    { return m_isReference; }
 	void setIsReference(bool isReference)       { m_isReference = isReference; }
 
+
+	std::string highlighted() const;
 	void setHighlightRange(size_t begin, size_t end);
 
 	void recomputeStringClipping();
@@ -56,15 +55,34 @@ public:
 		m_referenceCallback = callback;
 	}
 
+
+	void swapWith(ImageButton & other)
+	{
+		std::swap(m_caption, other.m_caption);
+		std::swap(m_isModified, other.m_isModified);
+//		std::swap(m_isSelected, other.m_isSelected);
+//		std::swap(m_isReference, other.m_isReference);
+//		std::swap(m_selectedCallback, other.m_selectedCallback);
+//		std::swap(m_referenceCallback, other.m_referenceCallback);
+//		std::swap(m_id, other.m_id);
+		std::swap(m_progress, other.m_progress);
+		std::swap(m_highlightBegin, other.m_highlightBegin);
+		std::swap(m_highlightEnd, other.m_highlightEnd);
+		std::swap(mTooltip, other.mTooltip);
+
+		// swapping may need to recompute trimming
+		m_cutoff = 0;
+		m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+		other.m_cutoff = 0;
+		other.m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+	}
+
 private:
 	std::string m_caption;
-
-	bool m_useShort = false;
 
 	bool m_isModified = false;
 	bool m_isSelected = false;
 	bool m_isReference = false;
-	bool m_canBeReference;
 	std::function<void(int)> m_selectedCallback;
 	std::function<void(int)> m_referenceCallback;
 

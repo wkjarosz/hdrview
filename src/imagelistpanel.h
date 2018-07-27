@@ -7,6 +7,7 @@
 #pragma once
 
 #include <nanogui/widget.h>
+#include "common.h"
 #include "fwd.h"
 
 using namespace nanogui;
@@ -21,6 +22,10 @@ public:
 	void repopulateImageList();
 	void setCurrentImage(int newIndex);
 	void setReferenceImage(int newIndex);
+	bool swapImages(int index1, int index2);
+	bool sendImageBackward();
+	bool bringImageForward();
+	void requestButtonsUpdate();
 	void requestHistogramUpdate(bool force = false);
 
 	EBlendMode blendMode() const;
@@ -29,10 +34,23 @@ public:
 	EChannel channel() const;
 	void setChannel(EChannel channel);
 
+	bool nthImageIsVisible(int n) const;
+	int nextVisibleImage(int index, EDirection direction) const;
+	int nthVisibleImageIndex(int n) const;
+
+	bool useRegex() const;
+	void setUseRegex(bool value);
+
+	bool setFilter(const std::string& filter);
+	std::string filter() const;
+	void focusFilter();
+
 private:
+	void updateButtons();
 	void enableDisableButtons();
 	void updateHistogram();
-	void recomputeShortFilenames();
+	void updateFilter();
+
 
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageManager * m_imageMgr = nullptr;
@@ -42,19 +60,21 @@ private:
 	Button * m_bringForwardButton = nullptr;
 	Button * m_sendBackwardButton = nullptr;
 	TextBox * m_filter = nullptr;
+	Button* m_eraseButton = nullptr;
+	Button* m_regexButton = nullptr;
 	Button * m_useShortButton = nullptr;
 	Widget * m_imageListWidget = nullptr;
 	ComboBox * m_blendModes = nullptr;
 	ComboBox * m_channels = nullptr;
 	std::vector<ImageButton*> m_imageButtons;
 
-	int m_beginShortOffset = 0, m_endShortOffset = 0;
-
 	ComboBox * m_xAxisScale = nullptr,
 			 * m_yAxisScale = nullptr;
 	MultiGraph * m_graph = nullptr;
 	bool m_histogramDirty = false;
 	bool m_histogramUpdateRequested = false;
+	bool m_updateFilterRequested = true;
+	bool m_buttonsUpdateRequested = true;
 	double m_histogramRequestTime;
 
 public:

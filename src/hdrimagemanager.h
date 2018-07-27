@@ -37,12 +37,13 @@ public:
 	void loadImages(const std::vector<std::string> & filenames);
 	void saveImage(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
 	               bool sRGB = true, bool dither = true);
-	void closeImage(int index);
+	void closeImage(int index, int next);
 	void closeAllImages();
+	bool swapImages(int index1, int index2);
 	bool sendImageBackward();
 	bool bringImageForward();
-	void setCurrentImageIndex(int index, bool forceCallback = false);
-	void setReferenceImageIndex(int index, bool forceCallback = false);
+	bool setCurrentImageIndex(int index, bool forceCallback = false);
+	bool setReferenceImageIndex(int index, bool forceCallback = false);
 
 	// Modify the image data
 	void modifyImage(const ImageCommand & command);
@@ -63,15 +64,19 @@ public:
 	const std::function<void(int)>& imageModifyDoneCallback() const { return m_imageModifyDoneCallback; }
 	void setImageModifyDoneCallback(const std::function<void(int)> &callback) { m_imageModifyDoneCallback = callback; }
 
-	/// Callback executed whenever the number of images has been changed, e.g. via @ref loadImages or closeImage
+	/// Callback executed when two images are swapped, e.g. via @ref sendImageBackward or @ref bringImageForward
+	const std::function<void(int,int)>& swapImagesCallback() const { return m_swapImagesCallback; }
+	void setSwapImagesCallback(const std::function<void(int,int)> &callback) { m_swapImagesCallback = callback; }
+
+	/// Callback executed whenever the number of images has been changed, e.g. via @ref loadImages or @ref closeImage
 	const std::function<void()>& numImagesCallback() const { return m_numImagesCallback; }
 	void setNumImagesCallback(const std::function<void()> &callback) { m_numImagesCallback = callback; }
 
-	/// Callback executed whenever the currently selected image has been changed, e.g. via @ref selectImage
+	/// Callback executed whenever the currently selected image has been changed, e.g. via @ref setCurrentImageIndex
 	const std::function<void()>& currentImageCallback() const { return m_currentImageCallback; }
 	void setCurrentImageCallback(const std::function<void()> &callback) { m_currentImageCallback = callback; }
 
-	/// Callback executed whenever the currently selected reference image has been changed, e.g. via @ref selectReference
+	/// Callback executed whenever the currently selected reference image has been changed, e.g. via @ref setReferenceImageIndex
 	const std::function<void()>& referenceImageCallback() const { return m_referenceImageCallback; }
 	void setReferenceImageCallback(const std::function<void()> &callback) { m_referenceImageCallback = callback; }
 
@@ -86,6 +91,7 @@ private:
 	// various callback functions
 	std::function<void(int)> m_imageModifyStartCallback;
 	std::function<void(int)> m_imageModifyDoneCallback;
+	std::function<void(int,int)> m_swapImagesCallback;
 	std::function<void()> m_numImagesCallback;
 	std::function<void()> m_currentImageCallback;
 	std::function<void()> m_referenceImageCallback;

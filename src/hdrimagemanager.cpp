@@ -14,10 +14,11 @@ using namespace std;
 
 HDRImageManager::HDRImageManager()
 	: m_imageModifyDoneRequested(false),
-	  m_imageModifyDoneCallback(function<void(int)>()),
-	  m_numImagesCallback(function<void(void)>()),
-	  m_currentImageCallback(function<void(void)>()),
-	  m_referenceImageCallback(function<void(void)>())
+	  m_imageModifyDoneCallback([](int){}),
+	  m_swapImagesCallback([](int, int){}),
+	  m_numImagesCallback([](){}),
+	  m_currentImageCallback([](){}),
+	  m_referenceImageCallback([](){})
 {
 
 }
@@ -70,7 +71,7 @@ shared_ptr<GLImage> HDRImageManager::image(int index)
 	return (index < 0 || index >= int(m_images.size())) ? nullptr : m_images[index];
 }
 
-void HDRImageManager::setCurrentImageIndex(int index, bool forceCallback)
+bool HDRImageManager::setCurrentImageIndex(int index, bool forceCallback)
 {
 	if (index != m_current)
 	{
@@ -80,15 +81,19 @@ void HDRImageManager::setCurrentImageIndex(int index, bool forceCallback)
 
 	if (forceCallback)
 		m_currentImageCallback();
+
+	return true;
 }
 
-void HDRImageManager::setReferenceImageIndex(int index, bool forceCallback)
+bool HDRImageManager::setReferenceImageIndex(int index, bool forceCallback)
 {
 	if (forceCallback || index != m_reference)
 	{
 		m_reference = index;
 		m_referenceImageCallback();
 	}
+
+	return true;
 }
 
 void HDRImageManager::loadImages(const vector<string> & filenames)
@@ -157,7 +162,7 @@ void HDRImageManager::loadImages(const vector<string> & filenames)
 		image->setImageModifyDoneCallback([this](){m_imageModifyDoneRequested = true;});
 		image->setFilename(filename);
 		image->asyncModify(
-			[this,filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
+			[filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 			{
 				Timer timer;
 				spdlog::get("console")->info("Trying to load image \"{}\"", filename);
@@ -184,20 +189,21 @@ void HDRImageManager::saveImage(const string & filename, float exposure, float g
 	if (filename.size())
 	{
 		currentImage()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
+//			currentImage()->setFilename(filename);
 		m_imageModifyDoneCallback(m_current);
 	}
 }
 
-void HDRImageManager::closeImage(int index)
+void HDRImageManager::closeImage(int index, int next)
 {
 	if (image(index))
 	{
 		m_images.erase(m_images.begin() + index);
 
-		int newIndex = m_current;
-		if (index < m_current)
+		int newIndex = next;
+		if (index < next)
 			newIndex--;
-		else if (m_current >= int(m_images.size()))
+		else if (next >= int(m_images.size()))
 			newIndex = m_images.size() - 1;
 
 		setCurrentImageIndex(newIndex, true);
@@ -221,7 +227,7 @@ void HDRImageManager::modifyImage(const ImageCommand & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[command, this](const shared_ptr<const HDRImage> & img)
+			[command](const shared_ptr<const HDRImage> & img)
 			{
 				auto ret = command(img);
 
@@ -240,7 +246,7 @@ void HDRImageManager::modifyImage(const ImageCommandWithProgress & command)
 	if (currentImage())
 	{
 		m_images[m_current]->asyncModify(
-			[command, this](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
+			[command](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
 			{
 				auto ret = command(img, progress);
 
@@ -266,13 +272,24 @@ void HDRImageManager::redo()
 		m_imageModifyDoneCallback(m_current);
 }
 
-bool HDRImageManager::bringImageForward()
+bool HDRImageManager::swapImages(int index1, int index2)
 {
-	if (m_images.empty() || m_current == 0)
-		// do nothing
+	if (index1 < 0 || index1 >= int(m_images.size()) ||
+		index2 < 0 || index2 >= int(m_images.size()))
+		// invalid image indices, do nothing
 		return false;
 
-	swap(m_images[m_current], m_images[m_current-1]);
+	swap(m_images[index1], m_images[index2]);
+	m_swapImagesCallback(index1, index2);
+
+	return true;
+}
+
+bool HDRImageManager::bringImageForward()
+{
+	if (!swapImages(m_current, m_current-1))
+		return false;
+
 	m_current--;
 
 	m_imageModifyDoneCallback(m_current);
@@ -283,11 +300,9 @@ bool HDRImageManager::bringImageForward()
 
 bool HDRImageManager::sendImageBackward()
 {
-	if (m_images.empty() || m_current == int(m_images.size()-1))
-		// do nothing
+	if (!swapImages(m_current, m_current+1))
 		return false;
 
-	swap(m_images[m_current], m_images[m_current+1]);
 	m_current++;
 
 	m_imageModifyDoneCallback(m_current);

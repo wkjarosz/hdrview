@@ -349,8 +349,13 @@ bool GLImage::save(const std::string & filename,
 	// make sure any pending edits are done
 	waitForAsyncResult();
 
-    m_history.markSaved();
-    return m_image->save(filename, gain, gamma, sRGB, dither);
+    if (!m_image->save(filename, gain, gamma, sRGB, dither))
+    	return false;
+
+	m_history.markSaved();
+//	setFilename(filename);
+
+    return true;
 }
 
 void GLImage::recomputeHistograms(float exposure) const

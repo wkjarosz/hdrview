@@ -114,14 +114,14 @@ public:
     bool hasRedo() const;
 
 	GLuint glTextureId() const;
-	void setFilename(std::string filename)      { m_filename = filename; }
-    std::string filename() const                { return m_filename; }
-	bool isNull() const                         { checkAsyncResult(); return !m_image || m_image->isNull(); }
-    const HDRImage & image() const              { checkAsyncResult(); return *m_image; }
-    int width() const                           { checkAsyncResult(); return m_image->width(); }
-    int height() const                          { checkAsyncResult(); return m_image->height(); }
-    Eigen::Vector2i size() const                { return isNull() ? Eigen::Vector2i(0,0) : Eigen::Vector2i(m_image->width(), m_image->height()); }
-    bool contains(const Eigen::Vector2i& p) const {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
+	void setFilename(const std::string & filename)  { m_filename = filename; }
+    std::string filename() const                    { return m_filename; }
+	bool isNull() const                             { checkAsyncResult(); return !m_image || m_image->isNull(); }
+    const HDRImage & image() const                  { checkAsyncResult(); return *m_image; }
+    int width() const                               { checkAsyncResult(); return m_image->width(); }
+    int height() const                              { checkAsyncResult(); return m_image->height(); }
+    Eigen::Vector2i size() const                    { return isNull() ? Eigen::Vector2i(0,0) : Eigen::Vector2i(m_image->width(), m_image->height()); }
+    bool contains(const Eigen::Vector2i& p) const   {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
 
     bool load(const std::string & filename);
     bool save(const std::string & filename,

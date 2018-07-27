@@ -351,3 +351,15 @@ inline int codePointLength(char first)
 	else
 		return 1;
 }
+
+std::vector<std::string> split(std::string text, const std::string& delim);
+std::string toLower(std::string str);
+std::string toUpper(std::string str);
+bool matches(std::string text, std::string filter, bool isRegex);
+
+
+enum EDirection
+{
+	Forward,
+	Backward,
+};

@@ -5,9 +5,9 @@
 //
 
 #include "common.h"
+#include <regex>
 
-using std::string;
-using std::vector;
+using namespace std;
 
 string getExtension(const string& filename)
 {
@@ -72,4 +72,87 @@ string channelToString(EChannel channel)
 string blendModeToString(EBlendMode mode)
 {
     return blendModeNames()[mode];
+}
+
+
+// The following functions are adapted from tev:
+// This file was developed by Thomas Müller <thomas94@gmx.net>.
+// It is published under the BSD 3-Clause License within the LICENSE file.
+
+vector<string> split(string text, const string& delim)
+{
+    vector<string> result;
+    while (true)
+    {
+        size_t begin = text.find_last_of(delim);
+        if (begin == string::npos)
+        {
+            result.emplace_back(text);
+            return result;
+        }
+        else
+        {
+            result.emplace_back(text.substr(begin + 1));
+            text.resize(begin);
+        }
+    }
+
+    return result;
+}
+
+string toLower(string str)
+{
+    transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)tolower(c); });
+    return str;
+}
+
+string toUpper(string str)
+{
+    transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)toupper(c); });
+    return str;
+}
+
+bool matches(string text, string filter, bool isRegex)
+{
+    auto matchesFuzzy = [](string text, string filter)
+        {
+            if (filter.empty())
+                return true;
+
+            // Perform matching on lowercase strings
+            text = toLower(text);
+            filter = toLower(filter);
+
+            auto words = split(filter, ", ");
+            // We don't want people entering multiple spaces in a row to match everything.
+            words.erase(remove(begin(words), end(words), ""), end(words));
+
+            if (words.empty())
+                return true;
+
+            // Match every word of the filter separately.
+            for (const auto& word : words)
+                if (text.find(word) != string::npos)
+                    return true;
+
+            return false;
+        };
+
+    auto matchesRegex = [](string text, string filter)
+        {
+            if (filter.empty())
+                return true;
+
+            try
+            {
+                regex searchRegex{filter, std::regex_constants::ECMAScript | std::regex_constants::icase};
+                return regex_search(text, searchRegex);
+            }
+            catch (const regex_error&)
+            {
+                return false;
+            }
+        };
+
+    return isRegex ? matchesRegex(text, filter) : matchesFuzzy(text, filter);
 }

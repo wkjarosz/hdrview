@@ -19,7 +19,7 @@ using namespace nanogui;
 using namespace std;
 
 ImageButton::ImageButton(Widget *parent, const string &caption)
-	: Widget (parent), m_caption(caption), m_canBeReference(true)
+	: Widget (parent), m_caption(caption)
 {
 	mFontSize = 15;
 }
@@ -60,8 +60,8 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 		return false;
 	}
 
-	if (m_canBeReference && (button == GLFW_MOUSE_BUTTON_2 ||
-		(button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT)))
+	if (button == GLFW_MOUSE_BUTTON_2 ||
+		(button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT))
 	{
 		// If we already were the reference, then let's disable using us a reference.
 		m_isReference = !m_isReference;
@@ -105,6 +105,33 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 	}
 
 	return false;
+}
+
+
+string ImageButton::highlighted() const
+{
+	vector<string> pieces;
+	if (m_highlightBegin <= 0)
+	{
+		if (m_highlightEnd <= 0)
+			pieces.emplace_back(m_caption);
+		else
+		{
+			size_t offset = m_highlightEnd;
+			pieces.emplace_back(m_caption.substr(offset));
+			pieces.emplace_back(m_caption.substr(0, offset));
+		}
+	}
+	else
+	{
+		size_t beginOffset = m_highlightBegin;
+		size_t endOffset = m_highlightEnd;
+		pieces.emplace_back(m_caption.substr(endOffset));
+		pieces.emplace_back(m_caption.substr(beginOffset, endOffset - beginOffset));
+		pieces.emplace_back(m_caption.substr(0, beginOffset));
+	}
+
+	return pieces.size() > 1 ? pieces[1] : "";
 }
 
 
@@ -189,50 +216,42 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontSize(ctx, mFontSize);
 	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
 
-	string fullCaption = m_useShort ? m_caption.substr(m_highlightBegin, m_highlightEnd - m_highlightBegin) : m_caption;
-
 	// trim caption to available space
 	if (mSize.x() == preferredSize(ctx).x())
 		m_cutoff = 0;
 	else if (mSize != m_sizeForWhichCutoffWasComputed)
 	{
 		m_cutoff = 0;
-		while (nvgTextBounds(ctx, 0, 0, fullCaption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 15 - idSize - iconSize)
+		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 15 - idSize - iconSize)
 			++m_cutoff;
 
 		m_sizeForWhichCutoffWasComputed = mSize;
 	}
 
 	// Image name
-	string trimmedCaption = fullCaption.substr(m_cutoff);
+	string trimmedCaption = m_caption.substr(m_cutoff);
 
 
 	vector<string> pieces;
-
-	if (!m_useShort)
+	if (m_highlightBegin <= m_cutoff)
 	{
-		if (m_highlightBegin <= m_cutoff)
-		{
-			if (m_highlightEnd <= m_cutoff)
-				pieces.emplace_back(trimmedCaption);
-			else
-			{
-				size_t offset = m_highlightEnd - m_cutoff;
-				pieces.emplace_back(trimmedCaption.substr(offset));
-				pieces.emplace_back(trimmedCaption.substr(0, offset));
-			}
-		}
+		if (m_highlightEnd <= m_cutoff)
+			pieces.emplace_back(trimmedCaption);
 		else
 		{
-			size_t beginOffset = m_highlightBegin - m_cutoff;
-			size_t endOffset = m_highlightEnd - m_cutoff;
-			pieces.emplace_back(trimmedCaption.substr(endOffset));
-			pieces.emplace_back(trimmedCaption.substr(beginOffset, endOffset - beginOffset));
-			pieces.emplace_back(trimmedCaption.substr(0, beginOffset));
+			size_t offset = m_highlightEnd - m_cutoff;
+			pieces.emplace_back(trimmedCaption.substr(offset));
+			pieces.emplace_back(trimmedCaption.substr(0, offset));
 		}
 	}
 	else
-		pieces.emplace_back(trimmedCaption);
+	{
+		size_t beginOffset = m_highlightBegin - m_cutoff;
+		size_t endOffset = m_highlightEnd - m_cutoff;
+		pieces.emplace_back(trimmedCaption.substr(endOffset));
+		pieces.emplace_back(trimmedCaption.substr(beginOffset, endOffset - beginOffset));
+		pieces.emplace_back(trimmedCaption.substr(0, beginOffset));
+	}
 
 	if (m_cutoff > 0 && m_cutoff < m_caption.size())
 		pieces.back() = string{"…"} + pieces.back();

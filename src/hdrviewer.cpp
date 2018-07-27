@@ -316,8 +316,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_imageMgr->setImageModifyDoneCallback([this](int i)
 	                                       {
 		                                       updateCaption();
-		                                       m_imagesPanel->requestHistogramUpdate(true);
+		                                       m_imagesPanel->requestButtonsUpdate();
+		                                       m_imagesPanel->setFilter(m_imagesPanel->filter());
 	                                       });
+//	m_imageMgr->setSwapImagesCallback([](int index1, int index2)
+//	                                       {
+//
+//	                                       });
 
 
 	sRGBCheckbox->setCallback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
@@ -375,6 +380,9 @@ bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 	try
 	{
 		m_imageMgr->loadImages(filenames);
+
+		// Ensure the new image button will have the correct visibility state.
+		m_imagesPanel->setFilter(m_imagesPanel->filter());
 	}
 	catch (const exception &e)
 	{
@@ -385,18 +393,37 @@ bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 	return true;
 }
 
-void HDRViewScreen::askCloseImage(int index)
+void HDRViewScreen::askCloseImage(int)
 {
-	if (auto img = m_imageMgr->image(index))
+	auto closeit = [this](int curr, int next)
+	{
+		m_imageMgr->closeImage(curr, next);
+//
+////			if (!m_imagesPanel->nthImageIsVisible(curr))
+//			{
+////				m_imageMgr->setCurrentImageIndex(-1);
+//				auto next = m_imagesPanel->nextVisibleImage(0, Forward);
+//				cout << "curr: " << curr << "; next: " << next << endl;
+//				m_imageMgr->setCurrentImageIndex(next, true);
+//				cout << "curr: " << m_imageMgr->currentImageIndex() << endl;
+//			}
+//			m_imageMgr->numImagesCallback()();
+		cout << "curr: " << m_imageMgr->currentImageIndex() << endl;
+	};
+
+	auto curr = m_imageMgr->currentImageIndex();
+	auto next = m_imagesPanel->nextVisibleImage(curr, Forward);
+	cout << "curr: " << curr << "; next: " << next << endl;
+	if (auto img = m_imageMgr->image(curr))
 	{
 		if (img->isModified())
 		{
 			auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
 			                                "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
-			dialog->setCallback([this,index](int close){if (close == 0) m_imageMgr->closeImage(index);});
+			dialog->setCallback([curr,next,closeit](int close){if (close == 0) closeit(curr,next);});
 		}
 		else
-			m_imageMgr->closeImage(index);
+			closeit(curr,next);
 	}
 }
 
@@ -641,6 +668,11 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    toggleHelpWindow();
             return true;
 
+    	case 'P':
+    		if (modifiers & SYSTEM_COMMAND_MOD)
+			    m_imagesPanel->focusFilter();
+		    return true;
+
         case GLFW_KEY_TAB:
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
@@ -661,12 +693,12 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_DOWN:
 	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
-		        m_imageMgr->sendImageBackward();
+		        m_imagesPanel->sendImageBackward();
 		        return true;
 	        }
 	        else if (m_imageMgr->numImages())
             {
-	            m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() + 1, m_imageMgr->numImages()));
+	            m_imageMgr->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imageMgr->currentImageIndex(), Backward));
 	            return true;
             }
 		    return false;
@@ -674,12 +706,12 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
         case GLFW_KEY_UP:
 	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
-		        m_imageMgr->bringImageForward();
+		        m_imagesPanel->bringImageForward();
 		        return true;
 	        }
 	        else if (m_imageMgr->numImages())
 	        {
-		        m_imageMgr->setCurrentImageIndex(mod(m_imageMgr->currentImageIndex() - 1, m_imageMgr->numImages()));
+		        m_imageMgr->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imageMgr->currentImageIndex(), Forward));
 		        return true;
 	        }
 		    return false;
@@ -711,8 +743,9 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		}
 		else
 		{
-			if (m_imageMgr->numImages() > idx)
-				m_imageMgr->setCurrentImageIndex(idx);
+			auto nth = m_imagesPanel->nthVisibleImageIndex(idx);
+			if (nth > 0)
+				m_imageMgr->setCurrentImageIndex(nth);
 		}
 		return false;
 	}
