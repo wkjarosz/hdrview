@@ -322,7 +322,7 @@ bool HDRImage::load(const string & filename)
 		{
 			console->debug("Decoding a 3 sample-per-pixel DNG image.");
 			// normalize
-			parallel_for(0, hdr.size(), [this,&hdr,invScale](int i)
+			parallel_for(0, hdr.size(), [&hdr,invScale](int i)
 			{
 				hdr[i] *= invScale;
 			});

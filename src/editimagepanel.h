@@ -14,13 +14,13 @@ using namespace nanogui;
 class EditImagePanel : public Widget
 {
 public:
-	EditImagePanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imageMgr);
+	EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * imagesPanel);
 
 	void draw(NVGcontext *ctx) override;
 
 private:
 	HDRViewScreen * m_screen = nullptr;
-	HDRImageManager * m_imageMgr = nullptr;
+    ImageListPanel * m_imagesPanel = nullptr;
 	Button * m_undoButton = nullptr;
 	Button * m_redoButton = nullptr;
 	std::vector<Button*> m_filterButtons;

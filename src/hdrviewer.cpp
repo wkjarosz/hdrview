@@ -12,7 +12,6 @@
 #include "common.h"
 #include "commandhistory.h"
 #include "hdrimageviewer.h"
-#include "hdrimagemanager.h"
 #include "helpwindow.h"
 #define NOMINMAX
 #include <tinydir.h>
@@ -21,7 +20,7 @@ using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(Vector2i(800,600), "HDRView", true),
-    m_imageMgr(new HDRImageManager()),
+//    m_imageMgr(new HDRImageManager()),
     console(spdlog::get("console"))
 {
     setBackground(Color(0.23f, 1.0f));
@@ -102,7 +101,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	btn->setPushed(true);
 	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
-    m_imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageMgr, m_imageView);
+    m_imagesPanel = new ImageListPanel(m_sidePanelContents, this, m_imageView);
 
 	btn->setChangeCallback([this,btn](bool value)
                          {
@@ -116,21 +115,21 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create edit panel
     //
 
-    btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_LEFT);
+	btn = new Button(m_sidePanelContents, "Edit", ENTYPO_ICON_CHEVRON_LEFT);
 	btn->setFlags(Button::ToggleButton);
 	btn->setFontSize(18);
 	btn->setIconPosition(Button::IconPosition::Right);
 
-	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imageMgr);
-    editPanel->setVisible(false);
+	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
+	editPanel->setVisible(false);
 
 	btn->setChangeCallback([this,btn,editPanel](bool value)
-     {
-	     btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
-         editPanel->setVisible(value);
-         updateLayout();
-         m_sidePanelContents->performLayout(mNVGContext);
-     });
+	 {
+		 btn->setIcon(value ? ENTYPO_ICON_CHEVRON_DOWN : ENTYPO_ICON_CHEVRON_LEFT);
+		 editPanel->setVisible(value);
+		 updateLayout();
+		 m_sidePanelContents->performLayout(mNVGContext);
+	 });
 	editPanel->performLayout(mNVGContext);
 
     //
@@ -151,7 +150,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	normalizeButton->setFixedSize(Vector2i(19, 19));
 	normalizeButton->setCallback([this](void)
 	                             {
-		                             auto img = m_imageMgr->currentImage();
+		                             auto img = m_imagesPanel->currentImage();
 		                             if (!img)
 			                             return;
 		                             Color4 mC = img->image().max();
@@ -262,7 +261,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_imageView
 	    ->setPixelHoverCallback([this](const Vector2i &pixelCoord, const Color4 &pixelVal, const Color4 &iPixelVal)
 	                            {
-		                            auto img = m_imageMgr->currentImage();
+		                            auto img = m_imagesPanel->currentImage();
 
 		                            if (img && img->contains(pixelCoord))
 		                            {
@@ -288,42 +287,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     m_zoomLabel->setCaption(fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2));
                                     updateLayout();
                                 });
-
-	m_imageMgr->setCurrentImageCallback([this](void)
-	                                    {
-		                                    m_imageView->setCurrentImage(m_imageMgr->currentImage());
-		                                    updateCaption();
-		                                    m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
-	                                    });
-
-	m_imageMgr->setReferenceImageCallback([this](void)
-	                                    {
-		                                    m_imageView->setReferenceImage(m_imageMgr->referenceImage());
-		                                    m_imagesPanel->setReferenceImage(m_imageMgr->referenceImageIndex());
-	                                    });
-
-	m_imageMgr->setNumImagesCallback([this](void)
-	                                 {
-		                                 updateCaption();
-		                                 m_imagesPanel->repopulateImageList();
-		                                 m_imagesPanel->setCurrentImage(m_imageMgr->currentImageIndex());
-		                                 m_imageMgr->setReferenceImageIndex(-1);
-	                                 });
-	m_imageMgr->setImageModifyStartCallback([this](int i)
-	                                       {
-		                                       updateCaption();
-	                                       });
-	m_imageMgr->setImageModifyDoneCallback([this](int i)
-	                                       {
-		                                       updateCaption();
-		                                       m_imagesPanel->requestButtonsUpdate();
-		                                       m_imagesPanel->setFilter(m_imagesPanel->filter());
-	                                       });
-//	m_imageMgr->setSwapImagesCallback([](int index1, int index2)
-//	                                       {
-//
-//	                                       });
-
 
 	sRGBCheckbox->setCallback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
     {
@@ -368,7 +331,7 @@ HDRViewScreen::~HDRViewScreen()
 
 void HDRViewScreen::updateCaption()
 {
-    auto img = m_imageMgr->currentImage();
+    auto img = m_imagesPanel->currentImage();
     if (img)
         setCaption(string("HDRView [") + img->filename() + (img->isModified() ? "*" : "") + "]");
     else
@@ -379,7 +342,7 @@ bool HDRViewScreen::dropEvent(const vector<string> & filenames)
 {
 	try
 	{
-		m_imageMgr->loadImages(filenames);
+		m_imagesPanel->loadImages(filenames);
 
 		// Ensure the new image button will have the correct visibility state.
 		m_imagesPanel->setFilter(m_imagesPanel->filter());
@@ -397,7 +360,7 @@ void HDRViewScreen::askCloseImage(int)
 {
 	auto closeit = [this](int curr, int next)
 	{
-		m_imageMgr->closeImage(curr, next);
+		m_imagesPanel->closeImage();
 //
 ////			if (!m_imagesPanel->nthImageIsVisible(curr))
 //			{
@@ -408,13 +371,13 @@ void HDRViewScreen::askCloseImage(int)
 //				cout << "curr: " << m_imageMgr->currentImageIndex() << endl;
 //			}
 //			m_imageMgr->numImagesCallback()();
-		cout << "curr: " << m_imageMgr->currentImageIndex() << endl;
+		cout << "curr: " << m_imagesPanel->currentImageIndex() << endl;
 	};
 
-	auto curr = m_imageMgr->currentImageIndex();
+	auto curr = m_imagesPanel->currentImageIndex();
 	auto next = m_imagesPanel->nextVisibleImage(curr, Forward);
 	cout << "curr: " << curr << "; next: " << next << endl;
-	if (auto img = m_imageMgr->image(curr))
+	if (auto img = m_imagesPanel->image(curr))
 	{
 		if (img->isModified())
 		{
@@ -430,17 +393,17 @@ void HDRViewScreen::askCloseImage(int)
 void HDRViewScreen::askCloseAllImages()
 {
 	bool anyModified = false;
-	for (int i = 0; i < m_imageMgr->numImages(); ++i)
-		anyModified |= m_imageMgr->image(i)->isModified();
+	for (int i = 0; i < m_imagesPanel->numImages(); ++i)
+		anyModified |= m_imagesPanel->image(i)->isModified();
 
 	if (anyModified)
 	{
 		auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
 		                                "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
-		dialog->setCallback([this](int close){if (close == 0) m_imageMgr->closeAllImages();});
+		dialog->setCallback([this](int close){if (close == 0) m_imagesPanel->closeAllImages();});
 	}
 	else
-		m_imageMgr->closeAllImages();
+		m_imagesPanel->closeAllImages();
 }
 
 
@@ -495,7 +458,7 @@ void HDRViewScreen::saveImage()
 {
 	try
 	{
-		if (!m_imageMgr->currentImage())
+		if (!m_imagesPanel->currentImage())
 			return;
 
 		string filename = file_dialog(
@@ -516,7 +479,7 @@ void HDRViewScreen::saveImage()
 		glfwFocusWindow(mGLFWWindow);
 
 		if (filename.size())
-			m_imageMgr->saveImage(filename, m_imageView->exposure(), m_imageView->gamma(),
+			m_imagesPanel->saveImage(filename, m_imageView->exposure(), m_imageView->gamma(),
 			                      m_imageView->sRGB(), m_imageView->ditheringOn());
 	}
 	catch (const exception &e)
@@ -530,14 +493,14 @@ void HDRViewScreen::saveImage()
 void HDRViewScreen::flipImage(bool h)
 {
     if (h)
-	    m_imageMgr->modifyImage(
+		m_imagesPanel->modifyImage(
 		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 		    {
 			    return {make_shared<HDRImage>(img->flippedHorizontal()),
 			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedHorizontal(); })};
 		    });
     else
-	    m_imageMgr->modifyImage(
+		m_imagesPanel->modifyImage(
 		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 		    {
 			    return {make_shared<HDRImage>(img->flippedVertical()),
@@ -591,16 +554,16 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
                 if (modifiers & GLFW_MOD_SHIFT)
-	                m_imageMgr->redo();
+					m_imagesPanel->redo();
 	            else
-	                m_imageMgr->undo();
+					m_imagesPanel->undo();
 
 	            return true;
             }
             return false;
 
         case GLFW_KEY_BACKSPACE:
-	        askCloseImage(m_imageMgr->currentImageIndex());
+	        askCloseImage(m_imagesPanel->currentImageIndex());
             return true;
         case 'W':
             if (modifiers & SYSTEM_COMMAND_MOD)
@@ -608,7 +571,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	            if (modifiers & GLFW_MOD_SHIFT)
 		            askCloseAllImages();
 	            else
-	                askCloseImage(m_imageMgr->currentImageIndex());
+	                askCloseImage(m_imagesPanel->currentImageIndex());
                 return true;
             }
             return false;
@@ -696,9 +659,9 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		        m_imagesPanel->sendImageBackward();
 		        return true;
 	        }
-	        else if (m_imageMgr->numImages())
+	        else if (m_imagesPanel->numImages())
             {
-	            m_imageMgr->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imageMgr->currentImageIndex(), Backward));
+				m_imagesPanel->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imagesPanel->currentImageIndex(), Backward));
 	            return true;
             }
 		    return false;
@@ -709,9 +672,9 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		        m_imagesPanel->bringImageForward();
 		        return true;
 	        }
-	        else if (m_imageMgr->numImages())
+	        else if (m_imagesPanel->numImages())
 	        {
-		        m_imageMgr->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imageMgr->currentImageIndex(), Forward));
+				m_imagesPanel->setCurrentImageIndex(m_imagesPanel->nextVisibleImage(m_imagesPanel->currentImageIndex(), Forward));
 		        return true;
 	        }
 		    return false;
@@ -745,7 +708,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		{
 			auto nth = m_imagesPanel->nthVisibleImageIndex(idx);
 			if (nth > 0)
-				m_imageMgr->setCurrentImageIndex(nth);
+				m_imagesPanel->setCurrentImageIndex(nth);
 		}
 		return false;
 	}
@@ -884,6 +847,6 @@ void HDRViewScreen::updateLayout()
 
 void HDRViewScreen::drawContents()
 {
-	m_imageMgr->runRequestedCallbacks();
+	m_imagesPanel->runRequestedCallbacks();
 	updateLayout();
 }

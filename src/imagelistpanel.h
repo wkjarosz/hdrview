@@ -7,7 +7,9 @@
 #pragma once
 
 #include <nanogui/widget.h>
+#include <vector>
 #include "common.h"
+#include "glimage.h"
 #include "fwd.h"
 
 using namespace nanogui;
@@ -15,16 +17,46 @@ using namespace nanogui;
 class ImageListPanel : public Widget
 {
 public:
-	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageManager * imgMgr, HDRImageViewer * imgViewer);
+	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imgViewer);
 
 	void draw(NVGcontext *ctx) override;
 
 	void repopulateImageList();
-	void setCurrentImage(int newIndex);
-	void setReferenceImage(int newIndex);
+
+	// Const access to the loaded images. Modification only possible via modifyImage, undo, redo
+	int numImages() const                  {return int(m_images.size());}
+	int currentImageIndex() const          {return m_current;}
+	int referenceImageIndex() const        {return m_reference;}
+	ConstImagePtr currentImage() const     {return image(m_current);}
+	ImagePtr currentImage()           {return image(m_current);}
+	ConstImagePtr referenceImage() const   {return image(m_reference);}
+	ImagePtr referenceImage()         {return image(m_reference);}
+	ConstImagePtr image(int index) const;
+	ImagePtr image(int index);
+
+	bool setCurrentImageIndex(int newIndex, bool forceCallback = false);
+	bool setReferenceImageIndex(int newIndex);
 	bool swapImages(int index1, int index2);
 	bool sendImageBackward();
 	bool bringImageForward();
+
+	// Loading, saving, closing, and rearranging the images in the image stack
+	void loadImages(const std::vector<std::string> & filenames);
+	bool saveImage(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
+				   bool sRGB = true, bool dither = true);
+	bool closeImage();
+	void closeAllImages();
+
+	// Modify the image data
+	void modifyImage(const ImageCommand & command);
+	void modifyImage(const ImageCommandWithProgress & command);
+	void undo();
+	void redo();
+
+	//
+	void runRequestedCallbacks();
+
+
 	void requestButtonsUpdate();
 	void requestHistogramUpdate(bool force = false);
 
@@ -45,15 +77,28 @@ public:
 	std::string filter() const;
 	void focusFilter();
 
+
 private:
 	void updateButtons();
 	void enableDisableButtons();
 	void updateHistogram();
 	void updateFilter();
+	bool isValid(int index) const {return index >= 0 && index < numImages();}
+
+	std::vector<ImagePtr> m_images; ///< The loaded images
+	int m_current = -1;             ///< The currently selected image
+	int m_reference = -1;           ///< The currently selected reference image
+
+	std::atomic<bool> m_imageModifyDoneRequested;
+
+	// various callback functions
+	std::function<void(int)> m_imageModifyDoneCallback;
+	std::function<void()> m_numImagesCallback;
+	std::function<void()> m_currentImageCallback;
+	std::function<void()> m_referenceImageCallback;
 
 
 	HDRViewScreen * m_screen = nullptr;
-	HDRImageManager * m_imageMgr = nullptr;
 	HDRImageViewer * m_imageViewer = nullptr;
 	Button * m_saveButton = nullptr;
 	Button * m_closeButton = nullptr;

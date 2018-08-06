@@ -97,23 +97,6 @@ public:
         m_currentState++;
     }
 
-//    UndoPtr grabUndo(std::shared_ptr<HDRImage> & img)
-//    {
-//        // check if there is anything to undo
-//        if (!hasUndo() || m_currentState > size())
-//            return nullptr;
-//
-//        return m_history[--m_currentState];
-//    }
-//    UndoPtr grabRedo(std::shared_ptr<HDRImage> & img)
-//    {
-//        // check if there is anything to redo
-//        if (!hasRedo() || m_currentState < 0)
-//            return nullptr;
-//
-//        return m_history[m_currentState++];
-//    }
-
     bool undo(std::shared_ptr<HDRImage> & img)
     {
         // check if there is anything to undo

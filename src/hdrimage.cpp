@@ -329,7 +329,7 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
     Timer timer;
     progress.setNumSteps(height());
     // for every pixel in the image
-    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigmaDomain,mX,mY,truncateDomain](int y)
+    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigmaDomain,mX,mY](int y)
     {
         for (int x = 0; x < filtered.width(); x++)
         {

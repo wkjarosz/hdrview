@@ -155,8 +155,6 @@ add_executable(HDRView
                src/hdrimage.cpp
                src/hdrimage.h
                src/hdrimageio.cpp
-               src/hdrimagemanager.cpp
-               src/hdrimagemanager.h
                src/hdrimageviewer.cpp
                src/hdrimageviewer.h
                src/hdrview.cpp

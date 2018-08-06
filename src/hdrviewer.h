@@ -38,10 +38,11 @@ public:
 
 	int modifiers() const {return mModifiers;}
 
+	void updateCaption();
+
 private:
 	void toggleHelpWindow();
 	void updateLayout();
-    void updateCaption();
 	bool atSidePanelEdge(const Eigen::Vector2i& p)
 	{
 		return p.x() - m_sidePanel->fixedWidth() < 10 && p.x() - m_sidePanel->fixedWidth() > -5;
@@ -51,7 +52,6 @@ private:
 	Window * m_sidePanel = nullptr;
 	Window * m_statusBar = nullptr;
 	HDRImageViewer * m_imageView = nullptr;
-	HDRImageManager * m_imageMgr;
 	ImageListPanel * m_imagesPanel = nullptr;
 
     Button * m_helpButton = nullptr;
