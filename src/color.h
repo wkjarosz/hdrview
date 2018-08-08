@@ -9,7 +9,7 @@
 #include <iostream>
 #include <cmath>
 #include <Eigen/Core>
-#include "fwd.h"
+#include "Fwd.h"
 
 
 class Color3

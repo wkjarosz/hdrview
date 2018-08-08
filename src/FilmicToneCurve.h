@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "common.h"
+#include "Common.h"
 
 class FilmicToneCurve
 {
@@ -120,11 +120,10 @@ public:
 		float y0;
 		float y1;
 
-
 		CurveSegment m_segments[3];
 		CurveSegment m_invSegments[3];
 	};
 
-	static void createCurve(FullCurve & dstCurve, const CurveParamsDirect & srcParams);
-	static void calcDirectParamsFromUser(CurveParamsDirect & dstParams, const CurveParamsUser & srcParams);
+	static void createCurve(FullCurve& dstCurve, const CurveParamsDirect& srcParams);
+	static void calcDirectParamsFromUser(CurveParamsDirect& dstParams, const CurveParamsUser& srcParams);
 };

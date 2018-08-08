@@ -25,9 +25,9 @@ float FilmicToneCurve::CurveSegment::eval(float x) const
 
 float FilmicToneCurve::CurveSegment::evalInv(float y) const
 {
-	float y0 = (y-offsetY)/scaleY;
+	float y0 = (y - offsetY)/scaleY;
 	float x0 = 0.0f;
-	
+
 	// watch out for log(0) again
 	if (y0 > 0)
 		x0 = std::exp((std::log(y0) - lnA)/B);
@@ -38,7 +38,7 @@ float FilmicToneCurve::CurveSegment::evalInv(float y) const
 
 float FilmicToneCurve::FullCurve::eval(float srcX) const
 {
-	float normX = srcX * invW;
+	float normX = srcX*invW;
 	int index = (normX < x0) ? 0 : ((normX < x1) ? 1 : 2);
 	CurveSegment segment = m_segments[index];
 	float ret = segment.eval(normX);
@@ -51,7 +51,7 @@ float FilmicToneCurve::FullCurve::evalInv(float y) const
 	CurveSegment segment = m_segments[index];
 
 	float normX = segment.evalInv(y);
-	return normX * W;
+	return normX*W;
 }
 
 // find a function of the form:
@@ -60,17 +60,17 @@ float FilmicToneCurve::FullCurve::evalInv(float y) const
 //   f(0)   = 0; not really a constraint
 //   f(x0)  = y0
 //   f'(x0) = m
-static void solveAB(float &lnA, float &B, float x0, float y0, float m)
+static void solveAB(float& lnA, float& B, float x0, float y0, float m)
 {
 	B = (m*x0)/y0;
 	lnA = std::log(y0) - B*std::log(x0);
 }
 
 // convert to y=mx+b
-static void asSlopeIntercept(float &m, float &b, float x0, float x1, float y0, float y1)
+static void asSlopeIntercept(float& m, float& b, float x0, float x1, float y0, float y1)
 {
-	float dy = (y1-y0);
-	float dx = (x1-x0);
+	float dy = (y1 - y0);
+	float dx = (x1 - x0);
 	if (dx == 0)
 		m = 1.0f;
 	else
@@ -83,32 +83,32 @@ static void asSlopeIntercept(float &m, float &b, float x0, float x1, float y0, f
 // f'(x) = gm(mx+b)^(g-1)
 static float evalDerivativeLinearGamma(float m, float b, float g, float x)
 {
-	float ret = g*m*powf(m*x+b,g-1.0f);
+	float ret = g*m*powf(m*x + b, g - 1.0f);
 	return ret;
 }
 
-void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect & srcParams)
+void FilmicToneCurve::createCurve(FullCurve& dstCurve, const CurveParamsDirect& srcParams)
 {
 	CurveParamsDirect params = srcParams;
 
 	dstCurve.reset();
 	dstCurve.W = srcParams.W;
-	dstCurve.invW = 1.0f / srcParams.W;
+	dstCurve.invW = 1.0f/srcParams.W;
 
 	// normalize params to 1.0 range
 	params.W = 1.0f;
 	params.x0 /= srcParams.W;
 	params.x1 /= srcParams.W;
-	params.overshootX = srcParams.overshootX / srcParams.W;
+	params.overshootX = srcParams.overshootX/srcParams.W;
 
 	float toeM = 0.0f;
 	float shoulderM = 0.0f;
 	{
 		float m, b;
-		asSlopeIntercept(m,b,params.x0,params.x1,params.y0,params.y1);
+		asSlopeIntercept(m, b, params.x0, params.x1, params.y0, params.y1);
 
 		float g = srcParams.gamma;
-		
+
 		// base function of linear section plus gamma is
 		// y = (mx+b)^g
 
@@ -127,13 +127,13 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		midSegment.offsetY = 0.0f;
 		midSegment.scaleX = 1.0f;
 		midSegment.scaleY = 1.0f;
-		midSegment.lnA = g * std::log(m);
+		midSegment.lnA = g*std::log(m);
 		midSegment.B = g;
 
 		dstCurve.m_segments[1] = midSegment;
 
-		toeM = evalDerivativeLinearGamma(m,b,g,params.x0);
-		shoulderM = evalDerivativeLinearGamma(m,b,g,params.x1);
+		toeM = evalDerivativeLinearGamma(m, b, g, params.x0);
+		shoulderM = evalDerivativeLinearGamma(m, b, g, params.x1);
 
 		// apply gamma to endpoints
 		params.y0 = std::max(0.f, std::pow(params.y0, params.gamma));
@@ -142,24 +142,18 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		params.overshootY = std::pow(1.0f + params.overshootY, params.gamma) - 1.0f;
 	}
 
-	spdlog::get("console")->debug(
-		"\n"
-			"x0:         {}\t\t{}\n"
-			"y0:         {}\t\t{}\n"
-			"x1:         {}\t\t{}\n"
-			"y1:         {}\t\t{}\n"
-			"W:          {}\t\t{}\n"
-			"gamma:      {}\t\t{}\n"
-			"overshootX: {}\t\t{}\n"
-			"overshootY: {}\t\t{}\n",
-		srcParams.x0,params.x0,
-		srcParams.y0,params.y0,
-		srcParams.x1,params.x1,
-		srcParams.y1,params.y1,
-		srcParams.W ,params.W ,
-		srcParams.gamma,params.gamma,
-		srcParams.overshootX,params.overshootX,
-		srcParams.overshootY,params.overshootY);
+	spdlog::get("console")->debug("\n"
+								  "x0:         {}\t\t{}\n"
+								  "y0:         {}\t\t{}\n"
+								  "x1:         {}\t\t{}\n"
+								  "y1:         {}\t\t{}\n"
+								  "W:          {}\t\t{}\n"
+								  "gamma:      {}\t\t{}\n"
+								  "overshootX: {}\t\t{}\n"
+								  "overshootY: {}\t\t{}\n", srcParams.x0, params.x0, srcParams.y0, params.y0,
+								  srcParams.x1, params.x1, srcParams.y1, params.y1, srcParams.W, params.W,
+								  srcParams.gamma, params.gamma, srcParams.overshootX, params.overshootX,
+								  srcParams.overshootY, params.overshootY);
 
 	dstCurve.x0 = params.x0;
 	dstCurve.x1 = params.x1;
@@ -174,7 +168,7 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 		toeSegment.scaleX = 1.0f;
 		toeSegment.scaleY = 1.0f;
 
-		solveAB(toeSegment.lnA,toeSegment.B,params.x0,params.y0,toeM);
+		solveAB(toeSegment.lnA, toeSegment.B, params.x0, params.y0, toeM);
 		dstCurve.m_segments[0] = toeSegment;
 	}
 
@@ -188,7 +182,7 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 
 		float lnA = 0.0f;
 		float B = 0.0f;
-		solveAB(lnA,B,x0,y0,shoulderM);
+		solveAB(lnA, B, x0, y0, shoulderM);
 
 		shoulderSegment.offsetX = (1.0f + params.overshootX);
 		shoulderSegment.offsetY = (1.0f + params.overshootY);
@@ -206,7 +200,7 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 	{
 		// evaluate shoulder at the end of the curve
 		float scale = dstCurve.m_segments[2].eval(1.0f);
-		float invScale = 1.0f / scale;
+		float invScale = 1.0f/scale;
 
 		dstCurve.m_segments[0].offsetY *= invScale;
 		dstCurve.m_segments[0].scaleY *= invScale;
@@ -220,7 +214,7 @@ void FilmicToneCurve::createCurve(FullCurve & dstCurve, const CurveParamsDirect 
 
 }
 
-void FilmicToneCurve::calcDirectParamsFromUser(CurveParamsDirect & dstParams, const CurveParamsUser & srcParams)
+void FilmicToneCurve::calcDirectParamsFromUser(CurveParamsDirect& dstParams, const CurveParamsUser& srcParams)
 {
 	dstParams = CurveParamsDirect();
 
@@ -249,19 +243,19 @@ void FilmicToneCurve::calcDirectParamsFromUser(CurveParamsDirect & dstParams, co
 	// apply base params
 	{
 		// toe goes from 0 to 0.5
-		float x0 = toeLength * .5f;
-		float y0 = (1.0f - toeStrength) * x0; // lerp from 0 to x0
+		float x0 = toeLength*.5f;
+		float y0 = (1.0f - toeStrength)*x0; // lerp from 0 to x0
 
 		float remainingY = 1.0f - y0;
 
 		float initialW = x0 + remainingY;
 
-		float y1_offset = (1.0f - shoulderLength) * remainingY;
+		float y1_offset = (1.0f - shoulderLength)*remainingY;
 		float x1 = x0 + y1_offset;
 		float y1 = y0 + y1_offset;
 
 		// filmic shoulder strength is in F stops
-		float extraW = exp2(shoulderStrength)-1.0f;
+		float extraW = exp2(shoulderStrength) - 1.0f;
 
 		float W = initialW + extraW;
 
@@ -275,8 +269,8 @@ void FilmicToneCurve::calcDirectParamsFromUser(CurveParamsDirect & dstParams, co
 		dstParams.gamma = gamma;
 	}
 
-	dstParams.overshootX = (dstParams.W * 2.0f) * shoulderAngle * shoulderStrength;
-	dstParams.overshootY = 0.5f * shoulderAngle * shoulderStrength;
+	dstParams.overshootX = (dstParams.W*2.0f)*shoulderAngle*shoulderStrength;
+	dstParams.overshootY = 0.5f*shoulderAngle*shoulderStrength;
 }
 
 

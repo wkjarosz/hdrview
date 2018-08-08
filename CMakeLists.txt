@@ -134,56 +134,56 @@ elseif(WIN32)
 endif()
 
 add_executable(HDRView
-               src/async.h
-               src/color.cpp
-               src/color.h
-               src/colorspace.cpp
-               src/colorspace.h
-               src/commandhistory.h
-               src/common.cpp
-               src/common.h
-               src/dither-matrix256.h
-               src/editimagepanel.cpp
-               src/editimagepanel.h
-               src/envmap.cpp
-               src/envmap.h
+               src/Async.h
+               src/Color.cpp
+               src/Color.h
+               src/Colorspace.cpp
+               src/Colorspace.h
+               src/CommandHistory.h
+               src/Common.cpp
+               src/Common.h
+               src/DitherMatrix256.h
+               src/EditImagePanel.cpp
+               src/EditImagePanel.h
+               src/EnvMap.cpp
+               src/EnvMap.h
                src/FilmicToneCurve.cpp
                src/FilmicToneCurve.h
-               src/fwd.h
-               src/glimage.cpp
-               src/glimage.h
-               src/hdrimage.cpp
-               src/hdrimage.h
-               src/hdrimageio.cpp
-               src/hdrimageviewer.cpp
-               src/hdrimageviewer.h
-               src/hdrview.cpp
-               src/hdrviewer.cpp
-               src/hdrviewer.h
-               src/helpwindow.cpp
-               src/helpwindow.h
-               src/hslgradient.cpp
-               src/hslgradient.h
-               src/imagebutton.cpp
-               src/imagebutton.h
-               src/imagelistpanel.cpp
-               src/imagelistpanel.h
-               src/imageshader.cpp
-               src/imageshader.h
-               src/multigraph.cpp
-               src/multigraph.h
-               src/parallelfor.cpp
-               src/parallelfor.h
-               src/pfm.h
-               src/pfm.cpp
-               src/ppm.h
-               src/ppm.cpp
-               src/progress.cpp
-               src/progress.h
-               src/range.h
-               src/timer.h
-               src/well.cpp
-               src/well.h
+               src/Fwd.h
+               src/GLImage.cpp
+               src/GLImage.h
+               src/HDRImage.cpp
+               src/HDRImage.h
+               src/HDRImageIO.cpp
+               src/HDRImageViewer.cpp
+               src/HDRImageViewer.h
+               src/HDRView.cpp
+               src/HDRViewer.cpp
+               src/HDRViewer.h
+               src/HelpWindow.cpp
+               src/HelpWindow.h
+               src/HSLGradient.cpp
+               src/HSLGradient.h
+               src/ImageButton.cpp
+               src/ImageButton.h
+               src/ImageListPanel.cpp
+               src/ImageListPanel.h
+               src/ImageShader.cpp
+               src/ImageShader.h
+               src/MultiGraph.cpp
+               src/MultiGraph.h
+               src/ParallelFor.cpp
+               src/ParallelFor.h
+               src/PFM.h
+               src/PFM.cpp
+               src/PPM.h
+               src/PPM.cpp
+               src/Progress.cpp
+               src/Progress.h
+               src/Range.h
+               src/Timer.h
+               src/Well.cpp
+               src/Well.h
                ${EXTRA_SOURCE})
 
 add_definitions(${NANOGUI_EXTRA_DEFS})
@@ -214,28 +214,28 @@ if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
 endif()
 
 add_executable(hdrbatch
-               src/color.cpp
-               src/colorspace.h
-               src/colorspace.cpp
-               src/common.cpp
-               src/common.h
-               src/envmap.cpp
-               src/envmap.h
-               src/dither-matrix256.h
-               src/color.h
-               src/hdrimage.h
-               src/hdrimage.cpp
-               src/hdrimageio.cpp
-               src/hdrbatch.cpp
-               src/parallelfor.cpp
-               src/parallelfor.h
-               src/pfm.h
-               src/pfm.cpp
-               src/ppm.h
-               src/ppm.cpp
-               src/progress.cpp
-               src/progress.h
-               src/range.h)
+               src/Color.cpp
+               src/Color.h
+               src/Colorspace.cpp
+               src/Colorspace.h
+               src/Common.cpp
+               src/Common.h
+               src/EnvMap.cpp
+               src/EnvMap.h
+               src/DitherMatrix256.h
+               src/HDRImage.cpp
+               src/HDRImage.h
+               src/HDRImageIO.cpp
+               src/HDRBatch.cpp
+               src/ParallelFor.cpp
+               src/ParallelFor.h
+               src/PFM.cpp
+               src/PFM.h
+               src/PPM.cpp
+               src/PPM.h
+               src/Progress.cpp
+               src/Progress.h
+               src/Range.h)
 
 
 add_executable(force-random-dither

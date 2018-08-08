@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "color.h"
-#include "colorspace.h"
+#include "Color.h"
+#include "Colorspace.h"
 
 
 Color3 Color3::LinearSRGBToXYZ() const
