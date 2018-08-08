@@ -250,7 +250,7 @@ void ImageListPanel::repopulateImageList()
 	for (int i = 0; i < numImages(); ++i)
 	{
 		auto btn = new ImageButton(m_imageListWidget, image(i)->filename());
-		btn->setId(i+1);
+		btn->setImageId(i+1);
 		btn->setSelectedCallback([&,i](int){setCurrentImageIndex(i);});
 		btn->setReferenceCallback([&,i](int){setReferenceImageIndex(i);});
 
@@ -504,6 +504,7 @@ bool ImageListPanel::setCurrentImageIndex(int index, bool forceCallback)
 	if (isValid(index))
 		m_imageButtons[index]->setIsSelected(true);
 
+	m_previous = m_current;
 	m_current = index;
 	m_imageViewer->setCurrentImage(currentImage());
 	m_screen->updateCaption();
@@ -648,6 +649,8 @@ bool ImageListPanel::closeImage()
 		newIndex = m_images.size() - 1;
 
 	setCurrentImageIndex(newIndex, true);
+	// for now just forget the previous selection when closing any image
+	m_previous = -1;
 	m_numImagesCallback();
 	return true;
 }
@@ -658,6 +661,7 @@ void ImageListPanel::closeAllImages()
 
 	m_current = -1;
 	m_reference = -1;
+	m_previous = -1;
 
 
     m_imageViewer->setCurrentImage(currentImage());
@@ -719,7 +723,7 @@ void ImageListPanel::redo()
 
 
 
-// The followxpering functions are adapted from tev:
+// The following functions are adapted from tev:
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
@@ -752,6 +756,7 @@ void ImageListPanel::setUseRegex(bool value)
 void ImageListPanel::updateFilter()
 {
     string filter = m_filter->value();
+	m_previous = -1;
 
     // Image filtering
     {
@@ -765,7 +770,7 @@ void ImageListPanel::updateFilter()
             btn->setVisible(matches(img->filename(), filter, useRegex()));
             if (btn->visible())
             {
-                btn->setId(id++);
+                btn->setImageId(id++);
                 activeImageNames.emplace_back(img->filename());
             }
         }

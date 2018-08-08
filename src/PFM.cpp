@@ -22,7 +22,7 @@ float reinterpretAsHostEndian(float f, bool bigEndian)
 {
 	static_assert(sizeof(float) == sizeof(unsigned int), "Sizes must match");
 
-	const unsigned char * uchar = (const unsigned char *) &f;
+	const auto* uchar = (const unsigned char *) &f;
 	uint32_t i;
 	if (bigEndian)
 		i = (uchar[3]<<0) | (uchar[2]<<8) | (uchar[1]<<16) | (uchar[0]<<24);
@@ -38,7 +38,7 @@ float reinterpretAsHostEndian(float f, bool bigEndian)
 
 bool isPFMImage(const char *filename) noexcept
 {
-	FILE *f = 0;
+	FILE *f = nullptr;
 	int numInputsRead = 0;
 
 	try
@@ -79,7 +79,7 @@ bool isPFMImage(const char *filename) noexcept
 float * loadPFMImage(const char *filename, int *width, int *height, int *numChannels)
 {
 	float * data = nullptr;
-	FILE *f = 0;
+	FILE *f = nullptr;
 	int numInputsRead = 0;
 
 	try
@@ -118,7 +118,7 @@ float * loadPFMImage(const char *filename, int *width, int *height, int *numChan
 		if (fread(data, 1, 1, f) != 1)
 			throw runtime_error("loadPFMImage: Unknown error");
 
-		size_t numFloats = (*width) * (*height) * (*numChannels);
+		size_t numFloats = static_cast<size_t>((*width) * (*height) * (*numChannels));
 		if (fread(data, sizeof(float), numFloats, f) != numFloats)
 			throw runtime_error("loadPFMImage: Could not read all pixel data");
 

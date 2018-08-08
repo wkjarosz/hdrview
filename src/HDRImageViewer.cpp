@@ -7,7 +7,7 @@
 #include "HDRImageViewer.h"
 #include "HDRViewer.h"
 #include <tinydir.h>
-
+#include <utility>
 using namespace std;
 
 namespace
@@ -219,9 +219,9 @@ bool HDRImageViewer::helpersVisible() const
 	return gridVisible() || pixelInfoVisible();
 }
 
-Vector2f HDRImageViewer::centerOffset(shared_ptr<const GLImage> img) const
+Vector2f HDRImageViewer::centerOffset(ConstImagePtr img) const
 {
-	return (sizeF() - scaledImageSizeF(img)) / 2;
+	return (sizeF() - scaledImageSizeF(std::move(img))) / 2;
 }
 
 void HDRImageViewer::draw(NVGcontext* ctx)

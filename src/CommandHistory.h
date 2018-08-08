@@ -16,7 +16,7 @@
 class ImageCommandUndo
 {
 public:
-    virtual ~ImageCommandUndo() {}
+    virtual ~ImageCommandUndo() = default;
 
     virtual void undo(std::shared_ptr<HDRImage> & img) = 0;
     virtual void redo(std::shared_ptr<HDRImage> & img) = 0;
@@ -33,11 +33,11 @@ using ImageCommandWithProgress = std::function<ImageCommandResult(const std::sha
 class FullImageUndo : public ImageCommandUndo
 {
 public:
-    FullImageUndo(const HDRImage & img) : m_undoImage(std::make_shared<HDRImage>(img)) {}
-    virtual ~FullImageUndo() {}
+    explicit FullImageUndo(const HDRImage & img) : m_undoImage(std::make_shared<HDRImage>(img)) {}
+    ~FullImageUndo() override = default;
 
-    virtual void undo(std::shared_ptr<HDRImage> & img) {img.swap(m_undoImage);}
-    virtual void redo(std::shared_ptr<HDRImage> & img) {undo(img);}
+    void undo(std::shared_ptr<HDRImage> & img) override {img.swap(m_undoImage);}
+    void redo(std::shared_ptr<HDRImage> & img) override {undo(img);}
 
 	const std::shared_ptr<HDRImage> image() const {return m_undoImage;}
 
@@ -49,13 +49,13 @@ private:
 class LambdaUndo : public ImageCommandUndo
 {
 public:
-    LambdaUndo(const std::function<void(std::shared_ptr<HDRImage> & img)> & undoCmd,
-               const std::function<void(std::shared_ptr<HDRImage> & img)> & redoCmd = nullptr) :
+    explicit LambdaUndo(const std::function<void(std::shared_ptr<HDRImage> & img)> & undoCmd,
+                        const std::function<void(std::shared_ptr<HDRImage> & img)> & redoCmd = nullptr) :
         m_undo(undoCmd), m_redo(redoCmd ? redoCmd : undoCmd) {}
-    virtual ~LambdaUndo() {}
+    ~LambdaUndo() override = default;
 
-    virtual void undo(std::shared_ptr<HDRImage> & img) {m_undo(img);}
-    virtual void redo(std::shared_ptr<HDRImage> & img) {m_redo(img);}
+    void undo(std::shared_ptr<HDRImage> & img) override {m_undo(img);}
+    void redo(std::shared_ptr<HDRImage> & img) override {m_redo(img);}
 
 private:
     std::function<void(std::shared_ptr<HDRImage> & img)> m_undo, m_redo;

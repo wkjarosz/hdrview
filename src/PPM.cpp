@@ -27,7 +27,7 @@ struct RGB
 
 bool isPPMImage(const char *filename)
 {
-    FILE *infile = 0;
+    FILE *infile = nullptr;
     int numInputsRead = 0;
     char buffer[256];
 
@@ -38,7 +38,7 @@ bool isPPMImage(const char *filename)
         if (!infile)
             throw std::runtime_error("cannot open file.");
 
-        if ((fgets(buffer, 256, infile) == 0) || (buffer[0] != 'P') || (buffer[1] != '6'))
+        if ((fgets(buffer, 256, infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
             throw std::runtime_error("image is not a binary PPM file.");
 
         // skip comments
@@ -76,13 +76,13 @@ bool isPPMImage(const char *filename)
 
 float * loadPPMImage(const char *filename, int *width, int *height, int *numChannels)
 {
-    FILE *infile = 0;
-    float * img = 0;
+    FILE *infile = nullptr;
+    float * img = nullptr;
     int colors;
     int numInputsRead = 0;
     float invColors;
     char buffer[256];
-    RGB *buf = 0;
+    RGB *buf = nullptr;
 
     try
     {
@@ -91,7 +91,7 @@ float * loadPPMImage(const char *filename, int *width, int *height, int *numChan
         if (!infile)
             throw std::runtime_error("cannot open file.");
 
-        if ((fgets(buffer, 256, infile) == 0) || (buffer[0] != 'P') || (buffer[1] != '6'))
+        if ((fgets(buffer, 256, infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
             throw std::runtime_error("image is not a binary PPM file.");
 
         *numChannels = 3;
@@ -155,7 +155,7 @@ float * loadPPMImage(const char *filename, int *width, int *height, int *numChan
 
 bool writePPMImage(const char *filename, int width, int height, int numChannels, const unsigned char *data)
 {
-    FILE *outfile = 0;
+    FILE *outfile = nullptr;
 
     try
     {
@@ -168,7 +168,7 @@ bool writePPMImage(const char *filename, int width, int height, int numChannels,
         fprintf(outfile, "%d %d\n", width, height);
         fprintf(outfile, "255\n");
 
-        size_t numChars = numChannels*width*height;
+        auto numChars = static_cast<size_t>(numChannels*width*height);
         if (fwrite(data, sizeof(unsigned char), numChars, outfile) != numChars)
             throw std::runtime_error("cannot write pixel data.");
 

@@ -18,6 +18,16 @@
 #include <memory>
 #include "Fwd.h"
 
+
+// Also define control key for windows/mac/linux
+#if defined(__APPLE__) || defined(DOXYGEN_DOCUMENTATION_BUILD)
+/// If on OSX, maps to ``GLFW_MOD_CONTROL``.  Otherwise, maps to ``GLFW_MOD_SUPER``.
+#define SYSTEM_CONTROL_MOD GLFW_MOD_CONTROL
+#else
+#define SYSTEM_CONTROL_MOD GLFW_MOD_SUPER
+#endif
+
+
 template <typename T>
 inline T sign(T a) {return (a > 0) ? T (1) : (a < 0) ? T (-1) : 0;}
 

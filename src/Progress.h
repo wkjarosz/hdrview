@@ -31,7 +31,7 @@ public:
 
 	std::atomic<Fixed> f;
 
-	AtomicFixed() {}
+	AtomicFixed() = default;
 
 	explicit AtomicFixed(float d) :
 		f(float2fixed(d))
@@ -39,7 +39,7 @@ public:
 		// empty
 	}
 
-	operator float() const
+	explicit operator float() const
 	{
 		return fixed2float(f);
 	}

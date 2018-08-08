@@ -25,7 +25,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 {
     setBackground(Color(0.23f, 1.0f));
 
-    Theme * thm = new Theme(mNVGContext);
+    auto thm = new Theme(mNVGContext);
     thm->mStandardFontSize     = 16;
     thm->mButtonFontSize       = 15;
     thm->mTextBoxFontSize      = 14;
@@ -34,7 +34,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	thm->mWindowFillFocused    = Color(45, 250);
     setTheme(thm);
 
-	Theme * panelTheme = new Theme(mNVGContext);
+	auto panelTheme = new Theme(mNVGContext);
 	panelTheme = new Theme(mNVGContext);
 	panelTheme->mStandardFontSize     = 16;
 	panelTheme->mButtonFontSize       = 15;
@@ -148,7 +148,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
 	auto normalizeButton = new Button(m_topPanel, "", ENTYPO_ICON_FLASH);
 	normalizeButton->setFixedSize(Vector2i(19, 19));
-	normalizeButton->setCallback([this](void)
+	normalizeButton->setCallback([this]()
 	                             {
 		                             auto img = m_imagesPanel->currentImage();
 		                             if (!img)
@@ -162,7 +162,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	normalizeButton->setTooltip("Normalize exposure.");
 	auto resetButton = new Button(m_topPanel, "", ENTYPO_ICON_CYCLE);
 	resetButton->setFixedSize(Vector2i(19, 19));
-	resetButton->setCallback([this](void)
+	resetButton->setCallback([this]()
 	                             {
 		                             m_imageView->setExposure(0.0f);
 		                             m_imageView->setGamma(2.2f);
@@ -449,7 +449,7 @@ bool HDRViewScreen::loadImage()
 	// re-gain focus
 	glfwFocusWindow(mGLFWWindow);
 
-	if (files.size())
+	if (!files.empty())
 		return dropEvent(files);
 	return false;
 }
@@ -478,7 +478,7 @@ void HDRViewScreen::saveImage()
 		// re-gain focus
 		glfwFocusWindow(mGLFWWindow);
 
-		if (filename.size())
+		if (!filename.empty())
 			m_imagesPanel->saveImage(filename, m_imageView->exposure(), m_imageView->gamma(),
 			                      m_imageView->sRGB(), m_imageView->ditheringOn());
 	}
@@ -555,7 +555,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             {
                 if (modifiers & GLFW_MOD_SHIFT)
 					m_imagesPanel->redo();
-	            else
+				else
 					m_imagesPanel->undo();
 
 	            return true;
@@ -608,8 +608,11 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
             return true;
 
         case 'F':
-            flipImage(false);
-            return true;
+			if (modifiers & SYSTEM_COMMAND_MOD)
+				m_imagesPanel->focusFilter();
+			else
+				flipImage(false);
+			return true;
 
         case 'M':
             flipImage(true);
@@ -631,11 +634,6 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    toggleHelpWindow();
             return true;
 
-    	case 'P':
-    		if (modifiers & SYSTEM_COMMAND_MOD)
-			    m_imagesPanel->focusFilter();
-		    return true;
-
         case GLFW_KEY_TAB:
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
@@ -644,12 +642,17 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		        m_guiTimerRunning = true;
 		        m_animationGoal = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
 	        }
-		    else
+		    else if (modifiers & GLFW_MOD_ALT)
+			{
+				m_imagesPanel->swapCurrentSelectedWithPrevious();
+			}
+	        else
 	        {
 		        m_guiAnimationStart = glfwGetTime();
 		        m_guiTimerRunning = true;
 		        m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
 	        }
+
 		    updateLayout();
             return true;
 
@@ -797,7 +800,7 @@ void HDRViewScreen::updateLayout()
 			{
 				double start = (m_animationGoal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
 				double end = (m_animationGoal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
-				sidePanelShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+				sidePanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 				m_sidePanelButton->setPushed(true);
 			}
 			// only animate the header if it isn't already at the goal position
@@ -806,7 +809,7 @@ void HDRViewScreen::updateLayout()
 			{
 				double start = (m_animationGoal & TOP_PANEL) ? double(-headerHeight) : 0.0;
 				double end = (m_animationGoal & TOP_PANEL) ? 0.0 : double(-headerHeight);
-				headerShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+				headerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 
 			// only animate the footer if it isn't already at the goal position
@@ -815,7 +818,7 @@ void HDRViewScreen::updateLayout()
 			{
 				double start = (m_animationGoal & BOTTOM_PANEL) ? double(footerHeight) : 0.0;
 				double end = (m_animationGoal & BOTTOM_PANEL) ? 0.0 : double(footerHeight);
-				footerShift = round(lerp(start, end, smoothStep(0.0, duration, elapsed)));
+				footerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 		}
 	}

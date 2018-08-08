@@ -8,42 +8,27 @@
 #include "Colorspace.h"
 
 
-Color3 Color3::LinearSRGBToXYZ() const
-{
-    Color3 ret;
-    ::LinearSRGBToXYZ(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::XYZToLinearSRGB() const
-{
-    Color3 ret;
-    ::XYZToLinearSRGB(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::XYZToLab() const
-{
-    Color3 ret;
-    ::XYZToLab(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::LabToXYZ() const
-{
-    Color3 ret;
-    ::LabToXYZ(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::XYZToLuv() const
-{
-    Color3 ret;
-    ::XYZToLuv(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::LuvToXYZ() const
-{
-    Color3 ret;
-    ::LuvToXYZ(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
+#define COLORSPACE_FUNCTION_WRAPPER(FUNC) \
+    Color3 Color3::FUNC() const \
+    { \
+        Color3 ret; \
+        ::FUNC(&ret.r, &ret.g, &ret.b, r, g, b); \
+        return ret; \
+    } \
+
+COLORSPACE_FUNCTION_WRAPPER(LinearSRGBToXYZ)
+COLORSPACE_FUNCTION_WRAPPER(XYZToLinearSRGB)
+COLORSPACE_FUNCTION_WRAPPER(LinearAdobeRGBToXYZ)
+COLORSPACE_FUNCTION_WRAPPER(XYZToLinearAdobeRGB)
+COLORSPACE_FUNCTION_WRAPPER(XYZToLab)
+COLORSPACE_FUNCTION_WRAPPER(LabToXYZ)
+COLORSPACE_FUNCTION_WRAPPER(XYZToLuv)
+COLORSPACE_FUNCTION_WRAPPER(LuvToXYZ)
+COLORSPACE_FUNCTION_WRAPPER(RGBToHSV)
+COLORSPACE_FUNCTION_WRAPPER(HSVToRGB)
+COLORSPACE_FUNCTION_WRAPPER(RGBToHSL)
+COLORSPACE_FUNCTION_WRAPPER(HSLToRGB)
+
 Color3 Color3::xyYToXYZ() const
 {
     Color3 ret;
@@ -56,30 +41,6 @@ Color3 Color3::XYZToxyY() const
     Color3 ret;
     ::XYZToxy(&ret[0], &ret[1], r, g, b);
 	ret.b = b;
-    return ret;
-}
-Color3 Color3::RGBToHSV() const
-{
-    Color3 ret;
-    ::RGBToHSV(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::HSVToRGB() const
-{
-    Color3 ret;
-    ::HSVToRGB(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::RGBToHLS() const
-{
-    Color3 ret;
-    ::RGBToHSL(&ret[0], &ret[1], &ret[2], r, g, b);
-    return ret;
-}
-Color3 Color3::HLSToRGB() const
-{
-    Color3 ret;
-    ::HSLToRGB(&ret[0], &ret[1], &ret[2], r, g, b);
     return ret;
 }
 Color3 Color3::HSIAdjust(float h, float s, float i) const

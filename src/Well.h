@@ -25,7 +25,7 @@ public:
 	/// Set the outer well color
 	void setOuterColor(const nanogui::Color & outerColor) { m_outerColor = outerColor; }
 
-    virtual void draw(NVGcontext* ctx) override;
+	void draw(NVGcontext* ctx) override;
 
 protected:
 	float m_radius;

@@ -52,9 +52,6 @@ public:
 
 	std::function<void(const Vector2f &)> dragCallback() const { return mDragCallback; }
 	void setDragCallback(const std::function<void(const Vector2f &)> &callback) { mDragCallback = callback; }
-//
-//	std::function<void(const Vector2f &)> finalCallback() const { return mFinalCallback; }
-//	void setFinalCallback(const std::function<void(const Vector2f &)> &callback) { mFinalCallback = callback; }
 
 	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
@@ -78,7 +75,6 @@ protected:
 	std::vector<std::string> mXTickLabels;
 
 	std::function<void(const Vector2f &)> mDragCallback;
-//	std::function<void(const Vector2f &)> mFinalCallback;
 
 public:
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW

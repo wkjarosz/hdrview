@@ -30,8 +30,8 @@ public:
 	/// Set the button's text caption/filename
 	void setCaption(const std::string &caption) { m_caption = caption; recomputeStringClipping(); }
 	const std::string & caption() const         { return m_caption; }
-	void setId(size_t id)                       { m_id = id; }
-	size_t id() const                           { return m_id; }
+	void setImageId(size_t id)                  { m_id = id; }
+	size_t imageId() const                      { return m_id; }
 	void setIsModified(bool b)                  { m_isModified = b; }
 	bool isModified() const                     { return m_isModified; }
 	bool isSelected() const                     { return m_isSelected; }

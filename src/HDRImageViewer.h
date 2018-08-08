@@ -1,3 +1,5 @@
+#include <utility>
+
 //
 // Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
@@ -25,8 +27,8 @@ class HDRImageViewer : public Widget
 public:
 	HDRImageViewer(Widget * parent, HDRViewScreen * screen);
 
-	void setCurrentImage(ConstImagePtr cur)    {m_currentImage = cur;}
-	void setReferenceImage(ConstImagePtr ref)  {m_referenceImage = ref;}
+	void setCurrentImage(ConstImagePtr cur)    {m_currentImage = std::move(cur);}
+	void setReferenceImage(ConstImagePtr ref)  {m_referenceImage = std::move(ref);}
 
 	// overridden Widget virtual functions
 	void draw(NVGcontext* ctx) override;

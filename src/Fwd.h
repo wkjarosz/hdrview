@@ -9,7 +9,6 @@
 // forward declarations
 class Color3;
 class Color4;
-class GLDitherTexture;
 class ImageButton;
 class ImageCommandUndo;
 class FullImageUndo;
@@ -18,7 +17,6 @@ class CommandHistory;
 class GLImage;
 class HDRImage;
 class HDRViewScreen;
-class HDRImageManager;
 class HDRImageViewer;
 class HelpWindow;
 class MultiGraph;

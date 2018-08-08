@@ -20,20 +20,20 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
-    Color3() {}
+    Color3() = default;
     Color3(const Color3 & c) : r(c.r), g(c.g), b(c.b) {}
     Color3(float x, float y, float z) : r(x), g(y), b(z) {}
     explicit Color3(float c) : r(c), g(c), b(c) {}
-    Color3(const float* c) : r(c[0]), g(c[1]), b(c[2]) {}
-    const Color3 & operator=(float c) {r = g = b = c; return *this;}
+    explicit Color3(const float* c) : r(c[0]), g(c[1]), b(c[2]) {}
+    Color3 & operator=(float c) {r = g = b = c; return *this;}
     //@}
 
 
     //-----------------------------------------------------------------------
     //@{ \name Casting operators.
     //-----------------------------------------------------------------------
-    operator const float*() const {return(const float*)&r;}
-    operator float*() {return(float*)&r;}
+    explicit operator const float*() const {return(const float*)&r;}
+    explicit operator float*() {return(float*)&r;}
     //@}
 
 
@@ -176,8 +176,8 @@ public:
 
     Color3 RGBToHSV() const;
     Color3 HSVToRGB() const;
-    Color3 RGBToHLS() const;
-    Color3 HLSToRGB() const;
+    Color3 RGBToHSL() const;
+    Color3 HSLToRGB() const;
     Color3 HSIAdjust(float h, float s, float i) const;
     Color3 HSLAdjust(float h, float s, float l) const;
 
@@ -212,12 +212,12 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
-    Color4() {}
+    Color4() = default;
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
     Color4(float g, float a) : Color3(g), a(a) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}
     explicit Color4(float x) : Color3(x), a(x) {}
-    Color4(const float* c) : Color3(c), a(c[3]) {}
+    explicit Color4(const float* c) : Color3(c), a(c[3]) {}
     const Color4 & operator=(float c) {r = g = b = a = c; return *this;}
     //@}
 
@@ -225,8 +225,8 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Casting operators.
     //-----------------------------------------------------------------------
-    operator const float*() const {return(const float*)&r;}
-    operator float*() {return(float*)&r;}
+    explicit operator const float*() const {return(const float*)&r;}
+    explicit operator float*() {return(float*)&r;}
     //@}
 
 
@@ -245,7 +245,7 @@ public:
     //-----------------------------------------------------------------------
     Color4 operator+(const Color4& v) const
     {
-        return Color4(r + v.r, g + v.g, b + v.b, a + v.a);
+        return {r + v.r, g + v.g, b + v.b, a + v.a};
     }
     const Color4 & operator+=(const Color4& v)
     {
@@ -263,7 +263,7 @@ public:
     //-----------------------------------------------------------------------
     Color4 operator-(const Color4& v) const
     {
-        return Color4(r - v.r, g - v.g, b - v.b, a - v.a);
+        return {r - v.r, g - v.g, b - v.b, a - v.a};
     }
     const Color4 & operator-=(const Color4& v)
     {
@@ -281,7 +281,7 @@ public:
     //-----------------------------------------------------------------------
     Color4 operator*(float c) const
     {
-        return Color4(r * c, g * c, b * c, a * c);
+        return {r * c, g * c, b * c, a * c};
     }
     Color4 operator*(const Color4& v) const
     {
@@ -295,7 +295,7 @@ public:
     {
         r *= v.r; g *= v.g; b *= v.b; a *= v.a; return *this;
     }
-    Color4 operator-() const {return Color4(-r, -g, -b, -a);}
+    Color4 operator-() const {return {-r, -g, -b, -a};}
     //@}
 
 
@@ -305,11 +305,11 @@ public:
     Color4 operator/(float c) const
     {
         float inv = 1.0f / c;
-        return Color4(r * inv, g * inv, b * inv, a * inv);
+        return {r * inv, g * inv, b * inv, a * inv};
     }
     Color4 operator/(const Color4 & v) const
     {
-        return Color4(r / v.r, g / v.g, b / v.b, a / v.a);
+        return {r / v.r, g / v.g, b / v.b, a / v.a};
     }
     const Color4 & operator/=(float c)
     {
@@ -348,8 +348,8 @@ public:
 
 	Color4 RGBToHSV() const {return Color4(Color3::RGBToHSV(), a);}
 	Color4 HSVToRGB() const {return Color4(Color3::HSVToRGB(), a);}
-	Color4 RGBToHLS() const {return Color4(Color3::RGBToHLS(), a);}
-	Color4 HLSToRGB() const {return Color4(Color3::HLSToRGB(), a);}
+	Color4 RGBToHSL() const {return Color4(Color3::RGBToHSL(), a);}
+	Color4 HSLToRGB() const {return Color4(Color3::HSLToRGB(), a);}
     Color4 HSIAdjust(float h, float s, float i) const {return Color4(Color3::HSIAdjust(h,s,i), a);}
     Color4 HSLAdjust(float h, float s, float l) const {return Color4(Color3::HSLAdjust(h,s,l), a);}
 
@@ -364,15 +364,15 @@ public:
     }
     friend Color4 operator*(float s, const Color4& c)
     {
-	   return Color4(c.r * s, c.g * s, c.b * s, c.a * s);
+	   return {c.r * s, c.g * s, c.b * s, c.a * s};
     }
     friend Color4 operator+(float s, const Color4& c)
     {
-       return Color4(s + c.r, s + c.g, s + c.b, c.a);
+       return {s + c.r, s + c.g, s + c.b, c.a};
     }
     friend Color4 operator-(float s, const Color4& c)
     {
-       return Color4(s - c.r, s - c.g, s - c.b, c.a);
+       return {s - c.r, s - c.g, s - c.b, c.a};
     }
 };
 

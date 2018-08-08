@@ -88,6 +88,8 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(imageLoading, "1…9", "Select the N-th Image");
 	addRow(imageLoading, "Down / Up", "Select Previous/Next Image");
 	addRow(imageLoading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
+	addRow(imageLoading, ALT + "+Tab", "Jump Back To Previously Selected Image");
+	addRow(imageLoading, COMMAND + "+F", "Find Image");
 
 	new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
 	auto imageSelection = new Widget(column);

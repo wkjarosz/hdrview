@@ -28,14 +28,15 @@ public:
 	int currentImageIndex() const          {return m_current;}
 	int referenceImageIndex() const        {return m_reference;}
 	ConstImagePtr currentImage() const     {return image(m_current);}
-	ImagePtr currentImage()           {return image(m_current);}
+	     ImagePtr currentImage()           {return image(m_current);}
 	ConstImagePtr referenceImage() const   {return image(m_reference);}
-	ImagePtr referenceImage()         {return image(m_reference);}
+	     ImagePtr referenceImage()         {return image(m_reference);}
 	ConstImagePtr image(int index) const;
-	ImagePtr image(int index);
+	     ImagePtr image(int index);
 
 	bool setCurrentImageIndex(int newIndex, bool forceCallback = false);
 	bool setReferenceImageIndex(int newIndex);
+	bool swapCurrentSelectedWithPrevious() {printf("current: %d; previous: %d\n", m_current, m_previous);return isValid(m_previous) ? setCurrentImageIndex(m_previous) : false;}
 	bool swapImages(int index1, int index2);
 	bool sendImageBackward();
 	bool bringImageForward();
@@ -88,6 +89,8 @@ private:
 	std::vector<ImagePtr> m_images; ///< The loaded images
 	int m_current = -1;             ///< The currently selected image
 	int m_reference = -1;           ///< The currently selected reference image
+
+	int m_previous = -1;			///< The previously selected image
 
 	std::atomic<bool> m_imageModifyDoneRequested;
 
