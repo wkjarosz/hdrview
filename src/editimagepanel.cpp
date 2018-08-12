@@ -1486,7 +1486,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			vector<Button *> buttonGroup;
 
 			buttonGroup.push_back(new Button(row, "+"));
-			buttonGroup.push_back(new Button(row, "–"));
+			buttonGroup.push_back(new Button(row, "-"));
 			buttonGroup.push_back(new Button(row, "+"));
 
 			buttonGroup.push_back(new Button(row, "|"));
@@ -1494,7 +1494,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 			buttonGroup.push_back(new Button(row, "|"));
 
 			buttonGroup.push_back(new Button(row, "+"));
-			buttonGroup.push_back(new Button(row, "–"));
+			buttonGroup.push_back(new Button(row, "-"));
 			buttonGroup.push_back(new Button(row, "+"));
 
 			for (size_t i = 0; i < buttonGroup.size(); ++i)
@@ -1517,7 +1517,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, HDRIm
 						}
 						else
 						{
-							btn->setCaption(i % 2 ? "–" : "+");
+							btn->setCaption(i % 2 ? "-" : "+");
 							if (i == 3 || i == 5)
 								btn->setCaption("|");
 							btn->setIcon(0);
