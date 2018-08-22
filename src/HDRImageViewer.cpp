@@ -372,7 +372,9 @@ void HDRImageViewer::drawPixelGrid(NVGcontext* ctx) const
 	}
 
 	nvgStrokeWidth(ctx, 2.0f);
-	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, 0.2f));
+	float factor = clamp01((m_zoom - m_gridThreshold)/(2*m_gridThreshold));
+	float alpha = lerp(0.0f, 0.2f, smoothStep(0.0f, 1.0f, factor));
+	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, alpha));
 	nvgStroke(ctx);
 }
 
@@ -383,6 +385,10 @@ void HDRImageViewer::drawPixelInfo(NVGcontext* ctx) const
 	int maxJ = min(m_currentImage->height() - 1, int(ceil((m_screen->size().y() - xy0.y()) / m_zoom)));
 	int minI = max(0, int(-xy0.x() / m_zoom));
 	int maxI = min(m_currentImage->width() - 1, int(ceil((m_screen->size().x() - xy0.x()) / m_zoom)));
+
+	float factor = clamp01((m_zoom - m_pixelInfoThreshold)/(2*m_pixelInfoThreshold));
+	float alpha = lerp(0.0f, 0.5f, smoothStep(0.0f, 1.0f, factor));
+
 	for (int j = minJ; j <= maxJ; ++j)
 	{
 		for (int i = minI; i <= maxI; ++i)
@@ -394,7 +400,7 @@ void HDRImageViewer::drawPixelInfo(NVGcontext* ctx) const
 			auto pos = screenPositionForCoordinate(Vector2f(i, j));
 			nvgFontFace(ctx, "sans");
 			nvgFontSize(ctx, m_zoom / 31.0f * 10);
-			nvgFillColor(ctx, luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, 0.5f) : Color(1.0f, 1.0f, 1.0f, 0.5f));
+			nvgFillColor(ctx, luminance > 0.5f ? Color(0.0f, 0.0f, 0.0f, alpha) : Color(1.0f, 1.0f, 1.0f, alpha));
 			nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
 			nvgTextBox(ctx, pos.x(), pos.y(), m_zoom, text.c_str(), nullptr);
 		}
