@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 #endif
         docargs = docopt::docopt(USAGE, argVector,
                                  true,            // show help if requested
-                                 "HDRView 0.1");  // version string
+                                 "HDRView " HDRVIEW_VERSION);  // version string
 
         verbosity = docargs["--verbose"].asLong();
 

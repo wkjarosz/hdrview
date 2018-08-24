@@ -199,7 +199,7 @@ int main(int argc, char **argv)
 #endif
         docargs = docopt::docopt(USAGE, argVector,
                                  true,             // show help if requested
-                                 "HDRBatch 0.1");  // version string
+                                 "HDRBatch " HDRVIEW_VERSION);  // version string
 
         verbosity = docargs["--verbose"].asLong();
 

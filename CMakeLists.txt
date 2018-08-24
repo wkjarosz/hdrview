@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.1)
 project(hdrview)
 
-set(HDRVIEW_VERSION "0.1.dev")
+set(HDRVIEW_VERSION "0.2")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
@@ -186,7 +186,13 @@ add_executable(HDRView
                src/Well.h
                ${EXTRA_SOURCE})
 
-add_definitions(${NANOGUI_EXTRA_DEFS})
+set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
+if (APPLE)
+    # HDRVIEW is unlikely to switch away from openGL anytime soon
+    set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DGL_SILENCE_DEPRECATION)
+endif()
+
+add_definitions(${HDRVIEW_DEFINITIONS} ${NANOGUI_EXTRA_DEFS})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
@@ -195,7 +201,8 @@ if (APPLE)
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
-    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright 2017, Wojciech Jarosz. Freely available under the BSD license.")
+    STRING(TIMESTAMP YEAR "%Y")
+    set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
     set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
@@ -236,7 +243,6 @@ add_executable(hdrbatch
                src/Progress.cpp
                src/Progress.h
                src/Range.h)
-
 
 add_executable(force-random-dither
     src/forced-random-dither.cpp)

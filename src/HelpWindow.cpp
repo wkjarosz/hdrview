@@ -54,7 +54,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	auto copyW = new Widget(this);
 	copyW->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-	auto copy = new Label(copyW, "Copyright (c) Wojciech Jarosz\n\n"
+	auto copy = new Label(copyW, "HDRView " HDRVIEW_VERSION ". Copyright (c) Wojciech Jarosz\n\n"
 		"HDRView is a simple research-oriented tool for examining, "
 		"comparing, manipulating, and converting high-dynamic range images.\n\n"
 		"HDRView is freely available under a 3-clause BSD license.");

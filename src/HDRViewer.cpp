@@ -62,7 +62,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanel->setTheme(panelTheme);
 
 	m_imageView = new HDRImageViewer(this, this);
-	m_imageView->setGridThreshold(20);
+	m_imageView->setGridThreshold(10);
 	m_imageView->setPixelInfoThreshold(40);
 
 	m_statusBar = new Window(this, "");
@@ -282,9 +282,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_imageView->setZoomCallback([this](float zoom)
                                 {
                                     float realZoom = zoom * pixelRatio();
-                                    int ratio1 = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
-                                    int ratio2 = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-                                    m_zoomLabel->setCaption(fmt::format("{:7.3f}% ({:d} : {:d})", realZoom * 100, ratio1, ratio2));
+                                    int numer = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
+                                    int denom = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
+                                    m_zoomLabel->setCaption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
                                     updateLayout();
                                 });
 
