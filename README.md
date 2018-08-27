@@ -21,6 +21,10 @@ Displaying HDR images naively on a 24 bit display leads to visible banding in sm
 HDRView supports high-quality dithering (both when viewing and when saving to an LDR file) to reduce these artifacts.
 ![Screenshot](resources/screenshot4.png "Screenshot4")
 
+## Obtaining HDRView
+
+If you are running a recent version of macOS, you can download the pre-built binary installer DMG from the [releases page](https://bitbucket.org/wkjarosz/hdrview/downloads). For other platforms, you will need to build HDRView from source for now.
+
 ## Compiling
 
 Compiling from scratch requires CMake and a recent version of the XCode build tools on macOS, Visual Studio 2015 on Windows, and GCC on Linux.
