@@ -682,6 +682,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 	        }
 		    return false;
 
+        case GLFW_KEY_KP_0:
 	    case '0':
 		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
@@ -693,9 +694,10 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		    return false;
     }
 
-	if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9)
+	if ((key >= GLFW_KEY_1 && key <= GLFW_KEY_9) || (key >= GLFW_KEY_KP_1 && key <= GLFW_KEY_KP_9))
 	{
-		int idx = (key - GLFW_KEY_1) % 10;
+        int keyOffset = (key >= GLFW_KEY_KP_1) ? GLFW_KEY_KP_1 : GLFW_KEY_1;
+        int idx = (key - keyOffset) % 10;
 
 		if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
 		{
@@ -710,7 +712,7 @@ bool HDRViewScreen::keyboardEvent(int key, int scancode, int action, int modifie
 		else
 		{
 			auto nth = m_imagesPanel->nthVisibleImageIndex(idx);
-			if (nth > 0)
+			if (nth >= 0)
 				m_imagesPanel->setCurrentImageIndex(nth);
 		}
 		return false;
