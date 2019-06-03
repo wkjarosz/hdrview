@@ -15,6 +15,7 @@ install:
 before_build:
 - cmd: >-
     echo Running cmake...
+    
     cmake -DBOOST_ROOT=C:\Libraries\boost_1_64_0 -G "Visual Studio 15 2017 Win64" .
 build:
   project: hdrview.sln
