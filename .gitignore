@@ -30,7 +30,8 @@ rules.ninja
 *.exe
 .DS_Store
 ext_build
-build
+.vscode
+build*/
 cmake-build-debug
 cmake-build-release
 cmake-build-minsizerel
