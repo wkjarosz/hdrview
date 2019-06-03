@@ -76,6 +76,8 @@ if (MSVC)
         string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
     endforeach()
 elseif(APPLE)
+    # silence GL deprecation warnings.
+    add_definitions(-DGL_SILENCE_DEPRECATION)
     # Try to auto-detect a suitable SDK
     # Commented out for now -- causes a too new SDK to be selected on AppVeyor
     #execute_process(COMMAND bash -c "xcodebuild -version -sdk | grep MacOSX | grep Path | head -n 1 | cut -f 2 -d ' '" OUTPUT_VARIABLE CMAKE_OSX_SYSROOT)
