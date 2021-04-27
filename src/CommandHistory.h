@@ -76,16 +76,16 @@ public:
         // empty
     }
 
-    bool isModified() const     {return m_currentState != m_savedState;}
-    void markSaved()            {m_savedState = m_currentState;}
+    bool is_modified() const     {return m_currentState != m_savedState;}
+    void mark_saved()            {m_savedState = m_currentState;}
 
-    int currentState() const    {return m_currentState;}
-    int savedState() const      {return m_savedState;}
+    int current_state() const    {return m_currentState;}
+    int saved_state() const      {return m_savedState;}
     int size() const            {return m_history.size();}
-    bool hasUndo() const        {return m_currentState > 0;}
-    bool hasRedo() const        {return m_currentState < size();}
+    bool has_undo() const        {return m_currentState > 0;}
+    bool has_redo() const        {return m_currentState < size();}
 
-    void addCommand(UndoPtr cmd)
+    void add_command(UndoPtr cmd)
     {
         // deletes all history newer than the current state
         m_history.resize(m_currentState);
@@ -98,7 +98,7 @@ public:
     bool undo(std::shared_ptr<HDRImage> & img)
     {
         // check if there is anything to undo
-        if (!hasUndo() || m_currentState > size())
+        if (!has_undo() || m_currentState > size())
             return false;
 
         m_history[--m_currentState]->undo(img);
@@ -107,7 +107,7 @@ public:
     bool redo(std::shared_ptr<HDRImage> & img)
     {
         // check if there is anything to redo
-        if (!hasRedo() || m_currentState < 0)
+        if (!has_redo() || m_currentState < 0)
             return false;
 
         m_history[m_currentState++]->redo(img);

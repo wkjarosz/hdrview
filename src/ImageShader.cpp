@@ -10,7 +10,7 @@
 #include <random>
 
 using namespace nanogui;
-using namespace Eigen;
+// using namespace Eigen;
 using namespace std;
 
 namespace
@@ -57,7 +57,7 @@ constexpr char const *const fragmentShader =
     uniform sampler2D reference;
 	uniform bool hasReference;
 
-	uniform int blendMode;
+	uniform int blend_mode;
     uniform float gain;
     uniform int channel;
     uniform float gamma;
@@ -251,7 +251,7 @@ constexpr char const *const fragmentShader =
 	{
 		vec3 diff = imageVal.rgb - referenceVal.rgb;
 		float alpha = imageVal.a + referenceVal.a*(1-imageVal.a);
-        switch (blendMode)
+        switch (blend_mode)
 		{
 			case NORMAL_BLEND:              return vec4(imageVal.rgb*imageVal.a + referenceVal.rgb*referenceVal.a*(1-imageVal.a), alpha);
 			case MULTIPLY_BLEND:            return vec4(imageVal.rgb * referenceVal.rgb, alpha);
@@ -300,54 +300,54 @@ constexpr char const *const fragmentShader =
     }
 )";
 
-void setDitherParams(GLShader & shader, GLuint textureId, bool hasDither)
+void setDitherParams(Shader & shader, GLuint textureId, bool hasDither)
 {
-	shader.setUniform("hasDither", (int)hasDither);
-	if (!hasDither)
-		return;
+	// shader.set_uniform("hasDither", (int)hasDither);
+	// if (!hasDither)
+	// 	return;
 
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, textureId);
+	// glActiveTexture(GL_TEXTURE0);
+	// glBindTexture(GL_TEXTURE_2D, textureId);
 
-	shader.setUniform("ditherImg", 0);
-	Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
-	                    std::generate_canonical<float, 10>(g_rand)*255);
-	shader.setUniform("randomness", randomness);
+	// shader.set_uniform("ditherImg", 0);
+	// Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
+	//                     std::generate_canonical<float, 10>(g_rand)*255);
+	// shader.set_uniform("randomness", randomness);
 }
 
-void setImageParams(GLShader & shader,
+void setImageParams(Shader & shader,
                     GLuint imageId,
                     const Vector2f & scale,
                     const Vector2f & position,
                     float gain, float gamma, bool sRGB,
                     EChannel channel)
 {
-	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, imageId);
+	// glActiveTexture(GL_TEXTURE1);
+	// glBindTexture(GL_TEXTURE_2D, imageId);
 
-	shader.setUniform("gain", gain);
-	shader.setUniform("gamma", gamma);
-	shader.setUniform("sRGB", (int)sRGB);
-	shader.setUniform("channel", (int)channel);
+	// shader.set_uniform("gain", gain);
+	// shader.set_uniform("gamma", gamma);
+	// shader.set_uniform("sRGB", (int)sRGB);
+	// shader.set_uniform("channel", (int)channel);
 
-	shader.setUniform("image", 1);
-	shader.setUniform("imageScale", scale);
-	shader.setUniform("imagePosition", position);
+	// shader.set_uniform("image", 1);
+	// shader.set_uniform("imageScale", scale);
+	// shader.set_uniform("imagePosition", position);
 }
 
-void setReferenceParams(GLShader & shader,
+void setReferenceParams(Shader & shader,
                         GLuint referenceId,
                         const Vector2f & scale,
                         const Vector2f & position,
-                        EBlendMode blendMode)
+                        EBlendMode blend_mode)
 {
-	glActiveTexture(GL_TEXTURE2);
-	glBindTexture(GL_TEXTURE_2D, referenceId);
+	// glActiveTexture(GL_TEXTURE2);
+	// glBindTexture(GL_TEXTURE_2D, referenceId);
 
-	shader.setUniform("reference", 2);
-	shader.setUniform("referenceScale", scale);
-	shader.setUniform("referencePosition", position);
-	shader.setUniform("blendMode", (int)blendMode);
+	// shader.set_uniform("reference", 2);
+	// shader.set_uniform("referenceScale", scale);
+	// shader.set_uniform("referencePosition", position);
+	// shader.set_uniform("blend_mode", (int)blend_mode);
 }
 
 } // namespace
@@ -357,61 +357,61 @@ void setReferenceParams(GLShader & shader,
 
 ImageShader::ImageShader()
 {
-	DEFINE_PARAMS2(EChannel, RED, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, GREEN, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIE_L, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIE_a, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIE_b, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, CIE_CHROMATICITY, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
-	DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, RED, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, GREEN, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, CIE_L, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, CIE_a, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, CIE_b, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, CIE_CHROMATICITY, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
+	// DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
 
-	DEFINE_PARAMS(EBlendMode, NORMAL_BLEND);
-	DEFINE_PARAMS(EBlendMode, MULTIPLY_BLEND);
-	DEFINE_PARAMS(EBlendMode, DIVIDE_BLEND);
-	DEFINE_PARAMS(EBlendMode, ADD_BLEND);
-	DEFINE_PARAMS(EBlendMode, AVERAGE_BLEND);
-	DEFINE_PARAMS(EBlendMode, SUBTRACT_BLEND);
-	DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
-	DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
+	// DEFINE_PARAMS(EBlendMode, NORMAL_BLEND);
+	// DEFINE_PARAMS(EBlendMode, MULTIPLY_BLEND);
+	// DEFINE_PARAMS(EBlendMode, DIVIDE_BLEND);
+	// DEFINE_PARAMS(EBlendMode, ADD_BLEND);
+	// DEFINE_PARAMS(EBlendMode, AVERAGE_BLEND);
+	// DEFINE_PARAMS(EBlendMode, SUBTRACT_BLEND);
+	// DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
+	// DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
 
-	// Gamma/exposure tonemapper with hasDither as a GLSL shader
-	m_shader.init("Tonemapper", vertexShader, fragmentShader);
+	// // Gamma/exposure tonemapper with hasDither as a GLSL shader
+	// m_shader.init("Tonemapper", vertexShader, fragmentShader);
 
-	// Draw 2 triangles
-	MatrixXu indices(3, 2);
-	indices.col(0) << 0, 1, 2;
-	indices.col(1) << 2, 3, 1;
+	// // Draw 2 triangles
+	// MatrixXu indices(3, 2);
+	// indices.col(0) << 0, 1, 2;
+	// indices.col(1) << 2, 3, 1;
 
-	MatrixXf vertices(2, 4);
-	vertices.col(0) << -1, -1;
-	vertices.col(1) <<  1, -1;
-	vertices.col(2) << -1,  1;
-	vertices.col(3) <<  1,  1;
+	// MatrixXf vertices(2, 4);
+	// vertices.col(0) << -1, -1;
+	// vertices.col(1) <<  1, -1;
+	// vertices.col(2) << -1,  1;
+	// vertices.col(3) <<  1,  1;
 
-	m_shader.bind();
-	m_shader.uploadIndices(indices);
-	m_shader.uploadAttrib("vertex", vertices);
+	// m_shader.bind();
+	// m_shader.uploadIndices(indices);
+	// m_shader.uploadAttrib("vertex", vertices);
 
-	// Allocate texture memory for the hasDither image
-	glGenTextures(1, &m_ditherTexId);
-	glBindTexture(GL_TEXTURE_2D, m_ditherTexId);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	// // Allocate texture memory for the hasDither image
+	// glGenTextures(1, &m_ditherTexId);
+	// glBindTexture(GL_TEXTURE_2D, m_ditherTexId);
+	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-	glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 256, 256,
-	             0, GL_RED, GL_FLOAT, (const GLvoid *) dither_matrix256);
+	// glPixelStorei(GL_UNPACK_ROW_LENGTH, 256);
+	// glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, 256, 256,
+	//              0, GL_RED, GL_FLOAT, (const GLvoid *) dither_matrix256);
 }
 
 ImageShader::~ImageShader()
 {
-	m_shader.free();
-	if (m_ditherTexId)
-		glDeleteTextures(1, &m_ditherTexId);
+	// m_shader.free();
+	// if (m_ditherTexId)
+	// 	glDeleteTextures(1, &m_ditherTexId);
 }
 
 void ImageShader::draw(GLuint imageId,
@@ -419,14 +419,14 @@ void ImageShader::draw(GLuint imageId,
 						float gain, float gamma, bool sRGB, bool hasDither,
 						EChannel channel, EBlendMode mode)
 {
-	m_shader.bind();
+	// m_shader.bind();
 
-	setDitherParams(m_shader, m_ditherTexId, hasDither);
-	setImageParams(m_shader, imageId, imageScale, imagePosition, gain, gamma, sRGB, channel);
-	m_shader.setUniform("hasImage", (int)true);
-	m_shader.setUniform("hasReference", (int)false);
+	// setDitherParams(m_shader, m_ditherTexId, hasDither);
+	// setImageParams(m_shader, imageId, imageScale, imagePosition, gain, gamma, sRGB, channel);
+	// m_shader.set_uniform("hasImage", (int)true);
+	// m_shader.set_uniform("hasReference", (int)false);
 
-	m_shader.drawIndexed(GL_TRIANGLES, 0, 2);
+	// m_shader.drawIndexed(GL_TRIANGLES, 0, 2);
 }
 
 void ImageShader::draw(GLuint imageId,
@@ -436,13 +436,13 @@ void ImageShader::draw(GLuint imageId,
                        float gain, float gamma, bool sRGB, bool hasDither,
                        EChannel channel, EBlendMode mode)
 {
-	m_shader.bind();
+	// m_shader.bind();
 
-	setDitherParams(m_shader, m_ditherTexId, hasDither);
-	setImageParams(m_shader, imageId, imageScale, imagePosition, gain, gamma, sRGB, channel);
-	setReferenceParams(m_shader, referenceId, referenceScale, referencePosition, mode);
-	m_shader.setUniform("hasImage", (int)true);
-	m_shader.setUniform("hasReference", (int)true);
+	// setDitherParams(m_shader, m_ditherTexId, hasDither);
+	// setImageParams(m_shader, imageId, imageScale, imagePosition, gain, gamma, sRGB, channel);
+	// setReferenceParams(m_shader, referenceId, referenceScale, referencePosition, mode);
+	// m_shader.set_uniform("hasImage", (int)true);
+	// m_shader.set_uniform("hasReference", (int)true);
 
-	m_shader.drawIndexed(GL_TRIANGLES, 0, 2);
+	// m_shader.drawIndexed(GL_TRIANGLES, 0, 2);
 }

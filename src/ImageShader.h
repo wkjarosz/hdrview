@@ -7,7 +7,8 @@
 #pragma once
 
 #include <nanogui/opengl.h>
-#include <nanogui/glutil.h>
+// #include <nanogui/glutil.h>
+#include <nanogui/shader.h>
 #include "Common.h"
 
 /*!
@@ -20,23 +21,23 @@ public:
 	virtual ~ImageShader();
 
 	void draw(GLuint imageId,
-	          const Eigen::Vector2f & scale,
-	          const Eigen::Vector2f & position,
+	          const nanogui::Vector2f & scale,
+	          const nanogui::Vector2f & position,
 	          float gain, float gamma,
 	          bool sRGB, bool dither,
 	          EChannel channel, EBlendMode mode);
 
 	void draw(GLuint imageId,
 	          GLuint referenceId,
-	          const Eigen::Vector2f & imageScale,
-	          const Eigen::Vector2f & imagePosition,
-	          const Eigen::Vector2f & referenceScale,
-	          const Eigen::Vector2f & referencePosition,
+	          const nanogui::Vector2f & imageScale,
+	          const nanogui::Vector2f & imagePosition,
+	          const nanogui::Vector2f & referenceScale,
+	          const nanogui::Vector2f & referencePosition,
 	          float gain, float gamma,
 	          bool sRGB, bool dither,
 	          EChannel channel, EBlendMode mode);
 
 private:
-	nanogui::GLShader m_shader;
+	// nanogui::Shader m_shader;
 	GLuint m_ditherTexId = 0;
 };

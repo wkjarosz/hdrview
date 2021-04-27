@@ -7,7 +7,7 @@
 #include "EditImagePanel.h"
 #include "Common.h"
 #include "GLImage.h"
-#include "HDRViewer.h"
+#include "HDRViewScreen.h"
 #include "HDRImage.h"
 #include "ImageListPanel.h"
 #include "EnvMap.h"
@@ -30,28 +30,28 @@ std::function<void(float)> createFloatBoxAndSlider(
 	std::function<void(void)> cb,
 	string help = "")
 {
-	auto fBox = gui->addVariable(name, variable);
-	fBox->setSpinnable(true);
-	fBox->numberFormat("%1.2f");
-	fBox->setValueIncrement(step);
-	fBox->setMinMaxValues(mn, mx);
-	fBox->setTooltip(help);
+	auto fBox = gui->add_variable(name, variable);
+	fBox->set_spinnable(true);
+	fBox->number_format("%1.2f");
+	fBox->set_value_increment(step);
+	fBox->set_min_max_values(mn, mx);
+	fBox->set_tooltip(help);
 
 	auto fSlider = new Slider(parent);
-	fSlider->setValue(variable);
-	fSlider->setRange({mn, mx});
-	fSlider->setTooltip(help);
-	gui->addWidget("", fSlider);
+	fSlider->set_value(variable);
+	fSlider->set_range({mn, mx});
+	fSlider->set_tooltip(help);
+	gui->add_widget("", fSlider);
 
 	auto fCb = [fBox,fSlider,cb,&variable](float v)
 	{
 		variable = v;
-		fBox->setValue(v);
-		fSlider->setValue(v);
+		fBox->set_value(v);
+		fSlider->set_value(v);
 		cb();
 	};
-	fSlider->setCallback(fCb);
-	fBox->setCallback(fCb);
+	fSlider->set_callback(fCb);
+	fBox->set_callback(fCb);
 	return fCb;
 }
 
@@ -61,52 +61,50 @@ void addOKCancelButtons(FormHelper * gui, Window * window,
                         const function<void()> &cancelCallback = nullptr)
 {
 	auto spacer = new Widget(window);
-	spacer->setFixedHeight(15);
-	gui->addWidget("", spacer);
+	spacer->set_fixed_height(15);
+	gui->add_widget("", spacer);
 
 	auto w = new Widget(window);
-	w->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
-	auto b = new Button(w, "Cancel", ENTYPO_ICON_CIRCLE_WITH_CROSS);
-	b->setCallback(
+	w->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+	auto b = new Button(w, "Cancel", window->theme()->m_message_alt_button_icon);
+	b->set_callback(
 		[window,cancelCallback]()
 		{
 			if (cancelCallback)
 				cancelCallback();
 			window->dispose();
 		});
-	b = new Button(w, "OK", ENTYPO_ICON_CHECK);
-	b->setCallback(
+	b = new Button(w, "OK", window->theme()->m_message_primary_button_icon);
+	b->set_callback(
 		[window,OKCallback]()
 		{
 			OKCallback();
 			window->dispose();
 		});
-	gui->addWidget("", w);
+	gui->add_widget("", w);
 }
 
 Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * imagesPanel)
 {
 	static string name = "Convert color space...";
 	static EColorSpace src = LinearSRGB_CS, dst = CIEXYZ_CS;
-	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_PALETTE);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(125, 20));
+			gui->set_fixed_size(Vector2i(125, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
+			auto window = gui->add_window(Vector2i(10, 10), name);
 
-			gui->addVariable("Source:", src, true)
-			   ->setItems(colorSpaceNames());
-			gui->addVariable("Destination:", dst, true)
-			   ->setItems(colorSpaceNames());
+			gui->add_variable("Source:", src, true)->set_items(colorSpaceNames());
+			gui->add_variable("Destination:", dst, true)->set_items(colorSpaceNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->unaryExpr([](const Color4 & c){return c.convert(dst, src);}).eval()),
@@ -115,7 +113,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, ImageLis
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -126,46 +124,44 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 	static float exposure = 0.0f;
 	static float gamma = 1.0f;
 	static float offset = 0.0f;
-	auto b = new Button(parent, name, ENTYPO_ICON_ADJUST);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_ADJUST);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(55, 20));
+			gui->set_fixed_size(Vector2i(55, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 
 			// graph
 			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
-			graph->addPlot(Color(255, 255, 255, 200));
-			graph->addPlot(Color(255, 255, 255, 50));
-			graph->setFixedSize(Vector2i(200, 200));
-			graph->setFilled(false);
-			graph->setWell(false);
-			graph->setValues(VectorXf::LinSpaced(257, 0.0f, 1.0f), 0);
-			graph->setValues(VectorXf::Constant(2, 0.5f), 2);
+			graph->add_plot(Color(255, 255, 255, 200));
+			graph->add_plot(Color(255, 255, 255, 50));
+			graph->set_fixed_size(Vector2i(200, 200));
+			graph->set_filled(false);
+			graph->set_well(false);
+			graph->set_values(linspaced(257, 0.0f, 1.0f), 0);
+			graph->set_values({0.5f, 0.5f}, 2);
 			int numTicks = 5;
 			// create the x tick marks
-			VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+			auto xTicks = linspaced(numTicks, 0.0f, 1.0f);
 			// create the x tick labels
 			vector<string> xTickLabels(numTicks);
 			for (int i = 0; i < numTicks; ++i)
 				xTickLabels[i] = fmt::format("{:.2f}", xTicks[i]);
-			graph->setXTicks(xTicks, xTickLabels);
-			graph->setYTicks(xTicks);
-			gui->addWidget("", graph);
+			graph->set_xticks(xTicks, xTickLabels);
+			graph->set_yticks(xTicks);
+			gui->add_widget("", graph);
 
 			auto graphCb = [graph]()
 			{
-				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
-					[](float v)
-					{
-						return pow(pow(2.0f, exposure) * v + offset, 1.0f/gamma);
-					});
-				graph->setValues(lCurve, 1);
+				auto lCurve = linspaced(257, 0.0f, 1.0f);
+				for (auto&& i : lCurve)
+					i = pow(pow(2.0f, exposure) * i + offset, 1.0f/gamma);
+				graph->set_values(lCurve, 1);
 			};
 
 			graphCb();
@@ -186,7 +182,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							spdlog::get("console")->debug("{}; {}; {}", exposure, offset, gamma);
@@ -196,7 +192,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -216,60 +212,57 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 		CHROMATICITY
 	} channel = RGB;
 	static ::EChannel channelMap[] = { ::EChannel::RGB, ::EChannel::LUMINANCE, ::EChannel::CIE_CHROMATICITY };
-	auto b = new Button(parent, name, ENTYPO_ICON_CONTROLLER_VOLUME);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_ADJUST);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(100, 20));
+			gui->set_fixed_size(Vector2i(100, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 
 			// graph
 			auto graph = new MultiGraph(window, Color(255, 255, 255, 30));
-			graph->addPlot(inactiveColor);
-			graph->addPlot(activeColor);
-			graph->addPlot(Color(255, 255, 255, 50));
-			graph->setFixedSize(Vector2i(200, 200));
-			graph->setFilled(false);
-			graph->setWell(false);
-			graph->setValues(VectorXf::LinSpaced(257, 0.0f, 1.0f), 0);
-			graph->setValues(VectorXf::Constant(2, 0.5f), 3);
+			graph->add_plot(inactiveColor);
+			graph->add_plot(activeColor);
+			graph->add_plot(Color(255, 255, 255, 50));
+			graph->set_fixed_size(Vector2i(200, 200));
+			graph->set_filled(false);
+			graph->set_well(false);
+			graph->set_values(linspaced(257, 0.0f, 1.0f), 0);
+			graph->set_values({0.5f, 0.5f}, 3);
 			int numTicks = 5;
 			// create the x tick marks
-			VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+			auto xTicks = linspaced(numTicks, 0.0f, 1.0f);
 			// create the x tick labels
 			vector<string> xTickLabels(numTicks);
 			for (int i = 0; i < numTicks; ++i)
 				xTickLabels[i] = fmt::format("{:.2f}", xTicks[i]);
-			graph->setXTicks(xTicks, xTickLabels);
-			graph->setYTicks(xTicks);
+			graph->set_xticks(xTicks, xTickLabels);
+			graph->set_yticks(xTicks);
 
-			gui->addWidget("", graph);
+			gui->add_widget("", graph);
 
 			auto graphCb = [graph]()
 			{
 				float slope = float(std::tan(lerp(0.0, M_PI_2, contrast/2.0 + 0.5)));
 				float midpoint = (1.f-brightness)/2.f;
 				float bias = (brightness + 1.f) / 2.f;
-				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
-					[slope, midpoint](float v)
-					{
-						return brightnessContrastL(v, slope, midpoint);
-					});
-				lCurve.tail<1>()(0) = 1;
-				graph->setValues(lCurve, 1);
+				auto lCurve = linspaced(257, 0.0f, 1.0f);
+				for (auto&& i : lCurve)
+					i = brightnessContrastL(i, slope, midpoint);
+				lCurve.back() = 1;
+				graph->set_values(lCurve, 1);
 
-				VectorXf nlCurve = VectorXf::LinSpaced(257, 0.0f, 1.0f).unaryExpr(
-					[slope, bias](float v)
-					{
-						return brightnessContrastNL(v, slope, bias);
-					});
-				nlCurve.tail<1>()(0) = 1;
-				graph->setValues(nlCurve, 2);
+				auto nlCurve = linspaced(257, 0.0f, 1.0f);
+				for (auto&& i : nlCurve)
+					i = brightnessContrastNL(i, slope, bias);
+
+				nlCurve.back() = 1;
+				graph->set_values(nlCurve, 2);
 			};
 
 			graphCb();
@@ -288,18 +281,18 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			                        "Contrast:", contrast,
 			                        -1.f, 1.f, 0.01f, graphCb, help);
 
-			auto lCheck = gui->addVariable("Linear:", linear, true);
-			gui->addVariable("Channel:", channel, true)->setItems({"RGB", "Luminance", "Chromaticity"});
+			auto lCheck = gui->add_variable("Linear:", linear, true);
+			gui->add_variable("Channel:", channel, true)->set_items({"RGB", "Luminance", "Chromaticity"});
 
-			lCheck->setCallback(
+			lCheck->set_callback(
 				[graph](bool b)
 				{
 					linear = b;
-					graph->setForegroundColor(linear ? activeColor : inactiveColor, 1);
-					graph->setForegroundColor(linear ? inactiveColor : activeColor, 2);
+					graph->set_foreground_color(linear ? activeColor : inactiveColor, 1);
+					graph->set_foreground_color(linear ? inactiveColor : activeColor, 2);
 				});
 
-			graph->setDragCallback(
+			graph->set_drag_callback(
 				[bCb,cCb](const Vector2f & frac)
 				{
 					bCb(lerp(1.f, -1.f, clamp01(frac.x())));
@@ -309,7 +302,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			addOKCancelButtons(gui, window,
                [&]()
                {
-	               imagesPanel->modifyImage(
+	               imagesPanel->modify_image(
 		               [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 		               {
 			               return {make_shared<HDRImage>(img->brightnessContrast(brightness, contrast, linear, channelMap[channel])),
@@ -318,7 +311,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
                });
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -330,24 +323,24 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 	static FilmicToneCurve::CurveParamsUser params;
 	static float vizFstops = 1.f;
 	static const auto activeColor = Color(255, 255, 255, 200);
-	auto b = new Button(parent, name, ENTYPO_ICON_CONTROLLER_VOLUME);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_ADJUST);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(55, 20));
+			gui->set_fixed_size(Vector2i(55, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 			// graph
 			MultiGraph* graph = new MultiGraph(window, Color(255, 255, 255, 30));
-			graph->addPlot(activeColor);
-			graph->setFixedSize(Vector2i(200, 200));
-			graph->setFilled(false);
-			graph->setWell(false);
-			gui->addWidget("", graph);
+			graph->add_plot(activeColor);
+			graph->set_fixed_size(Vector2i(200, 200));
+			graph->set_filled(false);
+			graph->set_well(false);
+			gui->add_widget("", graph);
 
 			auto graphCb = [graph]()
 			{
@@ -375,23 +368,21 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 //				    directParams.overshootX,
 //				    directParams.overshootY);
 
-				graph->setValues(VectorXf::LinSpaced(257, 0.0f, range), 0);
-				VectorXf lCurve = VectorXf::LinSpaced(257, 0.0f, range).unaryExpr(
-					[](float v)
-					{
-						return fCurve.eval(v);
-					});
-				graph->setValues(lCurve, 1);
+				graph->set_values(linspaced(257, 0.0f, range), 0);
+				auto lCurve = linspaced(257, 0.0f, range);
+				for (auto&& i : lCurve)
+					i = fCurve.eval(i);
+				graph->set_values(lCurve, 1);
 
 				int numTicks = 5;
 				// create the x tick marks
-				VectorXf xTicks = VectorXf::LinSpaced(numTicks, 0.0f, 1.0f);
+				auto xTicks = linspaced(numTicks, 0.0f, 1.0f);
 				// create the x tick labels
 				vector<string> xTickLabels(numTicks);
 				for (int i = 0; i < numTicks; ++i)
 					xTickLabels[i] = fmt::format("{:.2f}", range*xTicks[i]);
-				graph->setXTicks(xTicks, xTickLabels);
-				graph->setYTicks(VectorXf::LinSpaced(3, 0.0f, 1.0f));
+				graph->set_xticks(xTicks, xTickLabels);
+				graph->set_yticks(linspaced(3, 0.0f, 1.0f));
 			};
 
 			graphCb();
@@ -427,7 +418,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-				   imagesPanel->modifyImage(
+				   imagesPanel->modify_image(
 				       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 				       {
 				           return {make_shared<HDRImage>(img->unaryExpr(
@@ -449,7 +440,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -460,31 +451,31 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 	static float hue = 0.0f;
 	static float saturation = 0.0f;
 	static float lightness = 0.0f;
-	auto b = new Button(parent, name, ENTYPO_ICON_PALETTE);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_PALETTE);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(55, 20));
+			gui->set_fixed_size(Vector2i(55, 20));
 
 			Widget* spacer = nullptr;
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
 
 
 			auto fixedRainbow = new HSLGradient(window);
 			auto dynamicRainbow = new HSLGradient(window);
-			fixedRainbow->setFixedWidth(256);
-			dynamicRainbow->setFixedWidth(256);
+			fixedRainbow->set_fixed_width(256);
+			dynamicRainbow->set_fixed_width(256);
 
 			auto cb = [dynamicRainbow]()
 			{
-				dynamicRainbow->setHueOffset(hue);
-				dynamicRainbow->setSaturation((saturation + 100.f)/200.f);
-				dynamicRainbow->setLightness((lightness + 100.f)/200.f);
+				dynamicRainbow->set_hue_offset(hue);
+				dynamicRainbow->set_saturation((saturation + 100.f)/200.f);
+				dynamicRainbow->set_lightness((lightness + 100.f)/200.f);
 			};
 
 			createFloatBoxAndSlider(gui, window,
@@ -500,21 +491,21 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 			                        -100.f, 100.f, 1.f, cb);
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
-			gui->addWidget("", fixedRainbow);
+			gui->add_widget("", fixedRainbow);
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
-			gui->addWidget("", dynamicRainbow);
+			gui->add_widget("", dynamicRainbow);
 
 			addOKCancelButtons(gui, window,
 			                   [&]()
 			                   {
-				                   imagesPanel->modifyImage(
+				                   imagesPanel->modify_image(
 					                   [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 					                   {
 						                   return {make_shared<HDRImage>(
@@ -527,7 +518,7 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 			                   });
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -538,40 +529,40 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, Imag
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static bool exact = false;
 	static string name = "Gaussian blur...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_TINT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-			// window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+			// window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Width:", width);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w->setValueIncrement(5.f);
-			w->setUnits("px");
-			w = gui->addVariable("Height:", height);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w->setValueIncrement(5.f);
-			w->setUnits("px");
+			auto w = gui->add_variable("Width:", width);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w->set_value_increment(5.f);
+			w->set_units("px");
+			w = gui->add_variable("Height:", height);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w->set_value_increment(5.f);
+			w->set_units("px");
 
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
-			gui->addVariable("Exact (slow!):", exact, true);
+			gui->add_variable("Exact (slow!):", exact, true);
 
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(exact ? img->GaussianBlurred(width, height, progress, borderModeX, borderModeY) :
@@ -581,7 +572,7 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, Imag
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -591,35 +582,35 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageList
 	static float width = 1.0f, height = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Box blur...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_TINT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Width:", width);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w->setUnits("px");
-			w = gui->addVariable("Height:", height);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w->setUnits("px");
+			auto w = gui->add_variable("Width:", width);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w->set_units("px");
+			w = gui->add_variable("Height:", height);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w->set_units("px");
 
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->boxBlurred(width, height, progress, borderModeX, borderModeY)),
@@ -628,7 +619,7 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageList
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -638,33 +629,33 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, Ima
 	static float rangeSigma = 1.0f, valueSigma = 0.1f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Bilateral filter...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_TINT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Range sigma:", rangeSigma);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w = gui->addVariable("Value sigma:", valueSigma);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
+			auto w = gui->add_variable("Range sigma:", rangeSigma);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w = gui->add_variable("Value sigma:", valueSigma);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
 
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->bilateralFiltered(valueSigma, rangeSigma,
@@ -674,7 +665,7 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, Ima
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -684,33 +675,33 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, I
 	static float sigma = 1.0f, strength = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Unsharp mask...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_TINT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Sigma:", sigma);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
-			w = gui->addVariable("Strength:", strength);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
+			auto w = gui->add_variable("Sigma:", sigma);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
+			w = gui->add_variable("Strength:", strength);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
 
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->unsharpMasked(sigma, strength, progress, borderModeX, borderModeY)),
@@ -720,7 +711,7 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, I
 
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -730,30 +721,30 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, ImageL
 	static float radius = 1.0f;
 	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
 	static string name = "Median filter...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_TINT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("Radius:", radius);
-			w->setSpinnable(true);
-			w->setMinValue(0.0f);
+			auto w = gui->add_variable("Radius:", radius);
+			w->set_spinnable(true);
+			w->set_min_value(0.0f);
 
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->medianFiltered(radius, progress, borderModeX, borderModeY)),
@@ -762,7 +753,7 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, ImageL
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -772,91 +763,91 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, ImageListPan
 	static int width = 128, height = 128;
 	static string name = "Resize...";
 	static bool aspect = true;
-	auto b = new Button(parent, name, ENTYPO_ICON_RESIZE_FULL_SCREEN);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_EXPAND);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(0, 20));
+			gui->set_fixed_size(Vector2i(0, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-			window->setModal(true);
+			auto window = gui->add_window(Vector2i(10, 10), name);
+			window->set_modal(true);
 
 			auto row = new Widget(window);
-			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-			width = imagesPanel->currentImage()->width();
-			height = imagesPanel->currentImage()->height();
+			width = imagesPanel->current_image()->width();
+			height = imagesPanel->current_image()->height();
 
 			auto w = new IntBox<int>(row, width);
-			auto link = new ToolButton(row, ENTYPO_ICON_LINK);
+			auto link = new ToolButton(row, FA_LINK);
 			auto h = new IntBox<int>(row, height);
 
-			w->setSpinnable(true);
-			w->setEnabled(true);
-			w->setEditable(true);
-			w->setMinValue(1);
-			w->setFontSize(gui->widgetFontSize());
-			w->setFixedSize(Vector2i(80, gui->fixedSize().y()));
-			w->setAlignment(TextBox::Alignment::Right);
-			w->setUnits("px");
+			w->set_spinnable(true);
+			w->set_enabled(true);
+			w->set_editable(true);
+			w->set_min_value(1);
+			w->set_font_size(gui->widget_font_size());
+			w->set_fixed_size(Vector2i(80, gui->fixed_size().y()));
+			w->set_alignment(TextBox::Alignment::Right);
+			w->set_units("px");
 
-			link->setFixedSize(Vector2i(20,20));
-			link->setPushed(aspect);
+			link->set_fixed_size(Vector2i(20,20));
+			link->set_pushed(aspect);
 
-			h->setSpinnable(true);
-			h->setEnabled(true);
-			h->setEditable(true);
-			h->setMinValue(1);
-			h->setFontSize(gui->widgetFontSize());
-			h->setFixedSize(Vector2i(80, gui->fixedSize().y()));
-			h->setAlignment(TextBox::Alignment::Right);
-			h->setUnits("px");
+			h->set_spinnable(true);
+			h->set_enabled(true);
+			h->set_editable(true);
+			h->set_min_value(1);
+			h->set_font_size(gui->widget_font_size());
+			h->set_fixed_size(Vector2i(80, gui->fixed_size().y()));
+			h->set_alignment(TextBox::Alignment::Right);
+			h->set_units("px");
 
-			link->setChangeCallback(
+			link->set_change_callback(
 				[w,imagesPanel](bool preserve)
 				{
 					if (preserve)
 					{
-						float aspect = imagesPanel->currentImage()->width() / (float)imagesPanel->currentImage()->height();
+						float aspect = imagesPanel->current_image()->width() / (float)imagesPanel->current_image()->height();
 						width = max(1, (int)round(height * aspect));
-						w->setValue(width);
+						w->set_value(width);
 					}
 					aspect = preserve;
 				});
 
-			w->setCallback(
+			w->set_callback(
 				[h,link,imagesPanel](int w)
 				{
 					width = w;
 					if (link->pushed())
 					{
-						float aspect = imagesPanel->currentImage()->width() / (float)imagesPanel->currentImage()->height();
+						float aspect = imagesPanel->current_image()->width() / (float)imagesPanel->current_image()->height();
 						height = max(1, (int)round(w / aspect));
-						h->setValue(height);
+						h->set_value(height);
 					}
 				});
 
-			h->setCallback(
+			h->set_callback(
 				[w,link,imagesPanel](int h)
 				{
 					height = h;
 					if (link->pushed())
 					{
-						float aspect = imagesPanel->currentImage()->width() / (float)imagesPanel->currentImage()->height();
+						float aspect = imagesPanel->current_image()->width() / (float)imagesPanel->current_image()->height();
 						width = max(1, (int)round(height * aspect));
-						w->setValue(width);
+						w->set_value(width);
 					}
 				});
 
 
-			gui->addWidget("", row);
+			gui->add_widget("", row);
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->resized(width, height)),
@@ -865,7 +856,7 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, ImageListPan
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -889,28 +880,28 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 		};
 
 	static string name = "Remap...";
-	auto b = new Button(parent, name, ENTYPO_ICON_GLOBE);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_GLOBE);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(135, 20));
+			gui->set_fixed_size(Vector2i(135, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			width = imagesPanel->currentImage()->width();
-			auto w = gui->addVariable("Width:", width);
-			w->setSpinnable(true);
-			w->setMinValue(1);
-			w->setUnits("px");
+			width = imagesPanel->current_image()->width();
+			auto w = gui->add_variable("Width:", width);
+			w->set_spinnable(true);
+			w->set_min_value(1);
+			w->set_units("px");
 
-			height = imagesPanel->currentImage()->height();
-			auto h = gui->addVariable("Height:", height);
-			h->setSpinnable(true);
-			h->setMinValue(1);
-			h->setUnits("px");
+			height = imagesPanel->current_image()->height();
+			auto h = gui->add_variable("Height:", height);
+			h->set_spinnable(true);
+			h->set_min_value(1);
+			h->set_units("px");
 
 			auto recomputeW = []()
 			{
@@ -923,37 +914,37 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 					height = max(1, (int)round(width / autoAspects[to]));
 			};
 
-			w->setCallback(
+			w->set_callback(
 				[h,recomputeH](int w)
 				{
 					width = w;
 					recomputeH();
-					h->setValue(height);
+					h->set_value(height);
 				});
 
-			h->setCallback(
+			h->set_callback(
 				[w,recomputeW](int h)
 				{
 					height = h;
 					recomputeW();
-					w->setValue(width);
+					w->set_value(width);
 				});
 
 
-			auto autoAspectCheckbox = gui->addVariable("Auto aspect ratio:", autoAspect, true);
+			auto autoAspectCheckbox = gui->add_variable("Auto aspect ratio:", autoAspect, true);
 
-			auto src = gui->addVariable("Source map:", from, true);
-			auto dst = gui->addVariable("Target map:", to, true);
+			auto src = gui->add_variable("Source map:", from, true);
+			auto dst = gui->add_variable("Target map:", to, true);
 
-			src->setItems(envMappingNames());
-			src->setCallback([gui,recomputeW](EEnvMappingUVMode m)
+			src->set_items(envMappingNames());
+			src->set_callback([gui,recomputeW](EEnvMappingUVMode m)
 			                 {
 				                 from = m;
 				                 recomputeW();
 				                 gui->refresh();
 			                 });
-			dst->setItems(envMappingNames());
-			dst->setCallback([gui,recomputeW](EEnvMappingUVMode m)
+			dst->set_items(envMappingNames());
+			dst->set_callback([gui,recomputeW](EEnvMappingUVMode m)
 			                 {
 				                 to = m;
 				                 recomputeW();
@@ -961,36 +952,36 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 			                 });
 
 			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
-			auto btn = new Button(window, "Swap source/target", ENTYPO_ICON_SWAP);
-			btn->setCallback([gui,recomputeW,recomputeH](){std::swap(from,to);recomputeW();recomputeH();gui->refresh();});
-			btn->setFixedSize(gui->fixedSize());
-			gui->addWidget(" ", btn);
+			auto btn = new Button(window, "Swap source/target", FA_EXCHANGE_ALT);
+			btn->set_callback([gui,recomputeW,recomputeH](){std::swap(from,to);recomputeW();recomputeH();gui->refresh();});
+			btn->set_fixed_size(gui->fixed_size());
+			gui->add_widget(" ", btn);
 
-			autoAspectCheckbox->setCallback(
+			autoAspectCheckbox->set_callback(
 				[w,recomputeW](bool preserve)
 				{
 					autoAspect = preserve;
 					recomputeW();
-					w->setValue(width);
+					w->set_value(width);
 				});
 
 			recomputeW();
 			gui->refresh();
 
 
-			gui->addVariable("Sampler:", sampler, true)
-			   ->setItems(HDRImage::samplerNames());
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Sampler:", sampler, true)
+			   ->set_items(HDRImage::samplerNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
-			w = gui->addVariable("Super-samples:", samples);
-			w->setSpinnable(true);
-			w->setMinValue(1);
+			w = gui->add_variable("Super-samples:", samples);
+			w->set_spinnable(true);
+			w->set_min_value(1);
 
 			addOKCancelButtons(gui, window,
 				[&]()
@@ -998,9 +989,9 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 //					auto dst2xyz = envMapUVToXYZ(to);
 //					auto xyz2src = XYZToEnvMapUV(from);
 //					auto warp = [dst2xyz,xyz2src](const Vector2f &uv) { return xyz2src(dst2xyz(uv)); };
-					auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
+					auto warp = [](const Eigen::Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
 
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->resampled(width, height, progress, warp, samples, sampler,
@@ -1010,7 +1001,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -1021,43 +1012,43 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
 	static float dx = 0.f, dy = 0.f;
 	static string name = "Shift...";
-	auto b = new Button(parent, name, ENTYPO_ICON_POPUP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_ARROWS_ALT);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(125, 20));
+			gui->set_fixed_size(Vector2i(125, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//           window->setModal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
 
-			auto w = gui->addVariable("X offset:", dx);
-			w->setSpinnable(true);
-			w->setUnits("px");
+			auto w = gui->add_variable("X offset:", dx);
+			w->set_spinnable(true);
+			w->set_units("px");
 
-			w = gui->addVariable("Y offset:", dy);
-			w->setSpinnable(true);
-			w->setUnits("px");
+			w = gui->add_variable("Y offset:", dy);
+			w->set_spinnable(true);
+			w->set_units("px");
 
-			gui->addVariable("Sampler:", sampler, true)
-			   ->setItems(HDRImage::samplerNames());
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Sampler:", sampler, true)
+			   ->set_items(HDRImage::samplerNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
 			addOKCancelButtons(gui, window,
 				[&]()
 				{
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							// by default use a no-op passthrough warp function
-							function<Vector2f(const Vector2f &)> shift =
-								[&](const Vector2f &uv)
+							function<Eigen::Vector2f(const Eigen::Vector2f &)> shift =
+								[&](const Eigen::Vector2f &uv)
 								{
-									return (uv + Vector2f(dx / img->width(), dy / img->height())).eval();
+									return (uv + Eigen::Vector2f(dx / img->width(), dy / img->height())).eval();
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 							                                             progress, shift, 1, sampler,
@@ -1067,7 +1058,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 				});
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -1082,105 +1073,105 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
-	auto b = new Button(parent, name, ENTYPO_ICON_CROP);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_CROP);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(75, 20));
+			gui->set_fixed_size(Vector2i(75, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//			window->setModal(true);
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//			window->set_modal(true);
 
-			width = imagesPanel->currentImage()->width();
-			auto w = gui->addVariable("Width:", width);
-			w->setSpinnable(true);
-			w->setMinValue(1);
-			w->setUnits("px");
+			width = imagesPanel->current_image()->width();
+			auto w = gui->add_variable("Width:", width);
+			w->set_spinnable(true);
+			w->set_min_value(1);
+			w->set_units("px");
 
-			height = imagesPanel->currentImage()->height();
-			auto h = gui->addVariable("Height:", height);
-			h->setSpinnable(true);
-			h->setMinValue(1);
-			h->setUnits("px");
+			height = imagesPanel->current_image()->height();
+			auto h = gui->add_variable("Height:", height);
+			h->set_spinnable(true);
+			h->set_min_value(1);
+			h->set_units("px");
 
 			relative = false;
-			auto r = gui->addVariable("Relative:", relative, true);
-			r->setCallback(
+			auto r = gui->add_variable("Relative:", relative, true);
+			r->set_callback(
 				[w,h,imagesPanel](bool rel)
 				{
 					if (rel)
 					{
-						w->setMinValue(-imagesPanel->currentImage()->width()+1);
-						h->setMinValue(-imagesPanel->currentImage()->height()+1);
-						width = w->value() - imagesPanel->currentImage()->width();
-						height = h->value() - imagesPanel->currentImage()->height();
-						w->setValue(width);
-						h->setValue(height);
+						w->set_min_value(-imagesPanel->current_image()->width()+1);
+						h->set_min_value(-imagesPanel->current_image()->height()+1);
+						width = w->value() - imagesPanel->current_image()->width();
+						height = h->value() - imagesPanel->current_image()->height();
+						w->set_value(width);
+						h->set_value(height);
 					}
 					else
 					{
-						w->setMinValue(1);
-						h->setMinValue(1);
-						width = w->value() + imagesPanel->currentImage()->width();
-						height = h->value() + imagesPanel->currentImage()->height();
-						w->setValue(width);
-						h->setValue(height);
+						w->set_min_value(1);
+						h->set_min_value(1);
+						width = w->value() + imagesPanel->current_image()->width();
+						height = h->value() + imagesPanel->current_image()->height();
+						w->set_value(width);
+						h->set_value(height);
 					}
 					relative = rel;
 				});
 
 			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 
 			auto w2 = new Widget(window);
-			int bw = gui->fixedSize().y();
+			int bw = gui->fixed_size().y();
 			int pad = 2;
-			w2->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
+			w2->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
 			vector<Button *> buttonGroup;
 
-			int icons[] = {ENTYPO_ICON_PLUS, 		ENTYPO_ICON_ALIGN_TOP, 		ENTYPO_ICON_PLUS,
-						   ENTYPO_ICON_ALIGN_LEFT, 	ENTYPO_ICON_PLUS, 			ENTYPO_ICON_ALIGN_RIGHT,
-						   ENTYPO_ICON_PLUS, 		ENTYPO_ICON_ALIGN_BOTTOM, 	ENTYPO_ICON_PLUS};
+			int icons[] = {FA_PLUS, 		FA_ARROW_UP, 	FA_PLUS,
+						   FA_ARROW_LEFT, 	FA_PLUS, 		FA_ARROW_RIGHT,
+						   FA_PLUS, 		FA_ARROW_DOWN, 	FA_PLUS};
 
 			for (size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i)
 			{
 				Button * btn = new Button(w2, "", icons[i]);
 
-				btn->setFlags(Button::RadioButton);
-				btn->setFixedSize(Vector2i(bw, bw));
-				btn->setPushed(i == (size_t)anchor);
-				btn->setChangeCallback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
+				btn->set_flags(Button::RadioButton);
+				btn->set_fixed_size(Vector2i(bw, bw));
+				btn->set_pushed(i == (size_t)anchor);
+				btn->set_change_callback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
 				buttonGroup.push_back(btn);
 			}
 
-			w2->setFixedSize(Vector2i(3*bw+2*pad, 3*bw+2*pad));
-			gui->addWidget("Anchor:", w2);
+			w2->set_fixed_size(Vector2i(3*bw+2*pad, 3*bw+2*pad));
+			gui->add_widget("Anchor:", w2);
 
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 			auto popupBtn = new PopupButton(window, "", 0);
-			popupBtn->setBackgroundColor(Color(bgColor.head<3>(), alpha));
-			gui->addWidget("Extension color:", popupBtn);
+			popupBtn->set_background_color(Color(bgColor.r(), bgColor.g(), bgColor.b(), alpha));
+			gui->add_widget("Extension color:", popupBtn);
 
 			auto popup = popupBtn->popup();
-			popup->setLayout(new GroupLayout());
+			popup->set_layout(new GroupLayout());
 
 			auto colorwheel = new ColorWheel(popup);
-			colorwheel->setColor(Color(bgColor.head<3>(), alpha));
+			colorwheel->set_color(Color(bgColor.r(), bgColor.g(), bgColor.b(), alpha));
 
 			auto panel = new Widget(popup);
-//			panel->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
+//			panel->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
 			auto agrid = new AdvancedGridLayout({0, 20, 0}, {});
-			agrid->setMargin(0);
-			agrid->setColStretch(1, 1);
-			panel->setLayout(agrid);
+			agrid->set_margin(0);
+			agrid->set_col_stretch(1, 1);
+			panel->set_layout(agrid);
 
 			auto colorBtn = new Button(popup, "Pick");
 
@@ -1188,86 +1179,93 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			// opacity
 			//
 
-			agrid->appendRow(0);
-			agrid->setAnchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
+			agrid->append_row(0);
+			agrid->set_anchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
 			auto floatBox = new FloatBox<float>(panel, alpha * 100.0f);
-			agrid->setAnchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
-			floatBox->setUnits("%");
-			floatBox->numberFormat("%3.1f");
-			floatBox->setEditable(true);
-			floatBox->setMinValue(0.f);
-			floatBox->setMaxValue(100.f);
-			floatBox->setSpinnable(true);
-			floatBox->setFixedWidth(60);
-			floatBox->setAlignment(TextBox::Alignment::Right);
+			agrid->set_anchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			floatBox->set_units("%");
+			floatBox->number_format("%3.1f");
+			floatBox->set_editable(true);
+			floatBox->set_min_value(0.f);
+			floatBox->set_max_value(100.f);
+			floatBox->set_spinnable(true);
+			floatBox->set_fixed_width(60);
+			floatBox->set_alignment(TextBox::Alignment::Right);
 
-			agrid->appendRow(0);
+			agrid->append_row(0);
 			auto slider = new Slider(panel);
-			agrid->setAnchor(slider, AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
-			slider->setValue(alpha * 100.0f);
-			slider->setRange({0.0f,100.0f});
+			agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
+			slider->set_value(alpha * 100.0f);
+			slider->set_range({0.0f,100.0f});
 
-			slider->setCallback([floatBox,colorBtn](float a) {
+			slider->set_callback([floatBox,colorBtn](float a) {
 				alpha = a / 100.f;
-				floatBox->setValue(a);
-				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+				floatBox->set_value(a);
+				float f = pow(2.f, EV);
+				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
 			});
 
-			floatBox->setCallback([slider,colorBtn](float a) {
+			floatBox->set_callback([slider,colorBtn](float a) {
 				alpha = a / 100.f;
-				slider->setValue(a);
-				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+				slider->set_value(a);
+				float f = pow(2.f, EV);
+				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
 			});
 
-			agrid->appendRow(10);
+			agrid->append_row(10);
 
 			//
 			// EV
 			//
-			agrid->appendRow(0);
-			agrid->setAnchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
+			agrid->append_row(0);
+			agrid->set_anchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
 			floatBox = new FloatBox<float>(panel, 0.f);
-			agrid->setAnchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
-			floatBox->numberFormat("%1.2f");
-			floatBox->setEditable(true);
-			floatBox->setSpinnable(true);
-			floatBox->setFixedWidth(60);
-			floatBox->setAlignment(TextBox::Alignment::Right);
+			agrid->set_anchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			floatBox->number_format("%1.2f");
+			floatBox->set_editable(true);
+			floatBox->set_spinnable(true);
+			floatBox->set_fixed_width(60);
+			floatBox->set_alignment(TextBox::Alignment::Right);
 
-			agrid->appendRow(0);
+			agrid->append_row(0);
 			slider = new Slider(panel);
-			agrid->setAnchor(slider, AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
-			slider->setValue(0.0f);
-			slider->setRange({-9.0f,9.0f});
+			agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
+			slider->set_value(0.0f);
+			slider->set_range({-9.0f,9.0f});
 
-			slider->setCallback([floatBox,colorBtn](float ev) {
+			slider->set_callback([floatBox,colorBtn](float ev) {
 				EV = ev;
-				floatBox->setValue(EV);
-				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+				floatBox->set_value(EV);
+				float f = pow(2.f, EV);
+				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
 			});
 
-			floatBox->setCallback([slider,colorBtn](float ev) {
+			floatBox->set_callback([slider,colorBtn](float ev) {
 				EV = ev;
-				slider->setValue(EV);
-				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+				slider->set_value(EV);
+				float f = pow(2.f, EV);
+				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
 			});
 
 
-			colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+			colorBtn->set_background_color(Color(bgColor.r() * pow(2.f, EV), bgColor.g() * pow(2.f, EV), bgColor.b() * pow(2.f, EV), alpha));
 
-			colorwheel->setCallback([colorBtn](const Color &c) {
-				bgColor.head<3>() = c.head<3>();
-				colorBtn->setBackgroundColor(Color(bgColor.head<3>() * pow(2.f, EV), alpha));
+			colorwheel->set_callback([colorBtn](const Color &c) {
+				bgColor.r() = c.r();
+				bgColor.g() = c.g();
+				bgColor.b() = c.b();
+				float f = pow(2.f, EV);
+				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
 			});
 
-			colorBtn->setChangeCallback([popupBtn](bool pushed) {
+			colorBtn->set_change_callback([popupBtn](bool pushed) {
 				if (pushed)
 				{
-					float gain = pow(2.f, EV);
-					popupBtn->setBackgroundColor(Color(bgColor.head<3>() * gain, alpha));
-					popupBtn->setPushed(false);
+					float f = pow(2.f, EV);
+					popupBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+					popupBtn->set_pushed(false);
 				}
 			});
 
@@ -1275,7 +1273,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 				[&, popup]()
 				{
 					popup->dispose();
-					imagesPanel->modifyImage(
+					imagesPanel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							int newW = relative ? width + img->width() : width;
@@ -1291,7 +1289,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 				[popup](){ popup->dispose(); });
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -1311,229 +1309,229 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static int samples = 1;
 	static string name = "Transform...";
-	auto b = new Button(parent, name, ENTYPO_ICON_DOCUMENTS);
-	b->setFixedHeight(21);
-	b->setCallback(
+	auto b = new Button(parent, name, FA_CLONE);
+	b->set_fixed_height(21);
+	b->set_callback(
 		[&, screen, imagesPanel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->setFixedSize(Vector2i(0, 20));
+			gui->set_fixed_size(Vector2i(0, 20));
 
-			auto window = gui->addWindow(Eigen::Vector2i(10, 10), name);
-//			window->setModal(true);
+			auto window = gui->add_window(Vector2i(10, 10), name);
+//			window->set_modal(true);
 
 			auto row = new Widget(window);
-			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
 			auto x = new FloatBox<float>(row, translateX);
-			x->setSpinnable(true);
-			x->setEnabled(true);
-			x->setEditable(true);
-			x->setFontSize(gui->widgetFontSize());
-			x->setFixedSize(Vector2i(65+12, gui->fixedSize().y()));
-			x->setAlignment(TextBox::Alignment::Right);
-			x->setUnits("px");
-			x->setCallback([](float v){translateX = v;});
-			x->setTooltip("Set horizontal translation.");
+			x->set_spinnable(true);
+			x->set_enabled(true);
+			x->set_editable(true);
+			x->set_font_size(gui->widget_font_size());
+			x->set_fixed_size(Vector2i(65+12, gui->fixed_size().y()));
+			x->set_alignment(TextBox::Alignment::Right);
+			x->set_units("px");
+			x->set_callback([](float v){translateX = v;});
+			x->set_tooltip("Set horizontal translation.");
 
 			auto y = new FloatBox<float>(row, translateY);
-			y->setSpinnable(true);
-			y->setEnabled(true);
-			y->setEditable(true);
-			y->setFontSize(gui->widgetFontSize());
-			y->setFixedSize(Vector2i(65+13, gui->fixedSize().y()));
-			y->setAlignment(TextBox::Alignment::Right);
-			y->setUnits("px");
-			y->setCallback([](float v){translateY = v;});
-			y->setTooltip("Set vertical translation.");
+			y->set_spinnable(true);
+			y->set_enabled(true);
+			y->set_editable(true);
+			y->set_font_size(gui->widget_font_size());
+			y->set_fixed_size(Vector2i(65+13, gui->fixed_size().y()));
+			y->set_alignment(TextBox::Alignment::Right);
+			y->set_units("px");
+			y->set_callback([](float v){translateY = v;});
+			y->set_tooltip("Set vertical translation.");
 
-			gui->addWidget("Translate:", row);
+			gui->add_widget("Translate:", row);
 
 
 			auto spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 
 			row = new Widget(window);
-			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
 			auto w = new FloatBox<float>(row, scaleX);
-			auto link = new ToolButton(row, ENTYPO_ICON_LINK);
+			auto link = new ToolButton(row, FA_LINK);
 			auto h = new FloatBox<float>(row, scaleY);
 
-			w->setSpinnable(true);
-			w->setEnabled(true);
-			w->setEditable(true);
-			w->setFontSize(gui->widgetFontSize());
-			w->setFixedSize(Vector2i(65, gui->fixedSize().y()));
-			w->setAlignment(TextBox::Alignment::Right);
-			w->setUnits("%");
-			w->setTooltip("Set horizontal scale.");
-			w->setCallback(
+			w->set_spinnable(true);
+			w->set_enabled(true);
+			w->set_editable(true);
+			w->set_font_size(gui->widget_font_size());
+			w->set_fixed_size(Vector2i(65, gui->fixed_size().y()));
+			w->set_alignment(TextBox::Alignment::Right);
+			w->set_units("%");
+			w->set_tooltip("Set horizontal scale.");
+			w->set_callback(
 				[h](float v)
 				{
 					scaleX = v;
 					if (uniformScale) scaleY = scaleX;
-					h->setValue(scaleY);
+					h->set_value(scaleY);
 				});
 
-			link->setFixedSize(Vector2i(20,20));
-			link->setPushed(uniformScale);
-			link->setTooltip("Lock the X and Y scale factors to maintain aspect ratio.");
-			link->setChangeCallback(
+			link->set_fixed_size(Vector2i(20,20));
+			link->set_pushed(uniformScale);
+			link->set_tooltip("Lock the X and Y scale factors to maintain aspect ratio.");
+			link->set_change_callback(
 				[w,h](bool b)
 				{
 					uniformScale = b;
 					if (uniformScale) scaleX = scaleY;
-					w->setValue(scaleX);
-					h->setValue(scaleY);
+					w->set_value(scaleX);
+					h->set_value(scaleY);
 				});
 
-			h->setSpinnable(true);
-			h->setEnabled(true);
-			h->setEditable(true);
-			h->setFontSize(gui->widgetFontSize());
-			h->setFixedSize(Vector2i(65, gui->fixedSize().y()));
-			h->setAlignment(TextBox::Alignment::Right);
-			h->setUnits("%");
-			h->setTooltip("Set vertical scale.");
-			h->setCallback(
+			h->set_spinnable(true);
+			h->set_enabled(true);
+			h->set_editable(true);
+			h->set_font_size(gui->widget_font_size());
+			h->set_fixed_size(Vector2i(65, gui->fixed_size().y()));
+			h->set_alignment(TextBox::Alignment::Right);
+			h->set_units("%");
+			h->set_tooltip("Set vertical scale.");
+			h->set_callback(
 				[w](float v)
 				{
 					scaleY = v;
 					if (uniformScale) scaleX = scaleY;
-					w->setValue(scaleX);
+					w->set_value(scaleX);
 				});
 
-			gui->addWidget("Scale:", row);
+			gui->add_widget("Scale:", row);
 
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 
 			row = new Widget(window);
-			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
 			auto a = new FloatBox<float>(row, angle);
-			a->setSpinnable(true);
-			a->setEnabled(true);
-			a->setEditable(true);
-			a->setFontSize(gui->widgetFontSize());
-			a->setFixedSize(Vector2i(160-2*25, gui->fixedSize().y()));
-			a->setAlignment(TextBox::Alignment::Right);
-			a->setUnits("°");
-			a->setTooltip("Set rotation angle in degrees.");
-			a->setCallback([](float v){angle = v;});
+			a->set_spinnable(true);
+			a->set_enabled(true);
+			a->set_editable(true);
+			a->set_font_size(gui->widget_font_size());
+			a->set_fixed_size(Vector2i(160-2*25, gui->fixed_size().y()));
+			a->set_alignment(TextBox::Alignment::Right);
+			a->set_units("°");
+			a->set_tooltip("Set rotation angle in degrees.");
+			a->set_callback([](float v){angle = v;});
 
-			auto ccww = new Button(row, "", ENTYPO_ICON_CCW);
-			ccww->setFixedSize(Vector2i(20,20));
-			ccww->setFlags(Button::Flags::RadioButton);
-			ccww->setPushed(!cw);
-			ccww->setTooltip("Rotate in the counter-clockwise direction.");
-			ccww->setChangeCallback([](bool b){cw = !b;});
+			auto ccww = new Button(row, "", FA_UNDO);
+			ccww->set_fixed_size(Vector2i(20,20));
+			ccww->set_flags(Button::Flags::RadioButton);
+			ccww->set_pushed(!cw);
+			ccww->set_tooltip("Rotate in the counter-clockwise direction.");
+			ccww->set_change_callback([](bool b){cw = !b;});
 
-			auto cww = new Button(row, "", ENTYPO_ICON_CW);
-			cww->setFixedSize(Vector2i(20,20));
-			cww->setFlags(Button::Flags::RadioButton);
-			cww->setPushed(cw);
-			cww->setTooltip("Rotate in the clockwise direction.");
-			cww->setChangeCallback([](bool b){cw = b;});
+			auto cww = new Button(row, "", FA_REDO);
+			cww->set_fixed_size(Vector2i(20,20));
+			cww->set_flags(Button::Flags::RadioButton);
+			cww->set_pushed(cw);
+			cww->set_tooltip("Rotate in the clockwise direction.");
+			cww->set_change_callback([](bool b){cw = b;});
 
-			gui->addWidget("Rotate:", row);
+			gui->add_widget("Rotate:", row);
 
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 
 			row = new Widget(window);
-			row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
 			auto shx = new FloatBox<float>(row, shearX);
-			shx->setSpinnable(true);
-			shx->setEnabled(true);
-			shx->setEditable(true);
-			shx->setFontSize(gui->widgetFontSize());
-			shx->setFixedSize(Vector2i(65+12, gui->fixedSize().y()));
-			shx->setAlignment(TextBox::Alignment::Right);
-			shx->setUnits("°");
-			shx->setTooltip("Set horizontal skew/shear in degrees.");
-			shx->setCallback([](float v){shearX = v;});
+			shx->set_spinnable(true);
+			shx->set_enabled(true);
+			shx->set_editable(true);
+			shx->set_font_size(gui->widget_font_size());
+			shx->set_fixed_size(Vector2i(65+12, gui->fixed_size().y()));
+			shx->set_alignment(TextBox::Alignment::Right);
+			shx->set_units("°");
+			shx->set_tooltip("Set horizontal skew/shear in degrees.");
+			shx->set_callback([](float v){shearX = v;});
 
 			auto shy = new FloatBox<float>(row, shearY);
-			shy->setSpinnable(true);
-			shy->setEnabled(true);
-			shy->setEditable(true);
-			shy->setFontSize(gui->widgetFontSize());
-			shy->setFixedSize(Vector2i(65+13, gui->fixedSize().y()));
-			shy->setAlignment(TextBox::Alignment::Right);
-			shy->setUnits("°");
-			shy->setTooltip("Set vertical skew/shear in degrees.");
-			shy->setCallback([](float v){shearY = v;});
+			shy->set_spinnable(true);
+			shy->set_enabled(true);
+			shy->set_editable(true);
+			shy->set_font_size(gui->widget_font_size());
+			shy->set_fixed_size(Vector2i(65+13, gui->fixed_size().y()));
+			shy->set_alignment(TextBox::Alignment::Right);
+			shy->set_units("°");
+			shy->set_tooltip("Set vertical skew/shear in degrees.");
+			shy->set_callback([](float v){shearY = v;});
 
-			gui->addWidget("Shear:", row);
+			gui->add_widget("Shear:", row);
 
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(5);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(5);
+			gui->add_widget("", spacer);
 
 
 			row = new Widget(window);
-			int bw = gui->fixedSize().y();
+			int bw = gui->fixed_size().y();
 			int pad = 2;
-			row->setLayout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
+			row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
 			vector<Button *> buttonGroup;
 
-			int icons[] = {ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_TOP, ENTYPO_ICON_PLUS,
-			               ENTYPO_ICON_ALIGN_LEFT, ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_RIGHT,
-			               ENTYPO_ICON_PLUS, ENTYPO_ICON_ALIGN_BOTTOM, ENTYPO_ICON_PLUS};
+			int icons[] = {FA_PLUS, 		FA_ARROW_UP, 	FA_PLUS,
+						   FA_ARROW_LEFT, 	FA_PLUS, 		FA_ARROW_RIGHT,
+						   FA_PLUS, 		FA_ARROW_DOWN, 	FA_PLUS};
 
 			for (size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i)
 			{
 				Button * btn = new Button(row, "", icons[i]);
 
-				btn->setFlags(Button::RadioButton);
-				btn->setFixedSize(Vector2i(bw, bw));
-				btn->setPushed(i == (size_t)anchor);
-				btn->setChangeCallback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
+				btn->set_flags(Button::RadioButton);
+				btn->set_fixed_size(Vector2i(bw, bw));
+				btn->set_pushed(i == (size_t)anchor);
+				btn->set_change_callback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
 
 				buttonGroup.push_back(btn);
 			}
 
-			row->setFixedSize(Vector2i(3*bw+2*pad, 3*bw+2*pad));
-			gui->addWidget("Reference point:", row);
+			row->set_fixed_size(Vector2i(3*bw+2*pad, 3*bw+2*pad));
+			gui->add_widget("Reference point:", row);
 
 
 			spacer = new Widget(window);
-			spacer->setFixedHeight(10);
-			gui->addWidget("", spacer);
+			spacer->set_fixed_height(10);
+			gui->add_widget("", spacer);
 
 
-			gui->addVariable("Sampler:", sampler, true)
-			   ->setItems(HDRImage::samplerNames());
-			gui->addVariable("Border mode X:", borderModeX, true)
-			   ->setItems(HDRImage::borderModeNames());
-			gui->addVariable("Border mode Y:", borderModeY, true)
-			   ->setItems(HDRImage::borderModeNames());
+			gui->add_variable("Sampler:", sampler, true)
+			   ->set_items(HDRImage::samplerNames());
+			gui->add_variable("Border mode X:", borderModeX, true)
+			   ->set_items(HDRImage::borderModeNames());
+			gui->add_variable("Border mode Y:", borderModeY, true)
+			   ->set_items(HDRImage::borderModeNames());
 
-			auto s = gui->addVariable("Super-samples:", samples);
-			s->setSpinnable(true);
-			s->setMinValue(1);
+			auto s = gui->add_variable("Super-samples:", samples);
+			s->set_spinnable(true);
+			s->set_min_value(1);
 
 			addOKCancelButtons(gui, window,
 			                   [&]()
 			                   {
-				                   imagesPanel->modifyImage(
+				                   imagesPanel->modify_image(
 					                   [&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 					                   {
-						                   Affine2f t(Affine2f::Identity());
+						                   Eigen::Affine2f t(Eigen::Affine2f::Identity());
 
-						                   Vector2f origin(0.f, 0.f);
+						                   Eigen::Vector2f origin(0.f, 0.f);
 
 						                   // find top-left corner
 						                   switch (anchor)
@@ -1580,20 +1578,20 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 						                   }
 
 						                   t.translate(origin);
-						                   t.scale(Vector2f(1.f/img->width(), 1.f/img->height()));
-						                   t.translate(Vector2f(translateX, translateY));
+						                   t.scale(Eigen::Vector2f(1.f/img->width(), 1.f/img->height()));
+						                   t.translate(Eigen::Vector2f(translateX, translateY));
 						                   t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-						                   Matrix2f sh;
+						                   Eigen::Matrix2f sh;
 						                   sh << 1, tan(shearX/180.f * M_PI), tan(shearY/180.f * M_PI), 1;
 						                   t.linear() *= sh;
-						                   t.scale(Vector2f(scaleX, scaleY)*.01f);
-						                   t.scale(Vector2f(img->width(), img->height()));
+						                   t.scale(Eigen::Vector2f(scaleX, scaleY)*.01f);
+						                   t.scale(Eigen::Vector2f(img->width(), img->height()));
 						                   t.translate(-origin);
 
 						                   t = t.inverse();
 
-						                   function<Vector2f(const Vector2f &)> warp =
-							                   [t](const Vector2f &uv)
+						                   function<Eigen::Vector2f(const Eigen::Vector2f &)> warp =
+							                   [t](const Eigen::Vector2f &uv)
 							                   {
 								                   return (t * uv).eval();
 							                   };
@@ -1605,7 +1603,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			                   });
 
 			window->center();
-			window->requestFocus();
+			window->request_focus();
 		});
 	return b;
 }
@@ -1617,35 +1615,36 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	: Widget(parent), m_screen(screen), m_imagesPanel(imagesPanel)
 {
 	const int spacing = 2;
-	setLayout(new GroupLayout(2, 4, 8, 10));
+	set_layout(new GroupLayout(2, 4, 8, 10));
+
 
 	new Label(this, "History", "sans-bold");
 
 	auto buttonRow = new Widget(this);
-	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
+	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
-	m_undoButton = new Button(buttonRow, "Undo", ENTYPO_ICON_REPLY);
-	m_undoButton->setCallback([&](){m_imagesPanel->undo();});
-	m_redoButton = new Button(buttonRow, "Redo", ENTYPO_ICON_FORWARD);
-	m_redoButton->setCallback([&](){m_imagesPanel->redo();});
+	m_undoButton = new Button(buttonRow, "Undo", FA_REPLY);
+	m_undoButton->set_callback([&](){m_imagesPanel->undo();});
+	m_redoButton = new Button(buttonRow, "Redo", FA_SHARE);
+	m_redoButton->set_callback([&](){m_imagesPanel->redo();});
 
 	new Label(this, "Pixel/domain transformations", "sans-bold");
 
 	auto grid = new Widget(this);
-	grid->setLayout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
+	grid->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
 	// flip h
-	m_filterButtons.push_back(new Button(grid, "Flip H", ENTYPO_ICON_ALIGN_HORIZONTAL_MIDDLE));
-	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(true);});
-	m_filterButtons.back()->setFixedHeight(21);
+	m_filterButtons.push_back(new Button(grid, "Flip H", FA_ARROWS_ALT_H));
+	m_filterButtons.back()->set_callback([&](){m_screen->flip_image(true);});
+	m_filterButtons.back()->set_fixed_height(21);
 
 	// rotate cw
-	m_filterButtons.push_back(new Button(grid, "Rotate CW", ENTYPO_ICON_CW));
-	m_filterButtons.back()->setFixedHeight(21);
-	m_filterButtons.back()->setCallback(
+	m_filterButtons.push_back(new Button(grid, "Rotate CW", FA_REDO));
+	m_filterButtons.back()->set_fixed_height(21);
+	m_filterButtons.back()->set_callback(
 		[this]()
 		{
-			m_imagesPanel->modifyImage(
+			m_imagesPanel->modify_image(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->rotated90CW()),
@@ -1655,17 +1654,17 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 		});
 
 	// flip v
-	m_filterButtons.push_back(new Button(grid, "Flip V", ENTYPO_ICON_ALIGN_VERTICAL_MIDDLE));
-	m_filterButtons.back()->setCallback([&](){m_screen->flipImage(false);});
-	m_filterButtons.back()->setFixedHeight(21);
+	m_filterButtons.push_back(new Button(grid, "Flip V", FA_ARROWS_ALT_V));
+	m_filterButtons.back()->set_callback([&](){m_screen->flip_image(false);});
+	m_filterButtons.back()->set_fixed_height(21);
 
 	// rotate ccw
-	m_filterButtons.push_back(new Button(grid, "Rotate CCW", ENTYPO_ICON_CCW));
-	m_filterButtons.back()->setFixedHeight(21);
-	m_filterButtons.back()->setCallback(
+	m_filterButtons.push_back(new Button(grid, "Rotate CCW", FA_UNDO));
+	m_filterButtons.back()->set_fixed_height(21);
+	m_filterButtons.back()->set_callback(
 		[this]()
 		{
-			m_imagesPanel->modifyImage(
+			m_imagesPanel->modify_image(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->rotated90CCW()),
@@ -1692,33 +1691,33 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	new Label(this, "Color/range adjustments", "sans-bold");
 	buttonRow = new Widget(this);
 	auto agrid = new AdvancedGridLayout({0, spacing, 0}, {}, 0);
-	agrid->setColStretch(0, 1.0f);
-	agrid->setColStretch(2, 1.0f);
-	buttonRow->setLayout(agrid);
+	agrid->set_col_stretch(0, 1.0f);
+	agrid->set_col_stretch(2, 1.0f);
+	buttonRow->set_layout(agrid);
 
-	agrid->appendRow(0);
+	agrid->append_row(0);
 	// invert
-	m_filterButtons.push_back(new Button(buttonRow, "Invert", ENTYPO_ICON_IMAGE_INVERTED));
-	m_filterButtons.back()->setFixedHeight(21);
-	m_filterButtons.back()->setCallback(
+	m_filterButtons.push_back(new Button(buttonRow, "Invert", FA_IMAGE));
+	m_filterButtons.back()->set_fixed_height(21);
+	m_filterButtons.back()->set_callback(
 		[this]()
 		{
-			m_imagesPanel->modifyImage(
+			m_imagesPanel->modify_image(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->inverted()),
 					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->inverted(); })};
 				});
 		});
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1));
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
 	// clamp
-	m_filterButtons.push_back(new Button(buttonRow, "Clamp", ENTYPO_ICON_ADJUST));
-	m_filterButtons.back()->setFixedHeight(21);
-	m_filterButtons.back()->setCallback(
+	m_filterButtons.push_back(new Button(buttonRow, "Clamp", FA_ADJUST));
+	m_filterButtons.back()->set_fixed_height(21);
+	m_filterButtons.back()->set_callback(
 		[this]()
 		{
-			m_imagesPanel->modifyImage(
+			m_imagesPanel->modify_image(
 				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
 					return {make_shared<HDRImage>(img->unaryExpr(
@@ -1728,40 +1727,40 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 						}).eval()), nullptr };
 				});
 		});
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(2, agrid->rowCount()-1));
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
 
 //	buttonRow = new Widget(this);
-//	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
+//	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
 
-	agrid->appendRow(spacing);  // spacing
+	agrid->append_row(spacing);  // spacing
 
 	m_filterButtons.push_back(createExposureGammaButton(buttonRow, m_screen, m_imagesPanel));
-	agrid->appendRow(0);
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+	agrid->append_row(0);
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
-	agrid->appendRow(spacing);  // spacing
+	agrid->append_row(spacing);  // spacing
 	m_filterButtons.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_imagesPanel));
-	agrid->appendRow(0);
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+	agrid->append_row(0);
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
-	agrid->appendRow(spacing);  // spacing
+	agrid->append_row(spacing);  // spacing
 	m_filterButtons.push_back(createFilmicTonemappingButton(buttonRow, m_screen, m_imagesPanel));
-	agrid->appendRow(0);
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+	agrid->append_row(0);
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
-	agrid->appendRow(spacing);  // spacing
+	agrid->append_row(spacing);  // spacing
 	m_filterButtons.push_back(createHueSaturationButton(buttonRow, m_screen, m_imagesPanel));
-	agrid->appendRow(0);
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+	agrid->append_row(0);
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
-	agrid->appendRow(spacing);  // spacing
+	agrid->append_row(spacing);  // spacing
 	m_filterButtons.push_back(createColorSpaceButton(buttonRow, m_screen, m_imagesPanel));
-	agrid->appendRow(0);
-	agrid->setAnchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->rowCount()-1, 3, 1));
+	agrid->append_row(0);
+	agrid->set_anchor(m_filterButtons.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	new Label(this, "Filters", "sans-bold");
 	buttonRow = new Widget(this);
-	buttonRow->setLayout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
+	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
 	m_filterButtons.push_back(createGaussianFilterButton(buttonRow, m_screen, m_imagesPanel));
 	m_filterButtons.push_back(createBoxFilterButton(buttonRow, m_screen, m_imagesPanel));
 	m_filterButtons.push_back(createBilateralFilterButton(buttonRow, m_screen, m_imagesPanel));
@@ -1772,19 +1771,19 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 void EditImagePanel::draw(NVGcontext *ctx)
 {
-	auto img = m_imagesPanel->currentImage();
+	auto img = m_imagesPanel->current_image();
 
-	bool canModify = img && img->canModify();
+	bool can_modify = img && img->can_modify();
 
-	if (enabled() != canModify)
+	if (enabled() != can_modify)
 	{
-		setEnabled(canModify);
+		set_enabled(can_modify);
 		for (auto btn : m_filterButtons)
-			btn->setEnabled(canModify);
+			btn->set_enabled(can_modify);
 	}
 
-	m_undoButton->setEnabled(canModify && img->hasUndo());
-	m_redoButton->setEnabled(canModify && img->hasRedo());
+	m_undoButton->set_enabled(can_modify && img->has_undo());
+	m_redoButton->set_enabled(can_modify && img->has_redo());
 
 
 	Widget::draw(ctx);

@@ -10,8 +10,8 @@
 
 #include "ImageButton.h"
 #include <nanogui/opengl.h>
-#include <nanogui/entypo.h>
 #include <nanogui/theme.h>
+#include <nanogui/icons.h>
 #include <iostream>
 #include <spdlog/fmt/ostr.h>
 
@@ -21,41 +21,41 @@ using namespace std;
 ImageButton::ImageButton(Widget *parent, const string &caption)
 	: Widget (parent), m_caption(caption)
 {
-	mFontSize = 15;
+	m_font_size = 15;
 }
 
-void ImageButton::recomputeStringClipping()
+void ImageButton::recompute_string_clipping()
 {
 	m_cutoff = 0;
-	m_sizeForWhichCutoffWasComputed = Eigen::Vector2i::Constant(0);
+	m_size_for_computed_cutoff = Vector2i(0);
 }
 
-Vector2i ImageButton::preferredSize(NVGcontext *ctx) const
+Vector2i ImageButton::preferred_size(NVGcontext *ctx) const
 {
 	// calculate size of the image iD number
 	nvgFontFace(ctx, "sans-bold");
-	nvgFontSize(ctx, mFontSize);
-	string idString = to_string(m_id);
-	float idSize = nvgTextBounds(ctx, 0, 0, idString.c_str(), nullptr, nullptr);
+	nvgFontSize(ctx, m_font_size);
+	string id_string = to_string(m_id);
+	float id_size = nvgTextBounds(ctx, 0, 0, id_string.c_str(), nullptr, nullptr);
 
-	// calculate space for isModified icon
+	// calculate space for is_modified icon
 	nvgFontFace(ctx, "icons");
-	nvgFontSize(ctx, mFontSize * 1.5f);
-	float iw = nvgTextBounds(ctx, 0, 0, utf8(ENTYPO_ICON_PENCIL).data(), nullptr, nullptr);
+	nvgFontSize(ctx, m_font_size * 1.5f);
+	float iw = nvgTextBounds(ctx, 0, 0, utf8(FA_PENCIL_ALT).data(), nullptr, nullptr);
 
 	// calculate size of the filename
 	nvgFontFace(ctx, "sans");
-	nvgFontSize(ctx, mFontSize);
+	nvgFontSize(ctx, m_font_size);
 	float tw = nvgTextBounds(ctx, 0, 0, m_caption.c_str(), nullptr, nullptr);
 
-	return Vector2i(static_cast<int>(tw + iw + idSize) + 15, mFontSize + 6);
+	return Vector2i(static_cast<int>(tw + iw + id_size) + 15, m_font_size + 6);
 }
 
-bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers)
+bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-	Widget::mouseButtonEvent(p, button, down, modifiers);
+	Widget::mouse_button_event(p, button, down, modifiers);
 
-	if (!mEnabled || !down)
+	if (!m_enabled || !down)
 	{
 		return false;
 	}
@@ -64,42 +64,42 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 		(button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT))
 	{
 		// If we already were the reference, then let's disable using us a reference.
-		m_isReference = !m_isReference;
+		m_is_reference = !m_is_reference;
 
 		// If we newly became the reference, then we need to disable the existing reference
 		// if it exists.
-		if (m_isReference)
+		if (m_is_reference)
 		{
 			for (auto widget : parent()->children())
 			{
 				ImageButton* b = dynamic_cast<ImageButton*>(widget);
 				if (b && b != this)
-					b->m_isReference = false;
+					b->m_is_reference = false;
 			}
 		}
 
 		// Invoke the callback in any case, such that the surrounding code can
 		// react to new references or a loss of a reference image.
-		if (m_referenceCallback)
-			m_referenceCallback(m_isReference ? m_id : -1);
+		if (m_reference_callback)
+			m_reference_callback(m_is_reference ? m_id : -1);
 
 		return true;
 	}
 	else if (button == GLFW_MOUSE_BUTTON_1)
 	{
-		if (!m_isSelected)
+		if (!m_is_selected)
 		{
 			// Unselect the other, currently selected image.
 			for (auto widget : parent()->children())
 			{
 				ImageButton *b = dynamic_cast<ImageButton *>(widget);
 				if (b && b != this)
-					b->m_isSelected = false;
+					b->m_is_selected = false;
 			}
 
-			m_isSelected = true;
-			if (m_selectedCallback)
-				m_selectedCallback(m_id);
+			m_is_selected = true;
+			if (m_selected_callback)
+				m_selected_callback(m_id);
 		}
 		return true;
 	}
@@ -111,21 +111,21 @@ bool ImageButton::mouseButtonEvent(const Vector2i &p, int button, bool down, int
 string ImageButton::highlighted() const
 {
 	vector<string> pieces;
-	if (m_highlightBegin <= 0)
+	if (m_highlight_begin <= 0)
 	{
-		if (m_highlightEnd <= 0)
+		if (m_highlight_end <= 0)
 			pieces.emplace_back(m_caption);
 		else
 		{
-			size_t offset = m_highlightEnd;
+			size_t offset = m_highlight_end;
 			pieces.emplace_back(m_caption.substr(offset));
 			pieces.emplace_back(m_caption.substr(0, offset));
 		}
 	}
 	else
 	{
-		size_t beginOffset = m_highlightBegin;
-		size_t endOffset = m_highlightEnd;
+		size_t beginOffset = m_highlight_begin;
+		size_t endOffset = m_highlight_end;
 		pieces.emplace_back(m_caption.substr(endOffset));
 		pieces.emplace_back(m_caption.substr(beginOffset, endOffset - beginOffset));
 		pieces.emplace_back(m_caption.substr(0, beginOffset));
@@ -146,86 +146,86 @@ void ImageButton::draw(NVGcontext *ctx)
 	Widget::draw(ctx);
 
 	int extraBorder = 0;
-	if (m_isReference)
+	if (m_is_reference)
 	{
 		extraBorder = 2;
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, mPos.x(), mPos.y(), mSize.x(), mSize.y(), 3+1);
+		nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), 3+1);
 		nvgFillColor(ctx, Color(0.7f, 0.4f, 0.4f, 1.0f));
 		nvgFill(ctx);
 	}
 
 	// Fill the button with color.
-	if (m_isSelected || mMouseFocus)
+	if (m_is_selected || m_mouse_focus)
 	{
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, mPos.x() + extraBorder, mPos.y() + extraBorder,
-		        mSize.x() - 2*extraBorder, mSize.y() - 2*extraBorder, 3);
-		nvgFillColor(ctx, m_isSelected ? mTheme->mButtonGradientBotPushed : mTheme->mBorderMedium);
+		nvgRoundedRect(ctx, m_pos.x() + extraBorder, m_pos.y() + extraBorder,
+		        m_size.x() - 2*extraBorder, m_size.y() - 2*extraBorder, 3);
+		nvgFillColor(ctx, m_is_selected ? m_theme->m_button_gradient_bot_pushed : m_theme->m_border_medium);
 		nvgFill(ctx);
 	}
 
 	// percent progress bar
 	if (m_progress >= 0.f && m_progress < 1.f)
 	{
-		int barPos = (int) std::round((mSize.x() - 4) * m_progress);
+		int barPos = (int) std::round((m_size.x() - 4) * m_progress);
 
 		auto paint = nvgBoxGradient(
-			ctx, mPos.x() + 2 - 1, mPos.y() + 2 -1,
-			barPos + 1.5f, mSize.y() - 2*extraBorder + 1, 3, 4,
+			ctx, m_pos.x() + 2 - 1, m_pos.y() + 2 -1,
+			barPos + 1.5f, m_size.y() - 2*extraBorder + 1, 3, 4,
 			Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
 
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, mPos.x() + 2, mPos.y() + 2,
-		               barPos, mSize.y() - 2*2, 3);
+		nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2,
+		               barPos, m_size.y() - 2*2, 3);
 		nvgFillPaint(ctx, paint);
 		nvgFill(ctx);
 	}
 	// busy progress bar
 	else if (m_progress < 0.f)
 	{
-		int leftEdge  = mPos.x() + 2;
+		int leftEdge  = m_pos.x() + 2;
 		float time = glfwGetTime();
 		float anim1 = smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, triangleWave(time/4.f))));
 		float anim2 = smoothStep(0.0f, 1.0f, triangleWave(time/4.f*2.f));
 
-		int barSize = (int) std::round(lerp(float(mSize.x() - 4) * 0.05f, float(mSize.x() - 4) * 0.25f, anim2));
-		int left = (int) std::round(lerp((float)leftEdge, float(mSize.x() - 2 - barSize), anim1));
+		int barSize = (int) std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
+		int left = (int) std::round(lerp((float)leftEdge, float(m_size.x() - 2 - barSize), anim1));
 
 		auto paint = nvgBoxGradient(
-			ctx, left - 1, mPos.y() + 2 -1,
-			barSize + 1.5f, mSize.y() - 2*extraBorder + 1, 3, 4,
+			ctx, left - 1, m_pos.y() + 2 -1,
+			barSize + 1.5f, m_size.y() - 2*extraBorder + 1, 3, 4,
 			Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
 
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, left, mPos.y() + 2,
-		               barSize, mSize.y() - 2*2, 3);
+		nvgRoundedRect(ctx, left, m_pos.y() + 2,
+		               barSize, m_size.y() - 2*2, 3);
 		nvgFillPaint(ctx, paint);
 		nvgFill(ctx);
 	}
 
-	nvgFontSize(ctx, mFontSize);
+	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, "sans-bold");
-	string idString = to_string(m_id);
-	float idSize = nvgTextBounds(ctx, 0, 0, idString.c_str(), nullptr, nullptr);
+	string id_string = to_string(m_id);
+	float id_size = nvgTextBounds(ctx, 0, 0, id_string.c_str(), nullptr, nullptr);
 
-	nvgFontSize(ctx, mFontSize * 1.5f);
+	nvgFontSize(ctx, m_font_size * 1.5f);
 	nvgFontFace(ctx, "icons");
-	float iconSize = nvgTextBounds(ctx, 0, 0, utf8(ENTYPO_ICON_PENCIL).data(), nullptr, nullptr);
+	float iconSize = nvgTextBounds(ctx, 0, 0, utf8(FA_PENCIL_ALT).data(), nullptr, nullptr);
 
-	nvgFontSize(ctx, mFontSize);
-	nvgFontFace(ctx, m_isSelected ? "sans-bold" : "sans");
+	nvgFontSize(ctx, m_font_size);
+	nvgFontFace(ctx, m_is_selected ? "sans-bold" : "sans");
 
 	// trim caption to available space
-	if (mSize.x() == preferredSize(ctx).x())
+	if (m_size.x() == preferred_size(ctx).x())
 		m_cutoff = 0;
-	else if (mSize != m_sizeForWhichCutoffWasComputed)
+	else if (m_size != m_size_for_computed_cutoff)
 	{
 		m_cutoff = 0;
-		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > mSize.x() - 15 - idSize - iconSize)
+		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > m_size.x() - 15 - id_size - iconSize)
 			++m_cutoff;
 
-		m_sizeForWhichCutoffWasComputed = mSize;
+		m_size_for_computed_cutoff = m_size;
 	}
 
 	// Image name
@@ -233,21 +233,21 @@ void ImageButton::draw(NVGcontext *ctx)
 
 
 	vector<string> pieces;
-	if (m_highlightBegin <= m_cutoff)
+	if (m_highlight_begin <= m_cutoff)
 	{
-		if (m_highlightEnd <= m_cutoff)
+		if (m_highlight_end <= m_cutoff)
 			pieces.emplace_back(trimmedCaption);
 		else
 		{
-			size_t offset = m_highlightEnd - m_cutoff;
+			size_t offset = m_highlight_end - m_cutoff;
 			pieces.emplace_back(trimmedCaption.substr(offset));
 			pieces.emplace_back(trimmedCaption.substr(0, offset));
 		}
 	}
 	else
 	{
-		size_t beginOffset = m_highlightBegin - m_cutoff;
-		size_t endOffset = m_highlightEnd - m_cutoff;
+		size_t beginOffset = m_highlight_begin - m_cutoff;
+		size_t endOffset = m_highlight_end - m_cutoff;
 		pieces.emplace_back(trimmedCaption.substr(endOffset));
 		pieces.emplace_back(trimmedCaption.substr(beginOffset, endOffset - beginOffset));
 		pieces.emplace_back(trimmedCaption.substr(0, beginOffset));
@@ -256,41 +256,41 @@ void ImageButton::draw(NVGcontext *ctx)
 	if (m_cutoff > 0 && m_cutoff < m_caption.size())
 		pieces.back() = string{"…"} + pieces.back();
 
-	Vector2f center = mPos.cast<float>() + mSize.cast<float>() * 0.5f;
-	Vector2f bottomRight = mPos.cast<float>() + mSize.cast<float>();
-	Vector2f textPos(bottomRight.x() - 5, center.y());
-	NVGcolor regularTextColor = (m_isSelected || m_isReference || mMouseFocus) ? mTheme->mTextColor : Color(190, 100);
-	NVGcolor hightlightedTextColor = Color(190, 255);
+	Vector2f center = Vector2f(m_pos) + Vector2f(m_size) * 0.5f;
+	Vector2f bottom_right = Vector2f(m_pos) + Vector2f(m_size);
+	Vector2f text_pos(bottom_right.x() - 5, center.y());
+	NVGcolor regular_text_color = (m_is_selected || m_is_reference || m_mouse_focus) ? m_theme->m_text_color : Color(190, 100);
+	NVGcolor highlighted_text_color = Color(190, 255);
 
-	nvgFontSize(ctx, mFontSize);
+	nvgFontSize(ctx, m_font_size);
 	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 
 	for (size_t i = 0; i < pieces.size(); ++i)
 	{
 		nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
-		nvgFillColor(ctx, i == 1 ? hightlightedTextColor : regularTextColor);
-		nvgText(ctx, textPos.x(), textPos.y(), pieces[i].c_str(), nullptr);
-		textPos.x() -= nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+		nvgFillColor(ctx, i == 1 ? highlighted_text_color : regular_text_color);
+		nvgText(ctx, text_pos.x(), text_pos.y(), pieces[i].c_str(), nullptr);
+		text_pos.x() -= nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
 	}
 
-	// isModified icon
-	auto icon = utf8(m_isModified ? ENTYPO_ICON_PENCIL : ENTYPO_ICON_SAVE);
-	nvgFontSize(ctx, mFontSize * 0.8f);
+	// is_modified icon
+	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : FA_SAVE);
+	nvgFontSize(ctx, m_font_size * 0.8f);
 	nvgFontFace(ctx, "icons");
-	nvgFillColor(ctx, mTheme->mTextColor);
+	nvgFillColor(ctx, m_theme->m_text_color);
 	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	nvgText(ctx, mPos.x() + 5, textPos.y(), icon.data(), nullptr);
+	nvgText(ctx, m_pos.x() + 5, text_pos.y(), icon.data(), nullptr);
 
 	// Image number
-	nvgFontSize(ctx, mFontSize);
+	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, "sans-bold");
 	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	nvgFillColor(ctx, mTheme->mTextColor);
-	nvgText(ctx, mPos.x() + 20, textPos.y(), idString.c_str(), nullptr);
+	nvgFillColor(ctx, m_theme->m_text_color);
+	nvgText(ctx, m_pos.x() + 20, text_pos.y(), id_string.c_str(), nullptr);
 }
 
 
-void ImageButton::setHighlightRange(size_t begin, size_t end)
+void ImageButton::set_highlight_range(size_t begin, size_t end)
 {
 	size_t beginIndex = begin;
 	if (end > m_caption.size())
@@ -300,18 +300,18 @@ void ImageButton::setHighlightRange(size_t begin, size_t end)
 			end, m_caption.size())};
 	}
 
-	m_highlightBegin = beginIndex;
-	m_highlightEnd = max(m_caption.size() - end, beginIndex);
+	m_highlight_begin = beginIndex;
+	m_highlight_end = max(m_caption.size() - end, beginIndex);
 
-	if (m_highlightBegin == m_highlightEnd || m_caption.empty())
+	if (m_highlight_begin == m_highlight_end || m_caption.empty())
 		return;
 
 	// Extend beginning and ending of highlighted region to entire word/number
-	if (isalnum(m_caption[m_highlightBegin]))
-		while (m_highlightBegin > 0 && isalnum(m_caption[m_highlightBegin - 1]))
-			--m_highlightBegin;
+	if (isalnum(m_caption[m_highlight_begin]))
+		while (m_highlight_begin > 0 && isalnum(m_caption[m_highlight_begin - 1]))
+			--m_highlight_begin;
 
-	if (isalnum(m_caption[m_highlightEnd - 1]))
-		while (m_highlightEnd < m_caption.size() && isalnum(m_caption[m_highlightEnd]))
-			++m_highlightEnd;
+	if (isalnum(m_caption[m_highlight_end - 1]))
+		while (m_highlight_end < m_caption.size() && isalnum(m_caption[m_highlight_end]))
+			++m_highlight_end;
 }

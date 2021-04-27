@@ -14,7 +14,7 @@
 #include "CommandHistory.h"
 
 using namespace nanogui;
-using namespace Eigen;
+// using namespace Eigen;
 
 class HDRViewScreen : public Screen
 {
@@ -23,29 +23,29 @@ public:
     ~HDRViewScreen() override;
 
 	// overridden virtual functions from Screen
-    void drawContents() override;
-    bool dropEvent(const std::vector<std::string> &filenames) override;
-	bool mouseButtonEvent(const Eigen::Vector2i &p, int button, bool down, int modifiers) override;
-	bool mouseMotionEvent(const Eigen::Vector2i& p, const Eigen::Vector2i& rel, int button, int modifiers) override;
-	bool keyboardEvent(int key, int scancode, int action, int modifiers) override;
+    void draw_contents() override;
+    bool drop_event(const std::vector<std::string> &filenames) override;
+	bool mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+	bool mouse_motion_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int modifiers) override;
+	bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
-	bool loadImage();
-	void saveImage();
-	void askCloseImage(int index);
-	void askCloseAllImages();
-	void flipImage(bool h);
-	void clearFocusPath() {mFocusPath.clear();}
+	bool load_image();
+	void save_image();
+	void ask_close_image(int index);
+	void ask_close_all_images();
+	void flip_image(bool h);
+	void clear_focus_path() {m_focus_path.clear();}
 
-	int modifiers() const {return mModifiers;}
+	int modifiers() const {return m_modifiers;}
 
-	void updateCaption();
+	void update_caption();
 
 private:
-	void toggleHelpWindow();
-	void updateLayout();
-	bool atSidePanelEdge(const Eigen::Vector2i& p)
+	void toggle_help_window();
+	void update_layout();
+	bool at_side_panel_edge(const nanogui::Vector2i& p)
 	{
-		return p.x() - m_sidePanel->fixedWidth() < 10 && p.x() - m_sidePanel->fixedWidth() > -5;
+		return p.x() - m_sidePanel->fixed_width() < 10 && p.x() - m_sidePanel->fixed_width() > -5;
 	}
 
 	Window * m_topPanel = nullptr;

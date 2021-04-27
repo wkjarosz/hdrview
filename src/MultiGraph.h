@@ -19,63 +19,57 @@ class MultiGraph : public Widget
 {
 public:
 	MultiGraph(Widget *parent, const Color & fg = Color(255, 192, 0, 128),
-	           const VectorXf & v = VectorXf());
+	           const std::vector<float> & v = std::vector<float>());
 
-	const Color &backgroundColor() const { return mBackgroundColor; }
-	void setBackgroundColor(const Color &backgroundColor) { mBackgroundColor = backgroundColor; }
+	const Color &backgroundColor() const { return m_background_color; }
+	void setBackgroundColor(const Color &backgroundColor) { m_background_color = backgroundColor; }
 
-	const Color &textColor() const { return mTextColor; }
-	void setTextColor(const Color &textColor) { mTextColor = textColor; }
+	const Color &text_color() const { return m_text_color; }
+	void set_text_color(const Color &text_color) { m_text_color = text_color; }
 
-	int numPlots() const {return mValues.size();}
-	void addPlot(const Color & fg = Color(), const VectorXf & v = VectorXf()) {mValues.push_back(v); mForegroundColors.push_back(fg);}
-	void popPlot() {mValues.pop_back(); mForegroundColors.pop_back();}
+	int num_plots() const {return m_values.size();}
+	void add_plot(const Color & fg = Color(), const std::vector<float> & v = std::vector<float>()) {m_values.push_back(v); m_foreground_colors.push_back(fg);}
+	void pop_plot() {m_values.pop_back(); m_foreground_colors.pop_back();}
 
-	bool well() const       { return mInWell; }
-	void setWell(bool b)    { mInWell = b; }
+	bool well() const       { return m_in_well; }
+	void set_well(bool b)    { m_in_well = b; }
 
-	bool filled() const     { return mFilled; }
-	void setFilled(bool b)  { mFilled = b; }
+	bool filled() const     { return m_filled; }
+	void set_filled(bool b)  { m_filled = b; }
 
-	const Color &foregroundColor(int plot = 0) const { return mForegroundColors[plot]; }
-	void setForegroundColor(const Color &foregroundColor, int plot = 0) { mForegroundColors[plot] = foregroundColor; }
+	const Color &foreground_color(int plot = 0) const { return m_foreground_colors[plot]; }
+	void set_foreground_color(const Color &foreground_color, int plot = 0) { m_foreground_colors[plot] = foreground_color; }
 
-	const VectorXf &values(int plot = 0) const { return mValues[plot]; }
-	VectorXf &values(int plot = 0) { return mValues[plot]; }
-	void setValues(const VectorXf &values, int plot = 0) { mValues[plot] = values; }
+	const std::vector<float> &values(int plot = 0) const { return m_values[plot]; }
+	std::vector<float> &values(int plot = 0) { return m_values[plot]; }
+	void set_values(const std::vector<float> &values, int plot = 0) { m_values[plot] = values; }
 
-	void setXTicks(const VectorXf & ticks, const std::vector<std::string> & labels);
-	void setYTicks(const VectorXf & ticks)      { mYTicks = ticks; }
-	void setLeftHeader(const std::string & s)   { mLeftHeader = s; }
-	void setCenterHeader(const std::string & s) { mCenterHeader = s; }
-	void setRightHeader(const std::string & s)  { mRightHeader = s; }
+	void set_xticks(const std::vector<float> & ticks, const std::vector<std::string> & labels);
+	void set_yticks(const std::vector<float> & ticks)      { m_yticks = ticks; }
+	void set_left_header(const std::string & s)   { m_left_header = s; }
+	void set_center_header(const std::string & s) { m_center_header = s; }
+	void set_right_header(const std::string & s)  { m_right_header = s; }
 
-	std::function<void(const Vector2f &)> dragCallback() const { return mDragCallback; }
-	void setDragCallback(const std::function<void(const Vector2f &)> &callback) { mDragCallback = callback; }
+	std::function<void(const nanogui::Vector2f &)> drag_callback() const { return m_drag_callback; }
+	void set_drag_callback(const std::function<void(const nanogui::Vector2f &)> &callback) { m_drag_callback = callback; }
 
-	virtual Vector2i preferredSize(NVGcontext *ctx) const override;
+	virtual nanogui::Vector2i preferred_size(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
-	virtual bool mouseDragEvent(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
-	virtual bool mouseButtonEvent(const Vector2i &p, int button, bool down, int modifiers) override;
-
-	virtual void save(Serializer &s) const override;
-	virtual bool load(Serializer &s) override;
+	virtual bool mouse_drag_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers) override;
+	virtual bool mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
 
 protected:
-	Vector2f graphCoordinateAt(const Vector2f& position) const;
-	float xPosition(float xfrac) const;
-	float yPosition(float yfrac) const;
+	nanogui::Vector2f graph_coordinate_at(const nanogui::Vector2f& position) const;
+	float x_position(float xfrac) const;
+	float y_position(float yfrac) const;
 
-	Color mBackgroundColor, mTextColor;
-	std::vector<Color> mForegroundColors;
-	std::vector<VectorXf> mValues;
-	bool mFilled = true, mInWell = true;
-	std::string mLeftHeader, mCenterHeader, mRightHeader;
-	VectorXf mXTicks, mYTicks;
-	std::vector<std::string> mXTickLabels;
+	Color m_background_color, m_text_color;
+	std::vector<Color> m_foreground_colors;
+	std::vector< std::vector<float> > m_values;
+	bool m_filled = true, m_in_well = true;
+	std::string m_left_header, m_center_header, m_right_header;
+	std::vector<float> m_xticks, m_yticks;
+	std::vector<std::string> m_xtick_labels;
 
-	std::function<void(const Vector2f &)> mDragCallback;
-
-public:
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+	std::function<void(const nanogui::Vector2f &)> m_drag_callback;
 };

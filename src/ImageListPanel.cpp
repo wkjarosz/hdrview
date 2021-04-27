@@ -5,7 +5,7 @@
 //
 
 #include "ImageListPanel.h"
-#include "HDRViewer.h"
+#include "HDRViewScreen.h"
 #include "GLImage.h"
 #include "ImageButton.h"
 #include "HDRImageViewer.h"
@@ -27,232 +27,232 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
       m_screen(screen),
       m_imageViewer(imgViewer)
 {
-	setId("image list panel");
-	setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
+	// set_id("image list panel");
+	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
 
 	// histogram mode selection GUI elements
 	{
 		auto grid = new Widget(this);
 		auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
-		grid->setLayout(agl);
-		agl->setColStretch(2, 1.0f);
-		agl->setColStretch(4, 1.0f);
+		grid->set_layout(agl);
+		agl->set_col_stretch(2, 1.0f);
+		agl->set_col_stretch(4, 1.0f);
 
-		agl->appendRow(0);
-		agl->setAnchor(new Label(grid, "Histogram:", "sans", 14),
-		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+		agl->append_row(0);
+		agl->set_anchor(new Label(grid, "Histogram:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
 		m_yAxisScale = new ComboBox(grid);
-		m_yAxisScale->setTooltip("Set the scale for the Y axis.");
-		m_yAxisScale->setItems({"Linear", "Log"});
-		m_yAxisScale->setFixedHeight(19);
-		agl->setAnchor(m_yAxisScale,
-		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
+		m_yAxisScale->set_tooltip("Set the scale for the Y axis.");
+		m_yAxisScale->set_items({"Linear", "Log"});
+		m_yAxisScale->set_fixed_height(19);
+		agl->set_anchor(m_yAxisScale,
+		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
 		m_xAxisScale = new ComboBox(grid);
-		m_xAxisScale->setTooltip("Set the scale for the X axis.");
-		m_xAxisScale->setItems({"Linear", "sRGB", "Log"});
-		m_xAxisScale->setFixedHeight(19);
-		agl->setAnchor(m_xAxisScale,
-		               AdvancedGridLayout::Anchor(4, agl->rowCount() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
+		m_xAxisScale->set_tooltip("Set the scale for the X axis.");
+		m_xAxisScale->set_items({"Linear", "sRGB", "Log"});
+		m_xAxisScale->set_fixed_height(19);
+		agl->set_anchor(m_xAxisScale,
+		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-		m_xAxisScale->setSelectedIndex(1);
-		m_yAxisScale->setSelectedIndex(0);
-		m_xAxisScale->setCallback([this](int) { updateHistogram(); });
-		m_yAxisScale->setCallback([this](int) { updateHistogram(); });
+		m_xAxisScale->set_selected_index(1);
+		m_yAxisScale->set_selected_index(0);
+		m_xAxisScale->set_callback([this](int) { updateHistogram(); });
+		m_yAxisScale->set_callback([this](int) { updateHistogram(); });
 	}
 
 	// histogram and file buttons
 	{
 		auto row = new Widget(this);
-		row->setLayout(new BoxLayout(Orientation::Vertical,
+		row->set_layout(new BoxLayout(Orientation::Vertical,
 		                             Alignment::Fill, 0, 4));
 		m_graph = new MultiGraph(row, Color(255, 0, 0, 150));
-		m_graph->addPlot(Color(0, 255, 0, 150));
-		m_graph->addPlot(Color(0, 0, 255, 150));
+		m_graph->add_plot(Color(0, 255, 0, 150));
+		m_graph->add_plot(Color(0, 0, 255, 150));
 
 		row = new Widget(this);
-		row->setLayout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
 
-		auto b = new Button(row, "", ENTYPO_ICON_FOLDER);
-		b->setFixedHeight(25);
-		b->setTooltip("Load an image and add it to the set of opened images.");
-		b->setCallback([this] { m_screen->loadImage(); });
+		auto b = new Button(row, "", FA_FOLDER);
+		b->set_fixed_height(25);
+		b->set_tooltip("Load an image and add it to the set of opened images.");
+		b->set_callback([this] { m_screen->load_image(); });
 
-		m_saveButton = new Button(row, "", ENTYPO_ICON_SAVE);
-		m_saveButton->setEnabled(currentImage() != nullptr);
-		m_saveButton->setFixedHeight(25);
-		m_saveButton->setTooltip("Save the image to disk.");
-		m_saveButton->setCallback([this] { m_screen->saveImage(); });
+		m_saveButton = new Button(row, "", FA_SAVE);
+		m_saveButton->set_enabled(current_image() != nullptr);
+		m_saveButton->set_fixed_height(25);
+		m_saveButton->set_tooltip("Save the image to disk.");
+		m_saveButton->set_callback([this] { m_screen->save_image(); });
 
-		m_bringForwardButton = new Button(row, "", ENTYPO_ICON_ARROW_BOLD_UP);
-		m_bringForwardButton->setFixedHeight(25);
-		m_bringForwardButton->setTooltip("Bring the image forward/up the stack.");
-		m_bringForwardButton->setCallback([this]{this->bringImageForward();});
+		m_bringForwardButton = new Button(row, "", FA_ARROW_UP);
+		m_bringForwardButton->set_fixed_height(25);
+		m_bringForwardButton->set_tooltip("Bring the image forward/up the stack.");
+		m_bringForwardButton->set_callback([this]{this->bring_image_forward();});
 
-		m_sendBackwardButton = new Button(row, "", ENTYPO_ICON_ARROW_BOLD_DOWN);
-		m_sendBackwardButton->setFixedHeight(25);
-		m_sendBackwardButton->setTooltip("Send the image backward/down the stack.");
-		m_sendBackwardButton->setCallback([this]{sendImageBackward();});
+		m_sendBackwardButton = new Button(row, "", FA_ARROW_DOWN);
+		m_sendBackwardButton->set_fixed_height(25);
+		m_sendBackwardButton->set_tooltip("Send the image backward/down the stack.");
+		m_sendBackwardButton->set_callback([this]{send_image_backward();});
 
-		m_closeButton = new Button(row, "", ENTYPO_ICON_CIRCLE_WITH_CROSS);
-		m_closeButton->setFixedHeight(25);
-		m_closeButton->setTooltip("Close image");
-		m_closeButton->setCallback([this] { m_screen->askCloseImage(currentImageIndex()); });
+		m_closeButton = new Button(row, "", FA_TIMES_CIRCLE);
+		m_closeButton->set_fixed_height(25);
+		m_closeButton->set_tooltip("Close image");
+		m_closeButton->set_callback([this] { m_screen->ask_close_image(current_image_index()); });
 	}
 
 	// channel and blend mode GUI elements
 	{
 		auto grid = new Widget(this);
 		auto agl = new AdvancedGridLayout({0, 4, 0});
-		grid->setLayout(agl);
-		agl->setColStretch(2, 1.0f);
+		grid->set_layout(agl);
+		agl->set_col_stretch(2, 1.0f);
 
-		agl->appendRow(0);
-		agl->setAnchor(new Label(grid, "Mode:", "sans", 14),
-		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+		agl->append_row(0);
+		agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
 		m_blendModes = new ComboBox(grid);
-		m_blendModes->setItems(blendModeNames());
-		m_blendModes->setFixedHeight(19);
-		m_blendModes->setCallback([imgViewer](int b) { imgViewer->setBlendMode(EBlendMode(b)); });
-		agl->setAnchor(m_blendModes,
-		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+		m_blendModes->set_items(blendModeNames());
+		m_blendModes->set_fixed_height(19);
+		m_blendModes->set_callback([imgViewer](int b) { imgViewer->set_blend_mode(EBlendMode(b)); });
+		agl->set_anchor(m_blendModes,
+		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-		agl->appendRow(4);  // spacing
-		agl->appendRow(0);
+		agl->append_row(4);  // spacing
+		agl->append_row(0);
 
-		agl->setAnchor(new Label(grid, "Channel:", "sans", 14),
-		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+		agl->set_anchor(new Label(grid, "Channel:", "sans", 14),
+		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
 		m_channels = new ComboBox(grid, channelNames());
-		m_channels->setFixedHeight(19);
-		setChannel(EChannel::RGB);
-		m_channels->setCallback([imgViewer](int c) { imgViewer->setChannel(EChannel(c)); });
-		agl->setAnchor(m_channels,
-		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
+		m_channels->set_fixed_height(19);
+		set_channel(EChannel::RGB);
+		m_channels->set_callback([imgViewer](int c) { imgViewer->set_channel(EChannel(c)); });
+		agl->set_anchor(m_channels,
+		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 	}
 
 	// filter/search of open images GUI elemen ts
 	{
 		auto grid = new Widget(this);
 		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0});
-		grid->setLayout(agl);
-		agl->setColStretch(0, 1.0f);
+		grid->set_layout(agl);
+		agl->set_col_stretch(0, 1.0f);
 
-		agl->appendRow(0);
+		agl->append_row(0);
 
 		m_filter = new TextBox(grid, "");
-		m_eraseButton = new Button(grid, "", ENTYPO_ICON_ERASE);
+		m_eraseButton = new Button(grid, "", FA_BACKSPACE);
 		m_regexButton = new Button(grid, ".*");
-		m_useShortButton = new Button(grid, "", ENTYPO_ICON_LIST);
+		m_useShortButton = new Button(grid, "", FA_ALIGN_LEFT);
 
-		m_filter->setEditable(true);
-		m_filter->setAlignment(TextBox::Alignment::Left);
-		m_filter->setCallback([this](const string& filter){ return setFilter(filter); });
+		m_filter->set_editable(true);
+		m_filter->set_alignment(TextBox::Alignment::Left);
+		m_filter->set_callback([this](const string& filter){ return setFilter(filter); });
 
-		m_filter->setPlaceholder("Find");
-		m_filter->setTooltip("Filter open image list so that only images with a filename containing the search string will be visible.");
+		m_filter->set_placeholder("Find");
+		m_filter->set_tooltip("Filter open image list so that only images with a filename containing the search string will be visible.");
 
-		agl->setAnchor(m_filter,
-		               AdvancedGridLayout::Anchor(0, agl->rowCount() - 1, Alignment::Fill, Alignment::Fill));
-
-
-		m_eraseButton->setFixedWidth(19);
-		m_eraseButton->setFixedHeight(19);
-		m_eraseButton->setTooltip("Clear the search string.");
-		m_eraseButton->setChangeCallback([this](bool b){ setFilter(""); });
-		agl->setAnchor(m_eraseButton,
-		               AdvancedGridLayout::Anchor(2, agl->rowCount() - 1, Alignment::Minimum, Alignment::Fill));
+		agl->set_anchor(m_filter,
+		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
 
-		m_regexButton->setFixedWidth(19);
-		m_regexButton->setFixedHeight(19);
-		m_regexButton->setTooltip("Treat search string as a regular expression.");
-		m_regexButton->setFlags(Button::ToggleButton);
-		m_regexButton->setPushed(false);
-		m_regexButton->setChangeCallback([this](bool b){ setUseRegex(b); });
-		agl->setAnchor(m_regexButton,
-		               AdvancedGridLayout::Anchor(4, agl->rowCount() - 1, Alignment::Minimum, Alignment::Fill));
+		m_eraseButton->set_fixed_width(19);
+		m_eraseButton->set_fixed_height(19);
+		m_eraseButton->set_tooltip("Clear the search string.");
+		m_eraseButton->set_change_callback([this](bool b){ setFilter(""); });
+		agl->set_anchor(m_eraseButton,
+		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 
-		m_useShortButton->setFixedWidth(19);
-		m_useShortButton->setFixedHeight(19);
-		m_useShortButton->setTooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
-		m_useShortButton->setFlags(Button::ToggleButton);
-		m_useShortButton->setPushed(false);
-		m_useShortButton->setChangeCallback([this](bool b){ m_updateFilterRequested = true; });
-		agl->setAnchor(m_useShortButton,
-		               AdvancedGridLayout::Anchor(6, agl->rowCount() - 1, Alignment::Minimum, Alignment::Fill));
+		m_regexButton->set_fixed_width(19);
+		m_regexButton->set_fixed_height(19);
+		m_regexButton->set_tooltip("Treat search string as a regular expression.");
+		m_regexButton->set_flags(Button::ToggleButton);
+		m_regexButton->set_pushed(false);
+		m_regexButton->set_change_callback([this](bool b){ setUseRegex(b); });
+		agl->set_anchor(m_regexButton,
+		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+
+
+		m_useShortButton->set_fixed_width(19);
+		m_useShortButton->set_fixed_height(19);
+		m_useShortButton->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
+		m_useShortButton->set_flags(Button::ToggleButton);
+		m_useShortButton->set_pushed(false);
+		m_useShortButton->set_change_callback([this](bool b){ m_updateFilterRequested = true; });
+		agl->set_anchor(m_useShortButton,
+		               AdvancedGridLayout::Anchor(6, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 	}
 
 	m_numImagesCallback =
 		[this](void)
 		{
-			m_screen->updateCaption();
-			repopulateImageList();
-			setReferenceImageIndex(-1);
+			m_screen->update_caption();
+			repopulate_image_list();
+			set_reference_image_index(-1);
 		};
 
 	m_imageModifyDoneCallback =
 		[this](int i)
 		{
-			m_screen->updateCaption();
-			requestButtonsUpdate();
+			m_screen->update_caption();
+			request_buttons_update();
 			setFilter(filter());
-            requestHistogramUpdate();
+            request_histogram_update();
 		};
 }
 
-EBlendMode ImageListPanel::blendMode() const
+EBlendMode ImageListPanel::blend_mode() const
 {
-	return EBlendMode(m_blendModes->selectedIndex());
+	return EBlendMode(m_blendModes->selected_index());
 }
 
-void ImageListPanel::setBlendMode(EBlendMode mode)
+void ImageListPanel::set_blend_mode(EBlendMode mode)
 {
-	m_blendModes->setSelectedIndex(mode);
-	m_imageViewer->setBlendMode(mode);
+	m_blendModes->set_selected_index(mode);
+	m_imageViewer->set_blend_mode(mode);
 }
 
 EChannel ImageListPanel::channel() const
 {
-	return EChannel(m_channels->selectedIndex());
+	return EChannel(m_channels->selected_index());
 }
 
-void ImageListPanel::setChannel(EChannel channel)
+void ImageListPanel::set_channel(EChannel channel)
 {
-	m_channels->setSelectedIndex(channel);
-	m_imageViewer->setChannel(channel);
+	m_channels->set_selected_index(channel);
+	m_imageViewer->set_channel(channel);
 }
 
-void ImageListPanel::focusFilter() {m_filter->requestFocus();}
+void ImageListPanel::focusFilter() {m_filter->request_focus();}
 
 
-void ImageListPanel::repopulateImageList()
+void ImageListPanel::repopulate_image_list()
 {
 	// this currently just clears all the widgets and recreates all of them
 	// from scratch. this doesn't scale, but should be fine unless you have a
 	// lot of images, and makes the logic a lot simpler.
 
 	// prevent crash when the focus path includes any of the widgets we are destroying
-	m_screen->clearFocusPath();
+	m_screen->clear_focus_path();
 	m_imageButtons.clear();
 
 	// clear everything
 	if (m_imageListWidget)
-		removeChild(m_imageListWidget);
+		remove_child(m_imageListWidget);
 
 	m_imageListWidget = new Well(this);
-	m_imageListWidget->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
+	m_imageListWidget->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
 
-	for (int i = 0; i < numImages(); ++i)
+	for (int i = 0; i < num_images(); ++i)
 	{
 		auto btn = new ImageButton(m_imageListWidget, image(i)->filename());
-		btn->setImageId(i+1);
-		btn->setSelectedCallback([&,i](int){setCurrentImageIndex(i);});
-		btn->setReferenceCallback([&,i](int){setReferenceImageIndex(i);});
+		btn->set_image_id(i+1);
+		btn->set_selected_callback([&,i](int){set_current_image_index(i);});
+		btn->set_reference_callback([&,i](int){set_reference_image_index(i);});
 
 		m_imageButtons.push_back(btn);
 	}
@@ -261,22 +261,22 @@ void ImageListPanel::repopulateImageList()
 
 	updateFilter();
 
-	m_screen->performLayout();
+	m_screen->perform_layout();
 }
 
 void ImageListPanel::updateButtons()
 {
-    for (int i = 0; i < numImages(); ++i)
+    for (int i = 0; i < num_images(); ++i)
     {
         auto img = image(i);
         auto btn = m_imageButtons[i];
 
-        btn->setIsSelected(i == m_current);
-        btn->setIsReference(i == m_reference);
-        btn->setCaption(img->filename());
-        btn->setIsModified(img->isModified());
-        btn->setProgress(img->progress());
-        btn->setTooltip(
+        btn->set_is_selected(i == m_current);
+        btn->set_is_reference(i == m_reference);
+        btn->set_caption(img->filename());
+        btn->set_is_modified(img->is_modified());
+        btn->set_progress(img->progress());
+        btn->set_tooltip(
                 fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
     }
 
@@ -288,46 +288,46 @@ void ImageListPanel::updateButtons()
 
 void ImageListPanel::enableDisableButtons()
 {
-	bool hasImage = currentImage() != nullptr;
-	bool hasValidImage = hasImage && !currentImage()->isNull();
-	m_saveButton->setEnabled(hasValidImage);
-	m_closeButton->setEnabled(hasImage);
+	bool hasImage = current_image() != nullptr;
+	bool hasValidImage = hasImage && !current_image()->isNull();
+	m_saveButton->set_enabled(hasValidImage);
+	m_closeButton->set_enabled(hasImage);
 }
 
 
-bool ImageListPanel::swapImages(int index1, int index2)
+bool ImageListPanel::swap_images(int index1, int index2)
 {
 	if (!isValid(index1) || !isValid(index2))
 		// invalid image indices, do nothing
 		return false;
 
 	swap(m_images[index1], m_images[index2]);
-	m_imageButtons[index1]->swapWith(*m_imageButtons[index2]);
+	m_imageButtons[index1]->swap_with(*m_imageButtons[index2]);
 
 	return true;
 }
 
-bool ImageListPanel::bringImageForward()
+bool ImageListPanel::bring_image_forward()
 {
-	int curr = currentImageIndex();
+	int curr = current_image_index();
 	int next = nextVisibleImage(curr, Forward);
 
-	if (!swapImages(curr, next))
+	if (!swap_images(curr, next))
 		return false;
 
-	return setCurrentImageIndex(next);
+	return set_current_image_index(next);
 }
 
 
-bool ImageListPanel::sendImageBackward()
+bool ImageListPanel::send_image_backward()
 {
-	int curr = currentImageIndex();
+	int curr = current_image_index();
 	int next = nextVisibleImage(curr, Backward);
 
-	if (!swapImages(curr, next))
+	if (!swap_images(curr, next))
 		return false;
 
-	return setCurrentImageIndex(next);
+	return set_current_image_index(next);
 }
 
 void ImageListPanel::draw(NVGcontext *ctx)
@@ -344,41 +344,48 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		updateFilter();
 
 	if (m_histogramDirty &&
-		currentImage() &&
-		!currentImage()->isNull() &&
-		currentImage()->histograms() &&
-		currentImage()->histograms()->ready())
+		current_image() &&
+		!current_image()->isNull() &&
+		current_image()->histograms() &&
+		current_image()->histograms()->ready())
 	{
-		auto lazyHist = currentImage()->histograms();
-		int idx = m_xAxisScale->selectedIndex();
-		int idxY = m_yAxisScale->selectedIndex();
+		auto lazyHist = current_image()->histograms();
+		int idx = m_xAxisScale->selected_index();
+		int idxY = m_yAxisScale->selected_index();
 		auto hist = lazyHist->get()->histogram[idx].values;
 		auto ticks = lazyHist->get()->histogram[idx].xTicks;
 		auto labels = lazyHist->get()->histogram[idx].xTickLabels;
-		m_graph->setValues(idxY == 0 ? hist.col(0) : hist.col(0).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 0);
-		m_graph->setValues(idxY == 0 ? hist.col(1) : hist.col(1).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 1);
-		m_graph->setValues(idxY == 0 ? hist.col(2) : hist.col(2).unaryExpr([](float v){return normalizedLogScale(v);}).eval(), 2);
-		m_graph->setXTicks(ticks, labels);
-		VectorXf yTicks = VectorXf::LinSpaced(9,0.0f,1.0f);
-		if (idxY != 0) yTicks = yTicks.unaryExpr([](float v){return normalizedLogScale(v);});
-		m_graph->setYTicks(yTicks);
-		m_graph->setLeftHeader(fmt::format("{:.3f}", lazyHist->get()->minimum));
-		m_graph->setCenterHeader(fmt::format("{:.3f}", lazyHist->get()->average));
-		m_graph->setRightHeader(fmt::format("{:.3f}", lazyHist->get()->maximum));
+		
+		if (idxY != 0)
+			for (int c = 0; c < 3; ++c)
+				for_each(hist[c].begin(), hist[c].end(), [](float & v){v = normalizedLogScale(v);});
+		m_graph->set_values(hist[0], 0);
+		m_graph->set_values(hist[1], 1);
+		m_graph->set_values(hist[2], 2);
+		m_graph->set_xticks(ticks, labels);
+
+		auto yTicks = linspaced(9, 0.0f, 1.0f);
+		if (idxY != 0)
+			for_each(yTicks.begin(), yTicks.end(), [](float & v){v = normalizedLogScale(v);});
+		m_graph->set_yticks(yTicks);
+
+		m_graph->set_left_header(fmt::format("{:.3f}", lazyHist->get()->minimum));
+		m_graph->set_center_header(fmt::format("{:.3f}", lazyHist->get()->average));
+		m_graph->set_right_header(fmt::format("{:.3f}", lazyHist->get()->maximum));
 		m_histogramDirty = false;
 	}
 	enableDisableButtons();
 
-	if (numImages() != (int)m_imageButtons.size())
+	if (num_images() != (int)m_imageButtons.size())
 		spdlog::get("console")->error("Number of buttons and images don't match!");
 	else
 	{
-		for (int i = 0; i < numImages(); ++i)
+		for (int i = 0; i < num_images(); ++i)
 		{
 			auto img = image(i);
 			auto btn = m_imageButtons[i];
-			btn->setProgress(img->progress());
-			btn->setIsModified(img->isModified());
+			btn->set_progress(img->progress());
+			btn->set_is_modified(img->is_modified());
 		}
 	}
 
@@ -390,27 +397,27 @@ void ImageListPanel::updateHistogram()
 {
 	m_histogramDirty = true;
 
-	if (currentImage())
-		currentImage()->recomputeHistograms(m_imageViewer->exposure());
+	if (current_image())
+		current_image()->recomputeHistograms(m_imageViewer->exposure());
 	else
     {
-        m_graph->setValues(VectorXf(), 0);
-        m_graph->setValues(VectorXf(), 1);
-        m_graph->setValues(VectorXf(), 2);
+        m_graph->set_values(std::vector<float>(), 0);
+        m_graph->set_values(std::vector<float>(), 1);
+        m_graph->set_values(std::vector<float>(), 2);
 
-        m_graph->setLeftHeader("");
-        m_graph->setCenterHeader("");
-        m_graph->setRightHeader("");
+        m_graph->set_left_header("");
+        m_graph->set_center_header("");
+        m_graph->set_right_header("");
 
-        m_graph->setXTicks(VectorXf(), {});
-        m_graph->setYTicks(VectorXf());
+        m_graph->set_xticks(std::vector<float>(), {});
+        m_graph->set_yticks(std::vector<float>());
     }
 
 	m_histogramUpdateRequested = false;
 	m_histogramRequestTime = glfwGetTime();
 }
 
-void ImageListPanel::requestHistogramUpdate(bool force)
+void ImageListPanel::request_histogram_update(bool force)
 {
 	if (force)
 		updateHistogram();
@@ -422,7 +429,7 @@ void ImageListPanel::requestHistogramUpdate(bool force)
 	}
 }
 
-void ImageListPanel::requestButtonsUpdate()
+void ImageListPanel::request_buttons_update()
 {
 	// if no button update is pending, then queue one up, and start the timer
 	m_buttonsUpdateRequested = true;
@@ -444,7 +451,7 @@ void ImageListPanel::requestButtonsUpdate()
 
 
 
-void ImageListPanel::runRequestedCallbacks()
+void ImageListPanel::run_requested_callbacks()
 {
 	if (m_imageModifyDoneRequested.exchange(false))
 	{
@@ -457,7 +464,7 @@ void ImageListPanel::runRequestedCallbacks()
 		{
 			int i = it - m_images.begin();
 			auto img = m_images[i];
-			if (img && img->canModify() && img->isNull())
+			if (img && img->can_modify() && img->isNull())
 			{
 				it = m_images.erase(it);
 
@@ -474,8 +481,8 @@ void ImageListPanel::runRequestedCallbacks()
 
 		if (numImagesChanged)
 		{
-			m_imageViewer->setCurrentImage(currentImage());
-			m_screen->updateCaption();
+			m_imageViewer->set_current_image(current_image());
+			m_screen->update_caption();
 
 			m_numImagesCallback();
 		}
@@ -494,42 +501,42 @@ shared_ptr<GLImage> ImageListPanel::image(int index)
 	return isValid(index) ? m_images[index] : nullptr;
 }
 
-bool ImageListPanel::setCurrentImageIndex(int index, bool forceCallback)
+bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 {
 	if (index == m_current && !forceCallback)
 		return false;
 
 	if (isValid(m_current))
-		m_imageButtons[m_current]->setIsSelected(false);
+		m_imageButtons[m_current]->set_is_selected(false);
 	if (isValid(index))
-		m_imageButtons[index]->setIsSelected(true);
+		m_imageButtons[index]->set_is_selected(true);
 
 	m_previous = m_current;
 	m_current = index;
-	m_imageViewer->setCurrentImage(currentImage());
-	m_screen->updateCaption();
+	m_imageViewer->set_current_image(current_image());
+	m_screen->update_caption();
     updateHistogram();
 
 	return true;
 }
 
-bool ImageListPanel::setReferenceImageIndex(int index)
+bool ImageListPanel::set_reference_image_index(int index)
 {
 	if (index == m_reference)
 		return false;
 
 	if (isValid(m_reference))
-		m_imageButtons[m_reference]->setIsReference(false);
+		m_imageButtons[m_reference]->set_is_reference(false);
 	if (isValid(index))
-		m_imageButtons[index]->setIsReference(true);
+		m_imageButtons[index]->set_is_reference(true);
 
 	m_reference = index;
-	m_imageViewer->setReferenceImage(referenceImage());
+	m_imageViewer->set_reference_image(reference_image());
 
 	return true;
 }
 
-void ImageListPanel::loadImages(const vector<string> & filenames)
+void ImageListPanel::load_images(const vector<string> & filenames)
 {
 	vector<string> allFilenames;
 
@@ -599,7 +606,7 @@ void ImageListPanel::loadImages(const vector<string> & filenames)
 				{
 					Timer timer;
 					spdlog::get("console")->info("Trying to load image \"{}\"", filename);
-					shared_ptr<HDRImage> ret = loadImage(filename);
+					shared_ptr<HDRImage> ret = load_image(filename);
 					if (ret)
 						spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
 					else
@@ -611,17 +618,17 @@ void ImageListPanel::loadImages(const vector<string> & filenames)
 	}
 
 	m_numImagesCallback();
-	setCurrentImageIndex(int(m_images.size() - 1));
+	set_current_image_index(int(m_images.size() - 1));
 }
 
-bool ImageListPanel::saveImage(const string & filename, float exposure, float gamma, bool sRGB, bool dither)
+bool ImageListPanel::save_image(const string & filename, float exposure, float gamma, bool sRGB, bool dither)
 {
-	if (!currentImage() || !filename.size())
+	if (!current_image() || !filename.size())
 		return false;
 
-    if (currentImage()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither))
+    if (current_image()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither))
     {
-        currentImage()->setFilename(filename);
+        current_image()->setFilename(filename);
         m_imageModifyDoneCallback(m_current);
 
         return true;
@@ -630,9 +637,9 @@ bool ImageListPanel::saveImage(const string & filename, float exposure, float ga
         return false;
 }
 
-bool ImageListPanel::closeImage()
+bool ImageListPanel::close_image()
 {
-	if (!currentImage())
+	if (!current_image())
 		return false;
 
 	// select the next image down the list, or the previous if closing the bottom-most image
@@ -648,14 +655,14 @@ bool ImageListPanel::closeImage()
 	else if (next >= int(m_images.size()))
 		newIndex = m_images.size() - 1;
 
-	setCurrentImageIndex(newIndex, true);
+	set_current_image_index(newIndex, true);
 	// for now just forget the previous selection when closing any image
 	m_previous = -1;
 	m_numImagesCallback();
 	return true;
 }
 
-void ImageListPanel::closeAllImages()
+void ImageListPanel::close_all_images()
 {
 	m_images.clear();
 
@@ -664,15 +671,15 @@ void ImageListPanel::closeAllImages()
 	m_previous = -1;
 
 
-    m_imageViewer->setCurrentImage(currentImage());
-    m_screen->updateCaption();
+    m_imageViewer->set_current_image(current_image());
+    m_screen->update_caption();
 
 	m_numImagesCallback();
 }
 
-void ImageListPanel::modifyImage(const ImageCommand & command)
+void ImageListPanel::modify_image(const ImageCommand & command)
 {
-	if (currentImage())
+	if (current_image())
 	{
 		m_images[m_current]->asyncModify(
 				[command](const shared_ptr<const HDRImage> & img)
@@ -685,13 +692,13 @@ void ImageListPanel::modifyImage(const ImageCommand & command)
 
 					return ret;
 				});
-        m_screen->updateCaption();
+        m_screen->update_caption();
 	}
 }
 
-void ImageListPanel::modifyImage(const ImageCommandWithProgress & command)
+void ImageListPanel::modify_image(const ImageCommandWithProgress & command)
 {
-	if (currentImage())
+	if (current_image())
 	{
 		m_images[m_current]->asyncModify(
 				[command](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
@@ -704,19 +711,19 @@ void ImageListPanel::modifyImage(const ImageCommandWithProgress & command)
 
 					return ret;
 				});
-        m_screen->updateCaption();
+        m_screen->update_caption();
 	}
 }
 
 void ImageListPanel::undo()
 {
-	if (currentImage() && m_images[m_current]->undo())
+	if (current_image() && m_images[m_current]->undo())
 		m_imageModifyDoneCallback(m_current);
 }
 
 void ImageListPanel::redo()
 {
-	if (currentImage() && m_images[m_current]->redo())
+	if (current_image() && m_images[m_current]->redo())
 		m_imageModifyDoneCallback(m_current);
 }
 
@@ -730,8 +737,8 @@ void ImageListPanel::redo()
 
 bool ImageListPanel::setFilter(const string& filter)
 {
-    m_filter->setValue(filter);
-    m_eraseButton->setVisible(!filter.empty());
+    m_filter->set_value(filter);
+    m_eraseButton->set_visible(!filter.empty());
     m_updateFilterRequested = true;
     return true;
 }
@@ -748,7 +755,7 @@ bool ImageListPanel::useRegex() const
 
 void ImageListPanel::setUseRegex(bool value)
 {
-    m_regexButton->setPushed(value);
+    m_regexButton->set_pushed(value);
     m_updateFilterRequested = true;
 }
 
@@ -762,15 +769,15 @@ void ImageListPanel::updateFilter()
     {
         vector<string> activeImageNames;
         size_t id = 1;
-        for (int i = 0; i < numImages(); ++i)
+        for (int i = 0; i < num_images(); ++i)
         {
             auto img = image(i);
             auto btn = m_imageButtons[i];
 
-            btn->setVisible(matches(img->filename(), filter, useRegex()));
+            btn->set_visible(matches(img->filename(), filter, useRegex()));
             if (btn->visible())
             {
-                btn->setImageId(id++);
+                btn->set_image_id(id++);
                 activeImageNames.emplace_back(img->filename());
             }
         }
@@ -834,7 +841,7 @@ void ImageListPanel::updateFilter()
             }
         }
 
-        for (int i = 0; i < numImages(); ++i)
+        for (int i = 0; i < num_images(); ++i)
         {
             auto btn = m_imageButtons[i];
 
@@ -842,38 +849,38 @@ void ImageListPanel::updateFilter()
                 continue;
 
             auto img = image(i);
-            btn->setCaption(img->filename());
+            btn->set_caption(img->filename());
 
             if (m_useShortButton->pushed())
             {
-                btn->setHighlightRange(beginShortOffset, endShortOffset);
-                btn->setCaption(btn->highlighted());
-                btn->setHighlightRange(0, 0);
+                btn->set_highlight_range(beginShortOffset, endShortOffset);
+                btn->set_caption(btn->highlighted());
+                btn->set_highlight_range(0, 0);
             }
             else
             {
-                btn->setHighlightRange(beginShortOffset, endShortOffset);
+                btn->set_highlight_range(beginShortOffset, endShortOffset);
             }
 
         }
 
-        if (m_current == -1 || (currentImage() && !m_imageButtons[m_current]->visible()))
-            setCurrentImageIndex(nthVisibleImageIndex(0));
+        if (m_current == -1 || (current_image() && !m_imageButtons[m_current]->visible()))
+            set_current_image_index(nthVisibleImageIndex(0));
 
-        if (m_reference == -1 || (referenceImage() && !m_imageButtons[referenceImageIndex()]->visible()))
-            setReferenceImageIndex(-1);
+        if (m_reference == -1 || (reference_image() && !m_imageButtons[reference_image_index()]->visible()))
+            set_reference_image_index(-1);
     }
 
     m_updateFilterRequested = false;
 
-    m_screen->performLayout();
+    m_screen->perform_layout();
 }
 
 
 
 int ImageListPanel::nextVisibleImage(int index, EDirection direction) const
 {
-    if (!numImages())
+    if (!num_images())
         return -1;
 
     int dir = direction == Forward ? -1 : 1;
@@ -884,7 +891,7 @@ int ImageListPanel::nextVisibleImage(int index, EDirection direction) const
     int i = startIndex;
     do
     {
-        i = (i + numImages() + dir) % numImages();
+        i = (i + num_images() + dir) % num_images();
     }
     while (!m_imageButtons[i]->visible() && i != startIndex);
 
@@ -894,7 +901,7 @@ int ImageListPanel::nextVisibleImage(int index, EDirection direction) const
 int ImageListPanel::nthVisibleImageIndex(int n) const
 {
     int lastVisible = -1;
-    for (int i = 0; i < numImages(); ++i)
+    for (int i = 0; i < num_images(); ++i)
     {
         if (m_imageButtons[i]->visible())
         {

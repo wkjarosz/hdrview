@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
-#include "HDRViewer.h"
+#include "HDRViewScreen.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
         {
             nanogui::ref<HDRViewScreen> viewer = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
-            viewer->setVisible(true);
+            viewer->set_visible(true);
             nanogui::mainloop();
         }
 

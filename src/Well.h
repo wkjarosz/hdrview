@@ -30,7 +30,4 @@ public:
 protected:
 	float m_radius;
 	nanogui::Color m_innerColor, m_outerColor;
-
-public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };

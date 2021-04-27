@@ -249,10 +249,7 @@ public:
     bool save(const std::string & filename,
               float gain, float gamma,
               bool sRGB, bool dither) const;
-
-public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 
-std::shared_ptr<HDRImage> loadImage(const std::string & filename);
+std::shared_ptr<HDRImage> load_image(const std::string & filename);

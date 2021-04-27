@@ -1097,7 +1097,7 @@ int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
     switch (m)
     {
         case HDRImage::EDGE:
-            return clamp(p, 0, maxP - 1);
+            return ::clamp(p, 0, maxP - 1);
         case HDRImage::REPEAT:
             return mod(p, maxP);
         case HDRImage::MIRROR:
@@ -1115,7 +1115,7 @@ inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, cons
     Vector3f xyz = cameraToXYZ * c;
 
     for (int i = 0; i < 3; ++i)
-        xyz(i) = LUT[clamp((int) (xyz(i) * LUT.size()), 0, int(LUT.size()-1))];
+        xyz(i) = LUT[::clamp((int) (xyz(i) * LUT.size()), 0, int(LUT.size()-1))];
 
     return Vector3f(116.0f * xyz[1] - 16, 500.0f * (xyz[0] - xyz[1]), 200.0f * (xyz[1] - xyz[2]));
 }
@@ -1131,14 +1131,14 @@ inline float clamp2(float value, float mn, float mx)
 {
     if (mn > mx)
         std::swap(mn, mx);
-    return clamp(value, mn, mx);
+    return ::clamp(value, mn, mx);
 }
 
 inline float clamp4(float value, float a, float b, float c, float d)
 {
     float mn = min(a, b, c, d);
     float mx = max(a, b, c, d);
-    return clamp(value, mn, mx);
+    return ::clamp(value, mn, mx);
 }
 
 inline float interpGreenH(const HDRImage &raw, int x, int y)

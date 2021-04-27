@@ -24,7 +24,4 @@ private:
 	Button * m_undoButton = nullptr;
 	Button * m_redoButton = nullptr;
 	std::vector<Button*> m_filterButtons;
-
-public:
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };

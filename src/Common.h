@@ -54,6 +54,7 @@ inline T clamp01(T a)
 	return clamp(a, T(0), T(1));
 }
 
+
 /*!
  * @brief  Linear interpolation.
  *
@@ -69,6 +70,17 @@ template <typename T, typename S>
 inline T lerp(T a, T b, S t)
 {
     return T((S(1)-t) * a + t * b);
+}
+
+
+template <typename T>
+std::vector<T> linspaced(size_t num, T a, T b)
+{
+	std::vector<T> retVal(num);
+	for (size_t i = 0; i < num; ++i)
+		retVal[i] = lerp(a, b, T(i)/(num-1));
+
+	return retVal;
 }
 
 

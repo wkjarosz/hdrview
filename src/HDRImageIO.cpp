@@ -66,6 +66,14 @@
 
 using namespace Eigen;
 using namespace std;
+// using std::vector;
+// using std::runtime_error;
+// using std::exception;
+// using std::string;
+// using std::make_shared;
+// using std::shared_ptr;
+// using std::to_string;
+// using std::invalid_argument;
 
 // local functions
 namespace
@@ -213,7 +221,7 @@ bool HDRImage::load(const string & filename)
 	    {
 		    // FIXME: the threading below seems to cause issues, but shouldn't.
 		    // turning off for now
-		    Imf::setGlobalThreadCount(thread::hardware_concurrency());
+		    Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
 		    Timer timer;
 
 		    Imf::RgbaInputFile file(filename.c_str());
@@ -356,10 +364,10 @@ bool HDRImage::load(const string & filename)
 			throw runtime_error("Error loading DNG: Unsupported samples per pixel: " + to_string(spp));
 
 
-		int startRow = clamp(image.active_area[1], 0, w);
-		int endRow = clamp(image.active_area[3], 0, w);
-		int startCol = clamp(image.active_area[0], 0, h);
-		int endCol = clamp(image.active_area[2], 0, h);
+		int startRow = ::clamp(image.active_area[1], 0, w);
+		int endRow = ::clamp(image.active_area[3], 0, w);
+		int startCol = ::clamp(image.active_area[0], 0, h);
+		int endCol = ::clamp(image.active_area[2], 0, h);
 
 		*this = block(startRow, startCol,
 		              endRow-startRow,
@@ -406,7 +414,7 @@ bool HDRImage::load(const string & filename)
 }
 
 
-shared_ptr<HDRImage> loadImage(const string & filename)
+shared_ptr<HDRImage> load_image(const string & filename)
 {
 	shared_ptr<HDRImage> ret = make_shared<HDRImage>();
 	if (ret->load(filename))
@@ -448,7 +456,7 @@ bool HDRImage::save(const string & filename,
         if (!hdrFormat)
         {
             if (sRGB)
-                imgCopy = imgCopy.unaryExpr(ptr_fun((Color4 (*)(const Color4 &)) LinearToSRGB));
+                imgCopy = imgCopy.unaryExpr([](const Color4 & c) {return LinearToSRGB(c);});
             else if (gamma != 1.0f)
                 imgCopy = imgCopy.pow(gammaC);
         }
@@ -462,7 +470,7 @@ bool HDRImage::save(const string & filename,
     {
         try
         {
-            Imf::setGlobalThreadCount(thread::hardware_concurrency());
+            Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
             Imf::RgbaOutputFile file(filename.c_str(), width(), height(), Imf::WRITE_RGBA);
             Imf::Array2D<Imf::Rgba> pixels(height(), width());
 
@@ -640,7 +648,7 @@ HDRImage develop(vector<float> & raw,
 	{
 		for (int x = 0; x < developed.width(); x++)
 		{
-			float v = clamp((raw[y * developed.width() + x] - blackLevel)*invScale, 0.f, 1.f);
+			float v = ::clamp((raw[y * developed.width() + x] - blackLevel)*invScale, 0.f, 1.f);
 			Vector3f rgb = Vector3f(v,v,v);
 			rgb = rgb.cwiseQuotient(wb);
 			developed(x,y) = Color4(rgb(0),rgb(1),rgb(2),1.f);

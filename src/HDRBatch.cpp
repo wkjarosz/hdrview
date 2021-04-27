@@ -12,12 +12,12 @@
 #include "Common.h"                      // for getBasename, getExtension
 #include "HDRImage.h"                    // for HDRImage
 #include "EnvMap.h"                      // for XYZToAngularMap, XYZToCubeMap
-#include "HDRViewer.h"                   // for spdlog
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
 namespace spd = spdlog;
+using namespace Eigen;
 
 namespace
 {
@@ -450,13 +450,13 @@ int main(int argc, char **argv)
         if (!inFiles.size())
             throw invalid_argument("No files specified!");
 
-        HDRImage referenceImage;
+        HDRImage reference_image;
         if (!referenceFile.empty())
         {
             console->info("Reading reference image \"{}\"...", referenceFile);
-            if (!referenceImage.load(referenceFile))
+            if (!reference_image.load(referenceFile))
                 throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
-            console->info("Reference image size: {:d}x{:d}", referenceImage.width(), referenceImage.height());
+            console->info("Reference image size: {:d}x{:d}", reference_image.width(), reference_image.height());
         }
 
         HDRImage avgImg;
@@ -547,19 +547,19 @@ int main(int argc, char **argv)
 
             if (!errorType.empty())
             {
-                if (image.width() != referenceImage.width() ||
-                    image.height() != referenceImage.height())
+                if (image.width() != reference_image.width() ||
+                    image.height() != reference_image.height())
                 {
                     console->error("Images must have same dimensions!");
                     continue;
                 }
 
                 if (errorType == "squared")
-                    image = (image-referenceImage).square();
+                    image = (image-reference_image).square();
                 else if (errorType == "absolute")
-                    image = (image-referenceImage).abs();
+                    image = (image-reference_image).abs();
                 else //if (errorType == "relative-squared")
-                    image = (image-referenceImage).square() / (referenceImage.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
+                    image = (image-reference_image).square() / (reference_image.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
 
                 Color4 meanError = image.mean();
                 Color4 maxError = image.max();

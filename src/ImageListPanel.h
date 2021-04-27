@@ -21,51 +21,51 @@ public:
 
 	void draw(NVGcontext *ctx) override;
 
-	void repopulateImageList();
+	void repopulate_image_list();
 
-	// Const access to the loaded images. Modification only possible via modifyImage, undo, redo
-	int numImages() const                  {return int(m_images.size());}
-	int currentImageIndex() const          {return m_current;}
-	int referenceImageIndex() const        {return m_reference;}
-	ConstImagePtr currentImage() const     {return image(m_current);}
-	     ImagePtr currentImage()           {return image(m_current);}
-	ConstImagePtr referenceImage() const   {return image(m_reference);}
-	     ImagePtr referenceImage()         {return image(m_reference);}
+	// Const access to the loaded images. Modification only possible via modify_image, undo, redo
+	int num_images() const                  {return int(m_images.size());}
+	int current_image_index() const          {return m_current;}
+	int reference_image_index() const        {return m_reference;}
+	ConstImagePtr current_image() const     {return image(m_current);}
+	     ImagePtr current_image()           {return image(m_current);}
+	ConstImagePtr reference_image() const   {return image(m_reference);}
+	     ImagePtr reference_image()         {return image(m_reference);}
 	ConstImagePtr image(int index) const;
 	     ImagePtr image(int index);
 
-	bool setCurrentImageIndex(int newIndex, bool forceCallback = false);
-	bool setReferenceImageIndex(int newIndex);
-	bool swapCurrentSelectedWithPrevious() {printf("current: %d; previous: %d\n", m_current, m_previous);return isValid(m_previous) ? setCurrentImageIndex(m_previous) : false;}
-	bool swapImages(int index1, int index2);
-	bool sendImageBackward();
-	bool bringImageForward();
+	bool set_current_image_index(int newIndex, bool forceCallback = false);
+	bool set_reference_image_index(int newIndex);
+	bool swap_current_selected_with_previous() {printf("current: %d; previous: %d\n", m_current, m_previous);return isValid(m_previous) ? set_current_image_index(m_previous) : false;}
+	bool swap_images(int index1, int index2);
+	bool send_image_backward();
+	bool bring_image_forward();
 
 	// Loading, saving, closing, and rearranging the images in the image stack
-	void loadImages(const std::vector<std::string> & filenames);
-	bool saveImage(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
+	void load_images(const std::vector<std::string> & filenames);
+	bool save_image(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
 				   bool sRGB = true, bool dither = true);
-	bool closeImage();
-	void closeAllImages();
+	bool close_image();
+	void close_all_images();
 
 	// Modify the image data
-	void modifyImage(const ImageCommand & command);
-	void modifyImage(const ImageCommandWithProgress & command);
+	void modify_image(const ImageCommand & command);
+	void modify_image(const ImageCommandWithProgress & command);
 	void undo();
 	void redo();
 
 	//
-	void runRequestedCallbacks();
+	void run_requested_callbacks();
 
 
-	void requestButtonsUpdate();
-	void requestHistogramUpdate(bool force = false);
+	void request_buttons_update();
+	void request_histogram_update(bool force = false);
 
-	EBlendMode blendMode() const;
-	void setBlendMode(EBlendMode mode);
+	EBlendMode blend_mode() const;
+	void set_blend_mode(EBlendMode mode);
 
 	EChannel channel() const;
-	void setChannel(EChannel channel);
+	void set_channel(EChannel channel);
 
 	bool nthImageIsVisible(int n) const;
 	int nextVisibleImage(int index, EDirection direction) const;
@@ -84,7 +84,7 @@ private:
 	void enableDisableButtons();
 	void updateHistogram();
 	void updateFilter();
-	bool isValid(int index) const {return index >= 0 && index < numImages();}
+	bool isValid(int index) const {return index >= 0 && index < num_images();}
 
 	std::vector<ImagePtr> m_images; ///< The loaded images
 	int m_current = -1;             ///< The currently selected image
@@ -124,7 +124,4 @@ private:
 	bool m_updateFilterRequested = true;
 	bool m_buttonsUpdateRequested = true;
 	double m_histogramRequestTime;
-
-public:
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };

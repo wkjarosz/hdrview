@@ -11,13 +11,12 @@
 #include "ParallelFor.h"
 #include <random>
 #include <nanogui/common.h>
-#include <nanogui/glutil.h>
 #include <cmath>
 #include <spdlog/spdlog.h>
 #include "MultiGraph.h"
 
 using namespace nanogui;
-using namespace Eigen;
+// using namespace Eigen;
 using namespace std;
 
 shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &img, float exposure)
@@ -28,7 +27,11 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 
 	auto ret = make_shared<ImageStatistics>();
 	for (int i = 0; i < ENumAxisScales; ++i)
-		ret->histogram[i].values = MatrixX3f::Zero(numBins, 3);
+	{
+		ret->histogram[i].values[0] = vector<float>(numBins, 0);
+		ret->histogram[i].values[1] = vector<float>(numBins, 0);
+		ret->histogram[i].values[2] = vector<float>(numBins, 0);
+	}
 
 	ret->exposure = exposure;
 	ret->average = 0;
@@ -46,29 +49,40 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 
         for (int c = 0; c < 3; ++c)
         {
-	        ret->histogram[ELinear].values(clamp(int(floor(val[c] * numBins)), 0, numBins - 1), c) += d;
-	        ret->histogram[ESRGB].values(clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1), c) += d;
-	        ret->histogram[ELog].values(clamp(int(floor(normalizedLogScale(val[c]) * numBins)), 0, numBins - 1), c) += d;
+	        ret->histogram[ELinear].values[c][::clamp(int(floor(val[c] * numBins)), 0, numBins - 1)] += d;
+	        ret->histogram[ESRGB].values[c][::clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1)] += d;
+	        ret->histogram[ELog].values[c][::clamp(int(floor(normalizedLogScale(val[c]) * numBins)), 0, numBins - 1)] += d;
         }
     }
 
 	ret->average /= 3 * img.width() * img.height();
 
-
 	// Normalize each histogram according to its 10th-largest bin
-	MatrixXf temp;
 	for (int i = 0; i < ENumAxisScales; ++i)
 	{
-		temp = ret->histogram[i].values;
-		DenseIndex idx = temp.size() - 10;
-		nth_element(temp.data(), temp.data() + idx, temp.data() + temp.size());
-		ret->histogram[i].values /= temp(idx);
+		vector<float> temp;
+		for (int c = 0; c < 3; ++c)
+		{
+			auto h = ret->histogram[i].values[c];
+			temp.insert(temp.end(), h.begin(), h.end());
+		}
+
+		auto idx = temp.size() - 10;
+		nth_element(temp.begin(), temp.begin() + idx, temp.end());
+		float s = temp[idx];
+
+		for (int c = 0; c < 3; ++c)
+			for_each(ret->histogram[i].values[c].begin(), ret->histogram[i].values[c].end(), [s](float & v){v /= s;});
 	}
 
 	// create the tick marks
-	ret->histogram[ELinear].xTicks.setLinSpaced(numTicks+1, 0.0f, 1.0f);
-	ret->histogram[ESRGB].xTicks = ret->histogram[ELinear].xTicks.unaryExpr([](float v){return LinearToSRGB(v);});
-	ret->histogram[ELog].xTicks = ret->histogram[ELinear].xTicks.unaryExpr([](float v){return normalizedLogScale(v);});
+	auto ticks = linspaced(numTicks+1, 0.0f, 1.0f);
+	ret->histogram[ELinear].xTicks = ticks;
+	ret->histogram[ESRGB].xTicks = ticks;
+	ret->histogram[ELog].xTicks = ticks;
+
+	for_each(ret->histogram[ESRGB].xTicks.begin(), ret->histogram[ESRGB].xTicks.end(), [](float & v){v = LinearToSRGB(v);});
+	for_each(ret->histogram[ELog].xTicks.begin(), ret->histogram[ELog].xTicks.end(), [](float & v){v = normalizedLogScale(v);});
 
 	// create the tick labels
 	auto & hist = ret->histogram[ELinear];
@@ -194,11 +208,11 @@ float GLImage::progress() const
 	checkAsyncResult();
 	return m_asyncCommand ? m_asyncCommand->progress() : 1.0f;
 }
-bool GLImage::isModified() const    { checkAsyncResult(); return m_history.isModified(); }
-bool GLImage::hasUndo() const       { checkAsyncResult(); return m_history.hasUndo(); }
-bool GLImage::hasRedo() const       { checkAsyncResult(); return m_history.hasRedo(); }
+bool GLImage::is_modified() const    { checkAsyncResult(); return m_history.is_modified(); }
+bool GLImage::has_undo() const       { checkAsyncResult(); return m_history.has_undo(); }
+bool GLImage::has_redo() const       { checkAsyncResult(); return m_history.has_redo(); }
 
-bool GLImage::canModify() const
+bool GLImage::can_modify() const
 {
 	return !m_asyncCommand;
 }
@@ -289,7 +303,7 @@ bool GLImage::waitForAsyncResult() const
 		}
 		else
 		{
-			m_history.addCommand(result.second);
+			m_history.add_command(result.second);
 			m_image = result.first;
 		}
 
@@ -352,7 +366,7 @@ bool GLImage::save(const std::string & filename,
     if (!m_image->save(filename, gain, gamma, sRGB, dither))
     	return false;
 
-	m_history.markSaved();
+	m_history.mark_saved();
 //	setFilename(filename);
 
     return true;

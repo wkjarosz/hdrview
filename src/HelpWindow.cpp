@@ -10,7 +10,7 @@
 #include "HelpWindow.h"
 
 #include <nanogui/button.h>
-#include <nanogui/entypo.h>
+#include <nanogui/icons.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
@@ -33,43 +33,43 @@ string HelpWindow::ALT = "Alt";
 #endif
 
 HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
-    : Window{parent, "Help"}, mCloseCallback{closeCallback}
+    : Window{parent, "Help"}, m_close_callback{closeCallback}
 {
 
-    auto closeButton = new Button{buttonPanel(), "", ENTYPO_ICON_CROSS};
-    closeButton->setCallback(mCloseCallback);
+    auto closeButton = new Button{button_panel(), "", FA_TIMES};
+    closeButton->set_callback(m_close_callback);
 
-    setLayout(new GroupLayout());
+    set_layout(new GroupLayout());
 
     auto addRow = [](Widget* current, string keys, string desc)
     {
         auto row = new Widget(current);
-        row->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
         auto descWidget = new Label(row, desc, "sans", 14);
-        descWidget->setFixedWidth(185);
+        descWidget->set_fixed_width(185);
         new Label{row, keys, "sans-bold", 14};
     };
 
 	new Label(this, "About", "sans-bold", 18);
 
 	auto copyW = new Widget(this);
-	copyW->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+	copyW->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 	auto copy = new Label(copyW, "HDRView " HDRVIEW_VERSION ". Copyright (c) Wojciech Jarosz\n\n"
 		"HDRView is a simple research-oriented tool for examining, "
 		"comparing, manipulating, and converting high-dynamic range images.\n\n"
 		"HDRView is freely available under a 3-clause BSD license.");
-	copy->setFixedWidth(715);
+	copy->set_fixed_width(715);
 
 	new Label(this, "Keybindings", "sans-bold", 18);
 
 	auto keyBindingsWidget = new Well(this);
-	keyBindingsWidget->setLayout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
+	keyBindingsWidget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
 
 	auto newColumn = [keyBindingsWidget]()
 	{
 		auto w = new Widget(keyBindingsWidget);
-		w->setLayout(new GroupLayout(0));
-		w->setFixedWidth(350);
+		w->set_layout(new GroupLayout(0));
+		w->set_fixed_width(350);
 		return w;
 	};
 
@@ -77,7 +77,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(column, "Images and Layer List", "sans-bold", 16);
 	auto imageLoading = new Widget(column);
-	imageLoading->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	imageLoading->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	addRow(imageLoading, COMMAND + "+O", "Open Image");
 	addRow(imageLoading, COMMAND + "+S", "Save Image");
@@ -93,7 +93,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
 	auto imageSelection = new Widget(column);
-	imageSelection->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	imageSelection->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	addRow(imageSelection, "E / Shift+E", "Decrease/Increase Exposure");
 	addRow(imageSelection, "G / Shift+G", "Decrease/Increase Gamma");
@@ -106,7 +106,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(column, "Image Edits", "sans-bold", 16);
 	auto edits = new Widget(column);
-	edits->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	addRow(edits, "F", "Flip image about horizontal axis");
 	addRow(edits, "M", "Mirror image about vertical axis");
@@ -114,7 +114,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(column, "Panning/Zooming", "sans-bold", 16);
 	auto panningZooming = new Widget(column);
-	panningZooming->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	panningZooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	addRow(panningZooming, "Left Click+Drag / Shift+Scroll", "Pan image");
 	addRow(panningZooming, "Scroll", "Zoom In and Out Continuously");
@@ -124,7 +124,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	new Label(column, "Interface", "sans-bold", 16);
 	auto interface = new Widget(column);
-	interface->setLayout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	interface->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	addRow(interface, "H", "Show/Hide Help (this Window)");
 	addRow(interface, "T", "Show/Hide the Top Toolbar");
@@ -133,16 +133,16 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	addRow(interface, COMMAND + "+Q or Esc", "Quit");
 }
 
-bool HelpWindow::keyboardEvent(int key, int scancode, int action, int modifiers)
+bool HelpWindow::keyboard_event(int key, int scancode, int action, int modifiers)
 {
-    if (Window::keyboardEvent(key, scancode, action, modifiers))
+    if (Window::keyboard_event(key, scancode, action, modifiers))
     {
         return true;
     }
 
     if (key == GLFW_KEY_ESCAPE)
     {
-        mCloseCallback();
+        m_close_callback();
         return true;
     }
 

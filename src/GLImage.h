@@ -38,8 +38,8 @@ struct ImageStatistics
 
 	struct Histogram
 	{
-		Eigen::MatrixX3f values;
-		Eigen::VectorXf xTicks;
+		std::vector<float> values[3];
+		std::vector<float> xTicks;
 		std::vector<std::string> xTickLabels;
 	};
 
@@ -103,15 +103,15 @@ public:
     GLImage();
     ~GLImage();
 
-	bool canModify() const;
+	bool can_modify() const;
 	float progress() const;
     void asyncModify(const ImageCommand & command);
 	void asyncModify(const ImageCommandWithProgress & command);
-    bool isModified() const;
+    bool is_modified() const;
     bool undo();
     bool redo();
-    bool hasUndo() const;
-    bool hasRedo() const;
+    bool has_undo() const;
+    bool has_redo() const;
 
 	GLuint glTextureId() const;
 	void setFilename(const std::string & filename)  { m_filename = filename; }
@@ -120,8 +120,11 @@ public:
     const HDRImage & image() const                  { checkAsyncResult(); return *m_image; }
     int width() const                               { checkAsyncResult(); return m_image->width(); }
     int height() const                              { checkAsyncResult(); return m_image->height(); }
-    Eigen::Vector2i size() const                    { return isNull() ? Eigen::Vector2i(0,0) : Eigen::Vector2i(m_image->width(), m_image->height()); }
-    bool contains(const Eigen::Vector2i& p) const   {return (p.array() >= 0).all() && (p.array() < size().array()).all();}
+    nanogui::Vector2i size() const                  { return isNull() ? nanogui::Vector2i(0,0) : nanogui::Vector2i(m_image->width(), m_image->height()); }
+    bool contains(const nanogui::Vector2i& p) const
+	{
+		return p[0] >= 0 && p[1] >= 0 && p[0] < size()[0] && p[1] < size()[1];
+	}
 
     bool load(const std::string & filename);
     bool save(const std::string & filename,
