@@ -315,8 +315,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	update_layout();
 	set_resize_callback([&](nanogui::Vector2i)
 	                  {
-		                  update_layout();
-		                  redraw();
+		                //   update_layout();
 	                  });
 
     set_visible(true);
@@ -852,8 +851,6 @@ void HDRViewScreen::update_layout()
 
 void HDRViewScreen::draw_contents()
 {
-	console->debug("drawing");
 	m_imagesPanel->run_requested_callbacks();
 	update_layout();
-	// redraw();
 }
