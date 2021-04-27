@@ -12,12 +12,15 @@
 	url = https://github.com/syoyo/tinydngloader.git
 [submodule "ext/openexr"]
 	path = ext/openexr
-	url = https://github.com/mitsuba-renderer/openexr.git
-	branch = master
+	url = https://github.com/mmp/openexr.git
+	branch = zlibstatic-export-workaround
 [submodule "ext/zlib"]
 	path = ext/zlib
 	url = https://github.com/mitsuba-renderer/zlib.git
 	branch = master
 [submodule "ext/nanogui"]
 	path = ext/nanogui
-	url = https://github.com/wjakob/nanogui.git
+	url = https://github.com/mitsuba-renderer/nanogui
+[submodule "ext/eigen"]
+	path = ext/eigen
+	url = https://gitlab.com/libeigen/eigen.git
