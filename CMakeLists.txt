@@ -10,8 +10,6 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT hdrview)
 add_subdirectory(ext ext_build)
 
 include_directories(
-  # Nori include files
-  ${CMAKE_CURRENT_SOURCE_DIR}/include
   # tinyformat string formatting library
   ${TFM_INCLUDE_DIR}
   # Eigen linear algebra library

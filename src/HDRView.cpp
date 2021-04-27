@@ -135,7 +135,7 @@ int main(int argc, char **argv)
         {
             nanogui::ref<HDRViewScreen> viewer = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
             viewer->set_visible(true);
-            nanogui::mainloop();
+            nanogui::mainloop(1 / 60.f * 1000);
         }
 
         nanogui::shutdown();

@@ -263,9 +263,9 @@ bool HDRImage::load(const string & filename)
 	{
 		vector<tinydng::DNGImage> images;
 		{
-			std::string err;
+			std::string err, warn;
 			vector<tinydng::FieldInfo> customFields;
-			bool ret = tinydng::LoadDNG(filename.c_str(), customFields, &images, &err);
+			bool ret = tinydng::LoadDNG(filename.c_str(), customFields, &images, &err, &warn);
 
 			if (ret == false)
 				throw runtime_error("Failed to load DNG. " + err);
