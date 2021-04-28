@@ -11,7 +11,7 @@
 #include <vector>                // for vector
 #include <string>                // for string
 #include "Color.h"               // for Color4, max, min
-#include "progress.h"
+#include "Progress.h"
 
 
 //! Floating point image

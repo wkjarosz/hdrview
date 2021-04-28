@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "well.h"
+#include "Well.h"
 #include <nanogui/opengl.h>
 
 using namespace nanogui;

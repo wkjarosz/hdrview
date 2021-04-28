@@ -17,7 +17,7 @@
 #include "Common.h"              // for lerp, mod, clamp, getExtension
 #include "Colorspace.h"
 #include "ParallelFor.h"
-#include "timer.h"
+#include "Timer.h"
 #include <spdlog/spdlog.h>
 
 
@@ -175,7 +175,7 @@ HDRImage HDRImage::resampled(int w, int h,
     HDRImage result(w, h);
 
     Timer timer;
-    progress.set_num_steps(result.height());
+    progress.setNumSteps(result.height());
     // for every pixel in the image
     parallel_for(0, result.height(), [this,w,h,&progress,&warpFn,&result,superSample,sampler,mX,mY](int y)
     {
@@ -210,7 +210,7 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
     int centerY = int((kernel.cols()-1.0)/2.0);
 
     Timer timer;
-	progress.set_num_steps(result.width());
+	progress.setNumSteps(result.width());
     // for every pixel in the image
     parallel_for(0, result.width(), [this,&progress,kernel,mX,mY,&result,centerX,centerY](int x)
     {
@@ -276,7 +276,7 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, AtomicProgress prog
     HDRImage tempBuffer = *this;
 
     Timer timer;
-    progress.set_num_steps(height());
+    progress.setNumSteps(height());
     // for every pixel in the image
     parallel_for(0, height(), [this,&tempBuffer,&progress,radius,radiusi,channel,mX,mY,round](int y)
     {
@@ -327,7 +327,7 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
     int radius = int(std::ceil(truncateDomain * sigmaDomain));
 
     Timer timer;
-    progress.set_num_steps(height());
+    progress.setNumSteps(height());
     // for every pixel in the image
     parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigmaDomain,mX,mY](int y)
     {
@@ -458,7 +458,7 @@ HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, AtomicProgress progr
     HDRImage filtered(width(), height());
 
     Timer timer;
-	progress.set_num_steps(filtered.height());
+	progress.setNumSteps(filtered.height());
     // for every pixel in the image
     parallel_for(0, filtered.height(), [this,&filtered,&progress,leftSize,rightSize,mX](int y)
     {
@@ -484,7 +484,7 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, AtomicProgress progr
     HDRImage filtered(width(), height());
 
     Timer timer;
-	progress.set_num_steps(filtered.width());
+	progress.setNumSteps(filtered.width());
     // for every pixel in the image
     parallel_for(0, filtered.width(), [this,&filtered,&progress,leftSize,rightSize,mY](int x)
     {

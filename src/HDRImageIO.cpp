@@ -25,7 +25,7 @@
 #include "Common.h"              // for lerp, mod, clamp, getExtension
 #include "Colorspace.h"
 #include "ParallelFor.h"
-#include "timer.h"
+#include "Timer.h"
 #include <Eigen/Dense>
 #include <spdlog/spdlog.h>
 

@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "progress.h"
+#include "Progress.h"
 #include <iostream>
 
 AtomicProgress::AtomicProgress(bool createState, float totalPercentage) :
@@ -34,7 +34,7 @@ AtomicProgress::AtomicProgress(const AtomicProgress & parent, float percentageOf
 
 }
 
-void AtomicProgress::reset_progress(float p)
+void AtomicProgress::resetProgress(float p)
 {
 	if (!m_atomicState)
 		return;
@@ -50,13 +50,13 @@ float AtomicProgress::progress() const
 	return float(*m_atomicState);
 }
 
-void AtomicProgress::set_available_percent(float availablePercent)
+void AtomicProgress::setAvailablePercent(float availablePercent)
 {
 	m_percentageOfParent = availablePercent;
 	m_stepPercent = m_numSteps == 0 ? availablePercent : availablePercent / m_numSteps;
 }
 
-void AtomicProgress::set_num_steps(int numSteps)
+void AtomicProgress::setNumSteps(int numSteps)
 {
 	m_numSteps = numSteps;
 	m_stepPercent = m_numSteps == 0 ? m_percentageOfParent : m_percentageOfParent / m_numSteps;

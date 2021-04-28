@@ -98,11 +98,11 @@ add_executable(HDRView
                src/PPM.h
                src/PPM.cpp
                src/Progress.cpp
-               src/progress.h
-               src/range.h
-               src/timer.h
-               src/well.cpp
-               src/well.h
+               src/Progress.h
+               src/Range.h
+               src/Timer.h
+               src/Well.cpp
+               src/Well.h
                ${EXTRA_SOURCE})
 
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
@@ -162,8 +162,8 @@ add_executable(hdrbatch
                src/PPM.cpp
                src/PPM.h
                src/Progress.cpp
-               src/progress.h
-               src/range.h
+               src/Progress.h
+               src/Range.h
                src/Timer.h
                )
 

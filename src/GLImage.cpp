@@ -6,7 +6,7 @@
 
 #include "GLImage.h"
 #include "Common.h"
-#include "timer.h"
+#include "Timer.h"
 #include "Colorspace.h"
 #include "ParallelFor.h"
 #include <random>
