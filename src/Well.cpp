@@ -21,7 +21,7 @@ void Well::draw(NVGcontext* ctx)
                                     m_size.x()-2, m_size.y()-2, m_radius, m_radius+1,
                                     m_innerColor, m_outerColor);
     nvgBeginPath(ctx);
-    nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), m_radius);
+    nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y()-1, m_radius);
     nvgFillPaint(ctx, paint);
     nvgFill(ctx);
 
