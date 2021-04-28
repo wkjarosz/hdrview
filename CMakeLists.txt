@@ -97,7 +97,7 @@ add_executable(HDRView
                src/PFM.cpp
                src/PPM.h
                src/PPM.cpp
-               src/Progress.cpp
+               src/progress.cpp
                src/progress.h
                src/range.h
                src/timer.h
