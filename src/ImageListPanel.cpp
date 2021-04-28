@@ -58,8 +58,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 
 		m_xAxisScale->set_selected_index(1);
 		m_yAxisScale->set_selected_index(0);
-		m_xAxisScale->set_callback([this](int) { updateHistogram(); });
-		m_yAxisScale->set_callback([this](int) { updateHistogram(); });
+		m_xAxisScale->set_callback([this](int) { update_histogram(); });
+		m_yAxisScale->set_callback([this](int) { update_histogram(); });
 	}
 
 	// histogram and file buttons
@@ -149,7 +149,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 
 		m_filter->set_editable(true);
 		m_filter->set_alignment(TextBox::Alignment::Left);
-		m_filter->set_callback([this](const string& filter){ return setFilter(filter); });
+		m_filter->set_callback([this](const string& filter){ return set_filter(filter); });
 
 		m_filter->set_placeholder("Find");
 		m_filter->set_tooltip("Filter open image list so that only images with a filename containing the search string will be visible.");
@@ -161,7 +161,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_eraseButton->set_fixed_width(19);
 		m_eraseButton->set_fixed_height(19);
 		m_eraseButton->set_tooltip("Clear the search string.");
-		m_eraseButton->set_change_callback([this](bool b){ setFilter(""); });
+		m_eraseButton->set_change_callback([this](bool b){ set_filter(""); });
 		agl->set_anchor(m_eraseButton,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
@@ -171,7 +171,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_regexButton->set_tooltip("Treat search string as a regular expression.");
 		m_regexButton->set_flags(Button::ToggleButton);
 		m_regexButton->set_pushed(false);
-		m_regexButton->set_change_callback([this](bool b){ setUseRegex(b); });
+		m_regexButton->set_change_callback([this](bool b){ set_use_regex(b); });
 		agl->set_anchor(m_regexButton,
 		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
@@ -200,7 +200,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		{
 			m_screen->update_caption();
 			request_buttons_update();
-			setFilter(filter());
+			set_filter(filter());
             request_histogram_update();
 		};
 }
@@ -227,7 +227,7 @@ void ImageListPanel::set_channel(EChannel channel)
 	m_imageViewer->set_channel(channel);
 }
 
-void ImageListPanel::focusFilter() {m_filter->request_focus();}
+void ImageListPanel::focus_filter() {m_filter->request_focus();}
 
 
 void ImageListPanel::repopulate_image_list()
@@ -257,14 +257,14 @@ void ImageListPanel::repopulate_image_list()
 		m_imageButtons.push_back(btn);
 	}
 
-    updateButtons();
+    update_buttons();
 
-	updateFilter();
+	update_filter();
 
 	m_screen->perform_layout();
 }
 
-void ImageListPanel::updateButtons()
+void ImageListPanel::update_buttons()
 {
     for (int i = 0; i < num_images(); ++i)
     {
@@ -281,12 +281,12 @@ void ImageListPanel::updateButtons()
     }
 
     m_histogramUpdateRequested = true;
-//    updateHistogram();
+//    update_histogram();
 
     m_buttonsUpdateRequested = false;
 }
 
-void ImageListPanel::enableDisableButtons()
+void ImageListPanel::enable_disable_buttons()
 {
 	bool hasImage = current_image() != nullptr;
 	bool hasValidImage = hasImage && !current_image()->isNull();
@@ -297,7 +297,7 @@ void ImageListPanel::enableDisableButtons()
 
 bool ImageListPanel::swap_images(int index1, int index2)
 {
-	if (!isValid(index1) || !isValid(index2))
+	if (!is_valid(index1) || !is_valid(index2))
 		// invalid image indices, do nothing
 		return false;
 
@@ -310,7 +310,7 @@ bool ImageListPanel::swap_images(int index1, int index2)
 bool ImageListPanel::bring_image_forward()
 {
 	int curr = current_image_index();
-	int next = nextVisibleImage(curr, Forward);
+	int next = next_visible_image(curr, Forward);
 
 	if (!swap_images(curr, next))
 		return false;
@@ -322,7 +322,7 @@ bool ImageListPanel::bring_image_forward()
 bool ImageListPanel::send_image_backward()
 {
 	int curr = current_image_index();
-	int next = nextVisibleImage(curr, Backward);
+	int next = next_visible_image(curr, Backward);
 
 	if (!swap_images(curr, next))
 		return false;
@@ -333,15 +333,15 @@ bool ImageListPanel::send_image_backward()
 void ImageListPanel::draw(NVGcontext *ctx)
 {
 	if (m_buttonsUpdateRequested)
-		updateButtons();
+		update_buttons();
 
 	// if it has been more than 2 seconds since we requested a histogram update, then update it
 	if (m_histogramUpdateRequested &&
 		(glfwGetTime() - m_histogramRequestTime) > 1.0)
-		updateHistogram();
+		update_histogram();
 
 	if (m_updateFilterRequested)
-		updateFilter();
+		update_filter();
 
 	if (m_histogramDirty &&
 		current_image() &&
@@ -374,7 +374,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		m_graph->set_right_header(fmt::format("{:.3f}", lazyHist->get()->maximum));
 		m_histogramDirty = false;
 	}
-	enableDisableButtons();
+	enable_disable_buttons();
 
 	if (num_images() != (int)m_imageButtons.size())
 		spdlog::get("console")->error("Number of buttons and images don't match!");
@@ -393,7 +393,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 }
 
 
-void ImageListPanel::updateHistogram()
+void ImageListPanel::update_histogram()
 {
 	m_histogramDirty = true;
 
@@ -420,7 +420,7 @@ void ImageListPanel::updateHistogram()
 void ImageListPanel::request_histogram_update(bool force)
 {
 	if (force)
-		updateHistogram();
+		update_histogram();
 	else// if (!m_histogramUpdateRequested)
 	{
 		// if no histogram update is pending, then queue one up, and start the timer
@@ -493,12 +493,12 @@ void ImageListPanel::run_requested_callbacks()
 
 shared_ptr<const GLImage> ImageListPanel::image(int index) const
 {
-	return isValid(index) ? m_images[index] : nullptr;
+	return is_valid(index) ? m_images[index] : nullptr;
 }
 
 shared_ptr<GLImage> ImageListPanel::image(int index)
 {
-	return isValid(index) ? m_images[index] : nullptr;
+	return is_valid(index) ? m_images[index] : nullptr;
 }
 
 bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
@@ -506,16 +506,16 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 	if (index == m_current && !forceCallback)
 		return false;
 
-	if (isValid(m_current))
+	if (is_valid(m_current))
 		m_imageButtons[m_current]->set_is_selected(false);
-	if (isValid(index))
+	if (is_valid(index))
 		m_imageButtons[index]->set_is_selected(true);
 
 	m_previous = m_current;
 	m_current = index;
 	m_imageViewer->set_current_image(current_image());
 	m_screen->update_caption();
-    updateHistogram();
+    update_histogram();
 
 	return true;
 }
@@ -525,9 +525,9 @@ bool ImageListPanel::set_reference_image_index(int index)
 	if (index == m_reference)
 		return false;
 
-	if (isValid(m_reference))
+	if (is_valid(m_reference))
 		m_imageButtons[m_reference]->set_is_reference(false);
-	if (isValid(index))
+	if (is_valid(index))
 		m_imageButtons[index]->set_is_reference(true);
 
 	m_reference = index;
@@ -643,9 +643,9 @@ bool ImageListPanel::close_image()
 		return false;
 
 	// select the next image down the list, or the previous if closing the bottom-most image
-	int next = nextVisibleImage(m_current, Backward);
+	int next = next_visible_image(m_current, Backward);
 	if (next < m_current)
-        next = nextVisibleImage(m_current, Forward);
+        next = next_visible_image(m_current, Forward);
 
 	m_images.erase(m_images.begin() + m_current);
 
@@ -735,7 +735,7 @@ void ImageListPanel::redo()
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
 
-bool ImageListPanel::setFilter(const string& filter)
+bool ImageListPanel::set_filter(const string& filter)
 {
     m_filter->set_value(filter);
     m_eraseButton->set_visible(!filter.empty());
@@ -748,19 +748,19 @@ std::string ImageListPanel::filter() const
     return m_filter->value();
 }
 
-bool ImageListPanel::useRegex() const
+bool ImageListPanel::use_regex() const
 {
     return m_regexButton->pushed();
 }
 
-void ImageListPanel::setUseRegex(bool value)
+void ImageListPanel::set_use_regex(bool value)
 {
     m_regexButton->set_pushed(value);
     m_updateFilterRequested = true;
 }
 
 
-void ImageListPanel::updateFilter()
+void ImageListPanel::update_filter()
 {
     string filter = m_filter->value();
 	m_previous = -1;
@@ -774,7 +774,7 @@ void ImageListPanel::updateFilter()
             auto img = image(i);
             auto btn = m_imageButtons[i];
 
-            btn->set_visible(matches(img->filename(), filter, useRegex()));
+            btn->set_visible(matches(img->filename(), filter, use_regex()));
             if (btn->visible())
             {
                 btn->set_image_id(id++);
@@ -865,7 +865,7 @@ void ImageListPanel::updateFilter()
         }
 
         if (m_current == -1 || (current_image() && !m_imageButtons[m_current]->visible()))
-            set_current_image_index(nthVisibleImageIndex(0));
+            set_current_image_index(nth_visible_image_index(0));
 
         if (m_reference == -1 || (reference_image() && !m_imageButtons[reference_image_index()]->visible()))
             set_reference_image_index(-1);
@@ -878,7 +878,7 @@ void ImageListPanel::updateFilter()
 
 
 
-int ImageListPanel::nextVisibleImage(int index, EDirection direction) const
+int ImageListPanel::next_visible_image(int index, EDirection direction) const
 {
     if (!num_images())
         return -1;
@@ -898,7 +898,7 @@ int ImageListPanel::nextVisibleImage(int index, EDirection direction) const
     return i;
 }
 
-int ImageListPanel::nthVisibleImageIndex(int n) const
+int ImageListPanel::nth_visible_image_index(int n) const
 {
     int lastVisible = -1;
     for (int i = 0; i < num_images(); ++i)
@@ -915,7 +915,7 @@ int ImageListPanel::nthVisibleImageIndex(int n) const
     return lastVisible;
 }
 
-bool ImageListPanel::nthImageIsVisible(int n) const
+bool ImageListPanel::nth_image_is_visible(int n) const
 {
     return n >= 0 && n < int(m_imageButtons.size()) && m_imageButtons[n]->visible();
 }

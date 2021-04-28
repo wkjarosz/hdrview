@@ -36,7 +36,7 @@ public:
 
 	bool set_current_image_index(int newIndex, bool forceCallback = false);
 	bool set_reference_image_index(int newIndex);
-	bool swap_current_selected_with_previous() {printf("current: %d; previous: %d\n", m_current, m_previous);return isValid(m_previous) ? set_current_image_index(m_previous) : false;}
+	bool swap_current_selected_with_previous() {printf("current: %d; previous: %d\n", m_current, m_previous);return is_valid(m_previous) ? set_current_image_index(m_previous) : false;}
 	bool swap_images(int index1, int index2);
 	bool send_image_backward();
 	bool bring_image_forward();
@@ -67,24 +67,24 @@ public:
 	EChannel channel() const;
 	void set_channel(EChannel channel);
 
-	bool nthImageIsVisible(int n) const;
-	int nextVisibleImage(int index, EDirection direction) const;
-	int nthVisibleImageIndex(int n) const;
+	bool nth_image_is_visible(int n) const;
+	int next_visible_image(int index, EDirection direction) const;
+	int nth_visible_image_index(int n) const;
 
-	bool useRegex() const;
-	void setUseRegex(bool value);
+	bool use_regex() const;
+	void set_use_regex(bool value);
 
-	bool setFilter(const std::string& filter);
+	bool set_filter(const std::string& filter);
 	std::string filter() const;
-	void focusFilter();
+	void focus_filter();
 
 
 private:
-	void updateButtons();
-	void enableDisableButtons();
-	void updateHistogram();
-	void updateFilter();
-	bool isValid(int index) const {return index >= 0 && index < num_images();}
+	void update_buttons();
+	void enable_disable_buttons();
+	void update_histogram();
+	void update_filter();
+	bool is_valid(int index) const {return index >= 0 && index < num_images();}
 
 	std::vector<ImagePtr> m_images; ///< The loaded images
 	int m_current = -1;             ///< The currently selected image

@@ -111,26 +111,26 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                              m_sidePanelContents->perform_layout(m_nvg_context);
                          });
 
-    //
-    // create edit panel
-    //
+    // //
+    // // create edit panel
+    // //
 
-	btn = new Button(m_sidePanelContents, "Edit", FA_CHEVRON_LEFT);
-	btn->set_flags(Button::ToggleButton);
-	btn->set_font_size(18);
-	btn->set_icon_position(Button::IconPosition::Right);
+	// btn = new Button(m_sidePanelContents, "Edit", FA_CHEVRON_LEFT);
+	// btn->set_flags(Button::ToggleButton);
+	// btn->set_font_size(18);
+	// btn->set_icon_position(Button::IconPosition::Right);
 
-	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
-	editPanel->set_visible(false);
+	// auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
+	// editPanel->set_visible(false);
 
-	btn->set_change_callback([this,btn,editPanel](bool value)
-	 {
-		 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
-		 editPanel->set_visible(value);
-		 update_layout();
-		 m_sidePanelContents->perform_layout(m_nvg_context);
-	 });
-	editPanel->perform_layout(m_nvg_context);
+	// btn->set_change_callback([this,btn,editPanel](bool value)
+	//  {
+	// 	 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
+	// 	 editPanel->set_visible(value);
+	// 	 update_layout();
+	// 	 m_sidePanelContents->perform_layout(m_nvg_context);
+	//  });
+	// editPanel->perform_layout(m_nvg_context);
 
     //
     // create top panel controls
@@ -344,7 +344,7 @@ bool HDRViewScreen::drop_event(const vector<string> & filenames)
 		m_imagesPanel->load_images(filenames);
 
 		// Ensure the new image button will have the correct visibility state.
-		m_imagesPanel->setFilter(m_imagesPanel->filter());
+		m_imagesPanel->set_filter(m_imagesPanel->filter());
 	}
 	catch (const exception &e)
 	{
@@ -360,21 +360,11 @@ void HDRViewScreen::ask_close_image(int)
 	auto closeit = [this](int curr, int next)
 	{
 		m_imagesPanel->close_image();
-//
-////			if (!m_imagesPanel->nthImageIsVisible(curr))
-//			{
-////				m_imageMgr->set_current_image_index(-1);
-//				auto next = m_imagesPanel->nextVisibleImage(0, Forward);
-//				cout << "curr: " << curr << "; next: " << next << endl;
-//				m_imageMgr->set_current_image_index(next, true);
-//				cout << "curr: " << m_imageMgr->current_image_index() << endl;
-//			}
-//			m_imageMgr->numImagesCallback()();
 		cout << "curr: " << m_imagesPanel->current_image_index() << endl;
 	};
 
 	auto curr = m_imagesPanel->current_image_index();
-	auto next = m_imagesPanel->nextVisibleImage(curr, Forward);
+	auto next = m_imagesPanel->next_visible_image(curr, Forward);
 	cout << "curr: " << curr << "; next: " << next << endl;
 	if (auto img = m_imagesPanel->image(curr))
 	{
@@ -608,7 +598,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         case 'F':
 			if (modifiers & SYSTEM_COMMAND_MOD)
-				m_imagesPanel->focusFilter();
+				m_imagesPanel->focus_filter();
 			else
 				flip_image(false);
 			return true;
@@ -663,7 +653,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 	        }
 	        else if (m_imagesPanel->num_images())
             {
-				m_imagesPanel->set_current_image_index(m_imagesPanel->nextVisibleImage(m_imagesPanel->current_image_index(), Backward));
+				m_imagesPanel->set_current_image_index(m_imagesPanel->next_visible_image(m_imagesPanel->current_image_index(), Backward));
 	            return true;
             }
 		    return false;
@@ -676,7 +666,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 	        }
 	        else if (m_imagesPanel->num_images())
 	        {
-				m_imagesPanel->set_current_image_index(m_imagesPanel->nextVisibleImage(m_imagesPanel->current_image_index(), Forward));
+				m_imagesPanel->set_current_image_index(m_imagesPanel->next_visible_image(m_imagesPanel->current_image_index(), Forward));
 		        return true;
 	        }
 		    return false;
@@ -710,7 +700,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 		}
 		else
 		{
-			auto nth = m_imagesPanel->nthVisibleImageIndex(idx);
+			auto nth = m_imagesPanel->nth_visible_image_index(idx);
 			if (nth >= 0)
 				m_imagesPanel->set_current_image_index(nth);
 		}
