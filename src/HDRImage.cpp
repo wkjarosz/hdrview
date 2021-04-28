@@ -16,7 +16,7 @@
 #include <vector>                // for vector
 #include "Common.h"              // for lerp, mod, clamp, getExtension
 #include "Colorspace.h"
-#include "ParallelFor.h"
+#include "parallelfor.h"
 #include "timer.h"
 #include <spdlog/spdlog.h>
 

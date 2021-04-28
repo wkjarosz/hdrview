@@ -13,7 +13,7 @@
 #include "EnvMap.h"
 #include "Colorspace.h"
 #include "HSLGradient.h"
-#include "MultiGraph.h"
+#include "multigraph.h"
 #include "FilmicToneCurve.h"
 #include <spdlog/spdlog.h>
 #include <Eigen/Geometry>

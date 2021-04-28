@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "PPM.h"
+#include "ppm.h"
 #include <cstdio>
 #include <string>
 #include <iostream>
@@ -25,7 +25,7 @@ struct RGB
 
 } // end namespace
 
-bool isPPMImage(const char *filename)
+bool is_ppm_image(const char *filename)
 {
     FILE *infile = nullptr;
     int numInputsRead = 0;
@@ -74,7 +74,7 @@ bool isPPMImage(const char *filename)
 }
 
 
-float * loadPPMImage(const char *filename, int *width, int *height, int *numChannels)
+float * load_ppm_image(const char *filename, int *width, int *height, int *numChannels)
 {
     FILE *infile = nullptr;
     float * img = nullptr;
@@ -145,7 +145,7 @@ float * loadPPMImage(const char *filename, int *width, int *height, int *numChan
         delete [] img;
         if (infile)
             fclose(infile);
-        throw std::runtime_error(string("ERROR in loadPPMImage: ") +
+        throw std::runtime_error(string("ERROR in load_ppm_image: ") +
                                  string(e.what()) +
                                  string(" Unable to read PPM file '") +
                                  filename + "'");
@@ -153,7 +153,7 @@ float * loadPPMImage(const char *filename, int *width, int *height, int *numChan
 }
 
 
-bool writePPMImage(const char *filename, int width, int height, int numChannels, const unsigned char *data)
+bool write_ppm_image(const char *filename, int width, int height, int numChannels, const unsigned char *data)
 {
     FILE *outfile = nullptr;
 
@@ -179,7 +179,7 @@ bool writePPMImage(const char *filename, int width, int height, int numChannels,
     {
         if (outfile)
             fclose (outfile);
-        throw std::runtime_error(string("ERROR in writePPMImage: ") +
+        throw std::runtime_error(string("ERROR in write_ppm_image: ") +
                                  string(e.what()) +
                                  string(" Unable to write PPM file '") +
                                  string(filename) + "'");

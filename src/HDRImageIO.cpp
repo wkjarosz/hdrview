@@ -24,7 +24,7 @@
 #include <vector>                // for vector
 #include "Common.h"              // for lerp, mod, clamp, getExtension
 #include "Colorspace.h"
-#include "ParallelFor.h"
+#include "parallelfor.h"
 #include "timer.h"
 #include <Eigen/Dense>
 #include <spdlog/spdlog.h>
@@ -60,8 +60,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"     // for stbi_write_bmp, stbi_write_hdr, stbi...
 
-#include "PFM.h"
-#include "PPM.h"
+#include "pfm.h"
+#include "ppm.h"
 
 
 using namespace Eigen;
@@ -533,7 +533,7 @@ bool HDRImage::save(const string & filename,
         console->debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
 
         if (extension == "ppm")
-            return writePPMImage(filename.c_str(), width(), height(), 3, &data[0]);
+            return write_ppm_image(filename.c_str(), width(), height(), 3, &data[0]);
         else if (extension == "png")
             return stbi_write_png(filename.c_str(), width(), height(),
                                   3, &data[0], sizeof(unsigned char)*width()*3) != 0;

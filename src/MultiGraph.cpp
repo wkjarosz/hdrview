@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "MultiGraph.h"
+#include "multigraph.h"
 #include <nanogui/theme.h>
 #include <nanogui/opengl.h>
 #include <spdlog/fmt/fmt.h>

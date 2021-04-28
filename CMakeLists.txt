@@ -90,12 +90,12 @@ add_executable(HDRView
                src/ImageShader.cpp
                src/ImageShader.h
                src/MultiGraph.cpp
-               src/MultiGraph.h
+               src/multigraph.h
                src/ParallelFor.cpp
-               src/ParallelFor.h
-               src/PFM.h
+               src/parallelfor.h
+               src/pfm.h
                src/PFM.cpp
-               src/PPM.h
+               src/ppm.h
                src/PPM.cpp
                src/progress.cpp
                src/progress.h
@@ -156,11 +156,11 @@ add_executable(hdrbatch
                src/HDRImageIO.cpp
                src/HDRBatch.cpp
                src/ParallelFor.cpp
-               src/ParallelFor.h
+               src/parallelfor.h
                src/PFM.cpp
-               src/PFM.h
+               src/pfm.h
                src/PPM.cpp
-               src/PPM.h
+               src/ppm.h
                src/Progress.cpp
                src/progress.h
                src/range.h

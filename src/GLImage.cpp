@@ -8,12 +8,12 @@
 #include "Common.h"
 #include "timer.h"
 #include "Colorspace.h"
-#include "ParallelFor.h"
+#include "parallelfor.h"
 #include <random>
 #include <nanogui/common.h>
 #include <cmath>
 #include <spdlog/spdlog.h>
-#include "MultiGraph.h"
+#include "multigraph.h"
 
 using namespace nanogui;
 // using namespace Eigen;

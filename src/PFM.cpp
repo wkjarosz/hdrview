@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "PFM.h"
+#include "pfm.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>

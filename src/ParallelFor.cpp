@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "ParallelFor.h"
+#include "parallelfor.h"
 #include <future>
 #include <vector>
 

@@ -9,7 +9,7 @@
 #include "GLImage.h"
 #include "ImageButton.h"
 #include "HDRImageViewer.h"
-#include "MultiGraph.h"
+#include "multigraph.h"
 #include "well.h"
 #include <spdlog/spdlog.h>
 #include "timer.h"
