@@ -10,9 +10,9 @@
 #include "ImageButton.h"
 #include "HDRImageViewer.h"
 #include "MultiGraph.h"
-#include "Well.h"
+#include "well.h"
 #include <spdlog/spdlog.h>
-#include "Timer.h"
+#include "timer.h"
 #include <tinydir.h>
 #include <set>
 

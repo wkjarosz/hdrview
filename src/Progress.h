@@ -59,17 +59,18 @@ public:
 		return (f -= float2fixed(b));
 	}
 
-	/// This operator is *NOT* atomic
-	Fixed operator*=(float b)
-	{
-		return (f = Fixed(BigFixed(f) * BigFixed(float2fixed(b))) / ScalingFactor);
-	}
+	// Disabling to avoid accidental non-atomic operations
+	// /// This operator is *NOT* atomic
+	// Fixed operator*=(float b)
+	// {
+	// 	return (f = Fixed(BigFixed(f) * BigFixed(float2fixed(b))) / ScalingFactor);
+	// }
 
-	/// This operator is *NOT* atomic
-	Fixed operator/=(float b)
-	{
-		return (f = Fixed((BigFixed(f) * ScalingFactor) / float2fixed(b)));
-	}
+	// /// This operator is *NOT* atomic
+	// Fixed operator/=(float b)
+	// {
+	// 	return (f = Fixed((BigFixed(f) * ScalingFactor) / float2fixed(b)));
+	// }
 
 	bool operator<(float b) const
 	{
@@ -111,7 +112,7 @@ using AtomicFixed32 = AtomicFixed<std::int32_t, std::int64_t, 16>;
  * Helper object to manage the progress display.
  * 	{
  *   	AtomicProgress p1(true);
- *   	p1.setNumSteps(10);
+ *   	p1.set_num_steps(10);
  *   	for (int i = 0; i < 10; ++i, ++p1)
  *   	{
  *     		// do something
@@ -128,14 +129,14 @@ public:
 	AtomicProgress(const AtomicProgress & parent, float percentageOfParent = 1.f);
 
 	// access to the atomic internal storage
-	void resetProgress(float p = 0.f);
+	void reset_progress(float p = 0.f);
 	float progress() const;
-	void setDone()                              {resetProgress(1.f);}
-	void setBusy()                              {resetProgress(-1.f);}
+	void set_done()                              {reset_progress(1.f);}
+	void set_busy()                              {reset_progress(-1.f);}
 
 	// access to the discrete stepping
-	void setAvailablePercent(float percent);
-	void setNumSteps(int numSteps);
+	void set_available_percent(float percent);
+	void set_num_steps(int numSteps);
 	AtomicProgress& operator+=(int steps);
 	AtomicProgress& operator++()                {return ((*this)+=1);}
 

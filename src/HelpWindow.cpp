@@ -15,7 +15,7 @@
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
 #include <nanogui/window.h>
-#include "Well.h"
+#include "well.h"
 
 using namespace nanogui;
 using namespace std;

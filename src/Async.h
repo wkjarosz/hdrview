@@ -8,7 +8,7 @@
 #include <functional>
 #include <future>
 #include <chrono>
-#include "Progress.h"
+#include "progress.h"
 
 
 template <typename T>
@@ -29,7 +29,7 @@ public:
 	 * @param compute The function to execute asyncrhonously
 	 */
 	AsyncTask(TaskFunc compute)
-		: m_compute([compute](AtomicProgress & prog){T ret = compute(prog); prog.setDone(); return ret;}), m_progress(true)
+		: m_compute([compute](AtomicProgress & prog){T ret = compute(prog); prog.set_done(); return ret;}), m_progress(true)
 	{
 
 	}
@@ -84,7 +84,7 @@ public:
 
 	void setProgress(float p)
 	{
-		m_progress.resetProgress(p);
+		m_progress.reset_progress(p);
 	}
 
 	/*!
