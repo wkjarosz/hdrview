@@ -4,15 +4,15 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "HDRViewScreen.h"
-#include "GLImage.h"
-#include "EditImagePanel.h"
-#include "ImageListPanel.h"
+#include "hdrviewscreen.h"
+#include "glimage.h"
+#include "editimagepanel.h"
+#include "imagelistpanel.h"
 #include <iostream>
-#include "Common.h"
-#include "CommandHistory.h"
-#include "HDRImageViewer.h"
-#include "HelpWindow.h"
+#include "common.h"
+#include "commandhistory.h"
+#include "hdrimageviewer.h"
+#include "helpwindow.h"
 #define NOMINMAX
 #include <tinydir.h>
 

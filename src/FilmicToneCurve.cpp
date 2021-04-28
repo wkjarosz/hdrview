@@ -7,7 +7,7 @@
 // https://github.com/johnhable/fw-public
 // which was released into the public domain through the CC0 Universal license
 
-#include "FilmicToneCurve.h"
+#include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
 
 float FilmicToneCurve::CurveSegment::eval(float x) const

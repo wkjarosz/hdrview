@@ -4,17 +4,17 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "EditImagePanel.h"
-#include "Common.h"
-#include "GLImage.h"
-#include "HDRViewScreen.h"
-#include "HDRImage.h"
-#include "ImageListPanel.h"
-#include "EnvMap.h"
-#include "Colorspace.h"
-#include "HSLGradient.h"
+#include "editimagepanel.h"
+#include "common.h"
+#include "glimage.h"
+#include "hdrviewscreen.h"
+#include "hdrimage.h"
+#include "imagelistpanel.h"
+#include "envmap.h"
+#include "colorspace.h"
+#include "hslgradient.h"
 #include "multigraph.h"
-#include "FilmicToneCurve.h"
+#include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
 #include <Eigen/Geometry>
 

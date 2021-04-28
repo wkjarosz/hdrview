@@ -4,10 +4,10 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "GLImage.h"
-#include "Common.h"
+#include "glimage.h"
+#include "common.h"
 #include "timer.h"
-#include "Colorspace.h"
+#include "colorspace.h"
 #include "parallelfor.h"
 #include <random>
 #include <nanogui/common.h>
@@ -320,7 +320,7 @@ bool GLImage::waitForAsyncResult() const
 	}
 
 	// now set the progress bar to busy as we upload to GPU
-	m_asyncCommand->setProgress(-1.f);
+	m_asyncCommand->set_progress(-1.f);
 
 	uploadToGPU();
 

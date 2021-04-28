@@ -8,8 +8,8 @@
 #include <nanogui/theme.h>
 #include <nanogui/opengl.h>
 #include <spdlog/fmt/fmt.h>
-#include "Common.h"
-#include "Colorspace.h"
+#include "common.h"
+#include "colorspace.h"
 #include <iostream>
 
 using std::string;

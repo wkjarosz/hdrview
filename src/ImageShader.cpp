@@ -4,9 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "ImageShader.h"
-#include "Common.h"
-#include "DitherMatrix256.h"
+#include "imageshader.h"
+#include "common.h"
+#include "dithermatrix256.h"
 #include <random>
 
 using namespace nanogui;

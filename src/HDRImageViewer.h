@@ -10,10 +10,10 @@
 
 #include <nanogui/widget.h>
 #include <vector>
-#include "Fwd.h"
-#include "Common.h"
-#include "GLImage.h"
-#include "ImageShader.h"
+#include "fwd.h"
+#include "common.h"
+#include "glimage.h"
+#include "imageshader.h"
 
 using namespace nanogui;
 using namespace Eigen;

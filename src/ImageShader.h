@@ -9,7 +9,7 @@
 #include <nanogui/opengl.h>
 // #include <nanogui/glutil.h>
 #include <nanogui/shader.h>
-#include "Common.h"
+#include "common.h"
 
 /*!
  * Draws an image to the screen, optionally with high-quality dithering.

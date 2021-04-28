@@ -7,7 +7,7 @@
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
-#include "HelpWindow.h"
+#include "helpwindow.h"
 
 #include <nanogui/button.h>
 #include <nanogui/icons.h>

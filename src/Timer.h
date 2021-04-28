@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include "Common.h"
+#include "common.h"
 #include <chrono>
 
 //! Simple timer with millisecond precision

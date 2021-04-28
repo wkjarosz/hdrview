@@ -4,9 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "Colorspace.h"
-#include "Common.h"
-#include "Color.h"
+#include "colorspace.h"
+#include "common.h"
+#include "color.h"
 #include <cmath>
 
 namespace

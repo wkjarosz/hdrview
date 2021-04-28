@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "HSLGradient.h"
+#include "hslgradient.h"
 #include <nanogui/opengl.h>
 
 using namespace nanogui;

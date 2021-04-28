@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "Common.h"
+#include "common.h"
 
 #include <nanogui/widget.h>
 
@@ -30,15 +30,18 @@ public:
 	/// Set the button's text caption/filename
 	void set_caption(const std::string &caption){ m_caption = caption; recompute_string_clipping(); }
 	const std::string & caption() const         { return m_caption; }
+
 	void set_image_id(size_t id)                { m_id = id; }
 	size_t image_id() const                     { return m_id; }
+
 	void set_is_modified(bool b)                { m_is_modified = b; }
 	bool is_modified() const                    { return m_is_modified; }
+
 	bool is_selected() const                    { return m_is_selected; }
 	void set_is_selected(bool is_selected)      { m_is_selected = is_selected; }
+
 	bool is_reference() const                   { return m_is_reference; }
 	void set_is_reference(bool is_reference)    { m_is_reference = is_reference; }
-
 
 	std::string highlighted() const;
 	void set_highlight_range(size_t begin, size_t end);

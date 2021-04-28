@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "HDRImageViewer.h"
-#include "HDRViewScreen.h"
+#include "hdrimageviewer.h"
+#include "hdrviewscreen.h"
 #include <tinydir.h>
 #include <utility>
 using namespace std;

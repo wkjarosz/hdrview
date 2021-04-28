@@ -21,8 +21,8 @@ public:
 	MultiGraph(Widget *parent, const Color & fg = Color(255, 192, 0, 128),
 	           const std::vector<float> & v = std::vector<float>());
 
-	const Color &backgroundColor() const { return m_background_color; }
-	void setBackgroundColor(const Color &backgroundColor) { m_background_color = backgroundColor; }
+	const Color &background_color() const { return m_background_color; }
+	void set_background_color(const Color &background_color) { m_background_color = background_color; }
 
 	const Color &text_color() const { return m_text_color; }
 	void set_text_color(const Color &text_color) { m_text_color = text_color; }

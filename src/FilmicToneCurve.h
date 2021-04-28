@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "Common.h"
+#include "common.h"
 
 class FilmicToneCurve
 {

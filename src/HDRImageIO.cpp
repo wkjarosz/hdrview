@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "HDRImage.h"
-#include "DitherMatrix256.h"    // for dither_matrix256
+#include "hdrimage.h"
+#include "dithermatrix256.h"    // for dither_matrix256
 #include <ImfArray.h>            // for Array2D
 #include <ImfRgbaFile.h>         // for RgbaInputFile, RgbaOutputFile
 #include <ImathBox.h>            // for Box2i
@@ -22,8 +22,8 @@
 #include <stdexcept>             // for runtime_error, out_of_range
 #include <string>                // for allocator, operator==, basic_string
 #include <vector>                // for vector
-#include "Common.h"              // for lerp, mod, clamp, getExtension
-#include "Colorspace.h"
+#include "common.h"              // for lerp, mod, clamp, getExtension
+#include "colorspace.h"
 #include "parallelfor.h"
 #include "timer.h"
 #include <Eigen/Dense>
@@ -177,7 +177,7 @@ bool HDRImage::load(const string & filename)
 
 
     // then try pfm
-	if (isPFMImage(filename.c_str()))
+	if (is_pfm_image(filename.c_str()))
     {
 	    float * float_data = 0;
 	    try
@@ -185,7 +185,7 @@ bool HDRImage::load(const string & filename)
 		    w = 0;
 		    h = 0;
 
-		    if ((float_data = loadPFMImage(filename.c_str(), &w, &h, &n)))
+		    if ((float_data = load_pfm_image(filename.c_str(), &w, &h, &n)))
 		    {
 			    if (n == 3)
 			    {
@@ -465,7 +465,7 @@ bool HDRImage::save(const string & filename,
     if (extension == "hdr")
         return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "pfm")
-        return writePFMImage(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
+        return write_pfm_image(filename.c_str(), width(), height(), 4, (const float *) img->data()) != 0;
     else if (extension == "exr")
     {
         try

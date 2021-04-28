@@ -13,10 +13,10 @@
 #include <type_traits>         // for swap
 #include <vector>              // for vector, allocator
 #include <nanogui/opengl.h>
-#include "HDRImage.h"          // for HDRImage
-#include "Fwd.h"               // for HDRImage
-#include "CommandHistory.h"
-#include "Async.h"
+#include "hdrimage.h"          // for HDRImage
+#include "fwd.h"               // for HDRImage
+#include "commandhistory.h"
+#include "async.h"
 #include <utility>
 #include <memory>
 

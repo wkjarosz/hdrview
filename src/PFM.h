@@ -6,6 +6,6 @@
 
 #pragma once
 
-bool isPFMImage(const char *filename) noexcept;
-bool writePFMImage(const char *filename, int width, int height, int numChannels, const float *data);
-float * loadPFMImage(const char *filename, int *width, int *height, int *numChannels);
+bool is_pfm_image(const char *filename) noexcept;
+bool write_pfm_image(const char *filename, int width, int height, int numChannels, const float *data);
+float * load_pfm_image(const char *filename, int *width, int *height, int *numChannels);

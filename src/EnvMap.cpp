@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "Common.h"
-#include "EnvMap.h"
+#include "common.h"
+#include "envmap.h"
 
 using namespace Eigen;
 using std::vector;

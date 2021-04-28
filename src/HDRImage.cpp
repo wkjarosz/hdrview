@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "HDRImage.h"
+#include "hdrimage.h"
 #include <ctype.h>               // for tolower
 #include <stdlib.h>              // for abs
 #include <algorithm>             // for nth_element, transform
@@ -14,8 +14,8 @@
 #include <stdexcept>             // for runtime_error, out_of_range
 #include <string>                // for allocator, operator==, basic_string
 #include <vector>                // for vector
-#include "Common.h"              // for lerp, mod, clamp, getExtension
-#include "Colorspace.h"
+#include "common.h"              // for lerp, mod, clamp, getExtension
+#include "colorspace.h"
 #include "parallelfor.h"
 #include "timer.h"
 #include <spdlog/spdlog.h>

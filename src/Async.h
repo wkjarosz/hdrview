@@ -82,7 +82,7 @@ public:
 		return m_progress.progress();
 	}
 
-	void setProgress(float p)
+	void set_progress(float p)
 	{
 		m_progress.reset_progress(p);
 	}

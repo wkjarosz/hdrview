@@ -4,8 +4,8 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "Color.h"
-#include "Colorspace.h"
+#include "color.h"
+#include "colorspace.h"
 
 
 #define COLORSPACE_FUNCTION_WRAPPER(FUNC) \

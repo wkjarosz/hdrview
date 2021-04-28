@@ -10,8 +10,8 @@
 #include <vector>
 #include <iostream>
 #include <spdlog/spdlog.h>
-#include "Fwd.h"
-#include "CommandHistory.h"
+#include "fwd.h"
+#include "commandhistory.h"
 
 using namespace nanogui;
 // using namespace Eigen;

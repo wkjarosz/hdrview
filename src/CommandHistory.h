@@ -9,8 +9,8 @@
 #include <cstdint>             // for uint32_t
 #include <Eigen/Core>          // for Vector2i, Matrix4f, Vector3f
 #include <vector>              // for vector, allocator
-#include "HDRImage.h"          // for HDRImage
-#include "Fwd.h"               // for HDRImage
+#include "hdrimage.h"          // for HDRImage
+#include "fwd.h"               // for HDRImage
 
 //! Generic image manipulation undo class
 class ImageCommandUndo

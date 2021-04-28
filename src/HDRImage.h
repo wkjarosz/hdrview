@@ -10,7 +10,7 @@
 #include <functional>            // for function
 #include <vector>                // for vector
 #include <string>                // for string
-#include "Color.h"               // for Color4, max, min
+#include "color.h"               // for Color4, max, min
 #include "progress.h"
 
 

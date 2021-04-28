@@ -4,11 +4,11 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "ImageListPanel.h"
-#include "HDRViewScreen.h"
-#include "GLImage.h"
-#include "ImageButton.h"
-#include "HDRImageViewer.h"
+#include "imagelistpanel.h"
+#include "hdrviewscreen.h"
+#include "glimage.h"
+#include "imagebutton.h"
+#include "hdrimageviewer.h"
 #include "multigraph.h"
 #include "well.h"
 #include <spdlog/spdlog.h>

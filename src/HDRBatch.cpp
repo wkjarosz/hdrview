@@ -9,9 +9,9 @@
 #include <Eigen/Core>                    // for Vector2f
 #include <iostream>                      // for string
 #include <random>                        // for normal_distribution, mt19937
-#include "Common.h"                      // for getBasename, getExtension
-#include "HDRImage.h"                    // for HDRImage
-#include "EnvMap.h"                      // for XYZToAngularMap, XYZToCubeMap
+#include "common.h"                      // for getBasename, getExtension
+#include "hdrimage.h"                    // for HDRImage
+#include "envmap.h"                      // for XYZToAngularMap, XYZToCubeMap
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 

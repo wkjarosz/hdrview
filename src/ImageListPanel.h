@@ -8,9 +8,9 @@
 
 #include <nanogui/widget.h>
 #include <vector>
-#include "Common.h"
-#include "GLImage.h"
-#include "Fwd.h"
+#include "common.h"
+#include "glimage.h"
+#include "fwd.h"
 
 using namespace nanogui;
 

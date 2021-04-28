@@ -8,7 +8,7 @@
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
 
-#include "ImageButton.h"
+#include "imagebutton.h"
 #include <nanogui/opengl.h>
 #include <nanogui/theme.h>
 #include <nanogui/icons.h>

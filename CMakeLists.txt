@@ -53,43 +53,43 @@ endif()
 
 
 add_executable(HDRView
-               src/Async.h
-               src/Color.cpp
-               src/Color.h
-               src/Colorspace.cpp
-               src/Colorspace.h
-               src/CommandHistory.h
-               src/Common.cpp
-               src/Common.h
-               src/DitherMatrix256.h
-               src/EditImagePanel.cpp
-               src/EditImagePanel.h
-               src/EnvMap.cpp
-               src/EnvMap.h
-               src/FilmicToneCurve.cpp
-               src/FilmicToneCurve.h
-               src/Fwd.h
-               src/GLImage.cpp
-               src/GLImage.h
-               src/HDRImage.cpp
-               src/HDRImage.h
-               src/HDRImageIO.cpp
-               src/HDRImageViewer.cpp
-               src/HDRImageViewer.h
-               src/HDRView.cpp
-               src/HDRViewScreen.cpp
-               src/HDRViewScreen.h
-               src/HelpWindow.cpp
-               src/HelpWindow.h
-               src/HSLGradient.cpp
-               src/HSLGradient.h
-               src/ImageButton.cpp
-               src/ImageButton.h
-               src/ImageListPanel.cpp
-               src/ImageListPanel.h
-               src/ImageShader.cpp
-               src/ImageShader.h
-               src/MultiGraph.cpp
+               src/async.h
+               src/color.cpp
+               src/color.h
+               src/colorspace.cpp
+               src/colorspace.h
+               src/commandhistory.h
+               src/common.cpp
+               src/common.h
+               src/dithermatrix256.h
+               src/editimagepanel.cpp
+               src/editimagepanel.h
+               src/envmap.cpp
+               src/envmap.h
+               src/filmictonecurve.cpp
+               src/filmictonecurve.h
+               src/fwd.h
+               src/glimage.cpp
+               src/glimage.h
+               src/hdrimage.cpp
+               src/hdrimage.h
+               src/hdrimageio.cpp
+               src/hdrimageviewer.cpp
+               src/hdrimageviewer.h
+               src/hdrview.cpp
+               src/hdrviewscreen.cpp
+               src/hdrviewscreen.h
+               src/helpwindow.cpp
+               src/helpwindow.h
+               src/hslgradient.cpp
+               src/hslgradient.h
+               src/imagebutton.cpp
+               src/imagebutton.h
+               src/imagelistpanel.cpp
+               src/imagelistpanel.h
+               src/imageshader.cpp
+               src/imageshader.h
+               src/multigraph.cpp
                src/multigraph.h
                src/ParallelFor.cpp
                src/parallelfor.h
@@ -141,20 +141,20 @@ endif()
 
 
 add_executable(hdrbatch
-               src/Color.cpp
-               src/Color.h
-               src/Colorspace.cpp
-               src/Colorspace.h
-               src/Common.cpp
-               src/Common.h
-               src/EnvMap.cpp
-               src/EnvMap.h
-               src/DitherMatrix256.h
-               src/Fwd.h
-               src/HDRImage.cpp
-               src/HDRImage.h
-               src/HDRImageIO.cpp
-               src/HDRBatch.cpp
+               src/color.cpp
+               src/color.h
+               src/colorspace.cpp
+               src/colorspace.h
+               src/common.cpp
+               src/common.h
+               src/envmap.cpp
+               src/envmap.h
+               src/dithermatrix256.h
+               src/fwd.h
+               src/hdrimage.cpp
+               src/hdrimage.h
+               src/hdrimageio.cpp
+               src/hdrbatch.cpp
                src/ParallelFor.cpp
                src/parallelfor.h
                src/PFM.cpp

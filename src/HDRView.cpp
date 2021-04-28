@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <docopt.h>
-#include "HDRViewScreen.h"
+#include "hdrviewscreen.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 

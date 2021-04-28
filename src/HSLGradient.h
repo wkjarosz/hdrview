@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "Common.h"
+#include "common.h"
 #include <nanogui/widget.h>
 
 class HSLGradient : public nanogui::Widget
