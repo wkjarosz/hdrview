@@ -12,6 +12,10 @@
 #include <spdlog/spdlog.h>
 #include "fwd.h"
 #include "commandhistory.h"
+#include "imageview.h"
+#include <nanogui/texture.h>
+#include <nanogui/shader.h>
+#include <nanogui/renderpass.h>
 
 using namespace nanogui;
 // using namespace Eigen;
@@ -36,8 +40,6 @@ public:
 	void flip_image(bool h);
 	void clear_focus_path() {m_focus_path.clear();}
 
-	int modifiers() const {return m_modifiers;}
-
 	void update_caption();
 
 private:
@@ -51,7 +53,7 @@ private:
 	Window * m_topPanel = nullptr;
 	Window * m_sidePanel = nullptr;
 	Window * m_statusBar = nullptr;
-	HDRImageViewer * m_imageView = nullptr;
+	HDRImageView * image_view = nullptr;
 	ImageListPanel * m_imagesPanel = nullptr;
 
     Button * m_helpButton = nullptr;
@@ -77,4 +79,8 @@ private:
 	bool m_draggingSidePanel = false;
 
     std::shared_ptr<spdlog::logger> console;
+
+	using ImageHolder = std::shared_ptr<HDRImage>;
+    std::vector<std::pair<ref<Texture>, ImageHolder>> m_images;
+
 };

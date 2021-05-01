@@ -18,6 +18,7 @@ class GLImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageViewer;
+class HDRImageView;
 class HelpWindow;
 class MultiGraph;
 class EditImagePanel;

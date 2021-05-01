@@ -9,6 +9,7 @@
 #include "glimage.h"
 #include "imagebutton.h"
 #include "hdrimageviewer.h"
+#include "imageview.h"
 #include "multigraph.h"
 #include "well.h"
 #include <spdlog/spdlog.h>
@@ -19,13 +20,13 @@
 
 using namespace std;
 
-ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imgViewer)
+ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
 	: Widget(parent),
 	  m_imageModifyDoneRequested(false),
 	  m_imageModifyDoneCallback([](int){}),
 	  m_numImagesCallback([](){}),
       m_screen(screen),
-      m_imageViewer(imgViewer)
+      m_image_view(img_view)
 {
 	// set_id("image list panel");
 	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
@@ -115,7 +116,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_blendModes = new ComboBox(grid);
 		m_blendModes->set_items(blendModeNames());
 		m_blendModes->set_fixed_height(19);
-		m_blendModes->set_callback([imgViewer](int b) { imgViewer->set_blend_mode(EBlendMode(b)); });
+		m_blendModes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
 		agl->set_anchor(m_blendModes,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
@@ -128,7 +129,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_channels = new ComboBox(grid, channelNames());
 		m_channels->set_fixed_height(19);
 		set_channel(EChannel::RGB);
-		m_channels->set_callback([imgViewer](int c) { imgViewer->set_channel(EChannel(c)); });
+		m_channels->set_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });
 		agl->set_anchor(m_channels,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 	}
@@ -213,7 +214,7 @@ EBlendMode ImageListPanel::blend_mode() const
 void ImageListPanel::set_blend_mode(EBlendMode mode)
 {
 	m_blendModes->set_selected_index(mode);
-	m_imageViewer->set_blend_mode(mode);
+	m_image_view->set_blend_mode(mode);
 }
 
 EChannel ImageListPanel::channel() const
@@ -224,7 +225,7 @@ EChannel ImageListPanel::channel() const
 void ImageListPanel::set_channel(EChannel channel)
 {
 	m_channels->set_selected_index(channel);
-	m_imageViewer->set_channel(channel);
+	m_image_view->set_channel(channel);
 }
 
 void ImageListPanel::focus_filter() {m_filter->request_focus();}
@@ -398,7 +399,7 @@ void ImageListPanel::update_histogram()
 	m_histogramDirty = true;
 
 	if (current_image())
-		current_image()->recomputeHistograms(m_imageViewer->exposure());
+		current_image()->recomputeHistograms(m_image_view->exposure());
 	else
     {
         m_graph->set_values(std::vector<float>(), 0);
@@ -481,7 +482,8 @@ void ImageListPanel::run_requested_callbacks()
 
 		if (numImagesChanged)
 		{
-			m_imageViewer->set_current_image(current_image());
+			// FIXME after migration
+			// m_image_view->set_current_image(current_image());
 			m_screen->update_caption();
 
 			m_numImagesCallback();
@@ -513,7 +515,8 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 
 	m_previous = m_current;
 	m_current = index;
-	m_imageViewer->set_current_image(current_image());
+	// FIXME after migration
+	// m_image_view->set_current_image(current_image());
 	m_screen->update_caption();
     update_histogram();
 
@@ -531,7 +534,8 @@ bool ImageListPanel::set_reference_image_index(int index)
 		m_imageButtons[index]->set_is_reference(true);
 
 	m_reference = index;
-	m_imageViewer->set_reference_image(reference_image());
+	// FIXME after migration
+	// m_image_view->set_reference_image(reference_image());
 
 	return true;
 }
@@ -613,7 +617,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 						spdlog::get("console")->info("Loading \"{}\" failed", filename);
 					return {ret, nullptr};
 				});
-        image->recomputeHistograms(m_imageViewer->exposure());
+        image->recomputeHistograms(m_image_view->exposure());
 		m_images.emplace_back(image);
 	}
 
@@ -670,8 +674,8 @@ void ImageListPanel::close_all_images()
 	m_reference = -1;
 	m_previous = -1;
 
-
-    m_imageViewer->set_current_image(current_image());
+	// FIXME after migration
+    // m_image_view->set_current_image(current_image());
     m_screen->update_caption();
 
 	m_numImagesCallback();

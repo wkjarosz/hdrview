@@ -74,8 +74,6 @@ add_executable(HDRView
                src/hdrimage.cpp
                src/hdrimage.h
                src/hdrimageio.cpp
-               src/hdrimageviewer.cpp
-               src/hdrimageviewer.h
                src/hdrview.cpp
                src/hdrviewscreen.cpp
                src/hdrviewscreen.h
@@ -89,6 +87,8 @@ add_executable(HDRView
                src/imagelistpanel.h
                src/imageshader.cpp
                src/imageshader.h
+               src/imageview.cpp
+               src/imageview.h
                src/multigraph.cpp
                src/multigraph.h
                src/ParallelFor.cpp

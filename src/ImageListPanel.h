@@ -17,7 +17,7 @@ using namespace nanogui;
 class ImageListPanel : public Widget
 {
 public:
-	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageViewer * imgViewer);
+	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * imgViewer);
 
 	void draw(NVGcontext *ctx) override;
 
@@ -102,7 +102,7 @@ private:
 
 
 	HDRViewScreen * m_screen = nullptr;
-	HDRImageViewer * m_imageViewer = nullptr;
+	HDRImageView * m_image_view = nullptr;
 	Button * m_saveButton = nullptr;
 	Button * m_closeButton = nullptr;
 	Button * m_bringForwardButton = nullptr;

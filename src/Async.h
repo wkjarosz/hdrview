@@ -100,7 +100,7 @@ public:
 
 		auto status = m_future.wait_for(std::chrono::seconds(0));
 
-		// predent that the computation is ready for deferred execution since we will compute it on-demand in
+		// pretend that the computation is ready for deferred execution since we will compute it on-demand in
 		// get() anyway
 		return (status == std::future_status::ready || status == std::future_status::deferred);
 	}

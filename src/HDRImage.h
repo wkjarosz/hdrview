@@ -39,6 +39,10 @@ public:
     }
     //@}
 
+    bool contains(int x, int y) const
+	{
+		return x >= 0 && y >= 0 && x < width() && y < height();
+	}
     int width() const       { return (int)rows(); }
     int height() const      { return (int)cols(); }
     bool isNull() const     { return rows() == 0 || cols() == 0; }

@@ -148,7 +148,7 @@ private:
 
 	mutable std::shared_ptr<HDRImage> m_image;
     std::string m_filename;
-	mutable LazyGLTextureLoader m_texture;
+	mutable LazyGLTextureLoader m_texture_loader;
     mutable float m_cachedHistogramExposure;
     mutable std::atomic<bool> m_histogramDirty;
 	mutable LazyHistogramPtr m_histograms;

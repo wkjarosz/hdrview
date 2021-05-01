@@ -245,7 +245,7 @@ bool GLImage::undo()
 	if (m_history.undo(m_image))
 	{
 		m_histogramDirty = true;
-		m_texture.setDirty();
+		m_texture_loader.setDirty();
 		return true;
 	}
 	return false;
@@ -259,7 +259,7 @@ bool GLImage::redo()
 	if (m_history.redo(m_image))
 	{
 		m_histogramDirty = true;
-		m_texture.setDirty();
+		m_texture_loader.setDirty();
 		return true;
 	}
 	return false;
@@ -309,7 +309,7 @@ bool GLImage::waitForAsyncResult() const
 
 		m_asyncRetrieved = true;
 		m_histogramDirty = true;
-		m_texture.setDirty();
+		m_texture_loader.setDirty();
 
 		if (!result.first)
 		{
@@ -330,7 +330,7 @@ bool GLImage::waitForAsyncResult() const
 
 void GLImage::uploadToGPU() const
 {
-	if (m_texture.uploadToGPU(m_image))
+	if (m_texture_loader.uploadToGPU(m_image))
 		// now that we grabbed the results and uploaded to GPU, destroy the task
 		modifyFinished();
 }
@@ -340,7 +340,7 @@ GLuint GLImage::glTextureId() const
 {
 	checkAsyncResult();
 	uploadToGPU();
-    return m_texture.textureID();
+    return m_texture_loader.textureID();
 }
 
 
@@ -352,7 +352,7 @@ bool GLImage::load(const std::string & filename)
     m_history = CommandHistory();
     m_filename = filename;
     m_histogramDirty = true;
-	m_texture.setDirty();
+	m_texture_loader.setDirty();
     return m_image->load(filename);
 }
 
