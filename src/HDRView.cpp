@@ -37,7 +37,7 @@ Options:
   -v T, --verbose=T        Set verbosity threshold with lower values meaning
                            more verbose and higher values removing low-priority
                            messages.
-                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 1].
+                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 0].
                            All messages with severity >= T are displayed, where
                            the severities are:
                                 trace    = 0

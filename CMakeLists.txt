@@ -85,8 +85,6 @@ add_executable(HDRView
                src/imagebutton.h
                src/imagelistpanel.cpp
                src/imagelistpanel.h
-               src/imageshader.cpp
-               src/imageshader.h
                src/imageview.cpp
                src/imageview.h
                src/multigraph.cpp

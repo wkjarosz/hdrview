@@ -25,8 +25,8 @@ public:
 
 	// Const access to the loaded images. Modification only possible via modify_image, undo, redo
 	int num_images() const                  {return int(m_images.size());}
-	int current_image_index() const          {return m_current;}
-	int reference_image_index() const        {return m_reference;}
+	int current_image_index() const         {return m_current;}
+	int reference_image_index() const       {return m_reference;}
 	ConstImagePtr current_image() const     {return image(m_current);}
 	     ImagePtr current_image()           {return image(m_current);}
 	ConstImagePtr reference_image() const   {return image(m_reference);}
@@ -95,7 +95,7 @@ private:
 	std::atomic<bool> m_imageModifyDoneRequested;
 
 	// various callback functions
-	std::function<void(int)> m_imageModifyDoneCallback;
+	std::function<void(int)> m_modify_done_callback;
 	std::function<void()> m_numImagesCallback;
 	std::function<void()> m_currentImageCallback;
 	std::function<void()> m_referenceImageCallback;

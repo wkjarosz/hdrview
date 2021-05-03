@@ -241,7 +241,7 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-	if (m_currentImage && !m_currentImage->isNull())
+	if (m_currentImage && !m_currentImage->is_null())
 	{
 		nanogui::Vector2f pCurrent, sCurrent;
 		image_position_and_scale(pCurrent, sCurrent, m_currentImage);

@@ -9,6 +9,7 @@
 #include "editimagepanel.h"
 #include "imagelistpanel.h"
 #include <iostream>
+#include <nanogui/opengl.h>
 #include "common.h"
 #include "commandhistory.h"
 #include "helpwindow.h"
@@ -19,7 +20,6 @@ using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(nanogui::Vector2i(800,600), "HDRView", true),
-//    m_imageMgr(new HDRImageManager()),
     console(spdlog::get("console"))
 {
     set_background(Color(0.23f, 1.0f));
@@ -60,41 +60,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_sidePanel = new Window(this, "");
 	m_sidePanel->set_theme(panelTheme);
 
-	ImageHolder texture_data(make_shared<HDRImage>());
-	texture_data->load("/Users/wjarosz/Dropbox (Dartmouth College)/Admin Crap/Office Planning/Wall art/PPB/chandelier.exr");
-
-	Texture *tex = new Texture(
-		Texture::PixelFormat::RGBA,
-		Texture::ComponentFormat::Float32,
-		nanogui::Vector2i(texture_data->width(), texture_data->height()),
-		Texture::InterpolationMode::Trilinear,
-		Texture::InterpolationMode::Nearest,
-		Texture::WrapMode::Repeat);
-
-	tex->upload((const uint8_t *)texture_data->data());
-
-	m_images.emplace_back(tex, texture_data);
-
 	image_view = new ::HDRImageView(this);
 	image_view->set_grid_threshold(10);
 	image_view->set_pixel_info_threshold(40);
-	if (!m_images.empty())
-		image_view->set_image(m_images[0].first);
-	image_view->center();
-	int current_image = 0;
-
-	image_view->set_pixel_callback(
-		[this,current_image](const nanogui::Vector2i& index, char **out, size_t size) {
-			const Texture *texture = m_images[current_image].first.get();
-			shared_ptr<HDRImage> data = m_images[current_image].second;
-			for (int ch = 0; ch < 4; ++ch) {
-				float value = (*data)(index.x(), index.y())[ch];
-				snprintf(out[ch], size, "%f", value);
-			}
-		}
-	);
-
-
 
 
 	m_statusBar = new Window(this, "");
@@ -143,26 +111,26 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                              m_sidePanelContents->perform_layout(m_nvg_context);
                          });
 
-    // //
-    // // create edit panel
-    // //
+    //
+    // create edit panel
+    //
 
-	// btn = new Button(m_sidePanelContents, "Edit", FA_CHEVRON_LEFT);
-	// btn->set_flags(Button::ToggleButton);
-	// btn->set_font_size(18);
-	// btn->set_icon_position(Button::IconPosition::Right);
+	btn = new Button(m_sidePanelContents, "Edit", FA_CHEVRON_LEFT);
+	btn->set_flags(Button::ToggleButton);
+	btn->set_font_size(18);
+	btn->set_icon_position(Button::IconPosition::Right);
 
-	// auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
-	// editPanel->set_visible(false);
+	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
+	editPanel->set_visible(false);
 
-	// btn->set_change_callback([this,btn,editPanel](bool value)
-	//  {
-	// 	 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
-	// 	 editPanel->set_visible(value);
-	// 	 update_layout();
-	// 	 m_sidePanelContents->perform_layout(m_nvg_context);
-	//  });
-	// editPanel->perform_layout(m_nvg_context);
+	btn->set_change_callback([this,btn,editPanel](bool value)
+	 {
+		 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
+		 editPanel->set_visible(value);
+		 update_layout();
+		 m_sidePanelContents->perform_layout(m_nvg_context);
+	 });
+	editPanel->perform_layout(m_nvg_context);
 
     //
     // create top panel controls
@@ -321,6 +289,24 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     (new CheckBox(m_topPanel, "RGB values  ",
                  [&](bool v) { image_view->set_draw_values(v); }))->set_checked(image_view->draw_values_on());
 
+
+	image_view->set_pixel_callback(
+		[this](const nanogui::Vector2i& index, char **out, size_t size) {
+			auto img = m_imagesPanel->current_image();
+			if (img)
+			{
+				const HDRImage & image = img->image();
+				for (int ch = 0; ch < 4; ++ch)
+				{
+					float value = image(index.x(), index.y())[ch];
+					snprintf(out[ch], size, "%f", value);
+				}
+			}
+		}
+	);
+
+
+
 	drop_event(args);
 
 
@@ -332,7 +318,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                  });
 
     set_visible(true);
-    // glfwSwapInterval(1);
+    glfwSwapInterval(1);
 }
 
 HDRViewScreen::~HDRViewScreen()
@@ -348,6 +334,8 @@ void HDRViewScreen::update_caption()
         set_caption(string("HDRView [") + img->filename() + (img->is_modified() ? "*" : "") + "]");
     else
         set_caption(string("HDRView"));
+
+	redraw();
 }
 
 bool HDRViewScreen::drop_event(const vector<string> & filenames)
@@ -750,12 +738,14 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
 {
-	if (!m_images.empty() && image_view->contains(p))
+	auto img = m_imagesPanel->current_image();
+	if (img && img->contains(p))
 	{
 		nanogui::Vector2i pixelCoord(image_view->image_coordinate_at((p - image_view->position())));
-		if (m_images[0].second->contains(pixelCoord.x(), pixelCoord.y()))
+		const HDRImage & image = img->image();
+		if (image.contains(pixelCoord.x(), pixelCoord.y()))
 		{
-			Color4 pixelVal = (*m_images[0].second)(pixelCoord.x(), pixelCoord.y());
+			Color4 pixelVal = image(pixelCoord.x(), pixelCoord.y());
 			Color4 iPixelVal = (pixelVal * pow(2.f, image_view->exposure()) * 255).min(255.f).max(0.f);
 			string s = fmt::format(
 				"({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
@@ -884,5 +874,13 @@ void HDRViewScreen::update_layout()
 void HDRViewScreen::draw_contents()
 {
 	m_imagesPanel->run_requested_callbacks();
+
+	if (auto img = m_imagesPanel->current_image())
+	{
+		img->check_async_result();
+		img->upload_to_GPU();
+	}
+
 	update_layout();
+	redraw();
 }

@@ -10,6 +10,7 @@
 #include <random>
 #include <map>
 #include <sstream>
+#include <spdlog/spdlog.h>
 
 using namespace nanogui;
 using namespace std;
@@ -26,14 +27,18 @@ R"(#version 330
 
 uniform vec2 image_scale;
 uniform vec2 image_pos;
+uniform vec2 reference_scale;
+uniform vec2 reference_pos;
 
 in vec2 position;
 
-out vec2 uv;
+out vec2 image_uv;
+out vec2 reference_uv;
 
 void main()
 {
-    uv = (position/2.0 - image_pos + 0.5) / image_scale;
+    image_uv = (position/2.0 - image_pos + 0.5) / image_scale;
+    reference_uv = (position/2.0 - reference_pos + 0.5) / reference_scale;
     gl_Position  = vec4(position.x, -position.y, 0.0, 1.0);
 }
 )";
@@ -45,17 +50,20 @@ R"(#version 330
 #define saturate(v) clamp(v, 0, 1)
 #endif
 
-in vec2 uv;
+in vec2 image_uv;
+in vec2 reference_uv;
 in vec4 gl_FragCoord;
 
+uniform bool has_reference;
+
 uniform sampler2D image;
+uniform sampler2D reference;
 uniform sampler2D ditherImg;
-uniform bool hasDither;
+uniform bool do_dither;
 uniform vec2 randomness;
 
 uniform int blend_mode;
 uniform int channel;
-
 
 uniform float gain;
 uniform float gamma;
@@ -257,7 +265,7 @@ vec4 blend(vec4 imageVal, vec4 referenceVal)
 
 vec3 dither(vec3 color)
 {
-    if (!hasDither)
+    if (!do_dither)
 		return color;
 
     return color + vec3(randZeroMeanTriangle(gl_FragCoord.xy + randomness)/255.0);
@@ -271,12 +279,18 @@ void main() {
 
     vec4 background = vec4(vec3(checkerboard), 1.0);
 
-    vec4 value = texture(image, uv);
-    if (uv.x > 1.0 || uv.y > 1.0 || uv.x < 0.0 || uv.y < 0.0)
+    vec4 value = texture(image, image_uv);
+    if (image_uv.x > 1.0 || image_uv.y > 1.0 || image_uv.x < 0.0 || image_uv.y < 0.0)
         value.a = 0.0;
+    
+    if (has_reference)
+    {
+        vec4 reference_val = texture(reference, reference_uv);
+        if (reference_uv.x > 1.0 || reference_uv.y > 1.0 || reference_uv.x < 0.0 || reference_uv.y < 0.0)
+            reference_val.a = 0.0;
 
-    if (false)
-        vec4 test = blend(value, value);
+        value = blend(value, reference_val);
+    }
 
 	frag_color.a = 1.0;
     frag_color.rgb = mix(background.rgb, dither(tonemap(chooseChannel(gain * value.rgb))), value.a);
@@ -350,14 +364,14 @@ HDRImageView::HDRImageView(Widget *parent)
     m_zoom = 1.f / screen()->pixel_ratio();
     m_offset = nanogui::Vector2f(0.0f);
 
-    render_pass()->set_clear_color(0, Color(0.3f, 0.3f, 0.32f, 1.f));
+    set_background_color(Color(0.15f, 0.15f, 0.15f, 1.f));
     
     try
     {
         m_image_shader = new Shader(
             render_pass(),
             /* An identifying name */
-            "a_simple_shader",
+            "ImageView",
             vertex_shader, add_defines(fragment_shader),
             Shader::BlendMode::AlphaBlend
         );
@@ -381,19 +395,44 @@ HDRImageView::HDRImageView(Widget *parent)
                 Texture::WrapMode::Repeat);
         m_dither_tex->upload((const uint8_t *)dither_matrix256);
         m_image_shader->set_texture("ditherImg", m_dither_tex);
+
+        // m_current_image = new Texture(
+        //         Texture::PixelFormat::R,
+        //         Texture::ComponentFormat::Float32,
+        //         nanogui::Vector2i(256, 256),
+        //         Texture::InterpolationMode::Nearest,
+        //         Texture::InterpolationMode::Nearest,
+        //         Texture::WrapMode::Repeat);
+        // m_image_shader->set_texture("image", m_current_image);
+        m_reference_image = new Texture(
+                Texture::PixelFormat::R,
+                Texture::ComponentFormat::Float32,
+                nanogui::Vector2i(0, 0),
+                Texture::InterpolationMode::Nearest,
+                Texture::InterpolationMode::Nearest,
+                Texture::WrapMode::Repeat);
+        m_image_shader->set_texture("reference", m_reference_image);
     }
     catch(const std::exception& e)
     {
-        std::cerr << e.what() << '\n';
+        spdlog::get("console")->trace("{}", e.what());
     }
 }
 
-void HDRImageView::set_image(Texture *image) {
-    if (image->mag_interpolation_mode() != Texture::InterpolationMode::Nearest)
-        throw std::runtime_error(
-            "HDRImageView::set_image(): interpolation mode must be set to 'Nearest'!");
-    m_image = image;
-    m_image_shader->set_texture("image", m_image);
+void HDRImageView::set_current_image(TextureRef cur)
+{
+    spdlog::get("console")->debug("setting current image: {}", cur);
+    m_current_image = std::move(cur);
+    if (m_current_image)
+        m_image_shader->set_texture("image", m_current_image);
+}
+
+void HDRImageView::set_reference_image(TextureRef ref)
+{
+    spdlog::get("console")->debug("setting reference image: {}", ref);
+    m_reference_image = std::move(ref);
+    if (m_reference_image)
+        m_image_shader->set_texture("reference", m_reference_image);
 }
 
 
@@ -404,13 +443,13 @@ nanogui::Vector2f HDRImageView::center_offset(TextureRef img) const
 
 nanogui::Vector2f HDRImageView::image_coordinate_at(const nanogui::Vector2f& position) const
 {
-	auto image_pos = position - (m_offset + center_offset(m_image));
+	auto image_pos = position - (m_offset + center_offset(m_current_image));
 	return image_pos / m_zoom;
 }
 
 nanogui::Vector2f HDRImageView::position_for_coordinate(const nanogui::Vector2f& imageCoordinate) const
 {
-	return m_zoom * imageCoordinate + (m_offset + center_offset(m_image));
+	return m_zoom * imageCoordinate + (m_offset + center_offset(m_current_image));
 }
 
 nanogui::Vector2f HDRImageView::screen_position_for_coordinate(const nanogui::Vector2f& imageCoordinate) const
@@ -425,9 +464,9 @@ void HDRImageView::set_image_coordinate_at(const nanogui::Vector2f& position, co
 	m_offset = position - (imageCoordinate * m_zoom);
 
 	// Clamp offset so that the image remains near the screen.
-	m_offset = nanogui::max(nanogui::min(m_offset, size_f()), -scaled_image_size_f(m_image));
+	m_offset = nanogui::max(nanogui::min(m_offset, size_f()), -scaled_image_size_f(m_current_image));
 
-	m_offset -= center_offset(m_image);
+	m_offset -= center_offset(m_current_image);
 }
 
 void HDRImageView::image_position_and_scale(nanogui::Vector2f& position, nanogui::Vector2f& scale, TextureRef image)
@@ -444,7 +483,7 @@ void HDRImageView::center()
 void HDRImageView::fit()
 {
 	// Calculate the appropriate scaling factor.
-	nanogui::Vector2f factor(size_f() / image_size_f(m_image));
+	nanogui::Vector2f factor(size_f() / image_size_f(m_current_image));
 	m_zoom = std::min(factor[0], factor[1]);
 	center();
 
@@ -499,14 +538,13 @@ void HDRImageView::zoom_out()
 	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
 	set_image_coordinate_at(centerPosition, centerCoordinate);
 
-    // FIXME after refactor
 	m_zoomCallback(m_zoom);
 }
 
 
 bool HDRImageView::mouse_drag_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int /* button */, int /*modifiers*/)
 {
-    if (!m_enabled || !m_image)
+    if (!m_enabled || !m_current_image)
         return false;
         
     set_image_coordinate_at(p + rel, image_coordinate_at(p));
@@ -544,7 +582,7 @@ bool HDRImageView::scroll_event(const nanogui::Vector2i& p, const nanogui::Vecto
 }
 
 bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int /* modifiers */) {
-    if (!m_enabled || !m_image)
+    if (!m_enabled || !m_current_image)
         return false;
 
     if (action == GLFW_PRESS) {
@@ -556,15 +594,18 @@ bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int /
     return false;
 }
 
-void HDRImageView::draw(NVGcontext *ctx) {
-    if (!m_enabled || !m_image)
-        return;
-
+void HDRImageView::draw(NVGcontext *ctx)
+{
     Canvas::draw(ctx);      // calls HDRImageView draw_contents
 
-    draw_image_border(ctx);
-    draw_pixel_grid(ctx);
-    draw_pixel_info(ctx);
+
+    if (m_current_image)
+    {
+        draw_image_border(ctx);
+        draw_pixel_grid(ctx);
+        draw_pixel_info(ctx);
+    }
+    
     draw_widget_border(ctx);
 }
 
@@ -572,16 +613,19 @@ void HDRImageView::draw(NVGcontext *ctx) {
 
 void HDRImageView::draw_image_border(NVGcontext* ctx) const
 {
+    if (!m_current_image || squared_norm(m_current_image->size()) == 0)
+        return;
+
 	int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 
-	nanogui::Vector2i borderPosition = m_pos + nanogui::Vector2i(m_offset + center_offset(m_image));
-	nanogui::Vector2i borderSize(scaled_image_size_f(m_image));
+	nanogui::Vector2i borderPosition = m_pos + nanogui::Vector2i(m_offset + center_offset(m_current_image));
+	nanogui::Vector2i borderSize(scaled_image_size_f(m_current_image));
 
-	// if (m_referenceImage)
-	// {
-	// 	borderPosition = nanogui::min(borderPosition, m_pos + nanogui::Vector2i(m_offset + center_offset(m_referenceImage)));
-	// 	borderSize = nanogui::max(borderSize, nanogui::Vector2i(scaled_image_size_f(m_referenceImage)));
-	// }
+	if (m_reference_image && squared_norm(m_reference_image->size()) > 0)
+	{
+		borderPosition = nanogui::min(borderPosition, m_pos + nanogui::Vector2i(m_offset + center_offset(m_reference_image)));
+		borderSize = nanogui::max(borderSize, nanogui::Vector2i(scaled_image_size_f(m_reference_image)));
+	}
 
 	// Draw a drop shadow
 	NVGpaint shadowPaint =
@@ -612,6 +656,9 @@ void HDRImageView::draw_image_border(NVGcontext* ctx) const
 
 void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
 {
+    if (!m_current_image)
+        return;
+
     if (!m_drawGrid || (m_gridThreshold == -1) || (m_zoom <= m_gridThreshold))
         return;
 
@@ -622,9 +669,9 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
     {
         nanogui::Vector2f xy0 = screen_position_for_coordinate(nanogui::Vector2f(0.0f));
         int minJ = max(0, int(-xy0.y() / m_zoom));
-        int maxJ = min(m_image->size().y(), int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
+        int maxJ = min(m_current_image->size().y(), int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int minI = max(0, int(-xy0.x() / m_zoom));
-        int maxI = min(m_image->size().x(), int(ceil((screen()->size().x() - xy0.x()) / m_zoom)));
+        int maxI = min(m_current_image->size().x(), int(ceil((screen()->size().x() - xy0.x()) / m_zoom)));
 
         nvgBeginPath(ctx);
 
@@ -653,7 +700,8 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
 }
 
 
-void HDRImageView::draw_widget_border(NVGcontext* ctx) const {
+void HDRImageView::draw_widget_border(NVGcontext* ctx) const
+{
 	// Draw an inner drop shadow. (adapted from nanogui::Window) and tev
 	int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 	NVGpaint shadowPaint =
@@ -686,9 +734,9 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
 
         nanogui::Vector2f xy0 = screen_position_for_coordinate(nanogui::Vector2f(0.0f));
         int minJ = max(0, int(-xy0.y() / m_zoom));
-        int maxJ = min(m_image->size().y() - 1, int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
+        int maxJ = min(m_current_image->size().y() - 1, int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int minI = max(0, int(-xy0.x() / m_zoom));
-        int maxI = min(m_image->size().x() - 1, int(ceil((screen()->size().x() - xy0.x()) / m_zoom)));
+        int maxI = min(m_current_image->size().x() - 1, int(ceil((screen()->size().x() - xy0.x()) / m_zoom)));
 
         float font_size = m_zoom / 31.0f * 7;
         nvgFontFace(ctx, "sans");
@@ -730,31 +778,44 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
     }
 }
 
-void HDRImageView::draw_contents() {
-    
-    if (!m_image)
-        return;
+void HDRImageView::draw_contents()
+{
+    if (m_current_image)
+    {
+        nanogui::Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
+                                     std::generate_canonical<float, 10>(g_rand)*255);
 
-    nanogui::Vector2f pCurrent, sCurrent;
-    image_position_and_scale(pCurrent, sCurrent, m_image);
+        m_image_shader->set_uniform("randomness", randomness);
+        m_image_shader->set_uniform("gain", (float)powf(2.0f, m_exposure));
+        m_image_shader->set_uniform("gamma", m_gamma);
+        m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
+        m_image_shader->set_uniform("do_dither", (bool)m_dither);
 
-	nanogui::Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
-	                             std::generate_canonical<float, 10>(g_rand)*255);
-	m_image_shader->set_uniform("randomness", randomness);
+        nanogui::Vector2f pCurrent, sCurrent;
+        image_position_and_scale(pCurrent, sCurrent, m_current_image);
+        m_image_shader->set_uniform("image_pos", pCurrent);
+        m_image_shader->set_uniform("image_scale", sCurrent);
 
-    m_image_shader->set_uniform("gain", (float)powf(2.0f, m_exposure));
-	m_image_shader->set_uniform("gamma", m_gamma);
-	m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
-    m_image_shader->set_uniform("hasDither", (bool)m_dither);
-	m_image_shader->set_uniform("image_pos", pCurrent);
-	m_image_shader->set_uniform("image_scale", sCurrent);
-    // std::cout << m_channel << std::endl;
-    // m_image_shader->set_uniform("blend_mode", (int)m_blend_mode);
-    m_image_shader->set_uniform("channel", (int)m_channel);
-    // m_image_shader->set_uniform("hasImage", (int)true);
-	// m_image_shader->set_uniform("hasReference", (int)false);
-    
-    m_image_shader->begin();
-    m_image_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
-    m_image_shader->end();
+        m_image_shader->set_uniform("blend_mode", (int)m_blend_mode);
+        m_image_shader->set_uniform("channel", (int)m_channel);
+
+        if (m_reference_image)
+		{
+			nanogui::Vector2f pReference, sReference;
+			image_position_and_scale(pReference, sReference, m_reference_image);
+            m_image_shader->set_uniform("has_reference", true);
+            m_image_shader->set_uniform("reference_pos", pCurrent);
+            m_image_shader->set_uniform("reference_scale", sCurrent);
+		}
+        else
+        {
+            m_image_shader->set_uniform("has_reference", false);
+            m_image_shader->set_uniform("reference_pos", nanogui::Vector2f(1.f,1.f));
+            m_image_shader->set_uniform("reference_scale", nanogui::Vector2f(1.f,1.f));
+        }
+        
+        m_image_shader->begin();
+        m_image_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
+        m_image_shader->end();
+    }
 }

@@ -21,7 +21,8 @@ public:
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
     Color3() = default;
-    Color3(const Color3 & c) : r(c.r), g(c.g), b(c.b) {}
+    // Color3(const Color3 & c) : r(c.r), g(c.g), b(c.b) {}
+    Color3(const Color3 & c) = default;
     Color3(float x, float y, float z) : r(x), g(y), b(z) {}
     explicit Color3(float c) : r(c), g(c), b(c) {}
     explicit Color3(const float* c) : r(c[0]), g(c[1]), b(c[2]) {}
@@ -213,6 +214,7 @@ public:
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
     Color4() = default;
+    Color4(const Color4 & c) = default;
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
     Color4(float g, float a) : Color3(g), a(a) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}

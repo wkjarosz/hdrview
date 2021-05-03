@@ -80,7 +80,4 @@ private:
 
     std::shared_ptr<spdlog::logger> console;
 
-	using ImageHolder = std::shared_ptr<HDRImage>;
-    std::vector<std::pair<ref<Texture>, ImageHolder>> m_images;
-
 };

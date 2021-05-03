@@ -81,7 +81,13 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
 		// Invoke the callback in any case, such that the surrounding code can
 		// react to new references or a loss of a reference image.
 		if (m_reference_callback)
-			m_reference_callback(m_is_reference ? m_id : -1);
+		{
+			cout << "m_is_reference: " << m_is_reference << "; " << m_id << endl;
+			if (m_is_reference)
+				m_reference_callback(m_id-1);
+			else
+				m_reference_callback(-1);
+		}
 
 		return true;
 	}

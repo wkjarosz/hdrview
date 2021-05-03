@@ -23,7 +23,7 @@ using namespace std;
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
 	: Widget(parent),
 	  m_imageModifyDoneRequested(false),
-	  m_imageModifyDoneCallback([](int){}),
+	  m_modify_done_callback([](int){}),
 	  m_numImagesCallback([](){}),
       m_screen(screen),
       m_image_view(img_view)
@@ -196,13 +196,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 			set_reference_image_index(-1);
 		};
 
-	m_imageModifyDoneCallback =
+	m_modify_done_callback =
 		[this](int i)
 		{
 			m_screen->update_caption();
 			request_buttons_update();
 			set_filter(filter());
             request_histogram_update();
+			cout << "modify done for image: " << i << endl;
 		};
 }
 
@@ -252,8 +253,8 @@ void ImageListPanel::repopulate_image_list()
 	{
 		auto btn = new ImageButton(m_imageListWidget, image(i)->filename());
 		btn->set_image_id(i+1);
-		btn->set_selected_callback([&,i](int){set_current_image_index(i);});
-		btn->set_reference_callback([&,i](int){set_reference_image_index(i);});
+		btn->set_selected_callback([&](int j){set_current_image_index(j);});
+		btn->set_reference_callback([&](int j){cout << "setting reference to: " << j << endl; set_reference_image_index(j);});
 
 		m_imageButtons.push_back(btn);
 	}
@@ -290,7 +291,7 @@ void ImageListPanel::update_buttons()
 void ImageListPanel::enable_disable_buttons()
 {
 	bool hasImage = current_image() != nullptr;
-	bool hasValidImage = hasImage && !current_image()->isNull();
+	bool hasValidImage = hasImage && !current_image()->is_null();
 	m_saveButton->set_enabled(hasValidImage);
 	m_closeButton->set_enabled(hasImage);
 }
@@ -346,7 +347,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 
 	if (m_histogramDirty &&
 		current_image() &&
-		!current_image()->isNull() &&
+		!current_image()->is_null() &&
 		current_image()->histograms() &&
 		current_image()->histograms()->ready())
 	{
@@ -399,7 +400,7 @@ void ImageListPanel::update_histogram()
 	m_histogramDirty = true;
 
 	if (current_image())
-		current_image()->recomputeHistograms(m_image_view->exposure());
+		current_image()->recompute_histograms(m_image_view->exposure());
 	else
     {
         m_graph->set_values(std::vector<float>(), 0);
@@ -456,6 +457,7 @@ void ImageListPanel::run_requested_callbacks()
 {
 	if (m_imageModifyDoneRequested.exchange(false))
 	{
+		cout << "run_requested_callbacks (m_imageModifyDoneRequested = true)" << endl;
 		// remove any images that are not being modified and are null
 		bool numImagesChanged = false;
 
@@ -465,7 +467,7 @@ void ImageListPanel::run_requested_callbacks()
 		{
 			int i = it - m_images.begin();
 			auto img = m_images[i];
-			if (img && img->can_modify() && img->isNull())
+			if (img && img->can_modify() && img->is_null())
 			{
 				it = m_images.erase(it);
 
@@ -480,17 +482,20 @@ void ImageListPanel::run_requested_callbacks()
 				++it;
 		}
 
+		m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
+
 		if (numImagesChanged)
 		{
-			// FIXME after migration
-			// m_image_view->set_current_image(current_image());
+			// m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 			m_screen->update_caption();
 
 			m_numImagesCallback();
 		}
 
-		m_imageModifyDoneCallback(m_current);	// TODO: make this use the modified image
+		m_modify_done_callback(m_current);	// TODO: make this use the modified image
 	}
+	// else
+		// cout << "run_requested_callbacks (m_imageModifyDoneRequested = false)" << endl;
 }
 
 shared_ptr<const GLImage> ImageListPanel::image(int index) const
@@ -515,8 +520,7 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 
 	m_previous = m_current;
 	m_current = index;
-	// FIXME after migration
-	// m_image_view->set_current_image(current_image());
+	m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 	m_screen->update_caption();
     update_histogram();
 
@@ -534,8 +538,7 @@ bool ImageListPanel::set_reference_image_index(int index)
 		m_imageButtons[index]->set_is_reference(true);
 
 	m_reference = index;
-	// FIXME after migration
-	// m_image_view->set_reference_image(reference_image());
+	m_image_view->set_reference_image(reference_image() ? reference_image()->texture() : nullptr);
 
 	return true;
 }
@@ -603,8 +606,8 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 	for (auto filename : allFilenames)
 	{
 		shared_ptr<GLImage> image = make_shared<GLImage>();
-		image->setImageModifyDoneCallback([this](){m_imageModifyDoneRequested = true;});
-		image->setFilename(filename);
+		image->set_modify_done_callback([this](){m_imageModifyDoneRequested = true;});
+		image->set_filename(filename);
 		image->asyncModify(
 				[filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 				{
@@ -617,7 +620,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 						spdlog::get("console")->info("Loading \"{}\" failed", filename);
 					return {ret, nullptr};
 				});
-        image->recomputeHistograms(m_image_view->exposure());
+        image->recompute_histograms(m_image_view->exposure());
 		m_images.emplace_back(image);
 	}
 
@@ -632,8 +635,8 @@ bool ImageListPanel::save_image(const string & filename, float exposure, float g
 
     if (current_image()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither))
     {
-        current_image()->setFilename(filename);
-        m_imageModifyDoneCallback(m_current);
+        current_image()->set_filename(filename);
+        m_modify_done_callback(m_current);
 
         return true;
     }
@@ -674,8 +677,7 @@ void ImageListPanel::close_all_images()
 	m_reference = -1;
 	m_previous = -1;
 
-	// FIXME after migration
-    // m_image_view->set_current_image(current_image());
+	m_image_view->set_current_image(nullptr);
     m_screen->update_caption();
 
 	m_numImagesCallback();
@@ -685,6 +687,7 @@ void ImageListPanel::modify_image(const ImageCommand & command)
 {
 	if (current_image())
 	{
+		m_images[m_current]->set_modify_done_callback([this](){m_imageModifyDoneRequested = true;});
 		m_images[m_current]->asyncModify(
 				[command](const shared_ptr<const HDRImage> & img)
 				{
@@ -704,6 +707,7 @@ void ImageListPanel::modify_image(const ImageCommandWithProgress & command)
 {
 	if (current_image())
 	{
+		m_images[m_current]->set_modify_done_callback([this](){m_imageModifyDoneRequested = true;});
 		m_images[m_current]->asyncModify(
 				[command](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
 				{
@@ -722,13 +726,13 @@ void ImageListPanel::modify_image(const ImageCommandWithProgress & command)
 void ImageListPanel::undo()
 {
 	if (current_image() && m_images[m_current]->undo())
-		m_imageModifyDoneCallback(m_current);
+		m_modify_done_callback(m_current);
 }
 
 void ImageListPanel::redo()
 {
 	if (current_image() && m_images[m_current]->redo())
-		m_imageModifyDoneCallback(m_current);
+		m_modify_done_callback(m_current);
 }
 
 

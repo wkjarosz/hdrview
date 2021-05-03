@@ -9,6 +9,7 @@
 #include <nanogui/canvas.h>
 #include <nanogui/texture.h>
 #include "fwd.h"
+#include "glimage.h"
 
 
 using namespace nanogui;
@@ -25,17 +26,12 @@ public:
     /// Initialize the widget
     HDRImageView(Widget *parent);
 
-    /// Return the currently active image
-    Texture *image() { return m_image; }
-    /// Return the currently active image (const version)
-    const Texture *image() const { return m_image.get(); }
-    /// Set the currently active image
-    void set_image(Texture *image);
+
+	void set_current_image(TextureRef cur);
+	void set_reference_image(TextureRef ref);
 
     /// Set the callback that is used to acquire information about pixel components
-    void set_pixel_callback(const PixelCallback &pixel_callback) {
-        m_pixel_callback = pixel_callback;
-    }
+    void set_pixel_callback(const PixelCallback &cb) { m_pixel_callback = cb; }
     /// Return the callback that is used to acquire information about pixel components
     const PixelCallback &pixel_callback() const { return m_pixel_callback; }
 
@@ -50,13 +46,13 @@ public:
     void set_offset(const nanogui::Vector2f &offset) { m_offset = offset; }
 
 	float zoom_sensitivity() const                           { return m_zoomSensitivity; }
-	void set_zoom_sensitivity(float zoom_sensitivity)          { m_zoomSensitivity = zoom_sensitivity; }
+	void set_zoom_sensitivity(float zoom_sensitivity)        { m_zoomSensitivity = zoom_sensitivity; }
 
 	float grid_threshold() const                             { return m_gridThreshold; }
-	void set_grid_threshold(float grid_threshold)              { m_gridThreshold = grid_threshold; }
+	void set_grid_threshold(float grid_threshold)            { m_gridThreshold = grid_threshold; }
 
 	float pixel_info_threshold() const                        { return m_pixelInfoThreshold; }
-	void set_pixel_info_threshold(float pixel_info_threshold)    { m_pixelInfoThreshold = pixel_info_threshold; }
+	void set_pixel_info_threshold(float pixel_info_threshold) { m_pixelInfoThreshold = pixel_info_threshold; }
 
 
 	// Image transformation functions.
@@ -158,9 +154,9 @@ protected:
     nanogui::Vector2f position_f() const                            { return nanogui::Vector2f(m_pos); }
 	nanogui::Vector2f size_f() const                                { return nanogui::Vector2f(m_size); }
 
-	nanogui::Vector2i image_size(TextureRef img) const              { return img ? img->size() : nanogui::Vector2i(0,0); }
-	nanogui::Vector2f image_size_f(TextureRef img) const            { return nanogui::Vector2f(image_size(img)); }
-	nanogui::Vector2f scaled_image_size_f(TextureRef img) const     { return m_zoom * image_size_f(img); }
+	nanogui::Vector2i image_size(TextureRef img) const           	{ return img ? img->size() : nanogui::Vector2i(0,0); }
+	nanogui::Vector2f image_size_f(TextureRef img) const         	{ return nanogui::Vector2f(image_size(img)); }
+	nanogui::Vector2f scaled_image_size_f(TextureRef img) const  	{ return m_zoom * image_size_f(img); }
 
 
 	nanogui::Vector2f center_offset(TextureRef img) const;
@@ -172,11 +168,14 @@ protected:
 	void draw_pixel_grid(NVGcontext* ctx) const;
 	void draw_pixel_info(NVGcontext *ctx) const;
 	void image_position_and_scale(nanogui::Vector2f & position,
-							   nanogui::Vector2f & scale,
-	                           TextureRef image);
+							   	  nanogui::Vector2f & scale,
+	                              TextureRef image);
+
+
+	TextureRef m_current_image;
+	TextureRef m_reference_image;
 
     nanogui::ref<Shader> m_image_shader;
-    TextureRef m_image;
     TextureRef m_dither_tex;
     PixelCallback m_pixel_callback;
 
