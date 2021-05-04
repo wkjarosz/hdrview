@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-16.04]
+        os: [ubuntu-16.04, ubuntu-latest, ubuntu-14.04]
 
     steps:
       - name: Install dependencies
@@ -73,4 +73,4 @@ jobs:
         run: cmake -DCMAKE_SYSTEM_VERSION=10.0.19041.0 .
         
       - name: Build
-        run: msbuild /v:m /p:Configuration=Release HDRView.sln
+        run: msbuild /v:m /p:Configuration=Release hdrview.sln
