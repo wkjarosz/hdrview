@@ -162,7 +162,7 @@ add_executable(hdrbatch
                src/progress.cpp
                src/progress.h
                src/range.h
-               src/Timer.h
+               src/timer.h
                )
 
 
