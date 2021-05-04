@@ -456,7 +456,7 @@ void HSLToRGB(float *R, float *G, float *B, float H, float S, float L)
 	if (L < 0.5f)
 		y = (S > 1) ? 2 * L + S - 1 : L + L * S;
 	else
-		y = (S > 1) ? y = S : L + S - L * S;
+		y = (S > 1) ? S : L + S - L * S;
 	x = 2 * L - y;
 
 	// reconstruct rgb from min,max,hue
