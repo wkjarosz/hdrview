@@ -47,12 +47,12 @@ public:
     int height() const      { return (int)cols(); }
     bool is_null() const     { return rows() == 0 || cols() == 0; }
 
-    void setAlpha(float a)
+    void set_alpha(float a)
     {
         *this = unaryExpr([a](const Color4 & c){return Color4(c.r,c.g,c.b,a);});
     }
 
-    void setChannelFrom(int c, const HDRImage & other)
+    void set_channel_from(int c, const HDRImage & other)
     {
         *this = binaryExpr(other, [c](const Color4 & a, const Color4 & b){Color4 ret = a; ret[c] = b[c]; return ret;});
     }
@@ -85,7 +85,7 @@ public:
         REPEAT,
         MIRROR
     };
-    static const std::vector<std::string> & borderModeNames();
+    static const std::vector<std::string> & border_mode_names();
     Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE);
     const Color4 & pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     //@}
@@ -99,7 +99,7 @@ public:
         BILINEAR,
         BICUBIC
     };
-    static const std::vector<std::string> & samplerNames();
+    static const std::vector<std::string> & sampler_names();
     Color4 sample(float sx, float sy, Sampler s, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     Color4 bilinear(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     Color4 bicubic(float sx, float sy, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
@@ -123,7 +123,7 @@ public:
         BOTTOM_RIGHT,
         NUM_CANVAS_ANCHORS
     };
-    HDRImage resizedCanvas(int width, int height, CanvasAnchor anchor, const Color4 & bgColor) const;
+    HDRImage resized_canvas(int width, int height, CanvasAnchor anchor, const Color4 & bgColor) const;
     HDRImage resized(int width, int height) const;
     HDRImage resampled(int width, int height,
                        AtomicProgress progress = AtomicProgress(),
@@ -136,50 +136,50 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    HDRImage flippedVertical() const    {return rowwise().reverse().eval();}
-    HDRImage flippedHorizontal() const  {return colwise().reverse().eval();}
-    HDRImage rotated90CW() const        {return transpose().colwise().reverse().eval();}
-    HDRImage rotated90CCW() const       {return transpose().rowwise().reverse().eval();}
+    HDRImage flipped_vertical() const    {return rowwise().reverse().eval();}
+    HDRImage flipped_horizontal() const  {return colwise().reverse().eval();}
+    HDRImage rotated_90_cw() const       {return transpose().colwise().reverse().eval();}
+    HDRImage rotated_90_ccw() const      {return transpose().rowwise().reverse().eval();}
     //@}
 
 
     //-----------------------------------------------------------------------
     //@{ \name Bayer demosaicing.
     //-----------------------------------------------------------------------
-    void bayerMosaic(const Eigen::Vector2i &redOffset);
+    void bayer_mosaic(const Eigen::Vector2i &redOffset);
 
-    void demosaicLinear(const Eigen::Vector2i &redOffset)
+    void demosaic_linear(const Eigen::Vector2i &redOffset)
     {
-        demosaicGreenLinear(redOffset);
-        demosaicRedBlueLinear(redOffset);
+        demosaic_green_linear(redOffset);
+        demosaic_red_blue_linear(redOffset);
     }
-    void demosaicGreenGuidedLinear(const Eigen::Vector2i &redOffset)
+    void demosaic_green_guided_linear(const Eigen::Vector2i &redOffset)
     {
-        demosaicGreenLinear(redOffset);
-        demosaicRedBlueGreenGuidedLinear(redOffset);
+        demosaic_green_linear(redOffset);
+        demosaic_red_blue_green_guided_linear(redOffset);
     }
-    void demosaicMalvar(const Eigen::Vector2i &redOffset)
+    void demosaic_malvar(const Eigen::Vector2i &redOffset)
     {
-        demosaicGreenMalvar(redOffset);
-        demosaicRedBlueMalvar(redOffset);
+        demosaic_green_malvar(redOffset);
+        demosaic_red_blue_malvar(redOffset);
     }
     void demosaicAHD(const Eigen::Vector2i &redOffset, const Eigen::Matrix3f &cameraToXYZ);
 
     // green channel
-    void demosaicGreenLinear(const Eigen::Vector2i &redOffset);
-    void demosaicGreenHorizontal(const HDRImage &raw, const Eigen::Vector2i &redOffset);
-    void demosaicGreenVertical(const HDRImage &raw, const Eigen::Vector2i &redOffset);
-    void demosaicGreenMalvar(const Eigen::Vector2i &redOffset);
-    void demosaicGreenPhelippeau(const Eigen::Vector2i &redOffset);
+    void demosaic_green_linear(const Eigen::Vector2i &redOffset);
+    void demosaic_green_horizontal(const HDRImage &raw, const Eigen::Vector2i &redOffset);
+    void demosaic_green_vertical(const HDRImage &raw, const Eigen::Vector2i &redOffset);
+    void demosaic_green_malvar(const Eigen::Vector2i &redOffset);
+    void demosaic_green_phelippeau(const Eigen::Vector2i &redOffset);
 
     // red/blue channels
-    void demosaicRedBlueLinear(const Eigen::Vector2i &redOffset);
-    void demosaicRedBlueGreenGuidedLinear(const Eigen::Vector2i &redOffset);
-    void demosaicRedBlueMalvar(const Eigen::Vector2i &redOffset);
+    void demosaic_red_blue_linear(const Eigen::Vector2i &redOffset);
+    void demosaic_red_blue_green_guided_linear(const Eigen::Vector2i &redOffset);
+    void demosaic_red_blue_malvar(const Eigen::Vector2i &redOffset);
 
-    void demosaicBorder(size_t border);
+    void demosaic_border(size_t border);
 
-    HDRImage medianFilterBayerArtifacts() const;
+    HDRImage median_filter_bayer_artifacts() const;
     //@}
 
 
@@ -187,51 +187,51 @@ public:
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
     HDRImage inverted() const;
-	HDRImage brightnessContrast(float brightness, float contrast, bool linear, EChannel c) const;
+	HDRImage brightness_contrast(float brightness, float contrast, bool linear, EChannel c) const;
     HDRImage convolved(const Eigen::ArrayXXf &kernel,
                        AtomicProgress progress,
                        BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage GaussianBlurred(float sigmaX, float sigmaY,
-                             AtomicProgress progress,
-                             BorderMode mX = EDGE, BorderMode mY = EDGE,
-                             float truncateX = 6.0f, float truncateY = 6.0f) const;
-    HDRImage GaussianBlurredX(float sigmaX,
+    HDRImage gaussian_blurred(float sigmaX, float sigmaY,
                               AtomicProgress progress,
-                              BorderMode mode = EDGE, float truncateX = 6.0f) const;
-    HDRImage GaussianBlurredY(float sigmaY,
-                              AtomicProgress progress,
-                              BorderMode mode = EDGE, float truncateY = 6.0f) const;
-    HDRImage iteratedBoxBlurred(float sigma, int iterations = 6, AtomicProgress progress = AtomicProgress(), BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage fastGaussianBlurred(float sigmaX, float sigmaY,
+                              BorderMode mX = EDGE, BorderMode mY = EDGE,
+                              float truncateX = 6.0f, float truncateY = 6.0f) const;
+    HDRImage gaussian_blurred_x(float sigmaX,
+                                AtomicProgress progress,
+                                BorderMode mode = EDGE, float truncateX = 6.0f) const;
+    HDRImage gaussian_blurred_y(float sigmaY,
+                                AtomicProgress progress,
+                                BorderMode mode = EDGE, float truncateY = 6.0f) const;
+    HDRImage iterated_box_blurred(float sigma, int iterations = 6, AtomicProgress progress = AtomicProgress(), BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage fast_gaussian_blurred(float sigmaX, float sigmaY,
                                  AtomicProgress progress,
                                  BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage boxBlurred(int w, AtomicProgress progress,
+    HDRImage box_blurred(int w, AtomicProgress progress,
                         BorderMode mX = EDGE, BorderMode mY = EDGE) const
     {
-        return boxBlurred(w, w, progress, mX, mY);
+        return box_blurred(w, w, progress, mX, mY);
     }
-    HDRImage boxBlurred(int hw, int hh, AtomicProgress progress,
+    HDRImage box_blurred(int hw, int hh, AtomicProgress progress,
                         BorderMode mX = EDGE, BorderMode mY = EDGE) const
     {
-        return boxBlurredX(hw, AtomicProgress(progress, 0.5f), mX).boxBlurredY(hh, AtomicProgress(progress, 0.5f), mY);
+        return box_blurred_x(hw, AtomicProgress(progress, 0.5f), mX).box_blurred_y(hh, AtomicProgress(progress, 0.5f), mY);
     }
-    HDRImage boxBlurredX(int leftSize, int rightSize, AtomicProgress progress, BorderMode mode = EDGE) const;
-    HDRImage boxBlurredX(int halfSize, AtomicProgress progress,
-                         BorderMode mode = EDGE) const {return boxBlurredX(halfSize, halfSize, progress, mode);}
-    HDRImage boxBlurredY(int upSize, int downSize, AtomicProgress progress, BorderMode mode = EDGE) const;
-    HDRImage boxBlurredY(int halfSize, AtomicProgress progress,
-                         BorderMode mode = EDGE) const {return boxBlurredY(halfSize, halfSize, progress, mode);}
-    HDRImage unsharpMasked(float sigma, float strength, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
-    HDRImage medianFiltered(float radius, int channel, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const;
-    HDRImage medianFiltered(float r, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const
+    HDRImage box_blurred_x(int leftSize, int rightSize, AtomicProgress progress, BorderMode mode = EDGE) const;
+    HDRImage box_blurred_x(int halfSize, AtomicProgress progress,
+                         BorderMode mode = EDGE) const {return box_blurred_x(halfSize, halfSize, progress, mode);}
+    HDRImage box_blurred_y(int upSize, int downSize, AtomicProgress progress, BorderMode mode = EDGE) const;
+    HDRImage box_blurred_y(int halfSize, AtomicProgress progress,
+                         BorderMode mode = EDGE) const {return box_blurred_y(halfSize, halfSize, progress, mode);}
+    HDRImage unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    HDRImage median_filtered(float radius, int channel, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const;
+    HDRImage median_filtered(float r, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE, bool round = false) const
     {
-        return medianFiltered(r, 0, AtomicProgress(progress, 0.25f), mX, mY, round)
-            .medianFiltered(r, 1, AtomicProgress(progress, 0.25f), mX, mY, round)
-            .medianFiltered(r, 2, AtomicProgress(progress, 0.25f), mX, mY, round)
-            .medianFiltered(r, 3, AtomicProgress(progress, 0.25f), mX, mY, round);
+        return median_filtered(r, 0, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .median_filtered(r, 1, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .median_filtered(r, 2, AtomicProgress(progress, 0.25f), mX, mY, round)
+            .median_filtered(r, 3, AtomicProgress(progress, 0.25f), mX, mY, round);
     }
-    HDRImage bilateralFiltered(float sigmaRange/* = 0.1f*/,
-                               float sigmaDomain/* = 1.0f*/,
+    HDRImage bilateral_filtered(float sigma_range/* = 0.1f*/,
+                               float sigma_domain/* = 1.0f*/,
                                AtomicProgress progress,
                                BorderMode mX = EDGE, BorderMode mY = EDGE,
                                float truncateDomain = 6.0f) const;

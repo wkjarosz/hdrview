@@ -50,43 +50,6 @@ struct ImageStatistics
 	static std::shared_ptr<ImageStatistics> computeStatistics(const HDRImage &img, float exposure);
 };
 
-
-// /*!
-//  * A helper class that uploads a texture to the GPU incrementally in smaller chunks.
-//  * To avoid stalling the main rendering thread, chunks are uploaded until a
-//  * timeout has been reached.
-//  */
-// class LazyGLTextureLoader
-// {
-// public:
-// 	~LazyGLTextureLoader();
-
-// 	bool dirty() const {return m_dirty;}
-// 	void setDirty() {m_dirty = true; m_nextScanline = 0; m_uploadTime = 0;}
-
-// 	/*!
-// 	 * Incrementally upload a portion of an image to the GPU, returning shortly after the
-// 	 * specified timeout duration. Should be called repeatedly until it returns True.
-// 	 *
-// 	 * @param img 		The image to upload
-// 	 * @param timeout 	Return after this many milliseconds
-// 	 * @param mipLevel 	Which miplevel to upload
-// 	 * @param chunkSize The target number of pixels to upload
-// 	 * @return 			True iff uploading is done
-// 	 */
-// 	bool upload_to_GPU(const std::shared_ptr<const HDRImage> & img,
-// 	                 int timeout = 100,
-// 	                 int chunkSize = 128 * 128);
-
-// 	GLuint textureID() const {return m_texture;}
-
-// private:
-// 	GLuint m_texture = 0;
-// 	int m_nextScanline = -1;
-// 	bool m_dirty = false;
-// 	double m_uploadTime = 0.0;
-// };
-
 /*!
     A class which encapsulates a single HDRImage, a corresponding GPU texture, and histogram.
     Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
@@ -107,8 +70,8 @@ public:
 
 	bool can_modify() const;
 	float progress() const;
-    void asyncModify(const ImageCommand & command);
-	void asyncModify(const ImageCommandWithProgress & command);
+    void async_modify(const ImageCommand & command);
+	void async_modify(const ImageCommandWithProgress & command);
     bool is_modified() const;
     bool undo();
     bool redo();
@@ -128,7 +91,6 @@ public:
 		return p[0] >= 0 && p[1] >= 0 && p[0] < size()[0] && p[1] < size()[1];
 	}
 
-    bool load(const std::string & filename);
     bool save(const std::string & filename,
               float gain, float gamma,
               bool sRGB, bool dither) const;
@@ -136,12 +98,12 @@ public:
 	bool check_async_result() const;
 	void upload_to_GPU() const;
 
-	float histogram_exposure() const            { return m_cachedHistogramExposure; }
-	// bool histogram_dirty() const                { return m_histogramDirty; }
+	float histogram_exposure() const            { return m_cached_histogram_exposure; }
+	// bool histogram_dirty() const                { return m_histogram_dirty; }
 	LazyHistogramPtr histograms() const         { return m_histograms; }
 	void recompute_histograms(float exposure) const;
 
-	/// Callback executed whenever an image finishes being modified, e.g. via @ref asyncModify
+	/// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify
 	const VoidVoidFunc & modify_done_callback() const            { return m_modify_done_callback; }
 	void set_modify_done_callback(const VoidVoidFunc & callback)  { m_modify_done_callback = callback; }
 
@@ -154,13 +116,13 @@ private:
 	mutable TextureRef m_texture;
 	mutable bool m_texture_dirty = false;
     std::string m_filename;
-    mutable float m_cachedHistogramExposure;
-    mutable std::atomic<bool> m_histogramDirty;
+    mutable float m_cached_histogram_exposure;
+    mutable std::atomic<bool> m_histogram_dirty;
 	mutable LazyHistogramPtr m_histograms;
     mutable CommandHistory m_history;
 
-	mutable ModifyingTask m_asyncCommand = nullptr;
-	mutable bool m_asyncRetrieved = false;
+	mutable ModifyingTask m_async_command = nullptr;
+	mutable bool m_async_retrieved = false;
 
 	// various callback functions
 	VoidVoidFunc m_modify_done_callback;

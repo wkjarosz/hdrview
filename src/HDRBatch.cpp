@@ -311,22 +311,22 @@ int main(int argc, char **argv)
             AtomicProgress progress;
             if (filterType == "gaussian")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .GaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "box")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .boxBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .box_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "fast-gaussian")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .fastGaussianBlurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .fast_gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "median")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .medianFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .median_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "bilateral")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .bilateralFiltered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .bilateral_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else if (filterType == "unsharp")
                 filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .unsharpMasked(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                    .unsharp_masked(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -564,7 +564,7 @@ int main(int argc, char **argv)
                 Color4 meanError = image.mean();
                 Color4 maxError = image.max();
 
-                image.setAlpha(1.0f);
+                image.set_alpha(1.0f);
 
                 console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
                 console->info(fmt::format("Max {} error: {}.", errorType, maxError));

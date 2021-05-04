@@ -105,7 +105,7 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
 
 			m_is_selected = true;
 			if (m_selected_callback)
-				m_selected_callback(m_id);
+				m_selected_callback(m_id-1);
 		}
 		return true;
 	}

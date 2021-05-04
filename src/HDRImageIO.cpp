@@ -388,13 +388,13 @@ bool HDRImage::load(const string & filename)
 		// now rotate image based on stored orientation
 		switch (orientation)
 		{
-			case ORIENTATION_TOPRIGHT: *this = flippedHorizontal(); break;
-			case ORIENTATION_BOTRIGHT: *this = flippedVertical().flippedHorizontal(); break;
-			case ORIENTATION_BOTLEFT : *this = flippedVertical(); break;
-			case ORIENTATION_LEFTTOP : *this = rotated90CCW().flippedVertical(); break;
-			case ORIENTATION_RIGHTTOP: *this = rotated90CW(); break;
-			case ORIENTATION_RIGHTBOT: *this = rotated90CW().flippedVertical(); break;
-			case ORIENTATION_LEFTBOT : *this = rotated90CCW(); break;
+			case ORIENTATION_TOPRIGHT: *this = flipped_horizontal(); break;
+			case ORIENTATION_BOTRIGHT: *this = flipped_vertical().flipped_horizontal(); break;
+			case ORIENTATION_BOTLEFT : *this = flipped_vertical(); break;
+			case ORIENTATION_LEFTTOP : *this = rotated_90_ccw().flipped_vertical(); break;
+			case ORIENTATION_RIGHTTOP: *this = rotated_90_cw(); break;
+			case ORIENTATION_RIGHTBOT: *this = rotated_90_cw().flipped_vertical(); break;
+			case ORIENTATION_LEFTBOT : *this = rotated_90_ccw(); break;
 			default: break;// none (0), or ORIENTATION_TOPLEFT
 		}
 
@@ -656,9 +656,9 @@ HDRImage develop(vector<float> & raw,
 	});
 
 	// demosaic
-//	developed.demosaicLinear(redOffset);
-//	developed.demosaicGreenGuidedLinear(redOffset);
-//	developed.demosaicMalvar(redOffset);
+//	developed.demosaic_linear(redOffset);
+//	developed.demosaic_green_guided_linear(redOffset);
+//	developed.demosaic_malvar(redOffset);
 	developed.demosaicAHD(redOffset, XYZD50ToXYZD65 * CameraToXYZD50);
 
 	// color correction

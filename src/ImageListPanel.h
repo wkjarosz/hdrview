@@ -92,36 +92,36 @@ private:
 
 	int m_previous = -1;			///< The previously selected image
 
-	std::atomic<bool> m_imageModifyDoneRequested;
+	bool m_image_modify_done_requested = false;
 
 	// various callback functions
 	std::function<void(int)> m_modify_done_callback;
-	std::function<void()> m_numImagesCallback;
-	std::function<void()> m_currentImageCallback;
-	std::function<void()> m_referenceImageCallback;
+	std::function<void()> m_num_images_callback;
+	std::function<void()> m_current_image_callback;
+	std::function<void()> m_reference_image_callback;
 
 
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageView * m_image_view = nullptr;
-	Button * m_saveButton = nullptr;
-	Button * m_closeButton = nullptr;
-	Button * m_bringForwardButton = nullptr;
-	Button * m_sendBackwardButton = nullptr;
+	Button * m_save_btn = nullptr;
+	Button * m_close_btn = nullptr;
+	Button * m_bring_forward_btn = nullptr;
+	Button * m_send_backward_btn = nullptr;
 	TextBox * m_filter = nullptr;
-	Button* m_eraseButton = nullptr;
-	Button* m_regexButton = nullptr;
-	Button * m_useShortButton = nullptr;
-	Widget * m_imageListWidget = nullptr;
-	ComboBox * m_blendModes = nullptr;
+	Button* m_erase_btn = nullptr;
+	Button* m_regex_btn = nullptr;
+	Button * m_use_short_btn = nullptr;
+	Widget * m_image_list_widget = nullptr;
+	ComboBox * m_blend_modes = nullptr;
 	ComboBox * m_channels = nullptr;
-	std::vector<ImageButton*> m_imageButtons;
+	std::vector<ImageButton*> m_image_btns;
 
-	ComboBox * m_xAxisScale = nullptr,
-			 * m_yAxisScale = nullptr;
+	ComboBox * m_xaxis_scale = nullptr,
+			 * m_yaxis_scale = nullptr;
 	MultiGraph * m_graph = nullptr;
-	bool m_histogramDirty = false;
-	bool m_histogramUpdateRequested = false;
-	bool m_updateFilterRequested = true;
-	bool m_buttonsUpdateRequested = true;
-	double m_histogramRequestTime;
+	bool m_histogram_dirty = false;
+	bool m_histogram_update_requested = false;
+	bool m_update_filter_requested = true;
+	bool m_buttons_update_requested = true;
+	double m_histogram_request_time;
 };

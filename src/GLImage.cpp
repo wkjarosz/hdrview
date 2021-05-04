@@ -94,104 +94,11 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 	return ret;
 }
 
-
-
-// LazyGLTextureLoader::~LazyGLTextureLoader()
-// {
-// 	if (m_texture)
-// 		glDeleteTextures(1, &m_texture);
-// }
-
-// bool LazyGLTextureLoader::upload_to_GPU(const std::shared_ptr<const HDRImage> &img,
-//                                       int milliseconds,
-//                                       int chunkSize)
-// {
-// 	if (img->is_null())
-// 	{
-// 		m_dirty = false;
-// 		return false;
-// 	}
-
-// 	// check if we need to upload the image to the GPU
-// 	if (!m_dirty && m_texture)
-// 		return false;
-
-// 	Timer timer;
-// 	// Allocate texture memory for the image
-// 	if (!m_texture)
-// 		glGenTextures(1, &m_texture);
-
-// 	glBindTexture(GL_TEXTURE_2D, m_texture);
-
-// 	// allocate a new texture and set parameters only if this is the first scanline
-// 	if (m_nextScanline == 0)
-// 	{
-// 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-// 		             img->width(), img->height(),
-// 		             0, GL_RGBA, GL_FLOAT, nullptr);
-
-// 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-// //		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-// 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-// 		glPixelStorei(GL_UNPACK_ROW_LENGTH, img->width());
-// 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-// 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-// 		const GLfloat borderColor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-// 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-// 	}
-
-// 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-
-// 	int maxLines = max(1, chunkSize / img->width());
-// 	while (true)
-// 	{
-// 		// compute tile size, accounting for partial tiles at boundary
-// 		int remaining = img->height() - m_nextScanline;
-// 		int numLines = std::min(maxLines, remaining);
-
-// 		glPixelStorei(GL_UNPACK_SKIP_ROWS, m_nextScanline);
-// 		glTexSubImage2D(GL_TEXTURE_2D,
-// 		                0,		                     // level
-// 		                0, m_nextScanline,	         // xoffset, yoffset
-// 		                img->width(), numLines,      // tile width and height
-// 		                GL_RGBA,			         // format
-// 		                GL_FLOAT,		             // type
-// 		                (const GLvoid *) img->data());
-
-// 		m_nextScanline += maxLines;
-
-// 		if (m_nextScanline >= img->height())
-// 		{
-// 			// done
-// 			m_nextScanline = -1;
-// 			m_dirty = false;
-// 			break;
-// 		}
-// 		if (timer.elapsed() > milliseconds)
-// 			break;
-// 	}
-
-// 	m_uploadTime += timer.lap();
-
-// 	if (!m_dirty)
-// 	{
-// 		spdlog::get("console")->trace("Uploading texture to GPU took {} ms", m_uploadTime);
-// 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 1000);
-// 		glGenerateMipmap(GL_TEXTURE_2D);  //Generate num_mipmaps number of mipmaps here.
-// 		spdlog::get("console")->trace("Generating mipmaps took {} ms", timer.lap());
-// 	}
-
-// 	return !m_dirty;
-// }
-
-
-
 GLImage::GLImage() :
     m_image(make_shared<HDRImage>()),
     m_filename(),
-    m_cachedHistogramExposure(NAN),
-    m_histogramDirty(true),
+    m_cached_histogram_exposure(NAN),
+    m_histogram_dirty(true),
     m_modify_done_callback(GLImage::VoidVoidFunc())
 {
     m_texture = new Texture(Texture::PixelFormat::RGBA,
@@ -211,7 +118,7 @@ GLImage::~GLImage()
 float GLImage::progress() const
 {
 	check_async_result();
-	return m_asyncCommand ? m_asyncCommand->progress() : 1.0f;
+	return m_async_command ? m_async_command->progress() : 1.0f;
 }
 bool GLImage::is_modified() const    { check_async_result(); return m_history.is_modified(); }
 bool GLImage::has_undo() const       { check_async_result(); return m_history.has_undo(); }
@@ -219,27 +126,27 @@ bool GLImage::has_redo() const       { check_async_result(); return m_history.ha
 
 bool GLImage::can_modify() const
 {
-	return !m_asyncCommand;
+	return !m_async_command;
 }
 
-void GLImage::asyncModify(const ImageCommandWithProgress & command)
+void GLImage::async_modify(const ImageCommandWithProgress & command)
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
 
-	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,command](AtomicProgress & prog){return command(m_image, prog);});
-	m_asyncRetrieved = false;
-	m_asyncCommand->compute();
+	m_async_command = make_shared<AsyncTask<ImageCommandResult>>([this,command](AtomicProgress & prog){return command(m_image, prog);});
+	m_async_retrieved = false;
+	m_async_command->compute();
 }
 
-void GLImage::asyncModify(const ImageCommand &command)
+void GLImage::async_modify(const ImageCommand &command)
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
 
-	m_asyncCommand = make_shared<AsyncTask<ImageCommandResult>>([this,command](void){return command(m_image);});
-	m_asyncRetrieved = false;
-	m_asyncCommand->compute();
+	m_async_command = make_shared<AsyncTask<ImageCommandResult>>([this,command](void){return command(m_image);});
+	m_async_retrieved = false;
+	m_async_command->compute();
 }
 
 bool GLImage::undo()
@@ -249,8 +156,9 @@ bool GLImage::undo()
 
 	if (m_history.undo(m_image))
 	{
-		m_histogramDirty = true;
+		m_histogram_dirty = true;
 		m_texture_dirty = true;
+		upload_to_GPU();
 		return true;
 	}
 	return false;
@@ -263,8 +171,9 @@ bool GLImage::redo()
 
 	if (m_history.redo(m_image))
 	{
-		m_histogramDirty = true;
+		m_histogram_dirty = true;
 		m_texture_dirty = true;
+		upload_to_GPU();
 		return true;
 	}
 	return false;
@@ -272,7 +181,7 @@ bool GLImage::redo()
 
 bool GLImage::check_async_result() const
 {
-	if (!m_asyncCommand || !m_asyncCommand->ready())
+	if (!m_async_command || !m_async_command->ready())
 		return false;
 
 	return wait_for_async_result();
@@ -280,7 +189,7 @@ bool GLImage::check_async_result() const
 
 void GLImage::modify_done() const
 {
-	m_asyncCommand = nullptr;
+	m_async_command = nullptr;
 	if (m_modify_done_callback)
 		m_modify_done_callback();
 }
@@ -289,13 +198,13 @@ void GLImage::modify_done() const
 bool GLImage::wait_for_async_result() const
 {
 	// nothing to wait for
-	if (!m_asyncCommand)
+	if (!m_async_command)
 		return false;
 
-	if (!m_asyncRetrieved)
+	if (!m_async_retrieved)
 	{
 		// now retrieve the result and copy it out of the async task
-		auto result = m_asyncCommand->get();
+		auto result = m_async_command->get();
 
 		// if there is no undo, treat this as an image load
 		if (!result.second)
@@ -312,8 +221,8 @@ bool GLImage::wait_for_async_result() const
 			m_image = result.first;
 		}
 
-		m_asyncRetrieved = true;
-		m_histogramDirty = true;
+		m_async_retrieved = true;
+		m_histogram_dirty = true;
 		m_texture_dirty = true;
 
 		if (!result.first)
@@ -325,7 +234,7 @@ bool GLImage::wait_for_async_result() const
 	}
 
 	// now set the progress bar to busy as we upload to GPU
-	m_asyncCommand->set_progress(-1.f);
+	m_async_command->set_progress(-1.f);
 
 	upload_to_GPU();
 
@@ -366,18 +275,6 @@ GLImage::TextureRef GLImage::texture()
 }
 
 
-bool GLImage::load(const std::string & filename)
-{
-	// make sure any pending edits are done
-	wait_for_async_result();
-
-    m_history = CommandHistory();
-    m_filename = filename;
-    m_histogramDirty = true;
-	m_texture_dirty = true;
-    return m_image->load(filename);
-}
-
 bool GLImage::save(const std::string & filename,
                    float gain, float gamma,
                    bool sRGB, bool dither) const
@@ -389,7 +286,6 @@ bool GLImage::save(const std::string & filename,
     	return false;
 
 	m_history.mark_saved();
-//	set_filename(filename);
 
     return true;
 }
@@ -398,7 +294,7 @@ void GLImage::recompute_histograms(float exposure) const
 {
 	check_async_result();
 
-    if ((!m_histograms || m_histogramDirty || exposure != m_cachedHistogramExposure) && !m_image->is_null())
+    if ((!m_histograms || m_histogram_dirty || exposure != m_cached_histogram_exposure) && !m_image->is_null())
     {
         m_histograms = make_shared<LazyHistogram>(
 	        [this,exposure](void)
@@ -406,7 +302,7 @@ void GLImage::recompute_histograms(float exposure) const
 		        return ImageStatistics::computeStatistics(*m_image, exposure);
 	        });
         m_histograms->compute();
-        m_histogramDirty = false;
-        m_cachedHistogramExposure = exposure;
+        m_histogram_dirty = false;
+        m_cached_histogram_exposure = exposure;
     }
 }

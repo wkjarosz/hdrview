@@ -81,7 +81,7 @@ public:
 
     int current_state() const    {return m_currentState;}
     int saved_state() const      {return m_savedState;}
-    int size() const            {return m_history.size();}
+    int size() const             {return m_history.size();}
     bool has_undo() const        {return m_currentState > 0;}
     bool has_redo() const        {return m_currentState < size();}
 

@@ -15,6 +15,7 @@
 #include "helpwindow.h"
 #define NOMINMAX
 #include <tinydir.h>
+#include <thread>
 
 using namespace std;
 
@@ -50,77 +51,77 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	// Construct the top-level widgets
 	//
 
-	m_topPanel = new Window(this, "");
-	m_topPanel->set_theme(panelTheme);
-	m_topPanel->set_position(nanogui::Vector2i(0,0));
-	m_topPanel->set_fixed_height(30);
-	m_topPanel->set_layout(new BoxLayout(Orientation::Horizontal,
+	m_top_panel = new Window(this, "");
+	m_top_panel->set_theme(panelTheme);
+	m_top_panel->set_position(nanogui::Vector2i(0,0));
+	m_top_panel->set_fixed_height(30);
+	m_top_panel->set_layout(new BoxLayout(Orientation::Horizontal,
 	                                    Alignment::Middle, 5, 5));
 
-	m_sidePanel = new Window(this, "");
-	m_sidePanel->set_theme(panelTheme);
+	m_side_panel = new Window(this, "");
+	m_side_panel->set_theme(panelTheme);
 
-	image_view = new ::HDRImageView(this);
-	image_view->set_grid_threshold(10);
-	image_view->set_pixel_info_threshold(40);
+	m_image_view = new ::HDRImageView(this);
+	m_image_view->set_grid_threshold(10);
+	m_image_view->set_pixel_info_threshold(40);
 
 
-	m_statusBar = new Window(this, "");
-	m_statusBar->set_theme(panelTheme);
-	m_statusBar->set_fixed_height(m_statusBar->theme()->m_text_box_font_size+1);
+	m_status_bar = new Window(this, "");
+	m_status_bar->set_theme(panelTheme);
+	m_status_bar->set_fixed_height(m_status_bar->theme()->m_text_box_font_size+1);
 
     //
     // create status bar widgets
     //
 
-	m_pixelInfoLabel = new Label(m_statusBar, "", "sans");
-	m_pixelInfoLabel->set_font_size(thm->m_text_box_font_size);
-	m_pixelInfoLabel->set_position(nanogui::Vector2i(6, 0));
+	m_pixel_info_label = new Label(m_status_bar, "", "sans");
+	m_pixel_info_label->set_font_size(thm->m_text_box_font_size);
+	m_pixel_info_label->set_position(nanogui::Vector2i(6, 0));
 
-	m_zoomLabel = new Label(m_statusBar, "100% (1 : 1)", "sans");
-	m_zoomLabel->set_font_size(thm->m_text_box_font_size);
+	m_zoom_label = new Label(m_status_bar, "100% (1 : 1)", "sans");
+	m_zoom_label->set_font_size(thm->m_text_box_font_size);
 
     //
     // create side panel widgets
     //
 
-	m_sideScrollPanel = new VScrollPanel(m_sidePanel);
-	m_sidePanelContents = new Widget(m_sideScrollPanel);
-	m_sidePanelContents->set_layout(new BoxLayout(Orientation::Vertical,
+	m_side_scroll_panel = new VScrollPanel(m_side_panel);
+	m_side_panel_contents = new Widget(m_side_scroll_panel);
+	m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_sidePanelContents->set_fixed_width(213);
-	m_sideScrollPanel->set_fixed_width(m_sidePanelContents->fixed_width() + 12);
-	m_sidePanel->set_fixed_width(m_sideScrollPanel->fixed_width());
+	m_side_panel_contents->set_fixed_width(213);
+	m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
+	m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
 
     //
     // create file/images panel
     //
 
-    auto btn = new Button(m_sidePanelContents, "File", FA_CHEVRON_DOWN);
+    auto btn = new Button(m_side_panel_contents, "File", FA_CHEVRON_DOWN);
 	btn->set_flags(Button::ToggleButton);
 	btn->set_pushed(true);
 	btn->set_font_size(18);
 	btn->set_icon_position(Button::IconPosition::Right);
-    m_imagesPanel = new ImageListPanel(m_sidePanelContents, this, image_view);
+    m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
 
 	btn->set_change_callback([this,btn](bool value)
                          {
 	                         btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
-	                         m_imagesPanel->set_visible(value);
+	                         m_images_panel->set_visible(value);
                              update_layout();
-                             m_sidePanelContents->perform_layout(m_nvg_context);
+                             m_side_panel_contents->perform_layout(m_nvg_context);
                          });
 
     //
     // create edit panel
     //
 
-	btn = new Button(m_sidePanelContents, "Edit", FA_CHEVRON_LEFT);
+	btn = new Button(m_side_panel_contents, "Edit", FA_CHEVRON_LEFT);
 	btn->set_flags(Button::ToggleButton);
 	btn->set_font_size(18);
 	btn->set_icon_position(Button::IconPosition::Right);
 
-	auto editPanel = new EditImagePanel(m_sidePanelContents, this, m_imagesPanel);
+	auto editPanel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
 	editPanel->set_visible(false);
 
 	btn->set_change_callback([this,btn,editPanel](bool value)
@@ -128,7 +129,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
 		 editPanel->set_visible(value);
 		 update_layout();
-		 m_sidePanelContents->perform_layout(m_nvg_context);
+		 m_side_panel_contents->perform_layout(m_nvg_context);
 	 });
 	editPanel->perform_layout(m_nvg_context);
 
@@ -136,55 +137,56 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create top panel controls
     //
 
-	m_helpButton = new Button{m_topPanel, "", FA_QUESTION};
-	m_helpButton->set_fixed_size(nanogui::Vector2i(25, 25));
-	m_helpButton->set_change_callback([this](bool) { toggle_help_window(); });
-	m_helpButton->set_tooltip("Information about using HDRView.");
-	m_helpButton->set_flags(Button::ToggleButton);
+	m_help_button = new Button{m_top_panel, "", FA_QUESTION};
+	m_help_button->set_fixed_size(nanogui::Vector2i(25, 25));
+	m_help_button->set_change_callback([this](bool) { toggle_help_window(); });
+	m_help_button->set_tooltip("Information about using HDRView.");
+	m_help_button->set_flags(Button::ToggleButton);
 
-    m_sidePanelButton = new Button(m_topPanel, "", FA_BARS);
-    new Label(m_topPanel, "EV", "sans-bold");
-    auto exposureSlider = new Slider(m_topPanel);
-    auto exposureTextBox = new FloatBox<float>(m_topPanel, exposure);
-	auto normalizeButton = new Button(m_topPanel, "", FA_BOLT);
+    m_side_panel_button = new Button(m_top_panel, "", FA_BARS);
+    new Label(m_top_panel, "EV", "sans-bold");
+    auto exposureSlider = new Slider(m_top_panel);
+    auto exposureTextBox = new FloatBox<float>(m_top_panel, exposure);
+	auto normalizeButton = new Button(m_top_panel, "", FA_BOLT);
 	normalizeButton->set_fixed_size(nanogui::Vector2i(19, 19));
 	normalizeButton->set_callback([this]()
 	                             {
-		                             auto img = m_imagesPanel->current_image();
+		                             auto img = m_images_panel->current_image();
 		                             if (!img)
 			                             return;
 		                             Color4 mC = img->image().max();
 		                             float mCf = max(mC[0], mC[1], mC[2]);
 		                             console->debug("max value: {}", mCf);
-		                             image_view->set_exposure(log2(1.0f/mCf));
-		                             m_imagesPanel->request_histogram_update(true);
+		                             m_image_view->set_exposure(log2(1.0f/mCf));
+		                             m_images_panel->request_histogram_update(true);
 	                             });
 	normalizeButton->set_tooltip("Normalize exposure.");
-	auto resetButton = new Button(m_topPanel, "", FA_SYNC);
+	auto resetButton = new Button(m_top_panel, "", FA_SYNC);
 	resetButton->set_fixed_size(nanogui::Vector2i(19, 19));
 	resetButton->set_callback([this]()
 	                             {
-		                             image_view->set_exposure(0.0f);
-		                             image_view->set_gamma(2.2f);
-		                             image_view->set_sRGB(true);
-		                             m_imagesPanel->request_histogram_update(true);
+		                             m_image_view->set_exposure(0.0f);
+		                             m_image_view->set_gamma(2.2f);
+		                             m_image_view->set_sRGB(true);
+		                             m_images_panel->request_histogram_update(true);
 	                             });
 	resetButton->set_tooltip("Reset tonemapping.");
 
-    auto sRGBCheckbox = new CheckBox(m_topPanel, "sRGB   ");
-    auto gammaLabel = new Label(m_topPanel, "Gamma", "sans-bold");
-    auto gammaSlider = new Slider(m_topPanel);
-    auto gammaTextBox = new FloatBox<float>(m_topPanel);
+    auto sRGBCheckbox = new CheckBox(m_top_panel, "sRGB   ");
+    auto gammaLabel = new Label(m_top_panel, "Gamma", "sans-bold");
+    auto gammaSlider = new Slider(m_top_panel);
+    auto gammaTextBox = new FloatBox<float>(m_top_panel);
 
-    m_sidePanelButton->set_tooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
-    m_sidePanelButton->set_flags(Button::ToggleButton);
-	m_sidePanelButton->set_pushed(true);
-    m_sidePanelButton->set_fixed_size(nanogui::Vector2i(25, 25));
-    m_sidePanelButton->set_change_callback([this](bool value)
+    m_side_panel_button->set_tooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
+    m_side_panel_button->set_flags(Button::ToggleButton);
+	m_side_panel_button->set_pushed(true);
+    m_side_panel_button->set_fixed_size(nanogui::Vector2i(25, 25));
+    m_side_panel_button->set_change_callback([this](bool value)
     {
-	    m_guiAnimationStart = glfwGetTime();
-	    m_guiTimerRunning = true;
-	    m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
+	    m_gui_animation_start = glfwGetTime();
+		push_gui_refresh();
+		m_animation_running = true;
+	    m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
         update_layout();
     });
 
@@ -197,16 +199,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     exposureTextBox->set_alignment(TextBox::Alignment::Right);
     exposureTextBox->set_callback([this](float e)
                                  {
-	                                 image_view->set_exposure(e);
+	                                 m_image_view->set_exposure(e);
                                  });
     exposureSlider->set_callback([this](float v)
 						        {
-							        image_view->set_exposure(round(4*v) / 4.0f);
+							        m_image_view->set_exposure(round(4*v) / 4.0f);
 						        });
 	exposureSlider->set_final_callback([this](float v)
 	                                 {
-		                                 image_view->set_exposure(round(4*v) / 4.0f);
-		                                 m_imagesPanel->request_histogram_update(true);
+		                                 m_image_view->set_exposure(round(4*v) / 4.0f);
+		                                 m_images_panel->request_histogram_update(true);
 	                                 });
     exposureSlider->set_fixed_width(100);
     exposureSlider->set_range({-9.0f,9.0f});
@@ -222,14 +224,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     gammaTextBox->set_alignment(TextBox::Alignment::Right);
     gammaTextBox->set_callback([this,gammaSlider](float value)
                                 {
-                                    image_view->set_gamma(value);
+                                    m_image_view->set_gamma(value);
                                     gammaSlider->set_value(value);
                                 });
     gammaSlider->set_callback(
 	    [&,gammaSlider,gammaTextBox](float value)
 	    {
 		    float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
-		    image_view->set_gamma(g);
+		    m_image_view->set_gamma(g);
 		    gammaTextBox->set_value(g);
 		    gammaSlider->set_value(g);       // snap values
 	    });
@@ -238,39 +240,39 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     gammaSlider->set_value(gamma);
     gammaTextBox->set_value(gamma);
 
-    image_view->set_exposure_callback([this,exposureTextBox,exposureSlider](float e)
+    m_image_view->set_exposure_callback([this,exposureTextBox,exposureSlider](float e)
                                      {
 	                                     exposureTextBox->set_value(e);
 	                                     exposureSlider->set_value(e);
-	                                     m_imagesPanel->request_histogram_update();
+	                                     m_images_panel->request_histogram_update();
                                      });
-    image_view->set_gamma_callback([gammaTextBox,gammaSlider](float g)
+    m_image_view->set_gamma_callback([gammaTextBox,gammaSlider](float g)
                                   {
 	                                  gammaTextBox->set_value(g);
 	                                  gammaSlider->set_value(g);
                                   });
-	image_view->set_sRGB_callback([sRGBCheckbox,gammaTextBox,gammaSlider](bool b)
+	m_image_view->set_sRGB_callback([sRGBCheckbox,gammaTextBox,gammaSlider](bool b)
 	                              {
 		                              sRGBCheckbox->set_checked(b);
 		                              gammaTextBox->set_enabled(!b);
 		                              gammaTextBox->set_spinnable(!b);
 		                              gammaSlider->set_enabled(!b);
 	                              });
-    image_view->set_exposure(exposure);
-    image_view->set_gamma(gamma);
+    m_image_view->set_exposure(exposure);
+    m_image_view->set_gamma(gamma);
 
-    image_view->set_zoom_callback([this](float zoom)
+    m_image_view->set_zoom_callback([this](float zoom)
                                 {
                                     float realZoom = zoom * pixel_ratio();
                                     int numer = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
                                     int denom = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
-                                    m_zoomLabel->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
+                                    m_zoom_label->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
                                     update_layout();
                                 });
 
 	sRGBCheckbox->set_callback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
     {
-        image_view->set_sRGB(value);
+        m_image_view->set_sRGB(value);
         gammaSlider->set_enabled(!value);
 	    gammaTextBox->set_spinnable(!value);
         gammaTextBox->set_enabled(!value);
@@ -282,17 +284,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	sRGBCheckbox->set_checked(sRGB);
 	sRGBCheckbox->callback()(sRGB);
 
-    (new CheckBox(m_topPanel, "Dither  ",
-                 [&](bool v) { image_view->set_dithering(v); }))->set_checked(image_view->dithering_on());
-    (new CheckBox(m_topPanel, "Grid  ",
-                 [&](bool v) { image_view->set_draw_grid(v); }))->set_checked(image_view->draw_grid_on());
-    (new CheckBox(m_topPanel, "RGB values  ",
-                 [&](bool v) { image_view->set_draw_values(v); }))->set_checked(image_view->draw_values_on());
+    (new CheckBox(m_top_panel, "Dither  ",
+                 [&](bool v) { m_image_view->set_dithering(v); }))->set_checked(m_image_view->dithering_on());
+    (new CheckBox(m_top_panel, "Grid  ",
+                 [&](bool v) { m_image_view->set_draw_grid(v); }))->set_checked(m_image_view->draw_grid_on());
+    (new CheckBox(m_top_panel, "RGB values  ",
+                 [&](bool v) { m_image_view->set_draw_values(v); }))->set_checked(m_image_view->draw_values_on());
 
 
-	image_view->set_pixel_callback(
+	m_image_view->set_pixel_callback(
 		[this](const nanogui::Vector2i& index, char **out, size_t size) {
-			auto img = m_imagesPanel->current_image();
+			auto img = m_images_panel->current_image();
 			if (img)
 			{
 				const HDRImage & image = img->image();
@@ -319,33 +321,50 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     set_visible(true);
     glfwSwapInterval(1);
+
+
+	// Nanogui will redraw the screen for key/mouse events, but we need to manually
+	// invoke redraw for things like gui animations. do this in a separate thread
+    m_gui_refresh_thread = std::thread(
+        [this]()
+		{
+			std::chrono::microseconds idle_quantum = std::chrono::microseconds(1000 * 1000 / 20);
+			std::chrono::microseconds anim_quantum = std::chrono::microseconds(1000 * 1000 / 120);
+            while (true)
+			{
+				bool anim = this->should_refresh_gui();
+				std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
+				this->redraw();
+				if (anim)
+					console->trace("refreshing gui");
+            }
+        }
+    );
 }
 
 HDRViewScreen::~HDRViewScreen()
 {
-    // empty
+	m_gui_refresh_thread.join();
 }
 
 
 void HDRViewScreen::update_caption()
 {
-    auto img = m_imagesPanel->current_image();
+    auto img = m_images_panel->current_image();
     if (img)
         set_caption(string("HDRView [") + img->filename() + (img->is_modified() ? "*" : "") + "]");
     else
         set_caption(string("HDRView"));
-
-	redraw();
 }
 
 bool HDRViewScreen::drop_event(const vector<string> & filenames)
 {
 	try
 	{
-		m_imagesPanel->load_images(filenames);
+		m_images_panel->load_images(filenames);
 
 		// Ensure the new image button will have the correct visibility state.
-		m_imagesPanel->set_filter(m_imagesPanel->filter());
+		m_images_panel->set_filter(m_images_panel->filter());
 	}
 	catch (const exception &e)
 	{
@@ -360,14 +379,14 @@ void HDRViewScreen::ask_close_image(int)
 {
 	auto closeit = [this](int curr, int next)
 	{
-		m_imagesPanel->close_image();
-		cout << "curr: " << m_imagesPanel->current_image_index() << endl;
+		m_images_panel->close_image();
+		cout << "curr: " << m_images_panel->current_image_index() << endl;
 	};
 
-	auto curr = m_imagesPanel->current_image_index();
-	auto next = m_imagesPanel->next_visible_image(curr, Forward);
+	auto curr = m_images_panel->current_image_index();
+	auto next = m_images_panel->next_visible_image(curr, Forward);
 	cout << "curr: " << curr << "; next: " << next << endl;
-	if (auto img = m_imagesPanel->image(curr))
+	if (auto img = m_images_panel->image(curr))
 	{
 		if (img->is_modified())
 		{
@@ -383,34 +402,34 @@ void HDRViewScreen::ask_close_image(int)
 void HDRViewScreen::ask_close_all_images()
 {
 	bool anyModified = false;
-	for (int i = 0; i < m_imagesPanel->num_images(); ++i)
-		anyModified |= m_imagesPanel->image(i)->is_modified();
+	for (int i = 0; i < m_images_panel->num_images(); ++i)
+		anyModified |= m_images_panel->image(i)->is_modified();
 
 	if (anyModified)
 	{
 		auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
 		                                "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
-		dialog->set_callback([this](int close){if (close == 0) m_imagesPanel->close_all_images();});
+		dialog->set_callback([this](int close){if (close == 0) m_images_panel->close_all_images();});
 	}
 	else
-		m_imagesPanel->close_all_images();
+		m_images_panel->close_all_images();
 }
 
 
 void HDRViewScreen::toggle_help_window()
 {
-	if (m_helpWindow)
+	if (m_help_window)
 	{
-		m_helpWindow->dispose();
-		m_helpWindow = nullptr;
-		m_helpButton->set_pushed(false);
+		m_help_window->dispose();
+		m_help_window = nullptr;
+		m_help_button->set_pushed(false);
 	}
 	else
 	{
-		m_helpWindow = new HelpWindow{this, [this] { toggle_help_window(); }};
-		m_helpWindow->center();
-		m_helpWindow->request_focus();
-		m_helpButton->set_pushed(true);
+		m_help_window = new HelpWindow{this, [this] { toggle_help_window(); }};
+		m_help_window->center();
+		m_help_window->request_focus();
+		m_help_button->set_pushed(true);
 	}
 
 	update_layout();
@@ -448,7 +467,7 @@ void HDRViewScreen::save_image()
 {
 	try
 	{
-		if (!m_imagesPanel->current_image())
+		if (!m_images_panel->current_image())
 			return;
 
 		string filename = file_dialog(
@@ -469,8 +488,8 @@ void HDRViewScreen::save_image()
 		glfwFocusWindow(m_glfw_window);
 
 		if (!filename.empty())
-			m_imagesPanel->save_image(filename, image_view->exposure(), image_view->gamma(),
-			                      image_view->sRGB(), image_view->dithering_on());
+			m_images_panel->save_image(filename, m_image_view->exposure(), m_image_view->gamma(),
+			                      m_image_view->sRGB(), m_image_view->dithering_on());
 	}
 	catch (const exception &e)
 	{
@@ -483,18 +502,18 @@ void HDRViewScreen::save_image()
 void HDRViewScreen::flip_image(bool h)
 {
     if (h)
-		m_imagesPanel->modify_image(
+		m_images_panel->modify_image(
 		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 		    {
-			    return {make_shared<HDRImage>(img->flippedHorizontal()),
-			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedHorizontal(); })};
+			    return {make_shared<HDRImage>(img->flipped_horizontal()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_horizontal(); })};
 		    });
     else
-		m_imagesPanel->modify_image(
+		m_images_panel->modify_image(
 		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 		    {
-			    return {make_shared<HDRImage>(img->flippedVertical()),
-			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flippedVertical(); })};
+			    return {make_shared<HDRImage>(img->flipped_vertical()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_vertical(); })};
 		    });
 }
 
@@ -511,31 +530,31 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     {
         case GLFW_KEY_ESCAPE:
         {
-            if (!m_okToQuitDialog)
+            if (!m_ok_to_quit_dialog)
             {
-                m_okToQuitDialog = new MessageDialog(this,
+                m_ok_to_quit_dialog = new MessageDialog(this,
                         MessageDialog::Type::Warning, "Warning!",
                         "Do you really want to quit?", "Yes", "No", true);
-                m_okToQuitDialog->set_callback([this](int result)
+                m_ok_to_quit_dialog->set_callback([this](int result)
                     {
                         this->set_visible(result != 0);
-                        m_okToQuitDialog = nullptr;
+                        m_ok_to_quit_dialog = nullptr;
                     });
-	            m_okToQuitDialog->request_focus();
+	            m_ok_to_quit_dialog->request_focus();
             }
-            else if (m_okToQuitDialog->visible())
+            else if (m_ok_to_quit_dialog->visible())
             {
                 // dialog already visible, dismiss it
-                m_okToQuitDialog->dispose();
-                m_okToQuitDialog = nullptr;
+                m_ok_to_quit_dialog->dispose();
+                m_ok_to_quit_dialog = nullptr;
             }
             return true;
         }
         case GLFW_KEY_ENTER:
         {
-             if (m_okToQuitDialog && m_okToQuitDialog->visible())
+             if (m_ok_to_quit_dialog && m_ok_to_quit_dialog->visible())
                  // quit dialog already visible, "enter" clicks OK, and quits
-                 m_okToQuitDialog->callback()(0);
+                 m_ok_to_quit_dialog->callback()(0);
              else
                 return true;
         }
@@ -544,29 +563,32 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
                 if (modifiers & GLFW_MOD_SHIFT)
-					m_imagesPanel->redo();
+					m_images_panel->redo();
 				else
-					m_imagesPanel->undo();
+					m_images_panel->undo();
 
 	            return true;
             }
             return false;
 
         case GLFW_KEY_BACKSPACE:
-	        ask_close_image(m_imagesPanel->current_image_index());
+			console->trace("KEY BACKSPACE pressed");
+	        ask_close_image(m_images_panel->current_image_index());
             return true;
         case 'W':
+			console->trace("KEY `W` pressed");
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
 	            if (modifiers & GLFW_MOD_SHIFT)
 		            ask_close_all_images();
 	            else
-	                ask_close_image(m_imagesPanel->current_image_index());
+	                ask_close_image(m_images_panel->current_image_index());
                 return true;
             }
             return false;
 
 	    case 'O':
+			console->trace("KEY `O` pressed");
 		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    load_image();
@@ -576,79 +598,92 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         case '=':
         case GLFW_KEY_KP_ADD:
-			image_view->zoom_in();
+			console->trace("KEY `=` pressed");
+			m_image_view->zoom_in();
             return true;
 
         case '-':
         case GLFW_KEY_KP_SUBTRACT:
-			image_view->zoom_out();
+			console->trace("KEY `-` pressed");
+			m_image_view->zoom_out();
             return true;
 
         case 'G':
+			console->trace("KEY `G` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
-				image_view->set_gamma(image_view->gamma() + 0.02f);
+				m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
 			}
             else
 			{
-				image_view->set_gamma(max(0.02f, image_view->gamma() - 0.02f));
+				m_image_view->set_gamma(max(0.02f, m_image_view->gamma() - 0.02f));
 			}
             return true;
         case 'E':
+			console->trace("KEY `E` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
-				image_view->set_exposure(image_view->exposure() + 0.25f);
+				m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
 			}
             else
 			{
-				image_view->set_exposure(image_view->exposure() - 0.25f);
+				m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
 			}
             return true;
 
         case 'F':
+			console->trace("KEY `F` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
-				m_imagesPanel->focus_filter();
+				m_images_panel->focus_filter();
 			else
 				flip_image(false);
 			return true;
 
         case 'M':
+			console->trace("KEY `M` pressed");
             flip_image(true);
             return true;
 
         case ' ':
-	        image_view->center();
+			console->trace("KEY ` ` pressed");
+	        m_image_view->center();
             draw_all();
             return true;
 
         case 'T':
-		    m_guiAnimationStart = glfwGetTime();
-		    m_guiTimerRunning = true;
-		    m_animationGoal = EAnimationGoal(m_animationGoal ^ TOP_PANEL);
+			console->trace("KEY `T` pressed");
+		    m_gui_animation_start = glfwGetTime();
+			push_gui_refresh();
+			m_animation_running = true;
+		    m_animation_goal = EAnimationGoal(m_animation_goal ^ TOP_PANEL);
 		    update_layout();
             return true;
 
         case 'H':
+			console->trace("KEY `H` pressed");
 		    toggle_help_window();
             return true;
 
         case GLFW_KEY_TAB:
+			console->trace("KEY TAB pressed");
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
-		        bool setVis = !((m_animationGoal & SIDE_PANEL) || (m_animationGoal & TOP_PANEL) || (m_animationGoal & BOTTOM_PANEL));
-		        m_guiAnimationStart = glfwGetTime();
-		        m_guiTimerRunning = true;
-		        m_animationGoal = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
+		        bool setVis = !((m_animation_goal & SIDE_PANEL) || (m_animation_goal & TOP_PANEL) || (m_animation_goal & BOTTOM_PANEL));
+		        m_gui_animation_start = glfwGetTime();
+				push_gui_refresh();
+				m_animation_running = true;
+		        m_animation_goal = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
 	        }
 		    else if (modifiers & GLFW_MOD_ALT)
 			{
-				m_imagesPanel->swap_current_selected_with_previous();
+				m_images_panel->swap_current_selected_with_previous();
 			}
 	        else
 	        {
-		        m_guiAnimationStart = glfwGetTime();
-		        m_guiTimerRunning = true;
-		        m_animationGoal = EAnimationGoal(m_animationGoal ^ SIDE_PANEL);
+		        m_gui_animation_start = glfwGetTime();
+				push_gui_refresh();
+				m_animation_running = true;
+		        m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
 	        }
 
 		    update_layout();
@@ -657,12 +692,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         case GLFW_KEY_DOWN:
 	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
-		        m_imagesPanel->send_image_backward();
+		        m_images_panel->send_image_backward();
 		        return true;
 	        }
-	        else if (m_imagesPanel->num_images())
+	        else if (m_images_panel->num_images())
             {
-				m_imagesPanel->set_current_image_index(m_imagesPanel->next_visible_image(m_imagesPanel->current_image_index(), Backward));
+				m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Backward));
 	            return true;
             }
 		    return false;
@@ -670,12 +705,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         case GLFW_KEY_UP:
 	        if (modifiers & SYSTEM_COMMAND_MOD)
 	        {
-		        m_imagesPanel->bring_image_forward();
+		        m_images_panel->bring_image_forward();
 		        return true;
 	        }
-	        else if (m_imagesPanel->num_images())
+	        else if (m_images_panel->num_images())
 	        {
-				m_imagesPanel->set_current_image_index(m_imagesPanel->next_visible_image(m_imagesPanel->current_image_index(), Forward));
+				m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Forward));
 		        return true;
 	        }
 		    return false;
@@ -684,8 +719,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 	    case '0':
 		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
-			    image_view->center();
-			    image_view->fit();
+			    m_image_view->center();
+			    m_image_view->fit();
 			    draw_all();
 			    return true;
 		    }
@@ -699,19 +734,19 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
 		if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
 		{
-			m_imagesPanel->set_channel(EChannel(idx));
+			m_images_panel->set_channel(EChannel(idx));
 			return true;
 		}
 		else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
 		{
-			m_imagesPanel->set_blend_mode(EBlendMode(idx));
+			m_images_panel->set_blend_mode(EBlendMode(idx));
 			return true;
 		}
 		else
 		{
-			auto nth = m_imagesPanel->nth_visible_image_index(idx);
+			auto nth = m_images_panel->nth_visible_image_index(idx);
 			if (nth >= 0)
-				m_imagesPanel->set_current_image_index(nth);
+				m_images_panel->set_current_image_index(nth);
 		}
 		return false;
 	}
@@ -723,7 +758,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 {
 	if (button == GLFW_MOUSE_BUTTON_1 && down && at_side_panel_edge(p))
 	{
-		m_draggingSidePanel = true;
+		m_dragging_side_panel = true;
 
 		// prevent Screen::cursorPosCallbackEvent from calling dragEvent on other widgets
 		m_drag_active = false;
@@ -731,57 +766,57 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 		return true;
 	}
 	else
-		m_draggingSidePanel = false;
+		m_dragging_side_panel = false;
 
 	return Screen::mouse_button_event(p, button, down, modifiers);
 }
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
 {
-	auto img = m_imagesPanel->current_image();
+	auto img = m_images_panel->current_image();
 	if (img && img->contains(p))
 	{
-		nanogui::Vector2i pixelCoord(image_view->image_coordinate_at((p - image_view->position())));
+		nanogui::Vector2i pixelCoord(m_image_view->image_coordinate_at((p - m_image_view->position())));
 		const HDRImage & image = img->image();
 		if (image.contains(pixelCoord.x(), pixelCoord.y()))
 		{
 			Color4 pixelVal = image(pixelCoord.x(), pixelCoord.y());
-			Color4 iPixelVal = (pixelVal * pow(2.f, image_view->exposure()) * 255).min(255.f).max(0.f);
+			Color4 iPixelVal = (pixelVal * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
 			string s = fmt::format(
 				"({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
 				pixelCoord.x(), pixelCoord.y(),
 				pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
 				(int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
 				(int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
-			m_pixelInfoLabel->set_caption(s);
+			m_pixel_info_label->set_caption(s);
 		}
 		else
-			m_pixelInfoLabel->set_caption("");
+			m_pixel_info_label->set_caption("");
 
-		m_statusBar->perform_layout(m_nvg_context);
+		m_status_bar->perform_layout(m_nvg_context);
 	}
 
-	if (m_draggingSidePanel || at_side_panel_edge(p))
+	if (m_dragging_side_panel || at_side_panel_edge(p))
 	{
-		m_sidePanel->set_cursor(Cursor::HResize);
-		m_sideScrollPanel->set_cursor(Cursor::HResize);
-		m_sidePanelContents->set_cursor(Cursor::HResize);
-		image_view->set_cursor(Cursor::HResize);
+		m_side_panel->set_cursor(Cursor::HResize);
+		m_side_scroll_panel->set_cursor(Cursor::HResize);
+		m_side_panel_contents->set_cursor(Cursor::HResize);
+		m_image_view->set_cursor(Cursor::HResize);
 	}
 	else
 	{
-		m_sidePanel->set_cursor(Cursor::Arrow);
-		m_sideScrollPanel->set_cursor(Cursor::Arrow);
-		m_sidePanelContents->set_cursor(Cursor::Arrow);
-		image_view->set_cursor(Cursor::Arrow);
+		m_side_panel->set_cursor(Cursor::Arrow);
+		m_side_scroll_panel->set_cursor(Cursor::Arrow);
+		m_side_panel_contents->set_cursor(Cursor::Arrow);
+		m_image_view->set_cursor(Cursor::Arrow);
 	}
 
-	if (m_draggingSidePanel)
+	if (m_dragging_side_panel)
 	{
 		int w = ::clamp(p.x(), 206, m_size.x() - 10);
-		m_sidePanelContents->set_fixed_width(w);
-		m_sideScrollPanel->set_fixed_width(w + 12);
-		m_sidePanel->set_fixed_width(m_sideScrollPanel->fixed_width());
+		m_side_panel_contents->set_fixed_width(w);
+		m_side_scroll_panel->set_fixed_width(w + 12);
+		m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
 		update_layout();
 		return true;
 	}
@@ -792,95 +827,100 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 void HDRViewScreen::update_layout()
 {
-	int headerHeight = m_topPanel->fixed_height();
-	int sidePanelWidth = m_sidePanel->fixed_width();
-	int footerHeight = m_statusBar->fixed_height();
+	int headerHeight = m_top_panel->fixed_height();
+	int sidePanelWidth = m_side_panel->fixed_width();
+	int footerHeight = m_status_bar->fixed_height();
 
 	static int headerShift = 0;
 	static int sidePanelShift = 0;
 	static int footerShift = 0;
 
-	if (m_guiTimerRunning)
+	if (m_animation_running)
 	{
+		cout << "doing gui animation" << std::endl;
 		const double duration = 0.2;
-		double elapsed = glfwGetTime() - m_guiAnimationStart;
+		double elapsed = glfwGetTime() - m_gui_animation_start;
 		// stop the animation after 2 seconds
 		if (elapsed > duration)
 		{
-			m_guiTimerRunning = false;
-			sidePanelShift = (m_animationGoal & SIDE_PANEL) ? 0 : -sidePanelWidth;
-			headerShift = (m_animationGoal & TOP_PANEL) ? 0 : -headerHeight;
-			footerShift = (m_animationGoal & BOTTOM_PANEL) ? 0 : footerHeight;
+			pop_gui_refresh();
+			m_animation_running = false;
+			sidePanelShift = (m_animation_goal & SIDE_PANEL) ? 0 : -sidePanelWidth;
+			headerShift = (m_animation_goal & TOP_PANEL) ? 0 : -headerHeight;
+			footerShift = (m_animation_goal & BOTTOM_PANEL) ? 0 : footerHeight;
 
-			m_sidePanelButton->set_pushed(m_animationGoal & SIDE_PANEL);
+			m_side_panel_button->set_pushed(m_animation_goal & SIDE_PANEL);
 		}
 		// animate the location of the panels
 		else
 		{
 			// only animate the sidepanel if it isn't already at the goal position
-			if (((m_animationGoal & SIDE_PANEL) && sidePanelShift != 0) ||
-				(!(m_animationGoal & SIDE_PANEL) && sidePanelShift != -sidePanelWidth))
+			if (((m_animation_goal & SIDE_PANEL) && sidePanelShift != 0) ||
+				(!(m_animation_goal & SIDE_PANEL) && sidePanelShift != -sidePanelWidth))
 			{
-				double start = (m_animationGoal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
-				double end = (m_animationGoal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
+				double start = (m_animation_goal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
+				double end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
 				sidePanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
-				m_sidePanelButton->set_pushed(true);
+				m_side_panel_button->set_pushed(true);
 			}
 			// only animate the header if it isn't already at the goal position
-			if (((m_animationGoal & TOP_PANEL) && headerShift != 0) ||
-				(!(m_animationGoal & TOP_PANEL) && headerShift != -headerHeight))
+			if (((m_animation_goal & TOP_PANEL) && headerShift != 0) ||
+				(!(m_animation_goal & TOP_PANEL) && headerShift != -headerHeight))
 			{
-				double start = (m_animationGoal & TOP_PANEL) ? double(-headerHeight) : 0.0;
-				double end = (m_animationGoal & TOP_PANEL) ? 0.0 : double(-headerHeight);
+				double start = (m_animation_goal & TOP_PANEL) ? double(-headerHeight) : 0.0;
+				double end = (m_animation_goal & TOP_PANEL) ? 0.0 : double(-headerHeight);
 				headerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 
 			// only animate the footer if it isn't already at the goal position
-			if (((m_animationGoal & BOTTOM_PANEL) && footerShift != 0) ||
-				(!(m_animationGoal & BOTTOM_PANEL) && footerShift != footerHeight))
+			if (((m_animation_goal & BOTTOM_PANEL) && footerShift != 0) ||
+				(!(m_animation_goal & BOTTOM_PANEL) && footerShift != footerHeight))
 			{
-				double start = (m_animationGoal & BOTTOM_PANEL) ? double(footerHeight) : 0.0;
-				double end = (m_animationGoal & BOTTOM_PANEL) ? 0.0 : double(footerHeight);
+				double start = (m_animation_goal & BOTTOM_PANEL) ? double(footerHeight) : 0.0;
+				double end = (m_animation_goal & BOTTOM_PANEL) ? 0.0 : double(footerHeight);
 				footerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 		}
 	}
 
-	m_topPanel->set_position(nanogui::Vector2i(0,headerShift));
-	m_topPanel->set_fixed_width(width());
+	m_top_panel->set_position(nanogui::Vector2i(0,headerShift));
+	m_top_panel->set_fixed_width(width());
 
 	int middleHeight = height() - headerHeight - footerHeight - headerShift + footerShift;
 
-	m_sidePanel->set_position(nanogui::Vector2i(sidePanelShift,headerShift+headerHeight));
-	m_sidePanel->set_fixed_height(middleHeight);
+	m_side_panel->set_position(nanogui::Vector2i(sidePanelShift,headerShift+headerHeight));
+	m_side_panel->set_fixed_height(middleHeight);
 
-	image_view->set_position(nanogui::Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
-	image_view->set_fixed_width(width() - sidePanelShift-sidePanelWidth);
-	image_view->set_fixed_height(middleHeight);
+	m_image_view->set_position(nanogui::Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
+	m_image_view->set_fixed_width(width() - sidePanelShift-sidePanelWidth);
+	m_image_view->set_fixed_height(middleHeight);
 
-	m_statusBar->set_position(nanogui::Vector2i(0,headerShift+headerHeight+middleHeight));
-	m_statusBar->set_fixed_width(width());
+	m_status_bar->set_position(nanogui::Vector2i(0,headerShift+headerHeight+middleHeight));
+	m_status_bar->set_fixed_width(width());
 
-	int lh = std::min(middleHeight, m_sidePanelContents->preferred_size(m_nvg_context).y());
-	m_sideScrollPanel->set_fixed_height(lh);
+	int lh = std::min(middleHeight, m_side_panel_contents->preferred_size(m_nvg_context).y());
+	m_side_scroll_panel->set_fixed_height(lh);
 
-	int zoomWidth = m_zoomLabel->preferred_size(m_nvg_context).x();
-    m_zoomLabel->set_width(zoomWidth);
-    m_zoomLabel->set_position(nanogui::Vector2i(width()-zoomWidth-6, 0));
+	int zoomWidth = m_zoom_label->preferred_size(m_nvg_context).x();
+    m_zoom_label->set_width(zoomWidth);
+    m_zoom_label->set_position(nanogui::Vector2i(width()-zoomWidth-6, 0));
 
 	perform_layout();
 }
 
 void HDRViewScreen::draw_contents()
 {
-	m_imagesPanel->run_requested_callbacks();
+	clear();
 
-	if (auto img = m_imagesPanel->current_image())
+	// console->trace("HDRViewScreen::draw_contents");
+	m_images_panel->run_requested_callbacks();
+
+	if (auto img = m_images_panel->current_image())
 	{
 		img->check_async_result();
 		img->upload_to_GPU();
 	}
 
 	update_layout();
-	redraw();
+	// redraw();
 }

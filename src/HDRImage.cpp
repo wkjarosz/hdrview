@@ -55,7 +55,7 @@ inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, cons
 } // namespace
 
 
-const vector<string> & HDRImage::borderModeNames()
+const vector<string> & HDRImage::border_mode_names()
 {
 	static const vector<string> names =
 		{
@@ -67,7 +67,7 @@ const vector<string> & HDRImage::borderModeNames()
 	return names;
 }
 
-const vector<string> & HDRImage::samplerNames()
+const vector<string> & HDRImage::sampler_names()
 {
 	static const vector<string> names =
 		{
@@ -241,35 +241,35 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
     return result;
 }
 
-HDRImage HDRImage::GaussianBlurredX(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX) const
+HDRImage HDRImage::gaussian_blurred_x(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX) const
 {
     return convolved(horizontalGaussianKernel(sigmaX, truncateX), progress, mX, mX);
 }
 
-HDRImage HDRImage::GaussianBlurredY(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY) const
+HDRImage HDRImage::gaussian_blurred_y(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY) const
 {
     return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), progress, mY, mY);
 }
 
 // Use principles of separability to blur an image using 2 1D Gaussian Filters
-HDRImage HDRImage::GaussianBlurred(float sigmaX, float sigmaY, AtomicProgress progress,
+HDRImage HDRImage::gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress progress,
                                    BorderMode mX, BorderMode mY,
                                    float truncateX, float truncateY) const
 {
     // blur using 2, 1D filters in the x and y directions
-    return GaussianBlurredX(sigmaX, AtomicProgress(progress, .5f), mX, truncateX).GaussianBlurredY(sigmaY, AtomicProgress(progress, .5f), mY, truncateY);
+    return gaussian_blurred_x(sigmaX, AtomicProgress(progress, .5f), mX, truncateX).gaussian_blurred_y(sigmaY, AtomicProgress(progress, .5f), mY, truncateY);
 }
 
 
 // sharpen an image
-HDRImage HDRImage::unsharpMasked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY) const
 {
-    return *this + Color4(strength) * (*this - fastGaussianBlurred(sigma, sigma, progress, mX, mY));
+    return *this + Color4(strength) * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY));
 }
 
 
 
-HDRImage HDRImage::medianFiltered(float radius, int channel, AtomicProgress progress,
+HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress progress,
                                   BorderMode mX, BorderMode mY, bool round) const
 {
     int radiusi = int(std::ceil(radius));
@@ -317,19 +317,19 @@ HDRImage HDRImage::medianFiltered(float radius, int channel, AtomicProgress prog
 }
 
 
-HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
+HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain,
                                      AtomicProgress progress,
                                      BorderMode mX, BorderMode mY, float truncateDomain) const
 {
     HDRImage filtered(width(), height());
 
     // calculate the filter size
-    int radius = int(std::ceil(truncateDomain * sigmaDomain));
+    int radius = int(std::ceil(truncateDomain * sigma_domain));
 
     Timer timer;
     progress.set_num_steps(height());
     // for every pixel in the image
-    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigmaDomain,mX,mY](int y)
+    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigma_domain,mX,mY](int y)
     {
         for (int x = 0; x < filtered.width(); x++)
         {
@@ -348,7 +348,7 @@ HDRImage HDRImage::bilateralFiltered(float sigmaRange, float sigmaDomain,
                     float domainExp = std::pow(xFilter,2) + std::pow(yFilter,2);
 
                     // calculate the exponentiated weighting factor from the domain and range
-                    float factorDomain = std::exp(-domainExp / (2.0 * std::pow(sigmaDomain,2)));
+                    float factorDomain = std::exp(-domainExp / (2.0 * std::pow(sigma_domain,2)));
                     float factorRange = std::exp(-rangeExp / (2.0 * std::pow(sigmaRange,2)));
                     weightSum += factorDomain * factorRange;
                     accum += factorDomain * factorRange * pixel(xx,yy,mX,mY);
@@ -372,7 +372,7 @@ static int nextOddInt(int i)
 }
 
 
-HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX, BorderMode mY) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -407,17 +407,17 @@ HDRImage HDRImage::iteratedBoxBlurred(float sigma, int iterations, AtomicProgres
 
     HDRImage result = *this;
     for (int i = 0; i < iterations; i++)
-        result = result.boxBlurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
+        result = result.box_blurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
 
     return result;
 }
 
-HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY,
+HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY,
                                        AtomicProgress progress,
                                        BorderMode mX, BorderMode mY) const
 {
     Timer timer;
-    // See comments in HDRImage::iteratedBoxBlurred for derivation of width
+    // See comments in HDRImage::iterated_box_blurred for derivation of width
     int hw = std::round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
     int hh = std::round((std::sqrt(12.f/6) * sigmaY - 1)/2.f);
 
@@ -425,35 +425,35 @@ HDRImage HDRImage::fastGaussianBlurred(float sigmaX, float sigmaY,
     // do horizontal blurs
     if (hw < 3)
         // for small blurs, just use a separable Gaussian
-        im = GaussianBlurredX(sigmaX, AtomicProgress(progress, 0.5f), mX);
+        im = gaussian_blurred_x(sigmaX, AtomicProgress(progress, 0.5f), mX);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .boxBlurredX(hw, AtomicProgress(progress, .5f/6.f), mX);
+        im = box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX);
 
     // now do vertical blurs
     if (hh < 3)
         // for small blurs, just use a separable Gaussian
-        im = im.GaussianBlurredY(sigmaY, AtomicProgress(progress, 0.5f), mY);
+        im = im.gaussian_blurred_y(sigmaY, AtomicProgress(progress, 0.5f), mY);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = im.boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .boxBlurredY(hh, AtomicProgress(progress, .5f/6.f), mY);
+        im = im.box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY);
 
-    spdlog::get("console")->trace("fastGaussianBlurred filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed()/1000.f));
     return im;
 }
 
 
-HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, AtomicProgress progress, BorderMode mX) const
+HDRImage HDRImage::box_blurred_x(int leftSize, int rightSize, AtomicProgress progress, BorderMode mX) const
 {
     HDRImage filtered(width(), height());
 
@@ -473,13 +473,13 @@ HDRImage HDRImage::boxBlurredX(int leftSize, int rightSize, AtomicProgress progr
                              pixel(x+rightSize, y, mX, mX);
 	    ++progress;
     });
-    spdlog::get("console")->trace("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
 
 
-HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, AtomicProgress progress, BorderMode mY) const
+HDRImage HDRImage::box_blurred_y(int leftSize, int rightSize, AtomicProgress progress, BorderMode mY) const
 {
     HDRImage filtered(width(), height());
 
@@ -499,12 +499,12 @@ HDRImage HDRImage::boxBlurredY(int leftSize, int rightSize, AtomicProgress progr
                              pixel(x, y+rightSize, mY, mY);
 	    ++progress;
     });
-    spdlog::get("console")->trace("boxBlurredX filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered * Color4(1.f/(leftSize + rightSize + 1));
 }
 
-HDRImage HDRImage::resizedCanvas(int newW, int newH, CanvasAnchor anchor, const Color4 & bgColor) const
+HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const Color4 & bgColor) const
 {
     int oldW = width();
     int oldH = height();
@@ -608,7 +608,7 @@ HDRImage HDRImage::resized(int w, int h) const
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern
  */
-void HDRImage::bayerMosaic(const Vector2i &redOffset)
+void HDRImage::bayer_mosaic(const Vector2i &redOffset)
 {
     Color4 mosaic[2][2] = {{Color4(1.f, 0.f, 0.f, 1.f), Color4(0.f, 1.f, 0.f, 1.f)},
                            {Color4(0.f, 1.f, 0.f, 1.f), Color4(0.f, 0.f, 1.f, 1.f)}};
@@ -630,7 +630,7 @@ void HDRImage::bayerMosaic(const Vector2i &redOffset)
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicGreenLinear(const Vector2i &redOffset)
+void HDRImage::demosaic_green_linear(const Vector2i &redOffset)
 {
     bilinearGreen(*this, redOffset.x(), redOffset.y());
 }
@@ -641,7 +641,7 @@ void HDRImage::demosaicGreenLinear(const Vector2i &redOffset)
  * @param raw       The source raw pixel data.
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicGreenHorizontal(const HDRImage &raw, const Vector2i &redOffset)
+void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &redOffset)
 {
     parallel_for(redOffset.y(), height(), 2, [this,&raw,&redOffset](int y)
     {
@@ -660,7 +660,7 @@ void HDRImage::demosaicGreenHorizontal(const HDRImage &raw, const Vector2i &redO
  * @param raw       The source raw pixel data.
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicGreenVertical(const HDRImage &raw, const Vector2i &redOffset)
+void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &redOffset)
 {
     parallel_for(2+redOffset.y(), height()-2, 2, [this,&raw,&redOffset](int y)
     {
@@ -681,7 +681,7 @@ void HDRImage::demosaicGreenVertical(const HDRImage &raw, const Vector2i &redOff
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicGreenMalvar(const Vector2i &redOffset)
+void HDRImage::demosaic_green_malvar(const Vector2i &redOffset)
 {
     // fill in missing green at red pixels
     MalvarGreen(*this, 0, redOffset);
@@ -694,7 +694,7 @@ void HDRImage::demosaicGreenMalvar(const Vector2i &redOffset)
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicGreenPhelippeau(const Vector2i &redOffset)
+void HDRImage::demosaic_green_phelippeau(const Vector2i &redOffset)
 {
     PhelippeauGreen(*this, redOffset);
 }
@@ -704,7 +704,7 @@ void HDRImage::demosaicGreenPhelippeau(const Vector2i &redOffset)
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicRedBlueLinear(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_linear(const Vector2i &redOffset)
 {
     bilinearRedBlue(*this, 0, redOffset);
     bilinearRedBlue(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
@@ -721,7 +721,7 @@ void HDRImage::demosaicRedBlueLinear(const Vector2i &redOffset)
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicRedBlueGreenGuidedLinear(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &redOffset)
 {
     greenBasedRorB(*this, 0, redOffset);
     greenBasedRorB(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
@@ -737,7 +737,7 @@ void HDRImage::demosaicRedBlueGreenGuidedLinear(const Vector2i &redOffset)
  *
  * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaicRedBlueMalvar(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_malvar(const Vector2i &redOffset)
 {
     // fill in missing red horizontally
     MalvarRedOrBlueAtGreen(*this, 0, Vector2i((redOffset.x() + 1) % 2, redOffset.y()), true);
@@ -759,12 +759,12 @@ void HDRImage::demosaicRedBlueMalvar(const Vector2i &redOffset)
  * \brief Reduce some remaining color fringing and zipper artifacts by median-filtering the
  * red-green and blue-green differences as originally proposed by Freeman.
  */
-HDRImage HDRImage::medianFilterBayerArtifacts() const
+HDRImage HDRImage::median_filter_bayer_artifacts() const
 {
     AtomicProgress progress;
     HDRImage colorDiff = unaryExpr([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
-    colorDiff = colorDiff.medianFiltered(1.f, 0, AtomicProgress(progress, .5f))
-                         .medianFiltered(1.f, 2, AtomicProgress(progress, .5f));
+    colorDiff = colorDiff.median_filtered(1.f, 0, AtomicProgress(progress, .5f))
+                         .median_filtered(1.f, 2, AtomicProgress(progress, .5f));
     return binaryExpr(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);}).eval();
 }
 
@@ -806,12 +806,12 @@ void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXY
     HomoMap homoV = HomoMap::Zero(width(), height());
 
     // interpolate green channel both horizontally and vertically
-    rgbH.demosaicGreenHorizontal(*this, redOffset);
-    rgbV.demosaicGreenVertical(*this, redOffset);
+    rgbH.demosaic_green_horizontal(*this, redOffset);
+    rgbV.demosaic_green_vertical(*this, redOffset);
 
     // interpolate the red and blue using the green as a guide
-    rgbH.demosaicRedBlueGreenGuidedLinear(redOffset);
-    rgbV.demosaicRedBlueGreenGuidedLinear(redOffset);
+    rgbH.demosaic_red_blue_green_guided_linear(redOffset);
+    rgbV.demosaic_red_blue_green_guided_linear(redOffset);
 
     // Scale factor to push XYZ values to [0,1] range
     float scale = 1.0 / (maxCoeff().max() * cameraToXYZ.maxCoeff());
@@ -910,7 +910,7 @@ void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXY
     });
 
     // Now handle the boundary pixels
-    demosaicBorder(3);
+    demosaic_border(3);
 }
 
 /*!
@@ -922,7 +922,7 @@ void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXY
  *
  * @param border    The size of the border in pixels.
  */
-void HDRImage::demosaicBorder(size_t border)
+void HDRImage::demosaic_border(size_t border)
 {
     parallel_for(0, height(), [&](size_t y)
     {
@@ -979,7 +979,7 @@ void HDRImage::demosaicBorder(size_t border)
  *                  All other values result in a no-op.
  * @return          The adjusted image.
  */
-HDRImage HDRImage::brightnessContrast(float b, float c, bool linear, EChannel channel) const
+HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel channel) const
 {
     float slope = float(std::tan(lerp(0.0, M_PI_2, c/2.0 + 0.5)));
     // Perlin's version
