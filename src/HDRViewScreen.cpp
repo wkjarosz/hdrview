@@ -147,7 +147,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     new Label(m_top_panel, "EV", "sans-bold");
     auto exposureSlider = new Slider(m_top_panel);
     auto exposureTextBox = new FloatBox<float>(m_top_panel, exposure);
-	auto normalizeButton = new Button(m_top_panel, "", FA_BOLT);
+	auto normalizeButton = new Button(m_top_panel, "", FA_MAGIC);
 	normalizeButton->set_fixed_size(nanogui::Vector2i(19, 19));
 	normalizeButton->set_callback([this]()
 	                             {

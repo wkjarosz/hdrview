@@ -668,8 +668,10 @@ bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int /
 
 void HDRImageView::draw(NVGcontext *ctx)
 {
-    Canvas::draw(ctx);      // calls HDRImageView draw_contents
+    if (size().x() <= 1 || size().y() <= 1)
+        return;
 
+    Canvas::draw(ctx);      // calls HDRImageView draw_contents
 
     if (m_current_image)
     {
@@ -774,10 +776,14 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
 
 void HDRImageView::draw_widget_border(NVGcontext* ctx) const
 {
-	// Draw an inner drop shadow. (adapted from nanogui::Window) and tev
 	int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
+
+    if (m_size.x() <= ds || m_size.y() <= ds)
+        return;
+    
+	// Draw an inner drop shadow. (adapted from nanogui::Window) and tev
 	NVGpaint shadowPaint =
-		nvgBoxGradient(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr * 2, ds * 2, m_theme->m_transparent,
+		nvgBoxGradient(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr, ds, m_theme->m_transparent,
 					   m_theme->m_drop_shadow);
 
 	nvgSave(ctx);
@@ -852,7 +858,7 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
 
 void HDRImageView::draw_contents()
 {
-    if (m_current_image)
+    if (m_current_image && size().x() > 0 && size().y() > 0)
     {
         nanogui::Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
                                      std::generate_canonical<float, 10>(g_rand)*255);

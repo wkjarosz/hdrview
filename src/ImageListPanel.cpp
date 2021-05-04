@@ -74,7 +74,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		row = new Widget(this);
 		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
 
-		auto b = new Button(row, "", FA_FOLDER);
+		auto b = new Button(row, "", FA_FOLDER_OPEN);
 		b->set_fixed_height(25);
 		b->set_tooltip("Load an image and add it to the set of opened images.");
 		b->set_callback([this] { m_screen->load_image(); });

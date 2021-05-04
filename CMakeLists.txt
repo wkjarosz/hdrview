@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.2)
 project(hdrview)
 
-set(HDRVIEW_VERSION "0.2")
+set(HDRVIEW_VERSION "0.3")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
