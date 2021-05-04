@@ -89,7 +89,7 @@ add_executable(HDRView
                src/imageview.h
                src/multigraph.cpp
                src/multigraph.h
-               src/ParallelFor.cpp
+               src/parallelfor.cpp
                src/parallelfor.h
                src/pfm.h
                src/pfm.cpp
