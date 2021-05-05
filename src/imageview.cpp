@@ -8,7 +8,6 @@
 #include "common.h"
 #include "dithermatrix256.h"
 #include <random>
-#include <map>
 #include <sstream>
 #include <spdlog/spdlog.h>
 
@@ -400,8 +399,6 @@ std::string add_defines(std::string shader_string)
     DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
     DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
 
-    std::cout << defines << std::endl;
-
     if (!defines.empty())
     {
         if (shader_string.length() > 8 && shader_string.substr(0, 8) == "#version")
@@ -430,11 +427,11 @@ std::string add_defines(std::string shader_string)
 
 HDRImageView::HDRImageView(Widget *parent)
     : Canvas(parent, 1, false, false, true),
-    m_exposureCallback(std::function<void(float)>()), m_gammaCallback(std::function<void(float)>()),
-	m_sRGBCallback(std::function<void(bool)>()), m_zoomCallback(std::function<void(float)>())
+    m_exposure_callback(std::function<void(float)>()), m_gamma_callback(std::function<void(float)>()),
+	m_sRGB_callback(std::function<void(bool)>()), m_zoom_callback(std::function<void(float)>())
 {
     m_zoom = 1.f / screen()->pixel_ratio();
-    m_offset = nanogui::Vector2f(0.0f);
+    m_offset = Vector2f(0.0f);
 
     set_background_color(Color(0.15f, 0.15f, 0.15f, 1.f));
     
@@ -461,25 +458,20 @@ HDRImageView::HDRImageView(Widget *parent)
         m_dither_tex = new Texture(
                 Texture::PixelFormat::R,
                 Texture::ComponentFormat::Float32,
-                nanogui::Vector2i(256, 256),
+                Vector2i(256, 256),
                 Texture::InterpolationMode::Nearest,
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
         m_dither_tex->upload((const uint8_t *)dither_matrix256);
         m_image_shader->set_texture("ditherImg", m_dither_tex);
 
-        // m_current_image = new Texture(
-        //         Texture::PixelFormat::R,
-        //         Texture::ComponentFormat::Float32,
-        //         nanogui::Vector2i(256, 256),
-        //         Texture::InterpolationMode::Nearest,
-        //         Texture::InterpolationMode::Nearest,
-        //         Texture::WrapMode::Repeat);
-        // m_image_shader->set_texture("image", m_current_image);
+        // create an empty texture so that nanogui's shader doesn't print errors
+        // before we've selected a reference image
+        // FIXME: at some point, find a more elegant solution for this.
         m_reference_image = new Texture(
                 Texture::PixelFormat::R,
                 Texture::ComponentFormat::Float32,
-                nanogui::Vector2i(0, 0),
+                Vector2i(0, 0),
                 Texture::InterpolationMode::Nearest,
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
@@ -508,40 +500,40 @@ void HDRImageView::set_reference_image(TextureRef ref)
 }
 
 
-nanogui::Vector2f HDRImageView::center_offset(TextureRef img) const
+Vector2f HDRImageView::center_offset(TextureRef img) const
 {
 	return (size_f() - scaled_image_size_f(img)) / 2;
 }
 
-nanogui::Vector2f HDRImageView::image_coordinate_at(const nanogui::Vector2f& position) const
+Vector2f HDRImageView::image_coordinate_at(const Vector2f& position) const
 {
 	auto image_pos = position - (m_offset + center_offset(m_current_image));
 	return image_pos / m_zoom;
 }
 
-nanogui::Vector2f HDRImageView::position_for_coordinate(const nanogui::Vector2f& imageCoordinate) const
+Vector2f HDRImageView::position_for_coordinate(const Vector2f& imageCoordinate) const
 {
 	return m_zoom * imageCoordinate + (m_offset + center_offset(m_current_image));
 }
 
-nanogui::Vector2f HDRImageView::screen_position_for_coordinate(const nanogui::Vector2f& imageCoordinate) const
+Vector2f HDRImageView::screen_position_for_coordinate(const Vector2f& imageCoordinate) const
 {
 	return position_for_coordinate(imageCoordinate) + position_f();
 }
 
-void HDRImageView::set_image_coordinate_at(const nanogui::Vector2f& position, const nanogui::Vector2f& imageCoordinate)
+void HDRImageView::set_image_coordinate_at(const Vector2f& position, const Vector2f& imageCoordinate)
 {
 	// Calculate where the new offset must be in order to satisfy the image position equation.
 	// Round the floating point values to balance out the floating point to integer conversions.
 	m_offset = position - (imageCoordinate * m_zoom);
 
 	// Clamp offset so that the image remains near the screen.
-	m_offset = nanogui::max(nanogui::min(m_offset, size_f()), -scaled_image_size_f(m_current_image));
+	m_offset = max(min(m_offset, size_f()), -scaled_image_size_f(m_current_image));
 
 	m_offset -= center_offset(m_current_image);
 }
 
-void HDRImageView::image_position_and_scale(nanogui::Vector2f& position, nanogui::Vector2f& scale, TextureRef image)
+void HDRImageView::image_position_and_scale(Vector2f& position, Vector2f& scale, TextureRef image)
 {
 	scale = scaled_image_size_f(image) / Vector2f(size());
 	position = (m_offset + center_offset(image)) / Vector2f(size());
@@ -549,72 +541,71 @@ void HDRImageView::image_position_and_scale(nanogui::Vector2f& position, nanogui
 
 void HDRImageView::center()
 {
-	m_offset = nanogui::Vector2f(0.f, 0.f);
+	m_offset = Vector2f(0.f, 0.f);
 }
 
 void HDRImageView::fit()
 {
 	// Calculate the appropriate scaling factor.
-	nanogui::Vector2f factor(size_f() / image_size_f(m_current_image));
+	Vector2f factor(size_f() / image_size_f(m_current_image));
 	m_zoom = std::min(factor[0], factor[1]);
 	center();
 
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageView::set_zoom_level(float level)
 {
-	m_zoom = ::clamp(std::pow(m_zoomSensitivity, level), MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom = ::clamp(std::pow(m_zoom_sensitivity, level), MIN_ZOOM, MAX_ZOOM);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
-void HDRImageView::zoom_by(float amount, const nanogui::Vector2f& focusPosition)
+void HDRImageView::zoom_by(float amount, const Vector2f& focusPosition)
 {
 	auto focusedCoordinate = image_coordinate_at(focusPosition);
-	float scaleFactor = std::pow(m_zoomSensitivity, amount);
+	float scaleFactor = std::pow(m_zoom_sensitivity, amount);
 	m_zoom = ::clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(focusPosition, focusedCoordinate);
 
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageView::zoom_in()
 {
 	// keep position at center of window fixed while zooming
-	auto centerPosition = nanogui::Vector2f(size_f() / 2.f);
+	auto centerPosition = Vector2f(size_f() / 2.f);
 	auto centerCoordinate = image_coordinate_at(centerPosition);
 
 	// determine next higher power of 2 zoom level
 	float levelForPow2Sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
 	m_zoom = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(centerPosition, centerCoordinate);
 
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageView::zoom_out()
 {
 	// keep position at center of window fixed while zooming
-	auto centerPosition = nanogui::Vector2f(size_f() / 2.f);
+	auto centerPosition = Vector2f(size_f() / 2.f);
 	auto centerCoordinate = image_coordinate_at(centerPosition);
 
 	// determine next lower power of 2 zoom level
 	float levelForPow2Sensitivity = floor(log(m_zoom) / log(2.f) - 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
 	m_zoom = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(centerPosition, centerCoordinate);
 
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
-
-bool HDRImageView::mouse_drag_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int /* button */, int /*modifiers*/)
+bool HDRImageView::mouse_drag_event(const Vector2i& p, const Vector2i& rel, int /* button */, int /*modifiers*/)
 {
     if (!m_enabled || !m_current_image)
         return false;
@@ -624,7 +615,7 @@ bool HDRImageView::mouse_drag_event(const nanogui::Vector2i& p, const nanogui::V
     return true;
 }
 
-bool HDRImageView::scroll_event(const nanogui::Vector2i& p, const nanogui::Vector2f& rel)
+bool HDRImageView::scroll_event(const Vector2i& p, const Vector2f& rel)
 {
 	if (Canvas::scroll_event(p, rel))
 		return true;
@@ -636,7 +627,7 @@ bool HDRImageView::scroll_event(const nanogui::Vector2i& p, const nanogui::Vecto
 	if (lState == GLFW_PRESS || rState == GLFW_PRESS)
 	{
 		// panning
-		set_image_coordinate_at(nanogui::Vector2f(p) + rel * 4.f, image_coordinate_at(p));
+		set_image_coordinate_at(Vector2f(p) + rel * 4.f, image_coordinate_at(p));
 		return true;
 	}
 	else //if (screen()->modifiers() == 0)
@@ -692,13 +683,13 @@ void HDRImageView::draw_image_border(NVGcontext* ctx) const
 
 	int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 
-	nanogui::Vector2i borderPosition = m_pos + nanogui::Vector2i(m_offset + center_offset(m_current_image));
-	nanogui::Vector2i borderSize(scaled_image_size_f(m_current_image));
+	Vector2i borderPosition = m_pos + Vector2i(m_offset + center_offset(m_current_image));
+	Vector2i borderSize(scaled_image_size_f(m_current_image));
 
 	if (m_reference_image && squared_norm(m_reference_image->size()) > 0)
 	{
-		borderPosition = nanogui::min(borderPosition, m_pos + nanogui::Vector2i(m_offset + center_offset(m_reference_image)));
-		borderSize = nanogui::max(borderSize, nanogui::Vector2i(scaled_image_size_f(m_reference_image)));
+		borderPosition = min(borderPosition, m_pos + Vector2i(m_offset + center_offset(m_reference_image)));
+		borderSize = max(borderSize, Vector2i(scaled_image_size_f(m_reference_image)));
 	}
 
 	// Draw a drop shadow
@@ -733,15 +724,15 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
     if (!m_current_image)
         return;
 
-    if (!m_drawGrid || (m_gridThreshold == -1) || (m_zoom <= m_gridThreshold))
+    if (!m_draw_grid || (m_grid_threshold == -1) || (m_zoom <= m_grid_threshold))
         return;
 
-	float factor = clamp01((m_zoom - m_gridThreshold) / (2 * m_gridThreshold));
+	float factor = clamp01((m_zoom - m_grid_threshold) / (2 * m_grid_threshold));
 	float alpha = lerp(0.0f, 0.2f, smoothStep(0.0f, 1.0f, factor));
     
     if (alpha > 0.0f)
     {
-        nanogui::Vector2f xy0 = screen_position_for_coordinate(nanogui::Vector2f(0.0f));
+        Vector2f xy0 = screen_position_for_coordinate(Vector2f(0.0f));
         int minJ = max(0, int(-xy0.y() / m_zoom));
         int maxJ = min(m_current_image->size().y(), int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int minI = max(0, int(-xy0.x() / m_zoom));
@@ -752,8 +743,8 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
         // draw vertical lines
         for (int i = minI; i <= maxI; ++i)
         {
-            nanogui::Vector2f sxy0 = screen_position_for_coordinate(nanogui::Vector2f(i, minJ));
-            nanogui::Vector2f sxy1 = screen_position_for_coordinate(nanogui::Vector2f(i, maxJ));
+            Vector2f sxy0 = screen_position_for_coordinate(Vector2f(i, minJ));
+            Vector2f sxy1 = screen_position_for_coordinate(Vector2f(i, maxJ));
             nvgMoveTo(ctx, sxy0.x(), sxy0.y());
             nvgLineTo(ctx, sxy1.x(), sxy1.y());
         }
@@ -761,8 +752,8 @@ void HDRImageView::draw_pixel_grid(NVGcontext* ctx) const
         // draw horizontal lines
         for (int j = minJ; j <= maxJ; ++j)
         {
-            nanogui::Vector2f sxy0 = screen_position_for_coordinate(nanogui::Vector2f(minI, j));
-            nanogui::Vector2f sxy1 = screen_position_for_coordinate(nanogui::Vector2f(maxI, j));
+            Vector2f sxy0 = screen_position_for_coordinate(Vector2f(minI, j));
+            Vector2f sxy1 = screen_position_for_coordinate(Vector2f(maxI, j));
             nvgMoveTo(ctx, sxy0.x(), sxy0.y());
             nvgLineTo(ctx, sxy1.x(), sxy1.y());
         }
@@ -781,7 +772,7 @@ void HDRImageView::draw_widget_border(NVGcontext* ctx) const
     if (m_size.x() <= ds || m_size.y() <= ds)
         return;
     
-	// Draw an inner drop shadow. (adapted from nanogui::Window) and tev
+	// Draw an inner drop shadow. (adapted from Window) and tev
 	NVGpaint shadowPaint =
 		nvgBoxGradient(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr, ds, m_theme->m_transparent,
 					   m_theme->m_drop_shadow);
@@ -799,10 +790,10 @@ void HDRImageView::draw_widget_border(NVGcontext* ctx) const
 
 void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
 {
-    if (!m_drawValues || (m_pixelInfoThreshold == -1) || (m_zoom <= m_pixelInfoThreshold))
+    if (!m_draw_values || (m_pixel_info_threshold == -1) || (m_zoom <= m_pixel_info_threshold))
         return;
 
-    float factor = clamp01((m_zoom - m_pixelInfoThreshold) / (2 * m_pixelInfoThreshold));
+    float factor = clamp01((m_zoom - m_pixel_info_threshold) / (2 * m_pixel_info_threshold));
     float alpha = lerp(0.0f, 0.5f, smoothStep(0.0f, 1.0f, factor));
 
     if (alpha > 0.0f && m_pixel_callback)
@@ -810,7 +801,7 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
         nvgSave(ctx);
         nvgIntersectScissor(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y());
 
-        nanogui::Vector2f xy0 = screen_position_for_coordinate(nanogui::Vector2f(0.0f));
+        Vector2f xy0 = screen_position_for_coordinate(Vector2f(0.0f));
         int minJ = max(0, int(-xy0.y() / m_zoom));
         int maxJ = min(m_current_image->size().y() - 1, int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int minI = max(0, int(-xy0.x() / m_zoom));
@@ -830,7 +821,7 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
             {
                 m_pixel_callback(Vector2i(i, j), text, bsize);
 
-                auto pos = screen_position_for_coordinate(nanogui::Vector2f(i+0.5f, j+0.5f));
+                auto pos = screen_position_for_coordinate(Vector2f(i+0.5f, j+0.5f));
 
                 for (int ch = 0; ch < 4; ++ch)
                 {
@@ -860,7 +851,7 @@ void HDRImageView::draw_contents()
 {
     if (m_current_image && size().x() > 0 && size().y() > 0)
     {
-        nanogui::Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
+        Vector2f randomness(std::generate_canonical<float, 10>(g_rand)*255,
                                      std::generate_canonical<float, 10>(g_rand)*255);
 
         m_image_shader->set_uniform("randomness", randomness);
@@ -869,7 +860,7 @@ void HDRImageView::draw_contents()
         m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
         m_image_shader->set_uniform("do_dither", (bool)m_dither);
 
-        nanogui::Vector2f pCurrent, sCurrent;
+        Vector2f pCurrent, sCurrent;
         image_position_and_scale(pCurrent, sCurrent, m_current_image);
         m_image_shader->set_uniform("image_pos", pCurrent);
         m_image_shader->set_uniform("image_scale", sCurrent);
@@ -879,7 +870,7 @@ void HDRImageView::draw_contents()
 
         if (m_reference_image)
 		{
-			nanogui::Vector2f pReference, sReference;
+			Vector2f pReference, sReference;
 			image_position_and_scale(pReference, sReference, m_reference_image);
             m_image_shader->set_uniform("has_reference", true);
             m_image_shader->set_uniform("reference_pos", pCurrent);
@@ -888,8 +879,8 @@ void HDRImageView::draw_contents()
         else
         {
             m_image_shader->set_uniform("has_reference", false);
-            m_image_shader->set_uniform("reference_pos", nanogui::Vector2f(1.f,1.f));
-            m_image_shader->set_uniform("reference_scale", nanogui::Vector2f(1.f,1.f));
+            m_image_shader->set_uniform("reference_pos", Vector2f(1.f,1.f));
+            m_image_shader->set_uniform("reference_scale", Vector2f(1.f,1.f));
         }
         
         m_image_shader->begin();

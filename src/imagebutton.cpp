@@ -212,12 +212,13 @@ void ImageButton::draw(NVGcontext *ctx)
 
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, "sans-bold");
-	string id_string = to_string(m_id);
-	float id_size = nvgTextBounds(ctx, 0, 0, id_string.c_str(), nullptr, nullptr);
+	string id_string = fmt::format("{:d}", m_id);
+	string padded_id_string = fmt::format("{:02d}", m_id);
+	float id_size = nvgTextBounds(ctx, 0, 0, padded_id_string.c_str(), nullptr, nullptr);
 
 	nvgFontSize(ctx, m_font_size * 1.5f);
 	nvgFontFace(ctx, "icons");
-	float iconSize = nvgTextBounds(ctx, 0, 0, utf8(FA_PENCIL_ALT).data(), nullptr, nullptr);
+	float icon_size = nvgTextBounds(ctx, 0, 0, utf8(FA_PENCIL_ALT).data(), nullptr, nullptr);
 
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, m_is_selected ? "sans-bold" : "sans");
@@ -228,7 +229,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	else if (m_size != m_size_for_computed_cutoff)
 	{
 		m_cutoff = 0;
-		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > m_size.x() - 15 - id_size - iconSize)
+		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > m_size.x() - 15 - id_size - icon_size)
 			++m_cutoff;
 
 		m_size_for_computed_cutoff = m_size;
@@ -280,7 +281,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	}
 
 	// is_modified icon
-	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : FA_SAVE);
+	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : 0);
 	nvgFontSize(ctx, m_font_size * 0.8f);
 	nvgFontFace(ctx, "icons");
 	nvgFillColor(ctx, m_theme->m_text_color);
@@ -290,9 +291,9 @@ void ImageButton::draw(NVGcontext *ctx)
 	// Image number
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, "sans-bold");
-	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(ctx, m_theme->m_text_color);
-	nvgText(ctx, m_pos.x() + 20, text_pos.y(), id_string.c_str(), nullptr);
+	nvgText(ctx, m_pos.x() + icon_size + id_size, text_pos.y(), id_string.c_str(), nullptr);
 }
 
 

@@ -86,10 +86,6 @@ public:
     int width() const                               { check_async_result(); return m_image->width(); }
     int height() const                              { check_async_result(); return m_image->height(); }
     nanogui::Vector2i size() const                  { return is_null() ? nanogui::Vector2i(0,0) : nanogui::Vector2i(m_image->width(), m_image->height()); }
-    bool contains(const nanogui::Vector2i& p) const
-	{
-		return p[0] >= 0 && p[1] >= 0 && p[0] < size()[0] && p[1] < size()[1];
-	}
 
     bool save(const std::string & filename,
               float gain, float gamma,

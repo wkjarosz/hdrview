@@ -19,8 +19,8 @@ const float MAX_ZOOM = 512.f;
 
 HDRImageViewer::HDRImageViewer(Widget* parent, HDRViewScreen* screen)
 	: Widget(parent), m_screen(screen), m_zoom(1.f / m_screen->pixel_ratio()), m_offset(nanogui::Vector2f(0.0f)),
-	  m_exposureCallback(std::function<void(float)>()), m_gammaCallback(std::function<void(float)>()),
-	  m_sRGBCallback(std::function<void(bool)>()), m_zoomCallback(std::function<void(float)>()),
+	  m_exposure_callback(std::function<void(float)>()), m_gamma_callback(std::function<void(float)>()),
+	  m_sRGB_callback(std::function<void(bool)>()), m_zoom_callback(std::function<void(float)>()),
 	  m_pixelHoverCallback(std::function<void(const nanogui::Vector2i&, const Color4&, const Color4&)>())
 {
 
@@ -76,7 +76,7 @@ void HDRImageViewer::fit()
 	nanogui::Vector2f factor(size_f() / image_size_f(m_currentImage));
 	m_zoom = std::min(factor[0], factor[1]);
 	center();
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageViewer::move_offset(const nanogui::Vector2f& delta)
@@ -98,19 +98,19 @@ void HDRImageViewer::move_offset(const nanogui::Vector2f& delta)
 
 void HDRImageViewer::set_zoom_level(float level)
 {
-	m_zoom = ::clamp(std::pow(m_zoomSensitivity, level), MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
-	m_zoomCallback(m_zoom);
+	m_zoom = ::clamp(std::pow(m_zoom_sensitivity, level), MIN_ZOOM, MAX_ZOOM);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageViewer::zoom_by(float amount, const nanogui::Vector2f& focusPosition)
 {
 	auto focusedCoordinate = image_coordinate_at(focusPosition);
-	float scaleFactor = std::pow(m_zoomSensitivity, amount);
+	float scaleFactor = std::pow(m_zoom_sensitivity, amount);
 	m_zoom = ::clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(focusPosition, focusedCoordinate);
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageViewer::zoom_in()
@@ -123,9 +123,9 @@ void HDRImageViewer::zoom_in()
 	float levelForPow2Sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
 	m_zoom = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(centerPosition, centerCoordinate);
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 void HDRImageViewer::zoom_out()
@@ -138,9 +138,9 @@ void HDRImageViewer::zoom_out()
 	float levelForPow2Sensitivity = floor(log(m_zoom) / log(2.f) - 0.5f);
 	float newScale = std::pow(2.f, levelForPow2Sensitivity);
 	m_zoom = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-	m_zoomLevel = log(m_zoom) / log(m_zoomSensitivity);
+	m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
 	set_image_coordinate_at(centerPosition, centerCoordinate);
-	m_zoomCallback(m_zoom);
+	m_zoom_callback(m_zoom);
 }
 
 bool HDRImageViewer::mouse_drag_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int /*modifiers*/)
@@ -207,12 +207,12 @@ bool HDRImageViewer::scroll_event(const nanogui::Vector2i& p, const nanogui::Vec
 
 bool HDRImageViewer::grid_visible() const
 {
-	return m_drawGrid && (m_gridThreshold != -1) && (m_zoom > m_gridThreshold);
+	return m_draw_grid && (m_grid_threshold != -1) && (m_zoom > m_grid_threshold);
 }
 
 bool HDRImageViewer::pixel_info_visible() const
 {
-	return m_drawValues && (m_pixelInfoThreshold != -1) && (m_zoom > m_pixelInfoThreshold);
+	return m_draw_values && (m_pixel_info_threshold != -1) && (m_zoom > m_pixel_info_threshold);
 }
 
 bool HDRImageViewer::helpers_visible() const
@@ -373,7 +373,7 @@ void HDRImageViewer::draw_pixel_grid(NVGcontext* ctx) const
 	}
 
 	nvgStrokeWidth(ctx, 2.0f);
-	float factor = clamp01((m_zoom - m_gridThreshold)/(2*m_gridThreshold));
+	float factor = clamp01((m_zoom - m_grid_threshold)/(2*m_grid_threshold));
 	float alpha = lerp(0.0f, 0.2f, smoothStep(0.0f, 1.0f, factor));
 	nvgStrokeColor(ctx, Color(1.0f, 1.0f, 1.0f, alpha));
 	nvgStroke(ctx);
@@ -387,7 +387,7 @@ void HDRImageViewer::draw_pixel_info(NVGcontext* ctx) const
 	int minI = max(0, int(-xy0.x() / m_zoom));
 	int maxI = min(m_currentImage->width() - 1, int(ceil((m_screen->size().x() - xy0.x()) / m_zoom)));
 
-	float factor = clamp01((m_zoom - m_pixelInfoThreshold)/(2*m_pixelInfoThreshold));
+	float factor = clamp01((m_zoom - m_pixel_info_threshold)/(2*m_pixel_info_threshold));
 	float alpha = lerp(0.0f, 0.5f, smoothStep(0.0f, 1.0f, factor));
 
 	for (int j = minJ; j <= maxJ; ++j)

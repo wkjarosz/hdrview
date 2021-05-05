@@ -7,19 +7,16 @@
 #pragma once
 
 #include <nanogui/nanogui.h>
-#include <vector>
-#include <iostream>
-#include <thread>
-#include <spdlog/spdlog.h>
-#include "fwd.h"
-#include "commandhistory.h"
-#include "imageview.h"
 #include <nanogui/texture.h>
 #include <nanogui/shader.h>
 #include <nanogui/renderpass.h>
+#include <vector>
+#include <thread>
+#include <spdlog/spdlog.h>
+#include "fwd.h"
+#include "imageview.h"
 
 using namespace nanogui;
-// using namespace Eigen;
 
 class HDRViewScreen : public Screen
 {
@@ -30,8 +27,8 @@ public:
 	// overridden virtual functions from Screen
     void draw_contents() override;
     bool drop_event(const std::vector<std::string> &filenames) override;
-	bool mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
-	bool mouse_motion_event(const nanogui::Vector2i& p, const nanogui::Vector2i& rel, int button, int modifiers) override;
+	bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+	bool mouse_motion_event(const Vector2i& p, const Vector2i& rel, int button, int modifiers) override;
 	bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
 	bool load_image();
@@ -41,8 +38,8 @@ public:
 	void flip_image(bool h);
 	void clear_focus_path() {m_focus_path.clear();}
 
-	void push_gui_refresh() {m_gui_refresh++; std::cout << "starting gui refresh: " << m_gui_refresh << std::endl; }
-	void pop_gui_refresh() {std::cout << "ending gui refresh: " << m_gui_refresh; m_gui_refresh--; std::cout << "; ending gui refresh: " << m_gui_refresh << std::endl; }
+	void push_gui_refresh() {++m_gui_refresh;}
+	void pop_gui_refresh() {--m_gui_refresh;}
 	bool should_refresh_gui() const {return m_gui_refresh > 0;}
 
 
@@ -51,9 +48,10 @@ public:
 private:
 	void toggle_help_window();
 	void update_layout();
-	bool at_side_panel_edge(const nanogui::Vector2i& p)
+	bool at_side_panel_edge(const Vector2i& p)
 	{
-		return p.x() - m_side_panel->fixed_width() < 10 && p.x() - m_side_panel->fixed_width() > -5;
+		return p.x() - m_side_panel->fixed_width() < 10 &&
+			   p.x() - m_side_panel->fixed_width() > -5;
 	}
 
 	Window * m_top_panel = nullptr;
@@ -80,14 +78,12 @@ private:
 		BOTTOM_PANEL    = 1 << 2,
 	} m_animation_goal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
 
-
-
     MessageDialog * m_ok_to_quit_dialog = nullptr;
 
 	bool m_dragging_side_panel = false;
 
     std::shared_ptr<spdlog::logger> console;
 
-	mutable std::thread m_gui_refresh_thread;
+	std::thread m_gui_refresh_thread;
 	std::atomic<int> m_gui_refresh = 0;
 };

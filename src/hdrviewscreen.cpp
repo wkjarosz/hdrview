@@ -5,14 +5,15 @@
 //
 
 #include "hdrviewscreen.h"
-#include "glimage.h"
 #include "editimagepanel.h"
 #include "imagelistpanel.h"
-#include <iostream>
-#include <nanogui/opengl.h>
+#include "imageview.h"
 #include "common.h"
 #include "commandhistory.h"
 #include "helpwindow.h"
+#include "glimage.h"
+#include <iostream>
+#include <nanogui/opengl.h>
 #define NOMINMAX
 #include <tinydir.h>
 #include <thread>
@@ -773,8 +774,8 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
 {
-	auto img = m_images_panel->current_image();
-	if (img && img->contains(p))
+	ConstImagePtr img = m_images_panel->current_image();
+	if (img)
 	{
 		nanogui::Vector2i pixelCoord(m_image_view->image_coordinate_at((p - m_image_view->position())));
 		const HDRImage & image = img->image();

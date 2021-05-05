@@ -6,16 +6,16 @@
 
 #include "imagelistpanel.h"
 #include "hdrviewscreen.h"
-#include "glimage.h"
 #include "imagebutton.h"
 #include "hdrimageviewer.h"
 #include "imageview.h"
 #include "multigraph.h"
 #include "well.h"
-#include <spdlog/spdlog.h>
 #include "timer.h"
+#include "glimage.h"
 #include <tinydir.h>
 #include <set>
+#include <spdlog/spdlog.h>
 
 
 using namespace std;

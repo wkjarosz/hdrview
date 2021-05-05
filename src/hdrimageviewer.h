@@ -43,14 +43,14 @@ public:
 	const nanogui::Vector2f& offset() const                 { return m_offset; }
 	void set_offset(const nanogui::Vector2f& offset)         { m_offset = offset; }
 
-	float zoom_sensitivity() const                           { return m_zoomSensitivity; }
-	void set_zoom_sensitivity(float zoom_sensitivity)          { m_zoomSensitivity = zoom_sensitivity; }
+	float zoom_sensitivity() const                           { return m_zoom_sensitivity; }
+	void set_zoom_sensitivity(float zoom_sensitivity)          { m_zoom_sensitivity = zoom_sensitivity; }
 
-	float grid_threshold() const                             { return m_gridThreshold; }
-	void set_grid_threshold(float grid_threshold)              { m_gridThreshold = grid_threshold; }
+	float grid_threshold() const                             { return m_grid_threshold; }
+	void set_grid_threshold(float grid_threshold)              { m_grid_threshold = grid_threshold; }
 
-	float pixel_info_threshold() const                        { return m_pixelInfoThreshold; }
-	void set_pixel_info_threshold(float pixel_info_threshold)    { m_pixelInfoThreshold = pixel_info_threshold; }
+	float pixel_info_threshold() const                        { return m_pixel_info_threshold; }
+	void set_pixel_info_threshold(float pixel_info_threshold)    { m_pixel_info_threshold = pixel_info_threshold; }
 
 	/// Function indicating whether the grid is currently visible.
 	bool grid_visible() const;
@@ -110,7 +110,7 @@ public:
 	void zoom_out();
 
 
-	float zoom_level() const     {return m_zoomLevel;}
+	float zoom_level() const     {return m_zoom_level;}
 	void set_zoom_level(float l);
 
 	EChannel channel()          {return m_channel;}
@@ -120,40 +120,40 @@ public:
 	void set_blend_mode(EBlendMode b) {m_blendMode = b;}
 
 	float gamma() const         {return m_gamma;}
-	void set_gamma(float g)      {if (m_gamma != g) {m_gamma = g; m_gammaCallback(g);}}
+	void set_gamma(float g)      {if (m_gamma != g) {m_gamma = g; m_gamma_callback(g);}}
 
 	float exposure() const      {return m_exposure;}
-	void set_exposure(float e)   {if (m_exposure != e) {m_exposure = e; m_exposureCallback(e);}}
+	void set_exposure(float e)   {if (m_exposure != e) {m_exposure = e; m_exposure_callback(e);}}
 
 	bool sRGB() const           {return m_sRGB;}
-	void set_sRGB(bool b)        {m_sRGB = b; m_sRGBCallback(b);}
+	void set_sRGB(bool b)        {m_sRGB = b; m_sRGB_callback(b);}
 
 	bool dithering_on() const    {return m_dither;}
 	void set_dithering(bool b)   {m_dither = b;}
 
-	bool draw_grid_on() const     {return m_drawGrid;}
-	void set_draw_grid(bool b)    {m_drawGrid = b;}
+	bool draw_grid_on() const     {return m_draw_grid;}
+	void set_draw_grid(bool b)    {m_draw_grid = b;}
 
-	bool draw_values_on() const   {return m_drawValues;}
-	void set_draw_values(bool b)  {m_drawValues = b;}
+	bool draw_values_on() const   {return m_draw_values;}
+	void set_draw_values(bool b)  {m_draw_values = b;}
 
 	// Callback functions
 
 	/// Callback executed whenever the gamma value has been changed, e.g. via @ref set_gamma
-	const std::function<void(float)>& gamma_callback() const { return m_gammaCallback; }
-	void set_gamma_callback(const std::function<void(float)> &callback) { m_gammaCallback = callback; }
+	const std::function<void(float)>& gamma_callback() const { return m_gamma_callback; }
+	void set_gamma_callback(const std::function<void(float)> &callback) { m_gamma_callback = callback; }
 
 	/// Callback executed whenever the exposure value has been changed, e.g. via @ref set_exposure
-	const std::function<void(float)>& exposure_callback() const { return m_exposureCallback; }
-	void set_exposure_callback(const std::function<void(float)> &callback) { m_exposureCallback = callback; }
+	const std::function<void(float)>& exposure_callback() const { return m_exposure_callback; }
+	void set_exposure_callback(const std::function<void(float)> &callback) { m_exposure_callback = callback; }
 
 	/// Callback executed whenever the sRGB setting has been changed, e.g. via @ref set_sRGB
-	const std::function<void(bool)>& sRGB_callback() const { return m_sRGBCallback; }
-	void set_sRGB_callback(const std::function<void(bool)> &callback) { m_sRGBCallback = callback; }
+	const std::function<void(bool)>& sRGB_callback() const { return m_sRGB_callback; }
+	void set_sRGB_callback(const std::function<void(bool)> &callback) { m_sRGB_callback = callback; }
 
 	/// Callback executed when the zoom level changes
-	const std::function<void(float)>& zoom_callback() const { return m_zoomCallback; }
-	void set_zoom_callback(const std::function<void(float)> &callback) { m_zoomCallback = callback; }
+	const std::function<void(float)>& zoom_callback() const { return m_zoom_callback; }
+	void set_zoom_callback(const std::function<void(float)> &callback) { m_zoom_callback = callback; }
 
 	/// Callback executed when mouse hovers over different parts of the image, provides pixel coordinates and values
 	const std::function<void(const nanogui::Vector2i &, const Color4 &, const Color4 &)> pixel_hover_callback() const { return m_pixelHoverCallback; }
@@ -189,28 +189,28 @@ private:
 		  m_gamma = 2.2f;
 	bool m_sRGB = true,
 		 m_dither = true,
-		 m_drawGrid = true,
-		 m_drawValues = true;
+		 m_draw_grid = true,
+		 m_draw_values = true;
 
 
 	// Image display parameters.
 	float m_zoom;                           ///< The scale/zoom of the image
-	float m_zoomLevel;                      ///< The zoom level
+	float m_zoom_level;                      ///< The zoom level
 	nanogui::Vector2f m_offset;             ///< The panning offset of the
 	EChannel m_channel = EChannel::RGB;     ///< Which channel to display
 	EBlendMode m_blendMode = EBlendMode::NORMAL_BLEND;     ///< How to blend the current and reference images
 
 	// Fine-tuning parameters.
-	float m_zoomSensitivity = 1.0717734625f;
+	float m_zoom_sensitivity = 1.0717734625f;
 
 	// Image info parameters.
-	float m_gridThreshold = -1;
-	float m_pixelInfoThreshold = -1;
+	float m_grid_threshold = -1;
+	float m_pixel_info_threshold = -1;
 
 	// various callback functions
-	std::function<void(float)> m_exposureCallback;
-	std::function<void(float)> m_gammaCallback;
-	std::function<void(bool)> m_sRGBCallback;
-	std::function<void(float)> m_zoomCallback;
+	std::function<void(float)> m_exposure_callback;
+	std::function<void(float)> m_gamma_callback;
+	std::function<void(bool)> m_sRGB_callback;
+	std::function<void(float)> m_zoom_callback;
 	std::function<void(const nanogui::Vector2i &, const Color4 &, const Color4 &)> m_pixelHoverCallback;
 };

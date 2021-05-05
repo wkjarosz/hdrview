@@ -15,13 +15,15 @@
 
 #include <string>
 
-class ImageButton : public nanogui::Widget
+using namespace nanogui;
+
+class ImageButton : public Widget
 {
 public:
-	ImageButton(nanogui::Widget *parent, const std::string &caption);
+	ImageButton(Widget *parent, const std::string &caption);
 
-	nanogui::Vector2i preferred_size(NVGcontext *ctx) const override;
-	bool mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+	Vector2i preferred_size(NVGcontext *ctx) const override;
+	bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 	void draw(NVGcontext *ctx) override;
 
 	float progress()                        	{ return m_progress; }
@@ -75,9 +77,9 @@ public:
 
 		// swapping may need to recompute trimming
 		m_cutoff = 0;
-		m_size_for_computed_cutoff = nanogui::Vector2i(0);
+		m_size_for_computed_cutoff = Vector2i(0);
 		other.m_cutoff = 0;
-		other.m_size_for_computed_cutoff = nanogui::Vector2i(0);
+		other.m_size_for_computed_cutoff = Vector2i(0);
 	}
 
 private:
@@ -91,7 +93,7 @@ private:
 
 	size_t m_id = 0;
 	size_t m_cutoff = 0;
-	nanogui::Vector2i m_size_for_computed_cutoff = nanogui::Vector2i(0);
+	Vector2i m_size_for_computed_cutoff = Vector2i(0);
 
 	size_t m_highlight_begin = 0;
 	size_t m_highlight_end = 0;
