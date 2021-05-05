@@ -271,7 +271,7 @@ void HDRImageViewer::draw(NVGcontext* ctx)
 	draw_widget_border(ctx);
 }
 
-void HDRImageViewer::image_position_and_scale(nanogui::Vector2f& position, nanogui::Vector2f& scale, shared_ptr<const GLImage> image)
+void HDRImageViewer::image_position_and_scale(nanogui::Vector2f& position, nanogui::Vector2f& scale, shared_ptr<const XPUImage> image)
 {
 	scale = scaled_image_size_f(image) / screen_size_f();
 	position = (nanogui::Vector2f(absolute_position()) + m_offset + center_offset(image)) / screen_size_f();

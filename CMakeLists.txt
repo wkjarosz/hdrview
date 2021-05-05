@@ -69,8 +69,8 @@ add_executable(HDRView
                src/filmictonecurve.cpp
                src/filmictonecurve.h
                src/fwd.h
-               src/glimage.cpp
-               src/glimage.h
+               src/xpuimage.cpp
+               src/xpuimage.h
                src/hdrimage.cpp
                src/hdrimage.h
                src/hdrimageio.cpp
@@ -138,45 +138,45 @@ if (UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
 endif()
 
 
-# add_executable(hdrbatch
-#                src/color.cpp
-#                src/color.h
-#                src/colorspace.cpp
-#                src/colorspace.h
-#                src/common.cpp
-#                src/common.h
-#                src/envmap.cpp
-#                src/envmap.h
-#                src/dithermatrix256.h
-#                src/fwd.h
-#                src/hdrimage.cpp
-#                src/hdrimage.h
-#                src/hdrimageio.cpp
-#                src/hdrbatch.cpp
-#                src/parallelfor.cpp
-#                src/parallelfor.h
-#                src/pfm.cpp
-#                src/pfm.h
-#                src/ppm.cpp
-#                src/ppm.h
-#                src/progress.cpp
-#                src/progress.h
-#                src/range.h
-#                src/timer.h
-#                )
+add_executable(hdrbatch
+               src/color.cpp
+               src/color.h
+               src/colorspace.cpp
+               src/colorspace.h
+               src/common.cpp
+               src/common.h
+               src/envmap.cpp
+               src/envmap.h
+               src/dithermatrix256.h
+               src/fwd.h
+               src/hdrimage.cpp
+               src/hdrimage.h
+               src/hdrimageio.cpp
+               src/hdrbatch.cpp
+               src/parallelfor.cpp
+               src/parallelfor.h
+               src/pfm.cpp
+               src/pfm.h
+               src/ppm.cpp
+               src/ppm.h
+               src/progress.cpp
+               src/progress.h
+               src/range.h
+               src/timer.h
+               )
 
 
 add_executable(force-random-dither
     src/forced-random-dither.cpp)               
 
 target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
-# target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s ${Boost_REGEX_LIBRARY})
+target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s ${Boost_REGEX_LIBRARY})
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)
     find_program(iwyu_path NAMES include-what-you-use iwyu)
     if (iwyu_path)
-        set_property(TARGET HDRView force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
+        set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
     endif()
 endif()
 

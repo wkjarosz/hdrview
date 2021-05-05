@@ -12,7 +12,7 @@
 #include "multigraph.h"
 #include "well.h"
 #include "timer.h"
-#include "glimage.h"
+#include "xpuimage.h"
 #include <tinydir.h>
 #include <set>
 #include <spdlog/spdlog.h>
@@ -498,12 +498,12 @@ void ImageListPanel::run_requested_callbacks()
 	}
 }
 
-shared_ptr<const GLImage> ImageListPanel::image(int index) const
+shared_ptr<const XPUImage> ImageListPanel::image(int index) const
 {
 	return is_valid(index) ? m_images[index] : nullptr;
 }
 
-shared_ptr<GLImage> ImageListPanel::image(int index)
+shared_ptr<XPUImage> ImageListPanel::image(int index)
 {
 	return is_valid(index) ? m_images[index] : nullptr;
 }
@@ -605,7 +605,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 	// now start a bunch of asynchronous image loads
 	for (auto filename : allFilenames)
 	{
-		shared_ptr<GLImage> image = make_shared<GLImage>();
+		shared_ptr<XPUImage> image = make_shared<XPUImage>();
 		image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
 		image->set_filename(filename);
 		m_screen->push_gui_refresh();

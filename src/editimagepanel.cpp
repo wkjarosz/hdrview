@@ -6,7 +6,7 @@
 
 #include "editimagepanel.h"
 #include "common.h"
-#include "glimage.h"
+#include "xpuimage.h"
 #include "hdrviewscreen.h"
 #include "hdrimage.h"
 #include "imagelistpanel.h"

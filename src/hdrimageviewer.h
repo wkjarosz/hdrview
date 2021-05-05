@@ -12,7 +12,7 @@
 #include <vector>
 #include "fwd.h"
 #include "common.h"
-#include "glimage.h"
+#include "xpuimage.h"
 #include "imageshader.h"
 
 using namespace nanogui;

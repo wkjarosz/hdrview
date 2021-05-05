@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "glimage.h"
+#include "xpuimage.h"
 #include "common.h"
 #include "timer.h"
 #include "colorspace.h"
@@ -94,12 +94,12 @@ shared_ptr<ImageStatistics> ImageStatistics::computeStatistics(const HDRImage &i
 	return ret;
 }
 
-GLImage::GLImage() :
+XPUImage::XPUImage() :
     m_image(make_shared<HDRImage>()),
     m_filename(),
     m_cached_histogram_exposure(NAN),
     m_histogram_dirty(true),
-    m_modify_done_callback(GLImage::VoidVoidFunc())
+    m_modify_done_callback(XPUImage::VoidVoidFunc())
 {
     m_texture = new Texture(Texture::PixelFormat::RGBA,
 		Texture::ComponentFormat::Float32,
@@ -110,26 +110,26 @@ GLImage::GLImage() :
 }
 
 
-GLImage::~GLImage()
+XPUImage::~XPUImage()
 {
 
 }
 
-float GLImage::progress() const
+float XPUImage::progress() const
 {
 	check_async_result();
 	return m_async_command ? m_async_command->progress() : 1.0f;
 }
-bool GLImage::is_modified() const    { check_async_result(); return m_history.is_modified(); }
-bool GLImage::has_undo() const       { check_async_result(); return m_history.has_undo(); }
-bool GLImage::has_redo() const       { check_async_result(); return m_history.has_redo(); }
+bool XPUImage::is_modified() const    { check_async_result(); return m_history.is_modified(); }
+bool XPUImage::has_undo() const       { check_async_result(); return m_history.has_undo(); }
+bool XPUImage::has_redo() const       { check_async_result(); return m_history.has_redo(); }
 
-bool GLImage::can_modify() const
+bool XPUImage::can_modify() const
 {
 	return !m_async_command;
 }
 
-void GLImage::async_modify(const ImageCommandWithProgress & command)
+void XPUImage::async_modify(const ImageCommandWithProgress & command)
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
@@ -139,7 +139,7 @@ void GLImage::async_modify(const ImageCommandWithProgress & command)
 	m_async_command->compute();
 }
 
-void GLImage::async_modify(const ImageCommand &command)
+void XPUImage::async_modify(const ImageCommand &command)
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
@@ -149,7 +149,7 @@ void GLImage::async_modify(const ImageCommand &command)
 	m_async_command->compute();
 }
 
-bool GLImage::undo()
+bool XPUImage::undo()
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
@@ -164,7 +164,7 @@ bool GLImage::undo()
 	return false;
 }
 
-bool GLImage::redo()
+bool XPUImage::redo()
 {
 	// make sure any pending edits are done
 	wait_for_async_result();
@@ -179,7 +179,7 @@ bool GLImage::redo()
 	return false;
 }
 
-bool GLImage::check_async_result() const
+bool XPUImage::check_async_result() const
 {
 	if (!m_async_command || !m_async_command->ready())
 		return false;
@@ -187,7 +187,7 @@ bool GLImage::check_async_result() const
 	return wait_for_async_result();
 }
 
-void GLImage::modify_done() const
+void XPUImage::modify_done() const
 {
 	m_async_command = nullptr;
 	if (m_modify_done_callback)
@@ -195,7 +195,7 @@ void GLImage::modify_done() const
 }
 
 
-bool GLImage::wait_for_async_result() const
+bool XPUImage::wait_for_async_result() const
 {
 	// nothing to wait for
 	if (!m_async_command)
@@ -242,7 +242,7 @@ bool GLImage::wait_for_async_result() const
 }
 
 
-void GLImage::upload_to_GPU() const
+void XPUImage::upload_to_GPU() const
 {
 	if (m_image->is_null())
 	{
@@ -267,7 +267,7 @@ void GLImage::upload_to_GPU() const
 }
 
 
-GLImage::TextureRef GLImage::texture()
+XPUImage::TextureRef XPUImage::texture()
 {
 	check_async_result();
 	upload_to_GPU();
@@ -275,7 +275,7 @@ GLImage::TextureRef GLImage::texture()
 }
 
 
-bool GLImage::save(const std::string & filename,
+bool XPUImage::save(const std::string & filename,
                    float gain, float gamma,
                    bool sRGB, bool dither) const
 {
@@ -290,7 +290,7 @@ bool GLImage::save(const std::string & filename,
     return true;
 }
 
-void GLImage::recompute_histograms(float exposure) const
+void XPUImage::recompute_histograms(float exposure) const
 {
 	check_async_result();
 

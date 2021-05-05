@@ -14,7 +14,7 @@ class ImageCommandUndo;
 class FullImageUndo;
 class LambdaUndo;
 class CommandHistory;
-class GLImage;
+class XPUImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageView;

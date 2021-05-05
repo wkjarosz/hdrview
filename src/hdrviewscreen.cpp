@@ -11,7 +11,7 @@
 #include "common.h"
 #include "commandhistory.h"
 #include "helpwindow.h"
-#include "glimage.h"
+#include "xpuimage.h"
 #include <iostream>
 #include <nanogui/opengl.h>
 #define NOMINMAX

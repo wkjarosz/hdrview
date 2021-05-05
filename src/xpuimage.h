@@ -51,10 +51,13 @@ struct ImageStatistics
 };
 
 /*!
-    A class which encapsulates a single HDRImage, a corresponding GPU texture, and histogram.
-    Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
+    Stores an image both on the CPU (as an HDRImage) and as a corresponding texture on the GPU.
+	
+	An XPUImage also maintains a current histogram for the image data.
+    
+	Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing commands
 */
-class GLImage
+class XPUImage
 {
 public:
 	using TextureRef = nanogui::ref<nanogui::Texture>;
@@ -65,8 +68,8 @@ public:
 	using VoidVoidFunc = std::function<void(void)>;
 
 
-    GLImage();
-    ~GLImage();
+    XPUImage();
+    ~XPUImage();
 
 	bool can_modify() const;
 	float progress() const;
@@ -124,5 +127,5 @@ private:
 	VoidVoidFunc m_modify_done_callback;
 };
 
-using ConstImagePtr = std::shared_ptr<const GLImage>;
-using ImagePtr = std::shared_ptr<GLImage>;
+using ConstImagePtr = std::shared_ptr<const XPUImage>;
+using ImagePtr = std::shared_ptr<XPUImage>;

@@ -9,7 +9,7 @@
 #include <nanogui/widget.h>
 #include <vector>
 #include "common.h"
-#include "glimage.h"
+#include "xpuimage.h"
 #include "fwd.h"
 
 using namespace nanogui;
