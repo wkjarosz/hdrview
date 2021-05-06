@@ -16,6 +16,7 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include <vector>
+#include <random>
 #include <algorithm>    // std::random_shuffle
 #include <ctime>        // std::time
 #include <cstdlib>      // std::rand, std::srand
@@ -48,6 +49,7 @@ double force(double r)
 int main(int, char **)
 {
 	srand(unsigned ( std::time(0) ) );
+	std::mt19937 g_rand(unsigned ( std::time(0) ) );
 
 	vector<Vector2i> freeLocations;
 	ArrayXXd M = ArrayXXd::Zero(Sm,Sm);
@@ -61,7 +63,7 @@ int main(int, char **)
 	
 	for (int ditherValue = 0; ditherValue < Smk; ++ditherValue)
 	{
-  		random_shuffle(freeLocations.begin(), freeLocations.end());
+  		shuffle(freeLocations.begin(), freeLocations.end(), g_rand);
 		
 		double minimum = 1e20f;
 		Vector2i minimumLocation(0,0);

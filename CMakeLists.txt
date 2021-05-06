@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.2)
+cmake_minimum_required (VERSION 3.3)
 project(hdrview)
 
 set(HDRVIEW_VERSION "0.3")
@@ -165,9 +165,13 @@ add_executable(hdrbatch
                src/timer.h
                )
 
+# set_target_properties(hdrbatch PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 add_executable(force-random-dither
-    src/forced-random-dither.cpp)               
+    src/forced-random-dither.cpp)          
+    
+
+# set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
 target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s ${Boost_REGEX_LIBRARY})
@@ -181,7 +185,7 @@ if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)
 endif()
 
 if (APPLE)
-    install(TARGETS HDRView BUNDLE DESTINATION "/Applications")
+    install(TARGETS HDRView BUNDLE DESTINATION "/Applications" RESOURCE DESTINATION "/Applications")
     install(SCRIPT resources/osx-post-install.cmake)
 elseif(WIN32)
     install(TARGETS HDRView RUNTIME DESTINATION "bin")
@@ -213,4 +217,4 @@ if (CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 
 target_compile_features(HDRView PRIVATE cxx_std_17)
-# target_compile_features(hdrbatch PRIVATE cxx_std_17)
+target_compile_features(hdrbatch PRIVATE cxx_std_17)
