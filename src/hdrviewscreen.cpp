@@ -698,7 +698,10 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 	        }
 	        else if (m_images_panel->num_images())
             {
-				m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Backward));
+				if (modifiers & GLFW_MOD_SHIFT)
+					m_images_panel->set_reference_image_index(m_images_panel->next_visible_image(m_images_panel->reference_image_index(), Backward));
+				else
+					m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Backward));
 	            return true;
             }
 		    return false;
@@ -711,7 +714,10 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 	        }
 	        else if (m_images_panel->num_images())
 	        {
-				m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Forward));
+				if (modifiers & GLFW_MOD_SHIFT)
+					m_images_panel->set_reference_image_index(m_images_panel->next_visible_image(m_images_panel->reference_image_index(), Forward));
+				else
+					m_images_panel->set_current_image_index(m_images_panel->next_visible_image(m_images_panel->current_image_index(), Forward));
 		        return true;
 	        }
 		    return false;
