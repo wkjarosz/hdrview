@@ -100,6 +100,7 @@ public:
 	float histogram_exposure() const            { return m_cached_histogram_exposure; }
 	// bool histogram_dirty() const                { return m_histogram_dirty; }
 	HistogramTaskPtr histograms() const         { return m_histograms; }
+	void cancel_histograms() const;
 	void recompute_histograms(float exposure) const;
 
 	/// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify

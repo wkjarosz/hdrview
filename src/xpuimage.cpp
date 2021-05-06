@@ -135,12 +135,7 @@ XPUImage::XPUImage() :
 
 XPUImage::~XPUImage()
 {
-	// try to cancel the histogram task if any first
-	if (m_histograms)
-	{
-		m_histograms->cancel();
-		m_histograms->get();
-	}
+	cancel_histograms();
 }
 
 float XPUImage::progress() const
@@ -232,11 +227,7 @@ bool XPUImage::wait_for_async_result() const
 	if (!m_async_retrieved)
 	{
 		// first cancel and wait for any histogram task to finish if present
-		if (m_histograms)
-		{
-			m_histograms->cancel();
-			m_histograms->get();
-		}
+		cancel_histograms();
 
 		// now retrieve the result and copy it out of the async task
 		auto result = m_async_command->get();
@@ -323,6 +314,16 @@ bool XPUImage::save(const std::string & filename,
 	m_history.mark_saved();
 
     return true;
+}
+
+void XPUImage::cancel_histograms() const
+{
+	// try to cancel the histogram task if any first
+	if (m_histograms)
+	{
+		m_histograms->cancel();
+		m_histograms->get();
+	}
 }
 
 void XPUImage::recompute_histograms(float exposure) const
