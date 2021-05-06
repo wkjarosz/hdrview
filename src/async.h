@@ -25,7 +25,7 @@ public:
 	using NoProgressTaskFunc = std::function<T(void)>;
 
 	/*!
-	 * Create an asyncronous task that can report back on its progress
+	 * Create an asynchronous task that can report back on its progress
 	 * @param compute The function to execute asyncrhonously
 	 */
 	AsyncTask(TaskFunc compute)
@@ -35,7 +35,7 @@ public:
 	}
 
 	/*!
-	 * Create an asyncronous task without progress updates
+	 * Create an asynchronous task without progress updates
 	 * @param compute The function to execute asyncrhonously
 	 */
 	AsyncTask(NoProgressTaskFunc compute)
@@ -85,6 +85,17 @@ public:
 	void set_progress(float p)
 	{
 		m_progress.reset_progress(p);
+	}
+
+	/// Query whether the task is canceled.
+	bool canceled() const
+	{
+		return m_progress.canceled();
+	}
+
+	void cancel()
+	{
+		m_progress.cancel();
 	}
 
 	/*!

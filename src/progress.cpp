@@ -8,66 +8,77 @@
 #include <iostream>
 
 AtomicProgress::AtomicProgress(bool createState, float totalPercentage) :
-	m_numSteps(1),
-	m_percentageOfParent(totalPercentage),
-	m_stepPercent(m_numSteps == 0 ? totalPercentage : totalPercentage / m_numSteps),
-	m_atomicState(createState ? std::make_shared<AtomicPercent32>(0.f) : nullptr)
+	m_num_steps(1),
+	m_percentage_of_parent(totalPercentage),
+	m_step_percent(m_num_steps == 0 ? totalPercentage : totalPercentage / m_num_steps),
+	m_state(createState ? std::make_shared<State>() : nullptr)
 {
 
 }
 //
 //AtomicProgress::AtomicProgress(AtomicPercent32 * state, float totalPercentage) :
-//	m_numSteps(1),
-//	m_percentageOfParent(totalPercentage),
-//	m_stepPercent(m_numSteps == 0 ? totalPercentage : totalPercentage / m_numSteps),
-//	m_atomicState(state), m_isStateOwner(false)
+//	m_num_steps(1),
+//	m_percentage_of_parent(totalPercentage),
+//	m_step_percent(m_num_steps == 0 ? totalPercentage : totalPercentage / m_num_steps),
+//	m_state(state), m_isStateOwner(false)
 //{
 //
 //}
 
 AtomicProgress::AtomicProgress(const AtomicProgress & parent, float percentageOfParent) :
-	m_numSteps(1),
-	m_percentageOfParent(parent.m_percentageOfParent * percentageOfParent),
-	m_stepPercent(m_numSteps == 0 ? m_percentageOfParent : m_percentageOfParent / m_numSteps),
-	m_atomicState(parent.m_atomicState)
+	m_num_steps(1),
+	m_percentage_of_parent(parent.m_percentage_of_parent * percentageOfParent),
+	m_step_percent(m_num_steps == 0 ? m_percentage_of_parent : m_percentage_of_parent / m_num_steps),
+	m_state(parent.m_state)
 {
 
 }
 
 void AtomicProgress::reset_progress(float p)
 {
-	if (!m_atomicState)
+	if (!m_state)
 		return;
 
-	*m_atomicState = p;
+	m_state->progress = p;
 }
 
 float AtomicProgress::progress() const
 {
-	if (!m_atomicState)
-		return -1.f;
-
-	return float(*m_atomicState);
+	return m_state ? float(m_state->progress) : -1.f;
 }
 
-void AtomicProgress::set_available_percent(float availablePercent)
+void AtomicProgress::set_available_percent(float available_percent)
 {
-	m_percentageOfParent = availablePercent;
-	m_stepPercent = m_numSteps == 0 ? availablePercent : availablePercent / m_numSteps;
+	m_percentage_of_parent = available_percent;
+	m_step_percent = m_num_steps == 0 ? available_percent : available_percent / m_num_steps;
 }
 
-void AtomicProgress::set_num_steps(int numSteps)
+void AtomicProgress::set_num_steps(int num_steps)
 {
-	m_numSteps = numSteps;
-	m_stepPercent = m_numSteps == 0 ? m_percentageOfParent : m_percentageOfParent / m_numSteps;
+	m_num_steps = num_steps;
+	m_step_percent = m_num_steps == 0 ? m_percentage_of_parent : m_percentage_of_parent / m_num_steps;
 }
 
 AtomicProgress& AtomicProgress::operator+=(int steps)
 {
-	if (!m_atomicState)
+	if (!m_state)
 		return *this;
 
-	*m_atomicState += steps * m_stepPercent;
+	m_state->progress += steps * m_step_percent;
 
 	return *this;
+}
+
+
+bool AtomicProgress::canceled() const
+{
+	return m_state ? m_state->canceled : false;
+}
+
+void AtomicProgress::cancel()
+{
+	if (!m_state)
+		return;
+
+	m_state->canceled = true;
 }

@@ -349,7 +349,8 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		current_image() &&
 		!current_image()->is_null() &&
 		current_image()->histograms() &&
-		current_image()->histograms()->ready())
+		current_image()->histograms()->ready() &&
+		current_image()->histograms()->get())
 	{
 		auto lazyHist = current_image()->histograms();
 		int idx = m_xaxis_scale->selected_index();
