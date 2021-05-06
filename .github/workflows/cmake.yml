@@ -64,11 +64,6 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: env
-        run: echo "::set-env name=BOOST_ROOT_LATEST::$env:BOOST_ROOT_1_72_0"
-      - name: echo
-        run: $env:BOOST_ROOT_LATEST
-        
       - uses: actions/checkout@v1
         with:
           submodules: recursive
