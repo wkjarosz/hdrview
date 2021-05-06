@@ -168,6 +168,7 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 #============================================================================
 add_subdirectory(docopt EXCLUDE_FROM_ALL)
 if (WIN32)
+  cmake_policy(SET CMP0074 NEW)
 	add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
 	set(Boost_USE_STATIC_LIBS ON)
 	set(Boost_USE_STATIC_RUNTIME ON)
