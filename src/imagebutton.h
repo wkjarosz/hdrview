@@ -60,28 +60,6 @@ public:
 		m_reference_callback = callback;
 	}
 
-
-	void swap_with(ImageButton & other)
-	{
-		std::swap(m_caption, other.m_caption);
-		std::swap(m_is_modified, other.m_is_modified);
-//		std::swap(m_is_selected, other.m_is_selected);
-//		std::swap(m_is_reference, other.m_is_reference);
-//		std::swap(m_selected_callback, other.m_selected_callback);
-//		std::swap(m_reference_callback, other.m_reference_callback);
-//		std::swap(m_id, other.m_id);
-		std::swap(m_progress, other.m_progress);
-		std::swap(m_highlight_begin, other.m_highlight_begin);
-		std::swap(m_highlight_end, other.m_highlight_end);
-		std::swap(m_tooltip, other.m_tooltip);
-
-		// swapping may need to recompute trimming
-		m_cutoff = 0;
-		m_size_for_computed_cutoff = Vector2i(0);
-		other.m_cutoff = 0;
-		other.m_size_for_computed_cutoff = Vector2i(0);
-	}
-
 private:
 	std::string m_caption;
 

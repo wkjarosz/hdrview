@@ -133,7 +133,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 	}
 
-	// filter/search of open images GUI elemen ts
+	// filter/search of open images GUI elements
 	{
 		auto grid = new Widget(this);
 		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0});
@@ -203,7 +203,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 			set_filter(filter());
             request_histogram_update();
 			m_screen->redraw();
-			cout << "modify done for image: " << i << endl;
 		};
 }
 
@@ -240,23 +239,20 @@ void ImageListPanel::repopulate_image_list()
 
 	// prevent crash when the focus path includes any of the widgets we are destroying
 	m_screen->clear_focus_path();
-	m_image_btns.clear();
 
 	// clear everything
-	if (m_image_list_widget)
-		remove_child(m_image_list_widget);
+	if (m_image_list)
+		remove_child(m_image_list);
 
-	m_image_list_widget = new Well(this);
-	m_image_list_widget->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
-
+	m_image_list = new Well(this);
+	m_image_list->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
+	
 	for (int i = 0; i < num_images(); ++i)
 	{
-		auto btn = new ImageButton(m_image_list_widget, image(i)->filename());
+		auto btn = new ImageButton(m_image_list, image(i)->filename());
 		btn->set_image_id(i+1);
-		btn->set_selected_callback([&](int j){set_current_image_index(j);});
-		btn->set_reference_callback([&](int j){set_reference_image_index(j);});
-
-		m_image_btns.push_back(btn);
+		btn->set_selected_callback([&](int j){set_current_image_index(nth_visible_image_index(j));});
+		btn->set_reference_callback([&](int j){set_reference_image_index(nth_visible_image_index(j));});
 	}
 
     update_buttons();
@@ -268,10 +264,11 @@ void ImageListPanel::repopulate_image_list()
 
 void ImageListPanel::update_buttons()
 {
+	auto& buttons = m_image_list->children();
     for (int i = 0; i < num_images(); ++i)
     {
         auto img = image(i);
-        auto btn = m_image_btns[i];
+        auto btn = dynamic_cast<ImageButton*>(buttons[i]);
 
         btn->set_is_selected(i == m_current);
         btn->set_is_reference(i == m_reference);
@@ -290,22 +287,69 @@ void ImageListPanel::update_buttons()
 
 void ImageListPanel::enable_disable_buttons()
 {
-	bool hasImage = current_image() != nullptr;
-	bool hasValidImage = hasImage && !current_image()->is_null();
-	m_save_btn->set_enabled(hasValidImage);
-	m_close_btn->set_enabled(hasImage);
+	bool has_image = current_image() != nullptr;
+	bool has_valid_image = has_image && !current_image()->is_null();
+	m_save_btn->set_enabled(has_valid_image);
+	m_close_btn->set_enabled(has_image);
 }
 
 
-bool ImageListPanel::swap_images(int index1, int index2)
+bool ImageListPanel::move_image_to(int old_index, int new_index)
 {
-	if (!is_valid(index1) || !is_valid(index2))
-		// invalid image indices, do nothing
-		return false;
+ 	if (old_index == new_index || !is_valid(old_index) || !is_valid(new_index))
+		// invalid image indices and/or do nothing
+        return false;
 
-	swap(m_images[index1], m_images[index2]);
-	m_image_btns[index1]->swap_with(*m_image_btns[index2]);
+    auto* button = m_image_list->child_at(old_index);
+    button->inc_ref();
+    m_image_list->remove_child_at(old_index);
+    m_image_list->add_child(new_index, button);
+    button->dec_ref();
 
+	// update all button image ids in between 
+    int start_i = std::min(old_index, new_index);
+    int end_i = std::max(old_index, new_index);
+	
+	// compute visible index of first image
+	int visible_i = 0;
+	for (int i = 0; i < start_i; ++i)
+		if (nth_image_is_visible(i))
+			visible_i++;
+
+    for (int i = start_i; i <= end_i; ++i)
+	{
+        auto* b = dynamic_cast<ImageButton*>(m_image_list->child_at(i));
+		if (nth_image_is_visible(i))
+        	b->set_image_id(++visible_i);
+    }
+
+	// helper function to update an image index from before to after the image move
+	auto update_index = [old_index, new_index](int i)
+		{
+			if (i == old_index)
+				i = new_index;
+			else if (old_index < new_index)
+			{
+				if (i > old_index && i <= new_index)
+					i -= 1;
+			}
+			else if (old_index > new_index)
+			{
+				if (i < old_index && i >= new_index)
+					i += 1;
+			}
+			return i;
+		};
+
+	m_current = update_index(m_current);
+	m_reference = update_index(m_reference);
+
+	// now move the actual image
+    auto img = m_images[old_index];
+    m_images.erase(m_images.begin() + old_index);
+    m_images.insert(m_images.begin() + new_index, img);
+    
+    // requestLayoutUpdate();
 	return true;
 }
 
@@ -314,10 +358,10 @@ bool ImageListPanel::bring_image_forward()
 	int curr = current_image_index();
 	int next = next_visible_image(curr, Forward);
 
-	if (!swap_images(curr, next))
+	if (!move_image_to(curr, next))
 		return false;
 
-	return set_current_image_index(next);
+	return true;
 }
 
 
@@ -326,10 +370,64 @@ bool ImageListPanel::send_image_backward()
 	int curr = current_image_index();
 	int next = next_visible_image(curr, Backward);
 
-	if (!swap_images(curr, next))
+	if (!move_image_to(curr, next))
 		return false;
 
-	return set_current_image_index(next);
+	return true;
+}
+
+
+bool ImageListPanel::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
+{
+	// check if we are trying to drag an image button
+    if (down)
+	{
+		auto w = find_widget(p);
+		int i = m_image_list->child_index(w);
+		if (i >= 0)
+		{
+			const auto* btn = dynamic_cast<ImageButton*>(w);
+			m_dragged_image_btn_id = i;
+			m_dragging_image_btn = true;
+			m_dragging_start_pos = p - btn->position();
+		}
+    }
+
+    if (Widget::mouse_button_event(p, button, down, modifiers))
+        return true;
+
+    if (!down)
+        m_dragging_image_btn = false;
+
+    return false;
+}
+
+bool ImageListPanel::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
+{
+	if (Widget::mouse_motion_event(p, rel, button, modifiers))
+        return true;
+
+	if (m_dragging_image_btn)
+	{
+        auto& buttons = m_image_list->children();
+		auto w = find_widget(p);
+		int i = m_image_list->child_index(w);
+		if (i >= 0)
+		{
+			auto* btn = dynamic_cast<ImageButton*>(w);
+			auto pos = btn->position();
+			pos.y() += ((int)m_dragged_image_btn_id - (int)i) * btn->size().y();
+			btn->set_position(pos);
+			btn->mouse_enter_event(p, false);
+
+			move_image_to(m_dragged_image_btn_id, i);
+			m_dragged_image_btn_id = i;
+		}
+    
+        dynamic_cast<ImageButton*>(buttons[m_dragged_image_btn_id])->set_position(p - m_dragging_start_pos);
+    }
+
+    return false;
 }
 
 void ImageListPanel::draw(NVGcontext *ctx)
@@ -379,14 +477,15 @@ void ImageListPanel::draw(NVGcontext *ctx)
 	}
 	enable_disable_buttons();
 
-	if (num_images() != (int)m_image_btns.size())
+	if (num_images() != (int)m_image_list->children().size())
 		spdlog::get("console")->error("Number of buttons and images don't match!");
 	else
 	{
+		auto& buttons = m_image_list->children();
 		for (int i = 0; i < num_images(); ++i)
 		{
 			auto img = image(i);
-			auto btn = m_image_btns[i];
+			auto btn = dynamic_cast<ImageButton*>(buttons[i]);
 			btn->set_progress(img->progress());
 			btn->set_is_modified(img->is_modified());
 		}
@@ -439,21 +538,6 @@ void ImageListPanel::request_buttons_update()
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void ImageListPanel::run_requested_callbacks()
 {
 	if (m_image_modify_done_requested)
@@ -462,7 +546,7 @@ void ImageListPanel::run_requested_callbacks()
 
 		spdlog::get("console")->trace("running requested callbacks");
 		// remove any images that are not being modified and are null
-		bool numImagesChanged = false;
+		bool num_images_changed = false;
 
 		// iterate through the images, and remove the ones that didn't load properly
 		auto it = m_images.begin();
@@ -479,7 +563,7 @@ void ImageListPanel::run_requested_callbacks()
 				else if (m_current >= int(m_images.size()))
 					m_current = m_images.size() - 1;
 
-				numImagesChanged = true;
+				num_images_changed = true;
 			}
 			else
 				++it;
@@ -487,7 +571,7 @@ void ImageListPanel::run_requested_callbacks()
 
 		m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 
-		if (numImagesChanged)
+		if (num_images_changed)
 		{
 			// m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 			m_screen->update_caption();
@@ -514,10 +598,13 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 	if (index == m_current && !forceCallback)
 		return false;
 
+	auto& buttons = m_image_list->children();
 	if (is_valid(m_current))
-		m_image_btns[m_current]->set_is_selected(false);
+		dynamic_cast<ImageButton*>(buttons[m_current])->set_is_selected(false);
+	// for (size_t i = 0; i < buttons.size(); ++i)
+	// 	dynamic_cast<ImageButton*>(buttons[i])->set_is_selected(false);
 	if (is_valid(index))
-		m_image_btns[index]->set_is_selected(true);
+		dynamic_cast<ImageButton*>(buttons[index])->set_is_selected(true);
 
 	m_previous = m_current;
 	m_current = index;
@@ -533,10 +620,11 @@ bool ImageListPanel::set_reference_image_index(int index)
 	if (index == m_reference)
 		return false;
 
+	auto& buttons = m_image_list->children();
 	if (is_valid(m_reference))
-		m_image_btns[m_reference]->set_is_reference(false);
+		dynamic_cast<ImageButton*>(buttons[m_reference])->set_is_reference(false);
 	if (is_valid(index))
-		m_image_btns[index]->set_is_reference(true);
+		dynamic_cast<ImageButton*>(buttons[index])->set_is_reference(true);
 
 	m_reference = index;
 	m_image_view->set_reference_image(reference_image() ? reference_image()->texture() : nullptr);
@@ -658,13 +746,13 @@ bool ImageListPanel::close_image()
 
 	m_images.erase(m_images.begin() + m_current);
 
-	int newIndex = next;
+	int new_index = next;
 	if (m_current < next)
-		newIndex--;
+		new_index--;
 	else if (next >= int(m_images.size()))
-		newIndex = m_images.size() - 1;
+		new_index = m_images.size() - 1;
 
-	set_current_image_index(newIndex, true);
+	set_current_image_index(new_index, true);
 	// for now just forget the previous selection when closing any image
 	m_previous = -1;
 	m_num_images_callback();
@@ -785,85 +873,86 @@ void ImageListPanel::update_filter()
     string filter = m_filter->value();
 	m_previous = -1;
 
-    // Image filtering
+    // filename filtering
     {
-        vector<string> activeImageNames;
+        vector<string> active_image_names;
         size_t id = 1;
+		auto& buttons = m_image_list->children();
         for (int i = 0; i < num_images(); ++i)
         {
             auto img = image(i);
-            auto btn = m_image_btns[i];
+            auto btn = dynamic_cast<ImageButton*>(buttons[i]);
 
             btn->set_visible(matches(img->filename(), filter, use_regex()));
             if (btn->visible())
             {
                 btn->set_image_id(id++);
-                activeImageNames.emplace_back(img->filename());
+                active_image_names.emplace_back(img->filename());
             }
         }
 
         // determine common parts of filenames
         // taken from tev
-        int beginShortOffset = 0;
-        int endShortOffset = 0;
-        if (!activeImageNames.empty())
+        int begin_short_offset = 0;
+        int end_short_offset = 0;
+        if (!active_image_names.empty())
         {
-            string first = activeImageNames.front();
+            string first = active_image_names.front();
             int firstSize = (int)first.size();
             if (firstSize > 0)
             {
-                bool allStartWithSameChar = false;
+                bool all_start_with_same_char = false;
                 do
                 {
-                    int len = codePointLength(first[beginShortOffset]);
+                    int len = codePointLength(first[begin_short_offset]);
 
-                    allStartWithSameChar = all_of
-                            (
-                                    begin(activeImageNames),
-                                    end(activeImageNames),
-                                    [&first, beginShortOffset, len](const string& name)
-                                    {
-                                        if (beginShortOffset + len > (int)name.size())
-                                            return false;
+                    all_start_with_same_char = all_of
+						(
+							begin(active_image_names),
+							end(active_image_names),
+							[&first, begin_short_offset, len](const string& name)
+							{
+								if (begin_short_offset + len > (int)name.size())
+									return false;
 
-                                        for (int i = beginShortOffset; i < beginShortOffset + len; ++i)
-                                            if (name[i] != first[i])
-                                                return false;
+								for (int i = begin_short_offset; i < begin_short_offset + len; ++i)
+									if (name[i] != first[i])
+										return false;
 
-                                        return true;
-                                    }
-                            );
+								return true;
+							}
+						);
 
-                    if (allStartWithSameChar)
-                        beginShortOffset += len;
+                    if (all_start_with_same_char)
+                        begin_short_offset += len;
                 }
-                while (allStartWithSameChar && beginShortOffset < firstSize);
+                while (all_start_with_same_char && begin_short_offset < firstSize);
 
-                bool allEndWithSameChar;
+                bool all_end_with_same_char;
                 do
                 {
-                    char lastChar = first[firstSize - endShortOffset - 1];
-                    allEndWithSameChar = all_of
-                            (
-                                    begin(activeImageNames),
-                                    end(activeImageNames),
-                                    [lastChar, endShortOffset](const string& name)
-                                    {
-                                        int index = (int)name.size() - endShortOffset - 1;
-                                        return index >= 0 && name[index] == lastChar;
-                                    }
-                            );
+                    char lastChar = first[firstSize - end_short_offset - 1];
+                    all_end_with_same_char = all_of
+						(
+							begin(active_image_names),
+							end(active_image_names),
+							[lastChar, end_short_offset](const string& name)
+							{
+								int index = (int)name.size() - end_short_offset - 1;
+								return index >= 0 && name[index] == lastChar;
+							}
+						);
 
-                    if (allEndWithSameChar)
-                        ++endShortOffset;
+                    if (all_end_with_same_char)
+                        ++end_short_offset;
                 }
-                while (allEndWithSameChar && endShortOffset < firstSize);
+                while (all_end_with_same_char && end_short_offset < firstSize);
             }
         }
 
         for (int i = 0; i < num_images(); ++i)
         {
-            auto btn = m_image_btns[i];
+            auto btn = dynamic_cast<ImageButton*>(buttons[i]);
 
             if (!btn->visible())
                 continue;
@@ -873,21 +962,21 @@ void ImageListPanel::update_filter()
 
             if (m_use_short_btn->pushed())
             {
-                btn->set_highlight_range(beginShortOffset, endShortOffset);
+                btn->set_highlight_range(begin_short_offset, end_short_offset);
                 btn->set_caption(btn->highlighted());
                 btn->set_highlight_range(0, 0);
             }
             else
             {
-                btn->set_highlight_range(beginShortOffset, endShortOffset);
+                btn->set_highlight_range(begin_short_offset, end_short_offset);
             }
 
         }
 
-        if (m_current == -1 || (current_image() && !m_image_btns[m_current]->visible()))
+        if (m_current == -1 || (current_image() && !dynamic_cast<ImageButton*>(buttons[m_current])->visible()))
             set_current_image_index(nth_visible_image_index(0));
 
-        if (m_reference == -1 || (reference_image() && !m_image_btns[reference_image_index()]->visible()))
+        if (m_reference == -1 || (reference_image() && !dynamic_cast<ImageButton*>(buttons[reference_image_index()])->visible()))
             set_reference_image_index(-1);
     }
 
@@ -906,38 +995,40 @@ int ImageListPanel::next_visible_image(int index, EDirection direction) const
     int dir = direction == Forward ? -1 : 1;
 
     // If the image does not exist, start at image 0.
-    int startIndex = max(0, index);
+    int start_index = max(0, index);
 
-    int i = startIndex;
+	auto& buttons = m_image_list->children();
+    int i = start_index;
     do
     {
         i = (i + num_images() + dir) % num_images();
     }
-    while (!m_image_btns[i]->visible() && i != startIndex);
+    while (!dynamic_cast<ImageButton*>(buttons[i])->visible() && i != start_index);
 
     return i;
 }
 
 int ImageListPanel::nth_visible_image_index(int n) const
 {
-    int lastVisible = -1;
+	auto& buttons = m_image_list->children();
+    int last_visible = -1;
     for (int i = 0; i < num_images(); ++i)
     {
-        if (m_image_btns[i]->visible())
+        if (dynamic_cast<ImageButton*>(buttons[i])->visible())
         {
-            lastVisible = i;
+            last_visible = i;
             if (n == 0)
                 break;
 
             --n;
         }
     }
-    return lastVisible;
+    return last_visible;
 }
 
 bool ImageListPanel::nth_image_is_visible(int n) const
 {
-    return n >= 0 && n < int(m_image_btns.size()) && m_image_btns[n]->visible();
+    return n >= 0 && n < int(m_image_list->children().size()) && m_image_list->children()[n]->visible();
 }
 
 

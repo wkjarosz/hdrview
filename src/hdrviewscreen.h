@@ -46,6 +46,7 @@ public:
 	void update_caption();
 
 private:
+	void bring_to_focus() const;
 	void toggle_help_window();
 	void update_layout();
 	bool at_side_panel_edge(const Vector2i& p)

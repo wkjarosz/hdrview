@@ -21,6 +21,9 @@ public:
 
 	void draw(NVGcontext *ctx) override;
 
+	bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+	bool mouse_motion_event(const Vector2i& p, const Vector2i& rel, int button, int modifiers) override;
+
 	void repopulate_image_list();
 
 	// Const access to the loaded images. Modification only possible via modify_image, undo, redo
@@ -36,8 +39,8 @@ public:
 
 	bool set_current_image_index(int newIndex, bool forceCallback = false);
 	bool set_reference_image_index(int newIndex);
-	bool swap_current_selected_with_previous() {printf("current: %d; previous: %d\n", m_current, m_previous);return is_valid(m_previous) ? set_current_image_index(m_previous) : false;}
-	bool swap_images(int index1, int index2);
+	bool swap_current_selected_with_previous() {return is_valid(m_previous) ? set_current_image_index(m_previous) : false;}
+	bool move_image_to(int index1, int index2);
 	bool send_image_backward();
 	bool bring_image_forward();
 
@@ -97,8 +100,6 @@ private:
 	// various callback functions
 	std::function<void(int)> m_modify_done_callback;
 	std::function<void()> m_num_images_callback;
-	std::function<void()> m_current_image_callback;
-	std::function<void()> m_reference_image_callback;
 
 
 	HDRViewScreen * m_screen = nullptr;
@@ -111,10 +112,9 @@ private:
 	Button* m_erase_btn = nullptr;
 	Button* m_regex_btn = nullptr;
 	Button * m_use_short_btn = nullptr;
-	Widget * m_image_list_widget = nullptr;
+	Widget * m_image_list = nullptr;
 	ComboBox * m_blend_modes = nullptr;
 	ComboBox * m_channels = nullptr;
-	std::vector<ImageButton*> m_image_btns;
 
 	ComboBox * m_xaxis_scale = nullptr,
 			 * m_yaxis_scale = nullptr;
@@ -124,4 +124,9 @@ private:
 	bool m_update_filter_requested = true;
 	bool m_buttons_update_requested = true;
 	double m_histogram_request_time;
+
+    
+	bool m_dragging_image_btn = false;
+    size_t m_dragged_image_btn_id;
+    nanogui::Vector2i m_dragging_start_pos;
 };

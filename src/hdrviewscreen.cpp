@@ -358,11 +358,18 @@ void HDRViewScreen::update_caption()
         set_caption(string("HDRView"));
 }
 
+void HDRViewScreen::bring_to_focus() const
+{
+    glfwFocusWindow(m_glfw_window);
+}
+
 bool HDRViewScreen::drop_event(const vector<string> & filenames)
 {
 	try
 	{
 		m_images_panel->load_images(filenames);
+
+		bring_to_focus();
 
 		// Ensure the new image button will have the correct visibility state.
 		m_images_panel->set_filter(m_images_panel->filter());
@@ -913,6 +920,13 @@ void HDRViewScreen::update_layout()
     m_zoom_label->set_position(nanogui::Vector2i(width()-zoomWidth-6, 0));
 
 	perform_layout();
+
+    // With a changed layout the relative position of the mouse
+    // within children changes and therefore should get updated.
+    // nanogui does not handle this for us.
+    double x, y;
+    glfwGetCursorPos(m_glfw_window, &x, &y);
+    cursor_pos_callback_event(x, y);
 }
 
 void HDRViewScreen::draw_contents()
