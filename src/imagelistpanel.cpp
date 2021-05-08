@@ -67,9 +67,9 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		auto row = new Widget(this);
 		row->set_layout(new BoxLayout(Orientation::Vertical,
 		                             Alignment::Fill, 0, 4));
-		m_graph = new MultiGraph(row, Color(255, 0, 0, 150));
-		m_graph->add_plot(Color(0, 255, 0, 150));
-		m_graph->add_plot(Color(0, 0, 255, 150));
+		m_graph = new MultiGraph(row, Color(255, 0, 0, 200));
+		m_graph->add_plot(Color(0, 255, 0, 200));
+		m_graph->add_plot(Color(0, 0, 255, 200));
 
 		row = new Widget(this);
 		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));

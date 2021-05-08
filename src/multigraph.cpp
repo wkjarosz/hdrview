@@ -131,7 +131,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 				nvgFill(ctx);
 			}
 			Color sColor = m_foreground_colors[plot];
-			sColor.w() = (sColor.w() + 1.0f) / 2.0f;
+			sColor.w() = 1.0f;//(sColor.w() + 1.0f) / 2.0f;
 			nvgStrokeColor(ctx, sColor);
 			nvgStroke(ctx);
 		}
