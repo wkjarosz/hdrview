@@ -72,28 +72,18 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_graph->add_plot(Color(0, 0, 255, 200));
 
 		row = new Widget(this);
-		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+		row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
 
-		auto b = new Button(row, "", FA_FOLDER_OPEN);
+		auto b = new Button(row, "Open…", FA_FOLDER_OPEN);
 		b->set_fixed_height(25);
 		b->set_tooltip("Load an image and add it to the set of opened images.");
 		b->set_callback([this] { m_screen->load_image(); });
 
-		m_save_btn = new Button(row, "", FA_SAVE);
+		m_save_btn = new Button(row, "Save…", FA_SAVE);
 		m_save_btn->set_enabled(current_image() != nullptr);
 		m_save_btn->set_fixed_height(25);
 		m_save_btn->set_tooltip("Save the image to disk.");
 		m_save_btn->set_callback([this] { m_screen->save_image(); });
-
-		m_bring_forward_btn = new Button(row, "", FA_ARROW_UP);
-		m_bring_forward_btn->set_fixed_height(25);
-		m_bring_forward_btn->set_tooltip("Bring the image forward/up the stack.");
-		m_bring_forward_btn->set_callback([this]{this->bring_image_forward();});
-
-		m_send_backward_btn = new Button(row, "", FA_ARROW_DOWN);
-		m_send_backward_btn->set_fixed_height(25);
-		m_send_backward_btn->set_tooltip("Send the image backward/down the stack.");
-		m_send_backward_btn->set_callback([this]{send_image_backward();});
 
 		m_close_btn = new Button(row, "", FA_TIMES_CIRCLE);
 		m_close_btn->set_fixed_height(25);
@@ -136,7 +126,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 	// filter/search of open images GUI elements
 	{
 		auto grid = new Widget(this);
-		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0, 2, 0});
+		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0});
 		grid->set_layout(agl);
 		agl->set_col_stretch(0, 1.0f);
 
@@ -146,6 +136,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_erase_btn = new Button(grid, "", FA_BACKSPACE);
 		m_regex_btn = new Button(grid, ".*");
 		m_align_btn = new Button(grid, "", FA_ALIGN_RIGHT);
+		m_sort_btn = new Button(grid, "", FA_SORT_ALPHA_DOWN);
 		m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
 
 		m_filter->set_editable(true);
@@ -159,16 +150,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
 
-		m_erase_btn->set_fixed_width(19);
-		m_erase_btn->set_fixed_height(19);
+		m_erase_btn->set_fixed_size({19, 19});
 		m_erase_btn->set_tooltip("Clear the search string.");
 		m_erase_btn->set_change_callback([this](bool b){ set_filter(""); });
 		agl->set_anchor(m_erase_btn,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 
-		m_regex_btn->set_fixed_width(19);
-		m_regex_btn->set_fixed_height(19);
+		m_regex_btn->set_fixed_size({19, 19});
 		m_regex_btn->set_tooltip("Treat search string as a regular expression.");
 		m_regex_btn->set_flags(Button::ToggleButton);
 		m_regex_btn->set_pushed(false);
@@ -177,9 +166,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 
-		m_align_btn->set_fixed_width(19);
-		m_align_btn->set_fixed_height(19);
-		m_align_btn->set_tooltip("Toggle alignment.");
+		m_align_btn->set_fixed_size({19, 19});
+		m_align_btn->set_tooltip("Toggle aligning filenames left vs. right.");
 		m_align_btn->set_callback([this]()
 			{
 				m_align_btn->set_icon(m_align_left ? FA_ALIGN_RIGHT : FA_ALIGN_LEFT);
@@ -199,14 +187,36 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		               AdvancedGridLayout::Anchor(6, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 
-		m_use_short_btn->set_fixed_width(19);
-		m_use_short_btn->set_fixed_height(19);
+		m_sort_btn->set_fixed_size({19, 19});
+		m_sort_btn->set_tooltip("Sort the image list. Cycles through 4 sorting modes:\n\n"
+										 "Alphabetic increasing.\n"
+										 "Alphabetic decreasing.\n"
+										 "Image size decreasing.\n"
+										 "Image size increasing.\n\n"
+										 "When image names are aligned right, alphabetic sorting sorts by reversed filename (useful for sorting files with same extension together).");
+		m_sort_btn->set_callback([this]
+			{
+				sort_images();
+				if (m_sort_btn->icon() == FA_SORT_ALPHA_DOWN)
+					m_sort_btn->set_icon(FA_SORT_ALPHA_DOWN_ALT);
+				else if (m_sort_btn->icon() == FA_SORT_ALPHA_DOWN_ALT)
+					m_sort_btn->set_icon(FA_SORT_AMOUNT_DOWN);
+				else if (m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN)
+					m_sort_btn->set_icon(FA_SORT_AMOUNT_DOWN_ALT);
+				else if (m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT)
+					m_sort_btn->set_icon(FA_SORT_ALPHA_DOWN);
+			});
+		agl->set_anchor(m_sort_btn,
+		               AdvancedGridLayout::Anchor(8, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+
+
+		m_use_short_btn->set_fixed_size({19, 19});
 		m_use_short_btn->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
 		m_use_short_btn->set_flags(Button::ToggleButton);
 		m_use_short_btn->set_pushed(false);
 		m_use_short_btn->set_change_callback([this](bool b){ m_update_filter_requested = true; });
 		agl->set_anchor(m_use_short_btn,
-		               AdvancedGridLayout::Anchor(8, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+		               AdvancedGridLayout::Anchor(10, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 	}
 
@@ -314,6 +324,114 @@ void ImageListPanel::enable_disable_buttons()
 	bool has_valid_image = has_image && !current_image()->is_null();
 	m_save_btn->set_enabled(has_valid_image);
 	m_close_btn->set_enabled(has_image);
+}
+
+void ImageListPanel::sort_images()
+{
+	auto compare_filename = [&](int i, int j)
+	{
+		bool decreasing = m_sort_btn->icon() == FA_SORT_ALPHA_DOWN_ALT || m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT;
+		bool by_size = m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN || m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT;
+		
+		if (by_size)
+		{
+			int i_size = image(i)->width() * image(i)->height();
+			int j_size = image(j)->width() * image(j)->height();
+
+			if (decreasing)
+				return i_size > j_size;
+			else
+				return i_size < j_size;
+		}
+		else
+		{
+			string i_name = image(i)->filename();
+			string j_name = image(j)->filename();
+			if (m_align_left)
+			{
+				if (decreasing)
+					return std::lexicographical_compare(i_name.begin(), i_name.end(),
+														j_name.begin(), j_name.end());
+				else
+					return std::lexicographical_compare(j_name.begin(), j_name.end(),
+														i_name.begin(), i_name.end());
+			}
+			else
+			{
+				if (decreasing)
+					return std::lexicographical_compare(i_name.rbegin(), i_name.rend(),
+														j_name.rbegin(), j_name.rend());
+				else
+					return std::lexicographical_compare(j_name.rbegin(), j_name.rend(),
+														i_name.rbegin(), i_name.rend());
+			}
+		}
+	};
+
+	auto find_index_of_max = [&](int end)
+	{
+		int max_index_so_far = 0;
+
+		for (int i = 0; i <= end; ++i)
+			if (compare_filename(i, max_index_so_far))
+				max_index_so_far = i;
+
+		return max_index_so_far;
+	};
+
+	// selection sort
+	for (int end = num_images()-1; end >= 0; --end)
+	{
+        int mx = find_index_of_max(end);
+        // swap the item at index mx with the item at index end
+		swap_images(mx, end);
+	}
+
+	m_screen->request_layout_update();
+}
+
+bool ImageListPanel::swap_images(int old_index, int new_index)
+{
+ 	if (old_index == new_index || !is_valid(old_index) || !is_valid(new_index))
+		// invalid image indices and/or do nothing
+        return false;
+
+	auto old_btn = dynamic_cast<ImageButton*>(m_image_list->child_at(old_index));
+	auto new_btn = dynamic_cast<ImageButton*>(m_image_list->child_at(new_index));
+
+	old_btn->inc_ref();
+	new_btn->inc_ref();
+	
+	// swap the buttons' image ids
+	auto tmp = old_btn->image_id();
+	old_btn->set_image_id(new_btn->image_id());
+	new_btn->set_image_id(tmp);
+
+	// now swap them in their parent's lists
+	m_image_list->remove_child(old_btn);
+	m_image_list->remove_child(new_btn);
+
+	if (old_index < new_index)
+	{
+		m_image_list->add_child(old_index, new_btn);
+		m_image_list->add_child(new_index, old_btn);
+	}
+	else
+	{
+		m_image_list->add_child(new_index, old_btn);
+		m_image_list->add_child(old_index, new_btn);
+	}
+
+	old_btn->dec_ref();
+	new_btn->dec_ref();
+
+	// swap the images
+	std::swap(m_images[old_index], m_images[new_index]);
+
+
+	// with a simple swap, none of the other imagebuttons are affected
+
+	return true;
 }
 
 

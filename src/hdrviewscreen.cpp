@@ -955,7 +955,7 @@ void HDRViewScreen::draw_contents()
 		img->upload_to_GPU();
 	}
 
-	if (m_need_layout_update)
+	if (m_need_layout_update || m_animation_running)
 	{
 		update_layout();
 		// redraw();

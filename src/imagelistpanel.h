@@ -41,8 +41,10 @@ public:
 	bool set_reference_image_index(int newIndex);
 	bool swap_current_selected_with_previous() {return is_valid(m_previous) ? set_current_image_index(m_previous) : false;}
 	bool move_image_to(int index1, int index2);
+	bool swap_images(int index1, int index2);
 	bool send_image_backward();
 	bool bring_image_forward();
+	void sort_images();
 
 	// Loading, saving, closing, and rearranging the images in the image stack
 	void load_images(const std::vector<std::string> & filenames);
@@ -106,13 +108,12 @@ private:
 	HDRImageView * m_image_view = nullptr;
 	Button * m_save_btn = nullptr;
 	Button * m_close_btn = nullptr;
-	Button * m_bring_forward_btn = nullptr;
-	Button * m_send_backward_btn = nullptr;
 	TextBox * m_filter = nullptr;
 	Button* m_erase_btn = nullptr;
 	Button* m_regex_btn = nullptr;
 	Button* m_align_btn = nullptr;
 	bool m_align_left = false;
+	Button * m_sort_btn = nullptr;
 	Button * m_use_short_btn = nullptr;
 	Widget * m_image_list = nullptr;
 	ComboBox * m_blend_modes = nullptr;
