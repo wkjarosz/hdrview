@@ -7,7 +7,6 @@
 #include "imagelistpanel.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
-#include "hdrimageviewer.h"
 #include "imageview.h"
 #include "multigraph.h"
 #include "well.h"
@@ -16,6 +15,7 @@
 #include <tinydir.h>
 #include <set>
 #include <spdlog/spdlog.h>
+#include <GLFW/glfw3.h>
 
 
 using namespace std;
@@ -309,7 +309,7 @@ void ImageListPanel::update_buttons()
         btn->set_is_modified(img->is_modified());
         btn->set_progress(img->progress());
         btn->set_tooltip(
-                fmt::format("Path: {:s}\n\nResolution: ({:d}, {:d})", img->filename(), img->width(), img->height()));
+                fmt::format("Path: {}\n\nResolution: ({}, {})", img->filename(), img->width(), img->height()));
     }
 
     m_histogram_update_requested = true;

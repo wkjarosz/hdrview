@@ -14,7 +14,7 @@
 using namespace nanogui;
 
 /*!
- * @class 	HDRImageViewer hdrimageviewer.h
+ * @class 	HDRImageView hdrimageview.h
  * @brief	Widget used to manage and display multiple HDR images.
  */
 class HDRImageView : public Canvas {
