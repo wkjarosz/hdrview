@@ -210,9 +210,10 @@ void ImageButton::draw(NVGcontext *ctx)
 	string padded_id_string = fmt::format("{:02d}", m_id);
 	float id_size = nvgTextBounds(ctx, 0, 0, padded_id_string.c_str(), nullptr, nullptr);
 
-	nvgFontSize(ctx, m_font_size * 1.5f);
+	nvgFontSize(ctx, m_font_size * 1.f);
 	nvgFontFace(ctx, "icons");
 	float icon_size = nvgTextBounds(ctx, 0, 0, utf8(FA_PENCIL_ALT).data(), nullptr, nullptr);
+	icon_size += 5;
 
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, m_is_selected ? "sans-bold" : "sans");
@@ -271,7 +272,7 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgRestore(ctx);
 
 	// is_modified icon
-	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : 0);
+	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : FA_SAVE);
 	nvgFontSize(ctx, m_font_size * 0.8f);
 	nvgFontFace(ctx, "icons");
 	nvgFillColor(ctx, m_theme->m_text_color);
