@@ -860,21 +860,21 @@ void HDRImageView::draw_contents()
         m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
         m_image_shader->set_uniform("do_dither", (bool)m_dither);
 
-        Vector2f pCurrent, sCurrent;
-        image_position_and_scale(pCurrent, sCurrent, m_current_image);
-        m_image_shader->set_uniform("image_pos", pCurrent);
-        m_image_shader->set_uniform("image_scale", sCurrent);
+        Vector2f curr_pos, curr_scale;
+        image_position_and_scale(curr_pos, curr_scale, m_current_image);
+        m_image_shader->set_uniform("image_pos", curr_pos);
+        m_image_shader->set_uniform("image_scale", curr_scale);
 
         m_image_shader->set_uniform("blend_mode", (int)m_blend_mode);
         m_image_shader->set_uniform("channel", (int)m_channel);
 
         if (m_reference_image)
 		{
-			Vector2f pReference, sReference;
-			image_position_and_scale(pReference, sReference, m_reference_image);
+			Vector2f ref_pos, ref_scale;
+			image_position_and_scale(ref_pos, ref_scale, m_reference_image);
             m_image_shader->set_uniform("has_reference", true);
-            m_image_shader->set_uniform("reference_pos", pCurrent);
-            m_image_shader->set_uniform("reference_scale", sCurrent);
+            m_image_shader->set_uniform("reference_pos", ref_pos);
+            m_image_shader->set_uniform("reference_scale", ref_scale);
 		}
         else
         {
