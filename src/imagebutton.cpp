@@ -24,12 +24,6 @@ ImageButton::ImageButton(Widget *parent, const string &caption)
 	m_font_size = 15;
 }
 
-void ImageButton::recompute_string_clipping()
-{
-	m_cutoff = 0;
-	m_size_for_computed_cutoff = Vector2i(0);
-}
-
 Vector2i ImageButton::preferred_size(NVGcontext *ctx) const
 {
 	// calculate size of the image iD number
@@ -130,11 +124,11 @@ string ImageButton::highlighted() const
 	}
 	else
 	{
-		size_t beginOffset = m_highlight_begin;
-		size_t endOffset = m_highlight_end;
-		pieces.emplace_back(m_caption.substr(endOffset));
-		pieces.emplace_back(m_caption.substr(beginOffset, endOffset - beginOffset));
-		pieces.emplace_back(m_caption.substr(0, beginOffset));
+		size_t begin_offset = m_highlight_begin;
+		size_t end_offset = m_highlight_end;
+		pieces.emplace_back(m_caption.substr(end_offset));
+		pieces.emplace_back(m_caption.substr(begin_offset, end_offset - begin_offset));
+		pieces.emplace_back(m_caption.substr(0, begin_offset));
 	}
 
 	return pieces.size() > 1 ? pieces[1] : "";
@@ -223,62 +217,58 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, m_is_selected ? "sans-bold" : "sans");
 
-	// trim caption to available space
-	if (m_size.x() == preferred_size(ctx).x())
-		m_cutoff = 0;
-	else if (m_size != m_size_for_computed_cutoff)
-	{
-		m_cutoff = 0;
-		while (nvgTextBounds(ctx, 0, 0, m_caption.substr(m_cutoff).c_str(), nullptr, nullptr) > m_size.x() - 15 - id_size - icon_size)
-			++m_cutoff;
-
-		m_size_for_computed_cutoff = m_size;
-	}
-
-	// Image name
-	string trimmedCaption = m_caption.substr(m_cutoff);
-
-
-	vector<string> pieces;
-	if (m_highlight_begin <= m_cutoff)
-	{
-		if (m_highlight_end <= m_cutoff)
-			pieces.emplace_back(trimmedCaption);
-		else
-		{
-			size_t offset = m_highlight_end - m_cutoff;
-			pieces.emplace_back(trimmedCaption.substr(offset));
-			pieces.emplace_back(trimmedCaption.substr(0, offset));
-		}
-	}
-	else
-	{
-		size_t beginOffset = m_highlight_begin - m_cutoff;
-		size_t endOffset = m_highlight_end - m_cutoff;
-		pieces.emplace_back(trimmedCaption.substr(endOffset));
-		pieces.emplace_back(trimmedCaption.substr(beginOffset, endOffset - beginOffset));
-		pieces.emplace_back(trimmedCaption.substr(0, beginOffset));
-	}
-
-	if (m_cutoff > 0 && m_cutoff < m_caption.size())
-		pieces.back() = string{"…"} + pieces.back();
 
 	Vector2f center = Vector2f(m_pos) + Vector2f(m_size) * 0.5f;
-	Vector2f bottom_right = Vector2f(m_pos) + Vector2f(m_size);
-	Vector2f text_pos(bottom_right.x() - 5, center.y());
-	NVGcolor regular_text_color = (m_is_selected || m_is_reference || m_mouse_focus) ? m_theme->m_text_color : Color(190, 100);
-	NVGcolor highlighted_text_color = Color(190, 255);
 
-	nvgFontSize(ctx, m_font_size);
-	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+	// clip visible text area
+    float clip_x = m_pos.x() + icon_size + id_size + 5;
+    float clip_y = m_pos.y();
+    float clip_width = m_size.x() - (icon_size + id_size + 5 + 4);
+    float clip_height = m_size.y();
 
-	for (size_t i = 0; i < pieces.size(); ++i)
+    nvgSave(ctx);
+    nvgIntersectScissor(ctx, clip_x, clip_y, clip_width, clip_height);
 	{
-		nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
-		nvgFillColor(ctx, i == 1 ? highlighted_text_color : regular_text_color);
-		nvgText(ctx, text_pos.x(), text_pos.y(), pieces[i].c_str(), nullptr);
-		text_pos.x() -= nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+		vector<string> pieces;
+		// the unhighlighted region at the beginning
+		pieces.emplace_back(m_caption.substr(0, m_highlight_begin));
+		// the highlighted region
+		pieces.emplace_back(m_caption.substr(m_highlight_begin, m_highlight_end - m_highlight_begin));
+		// the unhighlighted region at the end
+		pieces.emplace_back(m_caption.substr(m_highlight_end));
+
+		Vector2f bottom_right = Vector2f(m_pos) + Vector2f(m_size);
+		Vector2f text_pos(0, center.y());
+		NVGcolor regular_text_color = (m_is_selected || m_is_reference || m_mouse_focus) ? m_theme->m_text_color : Color(190, 100);
+		NVGcolor highlighted_text_color = Color(190, 255);
+
+		nvgFontSize(ctx, m_font_size);
+
+		int direction = 0;
+		switch (m_alignment)
+		{
+			case Alignment::Left:
+				nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+				text_pos.x() = clip_x;
+				direction = 1;
+				break;
+			case Alignment::Right:
+				nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+				text_pos.x() = bottom_right.x() - 5;
+				direction = -1;
+				break;
+		}
+
+		for (size_t j = 0; j < pieces.size(); ++j)
+		{
+			size_t i = m_alignment == Alignment::Left ? j : pieces.size() - 1  - j;
+			nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
+			nvgFillColor(ctx, i == 1 ? highlighted_text_color : regular_text_color);
+			nvgText(ctx, text_pos.x(), text_pos.y(), pieces[i].c_str(), nullptr);
+			text_pos.x() += direction * nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+		}
 	}
+	nvgRestore(ctx);
 
 	// is_modified icon
 	auto icon = utf8(m_is_modified ? FA_PENCIL_ALT : 0);
@@ -286,14 +276,14 @@ void ImageButton::draw(NVGcontext *ctx)
 	nvgFontFace(ctx, "icons");
 	nvgFillColor(ctx, m_theme->m_text_color);
 	nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-	nvgText(ctx, m_pos.x() + 5, text_pos.y(), icon.data(), nullptr);
+	nvgText(ctx, m_pos.x() + 5, center.y(), icon.data(), nullptr);
 
 	// Image number
 	nvgFontSize(ctx, m_font_size);
 	nvgFontFace(ctx, "sans-bold");
 	nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
 	nvgFillColor(ctx, m_theme->m_text_color);
-	nvgText(ctx, m_pos.x() + icon_size + id_size, text_pos.y(), id_string.c_str(), nullptr);
+	nvgText(ctx, m_pos.x() + icon_size + id_size, center.y(), id_string.c_str(), nullptr);
 }
 
 

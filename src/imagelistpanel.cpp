@@ -136,7 +136,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 	// filter/search of open images GUI elements
 	{
 		auto grid = new Widget(this);
-		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0});
+		auto agl = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0, 2, 0});
 		grid->set_layout(agl);
 		agl->set_col_stretch(0, 1.0f);
 
@@ -145,7 +145,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_filter = new TextBox(grid, "");
 		m_erase_btn = new Button(grid, "", FA_BACKSPACE);
 		m_regex_btn = new Button(grid, ".*");
-		m_use_short_btn = new Button(grid, "", FA_ALIGN_LEFT);
+		m_align_btn = new Button(grid, "", FA_ALIGN_RIGHT);
+		m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
 
 		m_filter->set_editable(true);
 		m_filter->set_alignment(TextBox::Alignment::Left);
@@ -176,6 +177,28 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 
+		m_align_btn->set_fixed_width(19);
+		m_align_btn->set_fixed_height(19);
+		m_align_btn->set_tooltip("Toggle alignment.");
+		m_align_btn->set_callback([this]()
+			{
+				m_align_btn->set_icon(m_align_left ? FA_ALIGN_RIGHT : FA_ALIGN_LEFT);
+				m_align_left = !m_align_left;
+
+				// now set alignment on all buttons
+				auto& buttons = m_image_list->children();
+				for (int i = 0; i < num_images(); ++i)
+				{
+					auto img = image(i);
+					auto btn = dynamic_cast<ImageButton*>(buttons[i]);
+
+					btn->set_alignment(m_align_left ? ImageButton::Alignment::Left : ImageButton::Alignment::Right);
+				}
+			});
+		agl->set_anchor(m_align_btn,
+		               AdvancedGridLayout::Anchor(6, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+
+
 		m_use_short_btn->set_fixed_width(19);
 		m_use_short_btn->set_fixed_height(19);
 		m_use_short_btn->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
@@ -183,7 +206,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_use_short_btn->set_pushed(false);
 		m_use_short_btn->set_change_callback([this](bool b){ m_update_filter_requested = true; });
 		agl->set_anchor(m_use_short_btn,
-		               AdvancedGridLayout::Anchor(6, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+		               AdvancedGridLayout::Anchor(8, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
 
 	}
 
@@ -397,7 +420,10 @@ bool ImageListPanel::mouse_button_event(const nanogui::Vector2i &p, int button, 
         return true;
 
     if (!down)
+	{
         m_dragging_image_btn = false;
+		m_screen->request_layout_update();
+	}
 
     return false;
 }
@@ -425,6 +451,7 @@ bool ImageListPanel::mouse_motion_event(const nanogui::Vector2i &p, const nanogu
 		}
     
         dynamic_cast<ImageButton*>(buttons[m_dragged_image_btn_id])->set_position(p - m_dragging_start_pos);
+		m_screen->request_layout_update();
     }
 
     return false;
@@ -698,6 +725,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 		image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
 		image->set_filename(filename);
 		m_screen->push_gui_refresh();
+		m_screen->request_layout_update();
 		image->async_modify(
 				[filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 				{
@@ -779,6 +807,7 @@ void ImageListPanel::modify_image(const ImageCommand & command)
 	{
 		m_images[m_current]->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
 		m_screen->push_gui_refresh(); 
+		m_screen->request_layout_update();
 		m_images[m_current]->async_modify(
 				[command](const shared_ptr<const HDRImage> & img)
 				{
@@ -800,6 +829,7 @@ void ImageListPanel::modify_image(const ImageCommandWithProgress & command)
 	{
 		m_images[m_current]->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
 		m_screen->push_gui_refresh(); 
+		m_screen->request_layout_update();
 		m_images[m_current]->async_modify(
 				[command](const shared_ptr<const HDRImage> & img, AtomicProgress &progress)
 				{

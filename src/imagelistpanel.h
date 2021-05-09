@@ -111,6 +111,8 @@ private:
 	TextBox * m_filter = nullptr;
 	Button* m_erase_btn = nullptr;
 	Button* m_regex_btn = nullptr;
+	Button* m_align_btn = nullptr;
+	bool m_align_left = false;
 	Button * m_use_short_btn = nullptr;
 	Widget * m_image_list = nullptr;
 	ComboBox * m_blend_modes = nullptr;

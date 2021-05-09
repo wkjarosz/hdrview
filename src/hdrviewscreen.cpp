@@ -109,7 +109,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                          {
 	                         btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
 	                         m_images_panel->set_visible(value);
-                             update_layout();
+                            //  update_layout();
+							 request_layout_update();
                              m_side_panel_contents->perform_layout(m_nvg_context);
                          });
 
@@ -129,7 +130,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	 {
 		 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
 		 editPanel->set_visible(value);
-		 update_layout();
+		//  update_layout();
+		 request_layout_update();
 		 m_side_panel_contents->perform_layout(m_nvg_context);
 	 });
 	editPanel->perform_layout(m_nvg_context);
@@ -188,7 +190,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		push_gui_refresh();
 		m_animation_running = true;
 	    m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
-        update_layout();
+        // update_layout();
+		request_layout_update();
     });
 
     exposureTextBox->number_format("%1.2f");
@@ -268,7 +271,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     int numer = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
                                     int denom = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
                                     m_zoom_label->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
-                                    update_layout();
+                                    // update_layout();
+									request_layout_update();
                                 });
 
 	sRGBCheckbox->set_callback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
@@ -279,7 +283,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         gammaTextBox->set_enabled(!value);
         gammaLabel->set_enabled(!value);
         gammaLabel->set_color(value ? m_theme->m_disabled_text_color : m_theme->m_text_color);
-        update_layout();
+        // update_layout();
+		request_layout_update();
     });
 
 	sRGBCheckbox->set_checked(sRGB);
@@ -314,10 +319,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 
 	this->set_size(nanogui::Vector2i(1024, 800));
-	update_layout();
+	// update_layout();
+	request_layout_update();
 	set_resize_callback([&](nanogui::Vector2i)
 	                  {
 		                //   update_layout();
+						request_layout_update();
 	                  });
 
     set_visible(true);
@@ -440,7 +447,8 @@ void HDRViewScreen::toggle_help_window()
 		m_help_button->set_pushed(true);
 	}
 
-	update_layout();
+	// update_layout();
+	request_layout_update();
 }
 
 
@@ -664,7 +672,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			push_gui_refresh();
 			m_animation_running = true;
 		    m_animation_goal = EAnimationGoal(m_animation_goal ^ TOP_PANEL);
-		    update_layout();
+		    // update_layout();
+			request_layout_update();
             return true;
 
         case 'H':
@@ -694,7 +703,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 		        m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
 	        }
 
-		    update_layout();
+		    // update_layout();
+			request_layout_update();
             return true;
 
         case GLFW_KEY_DOWN:
@@ -831,7 +841,8 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 		m_side_panel_contents->set_fixed_width(w);
 		m_side_scroll_panel->set_fixed_width(w + 12);
 		m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
-		update_layout();
+		// update_layout();
+		request_layout_update();
 		return true;
 	}
 
@@ -851,7 +862,6 @@ void HDRViewScreen::update_layout()
 
 	if (m_animation_running)
 	{
-		cout << "doing gui animation" << std::endl;
 		const double duration = 0.2;
 		double elapsed = glfwGetTime() - m_gui_animation_start;
 		// stop the animation after 2 seconds
@@ -921,12 +931,15 @@ void HDRViewScreen::update_layout()
 
 	perform_layout();
 
-    // With a changed layout the relative position of the mouse
-    // within children changes and therefore should get updated.
-    // nanogui does not handle this for us.
-    double x, y;
-    glfwGetCursorPos(m_glfw_window, &x, &y);
-    cursor_pos_callback_event(x, y);
+	if (!m_dragging_side_panel)
+	{
+		// With a changed layout the relative position of the mouse
+		// within children changes and therefore should get updated.
+		// nanogui does not handle this for us.
+		double x, y;
+		glfwGetCursorPos(m_glfw_window, &x, &y);
+		cursor_pos_callback_event(x, y);
+	}
 }
 
 void HDRViewScreen::draw_contents()
@@ -942,6 +955,10 @@ void HDRViewScreen::draw_contents()
 		img->upload_to_GPU();
 	}
 
-	update_layout();
-	// redraw();
+	if (m_need_layout_update)
+	{
+		update_layout();
+		// redraw();
+		m_need_layout_update = false;
+	}
 }
