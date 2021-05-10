@@ -135,7 +135,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_filter = new TextBox(grid, "");
 		m_erase_btn = new Button(grid, "", FA_BACKSPACE);
 		m_regex_btn = new Button(grid, ".*");
-		m_align_btn = new Button(grid, "", FA_ALIGN_RIGHT);
+		m_align_btn = new Button(grid, "", FA_ALIGN_LEFT);
 		m_sort_btn = new Button(grid, "", FA_SORT_ALPHA_DOWN);
 		m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
 
@@ -170,7 +170,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_align_btn->set_tooltip("Toggle aligning filenames left vs. right.");
 		m_align_btn->set_callback([this]()
 			{
-				m_align_btn->set_icon(m_align_left ? FA_ALIGN_RIGHT : FA_ALIGN_LEFT);
+				m_align_btn->set_icon(m_align_left ? FA_ALIGN_LEFT : FA_ALIGN_RIGHT);
 				m_align_left = !m_align_left;
 
 				// now set alignment on all buttons

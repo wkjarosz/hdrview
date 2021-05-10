@@ -1074,7 +1074,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
-	auto b = new Button(parent, name, FA_CROP);
+	auto b = new Button(parent, name, FA_CROP_ALT);
 	b->set_fixed_height(21);
 	b->set_callback(
 		[&, screen, images_panel]()

@@ -687,25 +687,25 @@ void HDRImageView::draw_image_border(NVGcontext* ctx) const
 
 	int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 
-	Vector2i borderPosition = m_pos + Vector2i(m_offset + center_offset(m_current_image));
-	Vector2i borderSize(scaled_image_size_f(m_current_image));
+	Vector2i border_pos = m_pos + Vector2i(m_offset + center_offset(m_current_image));
+	Vector2i border_size(scaled_image_size_f(m_current_image));
 
 	if (m_reference_image && squared_norm(m_reference_image->size()) > 0)
 	{
-		borderPosition = min(borderPosition, m_pos + Vector2i(m_offset + center_offset(m_reference_image)));
-		borderSize = max(borderSize, Vector2i(scaled_image_size_f(m_reference_image)));
+		border_pos = min(border_pos, m_pos + Vector2i(m_offset + center_offset(m_reference_image)));
+		border_size = max(border_size, Vector2i(scaled_image_size_f(m_reference_image)));
 	}
 
 	// Draw a drop shadow
 	NVGpaint shadowPaint =
-		nvgBoxGradient(ctx, borderPosition.x(), borderPosition.y(), borderSize.x(), borderSize.y(), cr * 2, ds * 2,
+		nvgBoxGradient(ctx, border_pos.x(), border_pos.y(), border_size.x(), border_size.y(), cr * 2, ds * 2,
 					   m_theme->m_drop_shadow, m_theme->m_transparent);
 
 	nvgSave(ctx);
 	nvgBeginPath(ctx);
 	nvgScissor(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y());
-	nvgRect(ctx, borderPosition.x() - ds, borderPosition.y() - ds, borderSize.x() + 2 * ds, borderSize.y() + 2 * ds);
-	nvgRoundedRect(ctx, borderPosition.x(), borderPosition.y(), borderSize.x(), borderSize.y(), cr);
+	nvgRect(ctx, border_pos.x() - ds, border_pos.y() - ds, border_size.x() + 2 * ds, border_size.y() + 2 * ds);
+	nvgRoundedRect(ctx, border_pos.x(), border_pos.y(), border_size.x(), border_size.y(), cr);
 	nvgPathWinding(ctx, NVG_HOLE);
 	nvgFillPaint(ctx, shadowPaint);
 	nvgFill(ctx);
@@ -715,8 +715,8 @@ void HDRImageView::draw_image_border(NVGcontext* ctx) const
 	nvgSave(ctx);
 	nvgBeginPath(ctx);
 	nvgScissor(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y());
-	nvgStrokeWidth(ctx, 2.0f);
-	nvgRect(ctx, borderPosition.x() - 0.5f, borderPosition.y() - 0.5f, borderSize.x() + 1, borderSize.y() + 1);
+	nvgStrokeWidth(ctx, 1.0f);
+	nvgRect(ctx, border_pos.x(), border_pos.y(), border_size.x(), border_size.y());
 	nvgStrokeColor(ctx, Color(0.5f, 0.5f, 0.5f, 1.0f));
 	nvgStroke(ctx);
 	nvgResetScissor(ctx);
