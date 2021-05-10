@@ -57,7 +57,7 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
 	if (button == GLFW_MOUSE_BUTTON_2 ||
 		(button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT))
 	{
-		// If we already were the reference, then let's disable using us a reference.
+		// If we already were the reference, then let's disable using as a reference.
 		m_is_reference = !m_is_reference;
 
 		// If we newly became the reference, then we need to disable the existing reference
@@ -76,7 +76,6 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
 		// react to new references or a loss of a reference image.
 		if (m_reference_callback)
 		{
-			cout << "m_is_reference: " << m_is_reference << "; " << m_id << endl;
 			if (m_is_reference)
 				m_reference_callback(m_id-1);
 			else

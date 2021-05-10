@@ -352,13 +352,13 @@ void main() {
 
     vec4 value = texture(image, image_uv);
     if (image_uv.x > 1.0 || image_uv.y > 1.0 || image_uv.x < 0.0 || image_uv.y < 0.0)
-        value.a = 0.0;
+        value = vec4(0.0);
     
     if (has_reference)
     {
         vec4 reference_val = texture(reference, reference_uv);
         if (reference_uv.x > 1.0 || reference_uv.y > 1.0 || reference_uv.x < 0.0 || reference_uv.y < 0.0)
-            reference_val.a = 0.0;
+            reference_val = vec4(0.0);
 
         value = blend(value, reference_val);
     }
@@ -468,14 +468,14 @@ HDRImageView::HDRImageView(Widget *parent)
         // create an empty texture so that nanogui's shader doesn't print errors
         // before we've selected a reference image
         // FIXME: at some point, find a more elegant solution for this.
-        m_reference_image = new Texture(
+        m_null_image = new Texture(
                 Texture::PixelFormat::R,
                 Texture::ComponentFormat::Float32,
                 Vector2i(0, 0),
                 Texture::InterpolationMode::Nearest,
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
-        m_image_shader->set_texture("reference", m_reference_image);
+        m_image_shader->set_texture("reference", m_null_image);
     }
     catch(const std::exception& e)
     {
@@ -489,6 +489,8 @@ void HDRImageView::set_current_image(TextureRef cur)
     m_current_image = std::move(cur);
     if (m_current_image)
         m_image_shader->set_texture("image", m_current_image);
+    else
+        m_image_shader->set_texture("image", m_null_image);
 }
 
 void HDRImageView::set_reference_image(TextureRef ref)
@@ -497,6 +499,8 @@ void HDRImageView::set_reference_image(TextureRef ref)
     m_reference_image = std::move(ref);
     if (m_reference_image)
         m_image_shader->set_texture("reference", m_reference_image);
+    else
+        m_image_shader->set_texture("reference", m_null_image);
 }
 
 

@@ -914,6 +914,7 @@ void ImageListPanel::close_all_images()
 	m_previous = -1;
 
 	m_image_view->set_current_image(nullptr);
+	m_image_view->set_reference_image(nullptr);
     m_screen->update_caption();
 
 	m_num_images_callback();
@@ -1158,6 +1159,8 @@ int ImageListPanel::next_visible_image(int index, EDirection direction) const
 
 int ImageListPanel::nth_visible_image_index(int n) const
 {
+	if (n < 0) return -1;
+
 	auto& buttons = m_image_list->children();
     int last_visible = -1;
     for (int i = 0; i < num_images(); ++i)
