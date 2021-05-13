@@ -52,56 +52,120 @@ elseif(WIN32)
 endif()
 
 
+if (NANOGUI_BACKEND STREQUAL "OpenGL")
+  set(RESOURCE_GLOB "resources/*_gl.*")
+  message(STATUS "Using OpenGL backend.")
+elseif (NANOGUI_BACKEND STREQUAL "GLES 2")
+  set(RESOURCE_GLOB "resources/*_gles.*")
+  message(STATUS "Using GLES 2 backend.")
+elseif (NANOGUI_BACKEND STREQUAL "GLES 3")
+  set(RESOURCE_GLOB "resources/*_gles.*")
+  message(STATUS "Using GLES 3 backend.")
+elseif (NANOGUI_BACKEND STREQUAL "Metal")
+  set(RESOURCE_GLOB "resources/*_metal.*")
+  message(STATUS "Using Metal backend.")
+endif()
+
+# Run simple cmake converter to put shader files into the data segment
+
+# Glob up resource files
+file(GLOB resources "${RESOURCE_GLOB}")
+
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
+
+# Precompile .metal shaders to .metallib files
+foreach(fname_in IN LISTS resources)
+  if (NANOGUI_BACKEND STREQUAL "Metal" AND fname_in MATCHES "_metal")
+    get_filename_component(fname_out ${fname_in} NAME)
+    set(fname_out "${CMAKE_CURRENT_BINARY_DIR}/resources/${fname_out}lib")
+    add_custom_command(
+        OUTPUT ${fname_out}
+        DEPENDS ${fname_in}
+        COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3 "${fname_in}" -o "${fname_out}"
+        VERBATIM
+    )
+  else()
+    set(fname_out "${fname_in}")
+  endif()
+  list(APPEND resources_processed ${fname_out})
+endforeach()
+
+# Concatenate resource files into a comma separated string
+string(REGEX REPLACE "([^\\]|^);" "\\1," resources_string "${resources_processed}")
+string(REGEX REPLACE "[\\](.)" "\\1" resources_string "${resources_string}")
+
+# Create command line for running bin2c cmake script
+set(bin2c_cmdline
+  -DOUTPUT_C=hdrview_resources.cpp
+  -DOUTPUT_H=hdrview_resources.h
+  "-DINPUT_FILES=${resources_string}"
+  -P "${CMAKE_CURRENT_SOURCE_DIR}/resources/bin2c.cmake")
+
+
+# Run bin2c on resource files
+add_custom_command(
+  OUTPUT hdrview_resources.cpp hdrview_resources.h
+  COMMAND ${CMAKE_COMMAND} ARGS ${bin2c_cmdline}
+  DEPENDS ${resources} ${resources_processed}
+  COMMENT "Running bin2c"
+  PRE_BUILD VERBATIM)
+
+# Needed to generated files
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
 add_executable(HDRView
-               src/async.h
-               src/color.cpp
-               src/color.h
-               src/colorspace.cpp
-               src/colorspace.h
-               src/commandhistory.h
-               src/common.cpp
-               src/common.h
-               src/dithermatrix256.h
-               src/editimagepanel.cpp
-               src/editimagepanel.h
-               src/envmap.cpp
-               src/envmap.h
-               src/filmictonecurve.cpp
-               src/filmictonecurve.h
-               src/fwd.h
-               src/xpuimage.cpp
-               src/xpuimage.h
-               src/hdrimage.cpp
-               src/hdrimage.h
-               src/hdrimageio.cpp
-               src/hdrview.cpp
-               src/hdrviewscreen.cpp
-               src/hdrviewscreen.h
-               src/helpwindow.cpp
-               src/helpwindow.h
-               src/hslgradient.cpp
-               src/hslgradient.h
-               src/imagebutton.cpp
-               src/imagebutton.h
-               src/imagelistpanel.cpp
-               src/imagelistpanel.h
-               src/imageview.cpp
-               src/imageview.h
-               src/multigraph.cpp
-               src/multigraph.h
-               src/parallelfor.cpp
-               src/parallelfor.h
-               src/pfm.h
-               src/pfm.cpp
-               src/ppm.h
-               src/ppm.cpp
-               src/progress.cpp
-               src/progress.h
-               src/range.h
-               src/timer.h
-               src/well.cpp
-               src/well.h
-               ${EXTRA_SOURCE})
+
+    # shaders, etc.
+    hdrview_resources.cpp
+    src/async.h
+    src/color.cpp
+    src/color.h
+    src/colorspace.cpp
+    src/colorspace.h
+    src/commandhistory.h
+    src/common.cpp
+    src/common.h
+    src/dithermatrix256.h
+    src/editimagepanel.cpp
+    src/editimagepanel.h
+    src/envmap.cpp
+    src/envmap.h
+    src/filmictonecurve.cpp
+    src/filmictonecurve.h
+    src/fwd.h
+    src/xpuimage.cpp
+    src/xpuimage.h
+    src/hdrimage.cpp
+    src/hdrimage.h
+    src/hdrimageio.cpp
+    src/hdrview.cpp
+    src/hdrviewscreen.cpp
+    src/hdrviewscreen.h
+    src/helpwindow.cpp
+    src/helpwindow.h
+    src/hslgradient.cpp
+    src/hslgradient.h
+    src/imagebutton.cpp
+    src/imagebutton.h
+    src/imagelistpanel.cpp
+    src/imagelistpanel.h
+    src/imageview.cpp
+    src/imageview.h
+    src/multigraph.cpp
+    src/multigraph.h
+    src/parallelfor.cpp
+    src/parallelfor.h
+    src/pfm.h
+    src/pfm.cpp
+    src/ppm.h
+    src/ppm.cpp
+    src/progress.cpp
+    src/progress.h
+    src/range.h
+    src/timer.h
+    src/well.cpp
+    src/well.h
+    ${EXTRA_SOURCE})
 
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if (APPLE)
