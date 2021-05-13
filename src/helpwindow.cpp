@@ -16,6 +16,9 @@
 #include <nanogui/opengl.h>
 #include <nanogui/window.h>
 #include "well.h"
+#include <spdlog/spdlog.h>
+
+#include <timestamp.h>
 
 using namespace nanogui;
 using namespace std;
@@ -54,10 +57,17 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	auto copyW = new Widget(this);
 	copyW->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-	auto copy = new Label(copyW, "HDRView " HDRVIEW_VERSION ". Copyright (c) Wojciech Jarosz\n\n"
+
+	string about = fmt::format(
+		"HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
+		"(built {} from git {}-{}-{}, using {} backend)\n\n"
 		"HDRView is a simple research-oriented tool for examining, "
 		"comparing, manipulating, and converting high-dynamic range images.\n\n"
-		"HDRView is freely available under a 3-clause BSD license.");
+		"HDRView is freely available under a 3-clause BSD license.\n\n",
+		HDRVIEW_VERSION, HDRVIEW_BUILD_TIME,
+		hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(),
+		HDRVIEW_BACKEND);
+	auto copy = new Label(copyW, about);
 	copy->set_fixed_width(715);
 
 	new Label(this, "Keybindings", "sans-bold", 18);

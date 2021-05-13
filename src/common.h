@@ -388,14 +388,21 @@ enum EDirection
 
 
 
-/// Access binary data stored in nanogui_resources.cpp
+/// Access binary data stored in hdrview_resources.cpp
 #define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
 
-/// Access a shader stored in nanogui_resources.cpp
+/// Access a shader stored in hdrview_resources.cpp
 #if defined(NANOGUI_USE_OPENGL)
 #  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
+#  define HDRVIEW_BACKEND "OpenGL"
 #elif defined(NANOGUI_USE_GLES)
 #  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
+#  define HDRVIEW_BACKEND "OpenGL ES"
 #elif defined(NANOGUI_USE_METAL)
 #  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
+#  define HDRVIEW_BACKEND "Metal"
 #endif
+
+const char* hdrview_git_version();
+const char* hdrview_git_revision();
+const char* hdrview_git_branch();

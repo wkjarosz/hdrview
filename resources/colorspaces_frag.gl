@@ -1,6 +1,6 @@
 #define minLab vec3(0, -128, -128)
 #define maxLab vec3(100, 128, 128)
-#define rangeLab maxLab-minLab
+#define rangeLab (maxLab-minLab)
 #define LabD65Wts vec3(.95047, 1.000, 1.08883)
 #ifndef saturate
 #define saturate(v) clamp(v, 0, 1)

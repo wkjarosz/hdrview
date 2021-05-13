@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.3)
 project(hdrview)
 
-set(HDRVIEW_VERSION "0.3")
+set(HDRVIEW_VERSION "1.0")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
@@ -113,9 +113,44 @@ add_custom_command(
 # Needed to generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(HDRView
+# # Create command line for running timestamp cmake script
+# set(timestamp_cmdline
+#   -DOUTPUT_H=timestamp.h
+#   -P "${CMAKE_CURRENT_SOURCE_DIR}/resources/timestamp.cmake")
 
+# # build time in UTC ISO 8601
+# add_custom_command (
+#     OUTPUT timestamp.h
+#     COMMAND ${CMAKE_COMMAND} -P ${timestamp_cmdline}
+#     COMMENT "Generating timestamp")
+
+# build time in UTC ISO 8601
+FILE (WRITE ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "STRING(TIMESTAMP TIMEZ %Y-%m-%d)\n")
+FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(WRITE timestamp.h \"#ifndef TIMESTAMP_H\\n\")\n")
+FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#define TIMESTAMP_H\\n\\n\")\n")
+FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#define HDRVIEW_BUILD_TIME \\\"\${TIMEZ}\\\"\\n\\n\")\n")
+FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#endif // TIMESTAMP_H\\n\")\n")
+
+add_custom_target(
+    timestamp
+    COMMENT "Generating timestamp"
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake
+    ADD_DEPENDENCIES ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake)
+
+# Add a custom command that produces version.cpp, plus
+# a dummy output that's not actually produced, in order
+# to force version.cmake to always be re-run before the build
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
+          ${CMAKE_CURRENT_BINARY_DIR}/_version.cpp
+    COMMAND ${CMAKE_COMMAND} -P
+          ${CMAKE_CURRENT_SOURCE_DIR}/resources/version.cmake
+    COMMENT "Creating git version info")
+
+
+add_executable(HDRView
     # shaders, etc.
+    version.cpp
     hdrview_resources.cpp
     src/async.h
     src/color.cpp
@@ -167,6 +202,8 @@ add_executable(HDRView
     src/well.h
     ${EXTRA_SOURCE})
 
+add_dependencies(HDRView timestamp)
+
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if (APPLE)
     # HDRVIEW is unlikely to switch away from openGL anytime soon
@@ -203,31 +240,32 @@ endif()
 
 
 add_executable(hdrbatch
-               src/color.cpp
-               src/color.h
-               src/colorspace.cpp
-               src/colorspace.h
-               src/common.cpp
-               src/common.h
-               src/envmap.cpp
-               src/envmap.h
-               src/dithermatrix256.h
-               src/fwd.h
-               src/hdrimage.cpp
-               src/hdrimage.h
-               src/hdrimageio.cpp
-               src/hdrbatch.cpp
-               src/parallelfor.cpp
-               src/parallelfor.h
-               src/pfm.cpp
-               src/pfm.h
-               src/ppm.cpp
-               src/ppm.h
-               src/progress.cpp
-               src/progress.h
-               src/range.h
-               src/timer.h
-               )
+  version.cpp
+  src/color.cpp
+  src/color.h
+  src/colorspace.cpp
+  src/colorspace.h
+  src/common.cpp
+  src/common.h
+  src/envmap.cpp
+  src/envmap.h
+  src/dithermatrix256.h
+  src/fwd.h
+  src/hdrimage.cpp
+  src/hdrimage.h
+  src/hdrimageio.cpp
+  src/hdrbatch.cpp
+  src/parallelfor.cpp
+  src/parallelfor.h
+  src/pfm.cpp
+  src/pfm.h
+  src/ppm.cpp
+  src/ppm.h
+  src/progress.cpp
+  src/progress.h
+  src/range.h
+  src/timer.h
+)
 
 # set_target_properties(hdrbatch PROPERTIES CXX_VISIBILITY_PRESET hidden)
 

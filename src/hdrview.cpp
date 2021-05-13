@@ -8,6 +8,8 @@
 #include <iostream>
 #include <docopt.h>
 #include "hdrviewscreen.h"
+#include "common.h"
+#include <timestamp.h>
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
@@ -78,9 +80,13 @@ int main(int argc, char **argv)
             }
         }
 #endif
+        string version_string = fmt::format(
+            "HDRView {}. (built {} from git {}-{}-{}, using {} backend)",
+            HDRVIEW_VERSION, HDRVIEW_BUILD_TIME,
+            hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
         docargs = docopt::docopt(USAGE, argVector,
                                  true,            // show help if requested
-                                 "HDRView " HDRVIEW_VERSION);  // version string
+                                 version_string);  // version string
 
         verbosity = docargs["--verbose"].asLong();
 

@@ -21,41 +21,17 @@ std::mt19937 g_rand(53);
 const float MIN_ZOOM = 0.01f;
 const float MAX_ZOOM = 512.f;
 
-#define DEFINE_PARAMS(parent,name) defines += std::string("#define ") + #name + std::string(" ") + to_string(parent::name) + "\n";
-#define DEFINE_PARAMS2(parent,name,prefix) defines += std::string("#define ") + #prefix#name + std::string(" ") + to_string(parent::name) + "\n";
-
-std::string add_defines(std::string shader_string)
+std::string add_includes(std::string shader_string)
 {
-    std::string defines;
+#if defined(NANOGUI_USE_OPENGL) or defined(NANOGUI_USE_GLES)
+    std::string includes;
 
-    // add #defines to the shader
-    DEFINE_PARAMS2(EChannel, RED, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, GREEN, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, BLUE, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, RGB, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, LUMINANCE, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, CIE_L, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, CIE_a, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, CIE_b, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, CIE_CHROMATICITY, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, FALSE_COLOR, CHANNEL_);
-    DEFINE_PARAMS2(EChannel, POSITIVE_NEGATIVE, CHANNEL_);
+    includes += HDRVIEW_SHADER(colormaps_frag) + "\n";
+    includes += HDRVIEW_SHADER(colorspaces_frag) + "\n";
 
-    DEFINE_PARAMS(EBlendMode, NORMAL_BLEND);
-    DEFINE_PARAMS(EBlendMode, MULTIPLY_BLEND);
-    DEFINE_PARAMS(EBlendMode, DIVIDE_BLEND);
-    DEFINE_PARAMS(EBlendMode, ADD_BLEND);
-    DEFINE_PARAMS(EBlendMode, AVERAGE_BLEND);
-    DEFINE_PARAMS(EBlendMode, SUBTRACT_BLEND);
-    DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
-    DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
+    // spdlog::get("console")->trace("GLSL #includes: {}", includes);
 
-    defines += HDRVIEW_SHADER(colormaps_frag) + "\n";
-    defines += HDRVIEW_SHADER(colorspaces_frag) + "\n";
-
-    // spdlog::get("console")->trace("GLSL constants and #includes: {}", defines);
-
-    if (!defines.empty())
+    if (!includes.empty())
     {
         if (shader_string.length() > 8 && shader_string.substr(0, 8) == "#version")
         {
@@ -64,16 +40,17 @@ std::string add_defines(std::string shader_string)
             std::string line;
             std::getline(iss, line);
             oss << line << std::endl;
-            oss << defines;
+            oss << includes;
             while (std::getline(iss, line))
                 oss << line << std::endl;
             shader_string = oss.str();
         }
         else
         {
-            shader_string = defines + shader_string;
+            shader_string = includes + shader_string;
         }
     }
+#endif
 
     return shader_string;
 }
@@ -98,8 +75,7 @@ HDRImageView::HDRImageView(Widget *parent)
             /* An identifying name */
             "ImageView",
             HDRVIEW_SHADER(hdrimageview_vert),
-            add_defines(HDRVIEW_SHADER(hdrimageview_frag)),
-            // HDRVIEW_SHADER(hdrimageview_frag),
+            add_includes(HDRVIEW_SHADER(hdrimageview_frag)),
             Shader::BlendMode::AlphaBlend
         );
 
@@ -121,7 +97,7 @@ HDRImageView::HDRImageView(Widget *parent)
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
         m_dither_tex->upload((const uint8_t *)dither_matrix256);
-        m_image_shader->set_texture("dither_img", m_dither_tex);
+        m_image_shader->set_texture("dither_texture", m_dither_tex);
 
         // create an empty texture so that nanogui's shader doesn't print errors
         // before we've selected a reference image
@@ -133,7 +109,7 @@ HDRImageView::HDRImageView(Widget *parent)
                 Texture::InterpolationMode::Nearest,
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
-        m_image_shader->set_texture("reference", m_null_image);
+        m_image_shader->set_texture("secondary_texture", m_null_image);
     }
     catch(const std::exception& e)
     {
@@ -146,9 +122,9 @@ void HDRImageView::set_current_image(TextureRef cur)
     spdlog::get("console")->debug("setting current image: {}", cur);
     m_current_image = std::move(cur);
     if (m_current_image)
-        m_image_shader->set_texture("image", m_current_image);
+        m_image_shader->set_texture("primary_texture", m_current_image);
     else
-        m_image_shader->set_texture("image", m_null_image);
+        m_image_shader->set_texture("primary_texture", m_null_image);
 }
 
 void HDRImageView::set_reference_image(TextureRef ref)
@@ -156,9 +132,9 @@ void HDRImageView::set_reference_image(TextureRef ref)
     spdlog::get("console")->debug("setting reference image: {}", ref);
     m_reference_image = std::move(ref);
     if (m_reference_image)
-        m_image_shader->set_texture("reference", m_reference_image);
+        m_image_shader->set_texture("secondary_texture", m_reference_image);
     else
-        m_image_shader->set_texture("reference", m_null_image);
+        m_image_shader->set_texture("secondary_texture", m_null_image);
 }
 
 
@@ -524,8 +500,8 @@ void HDRImageView::draw_contents()
 
         Vector2f curr_pos, curr_scale;
         image_position_and_scale(curr_pos, curr_scale, m_current_image);
-        m_image_shader->set_uniform("image_pos", curr_pos);
-        m_image_shader->set_uniform("image_scale", curr_scale);
+        m_image_shader->set_uniform("primary_pos", curr_pos);
+        m_image_shader->set_uniform("primary_scale", curr_scale);
 
         m_image_shader->set_uniform("blend_mode", (int)m_blend_mode);
         m_image_shader->set_uniform("channel", (int)m_channel);
@@ -535,14 +511,14 @@ void HDRImageView::draw_contents()
 			Vector2f ref_pos, ref_scale;
 			image_position_and_scale(ref_pos, ref_scale, m_reference_image);
             m_image_shader->set_uniform("has_reference", true);
-            m_image_shader->set_uniform("reference_pos", ref_pos);
-            m_image_shader->set_uniform("reference_scale", ref_scale);
+            m_image_shader->set_uniform("secondary_pos", ref_pos);
+            m_image_shader->set_uniform("secondary_scale", ref_scale);
 		}
         else
         {
             m_image_shader->set_uniform("has_reference", false);
-            m_image_shader->set_uniform("reference_pos", Vector2f(1.f,1.f));
-            m_image_shader->set_uniform("reference_scale", Vector2f(1.f,1.f));
+            m_image_shader->set_uniform("secondary_pos", Vector2f(1.f,1.f));
+            m_image_shader->set_uniform("secondary_scale", Vector2f(1.f,1.f));
         }
         
         m_image_shader->begin();

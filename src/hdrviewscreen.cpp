@@ -328,7 +328,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	                  });
 
     set_visible(true);
-    glfwSwapInterval(1);
+    // glfwSwapInterval(1);
 
 
 	// Nanogui will redraw the screen for key/mouse events, but we need to manually
