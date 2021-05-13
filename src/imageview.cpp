@@ -50,8 +50,8 @@ std::string add_defines(std::string shader_string)
     DEFINE_PARAMS(EBlendMode, DIFFERENCE_BLEND);
     DEFINE_PARAMS(EBlendMode, RELATIVE_DIFFERENCE_BLEND);
 
-    defines += HDRVIEW_SHADER(colormaps, frag) + "\n";
-    defines += HDRVIEW_SHADER(colorspaces, frag) + "\n";
+    defines += HDRVIEW_SHADER(colormaps_frag) + "\n";
+    defines += HDRVIEW_SHADER(colorspaces_frag) + "\n";
 
     // spdlog::get("console")->trace("GLSL constants and #includes: {}", defines);
 
@@ -97,8 +97,9 @@ HDRImageView::HDRImageView(Widget *parent)
             render_pass(),
             /* An identifying name */
             "ImageView",
-            HDRVIEW_SHADER(hdrimageview, vert),
-            add_defines(HDRVIEW_SHADER(hdrimageview, frag)),
+            HDRVIEW_SHADER(hdrimageview_vert),
+            add_defines(HDRVIEW_SHADER(hdrimageview_frag)),
+            // HDRVIEW_SHADER(hdrimageview_frag),
             Shader::BlendMode::AlphaBlend
         );
 
@@ -120,7 +121,7 @@ HDRImageView::HDRImageView(Widget *parent)
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);
         m_dither_tex->upload((const uint8_t *)dither_matrix256);
-        m_image_shader->set_texture("ditherImg", m_dither_tex);
+        m_image_shader->set_texture("dither_img", m_dither_tex);
 
         // create an empty texture so that nanogui's shader doesn't print errors
         // before we've selected a reference image
@@ -128,7 +129,7 @@ HDRImageView::HDRImageView(Widget *parent)
         m_null_image = new Texture(
                 Texture::PixelFormat::R,
                 Texture::ComponentFormat::Float32,
-                Vector2i(0, 0),
+                Vector2i(1, 1),
                 Texture::InterpolationMode::Nearest,
                 Texture::InterpolationMode::Nearest,
                 Texture::WrapMode::Repeat);

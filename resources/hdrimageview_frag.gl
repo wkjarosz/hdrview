@@ -8,7 +8,7 @@ uniform bool has_reference;
 
 uniform sampler2D image;
 uniform sampler2D reference;
-uniform sampler2D ditherImg;
+uniform sampler2D dither_img;
 uniform bool do_dither;
 uniform vec2 randomness;
 
@@ -32,15 +32,15 @@ float nrand(vec2 n)
     return fract(sin(dot(n.xy, vec2(12.9898, 78.233)))* 43758.5453);
 }
 
-float randZeroMeanUniform(vec2 xy)
+float rand_box(vec2 xy)
 {
     // Result is in range [-0.5, 0.5]
-    return texture(ditherImg, xy/vec2(256,256)).r/65536 - 0.5;
+    return texture(dither_img, xy/vec2(256,256)).r/65536 - 0.5;
 }
 
-float randZeroMeanTriangle(vec2 xy)
+float rand_tent(vec2 xy)
 {
-    float r = randZeroMeanUniform(xy);
+    float r = rand_box(xy);
 
     // Convert uniform distribution into triangle-shaped distribution
     // Result is in range [-1.0,1.0]
@@ -49,7 +49,7 @@ float randZeroMeanTriangle(vec2 xy)
     return (r < 0) ? rn : rp;
 }
 
-vec3 chooseChannel(vec3 col)
+vec3 choose_channel(vec3 col)
 {
     switch (channel)
     {
@@ -68,20 +68,20 @@ vec3 chooseChannel(vec3 col)
     return col;
 }
 
-vec4 blend(vec4 imageVal, vec4 referenceVal)
+vec4 blend(vec4 top, vec4 bottom)
 {
-    vec3 diff = imageVal.rgb - referenceVal.rgb;
-    float alpha = imageVal.a + referenceVal.a*(1-imageVal.a);
+    vec3 diff = top.rgb - bottom.rgb;
+    float alpha = top.a + bottom.a*(1-top.a);
     switch (blend_mode)
     {
-        case NORMAL_BLEND:              return vec4(imageVal.rgb*imageVal.a + referenceVal.rgb*referenceVal.a*(1-imageVal.a), alpha);
-        case MULTIPLY_BLEND:            return vec4(imageVal.rgb * referenceVal.rgb, alpha);
-        case DIVIDE_BLEND:              return vec4(imageVal.rgb / referenceVal.rgb, alpha);
-        case ADD_BLEND:                 return vec4(imageVal.rgb + referenceVal.rgb, alpha);
-        case AVERAGE_BLEND:             return 0.5*(imageVal + referenceVal);
+        case NORMAL_BLEND:              return vec4(top.rgb*top.a + bottom.rgb*bottom.a*(1-top.a), alpha);
+        case MULTIPLY_BLEND:            return vec4(top.rgb * bottom.rgb, alpha);
+        case DIVIDE_BLEND:              return vec4(top.rgb / bottom.rgb, alpha);
+        case ADD_BLEND:                 return vec4(top.rgb + bottom.rgb, alpha);
+        case AVERAGE_BLEND:             return 0.5*(top + bottom);
         case SUBTRACT_BLEND:            return vec4(diff, alpha);
         case DIFFERENCE_BLEND:          return vec4(abs(diff), alpha);
-        case RELATIVE_DIFFERENCE_BLEND: return vec4(abs(diff) / (referenceVal.rgb + vec3(0.01)), alpha);
+        case RELATIVE_DIFFERENCE_BLEND: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
     }
     return vec4(0.0);
 }
@@ -91,14 +91,14 @@ vec3 dither(vec3 color)
     if (!do_dither)
 		return color;
 
-    return color + vec3(randZeroMeanTriangle(gl_FragCoord.xy + randomness)/255.0);
+    return color + vec3(rand_tent(gl_FragCoord.xy + randomness)/255.0);
 }
 
 void main() {
-    float darkGray = 0.1;
-    float lightGray = 0.2;
+    float dark_gray = 0.1;
+    float light_gray = 0.2;
 
-    float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? darkGray : lightGray;
+    float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? dark_gray : light_gray;
 
     vec4 background = vec4(vec3(checkerboard), 1.0);
 
@@ -116,5 +116,5 @@ void main() {
     }
 
 	frag_color.a = 1.0;
-    frag_color.rgb = mix(background.rgb, dither(tonemap(chooseChannel(gain * value.rgb))), value.a);
+    frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(gain * value.rgb))), value.a);
 }

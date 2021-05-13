@@ -53,16 +53,16 @@ endif()
 
 
 if (NANOGUI_BACKEND STREQUAL "OpenGL")
-  set(RESOURCE_GLOB "resources/*_gl.*")
+  set(RESOURCE_GLOB "resources/*.gl")
   message(STATUS "Using OpenGL backend.")
 elseif (NANOGUI_BACKEND STREQUAL "GLES 2")
-  set(RESOURCE_GLOB "resources/*_gles.*")
+  set(RESOURCE_GLOB "resources/*.gles")
   message(STATUS "Using GLES 2 backend.")
 elseif (NANOGUI_BACKEND STREQUAL "GLES 3")
-  set(RESOURCE_GLOB "resources/*_gles.*")
+  set(RESOURCE_GLOB "resources/*.gles")
   message(STATUS "Using GLES 3 backend.")
 elseif (NANOGUI_BACKEND STREQUAL "Metal")
-  set(RESOURCE_GLOB "resources/*_metal.*")
+  set(RESOURCE_GLOB "resources/*.metal")
   message(STATUS "Using Metal backend.")
 endif()
 
@@ -75,7 +75,7 @@ file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
 
 # Precompile .metal shaders to .metallib files
 foreach(fname_in IN LISTS resources)
-  if (NANOGUI_BACKEND STREQUAL "Metal" AND fname_in MATCHES "_metal")
+  if (NANOGUI_BACKEND STREQUAL "Metal" AND fname_in MATCHES "\\.metal")
     get_filename_component(fname_out ${fname_in} NAME)
     set(fname_out "${CMAKE_CURRENT_BINARY_DIR}/resources/${fname_out}lib")
     add_custom_command(

@@ -393,9 +393,9 @@ enum EDirection
 
 /// Access a shader stored in nanogui_resources.cpp
 #if defined(NANOGUI_USE_OPENGL)
-#  define HDRVIEW_SHADER(name, ext) HDRVIEW_RESOURCE_STRING(name##_gl_##ext)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
 #elif defined(NANOGUI_USE_GLES)
-#  define HDRVIEW_SHADER(name, ext) HDRVIEW_RESOURCE_STRING(name##_gles_##ext)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
 #elif defined(NANOGUI_USE_METAL)
-#  define HDRVIEW_SHADER(name, ext) HDRVIEW_RESOURCE_STRING(name##_metallib_##ext)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
 #endif
