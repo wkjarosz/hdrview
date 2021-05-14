@@ -29,27 +29,30 @@ std::string add_includes(std::string shader_string)
     includes += HDRVIEW_SHADER(colormaps_frag) + "\n";
     includes += HDRVIEW_SHADER(colorspaces_frag) + "\n";
 
-    // spdlog::get("console")->trace("GLSL #includes: {}", includes);
-
     if (!includes.empty())
     {
-        if (shader_string.length() > 8 && shader_string.substr(0, 8) == "#version")
-        {
-            std::istringstream iss(shader_string);
-            std::ostringstream oss;
-            std::string line;
-            std::getline(iss, line);
+        std::istringstream iss(shader_string);
+        std::ostringstream oss;
+        std::string line;
+
+        // first copy over all the #include or #version lines. these should stay at the top of the shader
+        while (std::getline(iss, line) && (line.substr(0, 8) == "#include" || line.substr(0, 8) == "#version"))
             oss << line << std::endl;
-            oss << includes;
-            while (std::getline(iss, line))
-                oss << line << std::endl;
-            shader_string = oss.str();
-        }
-        else
+
+        // now insert the new #includes
+        oss << includes;
+
+        // and copy over the rest of the lines in the shader
+        do
         {
-            shader_string = includes + shader_string;
-        }
+            oss << line << std::endl;
+        } while (std::getline(iss, line));
+
+        // spdlog::get("console")->trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
+        
+        shader_string = oss.str();
     }
+    
 #endif
 
     return shader_string;
