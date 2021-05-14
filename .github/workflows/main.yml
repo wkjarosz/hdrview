@@ -69,8 +69,8 @@ jobs:
 
       - name: Creating dmg
         run: RESULT="${{github.workspace}}/build/HDRView.dmg"
-        run: test -f $RESULT && rm $RESULT
-        run: create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
+      - run: test -f $RESULT && rm $RESULT
+      - run: create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
