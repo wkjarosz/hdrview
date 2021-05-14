@@ -17,6 +17,7 @@ extern "C"
     extern const char* GIT_TAG;
     extern const char* GIT_REV;
     extern const char* GIT_BRANCH;
+    extern const char* HDRVIEW_BUILD_TIME;
 }
 
 const char* hdrview_git_version()
@@ -32,6 +33,11 @@ const char* hdrview_git_revision()
 const char* hdrview_git_branch()
 {
     return GIT_BRANCH;
+}
+
+const char* hdrview_timestamp()
+{
+    return HDRVIEW_BUILD_TIME;
 }
 
 

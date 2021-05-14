@@ -28,16 +28,26 @@ else()
     string(STRIP "${GIT_BRANCH}" GIT_BRANCH)
 endif()
 
-set(VERSION "const char* GIT_REV=\"${GIT_REV}${GIT_DIFF}\";
-const char* GIT_TAG=\"${GIT_TAG}\";
-const char* GIT_BRANCH=\"${GIT_BRANCH}\";")
+# also get a timestamp of the build
+STRING(TIMESTAMP TIMEZ "%Y-%m-%d %H:%M")
+message("Git info: revision: ${GIT_REV}; tag: ${GIT_TAG}; branch: ${GIT_BRANCH}")
+message("Timestamp: ${TIMEZ}")
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/version.cpp)
-    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/version.cpp VERSION_)
+set(VERSION
+"const char* GIT_REV=\"${GIT_REV}${GIT_DIFF}\";
+const char* GIT_TAG=\"${GIT_TAG}\";
+const char* GIT_BRANCH=\"${GIT_BRANCH}\";
+const char* HDRVIEW_BUILD_TIME=\"${TIMEZ}\";\n")
+
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp)
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp VERSION_)
 else()
     set(VERSION_ "")
 endif()
 
 if (NOT "${VERSION}" STREQUAL "${VERSION_}")
-    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/version.cpp "${VERSION}")
+    message("Old VERSION file:\n${VERSION_}\nDoesn't match new version file:\n${VERSION}\n\tRegenerating...")
+    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp "${VERSION}")
+    file(READ ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp MYVAR)
+    message("Wrote out hdrview_version.cpp with contents:\n${MYVAR}")
 endif()

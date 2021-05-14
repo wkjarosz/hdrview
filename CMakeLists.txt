@@ -113,96 +113,74 @@ add_custom_command(
 # Needed to generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# # Create command line for running timestamp cmake script
-# set(timestamp_cmdline
-#   -DOUTPUT_H=timestamp.h
-#   -P "${CMAKE_CURRENT_SOURCE_DIR}/resources/timestamp.cmake")
-
-# # build time in UTC ISO 8601
-# add_custom_command (
-#     OUTPUT timestamp.h
-#     COMMAND ${CMAKE_COMMAND} -P ${timestamp_cmdline}
-#     COMMENT "Generating timestamp")
-
-# build time in UTC ISO 8601
-FILE (WRITE ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "STRING(TIMESTAMP TIMEZ %Y-%m-%d)\n")
-FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(WRITE timestamp.h \"#ifndef TIMESTAMP_H\\n\")\n")
-FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#define TIMESTAMP_H\\n\\n\")\n")
-FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#define HDRVIEW_BUILD_TIME \\\"\${TIMEZ}\\\"\\n\\n\")\n")
-FILE (APPEND ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake "FILE(APPEND timestamp.h \"#endif // TIMESTAMP_H\\n\")\n")
-
-add_custom_target(
-    timestamp
-    COMMENT "Generating timestamp"
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake
-    ADD_DEPENDENCIES ${CMAKE_CURRENT_BINARY_DIR}/timestamp.cmake)
-
-# Add a custom command that produces version.cpp, plus
+# Add a custom command that produces hdrview_version.cpp, plus
 # a dummy output that's not actually produced, in order
 # to force version.cmake to always be re-run before the build
 add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/version.cpp
-          ${CMAKE_CURRENT_BINARY_DIR}/_version.cpp
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp
+           ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
+           ${CMAKE_CURRENT_BINARY_DIR}/hdrview_timestamp.cpp
+           ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_timestamp.cpp
     COMMAND ${CMAKE_COMMAND} -P
           ${CMAKE_CURRENT_SOURCE_DIR}/resources/version.cmake
-    COMMENT "Creating git version info")
+    COMMENT "Generating timestamp and git version info")
 
 
 add_executable(HDRView
-    # shaders, etc.
-    version.cpp
-    hdrview_resources.cpp
-    src/async.h
-    src/color.cpp
-    src/color.h
-    src/colorspace.cpp
-    src/colorspace.h
-    src/commandhistory.h
-    src/common.cpp
-    src/common.h
-    src/dithermatrix256.h
-    src/editimagepanel.cpp
-    src/editimagepanel.h
-    src/envmap.cpp
-    src/envmap.h
-    src/filmictonecurve.cpp
-    src/filmictonecurve.h
-    src/fwd.h
-    src/xpuimage.cpp
-    src/xpuimage.h
-    src/hdrimage.cpp
-    src/hdrimage.h
-    src/hdrimageio.cpp
-    src/hdrview.cpp
-    src/hdrviewscreen.cpp
-    src/hdrviewscreen.h
-    src/helpwindow.cpp
-    src/helpwindow.h
-    src/hslgradient.cpp
-    src/hslgradient.h
-    src/imagebutton.cpp
-    src/imagebutton.h
-    src/imagelistpanel.cpp
-    src/imagelistpanel.h
-    src/imageview.cpp
-    src/imageview.h
-    src/multigraph.cpp
-    src/multigraph.h
-    src/parallelfor.cpp
-    src/parallelfor.h
-    src/pfm.h
-    src/pfm.cpp
-    src/ppm.h
-    src/ppm.cpp
-    src/progress.cpp
-    src/progress.h
-    src/range.h
-    src/timer.h
-    src/well.cpp
-    src/well.h
-    ${EXTRA_SOURCE})
+  # shaders, etc.
+  hdrview_version.cpp
+  hdrview_resources.cpp
+  src/async.h
+  src/color.cpp
+  src/color.h
+  src/colorspace.cpp
+  src/colorspace.h
+  src/commandhistory.h
+  src/common.cpp
+  src/common.h
+  src/dithermatrix256.h
+  src/editimagepanel.cpp
+  src/editimagepanel.h
+  src/envmap.cpp
+  src/envmap.h
+  src/filmictonecurve.cpp
+  src/filmictonecurve.h
+  src/fwd.h
+  src/xpuimage.cpp
+  src/xpuimage.h
+  src/hdrimage.cpp
+  src/hdrimage.h
+  src/hdrimageio.cpp
+  src/hdrview.cpp
+  src/hdrviewscreen.cpp
+  src/hdrviewscreen.h
+  src/helpwindow.cpp
+  src/helpwindow.h
+  src/hslgradient.cpp
+  src/hslgradient.h
+  src/imagebutton.cpp
+  src/imagebutton.h
+  src/imagelistpanel.cpp
+  src/imagelistpanel.h
+  src/imageview.cpp
+  src/imageview.h
+  src/multigraph.cpp
+  src/multigraph.h
+  src/parallelfor.cpp
+  src/parallelfor.h
+  src/pfm.h
+  src/pfm.cpp
+  src/ppm.h
+  src/ppm.cpp
+  src/progress.cpp
+  src/progress.h
+  src/range.h
+  src/timer.h
+  src/well.cpp
+  src/well.h
+  ${EXTRA_SOURCE})
 
-add_dependencies(HDRView timestamp)
+# add_dependencies(HDRView timestamp)
 
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if (APPLE)
@@ -240,7 +218,7 @@ endif()
 
 
 add_executable(hdrbatch
-  version.cpp
+  hdrview_version.cpp
   src/color.cpp
   src/color.h
   src/colorspace.cpp

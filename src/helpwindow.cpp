@@ -18,8 +18,6 @@
 #include "well.h"
 #include <spdlog/spdlog.h>
 
-#include <timestamp.h>
-
 using namespace nanogui;
 using namespace std;
 
@@ -60,11 +58,11 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
 	string about = fmt::format(
 		"HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
-		"(built {} from git {}-{}-{}, using {} backend)\n\n"
+		"(built on {} from git {}-{}-{} using {} backend)\n\n"
 		"HDRView is a simple research-oriented tool for examining, "
 		"comparing, manipulating, and converting high-dynamic range images.\n\n"
 		"HDRView is freely available under a 3-clause BSD license.\n\n",
-		HDRVIEW_VERSION, HDRVIEW_BUILD_TIME,
+		HDRVIEW_VERSION, hdrview_timestamp(),
 		hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(),
 		HDRVIEW_BACKEND);
 	auto copy = new Label(copyW, about);
