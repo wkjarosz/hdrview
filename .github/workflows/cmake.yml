@@ -69,6 +69,9 @@ jobs:
         with:
           winsdk-build-version: 19041
 
+      - name: Get WSL
+        uses: Vampire/setup-wsl@v1
+
       - name: Setup MSBuild.exe
         uses: microsoft/setup-msbuild@v1.0.2
 
