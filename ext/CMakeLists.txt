@@ -140,12 +140,12 @@ set (ILMBASE_BUILD_SHARED_LIBS    OFF CACHE BOOL " " FORCE)
 set (PYILMBASE_ENABLE             OFF CACHE BOOL " " FORCE)
 set (OPENEXR_BUILD_UTILS          OFF CACHE BOOL " " FORCE)
 set (INSTALL_OPENEXR_EXAMPLES     OFF CACHE BOOL " " FORCE)
+set (BUILD_TESTING                OFF CACHE BOOL " " FORCE)
 
 add_subdirectory (openexr)
 
 set_property (TARGET IexMath IlmThread Half
-              Iex Imath IlmImf HalfTest IexTest
-              IlmImfTest IlmImfUtil IlmImfUtilTest ImathTest
+              Iex Imath IlmImf IlmImfUtil
               PROPERTY FOLDER "ext/OpenEXR")
 
 
