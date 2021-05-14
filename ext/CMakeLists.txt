@@ -120,7 +120,7 @@ if (WIN32)
   if (CMAKE_GENERATOR STREQUAL "Ninja")
     set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/zlibstatic.lib" CACHE FILEPATH " " FORCE)
   else()
-    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIGURATION>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
   endif()
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
