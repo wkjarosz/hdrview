@@ -53,10 +53,10 @@ jobs:
         run: brew install create-dmg 
           
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-        
-      - name: Run configure again
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=10.14
+          cmake -B ${{github.workspace}}/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
         
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
