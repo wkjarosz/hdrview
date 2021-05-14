@@ -98,10 +98,9 @@ jobs:
         uses: microsoft/setup-msbuild@v1.0.2
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-        
-      - name: Run configure again
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
         
       - name: Build
         # Build your program with the given configuration
@@ -115,4 +114,4 @@ jobs:
         with:
           name: HDRView.exe
           path: |
-            ${{github.workspace}}/build/HDRView.exe
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
