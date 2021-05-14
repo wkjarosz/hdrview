@@ -51,6 +51,9 @@ jobs:
       - uses: actions/checkout@v1
         with:
           submodules: recursive
+
+      - name: Installing create-dmg
+        run: brew install create-dmg 
           
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/build -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
@@ -59,15 +62,22 @@ jobs:
         run: cmake -B ${{github.workspace}}/build -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
         
       - name: Build
-        # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Building and creating a dmg
+        run: ${{github.workspace}}/resources/create-dmg.sh
+
+      - name: Creating dmg
+        run: RESULT="${{github.workspace}}/build/HDRView.dmg"
+        run: test -f $RESULT && rm $RESULT
+        run: create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: mac-build-artifacts
+          name: HDRView.dmg
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/HDRView.dmg
 
   build_windows:
     name: Build on Windows
@@ -95,12 +105,12 @@ jobs:
       - name: Run configure again
         run: cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} .
         
-      # - name: Build
-      #   # Build your program with the given configuration
-      #   run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
-
       - name: Build
-        run: msbuild /v:m /p:Configuration=Release hdrview.sln
+        # Build your program with the given configuration
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      # - name: Build
+      #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
