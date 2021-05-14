@@ -14,10 +14,7 @@ env:
 jobs:
   build_linux:
     name: Build on linux systems
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Install dependencies
@@ -116,6 +113,6 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: windows-build-artifacts
+          name: HDRView.exe
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/HDRView.exe
