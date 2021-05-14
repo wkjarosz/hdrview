@@ -149,6 +149,11 @@ set_property (TARGET IexMath IlmThread Half
               PROPERTY FOLDER "ext/OpenEXR")
 
 
+if (WIN32)
+  add_dependencies(IlmImf zlib)
+endif()
+
+
 #============================================================================
 # Build NanoGUI
 #============================================================================
