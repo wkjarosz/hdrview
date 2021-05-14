@@ -453,7 +453,7 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
         nvgFontSize(ctx, font_size);
         nvgTextAlign(ctx, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
 
-        size_t bsize = 20;
+        constexpr size_t bsize = 20;
         char text_buf[4*bsize], *text[4] = { text_buf, text_buf + bsize, text_buf + 2*bsize, text_buf + 3*bsize };
 
         for (int j = minJ; j <= maxJ; ++j)
