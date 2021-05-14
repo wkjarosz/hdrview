@@ -51,7 +51,7 @@ inline T clamp(T a, T l, T h)
 template <typename T>
 inline T clamp01(T a)
 {
-	return clamp(a, T(0), T(1));
+	return ::clamp(a, T(0), T(1));
 }
 
 
@@ -115,7 +115,7 @@ inline T lerpFactor(T a, T b, T m)
 template <typename T>
 inline T smoothStep(T a, T b, T x)
 {
-    T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+    T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
     return t*t*(T(3) - T(2)*t);
 }
 
@@ -133,7 +133,7 @@ inline T smoothStep(T a, T b, T x)
 template <typename T>
 inline T smootherStep(T a, T b, T x)
 {
-    T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+    T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
     return t*t*t*(t*(t*T(6) - T(15)) + T(10));
 }
 
@@ -148,7 +148,7 @@ inline T smootherStep(T a, T b, T x)
 template <typename T>
 inline T cosStep(T a, T b, T x)
 {
-	T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+	T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
 	return T(0.5)*(T(1)-cos(t*T(M_PI)));
 }
 
@@ -156,7 +156,7 @@ inline T cosStep(T a, T b, T x)
 template <typename T>
 inline T inverseCosStep(T a, T b, T x)
 {
-	T t = clamp(lerpFactor(a,b,x), T(0), T(1));
+	T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
 	return acos(T(1) - T(2)*t)*T(M_1_PI);
 }
 
@@ -385,3 +385,25 @@ enum EDirection
 	Forward,
 	Backward,
 };
+
+
+
+/// Access binary data stored in hdrview_resources.cpp
+#define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
+
+/// Access a shader stored in hdrview_resources.cpp
+#if defined(NANOGUI_USE_OPENGL)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
+#  define HDRVIEW_BACKEND "OpenGL"
+#elif defined(NANOGUI_USE_GLES)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
+#  define HDRVIEW_BACKEND "OpenGL ES"
+#elif defined(NANOGUI_USE_METAL)
+#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
+#  define HDRVIEW_BACKEND "Metal"
+#endif
+
+const char* hdrview_git_version();
+const char* hdrview_git_revision();
+const char* hdrview_git_branch();
+const char* hdrview_timestamp();

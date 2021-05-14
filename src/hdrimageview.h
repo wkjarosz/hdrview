@@ -14,7 +14,7 @@
 using namespace nanogui;
 
 /*!
- * @class 	HDRImageViewer hdrimageviewer.h
+ * @class 	HDRImageView hdrimageview.h
  * @brief	Widget used to manage and display multiple HDR images.
  */
 class HDRImageView : public Canvas {
@@ -169,6 +169,7 @@ protected:
 
 	TextureRef m_current_image;
 	TextureRef m_reference_image;
+	TextureRef m_null_image;
 
     ref<Shader> m_image_shader;
     TextureRef m_dither_tex;

@@ -23,40 +23,41 @@ using namespace std;
 namespace
 {
 
-std::function<void(float)> createFloatBoxAndSlider(
+std::function<void(float)> create_floatbox_and_slider(
 	FormHelper * gui, Widget * parent,
 	string name, float & variable,
 	float mn, float mx, float step,
 	std::function<void(void)> cb,
 	string help = "")
 {
-	auto fBox = gui->add_variable(name, variable);
-	fBox->set_spinnable(true);
-	fBox->number_format("%1.2f");
-	fBox->set_value_increment(step);
-	fBox->set_min_max_values(mn, mx);
-	fBox->set_tooltip(help);
+	auto box = gui->add_variable(name, variable);
+	box->set_spinnable(true);
+	box->number_format("%3.2f");
+	box->set_value_increment(step);
+	box->set_min_max_values(mn, mx);
+	box->set_fixed_width(65);
+	box->set_tooltip(help);
 
-	auto fSlider = new Slider(parent);
-	fSlider->set_value(variable);
-	fSlider->set_range({mn, mx});
-	fSlider->set_tooltip(help);
-	gui->add_widget("", fSlider);
+	auto slider = new Slider(parent);
+	slider->set_value(variable);
+	slider->set_range({mn, mx});
+	slider->set_tooltip(help);
+	gui->add_widget("", slider);
 
-	auto fCb = [fBox,fSlider,cb,&variable](float v)
+	auto f_cb = [box,slider,cb,&variable](float v)
 	{
 		variable = v;
-		fBox->set_value(v);
-		fSlider->set_value(v);
+		box->set_value(v);
+		slider->set_value(v);
 		cb();
 	};
-	fSlider->set_callback(fCb);
-	fBox->set_callback(fCb);
-	return fCb;
+	slider->set_callback(f_cb);
+	box->set_callback(f_cb);
+	return f_cb;
 }
 
 
-void addOKCancelButtons(FormHelper * gui, Window * window,
+void add_ok_cancel_btns(FormHelper * gui, Window * window,
                         const function<void()> &OKCallback,
                         const function<void()> &cancelCallback = nullptr)
 {
@@ -84,7 +85,7 @@ void addOKCancelButtons(FormHelper * gui, Window * window,
 	gui->add_widget("", w);
 }
 
-Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Convert color space...";
 	static EColorSpace src = LinearSRGB_CS, dst = CIEXYZ_CS;
@@ -101,7 +102,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->add_variable("Source:", src, true)->set_items(colorSpaceNames());
 			gui->add_variable("Destination:", dst, true)->set_items(colorSpaceNames());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
@@ -118,7 +119,7 @@ Button * createColorSpaceButton(Widget *parent, HDRViewScreen * screen, ImageLis
 	return b;
 }
 
-Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_exposure_gamma_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Exposure/Gamma...";
 	static float exposure = 0.0f;
@@ -133,7 +134,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 			gui->set_fixed_size(Vector2i(55, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 
 			// graph
@@ -167,19 +168,19 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 			graphCb();
 
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Exposure:", exposure,
 			                        -10.f, 10.f, 0.1f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Offset:", offset,
 			                        -1.f, 1.f, 0.01f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Gamma:", gamma,
 			                        0.0001f, 10.f, 0.1f, graphCb);
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
@@ -197,7 +198,7 @@ Button * createExposureGammaButton(Widget *parent, HDRViewScreen * screen, Image
 	return b;
 }
 
-Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_brightness_constract_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Brightness/Contrast...";
 	static float brightness = 0.0f;
@@ -221,7 +222,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 			gui->set_fixed_size(Vector2i(100, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 
 			// graph
@@ -272,12 +273,12 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 						  "Setting brightness > 0 boosts a previously darker value to 50%, "
 						  "while brightness < 0 dims a previously brighter value to 50%.";
 
-			auto bCb = createFloatBoxAndSlider(gui, window,
+			auto bCb = create_floatbox_and_slider(gui, window,
 			                        "Brightness:", brightness,
 			                        -1.f, 1.f, 0.01f, graphCb, help);
 
 			help = "Change the slope/gradient at the new 50% midpoint.";
-			auto cCb = createFloatBoxAndSlider(gui, window,
+			auto cCb = create_floatbox_and_slider(gui, window,
 			                        "Contrast:", contrast,
 			                        -1.f, 1.f, 0.01f, graphCb, help);
 
@@ -299,7 +300,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 					cCb(lerp(-1.f, 1.f, clamp01(frac.y())));
 				});
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
                [&]()
                {
 	               images_panel->modify_image(
@@ -316,7 +317,7 @@ Button * createBrightnessContrastButton(Widget *parent, HDRViewScreen * screen, 
 	return b;
 }
 
-Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_filmic_tonemapping_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Filmic tonemapping...";
 	static FilmicToneCurve::FullCurve fCurve;
@@ -332,7 +333,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 			gui->set_fixed_size(Vector2i(55, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			// graph
 			MultiGraph* graph = new MultiGraph(window, Color(255, 255, 255, 30));
@@ -348,25 +349,6 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 				FilmicToneCurve::CurveParamsDirect directParams;
 				FilmicToneCurve::calcDirectParamsFromUser(directParams, params);
 				FilmicToneCurve::createCurve(fCurve, directParams);
-
-//				spdlog::get("console")->debug(
-//					"\n"
-//				    "x0: {}\n"
-//				    "y0: {}\n"
-//					"x1: {}\n"
-//					"y1: {}\n"
-//					"W: {}\n"
-//					"gamma: {}\n"
-//					"overshootX: {}\n"
-//					"overshootY: {}\n",
-//				    directParams.x0,
-//				    directParams.y0,
-//				    directParams.x1,
-//				    directParams.y1,
-//				    directParams.W ,
-//				    directParams.gamma,
-//				    directParams.overshootX,
-//				    directParams.overshootY);
 
 				graph->set_values(linspaced(257, 0.0f, range), 0);
 				auto lCurve = linspaced(257, 0.0f, range);
@@ -387,35 +369,35 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 
 			graphCb();
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Graph F-stops:", vizFstops,
 			                        0.f, 10.f, 0.1f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Toe strength:", params.toeStrength,
 			                        0.f, 1.f, 0.01f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Toe length:", params.toeLength,
 			                        0.f, 1.f, 0.01f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Shoulder strength:", params.shoulderStrength,
 			                        0.f, 10.f, 0.1f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Shoulder length:", params.shoulderLength,
 			                        0.f, 1.f, 0.01f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Shoulder angle:", params.shoulderAngle,
 			                        0.f, 1.f, 0.01f, graphCb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Gamma:", params.gamma,
 			                        0.f, 5.f, 0.01f, graphCb);
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 				   images_panel->modify_image(
@@ -424,13 +406,6 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 				           return {make_shared<HDRImage>(img->unaryExpr(
 				               [](const Color4 & c)
 				               {
-//					               float srcLum = c.average();
-//					               float dstLum = fCurve.eval(srcLum);
-////					               return c * (dstLum/srcLum);
-//					               return Color4(c.r * (dstLum/srcLum),
-//					                             c.g * (dstLum/srcLum),
-//					                             c.b * (dstLum/srcLum),
-//					                             c.a);
 				                   return Color4(fCurve.eval(c.r),
 				                                 fCurve.eval(c.g),
 				                                 fCurve.eval(c.b),
@@ -445,7 +420,7 @@ Button * createFilmicTonemappingButton(Widget *parent, HDRViewScreen * screen, I
 	return b;
 }
 
-Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_hsl_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Hue/Saturation...";
 	static float hue = 0.0f;
@@ -462,7 +437,7 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 			Widget* spacer = nullptr;
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 
 
@@ -478,15 +453,15 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 				dynamicRainbow->set_lightness((lightness + 100.f)/200.f);
 			};
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Hue:", hue,
 			                        -180.f, 180.f, 1.f, cb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Saturation:", saturation,
 			                        -100.f, 100.f, 1.f, cb);
 
-			createFloatBoxAndSlider(gui, window,
+			create_floatbox_and_slider(gui, window,
 			                        "Lightness:", lightness,
 			                        -100.f, 100.f, 1.f, cb);
 
@@ -502,7 +477,7 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 
 			gui->add_widget("", dynamicRainbow);
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 			                   [&]()
 			                   {
 				                   images_panel->modify_image(
@@ -523,10 +498,10 @@ Button * createHueSaturationButton(Widget *parent, HDRViewScreen * screen, Image
 	return b;
 }
 
-Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_gaussian_filter_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static float width = 1.0f, height = 1.0f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static bool exact = false;
 	static string name = "Gaussian blur...";
 	auto b = new Button(parent, name, FA_TINT);
@@ -538,7 +513,7 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, Imag
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-			// window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+			window->set_modal(true);
 
 			auto w = gui->add_variable("Width:", width);
 			w->set_spinnable(true);
@@ -551,22 +526,22 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, Imag
 			w->set_value_increment(5.f);
 			w->set_units("px");
 
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
 			gui->add_variable("Exact (slow!):", exact, true);
 
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(exact ? img->gaussian_blurred(width, height, progress, borderModeX, borderModeY) :
-							        img->fast_gaussian_blurred(width, height, progress, borderModeX, borderModeY)),
+							return {make_shared<HDRImage>(exact ? img->gaussian_blurred(width, height, progress, border_mode_x, border_mode_y) :
+							        img->fast_gaussian_blurred(width, height, progress, border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -577,10 +552,10 @@ Button * createGaussianFilterButton(Widget *parent, HDRViewScreen * screen, Imag
 	return b;
 }
 
-Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_box_filter_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static float width = 1.0f, height = 1.0f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static string name = "Box blur...";
 	auto b = new Button(parent, name, FA_TINT);
 	b->set_fixed_height(21);
@@ -591,7 +566,7 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageList
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			auto w = gui->add_variable("Width:", width);
 			w->set_spinnable(true);
@@ -602,18 +577,18 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageList
 			w->set_min_value(0.0f);
 			w->set_units("px");
 
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->box_blurred(width, height, progress, borderModeX, borderModeY)),
+							return {make_shared<HDRImage>(img->box_blurred(width, height, progress, border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -624,10 +599,10 @@ Button * createBoxFilterButton(Widget *parent, HDRViewScreen * screen, ImageList
 	return b;
 }
 
-Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_bilateral_filter_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static float rangeSigma = 1.0f, valueSigma = 0.1f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static string name = "Bilateral filter...";
 	auto b = new Button(parent, name, FA_TINT);
 	b->set_fixed_height(21);
@@ -638,7 +613,7 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, Ima
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			auto w = gui->add_variable("Range sigma:", rangeSigma);
 			w->set_spinnable(true);
@@ -647,19 +622,19 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, Ima
 			w->set_spinnable(true);
 			w->set_min_value(0.0f);
 
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->bilateral_filtered(valueSigma, rangeSigma,
-							                              progress, borderModeX, borderModeY)),
+							                              progress, border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -670,10 +645,10 @@ Button * createBilateralFilterButton(Widget *parent, HDRViewScreen * screen, Ima
 	return b;
 }
 
-Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_unsharp_mask_filter_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static float sigma = 1.0f, strength = 1.0f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static string name = "Unsharp mask...";
 	auto b = new Button(parent, name, FA_TINT);
 	b->set_fixed_height(21);
@@ -684,7 +659,7 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, I
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			auto w = gui->add_variable("Sigma:", sigma);
 			w->set_spinnable(true);
@@ -693,18 +668,18 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, I
 			w->set_spinnable(true);
 			w->set_min_value(0.0f);
 
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unsharp_masked(sigma, strength, progress, borderModeX, borderModeY)),
+							return {make_shared<HDRImage>(img->unsharp_masked(sigma, strength, progress, border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -716,10 +691,10 @@ Button * createUnsharpMaskFilterButton(Widget *parent, HDRViewScreen * screen, I
 	return b;
 }
 
-Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_median_filter_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static float radius = 1.0f;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static string name = "Median filter...";
 	auto b = new Button(parent, name, FA_TINT);
 	b->set_fixed_height(21);
@@ -730,24 +705,24 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, ImageL
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			auto w = gui->add_variable("Radius:", radius);
 			w->set_spinnable(true);
 			w->set_min_value(0.0f);
 
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->median_filtered(radius, progress, borderModeX, borderModeY)),
+							return {make_shared<HDRImage>(img->median_filtered(radius, progress, border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -758,7 +733,7 @@ Button * createMedianFilterButton(Widget *parent, HDRViewScreen * screen, ImageL
 	return b;
 }
 
-Button * createResizeButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_resize_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static int width = 128, height = 128;
 	static string name = "Resize...";
@@ -844,7 +819,7 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, ImageListPan
 
 			gui->add_widget("", row);
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
@@ -861,13 +836,13 @@ Button * createResizeButton(Widget *parent, HDRViewScreen * screen, ImageListPan
 	return b;
 }
 
-Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
+Button * create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {
 	static EEnvMappingUVMode from = ANGULAR_MAP, to = ANGULAR_MAP;
 	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
 	static int width = 128, height = 128;
 	static bool autoAspect = true;
-	static HDRImage::BorderMode borderModeX = HDRImage::EDGE, borderModeY = HDRImage::EDGE;
+	static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
 	static int samples = 1;
 
 	static float autoAspects[] =
@@ -880,7 +855,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 		};
 
 	static string name = "Remap...";
-	auto b = new Button(parent, name, FA_GLOBE);
+	auto b = new Button(parent, name, FA_GLOBE_AMERICAS);
 	b->set_fixed_height(21);
 	b->set_callback(
 		[&, screen, images_panel]()
@@ -889,7 +864,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 			gui->set_fixed_size(Vector2i(135, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			width = images_panel->current_image()->width();
 			auto w = gui->add_variable("Width:", width);
@@ -903,51 +878,51 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 			h->set_min_value(1);
 			h->set_units("px");
 
-			auto recomputeW = []()
+			auto recompute_w = []()
 			{
 				if (autoAspect)
 					width = max(1, (int)round(height * autoAspects[to]));
 			};
-			auto recomputeH = []()
+			auto recompute_h = []()
 			{
 				if (autoAspect)
 					height = max(1, (int)round(width / autoAspects[to]));
 			};
 
 			w->set_callback(
-				[h,recomputeH](int w)
+				[h,recompute_h](int w)
 				{
 					width = w;
-					recomputeH();
+					recompute_h();
 					h->set_value(height);
 				});
 
 			h->set_callback(
-				[w,recomputeW](int h)
+				[w,recompute_w](int h)
 				{
 					height = h;
-					recomputeW();
+					recompute_w();
 					w->set_value(width);
 				});
 
 
-			auto autoAspectCheckbox = gui->add_variable("Auto aspect ratio:", autoAspect, true);
+			auto auto_aspect_checkbox = gui->add_variable("Auto aspect ratio:", autoAspect, true);
 
 			auto src = gui->add_variable("Source map:", from, true);
 			auto dst = gui->add_variable("Target map:", to, true);
 
 			src->set_items(envMappingNames());
-			src->set_callback([gui,recomputeW](EEnvMappingUVMode m)
+			src->set_callback([gui,recompute_w](EEnvMappingUVMode m)
 			                 {
 				                 from = m;
-				                 recomputeW();
+				                 recompute_w();
 				                 gui->refresh();
 			                 });
 			dst->set_items(envMappingNames());
-			dst->set_callback([gui,recomputeW](EEnvMappingUVMode m)
+			dst->set_callback([gui,recompute_w](EEnvMappingUVMode m)
 			                 {
 				                 to = m;
-				                 recomputeW();
+				                 recompute_w();
 				                 gui->refresh();
 			                 });
 
@@ -956,34 +931,34 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 			gui->add_widget("", spacer);
 
 			auto btn = new Button(window, "Swap source/target", FA_EXCHANGE_ALT);
-			btn->set_callback([gui,recomputeW,recomputeH](){std::swap(from,to);recomputeW();recomputeH();gui->refresh();});
+			btn->set_callback([gui,recompute_w,recompute_h](){std::swap(from,to);recompute_w();recompute_h();gui->refresh();});
 			btn->set_fixed_size(gui->fixed_size());
 			gui->add_widget(" ", btn);
 
-			autoAspectCheckbox->set_callback(
-				[w,recomputeW](bool preserve)
+			auto_aspect_checkbox->set_callback(
+				[w,recompute_w](bool preserve)
 				{
 					autoAspect = preserve;
-					recomputeW();
+					recompute_w();
 					w->set_value(width);
 				});
 
-			recomputeW();
+			recompute_w();
 			gui->refresh();
 
 
 			gui->add_variable("Sampler:", sampler, true)
 			   ->set_items(HDRImage::sampler_names());
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
 			w = gui->add_variable("Super-samples:", samples);
 			w->set_spinnable(true);
 			w->set_min_value(1);
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 //					auto dst2xyz = envMapUVToXYZ(to);
@@ -995,7 +970,7 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(img->resampled(width, height, progress, warp, samples, sampler,
-							                                            borderModeX, borderModeY)),
+							                                            border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -1006,10 +981,10 @@ Button * createRemapButton(Widget *parent, HDRViewScreen *screen, ImageListPanel
 	return b;
 }
 
-Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_shift_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
-	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
+	static HDRImage::BorderMode border_mode_x = HDRImage::REPEAT, border_mode_y = HDRImage::REPEAT;
 	static float dx = 0.f, dy = 0.f;
 	static string name = "Shift...";
 	auto b = new Button(parent, name, FA_ARROWS_ALT);
@@ -1021,7 +996,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 			gui->set_fixed_size(Vector2i(125, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//           window->set_modal(true);    // BUG: this should be set to modal, but doesn't work with comboboxes
+          	window->set_modal(true);
 
 			auto w = gui->add_variable("X offset:", dx);
 			w->set_spinnable(true);
@@ -1033,12 +1008,12 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 
 			gui->add_variable("Sampler:", sampler, true)
 			   ->set_items(HDRImage::sampler_names());
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
 					images_panel->modify_image(
@@ -1052,7 +1027,7 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 							                                             progress, shift, 1, sampler,
-							                                             borderModeX, borderModeY)),
+							                                             border_mode_x, border_mode_y)),
 							        nullptr};
 						});
 				});
@@ -1064,16 +1039,42 @@ Button * createShiftButton(Widget *parent, HDRViewScreen * screen, ImageListPane
 }
 
 
-Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Widget * create_anchor_widget(Widget * window, HDRImage::CanvasAnchor & anchor, int bw)
+{
+	auto row = new Widget(window);
+	int pad = 2;
+	row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
+	vector<Button *> button_group;
+
+	int icons[] = {FA_PLUS, 				FA_GRIP_LINES, 	FA_PLUS,
+				   FA_GRIP_LINES_VERTICAL, 	FA_PLUS, 		FA_GRIP_LINES_VERTICAL,
+				   FA_PLUS, 				FA_GRIP_LINES, 	FA_PLUS};
+
+	for (size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i)
+	{
+		Button * btn = new Button(row, "", icons[i]);
+
+		btn->set_flags(Button::RadioButton);
+		btn->set_fixed_size(Vector2i(bw, bw));
+		btn->set_pushed(i == (size_t)anchor);
+		btn->set_change_callback([i, &anchor](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
+		button_group.push_back(btn);
+	}
+
+	row->set_fixed_size(Vector2i(3*bw+2*pad, 3*bw+2*pad));
+	return row;
+}
+
+Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static int width = 128, height = 128;
-	static Color bgColor(.8f, .8f, .8f, 1.f);
+	static Color bg(.8f, .8f, .8f, 1.f);
 	static float alpha = 1.f;
 	static float EV = 0.f;
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
-	auto b = new Button(parent, name, FA_CROP);
+	auto b = new Button(parent, name, FA_CROP_ALT);
 	b->set_fixed_height(21);
 	b->set_callback(
 		[&, screen, images_panel]()
@@ -1082,7 +1083,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//			window->set_modal(true);
+			window->set_modal(true);
 
 			width = images_panel->current_image()->width();
 			auto w = gui->add_variable("Width:", width);
@@ -1126,45 +1127,21 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			spacer->set_fixed_height(5);
 			gui->add_widget("", spacer);
 
-
-			auto w2 = new Widget(window);
-			int bw = gui->fixed_size().y();
-			int pad = 2;
-			w2->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
-			vector<Button *> buttonGroup;
-
-			int icons[] = {FA_PLUS, 		FA_ARROW_UP, 	FA_PLUS,
-						   FA_ARROW_LEFT, 	FA_PLUS, 		FA_ARROW_RIGHT,
-						   FA_PLUS, 		FA_ARROW_DOWN, 	FA_PLUS};
-
-			for (size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i)
-			{
-				Button * btn = new Button(w2, "", icons[i]);
-
-				btn->set_flags(Button::RadioButton);
-				btn->set_fixed_size(Vector2i(bw, bw));
-				btn->set_pushed(i == (size_t)anchor);
-				btn->set_change_callback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
-				buttonGroup.push_back(btn);
-			}
-
-			w2->set_fixed_size(Vector2i(3*bw+2*pad, 3*bw+2*pad));
-			gui->add_widget("Anchor:", w2);
-
+			gui->add_widget("Anchor:", create_anchor_widget(window, anchor, gui->fixed_size().y()));
 
 			spacer = new Widget(window);
 			spacer->set_fixed_height(5);
 			gui->add_widget("", spacer);
 
-			auto popupBtn = new PopupButton(window, "", 0);
-			popupBtn->set_background_color(Color(bgColor.r(), bgColor.g(), bgColor.b(), alpha));
-			gui->add_widget("Extension color:", popupBtn);
+			auto popup_btn = new PopupButton(window, "", 0);
+			popup_btn->set_background_color(Color(bg.r(), bg.g(), bg.b(), alpha));
+			gui->add_widget("Extension color:", popup_btn);
 
-			auto popup = popupBtn->popup();
+			auto popup = popup_btn->popup();
 			popup->set_layout(new GroupLayout());
 
 			auto colorwheel = new ColorWheel(popup);
-			colorwheel->set_color(Color(bgColor.r(), bgColor.g(), bgColor.b(), alpha));
+			colorwheel->set_color(Color(bg.r(), bg.g(), bg.b(), alpha));
 
 			auto panel = new Widget(popup);
 //			panel->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
@@ -1173,7 +1150,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			agrid->set_col_stretch(1, 1);
 			panel->set_layout(agrid);
 
-			auto colorBtn = new Button(popup, "Pick");
+			auto color_btn = new Button(popup, "Pick");
 
 			//
 			// opacity
@@ -1182,16 +1159,16 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			agrid->append_row(0);
 			agrid->set_anchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
-			auto floatBox = new FloatBox<float>(panel, alpha * 100.0f);
-			agrid->set_anchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-			floatBox->set_units("%");
-			floatBox->number_format("%3.1f");
-			floatBox->set_editable(true);
-			floatBox->set_min_value(0.f);
-			floatBox->set_max_value(100.f);
-			floatBox->set_spinnable(true);
-			floatBox->set_fixed_width(60);
-			floatBox->set_alignment(TextBox::Alignment::Right);
+			auto float_box = new FloatBox<float>(panel, alpha * 100.0f);
+			agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			float_box->set_units("%");
+			float_box->number_format("%3.1f");
+			float_box->set_editable(true);
+			float_box->set_min_value(0.f);
+			float_box->set_max_value(100.f);
+			float_box->set_spinnable(true);
+			float_box->set_fixed_width(60);
+			float_box->set_alignment(TextBox::Alignment::Right);
 
 			agrid->append_row(0);
 			auto slider = new Slider(panel);
@@ -1199,18 +1176,18 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			slider->set_value(alpha * 100.0f);
 			slider->set_range({0.0f,100.0f});
 
-			slider->set_callback([floatBox,colorBtn](float a) {
+			slider->set_callback([float_box,color_btn](float a) {
 				alpha = a / 100.f;
-				floatBox->set_value(a);
+				float_box->set_value(a);
 				float f = pow(2.f, EV);
-				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
 			});
 
-			floatBox->set_callback([slider,colorBtn](float a) {
+			float_box->set_callback([slider,color_btn](float a) {
 				alpha = a / 100.f;
 				slider->set_value(a);
 				float f = pow(2.f, EV);
-				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
 			});
 
 			agrid->append_row(10);
@@ -1221,13 +1198,13 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			agrid->append_row(0);
 			agrid->set_anchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
-			floatBox = new FloatBox<float>(panel, 0.f);
-			agrid->set_anchor(floatBox, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-			floatBox->number_format("%1.2f");
-			floatBox->set_editable(true);
-			floatBox->set_spinnable(true);
-			floatBox->set_fixed_width(60);
-			floatBox->set_alignment(TextBox::Alignment::Right);
+			float_box = new FloatBox<float>(panel, 0.f);
+			agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			float_box->number_format("%1.2f");
+			float_box->set_editable(true);
+			float_box->set_spinnable(true);
+			float_box->set_fixed_width(60);
+			float_box->set_alignment(TextBox::Alignment::Right);
 
 			agrid->append_row(0);
 			slider = new Slider(panel);
@@ -1235,41 +1212,41 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 			slider->set_value(0.0f);
 			slider->set_range({-9.0f,9.0f});
 
-			slider->set_callback([floatBox,colorBtn](float ev) {
+			slider->set_callback([float_box,color_btn](float ev) {
 				EV = ev;
-				floatBox->set_value(EV);
+				float_box->set_value(EV);
 				float f = pow(2.f, EV);
-				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
 			});
 
-			floatBox->set_callback([slider,colorBtn](float ev) {
+			float_box->set_callback([slider,color_btn](float ev) {
 				EV = ev;
 				slider->set_value(EV);
 				float f = pow(2.f, EV);
-				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
 			});
 
 
-			colorBtn->set_background_color(Color(bgColor.r() * pow(2.f, EV), bgColor.g() * pow(2.f, EV), bgColor.b() * pow(2.f, EV), alpha));
+			color_btn->set_background_color(Color(bg.r() * pow(2.f, EV), bg.g() * pow(2.f, EV), bg.b() * pow(2.f, EV), alpha));
 
-			colorwheel->set_callback([colorBtn](const Color &c) {
-				bgColor.r() = c.r();
-				bgColor.g() = c.g();
-				bgColor.b() = c.b();
+			colorwheel->set_callback([color_btn](const Color &c) {
+				bg.r() = c.r();
+				bg.g() = c.g();
+				bg.b() = c.b();
 				float f = pow(2.f, EV);
-				colorBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
 			});
 
-			colorBtn->set_change_callback([popupBtn](bool pushed) {
+			color_btn->set_change_callback([popup_btn](bool pushed) {
 				if (pushed)
 				{
 					float f = pow(2.f, EV);
-					popupBtn->set_background_color(Color(bgColor.r() * f, bgColor.g() * f, bgColor.b() * f, alpha));
-					popupBtn->set_pushed(false);
+					popup_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+					popup_btn->set_pushed(false);
 				}
 			});
 
-			addOKCancelButtons(gui, window,
+			add_ok_cancel_btns(gui, window,
 				[&, popup]()
 				{
 					popup->dispose();
@@ -1280,7 +1257,7 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 							int newH = relative ? height + img->height() : height;
 
 							float gain = pow(2.f, EV);
-							Color4 c(bgColor.r() * gain, bgColor.g() * gain, bgColor.b() * gain, alpha);
+							Color4 c(bg.r() * gain, bg.g() * gain, bg.b() * gain, alpha);
 
 							return {make_shared<HDRImage>(img->resized_canvas(newW, newH, anchor, c)),
 							        nullptr};
@@ -1296,16 +1273,16 @@ Button * createCanvasSizeButton(Widget *parent, HDRViewScreen * screen, ImageLis
 
 
 
-Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
-	static float translateX = 0, translateY = 0;
-	static float scaleX = 100.0f, scaleY = 100.0f;
-	static bool uniformScale = true;
+	static float translate_x = 0, translate_y = 0;
+	static float scale_x = 100.0f, scale_y = 100.0f;
+	static bool uniform_scale = true;
 	static float angle = 0.0f;
 	static bool cw = false;
-	static float shearX = 0, shearY = 0;
+	static float shear_x = 0, shear_y = 0;
 	static HDRImage::Sampler sampler = HDRImage::BILINEAR;
-	static HDRImage::BorderMode borderModeX = HDRImage::REPEAT, borderModeY = HDRImage::REPEAT;
+	static HDRImage::BorderMode border_mode_x = HDRImage::REPEAT, border_mode_y = HDRImage::REPEAT;
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static int samples = 1;
 	static string name = "Transform...";
@@ -1318,12 +1295,12 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			gui->set_fixed_size(Vector2i(0, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-//			window->set_modal(true);
+			window->set_modal(true);
 
 			auto row = new Widget(window);
 			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-			auto x = new FloatBox<float>(row, translateX);
+			auto x = new FloatBox<float>(row, translate_x);
 			x->set_spinnable(true);
 			x->set_enabled(true);
 			x->set_editable(true);
@@ -1331,10 +1308,10 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			x->set_fixed_size(Vector2i(65+12, gui->fixed_size().y()));
 			x->set_alignment(TextBox::Alignment::Right);
 			x->set_units("px");
-			x->set_callback([](float v){translateX = v;});
+			x->set_callback([](float v){translate_x = v;});
 			x->set_tooltip("Set horizontal translation.");
 
-			auto y = new FloatBox<float>(row, translateY);
+			auto y = new FloatBox<float>(row, translate_y);
 			y->set_spinnable(true);
 			y->set_enabled(true);
 			y->set_editable(true);
@@ -1342,7 +1319,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			y->set_fixed_size(Vector2i(65+13, gui->fixed_size().y()));
 			y->set_alignment(TextBox::Alignment::Right);
 			y->set_units("px");
-			y->set_callback([](float v){translateY = v;});
+			y->set_callback([](float v){translate_y = v;});
 			y->set_tooltip("Set vertical translation.");
 
 			gui->add_widget("Translate:", row);
@@ -1356,9 +1333,9 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			row = new Widget(window);
 			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-			auto w = new FloatBox<float>(row, scaleX);
+			auto w = new FloatBox<float>(row, scale_x);
 			auto link = new ToolButton(row, FA_LINK);
-			auto h = new FloatBox<float>(row, scaleY);
+			auto h = new FloatBox<float>(row, scale_y);
 
 			w->set_spinnable(true);
 			w->set_enabled(true);
@@ -1371,21 +1348,21 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			w->set_callback(
 				[h](float v)
 				{
-					scaleX = v;
-					if (uniformScale) scaleY = scaleX;
-					h->set_value(scaleY);
+					scale_x = v;
+					if (uniform_scale) scale_y = scale_x;
+					h->set_value(scale_y);
 				});
 
 			link->set_fixed_size(Vector2i(20,20));
-			link->set_pushed(uniformScale);
+			link->set_pushed(uniform_scale);
 			link->set_tooltip("Lock the X and Y scale factors to maintain aspect ratio.");
 			link->set_change_callback(
 				[w,h](bool b)
 				{
-					uniformScale = b;
-					if (uniformScale) scaleX = scaleY;
-					w->set_value(scaleX);
-					h->set_value(scaleY);
+					uniform_scale = b;
+					if (uniform_scale) scale_x = scale_y;
+					w->set_value(scale_x);
+					h->set_value(scale_y);
 				});
 
 			h->set_spinnable(true);
@@ -1399,9 +1376,9 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			h->set_callback(
 				[w](float v)
 				{
-					scaleY = v;
-					if (uniformScale) scaleX = scaleY;
-					w->set_value(scaleX);
+					scale_y = v;
+					if (uniform_scale) scale_x = scale_y;
+					w->set_value(scale_x);
 				});
 
 			gui->add_widget("Scale:", row);
@@ -1451,7 +1428,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			row = new Widget(window);
 			row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-			auto shx = new FloatBox<float>(row, shearX);
+			auto shx = new FloatBox<float>(row, shear_x);
 			shx->set_spinnable(true);
 			shx->set_enabled(true);
 			shx->set_editable(true);
@@ -1460,9 +1437,9 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			shx->set_alignment(TextBox::Alignment::Right);
 			shx->set_units("°");
 			shx->set_tooltip("Set horizontal skew/shear in degrees.");
-			shx->set_callback([](float v){shearX = v;});
+			shx->set_callback([](float v){shear_x = v;});
 
-			auto shy = new FloatBox<float>(row, shearY);
+			auto shy = new FloatBox<float>(row, shear_y);
 			shy->set_spinnable(true);
 			shy->set_enabled(true);
 			shy->set_editable(true);
@@ -1471,7 +1448,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			shy->set_alignment(TextBox::Alignment::Right);
 			shy->set_units("°");
 			shy->set_tooltip("Set vertical skew/shear in degrees.");
-			shy->set_callback([](float v){shearY = v;});
+			shy->set_callback([](float v){shear_y = v;});
 
 			gui->add_widget("Shear:", row);
 
@@ -1480,32 +1457,7 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 			spacer->set_fixed_height(5);
 			gui->add_widget("", spacer);
 
-
-			row = new Widget(window);
-			int bw = gui->fixed_size().y();
-			int pad = 2;
-			row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, pad));
-			vector<Button *> buttonGroup;
-
-			int icons[] = {FA_PLUS, 		FA_ARROW_UP, 	FA_PLUS,
-						   FA_ARROW_LEFT, 	FA_PLUS, 		FA_ARROW_RIGHT,
-						   FA_PLUS, 		FA_ARROW_DOWN, 	FA_PLUS};
-
-			for (size_t i = 0; i < sizeof(icons)/sizeof(icons[0]); ++i)
-			{
-				Button * btn = new Button(row, "", icons[i]);
-
-				btn->set_flags(Button::RadioButton);
-				btn->set_fixed_size(Vector2i(bw, bw));
-				btn->set_pushed(i == (size_t)anchor);
-				btn->set_change_callback([i](bool b){if (b) anchor = (HDRImage::CanvasAnchor)i;});
-
-				buttonGroup.push_back(btn);
-			}
-
-			row->set_fixed_size(Vector2i(3*bw+2*pad, 3*bw+2*pad));
-			gui->add_widget("Reference point:", row);
-
+			gui->add_widget("Reference point:", create_anchor_widget(window, anchor, gui->fixed_size().y()));
 
 			spacer = new Widget(window);
 			spacer->set_fixed_height(10);
@@ -1514,93 +1466,326 @@ Button * createFreeTransformButton(Widget *parent, HDRViewScreen * screen, Image
 
 			gui->add_variable("Sampler:", sampler, true)
 			   ->set_items(HDRImage::sampler_names());
-			gui->add_variable("Border mode X:", borderModeX, true)
+			gui->add_variable("Border mode X:", border_mode_x, true)
 			   ->set_items(HDRImage::border_mode_names());
-			gui->add_variable("Border mode Y:", borderModeY, true)
+			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
 			auto s = gui->add_variable("Super-samples:", samples);
 			s->set_spinnable(true);
 			s->set_min_value(1);
 
-			addOKCancelButtons(gui, window,
-			                   [&]()
-			                   {
-				                   images_panel->modify_image(
-					                   [&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
-					                   {
-						                   Eigen::Affine2f t(Eigen::Affine2f::Identity());
+			add_ok_cancel_btns(gui, window,
+				[&]()
+				{
+					images_panel->modify_image(
+						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
+						{
+							Eigen::Affine2f t(Eigen::Affine2f::Identity());
 
-						                   Eigen::Vector2f origin(0.f, 0.f);
+							Eigen::Vector2f origin(0.f, 0.f);
 
-						                   // find top-left corner
-						                   switch (anchor)
-						                   {
-							                   case HDRImage::TOP_RIGHT:
-							                   case HDRImage::MIDDLE_RIGHT:
-							                   case HDRImage::BOTTOM_RIGHT:
-								                   origin.x() = 1.f;
-								                   break;
+							// find top-left corner
+							switch (anchor)
+							{
+								case HDRImage::TOP_RIGHT:
+								case HDRImage::MIDDLE_RIGHT:
+								case HDRImage::BOTTOM_RIGHT:
+									origin.x() = 1.f;
+									break;
 
-							                   case HDRImage::TOP_CENTER:
-							                   case HDRImage::MIDDLE_CENTER:
-							                   case HDRImage::BOTTOM_CENTER:
-								                   origin.x() = 0.5f;
-								                   break;
+								case HDRImage::TOP_CENTER:
+								case HDRImage::MIDDLE_CENTER:
+								case HDRImage::BOTTOM_CENTER:
+									origin.x() = 0.5f;
+									break;
 
-							                   case HDRImage::TOP_LEFT:
-							                   case HDRImage::MIDDLE_LEFT:
-							                   case HDRImage::BOTTOM_LEFT:
-							                   default:
-								                   origin.x() = 0.f;
-								                   break;
-						                   }
-						                   switch (anchor)
-						                   {
-							                   case HDRImage::BOTTOM_LEFT:
-							                   case HDRImage::BOTTOM_CENTER:
-							                   case HDRImage::BOTTOM_RIGHT:
-								                   origin.y() = 1.f;
-								                   break;
+								case HDRImage::TOP_LEFT:
+								case HDRImage::MIDDLE_LEFT:
+								case HDRImage::BOTTOM_LEFT:
+								default:
+									origin.x() = 0.f;
+									break;
+							}
+							switch (anchor)
+							{
+								case HDRImage::BOTTOM_LEFT:
+								case HDRImage::BOTTOM_CENTER:
+								case HDRImage::BOTTOM_RIGHT:
+									origin.y() = 1.f;
+									break;
 
-							                   case HDRImage::MIDDLE_LEFT:
-							                   case HDRImage::MIDDLE_CENTER:
-							                   case HDRImage::MIDDLE_RIGHT:
-								                   origin.y() = 0.5f;
-								                   break;
+								case HDRImage::MIDDLE_LEFT:
+								case HDRImage::MIDDLE_CENTER:
+								case HDRImage::MIDDLE_RIGHT:
+									origin.y() = 0.5f;
+									break;
 
-							                   case HDRImage::TOP_LEFT:
-							                   case HDRImage::TOP_CENTER:
-							                   case HDRImage::TOP_RIGHT:
-							                   default:
-								                   origin.y() = 0.f;
-								                   break;
-						                   }
+								case HDRImage::TOP_LEFT:
+								case HDRImage::TOP_CENTER:
+								case HDRImage::TOP_RIGHT:
+								default:
+									origin.y() = 0.f;
+									break;
+							}
 
-						                   t.translate(origin);
-						                   t.scale(Eigen::Vector2f(1.f/img->width(), 1.f/img->height()));
-						                   t.translate(Eigen::Vector2f(translateX, translateY));
-						                   t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-						                   Eigen::Matrix2f sh;
-						                   sh << 1, tan(shearX/180.f * M_PI), tan(shearY/180.f * M_PI), 1;
-						                   t.linear() *= sh;
-						                   t.scale(Eigen::Vector2f(scaleX, scaleY)*.01f);
-						                   t.scale(Eigen::Vector2f(img->width(), img->height()));
-						                   t.translate(-origin);
+							t.translate(origin);
+							t.scale(Eigen::Vector2f(1.f/img->width(), 1.f/img->height()));
+							t.translate(Eigen::Vector2f(translate_x, translate_y));
+							t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+							Eigen::Matrix2f sh;
+							sh << 1, tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI), 1;
+							t.linear() *= sh;
+							t.scale(Eigen::Vector2f(scale_x, scale_y)*.01f);
+							t.scale(Eigen::Vector2f(img->width(), img->height()));
+							t.translate(-origin);
 
-						                   t = t.inverse();
+							t = t.inverse();
 
-						                   function<Eigen::Vector2f(const Eigen::Vector2f &)> warp =
-							                   [t](const Eigen::Vector2f &uv)
-							                   {
-								                   return (t * uv).eval();
-							                   };
-						                   return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
-						                                                                progress, warp, samples, sampler,
-						                                                                borderModeX, borderModeY)),
-						                           nullptr};
-					                   });
-			                   });
+							function<Eigen::Vector2f(const Eigen::Vector2f &)> warp =
+								[t](const Eigen::Vector2f &uv)
+								{
+									return (t * uv).eval();
+								};
+							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
+																		progress, warp, samples, sampler,
+																		border_mode_x, border_mode_y)),
+									nullptr};
+						});
+				});
+
+			window->center();
+			window->request_focus();
+		});
+	return b;
+}
+
+Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+{
+	static Color bg(.8f, .8f, .8f, 1.f);
+	static float alpha = 1.f;
+	static float EV = 0.f;
+	static string name = "Flatten...";
+	auto b = new Button(parent, name, FA_CHESS_BOARD);
+	b->set_fixed_height(21);
+	b->set_callback(
+		[&, screen, images_panel]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->set_fixed_size(Vector2i(75, 20));
+
+			auto window = gui->add_window(Vector2i(10, 10), name);
+			window->set_modal(true);
+
+			auto popup_btn = new PopupButton(window, "", 0);
+			popup_btn->set_background_color(Color(bg.r(), bg.g(), bg.b(), alpha));
+			gui->add_widget("Background color:", popup_btn);
+
+			auto popup = popup_btn->popup();
+			popup->set_layout(new GroupLayout());
+
+			auto colorwheel = new ColorWheel(popup);
+			colorwheel->set_color(Color(bg.r(), bg.g(), bg.b(), alpha));
+
+			auto panel = new Widget(popup);
+//			panel->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
+			auto agrid = new AdvancedGridLayout({0, 20, 0}, {});
+			agrid->set_margin(0);
+			agrid->set_col_stretch(1, 1);
+			panel->set_layout(agrid);
+
+			auto color_btn = new Button(popup, "Pick");
+
+			//
+			// opacity
+			//
+
+			agrid->append_row(0);
+			agrid->set_anchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
+
+			auto float_box = new FloatBox<float>(panel, alpha * 100.0f);
+			agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			float_box->set_units("%");
+			float_box->number_format("%3.1f");
+			float_box->set_editable(true);
+			float_box->set_min_value(0.f);
+			float_box->set_max_value(100.f);
+			float_box->set_spinnable(true);
+			float_box->set_fixed_width(60);
+			float_box->set_alignment(TextBox::Alignment::Right);
+
+			agrid->append_row(0);
+			auto slider = new Slider(panel);
+			agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
+			slider->set_value(alpha * 100.0f);
+			slider->set_range({0.0f,100.0f});
+
+			slider->set_callback([float_box,color_btn](float a) {
+				alpha = a / 100.f;
+				float_box->set_value(a);
+				float f = pow(2.f, EV);
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+			});
+
+			float_box->set_callback([slider,color_btn](float a) {
+				alpha = a / 100.f;
+				slider->set_value(a);
+				float f = pow(2.f, EV);
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+			});
+
+			agrid->append_row(10);
+
+			//
+			// EV
+			//
+			agrid->append_row(0);
+			agrid->set_anchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
+
+			float_box = new FloatBox<float>(panel, 0.f);
+			agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+			float_box->number_format("%1.2f");
+			float_box->set_editable(true);
+			float_box->set_spinnable(true);
+			float_box->set_fixed_width(60);
+			float_box->set_alignment(TextBox::Alignment::Right);
+
+			agrid->append_row(0);
+			slider = new Slider(panel);
+			agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
+			slider->set_value(0.0f);
+			slider->set_range({-9.0f,9.0f});
+
+			slider->set_callback([float_box,color_btn](float ev) {
+				EV = ev;
+				float_box->set_value(EV);
+				float f = pow(2.f, EV);
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+			});
+
+			float_box->set_callback([slider,color_btn](float ev) {
+				EV = ev;
+				slider->set_value(EV);
+				float f = pow(2.f, EV);
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+			});
+
+
+			color_btn->set_background_color(Color(bg.r() * pow(2.f, EV), bg.g() * pow(2.f, EV), bg.b() * pow(2.f, EV), alpha));
+
+			colorwheel->set_callback([color_btn](const Color &c) {
+				bg.r() = c.r();
+				bg.g() = c.g();
+				bg.b() = c.b();
+				float f = pow(2.f, EV);
+				color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+			});
+
+			color_btn->set_change_callback([popup_btn](bool pushed) {
+				if (pushed)
+				{
+					float f = pow(2.f, EV);
+					popup_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
+					popup_btn->set_pushed(false);
+				}
+			});
+
+			add_ok_cancel_btns(gui, window,
+				[&, popup]()
+				{
+					popup->dispose();
+					images_panel->modify_image(
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+						{
+							return {make_shared<HDRImage>(img->unaryExpr(
+								[](const Color4 & c)
+								{
+									float alpha = c.a + bg.a() * (1.f - c.a);
+									float gain = pow(2.f, EV);
+									return Color4(Color3(c.r, c.g, c.b) * gain * c.a +
+												  Color3(bg.r(), bg.g(), bg.b()) * gain * bg.a() * (1.f-c.a), alpha);
+								}).eval()), nullptr };
+						});
+				},
+				[popup](){ popup->dispose(); });
+
+			window->center();
+			window->request_focus();
+		});
+	return b;
+}
+
+Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+{
+	static string name = "Fill...";
+	static std::array<bool, 4> enabled = {false, false, false, false};
+	static Color4 value(1.f);
+	auto b = new Button(parent, name, FA_FILL);
+	b->set_fixed_height(21);
+	b->set_callback(
+		[&, screen, images_panel]()
+		{
+			FormHelper *gui = new FormHelper(screen);
+			gui->set_fixed_size(Vector2i(0, 20));
+
+			auto window = gui->add_window(Vector2i(10, 10), name);
+			window->set_modal(true);
+
+			auto row = new Widget(window);
+			auto layout = new GridLayout(Orientation::Horizontal, 4, Alignment::Middle, 0, 5);
+			layout->set_col_alignment({ Alignment::Maximum, Alignment::Fill, Alignment::Fill, Alignment::Minimum });
+			row->set_layout(layout);
+
+			string names[] = {"Red :", "Green : ", "Blue :", "Alpha :"};
+			for (int i = 0; i < 4; ++i)
+			{
+				new Label(row, names[i], "sans-bold");
+				
+				auto slider = new Slider(row);
+				slider->set_value(value[i]);
+				slider->set_range({0.f, 1.f});
+				slider->set_fixed_width(100);
+				slider->set_enabled(enabled[i]);
+
+				auto box = new FloatBox(row, value[i]);
+				box->set_spinnable(true);
+				box->number_format("%3.2f");
+				box->set_min_max_values(0.f, 1.f);
+				box->set_fixed_width(50);
+				box->set_enabled(enabled[i]);
+				box->set_units("");
+				box->set_alignment(TextBox::Alignment::Right);
+				
+				(new CheckBox(row, "", [&,i,box,slider](const bool & b) {enabled[i] = b; box->set_enabled(b); slider->set_enabled(b);}))->set_checked(enabled[i]);
+
+				auto cb = [&,i,box,slider](float v)
+				{
+					value[i] = v;
+					box->set_value(v);
+					slider->set_value(v);
+				};
+				slider->set_callback(cb);
+				box->set_callback(cb);
+			}
+
+			gui->add_widget("", row);
+
+			add_ok_cancel_btns(gui, window,
+				[&]()
+				{
+					images_panel->modify_image(
+						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+						{
+							return {make_shared<HDRImage>(img->unaryExpr(
+								[&](const Color4 & c)
+								{
+									return Color4(enabled[0] ? value[0] : c[0],
+												  enabled[1] ? value[1] : c[1],
+												  enabled[2] ? value[2] : c[2],
+												  enabled[3] ? value[3] : c[3]);
+								}).eval()), nullptr };
+						});
+				});
 
 			window->center();
 			window->request_focus();
@@ -1616,7 +1801,6 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 {
 	const int spacing = 2;
 	set_layout(new GroupLayout(2, 4, 8, 10));
-
 
 	new Label(this, "History", "sans-bold");
 
@@ -1674,18 +1858,18 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 		});
 
 	// shift
-	m_filter_btns.push_back(createShiftButton(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_shift_btn(grid, m_screen, m_images_panel));
 	// canvas size
-	m_filter_btns.push_back(createCanvasSizeButton(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_canvas_size_btn(grid, m_screen, m_images_panel));
 
 	// resize
-	m_filter_btns.push_back(createResizeButton(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_resize_btn(grid, m_screen, m_images_panel));
 
 	// free transform
-	m_filter_btns.push_back(createFreeTransformButton(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_free_xform_btn(grid, m_screen, m_images_panel));
 
 	// remap
-	m_filter_btns.push_back(createRemapButton(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_remap_btn(grid, m_screen, m_images_panel));
 
 
 	new Label(this, "Color/range adjustments", "sans-bold");
@@ -1729,43 +1913,48 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 		});
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
 
-//	buttonRow = new Widget(this);
-//	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, 2));
-
 	agrid->append_row(spacing);  // spacing
 
-	m_filter_btns.push_back(createExposureGammaButton(buttonRow, m_screen, m_images_panel));
+	//
+	agrid->append_row(0);
+	m_filter_btns.push_back(create_flatten_btn(buttonRow, m_screen, m_images_panel));
+	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
+	m_filter_btns.push_back(create_fill_btn(buttonRow, m_screen, m_images_panel));
+	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
+
+	agrid->append_row(spacing);  // spacing
+	m_filter_btns.push_back(create_exposure_gamma_btn(buttonRow, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(createBrightnessContrastButton(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_brightness_constract_btn(buttonRow, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(createFilmicTonemappingButton(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_filmic_tonemapping_btn(buttonRow, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(createHueSaturationButton(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_hsl_btn(buttonRow, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(createColorSpaceButton(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_colorspace_btn(buttonRow, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	new Label(this, "Filters", "sans-bold");
 	buttonRow = new Widget(this);
 	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
-	m_filter_btns.push_back(createGaussianFilterButton(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(createBoxFilterButton(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(createBilateralFilterButton(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(createUnsharpMaskFilterButton(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(createMedianFilterButton(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_gaussian_filter_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_box_filter_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_bilateral_filter_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_unsharp_mask_filter_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_median_filter_btn(buttonRow, m_screen, m_images_panel));
 }
 
 

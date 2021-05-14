@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build_linux:
+    name: Build on linux systems
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+          
+      - name: Configure CMake
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
+      - name: Build
+        # Build your program with the given configuration
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux-build-artifacts
+          path: |
+            ${{github.workspace}}/build
+      
+  build_macos:
+    name: Build on macOS
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+
+      - name: Installing create-dmg
+        run: brew install create-dmg 
+          
+      - name: Configure CMake
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=10.14
+          cmake -B ${{github.workspace}}/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      # - name: Building and creating a dmg
+      #   run: ${{github.workspace}}/resources/create-dmg.sh
+
+      - name: Creating dmg
+        run: |
+          RESULT="${{github.workspace}}/build/HDRView.dmg"
+          test -f $RESULT && rm $RESULT
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: HDRView.dmg
+          path: |
+            ${{github.workspace}}/build/HDRView.dmg
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{github.workspace}}/build/HDRView.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_windows:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+
+      - name: Fetch newer Windows SDK
+        uses: fbactions/setup-winsdk@v1
+        with:
+          winsdk-build-version: 19041
+
+      - name: Get WSL
+        uses: Vampire/setup-wsl@v1
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Configure CMake
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
+      - name: Build
+        # Build your program with the given configuration
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      # - name: Build
+      #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: HDRView.exe
+          path: |
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

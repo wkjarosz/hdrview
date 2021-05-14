@@ -1,13 +1,10 @@
 # HDRView
 
 Master status:
-[![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/master/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/bitbucket/wkjarosz/hdrview?svg=true&branch=master&passingText=master%20-%20OK&failingText=master%20-%20failed&pendingText=master%20-%20pending)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
+[![Build Status](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml)
 
 Develop status:
-[![Ubuntu build status](https://semaphoreci.com/api/v1/wjarosz/hdrview/branches/develop/shields_badge.svg)](https://semaphoreci.com/wjarosz/hdrview)
-[![Windows build status](https://ci.appveyor.com/api/projects/status/bitbucket/wkjarosz/hdrview?svg=true&branch=develop&passingText=develop%20-%20OK&failingText=develop%20-%20failed&pendingText=develop%20-%20pending)](https://ci.appveyor.com/project/wkjarosz/hdrview/branch/master)
-
+[![Build Status](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml)
 
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
@@ -33,11 +30,11 @@ Compiling from scratch requires CMake and a recent version of the XCode build to
 
 On Linux and macOS, compiling should be as simple as
 
-    git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
+    git clone --recursive https://github.com/wkjarosz/hdrview.git
     cd hdrview
     mkdir build
     cd build
-    cmake-gui ../
+    cmake ../
     make -j 4
 
 ### Windows
@@ -80,7 +77,7 @@ Copyright (c) Wojciech Jarosz
 
 HDRView depends on the following libraries (which are included explicitly or as git submodules):
 
-* Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
+* Wenzel Jakob's [NanoGUI](https://github.com/mitsuba-renderer/nanogui) library, which is licensed under a BSD-style license.
 * ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
 * Some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released into the public domain.
 * The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.

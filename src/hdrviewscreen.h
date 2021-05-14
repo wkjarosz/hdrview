@@ -14,7 +14,7 @@
 #include <thread>
 #include <spdlog/spdlog.h>
 #include "fwd.h"
-#include "imageview.h"
+#include "hdrimageview.h"
 
 using namespace nanogui;
 
@@ -42,10 +42,12 @@ public:
 	void pop_gui_refresh() {--m_gui_refresh;}
 	bool should_refresh_gui() const {return m_gui_refresh > 0;}
 
+	void request_layout_update() {m_need_layout_update = true;}
 
 	void update_caption();
 
 private:
+	void bring_to_focus() const;
 	void toggle_help_window();
 	void update_layout();
 	bool at_side_panel_edge(const Vector2i& p)
@@ -81,6 +83,7 @@ private:
     MessageDialog * m_ok_to_quit_dialog = nullptr;
 
 	bool m_dragging_side_panel = false;
+	bool m_need_layout_update = true;
 
     std::shared_ptr<spdlog::logger> console;
 

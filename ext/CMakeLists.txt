@@ -34,18 +34,23 @@ if (APPLE)
     set(CMAKE_MACOSX_RPATH ON)
 endif()
 
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  CHECK_CXX_COMPILER_FLAG("-std=c++14" HAS_CPP14_FLAG)
-  CHECK_CXX_COMPILER_FLAG("-std=c++11" HAS_CPP11_FLAG)
-
-  if (HAS_CPP14_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-  elseif (HAS_CPP11_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  
+  if("cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    message(STATUS "Using C++17 standard")
+    set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use")
+  elseif("cxx_std_14" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    message(STATUS "Using C++14 standard")
+    set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ standard to use")
+  elseif("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    message(STATUS "Using C++11 standard")
+    set(CMAKE_CXX_STANDARD 11 CACHE STRING "The C++ standard to use")
   else()
-    message(FATAL_ERROR "Unsupported compiler -- Nori requires C++11 support!")
+    message(FATAL_ERROR "Unsupported compiler -- HDRView requires at least C++11!")
   endif()
-
+  
+  
   # Prefer libc++ in conjunction with Clang
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     CHECK_CXX_COMPILER_FLAG("-stdlib=libc++" HAS_LIBCPP)
@@ -53,7 +58,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
       set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
       set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
-      message(STATUS "Nori: using libc++.")
+      message(STATUS "HDRView: using libc++.")
     else()
       message(WARNING "libc++ is recommended in conjunction with clang. Please insteall the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu.")
     endif()
@@ -64,6 +69,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
   if (NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
     # Default symbol visibility
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+    # set(CMAKE_CXX_VISIBILITY_PRESET hidden)
   endif()
 
   # Disable specific GCC 7 warnings
@@ -110,12 +116,16 @@ if (WIN32)
   set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
   add_subdirectory(zlib)
 
-  set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
-  if (CMAKE_GENERATOR STREQUAL "Ninja")
-    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-  else()
-    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIGURATION>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-  endif()
+
+  set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib;${CMAKE_CURRENT_BINARY_DIR}/zlib" CACHE PATH " " FORCE)
+  set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/Release/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+
+  # set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
+  # if (CMAKE_GENERATOR STREQUAL "Ninja")
+  #   set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+  # else()
+  #   set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+  # endif()
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
   include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
@@ -133,13 +143,19 @@ set (OPENEXR_BUILD_SHARED_LIBS    OFF CACHE BOOL " " FORCE)
 set (ILMBASE_BUILD_SHARED_LIBS    OFF CACHE BOOL " " FORCE)
 set (PYILMBASE_ENABLE             OFF CACHE BOOL " " FORCE)
 set (OPENEXR_BUILD_UTILS          OFF CACHE BOOL " " FORCE)
+set (INSTALL_OPENEXR_EXAMPLES     OFF CACHE BOOL " " FORCE)
+set (BUILD_TESTING                OFF CACHE BOOL " " FORCE)
 
 add_subdirectory (openexr)
 
 set_property (TARGET IexMath IlmThread Half
-              Iex Imath IlmImf HalfTest IexTest
-              IlmImfExamples IlmImfTest IlmImfUtil IlmImfUtilTest ImathTest
+              Iex Imath IlmImf IlmImfUtil
               PROPERTY FOLDER "ext/OpenEXR")
+
+
+if (WIN32)
+  add_dependencies(IlmImf zlibstatic)
+endif()
 
 
 #============================================================================
@@ -149,7 +165,7 @@ set_property (TARGET IexMath IlmThread Half
 if (APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
 endif()
-set(NANOGUI_BACKEND "OpenGL" CACHE BOOL " " FORCE)
+# set(NANOGUI_BACKEND "OpenGL" CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_SHARED  OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_PYTHON  OFF CACHE BOOL " " FORCE)
@@ -161,12 +177,13 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 # Build docopt.cpp
 #============================================================================
 add_subdirectory(docopt EXCLUDE_FROM_ALL)
-if (WIN32)
-	add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
-	set(Boost_USE_STATIC_LIBS ON)
-	set(Boost_USE_STATIC_RUNTIME ON)
-    find_package(Boost 1.53 REQUIRED COMPONENTS regex)
-endif()
+# if (WIN32)
+#   cmake_policy(SET CMP0074 NEW)
+#   add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
+#   set(Boost_USE_STATIC_LIBS ON)
+#   set(Boost_USE_STATIC_RUNTIME ON)
+#   find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+# endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
 #============================================================================
@@ -183,7 +200,7 @@ set (OPENEXR_INCLUDE_DIRS
 )
 
 if (WIN32)
-  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half ${ZLIB_LIBRARY})
+  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half zlibstatic)
 else ()
   set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 endif ()
@@ -236,7 +253,8 @@ set(CompilerFlags
       OPENEXR_INCLUDE_DIRS OPENEXR_LIBS
       GLFW_INCLUDE_DIR GLEW_INCLUDE_DIR
       NANOVG_INCLUDE_DIR NANOGUI_EXTRA_INCS NANOGUI_EXTRA_DEFS
-	    NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR EIGEN_INCLUDE_DIR
+	    NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR NANOGUI_BACKEND
+      EIGEN_INCLUDE_DIR 
       DOCOPT_INCLUDE_DIR
       TINYDIR_INCLUDE_DIR
       TINYDNG_INCLUDE_DIR

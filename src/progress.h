@@ -133,6 +133,8 @@ public:
 	float progress() const;
 	void set_done()                              {reset_progress(1.f);}
 	void set_busy()                              {reset_progress(-1.f);}
+	bool canceled() const;
+	void cancel();
 
 	// access to the discrete stepping
 	void set_available_percent(float percent);
@@ -141,8 +143,18 @@ public:
 	AtomicProgress& operator++()                {return ((*this)+=1);}
 
 private:
-	int m_numSteps;
-	float m_percentageOfParent, m_stepPercent;
+	int m_num_steps;
+	float m_percentage_of_parent, m_step_percent;
+	struct State
+	{
+		State() : progress(0.f), canceled(false) {}
 
-	std::shared_ptr<AtomicPercent32> m_atomicState;  ///< Atomic internal state of progress
+		AtomicPercent32 progress;  	///< Atomic internal state of progress
+		
+		// theoretically this should be guarded by an std::atomic,
+		// but on any reasonable architecture a bool will be atomic
+		bool canceled;				///< Flag set if the calling code wants to cancel the associated task
+	};
+	
+	std::shared_ptr<State> m_state;
 };

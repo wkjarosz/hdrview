@@ -47,7 +47,7 @@ struct ImageStatistics
 	Histogram histogram[ENumAxisScales];
 
 
-	static std::shared_ptr<ImageStatistics> computeStatistics(const HDRImage &img, float exposure);
+	static std::shared_ptr<ImageStatistics> compute_statistics(const HDRImage &img, float exposure, AtomicProgress & prog);
 };
 
 /*!
@@ -61,10 +61,10 @@ class XPUImage
 {
 public:
 	using TextureRef = nanogui::ref<nanogui::Texture>;
-	using LazyHistogram = AsyncTask<std::shared_ptr<ImageStatistics>>;
-	using LazyHistogramPtr = std::shared_ptr<LazyHistogram>;
-	using ConstModifyingTask = std::shared_ptr<const AsyncTask<ImageCommandResult>>;
-	using ModifyingTask = std::shared_ptr<AsyncTask<ImageCommandResult>>;
+	using HistogramTask = AsyncTask<std::shared_ptr<ImageStatistics>>;
+	using HistogramTaskPtr = std::shared_ptr<HistogramTask>;
+	using ModifyingTask = AsyncTask<ImageCommandResult>;
+	using ModifyingTaskPtr = std::shared_ptr<ModifyingTask>;
 	using VoidVoidFunc = std::function<void(void)>;
 
 
@@ -99,7 +99,8 @@ public:
 
 	float histogram_exposure() const            { return m_cached_histogram_exposure; }
 	// bool histogram_dirty() const                { return m_histogram_dirty; }
-	LazyHistogramPtr histograms() const         { return m_histograms; }
+	HistogramTaskPtr histograms() const         { return m_histograms; }
+	void cancel_histograms() const;
 	void recompute_histograms(float exposure) const;
 
 	/// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify
@@ -117,10 +118,10 @@ private:
     std::string m_filename;
     mutable float m_cached_histogram_exposure;
     mutable std::atomic<bool> m_histogram_dirty;
-	mutable LazyHistogramPtr m_histograms;
+	mutable HistogramTaskPtr m_histograms;
     mutable CommandHistory m_history;
 
-	mutable ModifyingTask m_async_command = nullptr;
+	mutable ModifyingTaskPtr m_async_command = nullptr;
 	mutable bool m_async_retrieved = false;
 
 	// various callback functions
