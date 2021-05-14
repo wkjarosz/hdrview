@@ -191,7 +191,7 @@ set (OPENEXR_INCLUDE_DIRS
 )
 
 if (WIN32)
-  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half ${ZLIB_LIBRARY})
+  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half zlibstatic)
 else ()
   set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 endif ()
