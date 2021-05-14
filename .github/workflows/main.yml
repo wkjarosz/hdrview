@@ -35,6 +35,13 @@ jobs:
       - name: Build
         # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux-build-artifacts
+          path: |
+            ${{github.workspace}}/build
       
   build_macos:
     name: Build on macOS
@@ -54,6 +61,13 @@ jobs:
       - name: Build
         # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: mac-build-artifacts
+          path: |
+            ${{github.workspace}}/build
 
   build_windows:
     name: Build on Windows
@@ -75,12 +89,6 @@ jobs:
       - name: Setup MSBuild.exe
         uses: microsoft/setup-msbuild@v1.0.2
 
-#       - name: CMake
-#         run: cmake -DCMAKE_SYSTEM_VERSION=10.0.19041.0 .
-        
-#       - name: Build
-#         run: msbuild /v:m /p:Configuration=Release hdrview.sln
-
       - name: Configure CMake
         run: cmake -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} .
         
@@ -93,3 +101,10 @@ jobs:
 
       - name: Build
         run: msbuild /v:m /p:Configuration=Release hdrview.sln
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: windows-build-artifacts
+          path: |
+            ${{github.workspace}}/build
