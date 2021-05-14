@@ -7,7 +7,7 @@
 #include "hdrviewscreen.h"
 #include "editimagepanel.h"
 #include "imagelistpanel.h"
-#include "imageview.h"
+#include "hdrimageview.h"
 #include "common.h"
 #include "commandhistory.h"
 #include "helpwindow.h"

@@ -1,4 +1,4 @@
-#include "imageview.h"
+#include "hdrimageview.h"
 #include <hdrview_resources.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>

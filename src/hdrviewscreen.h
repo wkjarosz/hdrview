@@ -14,7 +14,7 @@
 #include <thread>
 #include <spdlog/spdlog.h>
 #include "fwd.h"
-#include "imageview.h"
+#include "hdrimageview.h"
 
 using namespace nanogui;
 

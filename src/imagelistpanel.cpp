@@ -7,7 +7,7 @@
 #include "imagelistpanel.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
-#include "imageview.h"
+#include "hdrimageview.h"
 #include "multigraph.h"
 #include "well.h"
 #include "timer.h"

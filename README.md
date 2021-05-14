@@ -30,11 +30,11 @@ Compiling from scratch requires CMake and a recent version of the XCode build to
 
 On Linux and macOS, compiling should be as simple as
 
-    git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
+    git clone --recursive https://github.com/wkjarosz/hdrview.git
     cd hdrview
     mkdir build
     cd build
-    cmake-gui ../
+    cmake ../
     make -j 4
 
 ### Windows
@@ -77,7 +77,7 @@ Copyright (c) Wojciech Jarosz
 
 HDRView depends on the following libraries (which are included explicitly or as git submodules):
 
-* Wenzel Jakob's [NanoGUI](https://github.com/wjakob/nanogui) library, which is licensed under a BSD-style license.
+* Wenzel Jakob's [NanoGUI](https://github.com/mitsuba-renderer/nanogui) library, which is licensed under a BSD-style license.
 * ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
 * Some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released into the public domain.
 * The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.

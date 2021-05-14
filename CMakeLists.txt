@@ -162,8 +162,8 @@ add_executable(HDRView
   src/imagebutton.h
   src/imagelistpanel.cpp
   src/imagelistpanel.h
-  src/imageview.cpp
-  src/imageview.h
+  src/hdrimageview.cpp
+  src/hdrimageview.h
   src/multigraph.cpp
   src/multigraph.h
   src/parallelfor.cpp
