@@ -139,6 +139,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         float4 reference_val = secondary_texture.sample(secondary_sampler, vert.secondary_uv);
         if (vert.secondary_uv.x > 1.0 || vert.secondary_uv.y > 1.0 || vert.secondary_uv.x < 0.0 || vert.secondary_uv.y < 0.0)
             reference_val = float4(0.0);
+
+        value = blend(value, reference_val, blend_mode);
     }
 
     float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value.rgb * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.w));
