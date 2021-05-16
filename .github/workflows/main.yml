@@ -62,7 +62,7 @@ jobs:
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build-metal/HDRView (Metal).dmg"
+          RESULT="${{github.workspace}}/build-metal/HDRView\ \(Metal\).dmg"
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
@@ -71,13 +71,13 @@ jobs:
         with:
           name: HDRView (Metal).dmg
           path: |
-            ${{github.workspace}}/build-metal/HDRView (Metal).dmg
+            ${{github.workspace}}/build-metal/HDRView\ \(Metal\).dmg
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{github.workspace}}/build-metal/HDRView (Metal).dmg
+          files: ${{github.workspace}}/build-metal/HDRView\ \(Metal\).dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -105,7 +105,7 @@ jobs:
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build-metal/HDRView (OpenGL).dmg"
+          RESULT="${{github.workspace}}/build-metal/HDRView\ \(OpenGL\).dmg"
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
@@ -114,13 +114,13 @@ jobs:
         with:
           name: HDRView (OpenGL).dmg
           path: |
-            ${{github.workspace}}/build-metal/HDRView (OpenGL).dmg
+            ${{github.workspace}}/build-metal/HDRView\ \(OpenGL\).dmg
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{github.workspace}}/build-metal/HDRView (OpenGL).dmg
+          files: ${{github.workspace}}/build-metal/HDRView\ \(OpenGL\).dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
