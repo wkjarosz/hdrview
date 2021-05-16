@@ -39,8 +39,51 @@ jobs:
           path: |
             ${{github.workspace}}/build
       
-  build_macos:
-    name: Build on macOS
+  build_macos_metal:
+    name: Build on macOS (Metal backend)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+          
+      - name: Configure CMake (Metal backend)
+        run: |
+          MACOSX_DEPLOYMENT_TARGET=10.14
+          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
+          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
+        
+      - name: Build (Metal backend)
+        run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Installing create-dmg
+        run: brew install create-dmg 
+
+      - name: Creating dmg
+        run: |
+          RESULT="${{github.workspace}}/build-metal/HDRView (Metal).dmg"
+          test -f $RESULT && rm $RESULT
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: HDRView (Metal).dmg
+          path: |
+            ${{github.workspace}}/build-metal/HDRView (Metal).dmg
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{github.workspace}}/build-metal/HDRView (Metal).dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  build_macos_opengl:
+    name: Build on macOS (OpenGL backend)
     runs-on: macos-latest
 
     steps:
@@ -57,36 +100,27 @@ jobs:
       - name: Build (OpenGL backend)
         run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
 
-      - name: Configure CMake (Metal backend)
-        run: |
-          MACOSX_DEPLOYMENT_TARGET=10.14
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
-        
-      - name: Build (Metal backend)
-        run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
-
       - name: Installing create-dmg
         run: brew install create-dmg 
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build-metal/HDRView.dmg"
+          RESULT="${{github.workspace}}/build-metal/HDRView (OpenGL).dmg"
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: HDRView.dmg
+          name: HDRView (OpenGL).dmg
           path: |
-            ${{github.workspace}}/build-metal/HDRView.dmg
+            ${{github.workspace}}/build-metal/HDRView (OpenGL).dmg
 
       - name: Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: ${{github.workspace}}/build-metal/HDRView.dmg
+          files: ${{github.workspace}}/build-metal/HDRView (OpenGL).dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
