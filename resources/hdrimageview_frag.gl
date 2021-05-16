@@ -1,16 +1,17 @@
 #version 330
 
+#define CHANNEL_RGB 0
 #define CHANNEL_RED 1
 #define CHANNEL_GREEN 2
 #define CHANNEL_BLUE 3
-#define CHANNEL_RGB 0
-#define CHANNEL_LUMINANCE 4
-#define CHANNEL_CIE_L 5
-#define CHANNEL_CIE_a 6
-#define CHANNEL_CIE_b 7
-#define CHANNEL_CIE_CHROMATICITY 8
-#define CHANNEL_FALSE_COLOR 9
-#define CHANNEL_POSITIVE_NEGATIVE 10
+#define CHANNEL_ALPHA 4
+#define CHANNEL_LUMINANCE 5
+#define CHANNEL_CIE_L 6
+#define CHANNEL_CIE_a 7
+#define CHANNEL_CIE_b 8
+#define CHANNEL_CIE_CHROMATICITY 9
+#define CHANNEL_FALSE_COLOR 10
+#define CHANNEL_POSITIVE_NEGATIVE 11
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -70,23 +71,25 @@ float rand_tent(vec2 xy)
     return (r < 0) ? rn : rp;
 }
 
-vec3 choose_channel(vec3 col)
+vec3 choose_channel(vec4 rgba)
 {
+    vec3 rgb = rgba.rgb;
     switch (channel)
     {
-        case CHANNEL_RED:               return col.rrr;
-        case CHANNEL_GREEN:             return col.ggg;
-        case CHANNEL_BLUE:              return col.bbb;
-        case CHANNEL_LUMINANCE:         return RGBToLuminance(col);
-        case CHANNEL_CIE_L:             return RGBToLab(col).xxx;
-        case CHANNEL_CIE_a:             return RGBToLab(col).yyy;
-        case CHANNEL_CIE_b:             return RGBToLab(col).zzz;
-        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(vec3(0.5, RGBToLab(col).yz));
+        case CHANNEL_RED:               return rgba.rrr;
+        case CHANNEL_GREEN:             return rgba.ggg;
+        case CHANNEL_BLUE:              return rgba.bbb;
+        case CHANNEL_ALPHA:             return rgba.aaa;
+        case CHANNEL_LUMINANCE:         return RGBToLuminance(rgb);
+        case CHANNEL_CIE_L:             return RGBToLab(rgb).xxx;
+        case CHANNEL_CIE_a:             return RGBToLab(rgb).yyy;
+        case CHANNEL_CIE_b:             return RGBToLab(rgb).zzz;
+        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(vec3(0.5, RGBToLab(rgb).yz));
         // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(col).r));
-        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(col);
+        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(rgb).r));
+        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(rgb);
     }
-    return col;
+    return rgb;
 }
 
 vec4 blend(vec4 top, vec4 bottom)
@@ -115,6 +118,14 @@ vec3 dither(vec3 color)
     return color + vec3(rand_tent(gl_FragCoord.xy + randomness)/255.0);
 }
 
+vec4 sample(sampler2D sampler, vec2 uv)
+{
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        return vec4(0.0);
+    }
+    return texture(sampler, uv);
+}
+
 void main() {
     float dark_gray = 0.1;
     float light_gray = 0.2;
@@ -123,19 +134,14 @@ void main() {
 
     vec4 background = vec4(vec3(checkerboard), 1.0);
 
-    vec4 value = texture(primary_texture, primary_uv);
-    if (primary_uv.x > 1.0 || primary_uv.y > 1.0 || primary_uv.x < 0.0 || primary_uv.y < 0.0)
-        value = vec4(0.0);
+    vec4 value = sample(primary_texture, primary_uv);
     
     if (has_reference)
     {
-        vec4 reference_val = texture(secondary_texture, secondary_uv);
-        if (secondary_uv.x > 1.0 || secondary_uv.y > 1.0 || secondary_uv.x < 0.0 || secondary_uv.y < 0.0)
-            reference_val = vec4(0.0);
-
+        vec4 reference_val = sample(secondary_texture, secondary_uv);
         value = blend(value, reference_val);
     }
 
 	frag_color.a = 1.0;
-    frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(gain * value.rgb))), value.a);
+    frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(value) * gain)), value.a);
 }

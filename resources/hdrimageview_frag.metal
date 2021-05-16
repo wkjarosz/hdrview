@@ -6,17 +6,18 @@ using namespace metal;
 #include "colormaps_frag.h"
 #include "colorspaces_frag.h"
 
+#define CHANNEL_RGB 0
 #define CHANNEL_RED 1
 #define CHANNEL_GREEN 2
 #define CHANNEL_BLUE 3
-#define CHANNEL_RGB 0
-#define CHANNEL_LUMINANCE 4
-#define CHANNEL_CIE_L 5
-#define CHANNEL_CIE_a 6
-#define CHANNEL_CIE_b 7
-#define CHANNEL_CIE_CHROMATICITY 8
-#define CHANNEL_FALSE_COLOR 9
-#define CHANNEL_POSITIVE_NEGATIVE 10
+#define CHANNEL_ALPHA 4
+#define CHANNEL_LUMINANCE 5
+#define CHANNEL_CIE_L 6
+#define CHANNEL_CIE_a 7
+#define CHANNEL_CIE_b 8
+#define CHANNEL_CIE_CHROMATICITY 9
+#define CHANNEL_FALSE_COLOR 10
+#define CHANNEL_POSITIVE_NEGATIVE 11
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -64,23 +65,25 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
     return (r < 0) ? rn : rp;
 }
 
-float3 choose_channel(float3 col, int channel)
+float3 choose_channel(float4 rgba, int channel)
 {
+    float3 rgb = rgba.rgb;
     switch (channel)
     {
-        case CHANNEL_RED:               return col.rrr;
-        case CHANNEL_GREEN:             return col.ggg;
-        case CHANNEL_BLUE:              return col.bbb;
-        case CHANNEL_LUMINANCE:         return RGBToLuminance(col);
-        case CHANNEL_CIE_L:             return RGBToLab(col).xxx;
-        case CHANNEL_CIE_a:             return RGBToLab(col).yyy;
-        case CHANNEL_CIE_b:             return RGBToLab(col).zzz;
-        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(float3(0.5, RGBToLab(col).yz));
+        case CHANNEL_RED:               return rgba.rrr;
+        case CHANNEL_GREEN:             return rgba.ggg;
+        case CHANNEL_BLUE:              return rgba.bbb;
+        case CHANNEL_ALPHA:             return rgba.aaa;
+        case CHANNEL_LUMINANCE:         return RGBToLuminance(rgb);
+        case CHANNEL_CIE_L:             return RGBToLab(rgb).xxx;
+        case CHANNEL_CIE_a:             return RGBToLab(rgb).yyy;
+        case CHANNEL_CIE_b:             return RGBToLab(rgb).zzz;
+        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(float3(0.5, RGBToLab(rgb).yz));
         // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(col).r));
-        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(col);
+        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(rgb).r));
+        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(rgb);
     }
-    return col;
+    return rgb;
 }
 
 float4 blend(float4 top, float4 bottom, int blend_mode)
@@ -109,6 +112,14 @@ float3 dither(float3 color, float2 xy, const float2 randomness, const bool do_di
     return color + float3(rand_tent(xy + randomness, dither_texture, dither_sampler)/255.0);
 }
 
+float4 sample(texture2d<float, access::sample> texture, sampler the_sampler, float2 uv)
+{
+    if (uv.x > 1.0 || uv.y > 1.0 || uv.x < 0.0 || uv.y < 0.0)
+        return float4(0.0);
+
+    return texture.sample(the_sampler, uv);
+}
+
 fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               texture2d<float, access::sample> primary_texture,
                               texture2d<float, access::sample> secondary_texture,
@@ -130,20 +141,15 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
     float4 background = float4(float3(checkerboard), 1.0);
 
-    float4 value = primary_texture.sample(primary_sampler, vert.primary_uv);
-    if (vert.primary_uv.x > 1.0 || vert.primary_uv.y > 1.0 || vert.primary_uv.x < 0.0 || vert.primary_uv.y < 0.0)
-        value = float4(0.0);
+    float4 value = sample(primary_texture, primary_sampler, vert.primary_uv);
 
     if (has_reference != 0u)
     {
-        float4 reference_val = secondary_texture.sample(secondary_sampler, vert.secondary_uv);
-        if (vert.secondary_uv.x > 1.0 || vert.secondary_uv.y > 1.0 || vert.secondary_uv.x < 0.0 || vert.secondary_uv.y < 0.0)
-            reference_val = float4(0.0);
-
+        float4 reference_val = sample(secondary_texture, secondary_sampler, vert.secondary_uv);
         value = blend(value, reference_val, blend_mode);
     }
 
-    float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value.rgb * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.w));
+    float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value, channel) * gain, gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.a));
     return float4(blended, 1.0);
 }
 

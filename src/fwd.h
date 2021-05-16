@@ -61,6 +61,7 @@ enum EChannel : int
 	RED,
 	GREEN,
 	BLUE,
+	ALPHA,
 	LUMINANCE,
 	CIE_L,
 	CIE_a,
