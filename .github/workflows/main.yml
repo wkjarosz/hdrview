@@ -107,7 +107,7 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
