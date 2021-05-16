@@ -29,8 +29,12 @@ jobs:
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
         
       - name: Build
-        # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/HDRView --help
+          ${{github.workspace}}/build/hdrbatch --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
@@ -56,6 +60,11 @@ jobs:
         
       - name: Build (Metal backend)
         run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
+      
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build-metal/hdrbatch --help
 
       - name: Installing create-dmg
         run: brew install create-dmg 
@@ -99,6 +108,11 @@ jobs:
         
       - name: Build (OpenGL backend)
         run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build-opengl/hdrbatch --help
 
       - name: Installing create-dmg
         run: brew install create-dmg 
@@ -152,6 +166,11 @@ jobs:
       - name: Build
         # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exr --help
 
       # - name: Build
       #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
