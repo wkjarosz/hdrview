@@ -51,7 +51,6 @@ jobs:
           path: |
             ${{github.workspace}}/build-metal/HDRView-Metal.dmg
 
-
   build_macos_opengl:
     name: Build on macOS (OpenGL backend)
     runs-on: macos-latest
