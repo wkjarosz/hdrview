@@ -16,6 +16,7 @@
 #include <set>
 #include <spdlog/spdlog.h>
 #include <GLFW/glfw3.h>
+#include <alphanum.h>
 
 
 using namespace std;
@@ -350,20 +351,18 @@ void ImageListPanel::sort_images()
 			if (m_align_left)
 			{
 				if (decreasing)
-					return std::lexicographical_compare(i_name.begin(), i_name.end(),
-														j_name.begin(), j_name.end());
+					return doj::alphanum_comp(i_name, j_name) < 0;
 				else
-					return std::lexicographical_compare(j_name.begin(), j_name.end(),
-														i_name.begin(), i_name.end());
+					return doj::alphanum_comp(j_name, i_name) < 0;
 			}
 			else
 			{
+    			std::string rev_i_name = string(i_name.rbegin(), i_name.rend());
+				std::string rev_j_name = string(j_name.rbegin(), j_name.rend());
 				if (decreasing)
-					return std::lexicographical_compare(i_name.rbegin(), i_name.rend(),
-														j_name.rbegin(), j_name.rend());
+					return doj::alphanum_comp(rev_i_name, rev_j_name) < 0;
 				else
-					return std::lexicographical_compare(j_name.rbegin(), j_name.rend(),
-														i_name.rbegin(), i_name.rend());
+					return doj::alphanum_comp(rev_j_name, rev_i_name) < 0;
 			}
 		}
 	};
@@ -1108,18 +1107,8 @@ void ImageListPanel::update_filter()
 
             auto img = image(i);
             btn->set_caption(img->filename());
-
-            if (m_use_short_btn->pushed())
-            {
-                btn->set_highlight_range(begin_short_offset, end_short_offset);
-                btn->set_caption(btn->highlighted());
-                btn->set_highlight_range(0, 0);
-            }
-            else
-            {
-                btn->set_highlight_range(begin_short_offset, end_short_offset);
-            }
-
+			btn->set_highlight_range(begin_short_offset, end_short_offset);
+			btn->set_hide_unhighlighted(m_use_short_btn->pushed());
         }
 
         if (m_current == -1 || (current_image() && !dynamic_cast<ImageButton*>(buttons[m_current])->visible()))

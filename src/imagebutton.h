@@ -58,6 +58,9 @@ public:
 	std::string highlighted() const;
 	void set_highlight_range(size_t begin, size_t end);
 
+	void set_hide_unhighlighted(bool h) 		{ m_hide_unhighlighted = h;}
+	bool hide_unhighlighted() const 			{ return m_hide_unhighlighted;}
+
 	void set_selected_callback(const std::function<void(int)> & callback)
 	{
 		m_selected_callback = callback;
@@ -82,6 +85,7 @@ private:
 
 	size_t m_highlight_begin = 0;
 	size_t m_highlight_end = 0;
+	bool m_hide_unhighlighted = false;
 
 	float m_progress = -1.f;
 };

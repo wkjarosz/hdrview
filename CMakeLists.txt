@@ -41,6 +41,8 @@ include_directories(
   ${STB_INCLUDE_DIR}
   # tinydngloader
   ${TINYDNG_INCLUDE_DIR}
+  # alphanum
+  ${ALPHANUM_INCLUDE_DIR}
 )
 
 # Resource file (icons etc.)
