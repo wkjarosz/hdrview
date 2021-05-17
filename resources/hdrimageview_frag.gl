@@ -142,6 +142,6 @@ void main() {
         value = blend(value, reference_val);
     }
 
-	frag_color.a = 1.0;
+    frag_color.a = 1.0;
     frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(value) * gain)), value.a);
 }

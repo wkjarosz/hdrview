@@ -1107,8 +1107,8 @@ void ImageListPanel::update_filter()
 
             auto img = image(i);
             btn->set_caption(img->filename());
-			btn->set_highlight_range(begin_short_offset, end_short_offset);
-			btn->set_hide_unhighlighted(m_use_short_btn->pushed());
+            btn->set_highlight_range(begin_short_offset, end_short_offset);
+            btn->set_hide_unhighlighted(m_use_short_btn->pushed());
         }
 
         if (m_current == -1 || (current_image() && !dynamic_cast<ImageButton*>(buttons[m_current])->visible()))

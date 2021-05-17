@@ -1,10 +1,14 @@
 # HDRView
 
-Master status:
-[![Build Status](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml)
+Master branch:
+[![macOS build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml)
+[![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
+[![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
-Develop status:
-[![Build Status](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/main.yml)
+Develop branch:
+[![macOS build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml)
+[![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
+[![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
