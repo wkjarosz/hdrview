@@ -1,0 +1,44 @@
+name: Linux build
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build_linux:
+    name: Build on linux systems
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+          
+      - name: Configure CMake
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/HDRView --help
+          ${{github.workspace}}/build/hdrbatch --help
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: linux-build-artifacts
+          path: |
+            ${{github.workspace}}/build
