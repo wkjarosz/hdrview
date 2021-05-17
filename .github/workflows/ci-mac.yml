@@ -32,8 +32,8 @@ jobs:
       
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
           ${{github.workspace}}/build-metal/hdrbatch --help
+          ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
 
       - name: Installing create-dmg
         run: brew install create-dmg 
@@ -80,8 +80,8 @@ jobs:
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
           ${{github.workspace}}/build-opengl/hdrbatch --help
+          ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
 
       - name: Installing create-dmg
         run: brew install create-dmg 
