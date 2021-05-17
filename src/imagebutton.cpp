@@ -259,13 +259,25 @@ void ImageButton::draw(NVGcontext *ctx)
 				break;
 		}
 
-		for (size_t j = 0; j < pieces.size(); ++j)
+		if (m_hide_unhighlighted)
 		{
-			size_t i = m_alignment == Alignment::Left ? j : pieces.size() - 1  - j;
-			nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
-			nvgFillColor(ctx, i == 1 ? highlighted_text_color : regular_text_color);
-			nvgText(ctx, text_pos.x(), text_pos.y(), pieces[i].c_str(), nullptr);
-			text_pos.x() += direction * nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+			// only draw the middle (highlighted) piece
+			nvgFontFace(ctx, "sans");
+			nvgFillColor(ctx, regular_text_color);
+			nvgText(ctx, text_pos.x(), text_pos.y(), pieces[1].c_str(), nullptr);
+			text_pos.x() += direction * nvgTextBounds(ctx, 0, 0, pieces[1].c_str(), nullptr, nullptr);
+		}
+		else
+		{
+			// draw all three pieces, but bold the highlighted piece
+			for (size_t j = 0; j < pieces.size(); ++j)
+			{
+				size_t i = m_alignment == Alignment::Left ? j : pieces.size() - 1  - j;
+				nvgFontFace(ctx, i == 1 ? "sans-bold" : "sans");
+				nvgFillColor(ctx, i == 1 ? highlighted_text_color : regular_text_color);
+				nvgText(ctx, text_pos.x(), text_pos.y(), pieces[i].c_str(), nullptr);
+				text_pos.x() += direction * nvgTextBounds(ctx, 0, 0, pieces[i].c_str(), nullptr, nullptr);
+			}
 		}
 	}
 	nvgRestore(ctx);

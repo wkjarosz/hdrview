@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.3)
 project(hdrview)
 
-set(HDRVIEW_VERSION "1.0")
+set(HDRVIEW_VERSION "1.0.1")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
@@ -41,6 +41,8 @@ include_directories(
   ${STB_INCLUDE_DIR}
   # tinydngloader
   ${TINYDNG_INCLUDE_DIR}
+  # alphanum
+  ${ALPHANUM_INCLUDE_DIR}
 )
 
 # Resource file (icons etc.)

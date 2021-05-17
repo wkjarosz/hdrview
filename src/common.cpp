@@ -66,6 +66,7 @@ const vector<string> & channelNames()
             "Red",
             "Green",
             "Blue",
+            "Alpha",
             "Luminance",
             "CIE L*",
             "CIE a*",

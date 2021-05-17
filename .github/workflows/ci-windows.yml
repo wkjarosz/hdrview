@@ -1,0 +1,65 @@
+name: Windows build
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+  workflow_dispatch:
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build_windows:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          submodules: recursive
+
+      - name: Fetch newer Windows SDK
+        uses: fbactions/setup-winsdk@v1
+        with:
+          winsdk-build-version: 19041
+
+      - name: Get WSL
+        uses: Vampire/setup-wsl@v1
+
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v1.0.2
+
+      - name: Configure CMake
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        
+      - name: Build
+        # Build your program with the given configuration
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
+
+      # - name: Build
+      #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: HDRView.exe
+          path: |
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
