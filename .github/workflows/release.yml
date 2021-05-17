@@ -1,10 +1,9 @@
-name: macOS build
+name: Publish to releases
 
 on:
   push:
-    branches: [ master, develop ]
-  pull_request:
-    branches: [ master, develop ]
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 env:
@@ -44,12 +43,12 @@ jobs:
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v2
+      - name: Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: HDRView (Metal).dmg
-          path: |
-            ${{github.workspace}}/build-metal/HDRView-Metal.dmg
+          files: ${{github.workspace}}/build-metal/HDRView-Metal.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
   build_macos_opengl:
@@ -84,9 +83,9 @@ jobs:
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
 
-      - name: Archive build artifacts
-        uses: actions/upload-artifact@v2
+      - name: Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: HDRView (OpenGL).dmg
-          path: |
-            ${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg
+          files: ${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

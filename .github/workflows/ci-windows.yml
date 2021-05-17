@@ -55,11 +55,3 @@ jobs:
           name: HDRView.exe
           path: |
             ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
