@@ -128,5 +128,9 @@ private:
 	VoidVoidFunc m_modify_done_callback;
 };
 
+#define hdrview_image_icon(ctx, name, imageFlags) hdrview_get_icon(ctx, #name, imageFlags, (uint8_t *)name##_png, name##_png_size)
+int hdrview_get_icon(NVGcontext *ctx, const std::string &name, int imageFlags, uint8_t *data, uint32_t size);
+
+
 using ConstImagePtr = std::shared_ptr<const XPUImage>;
 using ImagePtr = std::shared_ptr<XPUImage>;

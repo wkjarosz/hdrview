@@ -13,6 +13,9 @@
 #include "envmap.h"
 #include "colorspace.h"
 #include "hslgradient.h"
+#include "colorslider.h"
+#include "colorwheel.h"
+#include "hdrcolorpicker.h"
 #include "multigraph.h"
 #include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
@@ -83,127 +86,6 @@ void add_ok_cancel_btns(FormHelper * gui, Window * window,
 			window->dispose();
 		});
 	gui->add_widget("", w);
-}
-
-PopupButton * create_color_btn(FormHelper * gui, Window * window, const string name, Color & bg, float & alpha, float & EV)
-{
-	// auto popup_btn = new ColorPicker(window, Color(bg.r(), bg.g(), bg.b(), alpha));
-	// gui->add_widget(name, popup_btn);
-
-	auto popup_btn = new PopupButton(window, "", 0);
-	popup_btn->set_background_color(Color(bg.r(), bg.g(), bg.b(), alpha));
-	gui->add_widget(name, popup_btn);
-
-	auto popup = popup_btn->popup();
-	popup->set_layout(new GroupLayout());
-
-	auto colorwheel = new ColorWheel(popup);
-	colorwheel->set_color(Color(bg.r(), bg.g(), bg.b(), alpha));
-
-	auto panel = new Widget(popup);
-	// panel->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
-	auto agrid = new AdvancedGridLayout({0, 20, 0}, {});
-	agrid->set_margin(0);
-	agrid->set_col_stretch(1, 1);
-	panel->set_layout(agrid);
-
-	auto color_btn = new Button(popup, "Pick");
-
-	//
-	// opacity
-	//
-
-	agrid->append_row(0);
-	agrid->set_anchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
-
-	auto float_box = new FloatBox<float>(panel, alpha * 100.0f);
-	agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-	float_box->set_units("%");
-	float_box->number_format("%3.1f");
-	float_box->set_editable(true);
-	float_box->set_min_value(0.f);
-	float_box->set_max_value(100.f);
-	float_box->set_spinnable(true);
-	float_box->set_fixed_width(60);
-	float_box->set_alignment(TextBox::Alignment::Right);
-
-	agrid->append_row(0);
-	auto slider = new Slider(panel);
-	agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
-	slider->set_value(alpha * 100.0f);
-	slider->set_range({0.0f,100.0f});
-
-	slider->set_callback([float_box,color_btn,&bg,&alpha,&EV](float a) {
-		alpha = a / 100.f;
-		float_box->set_value(a);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	float_box->set_callback([slider,color_btn,&bg,&alpha,&EV](float a) {
-		alpha = a / 100.f;
-		slider->set_value(a);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	agrid->append_row(10);
-
-	//
-	// EV
-	//
-	agrid->append_row(0);
-	agrid->set_anchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
-
-	float_box = new FloatBox<float>(panel, 0.f);
-	agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-	float_box->number_format("%1.2f");
-	float_box->set_editable(true);
-	float_box->set_spinnable(true);
-	float_box->set_fixed_width(60);
-	float_box->set_alignment(TextBox::Alignment::Right);
-
-	agrid->append_row(0);
-	slider = new Slider(panel);
-	agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
-	slider->set_value(0.0f);
-	slider->set_range({-9.0f,9.0f});
-
-	slider->set_callback([float_box,color_btn,&bg,&alpha,&EV](float ev) {
-		EV = ev;
-		float_box->set_value(EV);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	float_box->set_callback([slider,color_btn,&bg,&alpha,&EV](float ev) {
-		EV = ev;
-		slider->set_value(EV);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-
-	color_btn->set_background_color(Color(bg.r() * pow(2.f, EV), bg.g() * pow(2.f, EV), bg.b() * pow(2.f, EV), alpha));
-
-	colorwheel->set_callback([color_btn,&bg,&alpha,&EV](const Color &c) {
-		bg.r() = c.r();
-		bg.g() = c.g();
-		bg.b() = c.b();
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	color_btn->set_change_callback([popup_btn,&bg,&alpha,&EV](bool pushed) {
-		if (pushed)
-		{
-			float f = pow(2.f, EV);
-			popup_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-			popup_btn->set_pushed(false);
-		}
-	});
-
-	return popup_btn;
 }
 
 Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
@@ -1190,7 +1072,6 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 {
 	static int width = 128, height = 128;
 	static Color bg(.8f, .8f, .8f, 1.f);
-	static float alpha = 1.f;
 	static float EV = 0.f;
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
@@ -1204,7 +1085,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-			// window->set_modal(true);
+			window->set_modal(true);
 
 			width = images_panel->current_image()->width();
 			auto w = gui->add_variable("Width:", width);
@@ -1254,8 +1135,14 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			spacer->set_fixed_height(5);
 			gui->add_widget("", spacer);
 
-			auto popup_btn = create_color_btn(gui, window, "Background color:", bg, alpha, EV);
-			auto popup = popup_btn->popup();
+			auto color_btn = new HDRColorPicker(window, bg, EV);
+			gui->add_widget(name, color_btn);
+			color_btn->set_final_callback([](const Color & c, float e){
+				bg = c;
+				EV = e;
+			});
+
+			auto popup = color_btn->popup();
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
@@ -1269,7 +1156,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 							int newH = relative ? height + img->height() : height;
 
 							float gain = pow(2.f, EV);
-							Color4 c(bg.r() * gain, bg.g() * gain, bg.b() * gain, alpha);
+							Color4 c(bg.r() * gain, bg.g() * gain, bg.b() * gain, bg.a());
 
 							return {make_shared<HDRImage>(img->resized_canvas(newW, newH, anchor, c)),
 							        nullptr};
@@ -1575,7 +1462,6 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static Color bg(.8f, .8f, .8f, 1.f);
-	static float alpha = 1.f;
 	static float EV = 0.f;
 	static string name = "Flatten...";
 	auto b = new Button(parent, name, FA_CHESS_BOARD);
@@ -1589,8 +1475,14 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			auto window = gui->add_window(Vector2i(10, 10), name);
 			window->set_modal(true);
 
-			auto popup_btn = create_color_btn(gui, window, "Background color:", bg, alpha, EV);
-			auto popup = popup_btn->popup();
+			auto color_btn = new HDRColorPicker(window, bg, EV);
+			gui->add_widget(name, color_btn);
+			color_btn->set_final_callback([](const Color & c, float e){
+				bg = c;
+				EV = e;
+			});
+
+			auto popup = color_btn->popup();
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
@@ -1622,7 +1514,7 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 {
 	static string name = "Fill...";
 	static std::array<bool, 4> enabled = {false, false, false, false};
-	static Color4 value(1.f);
+	static Color value(0.8f);
 	auto b = new Button(parent, name, FA_FILL);
 	b->set_fixed_height(21);
 	b->set_callback(
@@ -1640,14 +1532,17 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 			row->set_layout(layout);
 
 			string names[] = {"Red :", "Green : ", "Blue :", "Alpha :"};
+			std::vector<ColorSlider*> sliders;
+			std::vector<FloatBox<float>*> float_boxes;
 			for (int i = 0; i < 4; ++i)
 			{
 				new Label(row, names[i], "sans-bold");
-				
-				auto slider = new Slider(row);
+
+				auto slider = new ColorSlider(row, value, ColorSlider::ColorMode(i));
+				slider->set_color(value);
 				slider->set_value(value[i]);
 				slider->set_range({0.f, 1.f});
-				slider->set_fixed_width(100);
+				slider->set_fixed_width(130);
 				slider->set_enabled(enabled[i]);
 
 				auto box = new FloatBox(row, value[i]);
@@ -1658,17 +1553,26 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 				box->set_enabled(enabled[i]);
 				box->set_units("");
 				box->set_alignment(TextBox::Alignment::Right);
+
+				sliders.push_back(slider);
+				float_boxes.push_back(box);
 				
 				(new CheckBox(row, "", [&,i,box,slider](const bool & b) {enabled[i] = b; box->set_enabled(b); slider->set_enabled(b);}))->set_checked(enabled[i]);
+			}
 
-				auto cb = [&,i,box,slider](float v)
+			for (size_t i = 0; i < sliders.size(); ++i)
+			{
+				auto cb = [i,float_boxes,sliders](float v)
 				{
 					value[i] = v;
-					box->set_value(v);
-					slider->set_value(v);
+					float_boxes[i]->set_value(v);
+					sliders[i]->set_value(v);
+					for (auto slider : sliders)
+						slider->set_color(value);
 				};
-				slider->set_callback(cb);
-				box->set_callback(cb);
+
+				sliders[i]->set_callback(cb);
+				float_boxes[i]->set_callback(cb);
 			}
 
 			gui->add_widget("", row);
