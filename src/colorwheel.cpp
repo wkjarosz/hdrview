@@ -116,7 +116,6 @@ void ColorWheel2::draw(NVGcontext *ctx) {
                 continue;
             Vector2f circle_center = {(i * 2 - 1) * (outer_radius - cr),
                                       (j * 2 - 1) * (outer_radius - cr)};
-            nvgStrokeWidth(vg, u);
             nvgBeginPath(vg);
             nvgCircle(vg, circle_center.x(), circle_center.y(), cr);
             NVGpaint paint = nvgImagePattern(vg, circle_center.x(), circle_center.y(),
@@ -126,8 +125,14 @@ void ColorWheel2::draw(NVGcontext *ctx) {
             nvgFill(vg);
 
             nvgFillColor(vg, colors[j][i]);
-            nvgStrokeColor(vg, nvgRGBA(192,192,192,255));
             nvgFill(vg);
+
+            nvgStrokeColor(vg, Color(m_enabled ? 0 : 64, 255));
+            nvgStrokeWidth(vg, u+1.f);
+            nvgStroke(vg);
+
+            nvgStrokeColor(vg, nvgRGBA(192,192,192,255));
+            nvgStrokeWidth(vg, u);
             nvgStroke(vg);
         }
 

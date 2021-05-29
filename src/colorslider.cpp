@@ -11,6 +11,7 @@
 #include <hdrview_resources.h>
 #include "xpuimage.h"
 #include <nanogui/screen.h>
+#include <spdlog/spdlog.h>
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -100,18 +101,14 @@ void ColorSlider::draw(NVGcontext* ctx)
         low[(int)m_mode] = m_range.first;
         hi[(int)m_mode] = m_range.second;
         if (m_mode < ColorMode::ALPHA)
-        {
-            low.a() = m_enabled ? 1.0f : 0.25f;
-            hi.a() = m_enabled ? 1.0f : 0.25f;
-        }
+            low.a() = hi.a() = m_enabled ? 1.0f : 0.25f;
     }
     else
     {
         // this should really be an exponential gradient, but we'll use linear for simplicity
         low -= (m_color * std::pow(1.5f, range().second) - m_color);
         hi += (m_color * std::pow(1.5f, range().second) - m_color);
-        low.a() = m_enabled ? 1.0f : 0.25f;
-        hi.a() = m_enabled ? 1.0f : 0.25f;
+        low.a() = hi.a() = m_enabled ? 1.0f : 0.25f;
     }
     NVGpaint bg = nvgLinearGradient(ctx, start_x, center.y(), width_x, center.y(), low, hi);
 
@@ -121,18 +118,18 @@ void ColorSlider::draw(NVGcontext* ctx)
     nvgFill(ctx);
     nvgStroke(ctx);
 
-    // highlight the ends of the horizontal bar
-    if (m_highlighted_range.second != m_highlighted_range.first)
-    {
-        nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, start_x + m_highlighted_range.first * m_size.x(),
-                       center.y() - knob_shadow + 1,
-                       width_x *
-                           (m_highlighted_range.second - m_highlighted_range.first),
-                       knob_shadow * 2, 2);
-        nvgFillColor(ctx, m_highlight_color);
-        nvgFill(ctx);
-    }
+    // // highlight the ends of the horizontal bar
+    // if (m_highlighted_range.second != m_highlighted_range.first)
+    // {
+    //     nvgBeginPath(ctx);
+    //     nvgRoundedRect(ctx, start_x + m_highlighted_range.first * m_size.x(),
+    //                    center.y() - knob_shadow + 1,
+    //                    width_x *
+    //                        (m_highlighted_range.second - m_highlighted_range.first),
+    //                    knob_shadow * 2, 2);
+    //     nvgFillColor(ctx, m_highlight_color);
+    //     nvgFill(ctx);
+    // }
 
 
     // draw the knob
@@ -154,12 +151,12 @@ void ColorSlider::draw(NVGcontext* ctx)
     Color knob_fill = m_mode == ColorMode::EXPOSURE ? m_color * std::pow(2.f, m_value) : m_color;
     knob_fill.a() = 1.f;
     nvgFillColor(ctx, knob_fill);
-    // auto knob_stroke = knob_fill.contrasting_color();
-    Color knob_stroke = Color(m_enabled ? 255 : 128, 255);
-    knob_stroke.a() = 1.f;
-    nvgStrokeColor(ctx, knob_stroke);
-    nvgStrokeWidth(ctx, 1.5f);
     nvgFill(ctx);
+    nvgStrokeColor(ctx, Color(m_enabled ? 0 : 64, 255));
+    nvgStrokeWidth(ctx, 2.5f);
+    nvgStroke(ctx);
+    nvgStrokeColor(ctx, Color(m_enabled ? 255 : 128, 255));
+    nvgStrokeWidth(ctx, 1.5f);
     nvgStroke(ctx);
 }
 

@@ -1513,15 +1513,16 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Fill...";
-	static std::array<bool, 4> enabled = {false, false, false, false};
-	static Color value(0.8f);
+	static std::array<bool, 4> enabled = {true, true, true, true};
+	// static Color value(0.8f);
+	static Color value(0.0f, 1.f);
 	auto b = new Button(parent, name, FA_FILL);
 	b->set_fixed_height(21);
 	b->set_callback(
 		[&, screen, images_panel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
-			gui->set_fixed_size(Vector2i(0, 20));
+			gui->set_fixed_size(Vector2i(200, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
 			window->set_modal(true);
@@ -1542,7 +1543,7 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 				slider->set_color(value);
 				slider->set_value(value[i]);
 				slider->set_range({0.f, 1.f});
-				slider->set_fixed_width(130);
+				slider->set_fixed_width(250);
 				slider->set_enabled(enabled[i]);
 
 				auto box = new FloatBox(row, value[i]);

@@ -21,7 +21,7 @@ class ColorSlider : public Slider
 {
 public:
 
-    enum class ColorMode : uint8_t
+    enum ColorMode : uint8_t
     {
         RED = 0,
         GREEN,
@@ -30,10 +30,10 @@ public:
         EXPOSURE,
     };
 
-    ColorSlider(Widget *parent, const Color & c = Color(0.8f, 1.f), ColorMode m = ColorMode::RED);
+    ColorSlider(Widget *parent, const Color & c = Color(0.8f, 1.f), ColorMode m = RED);
 
     const Color & color() const     { return m_color; }
-    void set_color(const Color& c)  { m_color = c; m_value = (m_mode <= ColorMode::ALPHA) ? m_color[(int)m_mode] : m_value;}
+    void set_color(const Color& c)  { m_color = c; m_value = (m_mode <= ALPHA) ? m_color[(int)m_mode] : m_value;}
 
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
     virtual bool mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;

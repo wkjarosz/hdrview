@@ -9,6 +9,7 @@
 #include "imagebutton.h"
 #include "hdrimageview.h"
 #include "multigraph.h"
+#include "colorslider.h"
 #include "well.h"
 #include "timer.h"
 #include "xpuimage.h"
