@@ -44,16 +44,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		agl->set_anchor(new Label(grid, "Histogram:", "sans", 14),
 		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-		m_yaxis_scale = new ComboBox(grid);
+		m_yaxis_scale = new ComboBox(grid, {"Linear", "Log"});
 		m_yaxis_scale->set_tooltip("Set the scale for the Y axis.");
-		m_yaxis_scale->set_items({"Linear", "Log"});
 		m_yaxis_scale->set_fixed_height(19);
 		agl->set_anchor(m_yaxis_scale,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-		m_xaxis_scale = new ComboBox(grid);
+		m_xaxis_scale = new ComboBox(grid, {"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_tooltip("Set the scale for the X axis.");
-		m_xaxis_scale->set_items({"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_fixed_height(19);
 		agl->set_anchor(m_xaxis_scale,
 		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
@@ -104,8 +102,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
 		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-		m_blend_modes = new ComboBox(grid);
-		m_blend_modes->set_items(blendModeNames());
+		m_blend_modes = new ComboBox(grid, blendModeNames());
 		m_blend_modes->set_fixed_height(19);
 		m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
 		agl->set_anchor(m_blend_modes,

@@ -33,6 +33,15 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	thm->m_window_corner_radius   = 4;
 	thm->m_window_fill_unfocused  = Color(40, 250);
 	thm->m_window_fill_focused    = Color(45, 250);
+	// thm->m_button_corner_radius   = 4;
+	// thm->m_border_light			  = thm->m_transparent;
+	// thm->m_border_dark			  = thm->m_transparent;
+	// // thm->m_button_gradient_top_focused = thm->m_transparent;
+    // thm->m_button_gradient_bot_focused = thm->m_button_gradient_top_focused;
+    // // thm->m_button_gradient_top_unfocused = thm->m_transparent;
+    // thm->m_button_gradient_bot_unfocused = thm->m_button_gradient_top_unfocused;
+    // // thm->m_button_gradient_top_pushed = thm->m_transparent;
+    // thm->m_button_gradient_bot_pushed = thm->m_button_gradient_top_pushed;
     set_theme(thm);
 
 	auto panelTheme = new Theme(m_nvg_context);
@@ -43,9 +52,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	panelTheme->m_window_corner_radius   = 0;
 	panelTheme->m_window_fill_unfocused  = Color(50, 255);
 	panelTheme->m_window_fill_focused    = Color(52, 255);
-	panelTheme->m_button_corner_radius   = 2;
 	panelTheme->m_window_header_height   = 0;
 	panelTheme->m_window_drop_shadow_size = 0;
+	// panelTheme->m_button_corner_radius   = 4;
+	// panelTheme->m_border_light			  = panelTheme->m_transparent;
+	// panelTheme->m_border_dark			  = panelTheme->m_transparent;
+	// // panelTheme->m_button_gradient_top_focused = panelTheme->m_transparent;
+    // panelTheme->m_button_gradient_bot_focused = panelTheme->m_button_gradient_top_focused;
+    // panelTheme->m_button_gradient_top_unfocused = panelTheme->m_transparent;
+    // panelTheme->m_button_gradient_bot_unfocused = panelTheme->m_transparent;
+    // // panelTheme->m_button_gradient_top_pushed = panelTheme->m_transparent;
+    // panelTheme->m_button_gradient_bot_pushed = panelTheme->m_button_gradient_top_pushed;
 
 
 	//
@@ -98,43 +115,48 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create file/images panel
     //
 
-    auto btn = new Button(m_side_panel_contents, "File", FA_CHEVRON_DOWN);
+    auto btn = new Button(m_side_panel_contents, "File", FA_CARET_DOWN);
 	btn->set_flags(Button::ToggleButton);
 	btn->set_pushed(true);
 	btn->set_font_size(18);
-	btn->set_icon_position(Button::IconPosition::Right);
+	btn->set_icon_position(Button::IconPosition::Left);
     m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
-
-	btn->set_change_callback([this,btn](bool value)
-                         {
-	                         btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
-	                         m_images_panel->set_visible(value);
-                            //  update_layout();
-							 request_layout_update();
-                             m_side_panel_contents->perform_layout(m_nvg_context);
-                         });
 
     //
     // create edit panel
     //
 
-	btn = new Button(m_side_panel_contents, "Edit", FA_CHEVRON_LEFT);
-	btn->set_flags(Button::ToggleButton);
-	btn->set_font_size(18);
-	btn->set_icon_position(Button::IconPosition::Right);
+	auto btn2 = new Button(m_side_panel_contents, "Edit", FA_CARET_RIGHT);
+	btn2->set_flags(Button::ToggleButton);
+	btn2->set_font_size(18);
+	btn2->set_icon_position(Button::IconPosition::Left);
 
-	auto editPanel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
-	editPanel->set_visible(false);
+	auto edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
+	edit_panel->set_visible(false);
 
-	btn->set_change_callback([this,btn,editPanel](bool value)
-	 {
-		 btn->set_icon(value ? FA_CHEVRON_DOWN : FA_CHEVRON_LEFT);
-		 editPanel->set_visible(value);
-		//  update_layout();
-		 request_layout_update();
-		 m_side_panel_contents->perform_layout(m_nvg_context);
-	 });
-	editPanel->perform_layout(m_nvg_context);
+	//
+	// image and edit panel callbacks
+	//
+	
+	auto toggle_panel = [this](Button * btn1, Button * btn2, Widget * panel1, Widget * panel2, bool value)
+		{
+			btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
+			panel1->set_visible(value);
+
+			// close other panel
+			if (value)
+			{
+				btn2->set_pushed(false);
+				btn2->set_icon(FA_CARET_RIGHT);
+				panel2->set_visible(false);
+			}
+
+			request_layout_update();
+			m_side_panel_contents->perform_layout(m_nvg_context);
+		};
+
+	btn->set_change_callback([this,btn,btn2,edit_panel,toggle_panel](bool value){toggle_panel(btn, btn2, m_images_panel, edit_panel, value);});
+	btn2->set_change_callback([this,btn,btn2,edit_panel,toggle_panel](bool value){toggle_panel(btn2, btn, edit_panel, m_images_panel, value);});
 
     //
     // create top panel controls
@@ -190,7 +212,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		push_gui_refresh();
 		m_animation_running = true;
 	    m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
-        // update_layout();
 		request_layout_update();
     });
 
@@ -271,7 +292,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                                     int numer = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
                                     int denom = (realZoom < 1.0f) ? (int)round(1.0f/realZoom) : 1;
                                     m_zoom_label->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
-                                    // update_layout();
 									request_layout_update();
                                 });
 
@@ -283,7 +303,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         gammaTextBox->set_enabled(!value);
         gammaLabel->set_enabled(!value);
         gammaLabel->set_color(value ? m_theme->m_disabled_text_color : m_theme->m_text_color);
-        // update_layout();
 		request_layout_update();
     });
 
@@ -319,11 +338,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 
 	this->set_size(nanogui::Vector2i(1024, 800));
-	// update_layout();
 	request_layout_update();
 	set_resize_callback([&](nanogui::Vector2i)
 	                  {
-		                //   update_layout();
 						request_layout_update();
 	                  });
 
@@ -447,7 +464,6 @@ void HDRViewScreen::toggle_help_window()
 		m_help_button->set_pushed(true);
 	}
 
-	// update_layout();
 	request_layout_update();
 }
 
@@ -672,7 +688,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			push_gui_refresh();
 			m_animation_running = true;
 		    m_animation_goal = EAnimationGoal(m_animation_goal ^ TOP_PANEL);
-		    // update_layout();
 			request_layout_update();
             return true;
 
@@ -703,7 +718,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 		        m_animation_goal = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
 	        }
 
-		    // update_layout();
 			request_layout_update();
             return true;
 
@@ -841,7 +855,6 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 		m_side_panel_contents->set_fixed_width(w);
 		m_side_scroll_panel->set_fixed_width(w + 12);
 		m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
-		// update_layout();
 		request_layout_update();
 		return true;
 	}
