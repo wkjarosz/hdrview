@@ -20,6 +20,7 @@
 #include "async.h"
 #include <utility>
 #include <memory>
+#include "box.h"
 
 
 struct ImageStatistics
@@ -49,6 +50,10 @@ struct ImageStatistics
 
 	static std::shared_ptr<ImageStatistics> compute_statistics(const HDRImage &img, float exposure, AtomicProgress & prog);
 };
+
+
+// Import some common Enoki types
+using Box2i     = Box<nanogui::Vector2i>;
 
 /*!
     Stores an image both on the CPU (as an HDRImage) and as a corresponding texture on the GPU.
@@ -81,6 +86,9 @@ public:
     bool has_undo() const;
     bool has_redo() const;
 
+	Box2i roi() const;
+	void set_roi(const Box2i & box)	{m_roi = box;}
+
 	TextureRef texture();
 	void set_filename(const std::string & filename) { m_filename = filename; }
     std::string filename() const                    { return m_filename; }
@@ -107,7 +115,7 @@ public:
 	const VoidVoidFunc & modify_done_callback() const            { return m_modify_done_callback; }
 	void set_modify_done_callback(const VoidVoidFunc & callback)  { m_modify_done_callback = callback; }
 
-private:
+protected:
 
 	bool wait_for_async_result() const;
 	void modify_done() const;
@@ -123,6 +131,8 @@ private:
 
 	mutable ModifyingTaskPtr m_async_command = nullptr;
 	mutable bool m_async_retrieved = false;
+
+	Box2i m_roi = Box2i();
 
 	// various callback functions
 	VoidVoidFunc m_modify_done_callback;
