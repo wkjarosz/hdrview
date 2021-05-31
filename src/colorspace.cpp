@@ -572,6 +572,22 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c,
 	}
 }
 
+Color3 convertColorSpace(const Color3 & c, EColorSpace dst, EColorSpace src)
+{
+	Color3 ret;
+	convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+	return ret;
+}
+
+Color4 convertColorSpace(const Color4 & c, EColorSpace dst, EColorSpace src)
+{
+	Color4 ret = c;
+	convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+	return ret;
+}
+
+
+
 const vector<string> & colorSpaceNames()
 {
 	static const vector<string> names =

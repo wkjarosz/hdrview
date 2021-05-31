@@ -8,26 +8,29 @@
 
 #include <nanogui/widget.h>
 
-class Well : public nanogui::Widget
+NAMESPACE_BEGIN(nanogui)
+class Well : public Widget
 {
 public:
-	Well(nanogui::Widget *parent, float radius = 3.0f,
-	     const nanogui::Color & inner = nanogui::Color(0, 32),
-	     const nanogui::Color & outer = nanogui::Color(0, 92));
+	Well(Widget *parent, float radius = 3.0f,
+	     const Color & inner = Color(0, 32),
+	     const Color & outer = Color(0, 92));
 
 	/// Return the inner well color
-	const nanogui::Color & innerColor() const { return m_innerColor; }
+	const Color & inner_color() const { return m_inner_color; }
 	/// Set the inner well color
-	void setInnerColor(const nanogui::Color & innerColor) { m_innerColor = innerColor; }
+	void set_inner_color(const Color & inner_color) { m_inner_color = inner_color; }
 
 	/// Return the outer well color
-	const nanogui::Color & outerColor() const { return m_outerColor; }
+	const Color & outer_color() const { return m_outer_color; }
 	/// Set the outer well color
-	void setOuterColor(const nanogui::Color & outerColor) { m_outerColor = outerColor; }
+	void set_outer_color(const Color & outer_color) { m_outer_color = outer_color; }
 
 	void draw(NVGcontext* ctx) override;
 
 protected:
 	float m_radius;
-	nanogui::Color m_innerColor, m_outerColor;
+	Color m_inner_color, m_outer_color;
 };
+
+NAMESPACE_END(nanogui)

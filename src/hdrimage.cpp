@@ -1001,19 +1001,19 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return unaryExpr(
                 [slope,midpoint](const Color4 &c)
                 {
-                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4(brightnessContrastL(lab.r, slope, midpoint),
-                                  lab.g, lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
+                    return convertColorSpace(Color4(brightnessContrastL(lab.r, slope, midpoint),
+                                             lab.g, lab.b, c.a), LinearSRGB_CS, CIELab_CS);
                 });
         else if (channel == CIE_CHROMATICITY)
             return unaryExpr(
                 [slope,midpoint](const Color4 &c)
                 {
-                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4(lab.r,
+                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
+                    return convertColorSpace(Color4(lab.r,
                                   brightnessContrastL(lab.g, slope, midpoint),
                                   brightnessContrastL(lab.b, slope, midpoint),
-                                  c.a).convert(LinearSRGB_CS, CIELab_CS);
+                                  c.a), LinearSRGB_CS, CIELab_CS);
                 });
         else
             return *this;
@@ -1035,19 +1035,19 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return unaryExpr(
                 [aB, slope](const Color4 &c)
                 {
-                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4(brightnessContrastNL(lab.r, slope, aB),
-                                  lab.g, lab.b, c.a).convert(LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
+                    return convertColorSpace(Color4(brightnessContrastNL(lab.r, slope, aB),
+                                  lab.g, lab.b, c.a), LinearSRGB_CS, CIELab_CS);
                 });
         else if (channel == CIE_CHROMATICITY)
             return unaryExpr(
                 [aB, slope](const Color4 &c)
                 {
-                    Color4 lab = c.convert(CIELab_CS, LinearSRGB_CS);
-                    return Color4(lab.r,
+                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
+                    return convertColorSpace(Color4(lab.r,
                                   brightnessContrastNL(lab.g, slope, aB),
                                   brightnessContrastNL(lab.b, slope, aB),
-                                  c.a).convert(LinearSRGB_CS, CIELab_CS);
+                                  c.a), LinearSRGB_CS, CIELab_CS);
                 });
         else
             return *this;

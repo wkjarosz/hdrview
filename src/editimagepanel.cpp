@@ -104,6 +104,8 @@ Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageList
 
 			gui->add_variable("Source:", src, true)->set_items(colorSpaceNames());
 			gui->add_variable("Destination:", dst, true)->set_items(colorSpaceNames());
+			
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()
@@ -111,7 +113,7 @@ Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unaryExpr([](const Color4 & c){return c.convert(dst, src);}).eval()),
+							return {make_shared<HDRImage>(img->unaryExpr([](const Color4 & c){return convertColorSpace(c, dst, src);}).eval()),
 							        nullptr};
 						});
 				});
@@ -303,6 +305,9 @@ Button * create_brightness_constract_btn(Widget *parent, HDRViewScreen * screen,
 					cCb(lerp(-1.f, 1.f, clamp01(frac.y())));
 				});
 
+			
+			screen->request_layout_update();
+
 			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
@@ -488,9 +493,10 @@ Button * create_hsl_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel *
 						{
 							return {make_shared<HDRImage>(
 								img->unaryExpr(
-									[](const Color4 & c)
+									[](Color4 c)
 									{
-										return c.HSLAdjust(hue, (saturation+100.f)/100.f, (lightness)/100.f);
+										HSLAdjust(&c[0], &c[1], &c[2], hue, (saturation+100.f)/100.f, (lightness)/100.f);
+										return c;
 									}).eval()), nullptr};
 						});
 				});
@@ -536,6 +542,7 @@ Button * create_gaussian_filter_btn(Widget *parent, HDRViewScreen * screen, Imag
 
 			gui->add_variable("Exact (slow!):", exact, true);
 
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()
@@ -585,6 +592,8 @@ Button * create_box_filter_btn(Widget *parent, HDRViewScreen * screen, ImageList
 			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
+			screen->request_layout_update();
+
 			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
@@ -629,6 +638,8 @@ Button * create_bilateral_filter_btn(Widget *parent, HDRViewScreen * screen, Ima
 			   ->set_items(HDRImage::border_mode_names());
 			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
+
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()
@@ -676,6 +687,8 @@ Button * create_unsharp_mask_filter_btn(Widget *parent, HDRViewScreen * screen, 
 			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
 
+			screen->request_layout_update();
+
 			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
@@ -718,6 +731,8 @@ Button * create_median_filter_btn(Widget *parent, HDRViewScreen * screen, ImageL
 			   ->set_items(HDRImage::border_mode_names());
 			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
+
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()
@@ -961,6 +976,8 @@ Button * create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel 
 			w->set_spinnable(true);
 			w->set_min_value(1);
 
+			screen->request_layout_update();
+
 			add_ok_cancel_btns(gui, window,
 				[&]()
 				{
@@ -1015,6 +1032,8 @@ Button * create_shift_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel
 			   ->set_items(HDRImage::border_mode_names());
 			gui->add_variable("Border mode Y:", border_mode_y, true)
 			   ->set_items(HDRImage::border_mode_names());
+
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()
@@ -1373,6 +1392,8 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 			auto s = gui->add_variable("Super-samples:", samples);
 			s->set_spinnable(true);
 			s->set_min_value(1);
+
+			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
 				[&]()

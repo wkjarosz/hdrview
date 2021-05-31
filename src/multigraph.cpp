@@ -21,6 +21,10 @@ const int hpad = 10;
 const int textPad = 4;
 }
 
+
+
+NAMESPACE_BEGIN(nanogui)
+
 /*!
  * @param parent	The parent widget
  * @param fg 		The foreground color of the first plot
@@ -274,3 +278,5 @@ bool MultiGraph::mouse_button_event(const Vector2i &p, int /* button */, bool do
 
 	return true;
 }
+
+NAMESPACE_END(nanogui)

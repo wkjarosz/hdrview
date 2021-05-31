@@ -163,25 +163,6 @@ public:
         return res;
     }
 
-	Color3 convert(EColorSpace dst, EColorSpace src) const;
-    Color3 LinearSRGBToXYZ() const;
-    Color3 XYZToLinearSRGB() const;
-    Color3 LinearAdobeRGBToXYZ() const;
-    Color3 XYZToLinearAdobeRGB() const;
-    Color3 XYZToLab() const;
-    Color3 LabToXYZ() const;
-    Color3 XYZToLuv() const;
-    Color3 LuvToXYZ() const;
-    Color3 xyYToXYZ() const;
-    Color3 XYZToxyY() const;
-
-    Color3 RGBToHSV() const;
-    Color3 HSVToRGB() const;
-    Color3 RGBToHSL() const;
-    Color3 HSLToRGB() const;
-    Color3 HSIAdjust(float h, float s, float i) const;
-    Color3 HSLAdjust(float h, float s, float l) const;
-
     friend std::ostream& operator<<(std::ostream& out, const Color3& c)
     {
 	   return(out << c.r << " " << c.g << " " << c.b);
@@ -333,27 +314,6 @@ public:
     float max() const {return std::max(Color3::max(), a);}
     Color4 max(const Color4 & m) const {return Color4(Color3::max(m), std::max(a,m.a));}
     Color4 max(float m) const {return Color4(Color3::max(m), std::max(a,m));}
-
-
-
-	Color4 convert(EColorSpace dst, EColorSpace src) const {return Color4(Color3::convert(dst, src), a);}
-	Color4 LinearSRGBToXYZ() const {return Color4(Color3::LinearSRGBToXYZ(), a);}
-	Color4 XYZToLinearSRGB() const {return Color4(Color3::XYZToLinearSRGB(), a);}
-    Color3 LinearAdobeRGBToXYZ() const {return Color4(Color3::LinearAdobeRGBToXYZ(), a);}
-    Color3 XYZToLinearAdobeRGB() const {return Color4(Color3::XYZToLinearAdobeRGB(), a);}
-	Color4 XYZToLab() const {return Color4(Color3::XYZToLab(), a);}
-	Color4 LabToXYZ() const {return Color4(Color3::LabToXYZ(), a);}
-	Color4 XYZToLuv() const {return Color4(Color3::XYZToLuv(), a);}
-	Color4 LuvToXYZ() const {return Color4(Color3::LuvToXYZ(), a);}
-	Color4 xyYToXYZ() const {return Color4(Color3::xyYToXYZ(), a);}
-	Color4 XYZToxyY() const {return Color4(Color3::XYZToxyY(), a);}
-
-	Color4 RGBToHSV() const {return Color4(Color3::RGBToHSV(), a);}
-	Color4 HSVToRGB() const {return Color4(Color3::HSVToRGB(), a);}
-	Color4 RGBToHSL() const {return Color4(Color3::RGBToHSL(), a);}
-	Color4 HSLToRGB() const {return Color4(Color3::HSLToRGB(), a);}
-    Color4 HSIAdjust(float h, float s, float i) const {return Color4(Color3::HSIAdjust(h,s,i), a);}
-    Color4 HSLAdjust(float h, float s, float l) const {return Color4(Color3::HSLAdjust(h,s,l), a);}
 
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)

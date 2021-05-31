@@ -137,7 +137,6 @@ add_executable(HDRView
   hdrview_version.cpp
   hdrview_resources.cpp
   src/async.h
-  src/color.cpp
   src/color.h
   src/colorslider.cpp
   src/colorslider.h
@@ -231,7 +230,6 @@ endif()
 
 add_executable(hdrbatch
   hdrview_version.cpp
-  src/color.cpp
   src/color.h
   src/colorspace.cpp
   src/colorspace.h

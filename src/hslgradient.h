@@ -7,7 +7,9 @@
 #include "common.h"
 #include <nanogui/widget.h>
 
-class HSLGradient : public nanogui::Widget
+
+NAMESPACE_BEGIN(nanogui)
+class HSLGradient : public Widget
 {
 public:
 	HSLGradient(Widget *parent);
@@ -21,7 +23,7 @@ public:
 	void set_lightness(float l)      { m_lightness = l; }
 	float lightness() const         { return m_lightness; }
 
-	virtual nanogui::Vector2i preferred_size(NVGcontext *ctx) const override;
+	virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
 
 protected:
@@ -29,3 +31,5 @@ protected:
 	float m_saturation = 0.5f;
 	float m_lightness = 0.5f;
 };
+
+NAMESPACE_END(nanogui)

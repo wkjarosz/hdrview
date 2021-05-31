@@ -19,7 +19,7 @@
 #include <GLFW/glfw3.h>
 #include <alphanum.h>
 
-
+using namespace nanogui;
 using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
