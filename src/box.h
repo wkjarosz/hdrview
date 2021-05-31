@@ -12,8 +12,7 @@
 
 //! Represents a bounded interval in higher dimensions.
 /*!
-    Box is an N-D interval. It assumes that the template parameter Vec
-    provides a dimensions() member(such as Math::Vec2 or Math::Vec3)
+    Box is an N-D interval.
 */
 template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size>
 class Box
