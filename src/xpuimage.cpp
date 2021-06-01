@@ -295,7 +295,7 @@ void XPUImage::upload_to_GPU() const
 }
 
 
-XPUImage::TextureRef XPUImage::texture()
+XPUImage::TextureRef XPUImage::texture() const
 {
 	check_async_result();
 	upload_to_GPU();

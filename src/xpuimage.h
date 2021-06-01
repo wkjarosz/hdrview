@@ -51,10 +51,6 @@ struct ImageStatistics
 	static std::shared_ptr<ImageStatistics> compute_statistics(const HDRImage &img, float exposure, AtomicProgress & prog);
 };
 
-
-// Import some common Enoki types
-using Box2i     = Box<nanogui::Vector2i>;
-
 /*!
     Stores an image both on the CPU (as an HDRImage) and as a corresponding texture on the GPU.
 	
@@ -86,10 +82,7 @@ public:
     bool has_undo() const;
     bool has_redo() const;
 
-	Box2i roi() const;
-	void set_roi(const Box2i & box)	{m_roi = box;}
-
-	TextureRef texture();
+	TextureRef texture() const;
 	void set_filename(const std::string & filename) { m_filename = filename; }
     std::string filename() const                    { return m_filename; }
 	bool is_null() const                            { check_async_result(); return !m_image || m_image->is_null(); }
@@ -97,6 +90,8 @@ public:
     int width() const                               { check_async_result(); return m_image->width(); }
     int height() const                              { check_async_result(); return m_image->height(); }
     nanogui::Vector2i size() const                  { return is_null() ? nanogui::Vector2i(0,0) : nanogui::Vector2i(m_image->width(), m_image->height()); }
+	Box2i box() const								{ return is_null() ? Box2i() : Box2i(0, size());}
+	Box2i & roi() const								{ return m_roi; }
 
     bool save(const std::string & filename,
               float gain, float gamma,
@@ -132,7 +127,7 @@ protected:
 	mutable ModifyingTaskPtr m_async_command = nullptr;
 	mutable bool m_async_retrieved = false;
 
-	Box2i m_roi = Box2i();
+	mutable Box2i m_roi = Box2i();
 
 	// various callback functions
 	VoidVoidFunc m_modify_done_callback;

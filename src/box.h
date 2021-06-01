@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "fwd.h"
 #include <limits>    // for numeric_limits
 #include <algorithm> // for min, max
 
@@ -14,7 +15,7 @@
 /*!
     Box is an N-D interval.
 */
-template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size>
+template <typename Vec, typename Value, size_t Dims>
 class Box
 {
 public:
@@ -67,6 +68,18 @@ public:
             max[i] = std::max(point[i], max[i]);
         }
     }
+    BoxT expanded(Value d) const
+    {
+        return BoxT(min-d, max+d);
+    }
+    BoxT expanded(const Vec & d) const
+    {
+        return BoxT(min-d, max+d);
+    }
+    BoxT expanded(const BoxT & d) const
+    {
+        return BoxT(min-d.min, max+d.max);
+    }
     void enclose(const BoxT & box)
     {
         for (size_t i = 0; i < Dims; ++i)
@@ -111,6 +124,12 @@ public:
     //-----------------------------------------------------------------------
     Vec  size() const {return max-min;}
     Vec  center() const {return (max+min)/Value(2);}
+    Vec  clamp(Vec point) const
+    {
+        for (size_t i = 0; i < Dims; ++i)
+            point[i] = std::min(std::max(point[i], min[i]), max[i]);
+        return point;
+    }
     bool contains(const Vec & point, bool proper = false) const
     {
         if (proper)

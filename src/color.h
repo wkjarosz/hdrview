@@ -314,6 +314,13 @@ public:
     float max() const {return std::max(Color3::max(), a);}
     Color4 max(const Color4 & m) const {return Color4(Color3::max(m), std::max(a,m.a));}
     Color4 max(float m) const {return Color4(Color3::max(m), std::max(a,m));}
+    Color4 pow(const Color3& exp) const
+    {
+        Color4 res;
+        for (int i = 0; i < 4; ++i)
+            res[i] = (*this)[i] > 0.0f ? powf((*this)[i], exp[i]) : 0.0f;
+        return res;
+    }
 
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)

@@ -8,6 +8,7 @@
 
 #include <nanogui/canvas.h>
 #include <nanogui/texture.h>
+#include "xpuimage.h"
 #include "fwd.h"
 
 
@@ -30,6 +31,7 @@ public:
 
     // Widget implementation
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
+	virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
     virtual bool scroll_event(const Vector2i &p, const Vector2f &rel) override;
     virtual void draw(NVGcontext *ctx) override;
@@ -38,8 +40,8 @@ public:
 
 	// Getters and setters
 
-	void set_current_image(TextureRef cur);
-	void set_reference_image(TextureRef ref);
+	void set_current_image(ConstImagePtr cur);
+	void set_reference_image(ConstImagePtr ref);
 
     /// Return the pixel offset of the zoomed image rectangle
     Vector2f offset() const 						  		  { return m_offset; }
@@ -151,11 +153,11 @@ protected:
     Vector2f position_f() const                             { return Vector2f(m_pos); }
 	Vector2f size_f() const                                 { return Vector2f(m_size); }
 
-	Vector2i image_size(TextureRef img) const           	{ return img ? img->size() : Vector2i(0,0); }
-	Vector2f image_size_f(TextureRef img) const         	{ return Vector2f(image_size(img)); }
-	Vector2f scaled_image_size_f(TextureRef img) const  	{ return m_zoom * image_size_f(img); }
+	Vector2i image_size(ConstImagePtr img) const           	{ return img ? img->size() : Vector2i(0,0); }
+	Vector2f image_size_f(ConstImagePtr img) const         	{ return Vector2f(image_size(img)); }
+	Vector2f scaled_image_size_f(ConstImagePtr img) const  	{ return m_zoom * image_size_f(img); }
 
-	Vector2f center_offset(TextureRef img) const;
+	Vector2f center_offset(ConstImagePtr img) const;
 
 	// Helper drawing methods.
 	void draw_widget_border(NVGcontext* ctx) const;
@@ -163,12 +165,13 @@ protected:
 	void draw_helpers(NVGcontext* ctx) const;
 	void draw_pixel_grid(NVGcontext* ctx) const;
 	void draw_pixel_info(NVGcontext *ctx) const;
+	void draw_ROI(NVGcontext *ctx) const;
 	void image_position_and_scale(Vector2f & position,
 							   	  Vector2f & scale,
-	                              TextureRef image);
+	                              ConstImagePtr image);
 
-	TextureRef m_current_image;
-	TextureRef m_reference_image;
+	ConstImagePtr m_current_image;
+	ConstImagePtr m_reference_image;
 	TextureRef m_null_image;
 
     ref<Shader> m_image_shader;
@@ -201,4 +204,6 @@ protected:
 	BoolCallback m_sRGB_callback;
 	FloatCallback m_zoom_callback;
     PixelCallback m_pixel_callback;
+
+	Vector2i m_clicked;
 };

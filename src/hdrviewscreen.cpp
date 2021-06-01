@@ -79,10 +79,23 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_side_panel = new Window(this, "");
 	m_side_panel->set_theme(panelTheme);
 
+	m_tool_panel = new Window(this, "");
+	m_tool_panel->set_theme(panelTheme);
+	m_tool_panel->set_fixed_width(32);
+	m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical,
+	                                       Alignment::Fill, 4, 4));
+	auto b = new ToolButton(m_tool_panel, FA_HAND_PAPER);
+	b->set_pushed(true);
+	b->set_flags(Button::Flags::RadioButton);
+	b->set_callback([this]{m_tool = HDRViewScreen::Tool_None;});
+	
+	b = new ToolButton(m_tool_panel, FA_EXPAND);
+	b->set_flags(Button::Flags::RadioButton);
+	b->set_callback([this]{m_tool = HDRViewScreen::Tool_Rectangular_Marquee;});
+
 	m_image_view = new ::HDRImageView(this);
 	m_image_view->set_grid_threshold(10);
 	m_image_view->set_pixel_info_threshold(40);
-
 
 	m_status_bar = new Window(this, "");
 	m_status_bar->set_theme(panelTheme);
@@ -110,6 +123,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_side_panel_contents->set_fixed_width(213);
 	m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
 	m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
+
 
     //
     // create file/images panel
@@ -867,10 +881,12 @@ void HDRViewScreen::update_layout()
 {
 	int headerHeight = m_top_panel->fixed_height();
 	int sidePanelWidth = m_side_panel->fixed_width();
+	int toolPanelWidth = m_tool_panel->fixed_width();
 	int footerHeight = m_status_bar->fixed_height();
 
 	static int headerShift = 0;
 	static int sidePanelShift = 0;
+	static int toolPanelShift = 0;
 	static int footerShift = 0;
 
 	if (m_animation_running)
@@ -883,6 +899,7 @@ void HDRViewScreen::update_layout()
 			pop_gui_refresh();
 			m_animation_running = false;
 			sidePanelShift = (m_animation_goal & SIDE_PANEL) ? 0 : -sidePanelWidth;
+			toolPanelShift = (m_animation_goal & SIDE_PANEL) ? 0 : toolPanelWidth;
 			headerShift = (m_animation_goal & TOP_PANEL) ? 0 : -headerHeight;
 			footerShift = (m_animation_goal & BOTTOM_PANEL) ? 0 : footerHeight;
 
@@ -898,6 +915,10 @@ void HDRViewScreen::update_layout()
 				double start = (m_animation_goal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
 				double end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
 				sidePanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
+
+				start = (m_animation_goal & SIDE_PANEL) ? double(toolPanelWidth) : 0.0;
+				end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(toolPanelWidth);
+				toolPanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 				m_side_panel_button->set_pushed(true);
 			}
 			// only animate the header if it isn't already at the goal position
@@ -924,12 +945,16 @@ void HDRViewScreen::update_layout()
 	m_top_panel->set_fixed_width(width());
 
 	int middleHeight = height() - headerHeight - footerHeight - headerShift + footerShift;
+	int middleWidth = width() - toolPanelWidth + toolPanelShift;
 
 	m_side_panel->set_position(nanogui::Vector2i(sidePanelShift,headerShift+headerHeight));
 	m_side_panel->set_fixed_height(middleHeight);
 
+	m_tool_panel->set_position(nanogui::Vector2i(middleWidth, headerShift+headerHeight));
+	m_tool_panel->set_fixed_height(middleHeight);
+
 	m_image_view->set_position(nanogui::Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
-	m_image_view->set_fixed_width(width() - sidePanelShift-sidePanelWidth);
+	m_image_view->set_fixed_width(width() - sidePanelShift-sidePanelWidth-toolPanelWidth+toolPanelShift);
 	m_image_view->set_fixed_height(middleHeight);
 
 	m_status_bar->set_position(nanogui::Vector2i(0,headerShift+headerHeight+middleHeight));

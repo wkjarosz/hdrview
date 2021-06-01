@@ -113,7 +113,7 @@ Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unaryExpr([](const Color4 & c){return convertColorSpace(c, dst, src);}).eval()),
+							return {make_shared<HDRImage>(img->apply_function([](const Color4 & c){return convertColorSpace(c, dst, src);}, images_panel->current_image()->roi())),
 							        nullptr};
 						});
 				});
@@ -192,8 +192,10 @@ Button * create_exposure_gamma_btn(Widget *parent, HDRViewScreen * screen, Image
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
 							spdlog::get("console")->debug("{}; {}; {}", exposure, offset, gamma);
-							return {make_shared<HDRImage>((Color4(pow(2.0f, exposure), 1.f) * (*img) + Color4(offset, 0.f)).pow(Color4(1.0f/gamma))),
-							        nullptr};
+							return {make_shared<HDRImage>(img->apply_function([](const Color4 & c)
+							{
+								return (Color4(pow(2.0f, exposure), 1.f) * c + Color4(offset, 0.f)).pow(Color4(1.0f/gamma, 1.f));
+							}, images_panel->current_image()->roi())), nullptr};
 						});
 				});
 
@@ -314,7 +316,7 @@ Button * create_brightness_constract_btn(Widget *parent, HDRViewScreen * screen,
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->brightness_contrast(brightness, contrast, linear, channelMap[channel])),
+							return {make_shared<HDRImage>(img->brightness_contrast(brightness, contrast, linear, channelMap[channel], images_panel->current_image()->roi())),
 									nullptr};
 						});
 				});
@@ -411,14 +413,14 @@ Button * create_filmic_tonemapping_btn(Widget *parent, HDRViewScreen * screen, I
 				   images_panel->modify_image(
 				       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 				       {
-				           return {make_shared<HDRImage>(img->unaryExpr(
+				           return {make_shared<HDRImage>(img->apply_function(
 				               [](const Color4 & c)
 				               {
 				                   return Color4(fCurve.eval(c.r),
 				                                 fCurve.eval(c.g),
 				                                 fCurve.eval(c.b),
 				                                 c.a);
-				               }).eval()), nullptr};
+				               }, images_panel->current_image()->roi())), nullptr};
 				       });
 				});
 
@@ -492,12 +494,12 @@ Button * create_hsl_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel *
 						[&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
 						{
 							return {make_shared<HDRImage>(
-								img->unaryExpr(
+								img->apply_function(
 									[](Color4 c)
 									{
 										HSLAdjust(&c[0], &c[1], &c[2], hue, (saturation+100.f)/100.f, (lightness)/100.f);
 										return c;
-									}).eval()), nullptr};
+									}, images_panel->current_image()->roi())), nullptr};
 						});
 				});
 
@@ -550,8 +552,8 @@ Button * create_gaussian_filter_btn(Widget *parent, HDRViewScreen * screen, Imag
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(exact ? img->gaussian_blurred(width, height, progress, border_mode_x, border_mode_y) :
-							        img->fast_gaussian_blurred(width, height, progress, border_mode_x, border_mode_y)),
+							auto roi = images_panel->current_image()->roi();
+							return {make_shared<HDRImage>(exact ? img->gaussian_blurred(width, height, progress, border_mode_x, border_mode_y, 6.f, 6.f, roi) : img->fast_gaussian_blurred(width, height, progress, border_mode_x, border_mode_y, roi)),
 							        nullptr};
 						});
 				});
@@ -600,7 +602,7 @@ Button * create_box_filter_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->box_blurred(width, height, progress, border_mode_x, border_mode_y)),
+							return {make_shared<HDRImage>(img->box_blurred(width, height, progress, border_mode_x, border_mode_y, images_panel->current_image()->roi())),
 							        nullptr};
 						});
 				});
@@ -695,7 +697,7 @@ Button * create_unsharp_mask_filter_btn(Widget *parent, HDRViewScreen * screen, 
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unsharp_masked(sigma, strength, progress, border_mode_x, border_mode_y)),
+							return {make_shared<HDRImage>(img->unsharp_masked(sigma, strength, progress, border_mode_x, border_mode_y, images_panel->current_image()->roi())),
 							        nullptr};
 						});
 				});
@@ -740,7 +742,7 @@ Button * create_median_filter_btn(Widget *parent, HDRViewScreen * screen, ImageL
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->median_filtered(radius, progress, border_mode_x, border_mode_y)),
+							return {make_shared<HDRImage>(img->median_filtered(radius, progress, border_mode_x, border_mode_y, false, images_panel->current_image()->roi())),
 							        nullptr};
 						});
 				});
@@ -1513,14 +1515,14 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unaryExpr(
+							return {make_shared<HDRImage>(img->apply_function(
 								[](const Color4 & c)
 								{
 									float alpha = c.a + bg.a() * (1.f - c.a);
 									float gain = pow(2.f, EV);
 									return Color4(Color3(c.r, c.g, c.b) * gain * c.a +
 												  Color3(bg.r(), bg.g(), bg.b()) * gain * bg.a() * (1.f-c.a), alpha);
-								}).eval()), nullptr };
+								}, images_panel->current_image()->roi())), nullptr };
 						});
 				},
 				[popup](){ popup->dispose(); });
@@ -1605,14 +1607,14 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							return {make_shared<HDRImage>(img->unaryExpr(
+							return {make_shared<HDRImage>(img->apply_function(
 								[&](const Color4 & c)
 								{
 									return Color4(enabled[0] ? value[0] : c[0],
 												  enabled[1] ? value[1] : c[1],
 												  enabled[2] ? value[2] : c[2],
 												  enabled[3] ? value[3] : c[3]);
-								}).eval()), nullptr };
+								}, images_panel->current_image()->roi())), nullptr };
 						});
 				});
 
@@ -1716,10 +1718,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 		[this]()
 		{
 			m_images_panel->modify_image(
-				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				[this](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
-					return {make_shared<HDRImage>(img->inverted()),
-					        make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->inverted(); })};
+					auto roi = m_images_panel->current_image()->roi();
+					return {make_shared<HDRImage>(img->inverted(roi)),
+					        make_shared<LambdaUndo>([roi](shared_ptr<HDRImage> & img2) { *img2 = img2->inverted(roi); })};
 				});
 		});
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
@@ -1731,13 +1734,13 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 		[this]()
 		{
 			m_images_panel->modify_image(
-				[](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				[this](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 				{
-					return {make_shared<HDRImage>(img->unaryExpr(
+					return {make_shared<HDRImage>(img->apply_function(
 						[](const Color4 & c)
 						{
 							return Color4(clamp01(c.r), clamp01(c.g), clamp01(c.b), clamp01(c.a));
-						}).eval()), nullptr };
+						}, m_images_panel->current_image()->roi())), nullptr };
 				});
 		});
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));

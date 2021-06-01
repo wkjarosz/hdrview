@@ -711,11 +711,10 @@ void ImageListPanel::run_requested_callbacks()
 				++it;
 		}
 
-		m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
+		m_image_view->set_current_image(current_image());
 
 		if (num_images_changed)
 		{
-			// m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 			m_screen->update_caption();
 
 			m_num_images_callback();
@@ -750,7 +749,7 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 
 	m_previous = m_current;
 	m_current = index;
-	m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
+	m_image_view->set_current_image(current_image());
 	m_screen->update_caption();
     update_histogram();
 
@@ -769,7 +768,7 @@ bool ImageListPanel::set_reference_image_index(int index)
 		dynamic_cast<ImageButton*>(buttons[index])->set_is_reference(true);
 
 	m_reference = index;
-	m_image_view->set_reference_image(reference_image() ? reference_image()->texture() : nullptr);
+	m_image_view->set_reference_image(reference_image());
 
 	return true;
 }

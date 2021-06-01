@@ -21,6 +21,12 @@ using namespace nanogui;
 class HDRViewScreen : public Screen
 {
 public:
+	enum ETool : uint32_t
+	{
+		Tool_None,
+		Tool_Rectangular_Marquee
+	};
+
     HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
     ~HDRViewScreen() override;
 
@@ -30,6 +36,8 @@ public:
 	bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 	bool mouse_motion_event(const Vector2i& p, const Vector2i& rel, int button, int modifiers) override;
 	bool keyboard_event(int key, int scancode, int action, int modifiers) override;
+
+	ETool tool() const {return m_tool;}
 
 	bool load_image();
 	void save_image();
@@ -58,6 +66,7 @@ private:
 
 	Window * m_top_panel = nullptr;
 	Window * m_side_panel = nullptr;
+	Window * m_tool_panel = nullptr;
 	Window * m_status_bar = nullptr;
 	HDRImageView * m_image_view = nullptr;
 	ImageListPanel * m_images_panel = nullptr;
@@ -73,12 +82,14 @@ private:
 
 	double m_gui_animation_start;
 	bool m_animation_running = false;
-	enum EAnimationGoal : int
+	enum EAnimationGoal : uint32_t
 	{
 		TOP_PANEL       = 1 << 0,
 		SIDE_PANEL      = 1 << 1,
 		BOTTOM_PANEL    = 1 << 2,
 	} m_animation_goal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
+
+	ETool m_tool = Tool_None;
 
     MessageDialog * m_ok_to_quit_dialog = nullptr;
 

@@ -38,12 +38,12 @@ const Color4 g_blackPixel(0,0,0,0);
 ArrayXXf horizontalGaussianKernel(float sigma, float truncate);
 int wrapCoord(int p, int maxP, HDRImage::BorderMode m);
 void bilinearGreen(HDRImage &raw, int offsetX, int offsetY);
-void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset);
-void MalvarGreen(HDRImage &raw, int c, const Vector2i & redOffset);
-void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &redOffset, bool horizontal);
-void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &redOffset);
-void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & redOffset);
-void greenBasedRorB(HDRImage &raw, int c, const Vector2i &redOffset);
+void PhelippeauGreen(HDRImage &raw, const Vector2i & red_offset);
+void MalvarGreen(HDRImage &raw, int c, const Vector2i & red_offset);
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &red_offset, bool horizontal);
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &red_offset);
+void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & red_offset);
+void greenBasedRorB(HDRImage &raw, int c, const Vector2i &red_offset);
 inline float clamp2(float value, float mn, float mx);
 inline float clamp4(float value, float a, float b, float c, float d);
 inline float interpGreenH(const HDRImage &raw, int x, int y);
@@ -54,6 +54,31 @@ inline int bayerColor(int x, int y);
 inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, const vector<float> & LUT);
 } // namespace
 
+
+void HDRImage::copy_subimage(const HDRImage & src, Box2i roi, int dst_x, int dst_y)
+{
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(src.box());
+    else
+        roi = src.box();
+
+    if (!roi.has_volume())
+        return;
+
+    // clip roi to valid region in this image starting at dst_x and dst_y
+    auto old_min = roi.min;
+    roi.move_min_to({dst_x, dst_y});
+    roi.intersect(box());
+    roi.move_min_to(old_min);
+
+    // for every pixel in the image
+    parallel_for(roi.min.y(), roi.max.y(), [this,&src,&roi,dst_x,dst_y](int y)
+    {
+        for (int x = roi.min.x(); x < roi.max.x(); ++x)
+            (*this)(dst_x + x-roi.min.x(), dst_y + y-roi.min.y()) = src(x, y);
+    });
+}
 
 const vector<string> & HDRImage::border_mode_names()
 {
@@ -202,19 +227,28 @@ HDRImage HDRImage::resampled(int w, int h,
 
 
 HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
-                             BorderMode mX, BorderMode mY) const
+                             BorderMode mX, BorderMode mY, Box2i roi) const
 {
-    HDRImage result(width(), height());
+    HDRImage result = *this;
+
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return result;
 
     int centerX = int((kernel.rows()-1.0)/2.0);
     int centerY = int((kernel.cols()-1.0)/2.0);
 
     Timer timer;
-	progress.set_num_steps(result.width());
+	progress.set_num_steps(roi.size().x());
     // for every pixel in the image
-    parallel_for(0, result.width(), [this,&progress,kernel,mX,mY,&result,centerX,centerY](int x)
+    parallel_for(roi.min.x(), roi.max.x(), [this,&roi,&progress,kernel,mX,mY,&result,centerX,centerY](int x)
     {
-        for (int y = 0; y < result.height(); y++)
+        for (int y = roi.min.y(); y < roi.max.y(); y++)
         {
             Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
             float weightSum = 0.0f;
@@ -241,63 +275,73 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
     return result;
 }
 
-HDRImage HDRImage::gaussian_blurred_x(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX) const
+HDRImage HDRImage::gaussian_blurred_x(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX, Box2i roi) const
 {
-    return convolved(horizontalGaussianKernel(sigmaX, truncateX), progress, mX, mX);
+    return convolved(horizontalGaussianKernel(sigmaX, truncateX), progress, mX, mX, roi);
 }
 
-HDRImage HDRImage::gaussian_blurred_y(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY) const
+HDRImage HDRImage::gaussian_blurred_y(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY, Box2i roi) const
 {
-    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), progress, mY, mY);
+    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), progress, mY, mY, roi);
 }
 
 // Use principles of separability to blur an image using 2 1D Gaussian Filters
 HDRImage HDRImage::gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress progress,
                                    BorderMode mX, BorderMode mY,
-                                   float truncateX, float truncateY) const
+                                   float truncateX, float truncateY, Box2i roi) const
 {
     // blur using 2, 1D filters in the x and y directions
-    return gaussian_blurred_x(sigmaX, AtomicProgress(progress, .5f), mX, truncateX).gaussian_blurred_y(sigmaY, AtomicProgress(progress, .5f), mY, truncateY);
+    return gaussian_blurred_x(sigmaX, AtomicProgress(progress, .5f), mX, truncateX, roi)
+          .gaussian_blurred_y(sigmaY, AtomicProgress(progress, .5f), mY, truncateY, roi);
 }
 
 
 // sharpen an image
-HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
 {
-    return *this + Color4(strength) * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY));
+    return *this + Color4(strength) * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
 }
 
 
 
 HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress progress,
-                                  BorderMode mX, BorderMode mY, bool round) const
+                                  BorderMode mX, BorderMode mY, bool round, Box2i roi) const
 {
     int radiusi = int(std::ceil(radius));
     HDRImage tempBuffer = *this;
 
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return tempBuffer;
+
     Timer timer;
-    progress.set_num_steps(height());
+    progress.set_num_steps(roi.size().y());
     // for every pixel in the image
-    parallel_for(0, height(), [this,&tempBuffer,&progress,radius,radiusi,channel,mX,mY,round](int y)
+    parallel_for(roi.min.y(), roi.max.y(), [this,&roi,&tempBuffer,&progress,radius,radiusi,channel,mX,mY,round](int y)
     {
         vector<float> mBuffer;
-        mBuffer.reserve((2*radiusi)*(2*radiusi));
-        for (int x = 0; x < tempBuffer.width(); x++)
+        mBuffer.reserve((2*(radiusi+1))*(2*(radiusi+1)));
+        for (int x = roi.min.x(); x < roi.max.x(); x++)
         {
             mBuffer.clear();
 
-            int xCoord, yCoord;
+            int x_coord, y_coord;
             // over all pixels in the neighborhood kernel
             for (int i = -radiusi; i <= radiusi; i++)
             {
-                xCoord = x + i;
+                x_coord = x + i;
                 for (int j = -radiusi; j <= radiusi; j++)
                 {
                     if (round && i*i + j*j > radius*radius)
                         continue;
 
-                    yCoord = y + j;
-                    mBuffer.push_back(pixel(xCoord, yCoord, mX, mY)[channel]);
+                    y_coord = y + j;
+                    mBuffer.push_back(pixel(x_coord, y_coord, mX, mY)[channel]);
                 }
             }
 
@@ -319,19 +363,28 @@ HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress pro
 
 HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain,
                                      AtomicProgress progress,
-                                     BorderMode mX, BorderMode mY, float truncateDomain) const
+                                     BorderMode mX, BorderMode mY, float truncateDomain, Box2i roi) const
 {
-    HDRImage filtered(width(), height());
+    HDRImage filtered = *this;
+    
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return filtered;
 
     // calculate the filter size
     int radius = int(std::ceil(truncateDomain * sigma_domain));
 
     Timer timer;
-    progress.set_num_steps(height());
+    progress.set_num_steps(roi.size().y());
     // for every pixel in the image
-    parallel_for(0, filtered.height(), [this,&filtered,&progress,radius,sigmaRange,sigma_domain,mX,mY](int y)
+    parallel_for(roi.min.y(), roi.max.y(), [this,&roi,&filtered,&progress,radius,sigmaRange,sigma_domain,mX,mY](int y)
     {
-        for (int x = 0; x < filtered.width(); x++)
+        for (int x = roi.min.x(); x < roi.max.x(); x++)
         {
             // initilize normalizer and sum value to 0 for every pixel location
             float weightSum = 0.0f;
@@ -372,7 +425,7 @@ static int nextOddInt(int i)
 }
 
 
-HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX, BorderMode mY) const
+HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -407,15 +460,25 @@ HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgr
 
     HDRImage result = *this;
     for (int i = 0; i < iterations; i++)
-        result = result.box_blurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY);
+        result = result.box_blurred(hw, AtomicProgress(progress, 1.f/iterations), mX, mY, roi);
 
     return result;
 }
 
 HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY,
-                                       AtomicProgress progress,
-                                       BorderMode mX, BorderMode mY) const
+                                         AtomicProgress progress,
+                                         BorderMode mX, BorderMode mY,
+                                         Box2i roi) const
 {
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return *this;
+
     Timer timer;
     // See comments in HDRImage::iterated_box_blurred for derivation of width
     int hw = std::round((std::sqrt(12.f/6) * sigmaX - 1)/2.f);
@@ -425,83 +488,118 @@ HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY,
     // do horizontal blurs
     if (hw < 3)
         // for small blurs, just use a separable Gaussian
-        im = gaussian_blurred_x(sigmaX, AtomicProgress(progress, 0.5f), mX);
+        im = gaussian_blurred_x(sigmaX, AtomicProgress(progress, 0.5f), mX, 6.f, roi);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX)
-	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX);
+        im = box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi.expanded(5*hw))
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi.expanded(4*hw))
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi.expanded(3*hw))
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi.expanded(2*hw))
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi.expanded(1*hw))
+	        .box_blurred_x(hw, AtomicProgress(progress, .5f/6.f), mX, roi);
 
     // now do vertical blurs
     if (hh < 3)
         // for small blurs, just use a separable Gaussian
-        im = im.gaussian_blurred_y(sigmaY, AtomicProgress(progress, 0.5f), mY);
+        im = im.gaussian_blurred_y(sigmaY, AtomicProgress(progress, 0.5f), mY, 6.f, roi);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = im.box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY)
-               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY);
+        im = im.box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi.expanded(5*hh))
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi.expanded(4*hh))
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi.expanded(3*hh))
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi.expanded(2*hh))
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi.expanded(1*hh))
+               .box_blurred_y(hh, AtomicProgress(progress, .5f/6.f), mY, roi);
+
+    // copy just the roi
+    HDRImage im2 = *this;
+    im2.copy_subimage(im, roi, roi.min.x(), roi.min.y());
 
     spdlog::get("console")->trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed()/1000.f));
-    return im;
+    return im2;
 }
 
 
-HDRImage HDRImage::box_blurred_x(int leftSize, int rightSize, AtomicProgress progress, BorderMode mX) const
+HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress, BorderMode mX, Box2i roi) const
 {
-    HDRImage filtered(width(), height());
+    HDRImage filtered = *this;
+
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return filtered;
 
     Timer timer;
-	progress.set_num_steps(filtered.height());
+	progress.set_num_steps(roi.size().y());
     // for every pixel in the image
-    parallel_for(0, filtered.height(), [this,&filtered,&progress,leftSize,rightSize,mX](int y)
+    parallel_for(roi.min.y(), roi.max.y(), [this,&roi,&filtered,&progress,l_size,r_size,mX](int y)
     {
         // fill up the accumulator
-        filtered(0, y) = 0;
-        for (int dx = -leftSize; dx <= rightSize; ++dx)
-            filtered(0, y) += pixel(dx, y, mX, mX);
-
-        for (int x = 1; x < width(); ++x)
+        int x = roi.min.x();
+        filtered(x, y) = 0;
+        for (int dx = -l_size; dx <= r_size; ++dx)
+            filtered(x, y) += pixel(x+dx, y, mX, mX);
+        
+        // blur all other pixels
+        for (x = roi.min.x()+1; x < roi.max.x(); ++x)
             filtered(x, y) = filtered(x-1, y) -
-                             pixel(x-1-leftSize, y, mX, mX) +
-                             pixel(x+rightSize, y, mX, mX);
+                             pixel(x-1-l_size, y, mX, mX) +
+                             pixel(x+r_size, y, mX, mX);
+        // normalize
+        for (x = roi.min.x(); x < roi.max.x(); ++x)
+            filtered(x, y) *= 1.f/(l_size + r_size + 1);
+
 	    ++progress;
     });
     spdlog::get("console")->trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return filtered * Color4(1.f/(leftSize + rightSize + 1));
+    return filtered;
 }
 
 
-HDRImage HDRImage::box_blurred_y(int leftSize, int rightSize, AtomicProgress progress, BorderMode mY) const
+HDRImage HDRImage::box_blurred_y(int l_size, int r_size, AtomicProgress progress, BorderMode mY, Box2i roi) const
 {
-    HDRImage filtered(width(), height());
+    HDRImage filtered = *this;
+
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return filtered;
 
     Timer timer;
-	progress.set_num_steps(filtered.width());
+	progress.set_num_steps(roi.size().x());
     // for every pixel in the image
-    parallel_for(0, filtered.width(), [this,&filtered,&progress,leftSize,rightSize,mY](int x)
+    parallel_for(roi.min.x(), roi.max.x(), [this,&roi,&filtered,&progress,l_size,r_size,mY](int x)
     {
         // fill up the accumulator
-        filtered(x, 0) = 0;
-        for (int dy = -leftSize; dy <= rightSize; ++dy)
-            filtered(x, 0) += pixel(x, dy, mY, mY);
+        int y = roi.min.y();
+        filtered(x, y) = 0;
+        for (int dy = -l_size; dy <= r_size; ++dy)
+            filtered(x, y) += pixel(x, y+dy, mY, mY);
 
-        for (int y = 1; y < height(); ++y)
+        // blur all other pixels
+        for (y = roi.min.y()+1; y < roi.max.y(); ++y)
             filtered(x, y) = filtered(x, y-1) -
-                             pixel(x, y-1-leftSize, mY, mY) +
-                             pixel(x, y+rightSize, mY, mY);
+                             pixel(x, y-1-l_size, mY, mY) +
+                             pixel(x, y+r_size, mY, mY);
+
+        // normalize
+        for (y = roi.min.y(); y < roi.max.y(); ++y)
+            filtered(x,y) *= 1.f/(l_size + r_size + 1);
+
 	    ++progress;
     });
-    spdlog::get("console")->trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::get("console")->trace("box_blurred_y filter took: {} seconds.", (timer.elapsed()/1000.f));
 
-    return filtered * Color4(1.f/(leftSize + rightSize + 1));
+    return filtered;
 }
 
 HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const Color4 & bgColor) const
@@ -606,18 +704,18 @@ HDRImage HDRImage::resized(int w, int h) const
  *
  * and the pattern is tiled across the entire image.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern
  */
-void HDRImage::bayer_mosaic(const Vector2i &redOffset)
+void HDRImage::bayer_mosaic(const Vector2i &red_offset)
 {
     Color4 mosaic[2][2] = {{Color4(1.f, 0.f, 0.f, 1.f), Color4(0.f, 1.f, 0.f, 1.f)},
                            {Color4(0.f, 1.f, 0.f, 1.f), Color4(0.f, 0.f, 1.f, 1.f)}};
     for (int y = 0; y < height(); ++y)
     {
-        int r = mod(y - redOffset.y(), 2);
+        int r = mod(y - red_offset.y(), 2);
         for (int x = 0; x < width(); ++x)
         {
-            int c = mod(x - redOffset.x(), 2);
+            int c = mod(x - red_offset.x(), 2);
             (*this)(x,y) *= mosaic[r][c];
         }
     }
@@ -628,24 +726,24 @@ void HDRImage::bayer_mosaic(const Vector2i &redOffset)
  * \brief Compute the missing green pixels using a simple bilinear interpolation.
  * from the 4 neighbors.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_linear(const Vector2i &redOffset)
+void HDRImage::demosaic_green_linear(const Vector2i &red_offset)
 {
-    bilinearGreen(*this, redOffset.x(), redOffset.y());
+    bilinearGreen(*this, red_offset.x(), red_offset.y());
 }
 
 /*!
  * \brief Compute the missing green pixels using vertical linear interpolation.
  *
  * @param raw       The source raw pixel data.
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &redOffset)
+void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &red_offset)
 {
-    parallel_for(redOffset.y(), height(), 2, [this,&raw,&redOffset](int y)
+    parallel_for(red_offset.y(), height(), 2, [this,&raw,&red_offset](int y)
     {
-        for (int x = 2+redOffset.x(); x < width()-2; x += 2)
+        for (int x = 2+red_offset.x(); x < width()-2; x += 2)
         {
             // populate the green channel into the red and blue pixels
             (*this)(x  , y  ).g = interpGreenH(raw, x, y);
@@ -658,13 +756,13 @@ void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &re
  * \brief Compute the missing green pixels using horizontal linear interpolation.
  *
  * @param raw       The source raw pixel data.
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &redOffset)
+void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &red_offset)
 {
-    parallel_for(2+redOffset.y(), height()-2, 2, [this,&raw,&redOffset](int y)
+    parallel_for(2+red_offset.y(), height()-2, 2, [this,&raw,&red_offset](int y)
     {
-        for (int x = redOffset.x(); x < width(); x += 2)
+        for (int x = red_offset.x(); x < width(); x += 2)
         {
             (*this)(x  , y  ).g = interpGreenV(raw, x, y);
             (*this)(x+1, y+1).g = interpGreenV(raw, x + 1, y + 1);
@@ -679,35 +777,35 @@ void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &redO
  * ringing/over-shooting--the interpolation is not allowed to extrapolate higher or
  * lower than the surrounding green pixels.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_malvar(const Vector2i &redOffset)
+void HDRImage::demosaic_green_malvar(const Vector2i &red_offset)
 {
     // fill in missing green at red pixels
-    MalvarGreen(*this, 0, redOffset);
+    MalvarGreen(*this, 0, red_offset);
     // fill in missing green at blue pixels
-    MalvarGreen(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+    MalvarGreen(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
  * \brief Interpolate the missing green pixels using the method by Phelippeau et al. 2009.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_phelippeau(const Vector2i &redOffset)
+void HDRImage::demosaic_green_phelippeau(const Vector2i &red_offset)
 {
-    PhelippeauGreen(*this, redOffset);
+    PhelippeauGreen(*this, red_offset);
 }
 
 /*!
  * \brief Interpolate the missing red and blue pixels using a simple linear or bilinear interpolation.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_linear(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_linear(const Vector2i &red_offset)
 {
-    bilinearRedBlue(*this, 0, redOffset);
-    bilinearRedBlue(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+    bilinearRedBlue(*this, 0, red_offset);
+    bilinearRedBlue(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
@@ -719,12 +817,12 @@ void HDRImage::demosaic_red_blue_linear(const Vector2i &redOffset)
  * some of the higher resolution of the green channel, and reduces color fringing under the
  * assumption that the color channels in natural images are positively correlated.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &red_offset)
 {
-    greenBasedRorB(*this, 0, redOffset);
-    greenBasedRorB(*this, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+    greenBasedRorB(*this, 0, red_offset);
+    greenBasedRorB(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
@@ -735,24 +833,24 @@ void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &redOffset)
  *
  * The method uses a 5x5 linear filter.
  *
- * @param redOffset The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_malvar(const Vector2i &redOffset)
+void HDRImage::demosaic_red_blue_malvar(const Vector2i &red_offset)
 {
     // fill in missing red horizontally
-    MalvarRedOrBlueAtGreen(*this, 0, Vector2i((redOffset.x() + 1) % 2, redOffset.y()), true);
+    MalvarRedOrBlueAtGreen(*this, 0, Vector2i((red_offset.x() + 1) % 2, red_offset.y()), true);
     // fill in missing red vertically
-    MalvarRedOrBlueAtGreen(*this, 0, Vector2i(redOffset.x(), (redOffset.y() + 1) % 2), false);
+    MalvarRedOrBlueAtGreen(*this, 0, Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), false);
 
     // fill in missing blue horizontally
-    MalvarRedOrBlueAtGreen(*this, 2, Vector2i(redOffset.x(), (redOffset.y() + 1) % 2), true);
+    MalvarRedOrBlueAtGreen(*this, 2, Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), true);
     // fill in missing blue vertically
-    MalvarRedOrBlueAtGreen(*this, 2, Vector2i((redOffset.x() + 1) % 2, redOffset.y()), false);
+    MalvarRedOrBlueAtGreen(*this, 2, Vector2i((red_offset.x() + 1) % 2, red_offset.y()), false);
 
     // fill in missing red at blue
-    MalvarRedOrBlue(*this, 0, 2, Vector2i((redOffset.x() + 1) % 2, (redOffset.y() + 1) % 2));
+    MalvarRedOrBlue(*this, 0, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
     // fill in missing blue at red
-    MalvarRedOrBlue(*this, 2, 0, redOffset);
+    MalvarRedOrBlue(*this, 2, 0, red_offset);
 }
 
 /*!
@@ -762,7 +860,7 @@ void HDRImage::demosaic_red_blue_malvar(const Vector2i &redOffset)
 HDRImage HDRImage::median_filter_bayer_artifacts() const
 {
     AtomicProgress progress;
-    HDRImage colorDiff = unaryExpr([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
+    HDRImage colorDiff = apply_function([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
     colorDiff = colorDiff.median_filtered(1.f, 0, AtomicProgress(progress, .5f))
                          .median_filtered(1.f, 2, AtomicProgress(progress, .5f));
     return binaryExpr(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);}).eval();
@@ -790,11 +888,11 @@ HDRImage HDRImage::median_filter_bayer_artifacts() const
  * Finally, the output image is formed by choosing for each pixel the demosaiced
  * result which has the most homogeneous "votes" in the surrounding 3x3 neighborhood.
  *
- * @param redOffset     The x,y offset to the first red pixel in the Bayer pattern.
+ * @param red_offset     The x,y offset to the first red pixel in the Bayer pattern.
  * @param cameraToXYZ   The matrix that transforms from sensor values to XYZ with
  *                      D65 white point.
  */
-void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXYZ)
+void HDRImage::demosaicAHD(const Vector2i &red_offset, const Matrix3f &cameraToXYZ)
 {
     using Image3f = Array<Vector3f,Dynamic,Dynamic>;
     using HomoMap = Array<uint8_t,Dynamic,Dynamic>;
@@ -806,12 +904,12 @@ void HDRImage::demosaicAHD(const Vector2i &redOffset, const Matrix3f &cameraToXY
     HomoMap homoV = HomoMap::Zero(width(), height());
 
     // interpolate green channel both horizontally and vertically
-    rgbH.demosaic_green_horizontal(*this, redOffset);
-    rgbV.demosaic_green_vertical(*this, redOffset);
+    rgbH.demosaic_green_horizontal(*this, red_offset);
+    rgbV.demosaic_green_vertical(*this, red_offset);
 
     // interpolate the red and blue using the green as a guide
-    rgbH.demosaic_red_blue_green_guided_linear(redOffset);
-    rgbV.demosaic_red_blue_green_guided_linear(redOffset);
+    rgbH.demosaic_red_blue_green_guided_linear(red_offset);
+    rgbV.demosaic_red_blue_green_guided_linear(red_offset);
 
     // Scale factor to push XYZ values to [0,1] range
     float scale = 1.0 / (maxCoeff().max() * cameraToXYZ.maxCoeff());
@@ -979,34 +1077,41 @@ void HDRImage::demosaic_border(size_t border)
  *                  All other values result in a no-op.
  * @return          The adjusted image.
  */
-HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel channel) const
+HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel channel, Box2i roi) const
 {
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return *this;
+
     float slope = float(std::tan(lerp(0.0, M_PI_2, c/2.0 + 0.5)));
-    // Perlin's version
-    //float slope = c >= 0 ? -log2(1.f - c) + 1.f : 1.f / (-log2(1.f + c) + 1.f);
     
     if (linear)
     {
         float midpoint = (1.f-b)/2.f;
 
         if (channel == RGB)
-            return unaryExpr(
+            return apply_function(
                 [slope,midpoint](const Color4 &c)
                 {
                     return Color4(brightnessContrastL(c.r, slope, midpoint),
                                   brightnessContrastL(c.g, slope, midpoint),
                                   brightnessContrastL(c.b, slope, midpoint), c.a);
-                });
+                }, roi);
         else if (channel == LUMINANCE || channel == CIE_L)
-            return unaryExpr(
+            return apply_function(
                 [slope,midpoint](const Color4 &c)
                 {
                     Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
                     return convertColorSpace(Color4(brightnessContrastL(lab.r, slope, midpoint),
                                              lab.g, lab.b, c.a), LinearSRGB_CS, CIELab_CS);
-                });
+                }, roi);
         else if (channel == CIE_CHROMATICITY)
-            return unaryExpr(
+            return apply_function(
                 [slope,midpoint](const Color4 &c)
                 {
                     Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
@@ -1014,7 +1119,7 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                                   brightnessContrastL(lab.g, slope, midpoint),
                                   brightnessContrastL(lab.b, slope, midpoint),
                                   c.a), LinearSRGB_CS, CIELab_CS);
-                });
+                }, roi);
         else
             return *this;
     }
@@ -1023,24 +1128,24 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
         float aB = (b + 1.f) / 2.f;
 
         if (channel == RGB)
-            return unaryExpr(
+            return apply_function(
                 [aB, slope](const Color4 &c)
                 {
                     return Color4(brightnessContrastNL(c.r, slope, aB),
                                   brightnessContrastNL(c.g, slope, aB),
                                   brightnessContrastNL(c.b, slope, aB),
                                   c.a);
-                });
+                }, roi);
         else if (channel == LUMINANCE || channel == CIE_L)
-            return unaryExpr(
+            return apply_function(
                 [aB, slope](const Color4 &c)
                 {
                     Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
                     return convertColorSpace(Color4(brightnessContrastNL(lab.r, slope, aB),
                                   lab.g, lab.b, c.a), LinearSRGB_CS, CIELab_CS);
-                });
+                }, roi);
         else if (channel == CIE_CHROMATICITY)
-            return unaryExpr(
+            return apply_function(
                 [aB, slope](const Color4 &c)
                 {
                     Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
@@ -1048,15 +1153,15 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                                   brightnessContrastNL(lab.g, slope, aB),
                                   brightnessContrastNL(lab.b, slope, aB),
                                   c.a), LinearSRGB_CS, CIELab_CS);
-                });
+                }, roi);
         else
             return *this;
     }
 }
 
-HDRImage HDRImage::inverted() const
+HDRImage HDRImage::inverted(Box2i roi) const
 {
-	return unaryExpr([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); });
+	return apply_function([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); }, roi);
 }
 
 
@@ -1190,15 +1295,15 @@ void bilinearGreen(HDRImage &raw, int offsetX, int offsetY)
 }
 
 
-void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset)
+void PhelippeauGreen(HDRImage &raw, const Vector2i & red_offset)
 {
     ArrayXXf Gh(raw.width(), raw.height());
     ArrayXXf Gv(raw.width(), raw.height());
 
     // populate horizontally interpolated green
-    parallel_for(redOffset.y(), raw.height(), 2, [&raw,&Gh,&redOffset](int y)
+    parallel_for(red_offset.y(), raw.height(), 2, [&raw,&Gh,&red_offset](int y)
     {
-        for (int x = 2+redOffset.x(); x < raw.width() - 2; x += 2)
+        for (int x = 2+red_offset.x(); x < raw.width() - 2; x += 2)
         {
             Gh(x  , y  ) = interpGreenH(raw, x, y);
             Gh(x+1, y+1) = interpGreenH(raw, x + 1, y + 1);
@@ -1206,18 +1311,18 @@ void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset)
     });
 
     // populate vertically interpolated green
-    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,&Gv,&redOffset](int y)
+    parallel_for(2+red_offset.y(), raw.height()-2, 2, [&raw,&Gv,&red_offset](int y)
     {
-        for (int x = redOffset.x(); x < raw.width(); x += 2)
+        for (int x = red_offset.x(); x < raw.width(); x += 2)
         {
             Gv(x  , y  ) = interpGreenV(raw, x, y);
             Gv(x+1, y+1) = interpGreenV(raw, x + 1, y + 1);
         }
     });
 
-    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,&Gh,&Gv,redOffset](int y)
+    parallel_for(2+red_offset.y(), raw.height()-2, 2, [&raw,&Gh,&Gv,red_offset](int y)
     {
-        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        for (int x = 2+red_offset.x(); x < raw.width()-2; x += 2)
         {
             float ghGh = ghG(Gh, x, y);
             float ghGv = ghG(Gv, x, y);
@@ -1240,15 +1345,15 @@ void PhelippeauGreen(HDRImage &raw, const Vector2i & redOffset)
 }
 
 
-void MalvarGreen(HDRImage &raw, int c, const Vector2i & redOffset)
+void MalvarGreen(HDRImage &raw, int c, const Vector2i & red_offset)
 {
     // fill in half of the missing locations (R or B)
-    parallel_for(2, raw.height()-2-redOffset.y(), 2, [&raw,c,&redOffset](int yy)
+    parallel_for(2, raw.height()-2-red_offset.y(), 2, [&raw,c,&red_offset](int yy)
     {
-        int y = yy + redOffset.y();
-        for (int xx = 2; xx < raw.width()-2-redOffset.x(); xx += 2)
+        int y = yy + red_offset.y();
+        for (int xx = 2; xx < raw.width()-2-red_offset.x(); xx += 2)
         {
-            int x = xx + redOffset.x();
+            int x = xx + red_offset.x();
             float v = (4.f * raw(x,y)[c]
                          + 2.f * (raw(x, y-1)[1] + raw(x-1, y)[1] +
                                   raw(x, y+1)[1] + raw(x+1, y)[1])
@@ -1260,14 +1365,14 @@ void MalvarGreen(HDRImage &raw, int c, const Vector2i & redOffset)
     });
 }
 
-void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &redOffset, bool horizontal)
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &red_offset, bool horizontal)
 {
     int dx = (horizontal) ? 1 : 0;
     int dy = (horizontal) ? 0 : 1;
     // fill in half of the missing locations (R or B)
-    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,c,&redOffset,dx,dy](int y)
+    parallel_for(2+red_offset.y(), raw.height()-2, 2, [&raw,c,&red_offset,dx,dy](int y)
     {
-        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        for (int x = 2+red_offset.x(); x < raw.width()-2; x += 2)
         {
             raw(x,y)[c] = (5.f * raw(x,y)[1]
                          - 1.f * (raw(x-1,y-1)[1] + raw(x+1,y-1)[1] + raw(x+1,y+1)[1] + raw(x-1,y+1)[1] + raw(x-2,y)[1] + raw(x+2,y)[1])
@@ -1277,12 +1382,12 @@ void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &redOffset, boo
     });
 }
 
-void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &redOffset)
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &red_offset)
 {
     // fill in half of the missing locations (R or B)
-    parallel_for(2+redOffset.y(), raw.height()-2, 2, [&raw,c1,c2,&redOffset](int y)
+    parallel_for(2+red_offset.y(), raw.height()-2, 2, [&raw,c1,c2,&red_offset](int y)
     {
-        for (int x = 2+redOffset.x(); x < raw.width()-2; x += 2)
+        for (int x = 2+red_offset.x(); x < raw.width()-2; x += 2)
         {
             raw(x,y)[c1] = (6.f * raw(x,y)[c2]
                           + 2.f * (raw(x-1,y-1)[c1] + raw(x+1,y-1)[c1] + raw(x+1,y+1)[c1] + raw(x-1,y+1)[c1])
@@ -1294,27 +1399,27 @@ void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &redOffset)
 
 // takes as input a raw image and returns a single-channel
 // 2D image corresponding to the red or blue channel using simple interpolation
-void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & redOffset)
+void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & red_offset)
 {
     // diagonal interpolation
-    parallel_for(redOffset.y() + 1, raw.height()-1, 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y() + 1, raw.height()-1, 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+        for (int x = red_offset.x() + 1; x < raw.width() - 1; x += 2)
             raw(x, y)[c] = 0.25f * (raw(x - 1, y - 1)[c] + raw(x + 1, y - 1)[c] +
                                     raw(x - 1, y + 1)[c] + raw(x + 1, y + 1)[c]);
     });
 
     // horizontal interpolation
-    parallel_for(redOffset.y(), raw.height(), 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y(), raw.height(), 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+        for (int x = red_offset.x() + 1; x < raw.width() - 1; x += 2)
             raw(x, y)[c] = 0.5f * (raw(x - 1, y)[c] + raw(x + 1, y)[c]);
     });
 
     // vertical interpolation
-    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y() + 1, raw.height() - 1, 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x(); x < raw.width(); x += 2)
+        for (int x = red_offset.x(); x < raw.width(); x += 2)
             raw(x, y)[c] = 0.5f * (raw(x, y - 1)[c] + raw(x, y + 1)[c]);
     });
 }
@@ -1322,28 +1427,28 @@ void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & redOffset)
 
 // takes as input a raw image and returns a single-channel
 // 2D image corresponding to the red or blue channel using green based interpolation
-void greenBasedRorB(HDRImage &raw, int c, const Vector2i &redOffset)
+void greenBasedRorB(HDRImage &raw, int c, const Vector2i &red_offset)
 {
     // horizontal interpolation
-    parallel_for(redOffset.y(), raw.height(), 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y(), raw.height(), 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+        for (int x = red_offset.x() + 1; x < raw.width() - 1; x += 2)
             raw(x, y)[c] = std::max(0.f, 0.5f * (raw(x - 1, y)[c] + raw(x + 1, y)[c] -
                                                  raw(x - 1, y)[1] - raw(x + 1, y)[1]) + raw(x, y)[1]);
     });
 
     // vertical interpolation
-    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y() + 1, raw.height() - 1, 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x(); x < raw.width(); x += 2)
+        for (int x = red_offset.x(); x < raw.width(); x += 2)
             raw(x, y)[c] = std::max(0.f, 0.5f * (raw(x, y - 1)[c] + raw(x, y + 1)[c] -
                                                  raw(x, y - 1)[1] - raw(x, y + 1)[1]) + raw(x, y)[1]);
     });
 
     // diagonal interpolation
-    parallel_for(redOffset.y() + 1, raw.height() - 1, 2, [&raw,c,&redOffset](int y)
+    parallel_for(red_offset.y() + 1, raw.height() - 1, 2, [&raw,c,&red_offset](int y)
     {
-        for (int x = redOffset.x() + 1; x < raw.width() - 1; x += 2)
+        for (int x = red_offset.x() + 1; x < raw.width() - 1; x += 2)
             raw(x, y)[c] = std::max(0.f, 0.25f * (raw(x - 1, y - 1)[c] + raw(x + 1, y - 1)[c] +
                                                   raw(x - 1, y + 1)[c] + raw(x + 1, y + 1)[c] -
                                                   raw(x - 1, y - 1)[1] - raw(x + 1, y - 1)[1] -

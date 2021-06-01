@@ -6,7 +6,10 @@
 
 #pragma once
 
+#include <nanogui/vector.h>
+
 // forward declarations
+template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size> class Box;
 class Color3;
 class Color4;
 class ImageCommandUndo;
@@ -45,6 +48,9 @@ class HSLGradient;
 }
 
 namespace spdlog { class logger; }
+
+// define some common types
+using Box2i     = Box<nanogui::Vector2i>;
 
 
 enum EColorSpace : int
