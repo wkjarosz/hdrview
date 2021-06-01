@@ -23,8 +23,9 @@ class HDRViewScreen : public Screen
 public:
 	enum ETool : uint32_t
 	{
-		Tool_None,
-		Tool_Rectangular_Marquee
+		Tool_None					= 0,
+		Tool_Rectangular_Marquee,
+		Tool_Num_Tools
 	};
 
     HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
@@ -38,6 +39,7 @@ public:
 	bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
 	ETool tool() const {return m_tool;}
+	void set_tool(ETool t);
 
 	bool load_image();
 	void save_image();
@@ -90,6 +92,8 @@ private:
 	} m_animation_goal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
 
 	ETool m_tool = Tool_None;
+	std::vector<ToolButton*> m_toolbuttons;
+	
 
     MessageDialog * m_ok_to_quit_dialog = nullptr;
 

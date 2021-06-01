@@ -116,19 +116,18 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	auto edits = new Widget(column);
 	edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(edits, "F", "Flip image about horizontal axis");
-	addRow(edits, "M", "Mirror image about vertical axis");
 	addRow(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
 
-	new Label(column, "Panning/Zooming", "sans-bold", 16);
+	new Label(column, "Panning/Zooming/Selecting", "sans-bold", 16);
 	auto panningZooming = new Widget(column);
 	panningZooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
+	addRow(panningZooming, "Space", "Switch mouse to pan/zoom mode");
 	addRow(panningZooming, "Left Click+Drag / Shift+Scroll", "Pan image");
 	addRow(panningZooming, "Scroll", "Zoom In and Out Continuously");
 	addRow(panningZooming, "- / +", "Zoom In and Out by Powers of 2");
-	addRow(panningZooming, "Space", "Re-Center View");
     addRow(panningZooming, COMMAND + "+0", "Fit Image to Screen");
+	addRow(panningZooming, "M", "Switch mouse to selection mode");
 
 	new Label(column, "Interface", "sans-bold", 16);
 	auto interface = new Widget(column);

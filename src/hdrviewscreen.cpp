@@ -88,10 +88,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	b->set_pushed(true);
 	b->set_flags(Button::Flags::RadioButton);
 	b->set_callback([this]{m_tool = HDRViewScreen::Tool_None;});
+	b->set_tooltip("Switch to default zoom/pan mode.");
+	m_toolbuttons.push_back(b);
 	
 	b = new ToolButton(m_tool_panel, FA_EXPAND);
 	b->set_flags(Button::Flags::RadioButton);
+	b->set_tooltip("Switch to rectangular marquee selection mode.");
 	b->set_callback([this]{m_tool = HDRViewScreen::Tool_Rectangular_Marquee;});
+	m_toolbuttons.push_back(b);
 
 	m_image_view = new ::HDRImageView(this);
 	m_image_view->set_grid_threshold(10);
@@ -387,6 +391,13 @@ HDRViewScreen::~HDRViewScreen()
 }
 
 
+void HDRViewScreen::set_tool(ETool t)
+{
+	m_tool = t;
+	for (int i = 0; i < (int)Tool_Num_Tools; ++i)
+		m_toolbuttons[i]->set_pushed(i == (int)t);
+}
+
 void HDRViewScreen::update_caption()
 {
     auto img = m_images_panel->current_image();
@@ -680,20 +691,20 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         case 'F':
 			console->trace("KEY `F` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
+			{
 				m_images_panel->focus_filter();
-			else
-				flip_image(false);
-			return true;
+				return true;
+			}
+			break;
 
         case 'M':
 			console->trace("KEY `M` pressed");
-            flip_image(true);
+            set_tool(Tool_Rectangular_Marquee);
             return true;
 
         case ' ':
 			console->trace("KEY ` ` pressed");
-	        m_image_view->center();
-            draw_all();
+	        set_tool(Tool_None);
             return true;
 
         case 'T':
