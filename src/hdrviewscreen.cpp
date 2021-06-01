@@ -188,11 +188,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_side_panel_button = new Button(m_top_panel, "", FA_BARS);
     new Label(m_top_panel, "EV", "sans-bold");
-    auto exposureSlider = new Slider(m_top_panel);
-    auto exposureTextBox = new FloatBox<float>(m_top_panel, exposure);
-	auto normalizeButton = new Button(m_top_panel, "", FA_MAGIC);
-	normalizeButton->set_fixed_size(nanogui::Vector2i(19, 19));
-	normalizeButton->set_callback([this]()
+    auto exposure_slider = new Slider(m_top_panel);
+    auto exposure_textbox = new FloatBox<float>(m_top_panel, exposure);
+	auto normalize_button = new Button(m_top_panel, "", FA_MAGIC);
+	normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
+	normalize_button->set_callback([this]()
 	                             {
 		                             auto img = m_images_panel->current_image();
 		                             if (!img)
@@ -203,22 +203,22 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		                             m_image_view->set_exposure(log2(1.0f/mCf));
 		                             m_images_panel->request_histogram_update(true);
 	                             });
-	normalizeButton->set_tooltip("Normalize exposure.");
-	auto resetButton = new Button(m_top_panel, "", FA_SYNC);
-	resetButton->set_fixed_size(nanogui::Vector2i(19, 19));
-	resetButton->set_callback([this]()
+	normalize_button->set_tooltip("Normalize exposure.");
+	auto reset_button = new Button(m_top_panel, "", FA_SYNC);
+	reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
+	reset_button->set_callback([this]()
 	                             {
 		                             m_image_view->set_exposure(0.0f);
 		                             m_image_view->set_gamma(2.2f);
 		                             m_image_view->set_sRGB(true);
 		                             m_images_panel->request_histogram_update(true);
 	                             });
-	resetButton->set_tooltip("Reset tonemapping.");
+	reset_button->set_tooltip("Reset tonemapping.");
 
-    auto sRGBCheckbox = new CheckBox(m_top_panel, "sRGB   ");
-    auto gammaLabel = new Label(m_top_panel, "Gamma", "sans-bold");
-    auto gammaSlider = new Slider(m_top_panel);
-    auto gammaTextBox = new FloatBox<float>(m_top_panel);
+    auto sRGB_checkbox = new CheckBox(m_top_panel, "sRGB   ");
+    auto gamma_label = new Label(m_top_panel, "Gamma", "sans-bold");
+    auto gamma_slider = new Slider(m_top_panel);
+    auto gamma_textbox = new FloatBox<float>(m_top_panel);
 
     m_side_panel_button->set_tooltip("Bring up the images dialog to load/remove images, and cycle through open images.");
     m_side_panel_button->set_flags(Button::ToggleButton);
@@ -233,73 +233,73 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		request_layout_update();
     });
 
-    exposureTextBox->number_format("%1.2f");
-    exposureTextBox->set_editable(true);
-	exposureTextBox->set_spinnable(true);
-    exposureTextBox->set_fixed_width(50);
-	exposureTextBox->set_min_value(-9.0f);
-	exposureTextBox->set_max_value( 9.0f);
-    exposureTextBox->set_alignment(TextBox::Alignment::Right);
-    exposureTextBox->set_callback([this](float e)
+    exposure_textbox->number_format("%1.2f");
+    exposure_textbox->set_editable(true);
+	exposure_textbox->set_spinnable(true);
+    exposure_textbox->set_fixed_width(50);
+	exposure_textbox->set_min_value(-9.0f);
+	exposure_textbox->set_max_value( 9.0f);
+    exposure_textbox->set_alignment(TextBox::Alignment::Right);
+    exposure_textbox->set_callback([this](float e)
                                  {
 	                                 m_image_view->set_exposure(e);
                                  });
-    exposureSlider->set_callback([this](float v)
+    exposure_slider->set_callback([this](float v)
 						        {
 							        m_image_view->set_exposure(round(4*v) / 4.0f);
 						        });
-	exposureSlider->set_final_callback([this](float v)
+	exposure_slider->set_final_callback([this](float v)
 	                                 {
 		                                 m_image_view->set_exposure(round(4*v) / 4.0f);
 		                                 m_images_panel->request_histogram_update(true);
 	                                 });
-    exposureSlider->set_fixed_width(100);
-    exposureSlider->set_range({-9.0f,9.0f});
-    exposureTextBox->set_value(exposure);
+    exposure_slider->set_fixed_width(100);
+    exposure_slider->set_range({-9.0f,9.0f});
+    exposure_textbox->set_value(exposure);
 
-    gammaTextBox->set_editable(true);
-	gammaTextBox->set_spinnable(true);
-    gammaTextBox->number_format("%1.3f");
-    gammaTextBox->set_fixed_width(55);
-	gammaTextBox->set_min_value(0.02f);
-	gammaTextBox->set_max_value(9.0f);
+    gamma_textbox->set_editable(true);
+	gamma_textbox->set_spinnable(true);
+    gamma_textbox->number_format("%1.3f");
+    gamma_textbox->set_fixed_width(55);
+	gamma_textbox->set_min_value(0.02f);
+	gamma_textbox->set_max_value(9.0f);
 
-    gammaTextBox->set_alignment(TextBox::Alignment::Right);
-    gammaTextBox->set_callback([this,gammaSlider](float value)
+    gamma_textbox->set_alignment(TextBox::Alignment::Right);
+    gamma_textbox->set_callback([this,gamma_slider](float value)
                                 {
                                     m_image_view->set_gamma(value);
-                                    gammaSlider->set_value(value);
+                                    gamma_slider->set_value(value);
                                 });
-    gammaSlider->set_callback(
-	    [&,gammaSlider,gammaTextBox](float value)
+    gamma_slider->set_callback(
+	    [&,gamma_slider,gamma_textbox](float value)
 	    {
-		    float g = max(gammaSlider->range().first, round(10*value) / 10.0f);
+		    float g = max(gamma_slider->range().first, round(10*value) / 10.0f);
 		    m_image_view->set_gamma(g);
-		    gammaTextBox->set_value(g);
-		    gammaSlider->set_value(g);       // snap values
+		    gamma_textbox->set_value(g);
+		    gamma_slider->set_value(g);       // snap values
 	    });
-    gammaSlider->set_fixed_width(100);
-    gammaSlider->set_range({0.02f,9.0f});
-    gammaSlider->set_value(gamma);
-    gammaTextBox->set_value(gamma);
+    gamma_slider->set_fixed_width(100);
+    gamma_slider->set_range({0.02f,9.0f});
+    gamma_slider->set_value(gamma);
+    gamma_textbox->set_value(gamma);
 
-    m_image_view->set_exposure_callback([this,exposureTextBox,exposureSlider](float e)
+    m_image_view->set_exposure_callback([this,exposure_textbox,exposure_slider](float e)
                                      {
-	                                     exposureTextBox->set_value(e);
-	                                     exposureSlider->set_value(e);
+	                                     exposure_textbox->set_value(e);
+	                                     exposure_slider->set_value(e);
 	                                     m_images_panel->request_histogram_update();
                                      });
-    m_image_view->set_gamma_callback([gammaTextBox,gammaSlider](float g)
+    m_image_view->set_gamma_callback([gamma_textbox,gamma_slider](float g)
                                   {
-	                                  gammaTextBox->set_value(g);
-	                                  gammaSlider->set_value(g);
+	                                  gamma_textbox->set_value(g);
+	                                  gamma_slider->set_value(g);
                                   });
-	m_image_view->set_sRGB_callback([sRGBCheckbox,gammaTextBox,gammaSlider](bool b)
+	m_image_view->set_sRGB_callback([sRGB_checkbox,gamma_textbox,gamma_slider](bool b)
 	                              {
-		                              sRGBCheckbox->set_checked(b);
-		                              gammaTextBox->set_enabled(!b);
-		                              gammaTextBox->set_spinnable(!b);
-		                              gammaSlider->set_enabled(!b);
+		                              sRGB_checkbox->set_checked(b);
+		                              gamma_textbox->set_enabled(!b);
+		                              gamma_textbox->set_spinnable(!b);
+		                              gamma_slider->set_enabled(!b);
 	                              });
     m_image_view->set_exposure(exposure);
     m_image_view->set_gamma(gamma);
@@ -313,19 +313,19 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 									request_layout_update();
                                 });
 
-	sRGBCheckbox->set_callback([&,gammaSlider,gammaTextBox,gammaLabel](bool value)
+	sRGB_checkbox->set_callback([&,gamma_slider,gamma_textbox,gamma_label](bool value)
     {
         m_image_view->set_sRGB(value);
-        gammaSlider->set_enabled(!value);
-	    gammaTextBox->set_spinnable(!value);
-        gammaTextBox->set_enabled(!value);
-        gammaLabel->set_enabled(!value);
-        gammaLabel->set_color(value ? m_theme->m_disabled_text_color : m_theme->m_text_color);
+        gamma_slider->set_enabled(!value);
+	    gamma_textbox->set_spinnable(!value);
+        gamma_textbox->set_enabled(!value);
+        gamma_label->set_enabled(!value);
+        gamma_label->set_color(value ? m_theme->m_disabled_text_color : m_theme->m_text_color);
 		request_layout_update();
     });
 
-	sRGBCheckbox->set_checked(sRGB);
-	sRGBCheckbox->callback()(sRGB);
+	sRGB_checkbox->set_checked(sRGB);
+	sRGB_checkbox->callback()(sRGB);
 
     (new CheckBox(m_top_panel, "Dither  ",
                  [&](bool v) { m_image_view->set_dithering(v); }))->set_checked(m_image_view->dithering_on());
