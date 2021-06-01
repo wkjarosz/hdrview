@@ -1097,7 +1097,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 	static HDRImage::CanvasAnchor anchor = HDRImage::MIDDLE_CENTER;
 	static string name = "Canvas size...";
 	static bool relative = false;
-	auto b = new Button(parent, name, FA_CROP_ALT);
+	auto b = new Button(parent, name, FA_COMPRESS);
 	b->set_fixed_height(21);
 	b->set_callback(
 		[&, screen, images_panel]()
@@ -1696,11 +1696,30 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	// resize
 	m_filter_btns.push_back(create_resize_btn(grid, m_screen, m_images_panel));
 
-	// free transform
-	m_filter_btns.push_back(create_free_xform_btn(grid, m_screen, m_images_panel));
+	// crop
+	m_filter_btns.push_back(new Button(grid, "Crop", FA_CROP));
+	m_filter_btns.back()->set_fixed_height(21);
+	m_filter_btns.back()->set_callback(
+		[this]()
+		{
+			m_images_panel->modify_image(
+				[this](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				{
+					auto roi = m_images_panel->current_image()->roi();
+					if (!roi.has_volume())
+						roi = img->box();
+					HDRImage result(roi.size().x(), roi.size().y());
+					result.copy_subimage(*img, roi, 0, 0);
+					m_images_panel->current_image()->roi() = Box2i();
+					return {make_shared<HDRImage>(result), nullptr};
+				});
+		});
 
 	// remap
 	m_filter_btns.push_back(create_remap_btn(grid, m_screen, m_images_panel));
+
+	// free transform
+	m_filter_btns.push_back(create_free_xform_btn(grid, m_screen, m_images_panel));
 
 
 	new Label(this, "Color/range adjustments", "sans-bold");

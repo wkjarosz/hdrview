@@ -235,6 +235,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 			set_filter(filter());
             request_histogram_update();
 			m_screen->redraw();
+			m_image_modify_done_requested = true;
 		};
 }
 
@@ -684,8 +685,6 @@ void ImageListPanel::run_requested_callbacks()
 {
 	if (m_image_modify_done_requested)
 	{
-		m_image_modify_done_requested = false;
-
 		spdlog::get("console")->trace("running requested callbacks");
 		// remove any images that are not being modified and are null
 		bool num_images_changed = false;
@@ -721,6 +720,8 @@ void ImageListPanel::run_requested_callbacks()
 		}
 
 		m_modify_done_callback(m_current);	// TODO: make this use the modified image
+		
+		m_image_modify_done_requested = false;
 	}
 }
 
