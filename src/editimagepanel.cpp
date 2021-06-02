@@ -88,127 +88,6 @@ void add_ok_cancel_btns(FormHelper * gui, Window * window,
 	gui->add_widget("", w);
 }
 
-PopupButton * create_color_btn(FormHelper * gui, Window * window, const string name, Color & bg, float & alpha, float & EV)
-{
-	// auto popup_btn = new ColorPicker(window, Color(bg.r(), bg.g(), bg.b(), alpha));
-	// gui->add_widget(name, popup_btn);
-
-	auto popup_btn = new PopupButton(window, "", 0);
-	popup_btn->set_background_color(Color(bg.r(), bg.g(), bg.b(), alpha));
-	gui->add_widget(name, popup_btn);
-
-	auto popup = popup_btn->popup();
-	popup->set_layout(new GroupLayout());
-
-	auto colorwheel = new ColorWheel(popup);
-	colorwheel->set_color(Color(bg.r(), bg.g(), bg.b(), alpha));
-
-	auto panel = new Widget(popup);
-	// panel->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 0));
-	auto agrid = new AdvancedGridLayout({0, 20, 0}, {});
-	agrid->set_margin(0);
-	agrid->set_col_stretch(1, 1);
-	panel->set_layout(agrid);
-
-	auto color_btn = new Button(popup, "Pick");
-
-	//
-	// opacity
-	//
-
-	agrid->append_row(0);
-	agrid->set_anchor(new Label(panel, "Opacity:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
-
-	auto float_box = new FloatBox<float>(panel, alpha * 100.0f);
-	agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-	float_box->set_units("%");
-	float_box->number_format("%3.1f");
-	float_box->set_editable(true);
-	float_box->set_min_value(0.f);
-	float_box->set_max_value(100.f);
-	float_box->set_spinnable(true);
-	float_box->set_fixed_width(60);
-	float_box->set_alignment(TextBox::Alignment::Right);
-
-	agrid->append_row(0);
-	auto slider = new Slider(panel);
-	agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
-	slider->set_value(alpha * 100.0f);
-	slider->set_range({0.0f,100.0f});
-
-	slider->set_callback([float_box,color_btn,&bg,&alpha,&EV](float a) {
-		alpha = a / 100.f;
-		float_box->set_value(a);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	float_box->set_callback([slider,color_btn,&bg,&alpha,&EV](float a) {
-		alpha = a / 100.f;
-		slider->set_value(a);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	agrid->append_row(10);
-
-	//
-	// EV
-	//
-	agrid->append_row(0);
-	agrid->set_anchor(new Label(panel, "EV:"), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
-
-	float_box = new FloatBox<float>(panel, 0.f);
-	agrid->set_anchor(float_box, AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
-	float_box->number_format("%1.2f");
-	float_box->set_editable(true);
-	float_box->set_spinnable(true);
-	float_box->set_fixed_width(60);
-	float_box->set_alignment(TextBox::Alignment::Right);
-
-	agrid->append_row(0);
-	slider = new Slider(panel);
-	agrid->set_anchor(slider, AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
-	slider->set_value(0.0f);
-	slider->set_range({-9.0f,9.0f});
-
-	slider->set_callback([float_box,color_btn,&bg,&alpha,&EV](float ev) {
-		EV = ev;
-		float_box->set_value(EV);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	float_box->set_callback([slider,color_btn,&bg,&alpha,&EV](float ev) {
-		EV = ev;
-		slider->set_value(EV);
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-
-	color_btn->set_background_color(Color(bg.r() * pow(2.f, EV), bg.g() * pow(2.f, EV), bg.b() * pow(2.f, EV), alpha));
-
-	colorwheel->set_callback([color_btn,&bg,&alpha,&EV](const Color &c) {
-		bg.r() = c.r();
-		bg.g() = c.g();
-		bg.b() = c.b();
-		float f = pow(2.f, EV);
-		color_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-	});
-
-	color_btn->set_change_callback([popup_btn,&bg,&alpha,&EV](bool pushed) {
-		if (pushed)
-		{
-			float f = pow(2.f, EV);
-			popup_btn->set_background_color(Color(bg.r() * f, bg.g() * f, bg.b() * f, alpha));
-			popup_btn->set_pushed(false);
-		}
-	});
-
-	return popup_btn;
-}
-
 Button * create_colorspace_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static string name = "Convert color space...";
@@ -1227,7 +1106,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->set_fixed_size(Vector2i(75, 20));
 
 			auto window = gui->add_window(Vector2i(10, 10), name);
-			// window->set_modal(true);
+			window->set_modal(true);
 
 			width = images_panel->current_image()->width();
 			auto w = gui->add_variable("Width:", width);
