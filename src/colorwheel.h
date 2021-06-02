@@ -19,17 +19,17 @@ public:
 
     enum Components : uint32_t
     {
-        WHEEL       = 1 << 0,
+        WHEEL           = 1 << 0,
 
-        PATCH       = 1 << 1,
+        PATCH           = 1 << 1,
 
-        WHITE       = 1 << 2,
-        BLACK       = 1 << 3,
-        OPAQUE      = 1 << 4,
-        TRANS       = 1 << 5,
-        ALL_CORNERS = WHITE | BLACK | OPAQUE | TRANS,
+        WHITE_CORNER    = 1 << 2,
+        BLACK_CORNER    = 1 << 3,
+        OPAQUE_CORNER   = 1 << 4,
+        TRANS_CORNER    = 1 << 5,
+        ALL_CORNERS     = WHITE_CORNER | BLACK_CORNER | OPAQUE_CORNER | TRANS_CORNER,
 
-        ALL         = WHEEL | PATCH | ALL_CORNERS
+        ALL             = WHEEL | PATCH | ALL_CORNERS
     };
 
     /**

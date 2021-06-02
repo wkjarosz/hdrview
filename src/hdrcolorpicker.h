@@ -19,7 +19,7 @@ public:
 
     enum Components : uint32_t
     {
-        R_SLIDER    = ColorWheel2::TRANS << 1,
+        R_SLIDER    = ColorWheel2::TRANS_CORNER << 1,
         G_SLIDER    = R_SLIDER << 2,
         B_SLIDER    = R_SLIDER << 3,
         A_SLIDER    = R_SLIDER << 4,

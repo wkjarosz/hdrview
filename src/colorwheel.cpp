@@ -101,8 +101,8 @@ void ColorWheel2::draw(NVGcontext *ctx) {
     Color current = color();
     Color colors[2][2] = {{Color(1.f, 1.f), Color(current.r(), current.g(), current.b(), 1.f)},
                           {Color(0.f, 1.f), Color(current.r(), current.g(), current.b(), 0.f)}};
-    int corner_components[2][2] = {{(int)ColorWheel2::WHITE, (int)ColorWheel2::OPAQUE},
-                                   {(int)ColorWheel2::BLACK, (int)ColorWheel2::TRANS}};
+    int corner_components[2][2] = {{(int)ColorWheel2::WHITE_CORNER, (int)ColorWheel2::OPAQUE_CORNER},
+                                   {(int)ColorWheel2::BLACK_CORNER, (int)ColorWheel2::TRANS_CORNER}};
     float cr = outer_radius * std::sqrt(2.f) * 0.1f;
 
 
