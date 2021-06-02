@@ -24,4 +24,6 @@ private:
 	Button * m_undo_btn = nullptr;
 	Button * m_redo_btn = nullptr;
 	std::vector<Button*> m_filter_btns;
+
+	std::shared_ptr<HDRImage> m_clipboard;
 };

@@ -697,6 +697,24 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			}
 			break;
 
+		case 'A':
+			console->trace("Key `A` pressed");
+			if (modifiers & SYSTEM_COMMAND_MOD)
+			{
+				if (auto img = m_images_panel->current_image())
+					img->roi() = img->box();
+			}
+			break;
+
+		case 'D':
+			console->trace("Key `D` pressed");
+			if (modifiers & SYSTEM_COMMAND_MOD)
+			{
+				if (auto img = m_images_panel->current_image())
+					img->roi() = Box2i();
+			}
+			break;
+
         case 'M':
 			console->trace("KEY `M` pressed");
             set_tool(Tool_Rectangular_Marquee);

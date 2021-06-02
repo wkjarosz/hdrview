@@ -1628,20 +1628,55 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 
 
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
-	: Widget(parent), m_screen(screen), m_images_panel(images_panel)
+	: Widget(parent), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
 {
 	const int spacing = 2;
 	set_layout(new GroupLayout(2, 4, 8, 10));
 
 	new Label(this, "History", "sans-bold");
 
-	auto buttonRow = new Widget(this);
-	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
+	auto button_row = new Widget(this);
+	button_row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
-	m_undo_btn = new Button(buttonRow, "Undo", FA_REPLY);
+	m_undo_btn = new Button(button_row, "Undo", FA_REPLY);
 	m_undo_btn->set_callback([&](){m_images_panel->undo();});
-	m_redo_btn = new Button(buttonRow, "Redo", FA_SHARE);
+	m_redo_btn = new Button(button_row, "Redo", FA_SHARE);
 	m_redo_btn->set_callback([&](){m_images_panel->redo();});
+
+	new Label(this, "Copy/Paste", "sans-bold");
+
+	button_row = new Widget(this);
+	button_row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
+
+	auto copy_btn = new Button(button_row, "Copy", FA_COPY);
+	copy_btn->set_callback(
+		[this]()
+		{
+			auto img = m_images_panel->current_image();
+
+			if (img)
+			{
+				auto roi = img->roi();
+				if (!roi.has_volume())
+					roi = img->box();
+				m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+
+				m_clipboard->copy_subimage(img->image(), roi, 0, 0);
+			}
+		});
+	auto paste_btn = new Button(button_row, "Paste", FA_PASTE);
+	paste_btn->set_callback(
+		[this]()
+		{
+			m_images_panel->modify_image(
+				[this](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+				{
+					auto result = make_shared<HDRImage>(*img);
+					result->copy_subimage(*m_clipboard, Box2i(), 0, 0);
+					return {result, nullptr};
+				});
+		});
+	// m_redo_btn->set_callback([&](){m_images_panel->redo();});
 
 	new Label(this, "Pixel/domain transformations", "sans-bold");
 
@@ -1723,15 +1758,15 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 
 	new Label(this, "Color/range adjustments", "sans-bold");
-	buttonRow = new Widget(this);
+	button_row = new Widget(this);
 	auto agrid = new AdvancedGridLayout({0, spacing, 0}, {}, 0);
 	agrid->set_col_stretch(0, 1.0f);
 	agrid->set_col_stretch(2, 1.0f);
-	buttonRow->set_layout(agrid);
+	button_row->set_layout(agrid);
 
 	agrid->append_row(0);
 	// invert
-	m_filter_btns.push_back(new Button(buttonRow, "Invert", FA_IMAGE));
+	m_filter_btns.push_back(new Button(button_row, "Invert", FA_IMAGE));
 	m_filter_btns.back()->set_fixed_height(21);
 	m_filter_btns.back()->set_callback(
 		[this]()
@@ -1747,7 +1782,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 
 	// clamp
-	m_filter_btns.push_back(new Button(buttonRow, "Clamp", FA_ADJUST));
+	m_filter_btns.push_back(new Button(button_row, "Clamp", FA_ADJUST));
 	m_filter_btns.back()->set_fixed_height(21);
 	m_filter_btns.back()->set_callback(
 		[this]()
@@ -1768,44 +1803,44 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 	//
 	agrid->append_row(0);
-	m_filter_btns.push_back(create_flatten_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
-	m_filter_btns.push_back(create_fill_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_fill_btn(button_row, m_screen, m_images_panel));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(create_exposure_gamma_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_exposure_gamma_btn(button_row, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(create_brightness_constract_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_brightness_constract_btn(button_row, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(create_filmic_tonemapping_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_filmic_tonemapping_btn(button_row, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(create_hsl_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_hsl_btn(button_row, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	agrid->append_row(spacing);  // spacing
-	m_filter_btns.push_back(create_colorspace_btn(buttonRow, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_colorspace_btn(button_row, m_screen, m_images_panel));
 	agrid->append_row(0);
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1, 3, 1));
 
 	new Label(this, "Filters", "sans-bold");
-	buttonRow = new Widget(this);
-	buttonRow->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
-	m_filter_btns.push_back(create_gaussian_filter_btn(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(create_box_filter_btn(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(create_bilateral_filter_btn(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(create_unsharp_mask_filter_btn(buttonRow, m_screen, m_images_panel));
-	m_filter_btns.push_back(create_median_filter_btn(buttonRow, m_screen, m_images_panel));
+	button_row = new Widget(this);
+	button_row->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
+	m_filter_btns.push_back(create_gaussian_filter_btn(button_row, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_box_filter_btn(button_row, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_bilateral_filter_btn(button_row, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_unsharp_mask_filter_btn(button_row, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_median_filter_btn(button_row, m_screen, m_images_panel));
 }
 
 
