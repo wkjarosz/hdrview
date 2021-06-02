@@ -7,6 +7,7 @@
 #pragma once
 
 #include "fwd.h"
+#define NOMINMAX
 #include <limits>    // for numeric_limits
 #include <algorithm> // for min, max
 
