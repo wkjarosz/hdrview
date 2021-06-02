@@ -72,6 +72,7 @@ private:
 	Window * m_status_bar = nullptr;
 	HDRImageView * m_image_view = nullptr;
 	ImageListPanel * m_images_panel = nullptr;
+	EditImagePanel * m_edit_panel = nullptr;
 
     Button * m_help_button = nullptr;
     Button * m_side_panel_button = nullptr;

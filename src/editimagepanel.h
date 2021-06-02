@@ -16,6 +16,9 @@ class EditImagePanel : public Widget
 public:
 	EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel);
 
+	void copy();
+	void paste();
+
 	void draw(NVGcontext *ctx) override;
 
 private:

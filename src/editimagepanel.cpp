@@ -1627,6 +1627,46 @@ Button * create_fill_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel 
 }
 
 
+
+void EditImagePanel::copy()
+{
+	auto img = m_images_panel->current_image();
+
+	if (img)
+	{
+		auto roi = img->roi();
+		if (!roi.has_volume())
+			roi = img->box();
+		m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+
+		m_clipboard->copy_subimage(img->image(), roi, 0, 0);
+	}
+}
+
+
+void EditImagePanel::paste()
+{
+	auto img = m_images_panel->current_image();
+	
+	if (!img)
+		return;
+
+	auto roi = img->roi();
+	if (!roi.has_volume())
+		roi = img->box();
+
+	m_images_panel->modify_image(
+		[this, roi](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+		{
+			auto result = make_shared<HDRImage>(*img);
+			result->copy_subimage(*m_clipboard, Box2i(), roi.min.x(), roi.min.y());
+			m_images_panel->current_image()->roi() = Box2i();
+			return {result, nullptr};
+		});
+}
+
+
+
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 	: Widget(parent), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
 {
@@ -1648,35 +1688,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	button_row = new Widget(this);
 	button_row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
-	auto copy_btn = new Button(button_row, "Copy", FA_COPY);
-	copy_btn->set_callback(
-		[this]()
-		{
-			auto img = m_images_panel->current_image();
+	m_filter_btns.push_back(new Button(button_row, "Copy", FA_COPY));
+	m_filter_btns.back()->set_callback([this](){copy();});
 
-			if (img)
-			{
-				auto roi = img->roi();
-				if (!roi.has_volume())
-					roi = img->box();
-				m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
-
-				m_clipboard->copy_subimage(img->image(), roi, 0, 0);
-			}
-		});
-	auto paste_btn = new Button(button_row, "Paste", FA_PASTE);
-	paste_btn->set_callback(
-		[this]()
-		{
-			m_images_panel->modify_image(
-				[this](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
-				{
-					auto result = make_shared<HDRImage>(*img);
-					result->copy_subimage(*m_clipboard, Box2i(), 0, 0);
-					return {result, nullptr};
-				});
-		});
-	// m_redo_btn->set_callback([&](){m_images_panel->redo();});
+	m_filter_btns.push_back(new Button(button_row, "Paste", FA_PASTE));
+	m_filter_btns.back()->set_callback([this](){paste();});
 
 	new Label(this, "Pixel/domain transformations", "sans-bold");
 

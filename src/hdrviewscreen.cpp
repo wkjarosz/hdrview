@@ -149,8 +149,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	btn2->set_font_size(18);
 	btn2->set_icon_position(Button::IconPosition::Left);
 
-	auto edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
-	edit_panel->set_visible(false);
+	m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
+	m_edit_panel->set_visible(false);
 
 	//
 	// image and edit panel callbacks
@@ -173,8 +173,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 			m_side_panel_contents->perform_layout(m_nvg_context);
 		};
 
-	btn->set_change_callback([this,btn,btn2,edit_panel,toggle_panel](bool value){toggle_panel(btn, btn2, m_images_panel, edit_panel, value);});
-	btn2->set_change_callback([this,btn,btn2,edit_panel,toggle_panel](bool value){toggle_panel(btn2, btn, edit_panel, m_images_panel, value);});
+	btn->set_change_callback([this,btn,btn2,toggle_panel](bool value){toggle_panel(btn, btn2, m_images_panel, m_edit_panel, value);});
+	btn2->set_change_callback([this,btn,btn2,toggle_panel](bool value){toggle_panel(btn2, btn, m_edit_panel, m_images_panel, value);});
 
     //
     // create top panel controls
@@ -713,6 +713,18 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 				if (auto img = m_images_panel->current_image())
 					img->roi() = Box2i();
 			}
+			break;
+
+		case 'C':
+			console->trace("Key `C` pressed");
+			if (modifiers & SYSTEM_COMMAND_MOD)
+				m_edit_panel->copy();
+			break;
+
+		case 'V':
+			console->trace("Key `V` pressed");
+			if (modifiers & SYSTEM_COMMAND_MOD)
+				m_edit_panel->paste();
 			break;
 
         case 'M':

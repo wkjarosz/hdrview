@@ -115,6 +115,7 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 	edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
 	add_row(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
+	add_row(edits, COMMAND + "+C / " + COMMAND + "+V", "Copy/Paste");\
 
 	new Label(column, "Panning/Zooming/Selecting", "sans-bold", 16);
 	auto panning_zooming = new Widget(column);
