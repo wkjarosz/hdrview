@@ -129,8 +129,8 @@ Color4 HDRImage::sample(float sx, float sy, Sampler s, BorderMode mX, BorderMode
 	{
 		case NEAREST:  return nearest(sx, sy, mX, mY);
 		case BILINEAR: return bilinear(sx, sy, mX, mY);
-        case default:
-		case BICUBIC:  return bicubic(sx, sy, mX, mY);
+		case BICUBIC:
+        default:       return bicubic(sx, sy, mX, mY);
 	}
 }
 
@@ -1211,8 +1211,8 @@ int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
             int frac = mod(p, maxP);
             return (::abs(p) / maxP % 2 != 0) ? maxP - 1 - frac : frac;
         }
-        default:
         case HDRImage::BLACK:
+        default:
             return -1;
     }
 }
