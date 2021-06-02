@@ -326,7 +326,8 @@ void HSVToRGB(float *R, float *G, float *B, float H, float S, float V)
 			case 2: *R = p; *G = V; *B = t; break;
 			case 3: *R = p; *G = q; *B = V; break;
 			case 4: *R = t; *G = p; *B = V; break;
-			case 5: *R = V; *G = p; *B = q; break;
+			case 5:
+			default: *R = V; *G = p; *B = q; break;
 		}
 	}
 }
