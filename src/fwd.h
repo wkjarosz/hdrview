@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <nanogui/vector.h>
+
 // forward declarations
+template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size> class Box;
 class Color3;
 class Color4;
-class ImageButton;
 class ImageCommandUndo;
 class FullImageUndo;
 class LambdaUndo;
@@ -19,27 +21,36 @@ class HDRImage;
 class HDRViewScreen;
 class HDRImageView;
 class HelpWindow;
-class MultiGraph;
 class EditImagePanel;
-class HistogramPanel;
 class ImageListPanel;
 class Timer;
 template<typename T> class Range;
 
+namespace nanogui
+{
+class Widget;
+class Button;
+class CheckBox;
+class Label;
+class MessageDialog;
+class Slider;
+class VScrollPanel;
+class Window;
+template <typename Scalar> class FloatBox;
 
-namespace nanogui { class Widget; }
-namespace nanogui { class Button; }
-namespace nanogui { class CheckBox; }
-namespace nanogui { class Label; }
-namespace nanogui { class MessageDialog; }
-namespace nanogui { class Slider; }
-namespace nanogui { class VScrollPanel; }
-namespace nanogui { class Window; }
-namespace nanogui { template <typename Scalar> class FloatBox; }
-namespace nanogui { class GLShader; }
-
+class HDRColorPicker;
+class ColorWheel2;
+class ColorSlider;
+class MultiGraph;
+class Well;
+class ImageButton;
+class HSLGradient;
+}
 
 namespace spdlog { class logger; }
+
+// define some common types
+using Box2i     = Box<nanogui::Vector2i>;
 
 
 enum EColorSpace : int

@@ -18,7 +18,7 @@ using namespace std;
 namespace
 {
 
-float reinterpretAsHostEndian(float f, bool bigEndian)
+float reinterpret_as_host_endian(float f, bool bigEndian)
 {
 	static_assert(sizeof(float) == sizeof(unsigned int), "Sizes must match");
 
@@ -125,7 +125,7 @@ float * load_pfm_image(const char *filename, int *width, int *height, int *numCh
 		// multiply data by scale factor
 		scale = fabsf(scale);
         for (size_t i = 0; i < numFloats; ++i)
-            data[i] = scale*reinterpretAsHostEndian(data[i], bigEndian);
+            data[i] = scale*reinterpret_as_host_endian(data[i], bigEndian);
 
 		fclose(f);
 		return data;

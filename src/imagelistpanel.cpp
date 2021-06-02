@@ -9,6 +9,7 @@
 #include "imagebutton.h"
 #include "hdrimageview.h"
 #include "multigraph.h"
+#include "colorslider.h"
 #include "well.h"
 #include "timer.h"
 #include "xpuimage.h"
@@ -18,7 +19,7 @@
 #include <GLFW/glfw3.h>
 #include <alphanum.h>
 
-
+using namespace nanogui;
 using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
@@ -43,16 +44,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		agl->set_anchor(new Label(grid, "Histogram:", "sans", 14),
 		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-		m_yaxis_scale = new ComboBox(grid);
+		m_yaxis_scale = new ComboBox(grid, {"Linear", "Log"});
 		m_yaxis_scale->set_tooltip("Set the scale for the Y axis.");
-		m_yaxis_scale->set_items({"Linear", "Log"});
 		m_yaxis_scale->set_fixed_height(19);
 		agl->set_anchor(m_yaxis_scale,
 		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
-		m_xaxis_scale = new ComboBox(grid);
+		m_xaxis_scale = new ComboBox(grid, {"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_tooltip("Set the scale for the X axis.");
-		m_xaxis_scale->set_items({"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_fixed_height(19);
 		agl->set_anchor(m_xaxis_scale,
 		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
@@ -103,8 +102,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
 		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-		m_blend_modes = new ComboBox(grid);
-		m_blend_modes->set_items(blendModeNames());
+		m_blend_modes = new ComboBox(grid, blendModeNames());
 		m_blend_modes->set_fixed_height(19);
 		m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
 		agl->set_anchor(m_blend_modes,
@@ -237,6 +235,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 			set_filter(filter());
             request_histogram_update();
 			m_screen->redraw();
+			m_image_modify_done_requested = true;
 		};
 }
 
@@ -686,8 +685,6 @@ void ImageListPanel::run_requested_callbacks()
 {
 	if (m_image_modify_done_requested)
 	{
-		m_image_modify_done_requested = false;
-
 		spdlog::get("console")->trace("running requested callbacks");
 		// remove any images that are not being modified and are null
 		bool num_images_changed = false;
@@ -713,17 +710,18 @@ void ImageListPanel::run_requested_callbacks()
 				++it;
 		}
 
-		m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
+		m_image_view->set_current_image(current_image());
 
 		if (num_images_changed)
 		{
-			// m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
 			m_screen->update_caption();
 
 			m_num_images_callback();
 		}
 
 		m_modify_done_callback(m_current);	// TODO: make this use the modified image
+		
+		m_image_modify_done_requested = false;
 	}
 }
 
@@ -752,7 +750,7 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 
 	m_previous = m_current;
 	m_current = index;
-	m_image_view->set_current_image(current_image() ? current_image()->texture() : nullptr);
+	m_image_view->set_current_image(current_image());
 	m_screen->update_caption();
     update_histogram();
 
@@ -771,7 +769,7 @@ bool ImageListPanel::set_reference_image_index(int index)
 		dynamic_cast<ImageButton*>(buttons[index])->set_is_reference(true);
 
 	m_reference = index;
-	m_image_view->set_reference_image(reference_image() ? reference_image()->texture() : nullptr);
+	m_image_view->set_reference_image(reference_image());
 
 	return true;
 }

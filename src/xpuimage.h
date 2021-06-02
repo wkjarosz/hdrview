@@ -20,6 +20,7 @@
 #include "async.h"
 #include <utility>
 #include <memory>
+#include "box.h"
 
 
 struct ImageStatistics
@@ -81,7 +82,7 @@ public:
     bool has_undo() const;
     bool has_redo() const;
 
-	TextureRef texture();
+	TextureRef texture() const;
 	void set_filename(const std::string & filename) { m_filename = filename; }
     std::string filename() const                    { return m_filename; }
 	bool is_null() const                            { check_async_result(); return !m_image || m_image->is_null(); }
@@ -89,6 +90,8 @@ public:
     int width() const                               { check_async_result(); return m_image->width(); }
     int height() const                              { check_async_result(); return m_image->height(); }
     nanogui::Vector2i size() const                  { return is_null() ? nanogui::Vector2i(0,0) : nanogui::Vector2i(m_image->width(), m_image->height()); }
+	Box2i box() const								{ return is_null() ? Box2i() : Box2i(0, size());}
+	Box2i & roi() const								{ return m_roi; }
 
     bool save(const std::string & filename,
               float gain, float gamma,
@@ -107,7 +110,7 @@ public:
 	const VoidVoidFunc & modify_done_callback() const            { return m_modify_done_callback; }
 	void set_modify_done_callback(const VoidVoidFunc & callback)  { m_modify_done_callback = callback; }
 
-private:
+protected:
 
 	bool wait_for_async_result() const;
 	void modify_done() const;
@@ -124,9 +127,15 @@ private:
 	mutable ModifyingTaskPtr m_async_command = nullptr;
 	mutable bool m_async_retrieved = false;
 
+	mutable Box2i m_roi = Box2i();
+
 	// various callback functions
 	VoidVoidFunc m_modify_done_callback;
 };
+
+#define hdrview_image_icon(ctx, name, imageFlags) hdrview_get_icon(ctx, #name, imageFlags, (uint8_t *)name##_png, name##_png_size)
+int hdrview_get_icon(NVGcontext *ctx, const std::string &name, int imageFlags, uint8_t *data, uint32_t size);
+
 
 using ConstImagePtr = std::shared_ptr<const XPUImage>;
 using ImagePtr = std::shared_ptr<XPUImage>;

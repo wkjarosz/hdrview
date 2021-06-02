@@ -630,7 +630,7 @@ HDRImage develop(vector<float> & raw,
 	int height = param1.height;
 	int blackLevel = param1.black_level[0];
 	int whiteLevel = param1.white_level[0];
-	Vector2i redOffset(param1.active_area[1] % 2, param1.active_area[0] % 2);
+	Vector2i red_offset(param1.active_area[1] % 2, param1.active_area[0] % 2);
 
 	HDRImage developed(width, height);
 
@@ -656,10 +656,10 @@ HDRImage develop(vector<float> & raw,
 	});
 
 	// demosaic
-//	developed.demosaic_linear(redOffset);
-//	developed.demosaic_green_guided_linear(redOffset);
-//	developed.demosaic_malvar(redOffset);
-	developed.demosaicAHD(redOffset, XYZD50ToXYZD65 * CameraToXYZD50);
+//	developed.demosaic_linear(red_offset);
+//	developed.demosaic_green_guided_linear(red_offset);
+//	developed.demosaic_malvar(red_offset);
+	developed.demosaicAHD(red_offset, XYZD50ToXYZD65 * CameraToXYZD50);
 
 	// color correction
 	// also undo the white balance since the color correction matrix already includes it

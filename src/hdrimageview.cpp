@@ -11,6 +11,7 @@
 #include <random>
 #include <sstream>
 #include <spdlog/spdlog.h>
+#include "hdrviewscreen.h"
 
 using namespace nanogui;
 using namespace std;
@@ -120,28 +121,28 @@ HDRImageView::HDRImageView(Widget *parent)
     }
 }
 
-void HDRImageView::set_current_image(TextureRef cur)
+void HDRImageView::set_current_image(ConstImagePtr cur)
 {
-    spdlog::get("console")->debug("setting current image: {}", cur);
-    m_current_image = std::move(cur);
-    if (m_current_image)
-        m_image_shader->set_texture("primary_texture", m_current_image);
+    // spdlog::get("console")->debug("setting current image: {}", cur.get());
+    m_current_image = cur;
+    if (m_current_image && m_current_image->texture())
+        m_image_shader->set_texture("primary_texture", m_current_image->texture());
     else
         m_image_shader->set_texture("primary_texture", m_null_image);
 }
 
-void HDRImageView::set_reference_image(TextureRef ref)
+void HDRImageView::set_reference_image(ConstImagePtr ref)
 {
-    spdlog::get("console")->debug("setting reference image: {}", ref);
-    m_reference_image = std::move(ref);
-    if (m_reference_image)
-        m_image_shader->set_texture("secondary_texture", m_reference_image);
+    // spdlog::get("console")->debug("setting reference image: {}", ref.get());
+    m_reference_image = ref;
+    if (m_reference_image && m_reference_image->texture())
+        m_image_shader->set_texture("secondary_texture", m_reference_image->texture());
     else
         m_image_shader->set_texture("secondary_texture", m_null_image);
 }
 
 
-Vector2f HDRImageView::center_offset(TextureRef img) const
+Vector2f HDRImageView::center_offset(ConstImagePtr img) const
 {
 	return (size_f() - scaled_image_size_f(img)) / 2;
 }
@@ -174,7 +175,7 @@ void HDRImageView::set_image_coordinate_at(const Vector2f& position, const Vecto
 	m_offset -= center_offset(m_current_image);
 }
 
-void HDRImageView::image_position_and_scale(Vector2f& position, Vector2f& scale, TextureRef image)
+void HDRImageView::image_position_and_scale(Vector2f& position, Vector2f& scale, ConstImagePtr image)
 {
 	scale = scaled_image_size_f(image) / Vector2f(size());
 	position = (m_offset + center_offset(image)) / Vector2f(size());
@@ -246,12 +247,52 @@ void HDRImageView::zoom_out()
 	m_zoom_callback(m_zoom);
 }
 
+bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
+{
+    if (!m_enabled || !m_current_image)
+        return false;
+
+    if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
+    {
+        if (s->tool() == HDRViewScreen::Tool_Rectangular_Marquee)
+        {
+            if (down)
+            {
+                auto ic = image_coordinate_at(p-position());
+                m_clicked = Vector2i(round(ic.x()), round(ic.y()));
+                m_current_image->roi() = Box2i(m_current_image->box().clamp(m_clicked));
+            }
+            else
+            {
+                if (!m_current_image->roi().has_volume())
+                    m_current_image->roi() = Box2i();
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool HDRImageView::mouse_drag_event(const Vector2i& p, const Vector2i& rel, int /* button */, int /*modifiers*/)
 {
     if (!m_enabled || !m_current_image)
         return false;
-        
-    set_image_coordinate_at(p + rel, image_coordinate_at(p));
+
+    if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
+    {
+        if (s->tool() == HDRViewScreen::Tool_None)
+            set_image_coordinate_at(p + rel, image_coordinate_at(p));
+        else
+        {
+            auto ic = image_coordinate_at(p-position());
+            Vector2i drag_pixel(round(ic.x()), round(ic.y()));
+                
+            m_current_image->roi() = Box2i(m_current_image->box().clamp(m_clicked));
+            m_current_image->roi().enclose(drag_pixel);
+            m_current_image->roi().intersect(m_current_image->box());
+        }
+    }
     
     return true;
 }
@@ -310,6 +351,7 @@ void HDRImageView::draw(NVGcontext *ctx)
         draw_image_border(ctx);
         draw_pixel_grid(ctx);
         draw_pixel_info(ctx);
+        draw_ROI(ctx);
     }
     
     draw_widget_border(ctx);
@@ -486,6 +528,27 @@ void HDRImageView::draw_pixel_info(NVGcontext* ctx) const
 
         nvgRestore(ctx);
     }
+}
+
+void HDRImageView::draw_ROI(NVGcontext* ctx) const
+{
+    if (m_current_image->roi().is_empty())
+        return;
+
+    double time = glfwGetTime();
+    int w, h;
+    auto stripes = hdrview_image_icon(ctx, stripe7, NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY | NVG_IMAGE_NEAREST);
+    nvgImageSize(ctx, stripes, &w, &h);
+    NVGpaint paint = nvgImagePattern(ctx, mod(time*30, (double)w), 0, w, h, 0, stripes, m_enabled ? 1.0f : 0.25f);
+    nvgStrokePaint(ctx, paint);
+
+    nvgBeginPath(ctx);
+    Vector2i tl = screen_position_for_coordinate(m_current_image->roi().min);
+    Vector2i br = screen_position_for_coordinate(m_current_image->roi().max);
+    Vector2i border_size = br-tl;
+    nvgRect(ctx, tl.x(), tl.y(), border_size.x(), border_size.y());
+    nvgStrokeWidth(ctx, 1.0f);
+    nvgStroke(ctx);
 }
 
 void HDRImageView::draw_contents()

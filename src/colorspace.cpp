@@ -326,7 +326,8 @@ void HSVToRGB(float *R, float *G, float *B, float H, float S, float V)
 			case 2: *R = p; *G = V; *B = t; break;
 			case 3: *R = p; *G = q; *B = V; break;
 			case 4: *R = t; *G = p; *B = V; break;
-			case 5: *R = V; *G = p; *B = q; break;
+			case 5:
+			default: *R = V; *G = p; *B = q; break;
 		}
 	}
 }
@@ -571,6 +572,22 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c,
 		default:  *a = X; *b = Y; *c = Z;          // XYZ
 	}
 }
+
+Color3 convertColorSpace(const Color3 & c, EColorSpace dst, EColorSpace src)
+{
+	Color3 ret;
+	convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+	return ret;
+}
+
+Color4 convertColorSpace(const Color4 & c, EColorSpace dst, EColorSpace src)
+{
+	Color4 ret = c;
+	convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+	return ret;
+}
+
+
 
 const vector<string> & colorSpaceNames()
 {

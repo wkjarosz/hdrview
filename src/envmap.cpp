@@ -31,6 +31,7 @@ Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const
 		    xyz = cylindricalToXYZ(srcUV);
 		    break;
         case CUBE_MAP:
+        default:
             xyz = cubeMapToXYZ(srcUV);
             break;
     }
@@ -50,6 +51,7 @@ Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const
 		    uv = XYZToCylindrical(xyz);
 		    break;
         case CUBE_MAP:
+        default:
             uv = XYZToCubeMap(xyz);
             break;
     }
@@ -84,6 +86,7 @@ UV2XYZFn * envMapUVToXYZ(EEnvMappingUVMode mode)
 	    case CYLINDRICAL:
 		    return cylindricalToXYZ;
         case CUBE_MAP:
+        default:
             return cubeMapToXYZ;
     }
 }
@@ -101,6 +104,7 @@ XYZ2UVFn * XYZToEnvMapUV(EEnvMappingUVMode mode)
 	    case CYLINDRICAL:
 		    return XYZToCylindrical;
         case CUBE_MAP:
+        default:
             return XYZToCubeMap;
     }
 }

@@ -42,19 +42,18 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 
     set_layout(new GroupLayout());
 
-    auto addRow = [](Widget* current, string keys, string desc)
+    auto add_row = [](Widget* current, string keys, string desc)
     {
         auto row = new Widget(current);
         row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-        auto descWidget = new Label(row, desc, "sans", 14);
-        descWidget->set_fixed_width(185);
-        new Label{row, keys, "sans-bold", 14};
+        (new Label(row, desc, "sans", 14))->set_fixed_width(185);
+        new Label(row, keys, "sans-bold", 14);
     };
 
 	new Label(this, "About", "sans-bold", 18);
 
-	auto copyW = new Widget(this);
-	copyW->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+	auto copyright_widget = new Widget(this);
+	copyright_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
 	string about = fmt::format(
 		"HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
@@ -65,80 +64,81 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback)
 		HDRVIEW_VERSION, hdrview_timestamp(),
 		hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(),
 		HDRVIEW_BACKEND);
-	auto copy = new Label(copyW, about);
-	copy->set_fixed_width(715);
+	(new Label(copyright_widget, about))->set_fixed_width(715);
 
 	new Label(this, "Keybindings", "sans-bold", 18);
 
-	auto keyBindingsWidget = new Well(this);
-	keyBindingsWidget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
+	auto key_bindings_widget = new Well(this);
+	key_bindings_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
 
-	auto newColumn = [keyBindingsWidget]()
+	auto new_column = [key_bindings_widget]()
 	{
-		auto w = new Widget(keyBindingsWidget);
+		auto w = new Widget(key_bindings_widget);
 		w->set_layout(new GroupLayout(0));
 		w->set_fixed_width(350);
 		return w;
 	};
 
-	auto column = newColumn();
+	auto column = new_column();
 
 	new Label(column, "Images and Layer List", "sans-bold", 16);
-	auto imageLoading = new Widget(column);
-	imageLoading->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	auto image_loading = new Widget(column);
+	image_loading->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(imageLoading, COMMAND + "+O", "Open Image");
-	addRow(imageLoading, COMMAND + "+S", "Save Image");
-	addRow(imageLoading, COMMAND + "+W or Delete", "Close Image");
-	addRow(imageLoading, COMMAND + "+Shift+W", "Close All Images");
-	addRow(imageLoading, "Left Click", "Select Image");
-	addRow(imageLoading, "Shift+Left Click", "Select/Deselect Reference Image");
-	addRow(imageLoading, "1…9", "Select the N-th Image");
-	addRow(imageLoading, "Down / Up", "Select Previous/Next Image");
-	addRow(imageLoading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
-	addRow(imageLoading, ALT + "+Tab", "Jump Back To Previously Selected Image");
-	addRow(imageLoading, COMMAND + "+F", "Find Image");
+	add_row(image_loading, COMMAND + "+O", "Open Image");
+	add_row(image_loading, COMMAND + "+S", "Save Image");
+	add_row(image_loading, COMMAND + "+W or Delete", "Close Image");
+	add_row(image_loading, COMMAND + "+Shift+W", "Close All Images");
+	add_row(image_loading, "Left Click", "Select Image");
+	add_row(image_loading, "Shift+Left Click", "Select/Deselect Reference Image");
+	add_row(image_loading, "1…9", "Select the N-th Image");
+	add_row(image_loading, "Down / Up", "Select Previous/Next Image");
+	add_row(image_loading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
+	add_row(image_loading, ALT + "+Tab", "Jump Back To Previously Selected Image");
+	add_row(image_loading, COMMAND + "+F", "Find Image");
 
 	new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
-	auto imageSelection = new Widget(column);
-	imageSelection->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	auto image_selection = new Widget(column);
+	image_selection->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(imageSelection, "E / Shift+E", "Decrease/Increase Exposure");
-	addRow(imageSelection, "G / Shift+G", "Decrease/Increase Gamma");
-	addRow(imageSelection, "R", "Reset tonemapping");
-	addRow(imageSelection, "N", "Normalize Image to [0,1]");
-	addRow(imageSelection, COMMAND + "+1…7", "Cycle through Color Channels");
-	addRow(imageSelection, "Shift+1…8", "Cycle through Blend Modes");
+	add_row(image_selection, "E / Shift+E", "Decrease/Increase Exposure");
+	add_row(image_selection, "G / Shift+G", "Decrease/Increase Gamma");
+	add_row(image_selection, "R", "Reset tonemapping");
+	add_row(image_selection, "N", "Normalize Image to [0,1]");
+	add_row(image_selection, COMMAND + "+1…7", "Cycle through Color Channels");
+	add_row(image_selection, "Shift+1…8", "Cycle through Blend Modes");
 
-	column = newColumn();
+	column = new_column();
 
 	new Label(column, "Image Edits", "sans-bold", 16);
 	auto edits = new Widget(column);
 	edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(edits, "F", "Flip image about horizontal axis");
-	addRow(edits, "M", "Mirror image about vertical axis");
-	addRow(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
+	add_row(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
+	add_row(edits, COMMAND + "+C / " + COMMAND + "+V", "Copy/Paste");\
 
-	new Label(column, "Panning/Zooming", "sans-bold", 16);
-	auto panningZooming = new Widget(column);
-	panningZooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+	new Label(column, "Panning/Zooming/Selecting", "sans-bold", 16);
+	auto panning_zooming = new Widget(column);
+	panning_zooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(panningZooming, "Left Click+Drag / Shift+Scroll", "Pan image");
-	addRow(panningZooming, "Scroll", "Zoom In and Out Continuously");
-	addRow(panningZooming, "- / +", "Zoom In and Out by Powers of 2");
-	addRow(panningZooming, "Space", "Re-Center View");
-    addRow(panningZooming, COMMAND + "+0", "Fit Image to Screen");
+	add_row(panning_zooming, "Space", "Switch mouse to pan/zoom mode");
+	add_row(panning_zooming, "Left Click+Drag / Shift+Scroll", "Pan image");
+	add_row(panning_zooming, "Scroll", "Zoom In and Out Continuously");
+	add_row(panning_zooming, "- / +", "Zoom In and Out by Powers of 2");
+    add_row(panning_zooming, COMMAND + "+0", "Fit Image to Screen");
+	add_row(panning_zooming, "M", "Switch mouse to selection mode");
+	add_row(panning_zooming, COMMAND + "+A", "Select entire image");
+	add_row(panning_zooming, COMMAND + "+D", "Deselect");
 
 	new Label(column, "Interface", "sans-bold", 16);
 	auto interface = new Widget(column);
 	interface->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-	addRow(interface, "H", "Show/Hide Help (this Window)");
-	addRow(interface, "T", "Show/Hide the Top Toolbar");
-	addRow(interface, "Tab", "Show/Hide the Side Panel");
-	addRow(interface, "Shift+Tab", "Show/Hide All Panels");
-	addRow(interface, COMMAND + "+Q or Esc", "Quit");
+	add_row(interface, "H", "Show/Hide Help (this Window)");
+	add_row(interface, "T", "Show/Hide the Top Toolbar");
+	add_row(interface, "Tab", "Show/Hide the Side Panel");
+	add_row(interface, "Shift+Tab", "Show/Hide All Panels");
+	add_row(interface, COMMAND + "+Q or Esc", "Quit");
 }
 
 bool HelpWindow::keyboard_event(int key, int scancode, int action, int modifiers)

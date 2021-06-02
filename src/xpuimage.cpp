@@ -12,8 +12,10 @@
 #include <random>
 #include <nanogui/common.h>
 #include <cmath>
+#include <map>
 #include <spdlog/spdlog.h>
 #include "multigraph.h"
+#include <nanovg.h>
 
 using namespace nanogui;
 // using namespace Eigen;
@@ -293,7 +295,7 @@ void XPUImage::upload_to_GPU() const
 }
 
 
-XPUImage::TextureRef XPUImage::texture()
+XPUImage::TextureRef XPUImage::texture() const
 {
 	check_async_result();
 	upload_to_GPU();
@@ -341,4 +343,18 @@ void XPUImage::recompute_histograms(float exposure) const
         m_histogram_dirty = false;
         m_cached_histogram_exposure = exposure;
     }
+}
+
+
+int hdrview_get_icon(NVGcontext *ctx, const std::string &name, int imageFlags, uint8_t *data, uint32_t size)
+{
+    static std::map<std::string, int> icon_cache;
+    auto it = icon_cache.find(name);
+    if (it != icon_cache.end())
+        return it->second;
+    int icon_id = nvgCreateImageMem(ctx, imageFlags, data, size);
+    if (icon_id == 0)
+        throw std::runtime_error("Unable to load resource data.");
+    icon_cache[name] = icon_id;
+    return icon_id;
 }

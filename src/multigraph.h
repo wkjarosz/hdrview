@@ -8,7 +8,7 @@
 
 #include <nanogui/widget.h>
 
-using namespace nanogui;
+NAMESPACE_BEGIN(nanogui)
 
 /**
  * \class MultiGraph multigraph.h
@@ -28,7 +28,11 @@ public:
 	void set_text_color(const Color &text_color) { m_text_color = text_color; }
 
 	int num_plots() const {return m_values.size();}
-	void add_plot(const Color & fg = Color(), const std::vector<float> & v = std::vector<float>()) {m_values.push_back(v); m_foreground_colors.push_back(fg);}
+	void add_plot(const Color & fg = Color(),
+				  const std::vector<float> & v = std::vector<float>())
+	{
+		m_values.push_back(v); m_foreground_colors.push_back(fg);
+	}
 	void pop_plot() {m_values.pop_back(); m_foreground_colors.pop_back();}
 
 	bool well() const       { return m_in_well; }
@@ -50,16 +54,16 @@ public:
 	void set_center_header(const std::string & s) { m_center_header = s; }
 	void set_right_header(const std::string & s)  { m_right_header = s; }
 
-	std::function<void(const nanogui::Vector2f &)> drag_callback() const { return m_drag_callback; }
-	void set_drag_callback(const std::function<void(const nanogui::Vector2f &)> &callback) { m_drag_callback = callback; }
+	std::function<void(const Vector2f &)> drag_callback() const { return m_drag_callback; }
+	void set_drag_callback(const std::function<void(const Vector2f &)> &callback) { m_drag_callback = callback; }
 
-	virtual nanogui::Vector2i preferred_size(NVGcontext *ctx) const override;
+	virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
-	virtual bool mouse_drag_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers) override;
-	virtual bool mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+	virtual bool mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+	virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
 protected:
-	nanogui::Vector2f graph_coordinate_at(const nanogui::Vector2f& position) const;
+	Vector2f graph_coordinate_at(const Vector2f& position) const;
 	float x_position(float xfrac) const;
 	float y_position(float yfrac) const;
 
@@ -71,5 +75,7 @@ protected:
 	std::vector<float> m_xticks, m_yticks;
 	std::vector<std::string> m_xtick_labels;
 
-	std::function<void(const nanogui::Vector2f &)> m_drag_callback;
+	std::function<void(const Vector2f &)> m_drag_callback;
 };
+
+NAMESPACE_END(nanogui)

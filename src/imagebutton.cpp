@@ -9,14 +9,16 @@
 
 
 #include "imagebutton.h"
+#include "common.h"
 #include <nanogui/opengl.h>
 #include <nanogui/theme.h>
 #include <nanogui/icons.h>
 #include <iostream>
 #include <spdlog/fmt/ostr.h>
 
-using namespace nanogui;
 using namespace std;
+
+NAMESPACE_BEGIN(nanogui)
 
 ImageButton::ImageButton(Widget *parent, const string &caption)
 	: Widget (parent), m_caption(caption)
@@ -310,7 +312,7 @@ void ImageButton::set_highlight_range(size_t begin, size_t end)
 	}
 
 	m_highlight_begin = beginIndex;
-	m_highlight_end = max(m_caption.size() - end, beginIndex);
+	m_highlight_end = std::max(m_caption.size() - end, beginIndex);
 
 	if (m_highlight_begin == m_highlight_end || m_caption.empty())
 		return;
@@ -324,3 +326,6 @@ void ImageButton::set_highlight_range(size_t begin, size_t end)
 		while (m_highlight_end < m_caption.size() && isalnum(m_caption[m_highlight_end]))
 			++m_highlight_end;
 }
+
+
+NAMESPACE_END(nanogui)

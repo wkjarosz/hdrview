@@ -55,7 +55,7 @@ Options:
 
 int main(int argc, char **argv)
 {
-    vector<string> argVector = { argv + 1, argv + argc };
+    vector<string> arg_vector = { argv + 1, argv + argc };
     map<string, docopt::value> docargs;
     int verbosity = 0;
     float gamma = 2.2f, exposure;
@@ -69,12 +69,12 @@ int main(int argc, char **argv)
 #if defined(__APPLE__)
         bool launched_from_finder = false;
         // check whether -psn is set, and remove it from the arguments
-        for (vector<string>::iterator i = argVector.begin(); i != argVector.end(); ++i)
+        for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
         {
             if (strncmp("-psn", i->c_str(), 4) == 0)
             {
                 launched_from_finder = true;
-                argVector.erase(i);
+                arg_vector.erase(i);
                 break;
             }
         }
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
             "HDRView {}. (built on {} from git {}-{}-{} using {} backend)",
             HDRVIEW_VERSION, hdrview_timestamp(),
             hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
-        docargs = docopt::docopt(USAGE, argVector,
+        docargs = docopt::docopt(USAGE, arg_vector,
                                  true,            // show help if requested
                                  version_string);  // version string
 

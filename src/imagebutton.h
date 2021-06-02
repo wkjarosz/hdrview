@@ -9,13 +9,10 @@
 
 #pragma once
 
-#include "common.h"
-
 #include <nanogui/widget.h>
-
 #include <string>
 
-using namespace nanogui;
+NAMESPACE_BEGIN(nanogui)
 
 class ImageButton : public Widget
 {
@@ -89,3 +86,6 @@ private:
 
 	float m_progress = -1.f;
 };
+
+
+NAMESPACE_END(nanogui)

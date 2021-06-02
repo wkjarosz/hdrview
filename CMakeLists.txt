@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.3)
 project(hdrview)
 
-set(HDRVIEW_VERSION "1.0.2")
+set(HDRVIEW_VERSION "1.1.0")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
@@ -92,6 +92,10 @@ foreach(fname_in IN LISTS resources)
   list(APPEND resources_processed ${fname_out})
 endforeach()
 
+
+file(GLOB patterns "${CMAKE_CURRENT_SOURCE_DIR}/resources/patterns/*.png")
+list (APPEND resources_processed ${patterns})
+
 # Concatenate resource files into a comma separated string
 string(REGEX REPLACE "([^\\]|^);" "\\1," resources_string "${resources_processed}")
 string(REGEX REPLACE "[\\](.)" "\\1" resources_string "${resources_string}")
@@ -133,10 +137,13 @@ add_executable(HDRView
   hdrview_version.cpp
   hdrview_resources.cpp
   src/async.h
-  src/color.cpp
   src/color.h
+  src/colorslider.cpp
+  src/colorslider.h
   src/colorspace.cpp
   src/colorspace.h
+  src/colorwheel.cpp
+  src/colorwheel.h
   src/commandhistory.h
   src/common.cpp
   src/common.h
@@ -150,6 +157,8 @@ add_executable(HDRView
   src/fwd.h
   src/xpuimage.cpp
   src/xpuimage.h
+  src/hdrcolorpicker.cpp
+  src/hdrcolorpicker.h
   src/hdrimage.cpp
   src/hdrimage.h
   src/hdrimageio.cpp
@@ -221,7 +230,6 @@ endif()
 
 add_executable(hdrbatch
   hdrview_version.cpp
-  src/color.cpp
   src/color.h
   src/colorspace.cpp
   src/colorspace.h
