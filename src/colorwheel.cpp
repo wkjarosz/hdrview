@@ -4,7 +4,6 @@
 // be found in the LICENSE.txt file.
 //
 
-#define NOMINMAX
 #include "colorwheel.h"
 #include "colorspace.h"
 #include "xpuimage.h"
