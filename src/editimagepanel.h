@@ -7,6 +7,7 @@
 #pragma once
 
 #include <nanogui/widget.h>
+#include <memory>
 #include "fwd.h"
 
 using namespace nanogui;
