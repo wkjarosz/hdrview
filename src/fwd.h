@@ -47,8 +47,6 @@ class ImageButton;
 class HSLGradient;
 }
 
-namespace spdlog { class logger; }
-
 // define some common types
 using Box2i     = Box<nanogui::Vector2i>;
 

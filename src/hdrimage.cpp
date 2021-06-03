@@ -222,7 +222,7 @@ HDRImage HDRImage::resampled(int w, int h,
         }
         ++progress;
     });
-    spdlog::get("console")->trace("Resampling took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("Resampling took: {} seconds.", (timer.elapsed()/1000.f));
     return result;
 }
 
@@ -271,7 +271,7 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
         }
         ++progress;
     });
-    spdlog::get("console")->trace("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("Convolution took: {} seconds.", (timer.elapsed()/1000.f));
 
     return result;
 }
@@ -356,7 +356,7 @@ HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress pro
         }
         ++progress;
     });
-    spdlog::get("console")->trace("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("Median filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return tempBuffer;
 }
@@ -414,7 +414,7 @@ HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain,
         }
         ++progress;
     });
-    spdlog::get("console")->trace("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("Bilateral filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered;
 }
@@ -516,7 +516,7 @@ HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY,
     HDRImage im2 = *this;
     im2.copy_subimage(im, roi, roi.min.x(), roi.min.y());
 
-    spdlog::get("console")->trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed()/1000.f));
     return im2;
 }
 
@@ -556,7 +556,7 @@ HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress
 
 	    ++progress;
     });
-    spdlog::get("console")->trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("box_blurred_x filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered;
 }
@@ -598,7 +598,7 @@ HDRImage HDRImage::box_blurred_y(int l_size, int r_size, AtomicProgress progress
 
 	    ++progress;
     });
-    spdlog::get("console")->trace("box_blurred_y filter took: {} seconds.", (timer.elapsed()/1000.f));
+    spdlog::trace("box_blurred_y filter took: {} seconds.", (timer.elapsed()/1000.f));
 
     return filtered;
 }

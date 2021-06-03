@@ -139,7 +139,6 @@ bool isSTBImage(const string & filename)
 
 bool HDRImage::load(const string & filename)
 {
-	auto console = spdlog::get("console");
     string errors;
 	string extension = getExtension(filename);
 	transform(extension.begin(),
@@ -164,7 +163,7 @@ bool HDRImage::load(const string & filename)
 			bool convertToLinear = !stbi_is_hdr(filename.c_str());
 			Timer timer;
 			copyPixelsFromArray(*this, float_data, w, h, 4, convertToLinear);
-			console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+			spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 
 			stbi_image_free(float_data);
 			return true;
@@ -194,7 +193,7 @@ bool HDRImage::load(const string & filename)
 				    Timer timer;
 				    // convert 3-channel pfm data to 4-channel internal representation
 				    copyPixelsFromArray(*this, float_data, w, h, 3, false);
-				    console->debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+				    spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
 				    delete [] float_data;
 				    return true;
@@ -235,7 +234,7 @@ bool HDRImage::load(const string & filename)
 		    file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
 		    file.readPixels(dw.min.y, dw.max.y);
 
-		    console->debug("Reading EXR image took: {} seconds.", (timer.lap() / 1000.f));
+		    spdlog::debug("Reading EXR image took: {} seconds.", (timer.lap() / 1000.f));
 
 		    resize(w, h);
 
@@ -249,7 +248,7 @@ bool HDRImage::load(const string & filename)
 			    }
 		    });
 
-		    console->debug("Copying EXR image data took: {} seconds.", (timer.lap() / 1000.f));
+		    spdlog::debug("Copying EXR image data took: {} seconds.", (timer.lap() / 1000.f));
 		    return true;
 	    }
 	    catch (const exception &e)
@@ -276,8 +275,8 @@ bool HDRImage::load(const string & filename)
 		int orientation = 0;
 		for (size_t i = 0; i < images.size(); i++)
 		{
-			console->debug("Image [{}] size = {} x {}.", i, images[i].width, images[i].height);
-			console->debug("Image [{}] orientation = {}", i, images[i].orientation);
+			spdlog::debug("Image [{}] size = {} x {}.", i, images[i].width, images[i].height);
+			spdlog::debug("Image [{}] orientation = {}", i, images[i].orientation);
 			if (images[i].orientation != 0)
 				orientation = images[i].orientation;
 		}
@@ -301,12 +300,12 @@ bool HDRImage::load(const string & filename)
 		tinydng::DNGImage & image = images[imageIndex];
 
 
-		console->debug("\nLargest image within DNG:");
+		spdlog::debug("\nLargest image within DNG:");
 		printImageInfo(image);
-		console->debug("\nLast image within DNG:");
+		spdlog::debug("\nLast image within DNG:");
 		printImageInfo(images.back());
 
-		console->debug("Loading image [{}].", imageIndex);
+		spdlog::debug("Loading image [{}].", imageIndex);
 
 		w = image.width;
 		h = image.height;
@@ -328,7 +327,7 @@ bool HDRImage::load(const string & filename)
 		float invScale = 1.0f / static_cast<float>((1 << image.bits_per_sample));
 		if (spp == 3)
 		{
-			console->debug("Decoding a 3 sample-per-pixel DNG image.");
+			spdlog::debug("Decoding a 3 sample-per-pixel DNG image.");
 			// normalize
 			parallel_for(0, hdr.size(), [&hdr,invScale](int i)
 			{
@@ -350,15 +349,15 @@ bool HDRImage::load(const string & filename)
 					                       hdr[index] * invScale + 2, 1.0f);
 				}
 			});
-			console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+			spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 		}
 		else if (spp == 1)
 		{
 			// Create grayscale image & normalize intensity.
-			console->debug("Decoding a 1 sample-per-pixel DNG image.");
+			spdlog::debug("Decoding a 1 sample-per-pixel DNG image.");
 			Timer timer;
 			*this = develop(hdr, image, images.back());
-			console->debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
+			spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed()/1000.f));
 		}
 		else
 			throw runtime_error("Error loading DNG: Unsupported samples per pixel: " + to_string(spp));
@@ -408,7 +407,7 @@ bool HDRImage::load(const string & filename)
 			errors += string("\t") + e.what() + "\n";
 	}
 
-    console->error("ERROR: Unable to read image file \"{}\":\n{}", filename, errors);
+    spdlog::error("ERROR: Unable to read image file \"{}\":\n{}", filename, errors);
 
     return false;
 }
@@ -427,7 +426,6 @@ bool HDRImage::save(const string & filename,
                     float gain, float gamma,
                     bool sRGB, bool dither) const
 {
-	auto console = spdlog::get("console");
     string extension = getExtension(filename);
 
     transform(extension.begin(),
@@ -488,17 +486,17 @@ bool HDRImage::save(const string & filename,
                     p.a = c[3];
                 }
             });
-            console->debug("Copying pixel data took: {} seconds.", (timer.lap()/1000.f));
+            spdlog::debug("Copying pixel data took: {} seconds.", (timer.lap()/1000.f));
 
             file.setFrameBuffer(&pixels[0][0], 1, width());
             file.writePixels(height());
 
-            console->debug("Writing EXR image took: {} seconds.", (timer.lap()/1000.f));
+            spdlog::debug("Writing EXR image took: {} seconds.", (timer.lap()/1000.f));
 			return true;
         }
         catch (const exception &e)
         {
-            console->error("ERROR: Unable to write image file \"{}\": {}", filename, e.what());
+            spdlog::error("ERROR: Unable to write image file \"{}\": {}", filename, e.what());
             return false;
         }
     }
@@ -530,7 +528,7 @@ bool HDRImage::save(const string & filename,
                 data[3 * x + 3 * y * width() + 2] = (unsigned char) c[2];
             }
         });
-        console->debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
+        spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed()/1000.f));
 
         if (extension == "ppm")
             return write_ppm_image(filename.c_str(), width(), height(), 3, &data[0]);
@@ -674,7 +672,7 @@ HDRImage develop(vector<float> & raw,
 		}
 	});
 
-	spdlog::get("console")->debug("Developing DNG image took {} seconds.", (timer.elapsed()/1000.f));
+	spdlog::debug("Developing DNG image took {} seconds.", (timer.elapsed()/1000.f));
 	return developed;
 }
 
@@ -761,7 +759,7 @@ void decode12BitToFloat(vector<float> &image, unsigned char *data, int width, in
 		}
 	});
 
-	spdlog::get("console")->debug("decode12BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
+	spdlog::debug("decode12BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 //
@@ -840,7 +838,7 @@ void decode14BitToFloat(vector<float> &image, unsigned char *data, int width, in
 		}
 	});
 
-	spdlog::get("console")->debug("decode14BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
+	spdlog::debug("decode14BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 //
@@ -866,7 +864,7 @@ void decode16BitToFloat(vector<float> &image, unsigned char *data, int width, in
 		}
 	});
 
-	spdlog::get("console")->debug("decode16BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
+	spdlog::debug("decode16BitToFloat took: {} seconds.", (timer.lap() / 1000.f));
 }
 
 char get_colorname(int c)
@@ -894,118 +892,117 @@ char get_colorname(int c)
 
 void printImageInfo(const tinydng::DNGImage & image)
 {
-	auto console = spdlog::get("console");
-	console->debug("width = {}.", image.width);
-	console->debug("width = {}.", image.width);
-	console->debug("height = {}.", image.height);
-	console->debug("bits per pixel = {}.", image.bits_per_sample);
-	console->debug("bits per pixel(original) = {}", image.bits_per_sample_original);
-	console->debug("samples per pixel = {}", image.samples_per_pixel);
-	console->debug("sample format = {}", image.sample_format);
+	spdlog::debug("width = {}.", image.width);
+	spdlog::debug("width = {}.", image.width);
+	spdlog::debug("height = {}.", image.height);
+	spdlog::debug("bits per pixel = {}.", image.bits_per_sample);
+	spdlog::debug("bits per pixel(original) = {}", image.bits_per_sample_original);
+	spdlog::debug("samples per pixel = {}", image.samples_per_pixel);
+	spdlog::debug("sample format = {}", image.sample_format);
 
-	console->debug("version = {}", image.version);
+	spdlog::debug("version = {}", image.version);
 
 	for (int s = 0; s < image.samples_per_pixel; s++)
 	{
-		console->debug("white_level[{}] = {}", s, image.white_level[s]);
-		console->debug("black_level[{}] = {}", s, image.black_level[s]);
+		spdlog::debug("white_level[{}] = {}", s, image.white_level[s]);
+		spdlog::debug("black_level[{}] = {}", s, image.black_level[s]);
 	}
 
-	console->debug("tile_width = {}", image.tile_width);
-	console->debug("tile_length = {}", image.tile_length);
-	console->debug("tile_offset = {}", image.tile_offset);
-	console->debug("tile_offset = {}", image.tile_offset);
+	spdlog::debug("tile_width = {}", image.tile_width);
+	spdlog::debug("tile_length = {}", image.tile_length);
+	spdlog::debug("tile_offset = {}", image.tile_offset);
+	spdlog::debug("tile_offset = {}", image.tile_offset);
 
-	console->debug("cfa_layout = {}", image.cfa_layout);
-	console->debug("cfa_plane_color = {}{}{}{}",
+	spdlog::debug("cfa_layout = {}", image.cfa_layout);
+	spdlog::debug("cfa_plane_color = {}{}{}{}",
 	               get_colorname(image.cfa_plane_color[0]),
 	               get_colorname(image.cfa_plane_color[1]),
 	               get_colorname(image.cfa_plane_color[2]),
 	               get_colorname(image.cfa_plane_color[3]));
-	console->debug("cfa_pattern[2][2] = \n {}, {},\n {}, {}",
+	spdlog::debug("cfa_pattern[2][2] = \n {}, {},\n {}, {}",
 	               image.cfa_pattern[0][0],
 	               image.cfa_pattern[0][1],
 	               image.cfa_pattern[1][0],
 	               image.cfa_pattern[1][1]);
 
-	console->debug("active_area = \n {}, {},\n {}, {}",
+	spdlog::debug("active_area = \n {}, {},\n {}, {}",
 	               image.active_area[0],
 	               image.active_area[1],
 	               image.active_area[2],
 	               image.active_area[3]);
 
-	console->debug("calibration_illuminant1 = {}", image.calibration_illuminant1);
-	console->debug("calibration_illuminant2 = {}", image.calibration_illuminant2);
+	spdlog::debug("calibration_illuminant1 = {}", image.calibration_illuminant1);
+	spdlog::debug("calibration_illuminant2 = {}", image.calibration_illuminant2);
 
-	console->debug("color_matrix1 = ");
+	spdlog::debug("color_matrix1 = ");
 	for (size_t k = 0; k < 3; k++)
-		console->debug("{} {} {}",
+		spdlog::debug("{} {} {}",
 		               image.color_matrix1[k][0],
 		               image.color_matrix1[k][1],
 		               image.color_matrix1[k][2]);
 
-	console->debug("color_matrix2 = ");
+	spdlog::debug("color_matrix2 = ");
 	for (size_t k = 0; k < 3; k++)
-		console->debug("{} {} {}",
+		spdlog::debug("{} {} {}",
 		               image.color_matrix2[k][0],
 		               image.color_matrix2[k][1],
 		               image.color_matrix2[k][2]);
 
 	if (true)//image.has_forward_matrix2)
 	{
-		console->debug("forward_matrix1 found = ");
+		spdlog::debug("forward_matrix1 found = ");
 		for (size_t k = 0; k < 3; k++)
-			console->debug("{} {} {}",
+			spdlog::debug("{} {} {}",
 			               image.forward_matrix1[k][0],
 			               image.forward_matrix1[k][1],
 			               image.forward_matrix1[k][2]);
 	}
 	else
-		console->debug("forward_matrix2 not found!");
+		spdlog::debug("forward_matrix2 not found!");
 
 	if (true)//image.has_forward_matrix2)
 	{
-		console->debug("forward_matrix2 found = ");
+		spdlog::debug("forward_matrix2 found = ");
 		for (size_t k = 0; k < 3; k++)
-			console->debug("{} {} {}",
+			spdlog::debug("{} {} {}",
 			               image.forward_matrix2[k][0],
 			               image.forward_matrix2[k][1],
 			               image.forward_matrix2[k][2]);
 	}
 	else
-		console->debug("forward_matrix2 not found!");
+		spdlog::debug("forward_matrix2 not found!");
 
-	console->debug("camera_calibration1 = ");
+	spdlog::debug("camera_calibration1 = ");
 	for (size_t k = 0; k < 3; k++)
-		console->debug("{} {} {}",
+		spdlog::debug("{} {} {}",
 		               image.camera_calibration1[k][0],
 		               image.camera_calibration1[k][1],
 		               image.camera_calibration1[k][2]);
 
-	console->debug("orientation = {}", image.orientation);
+	spdlog::debug("orientation = {}", image.orientation);
 
-	console->debug("camera_calibration2 = ");
+	spdlog::debug("camera_calibration2 = ");
 	for (size_t k = 0; k < 3; k++)
-		console->debug("{} {} {}",
+		spdlog::debug("{} {} {}",
 		               image.camera_calibration2[k][0],
 		               image.camera_calibration2[k][1],
 		               image.camera_calibration2[k][2]);
 
 	if (image.has_analog_balance)
-		console->debug("analog_balance = {} , {} , {}",
+		spdlog::debug("analog_balance = {} , {} , {}",
 		               image.analog_balance[0],
 		               image.analog_balance[1],
 		               image.analog_balance[2]);
 	else
-		console->debug("analog_balance not found!");
+		spdlog::debug("analog_balance not found!");
 
 	if (image.has_as_shot_neutral)
-		console->debug("as_shot_neutral = {} , {} , {}",
+		spdlog::debug("as_shot_neutral = {} , {} , {}",
 		               image.as_shot_neutral[0],
 		               image.as_shot_neutral[1],
 		               image.as_shot_neutral[2]);
 	else
-		console->debug("shot_neutral not found!");
+		spdlog::debug("shot_neutral not found!");
 }
 
 } // namespace

@@ -17,12 +17,12 @@
 #define NOMINMAX
 #include <tinydir.h>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
-    Screen(nanogui::Vector2i(800,600), "HDRView", true),
-    console(spdlog::get("console"))
+    Screen(nanogui::Vector2i(800,600), "HDRView", true)
 {
     set_background(Color(0.23f, 1.0f));
 
@@ -199,7 +199,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 			                             return;
 		                             Color4 mC = img->image().max();
 		                             float mCf = max(mC[0], mC[1], mC[2]);
-		                             console->debug("max value: {}", mCf);
+		                             spdlog::debug("max value: {}", mCf);
 		                             m_image_view->set_exposure(log2(1.0f/mCf));
 		                             m_images_panel->request_histogram_update(true);
 	                             });
@@ -379,7 +379,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 				std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
 				this->redraw();
 				if (anim)
-					console->trace("refreshing gui");
+					spdlog::trace("refreshing gui");
             }
         }
     );
@@ -629,11 +629,11 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return false;
 
         case GLFW_KEY_BACKSPACE:
-			console->trace("KEY BACKSPACE pressed");
+			spdlog::trace("KEY BACKSPACE pressed");
 	        ask_close_image(m_images_panel->current_image_index());
             return true;
         case 'W':
-			console->trace("KEY `W` pressed");
+			spdlog::trace("KEY `W` pressed");
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
 	            if (modifiers & GLFW_MOD_SHIFT)
@@ -645,7 +645,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return false;
 
 	    case 'O':
-			console->trace("KEY `O` pressed");
+			spdlog::trace("KEY `O` pressed");
 		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    load_image();
@@ -655,18 +655,18 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         case '=':
         case GLFW_KEY_KP_ADD:
-			console->trace("KEY `=` pressed");
+			spdlog::trace("KEY `=` pressed");
 			m_image_view->zoom_in();
             return true;
 
         case '-':
         case GLFW_KEY_KP_SUBTRACT:
-			console->trace("KEY `-` pressed");
+			spdlog::trace("KEY `-` pressed");
 			m_image_view->zoom_out();
             return true;
 
         case 'G':
-			console->trace("KEY `G` pressed");
+			spdlog::trace("KEY `G` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
 				m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
@@ -677,7 +677,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			}
             return true;
         case 'E':
-			console->trace("KEY `E` pressed");
+			spdlog::trace("KEY `E` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
 				m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
@@ -689,7 +689,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
 
         case 'F':
-			console->trace("KEY `F` pressed");
+			spdlog::trace("KEY `F` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 			{
 				m_images_panel->focus_filter();
@@ -698,7 +698,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			break;
 
 		case 'A':
-			console->trace("Key `A` pressed");
+			spdlog::trace("Key `A` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 			{
 				if (auto img = m_images_panel->current_image())
@@ -707,7 +707,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			break;
 
 		case 'D':
-			console->trace("Key `D` pressed");
+			spdlog::trace("Key `D` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 			{
 				if (auto img = m_images_panel->current_image())
@@ -716,29 +716,29 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			break;
 
 		case 'C':
-			console->trace("Key `C` pressed");
+			spdlog::trace("Key `C` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 				m_edit_panel->copy();
 			break;
 
 		case 'V':
-			console->trace("Key `V` pressed");
+			spdlog::trace("Key `V` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 				m_edit_panel->paste();
 			break;
 
         case 'M':
-			console->trace("KEY `M` pressed");
+			spdlog::trace("KEY `M` pressed");
             set_tool(Tool_Rectangular_Marquee);
             return true;
 
         case ' ':
-			console->trace("KEY ` ` pressed");
+			spdlog::trace("KEY ` ` pressed");
 	        set_tool(Tool_None);
             return true;
 
         case 'T':
-			console->trace("KEY `T` pressed");
+			spdlog::trace("KEY `T` pressed");
 		    m_gui_animation_start = glfwGetTime();
 			push_gui_refresh();
 			m_animation_running = true;
@@ -747,12 +747,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
 
         case 'H':
-			console->trace("KEY `H` pressed");
+			spdlog::trace("KEY `H` pressed");
 		    toggle_help_window();
             return true;
 
         case GLFW_KEY_TAB:
-			console->trace("KEY TAB pressed");
+			spdlog::trace("KEY TAB pressed");
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
 		        bool setVis = !((m_animation_goal & SIDE_PANEL) || (m_animation_goal & TOP_PANEL) || (m_animation_goal & BOTTOM_PANEL));
@@ -1025,7 +1025,7 @@ void HDRViewScreen::draw_contents()
 {
 	clear();
 
-	// console->trace("HDRViewScreen::draw_contents");
+	// spdlog::trace("HDRViewScreen::draw_contents");
 	m_images_panel->run_requested_callbacks();
 
 	if (auto img = m_images_panel->current_image())

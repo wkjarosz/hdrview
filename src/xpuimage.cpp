@@ -113,7 +113,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 	}
 	catch(const std::exception& e)
 	{
-		spdlog::get("console")->trace("Interrupting histogram computation");
+		spdlog::trace("Interrupting histogram computation");
 		return nullptr;
 	}
 	
@@ -288,7 +288,7 @@ void XPUImage::upload_to_GPU() const
 	m_texture->resize(s);
 	m_texture->upload((const uint8_t *)m_image->data());
 	m_texture_dirty = false;
-	spdlog::get("console")->trace("Uploading texture to GPU took {} ms", timer.lap());
+	spdlog::trace("Uploading texture to GPU took {} ms", timer.lap());
 
 	// now that we grabbed the results and uploaded to GPU, destroy the task
 	modify_done();

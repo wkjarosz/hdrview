@@ -12,7 +12,6 @@
 #include <nanogui/renderpass.h>
 #include <vector>
 #include <thread>
-#include <spdlog/spdlog.h>
 #include "fwd.h"
 #include "hdrimageview.h"
 
@@ -100,8 +99,6 @@ private:
 
 	bool m_dragging_side_panel = false;
 	bool m_need_layout_update = true;
-
-    std::shared_ptr<spdlog::logger> console;
 
 	std::thread m_gui_refresh_thread;
 	std::atomic<int> m_gui_refresh = 0;

@@ -621,7 +621,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 	enable_disable_buttons();
 
 	if (num_images() != (int)m_image_list->children().size())
-		spdlog::get("console")->error("Number of buttons and images don't match!");
+		spdlog::error("Number of buttons and images don't match!");
 	else
 	{
 		auto& buttons = m_image_list->children();
@@ -685,7 +685,7 @@ void ImageListPanel::run_requested_callbacks()
 {
 	if (m_image_modify_done_requested)
 	{
-		spdlog::get("console")->trace("running requested callbacks");
+		spdlog::trace("running requested callbacks");
 		// remove any images that are not being modified and are null
 		bool num_images_changed = false;
 
@@ -789,7 +789,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 			try
 			{
 				// filename is actually a directory, traverse it
-				spdlog::get("console")->info("Loading images in \"{}\"...", dir.path);
+				spdlog::info("Loading images in \"{}\"...", dir.path);
 				while (dir.has_next)
 				{
 					tinydir_file file;
@@ -823,7 +823,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 			}
 			catch (const exception & e)
 			{
-				spdlog::get("console")->error("Error listing directory: ({}).", e.what());
+				spdlog::error("Error listing directory: ({}).", e.what());
 			}
 		}
 		else
@@ -845,12 +845,12 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 				[filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 				{
 					Timer timer;
-					spdlog::get("console")->info("Trying to load image \"{}\"", filename);
+					spdlog::info("Trying to load image \"{}\"", filename);
 					shared_ptr<HDRImage> ret = load_image(filename);
 					if (ret)
-						spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
+						spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
 					else
-						spdlog::get("console")->info("Loading \"{}\" failed", filename);
+						spdlog::info("Loading \"{}\" failed", filename);
 					return {ret, nullptr};
 				});
         image->recompute_histograms(m_image_view->exposure());

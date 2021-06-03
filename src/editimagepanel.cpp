@@ -191,7 +191,7 @@ Button * create_exposure_gamma_btn(Widget *parent, HDRViewScreen * screen, Image
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
 						{
-							spdlog::get("console")->debug("{}; {}; {}", exposure, offset, gamma);
+							spdlog::debug("{}; {}; {}", exposure, offset, gamma);
 							return {make_shared<HDRImage>(img->apply_function([](const Color4 & c)
 							{
 								return (Color4(pow(2.0f, exposure), 1.f) * c + Color4(offset, 0.f)).pow(Color4(1.0f/gamma, 1.f));

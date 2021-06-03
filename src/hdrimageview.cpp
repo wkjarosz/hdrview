@@ -49,7 +49,7 @@ std::string add_includes(std::string shader_string)
             oss << line << std::endl;
         } while (std::getline(iss, line));
 
-        // spdlog::get("console")->trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
+        // spdlog::trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
         
         shader_string = oss.str();
     }
@@ -117,13 +117,13 @@ HDRImageView::HDRImageView(Widget *parent)
     }
     catch(const std::exception& e)
     {
-        spdlog::get("console")->trace("{}", e.what());
+        spdlog::trace("{}", e.what());
     }
 }
 
 void HDRImageView::set_current_image(ConstImagePtr cur)
 {
-    // spdlog::get("console")->debug("setting current image: {}", cur.get());
+    // spdlog::debug("setting current image: {}", cur.get());
     m_current_image = cur;
     if (m_current_image && m_current_image->texture())
         m_image_shader->set_texture("primary_texture", m_current_image->texture());
@@ -133,7 +133,7 @@ void HDRImageView::set_current_image(ConstImagePtr cur)
 
 void HDRImageView::set_reference_image(ConstImagePtr ref)
 {
-    // spdlog::get("console")->debug("setting reference image: {}", ref.get());
+    // spdlog::debug("setting reference image: {}", ref.get());
     m_reference_image = ref;
     if (m_reference_image && m_reference_image->texture())
         m_image_shader->set_texture("secondary_texture", m_reference_image->texture());
