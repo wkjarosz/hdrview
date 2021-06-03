@@ -782,7 +782,7 @@ bool ImageListPanel::set_reference_image_index(int index)
 
 void ImageListPanel::load_images(const vector<string> & filenames)
 {
-	vector<string> allFilenames;
+	vector<string> all_filenames;
 
 	const static set<string> extensions = {"exr", "png", "jpg", "jpeg", "hdr", "pic", "pfm", "ppm", "bmp", "tga", "psd"};
 
@@ -819,7 +819,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 						continue;
 					}
 
-					allFilenames.push_back(file.path);
+					all_filenames.push_back(file.path);
 
 					if (tinydir_next(&dir) == -1)
 						throw runtime_error("Error getting next file");
@@ -834,13 +834,13 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 		}
 		else
 		{
-			allFilenames.push_back(i);
+			all_filenames.push_back(i);
 		}
 		tinydir_close(&dir);
 	}
 
 	// now start a bunch of asynchronous image loads
-	for (auto filename : allFilenames)
+	for (auto filename : all_filenames)
 	{
 		shared_ptr<XPUImage> image = make_shared<XPUImage>();
 		image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
