@@ -300,7 +300,12 @@ HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress pr
 {
     Timer timer;
     spdlog::trace("Starting unsharp mask...");
-    HDRImage result = *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
+    HDRImage result = fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi);
+    result *= -1.f;
+    result += *this;
+    result *= strength;
+    result += *this;
+    // HDRImage result = *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
     spdlog::trace("Unsharp mask took: {} seconds.", (timer.elapsed()/1000.f));
     return result;
 }
