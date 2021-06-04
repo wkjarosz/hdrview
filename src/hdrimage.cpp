@@ -298,7 +298,11 @@ HDRImage HDRImage::gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress p
 // sharpen an image
 HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
 {
-    return *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
+    Timer timer;
+    spdlog::trace("Starting unsharp mask...");
+    HDRImage result = *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
+    spdlog::trace("Unsharp mask took: {} seconds.", (timer.elapsed()/1000.f));
+    return result;
 }
 
 
