@@ -19,7 +19,6 @@
 #include "multigraph.h"
 #include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
-#include <Eigen/Geometry>
 
 using namespace std;
 
@@ -986,7 +985,7 @@ Button * create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel 
 //					auto dst2xyz = envMapUVToXYZ(to);
 //					auto xyz2src = XYZToEnvMapUV(from);
 //					auto warp = [dst2xyz,xyz2src](const Vector2f &uv) { return xyz2src(dst2xyz(uv)); };
-					auto warp = [](const Eigen::Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
+					auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
 
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -1044,10 +1043,10 @@ Button * create_shift_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							// by default use a no-op passthrough warp function
-							function<Eigen::Vector2f(const Eigen::Vector2f &)> shift =
-								[&](const Eigen::Vector2f &uv)
+							function<Vector2f(const Vector2f &)> shift =
+								[&](const Vector2f &uv)
 								{
-									return (uv + Eigen::Vector2f(dx / img->width(), dy / img->height())).eval();
+									return (uv + Vector2f(dx / img->width(), dy / img->height()));
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 							                                             progress, shift, 1, sampler,
@@ -1403,9 +1402,8 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							Eigen::Affine2f t(Eigen::Affine2f::Identity());
-
-							Eigen::Vector2f origin(0.f, 0.f);
+							Matrix3f t(1.f);
+							Vector2f origin(0.f, 0.f);
 
 							// find top-left corner
 							switch (anchor)
@@ -1451,23 +1449,40 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 									break;
 							}
 
-							t.translate(origin);
-							t.scale(Eigen::Vector2f(1.f/img->width(), 1.f/img->height()));
-							t.translate(Eigen::Vector2f(translate_x, translate_y));
-							t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-							Eigen::Matrix2f sh;
-							sh << 1, tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI), 1;
-							t.linear() *= sh;
-							t.scale(Eigen::Vector2f(scale_x, scale_y)*.01f);
-							t.scale(Eigen::Vector2f(img->width(), img->height()));
-							t.translate(-origin);
+							// t.translate(origin);
+							// t.scale(Vector2f(1.f/img->width(), 1.f/img->height()));
+							// t.translate(Vector2f(translate_x, translate_y));
+							// t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+							// Matrix2f sh;
+							// sh << 1, tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI), 1;
+							// t.linear() *= sh;
+							// t.scale(Vector2f(scale_x, scale_y)*.01f);
+							// t.scale(Vector2f(img->width(), img->height()));
+							// t.translate(-origin);
+							// FIXME
+							t = t * Matrix3f::translate(origin);
+							t = t * Matrix3f::scale(Vector2f(1.f/img->width(), 1.f/img->height()));
+							t = t * Matrix3f::translate(Vector2f(translate_x, translate_y));
+							// t *= Matrix3f::rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+							Matrix3f sh(1.f);
+							sh.m[0][0] = 1.f;
+							sh.m[0][1] = tan(shear_x/180.f * M_PI);
+							sh.m[1][0] = tan(shear_y/180.f * M_PI);
+							sh.m[1][1] = 1.f;
+							// t.linear() *= sh;
+							// t.scale(Vector2f(scale_x, scale_y)*.01f);
+							// t.scale(Vector2f(img->width(), img->height()));
+							// t.translate(-origin);
 
-							t = t.inverse();
+							// t = t.inverse();
 
-							function<Eigen::Vector2f(const Eigen::Vector2f &)> warp =
-								[t](const Eigen::Vector2f &uv)
+							function<Vector2f(const Vector2f &)> warp =
+								[t](const Vector2f &uv)
 								{
-									return (t * uv).eval();
+									Vector3f uvh(uv.x(), uv.y(), 1.f);
+									Vector3f resh = t * uvh;
+									resh /= resh.z();
+									return Vector2f(resh.x(), resh.y());
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 																		progress, warp, samples, sampler,

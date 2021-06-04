@@ -8,6 +8,19 @@
 
 #include <nanogui/vector.h>
 
+
+
+
+inline nanogui::Vector3f operator*(const nanogui::Matrix3f & M, const nanogui::Vector3f & v)
+{
+	nanogui::Vector3f result;
+	result[0] = M.m[0][0] * v[0] + M.m[0][1] * v[1] + M.m[0][2] * v[2];
+	result[1] = M.m[1][0] * v[0] + M.m[1][1] * v[1] + M.m[1][2] * v[2];
+	result[2] = M.m[2][0] * v[0] + M.m[2][1] * v[1] + M.m[2][2] * v[2];
+	return result;
+}
+
+
 // forward declarations
 template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size> class Box;
 class Color3;

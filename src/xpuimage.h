@@ -7,12 +7,10 @@
 #pragma once
 
 #include <cstdint>             // for uint32_t
-#include <Eigen/Core>          // for Vector2i, Matrix4f, Vector3f
 #include <functional>          // for function
 #include <iosfwd>              // for string
 #include <type_traits>         // for swap
 #include <vector>              // for vector, allocator
-// #include <nanogui/opengl.h>
 #include <nanogui/texture.h>
 #include "hdrimage.h"          // for HDRImage
 #include "fwd.h"               // for HDRImage

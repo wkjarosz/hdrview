@@ -26,7 +26,6 @@
 #include "colorspace.h"
 #include "parallelfor.h"
 #include "timer.h"
-#include <Eigen/Dense>
 #include <spdlog/spdlog.h>
 
 // these pragmas ignore warnings about unused static functions
@@ -64,16 +63,8 @@
 #include "ppm.h"
 
 
-using namespace Eigen;
+using namespace nanogui;
 using namespace std;
-// using std::vector;
-// using std::runtime_error;
-// using std::exception;
-// using std::string;
-// using std::make_shared;
-// using std::shared_ptr;
-// using std::to_string;
-// using std::invalid_argument;
 
 // local functions
 namespace
@@ -368,9 +359,13 @@ bool HDRImage::load(const string & filename)
 		int startCol = ::clamp(image.active_area[0], 0, h);
 		int endCol = ::clamp(image.active_area[2], 0, h);
 
-		*this = block(startRow, startCol,
-		              endRow-startRow,
-		              endCol-startCol).eval();
+		// FIXME
+		// *this = block(startRow, startCol,
+		//               endRow-startRow,
+		//               endCol-startCol).eval();
+		HDRImage copy(endCol-startCol, endRow-startRow);
+		copy.copy_subimage(*this, Box2i(Vector2i(startCol, startRow), Vector2i(endCol, endRow)), 0, 0);
+		*this = copy;
 
 		enum Orientations
 		{
@@ -454,9 +449,9 @@ bool HDRImage::save(const string & filename,
         if (!hdrFormat)
         {
             if (sRGB)
-                imgCopy = imgCopy.unaryExpr([](const Color4 & c) {return LinearToSRGB(c);});
+                imgCopy = imgCopy.apply_function([](const Color4 & c){return LinearToSRGB(c);});
             else if (gamma != 1.0f)
-                imgCopy = imgCopy.pow(gammaC);
+                imgCopy = imgCopy.apply_function([&gammaC](const Color4 & c){return pow(c, gammaC);});
         }
     }
 
@@ -552,22 +547,45 @@ namespace
 {
 
 
-// Taken from http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
-const Matrix3f XYZD65TosRGB(
-	(Matrix3f() << 3.2406f, -1.5372f, -0.4986f,
-		-0.9689f,  1.8758f,  0.0415f,
-		0.0557f, -0.2040f,  1.0570f).finished());
+inline Matrix3f create_matrix(float a00, float a01, float a02,
+									   float a10, float a11, float a12,
+									   float a20, float a21, float a22) 
+{
+	Matrix3f result;
+    result.m[0][0] = a00;
+	result.m[0][1] = a01;
+	result.m[0][2] = a02;
 
-const Matrix3f XYZD50ToXYZD65(
-	(Matrix3f() << 0.9555766f, -0.0230393f, 0.0631636f,
-		-0.0282895f,  1.0099416f, 0.0210077f,
-		0.0122982f, -0.0204830f, 1.3299098f).finished());
+	result.m[1][0] = a10;
+	result.m[1][1] = a11;
+	result.m[1][2] = a12;
+
+	result.m[2][0] = a20;
+	result.m[2][1] = a21;
+	result.m[2][2] = a22;
+
+	return result;
+}
+
+
+// Taken from http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
+const Matrix3f XYZD65TosRGB = create_matrix(
+	3.2406f, -1.5372f, -0.4986f,
+	-0.9689f,  1.8758f,  0.0415f,
+	0.0557f, -0.2040f,  1.0570f);
+
+const Matrix3f XYZD50ToXYZD65 = create_matrix(
+	0.9555766f, -0.0230393f, 0.0631636f,
+	-0.0282895f,  1.0099416f, 0.0210077f,
+	0.0122982f, -0.0204830f, 1.3299098f
+);
 
 // Taken from http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-const Matrix3f XYZD50TosRGB(
-	(Matrix3f() << 3.2404542f, -1.5371385f, -0.4985314f,
-		-0.9692660f,  1.8760108f,  0.0415560f,
-		0.0556434f, -0.2040259f,  1.0572252).finished());
+const Matrix3f XYZD50TosRGB = create_matrix(
+	3.2404542f, -1.5371385f, -0.4985314f,
+	-0.9692660f,  1.8760108f,  0.0415560f,
+	0.0556434f, -0.2040259f,  1.0572252
+);
 
 Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 {
@@ -585,36 +603,38 @@ Matrix3f computeCameraToXYZD50(const tinydng::DNGImage &param)
 	// TODO: the color correction code below is not quite correct
 
 	// if the ForwardMatrix is included:
-	if (false)//param.has_forward_matrix2)
-	{
-		auto FM((Matrix3f() << param.forward_matrix2[0][0], param.forward_matrix2[0][1], param.forward_matrix2[0][2],
-			                   param.forward_matrix2[1][0], param.forward_matrix2[1][1], param.forward_matrix2[1][2],
-							   param.forward_matrix2[2][0], param.forward_matrix2[2][1], param.forward_matrix2[2][2]).finished());
-		auto CC((Matrix3f() << param.camera_calibration2[0][0], param.camera_calibration2[0][1], param.camera_calibration2[0][2],
-							   param.camera_calibration2[1][0], param.camera_calibration2[1][1], param.camera_calibration2[1][2],
-							   param.camera_calibration2[2][0], param.camera_calibration2[2][1], param.camera_calibration2[2][2]).finished());
-		auto AB = Vector3f(param.analog_balance[0], param.analog_balance[1], param.analog_balance[2]).asDiagonal();
+	
+	// FIXME: need matrix class with inverse
+	// if (false)//param.has_forward_matrix2)
+	// {
+	// 	auto FM(create_matrix(param.forward_matrix2[0][0], param.forward_matrix2[0][1], param.forward_matrix2[0][2],
+	// 		                  param.forward_matrix2[1][0], param.forward_matrix2[1][1], param.forward_matrix2[1][2],
+	// 						  param.forward_matrix2[2][0], param.forward_matrix2[2][1], param.forward_matrix2[2][2]));
+	// 	auto CC(create_matrix(param.camera_calibration2[0][0], param.camera_calibration2[0][1], param.camera_calibration2[0][2],
+	// 						  param.camera_calibration2[1][0], param.camera_calibration2[1][1], param.camera_calibration2[1][2],
+	// 						  param.camera_calibration2[2][0], param.camera_calibration2[2][1], param.camera_calibration2[2][2]));
+	// 	auto AB = Matrix3f(param.analog_balance[0], param.analog_balance[1], param.analog_balance[2]);
 
-		Vector3f CameraNeutral(param.as_shot_neutral[0],
-		                       param.as_shot_neutral[1],
-		                       param.as_shot_neutral[2]);
-		Vector3f ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
-		auto D = (ReferenceNeutral.asDiagonal()).inverse();
-		auto CameraToXYZ = FM * D * (AB * CC).inverse();
+	// 	Vector3f CameraNeutral(param.as_shot_neutral[0],
+	// 	                       param.as_shot_neutral[1],
+	// 	                       param.as_shot_neutral[2]);
+	// 	Vector3f ReferenceNeutral = (AB * CC).inverse() * CameraNeutral;
+	// 	auto D = (ReferenceNeutral.asDiagonal()).inverse();
+	// 	auto CameraToXYZ = FM * D * (AB * CC).inverse();
 
-		return CameraToXYZ;
-	}
-	else
-	{
-		auto CM((Matrix3f() << param.color_matrix2[0][0], param.color_matrix2[0][1], param.color_matrix2[0][2],
-			                   param.color_matrix2[1][0], param.color_matrix2[1][1], param.color_matrix2[1][2],
-				               param.color_matrix2[2][0], param.color_matrix2[2][1], param.color_matrix2[2][2]).finished());
+	// 	return CameraToXYZ;
+	// }
+	// else
+	// {
+	// 	auto CM((Matrix3f() << param.color_matrix2[0][0], param.color_matrix2[0][1], param.color_matrix2[0][2],
+	// 		                   param.color_matrix2[1][0], param.color_matrix2[1][1], param.color_matrix2[1][2],
+	// 			               param.color_matrix2[2][0], param.color_matrix2[2][1], param.color_matrix2[2][2]).finished());
 
-		auto CameraToXYZ = CM.inverse();
+	// 	auto CameraToXYZ = CM.inverse();
 
-		return CameraToXYZ;
-
-	}
+	// 	return CameraToXYZ;
+	// }
+	return Matrix3f();
 }
 
 
@@ -647,9 +667,9 @@ HDRImage develop(vector<float> & raw,
 		for (int x = 0; x < developed.width(); x++)
 		{
 			float v = ::clamp((raw[y * developed.width() + x] - blackLevel)*invScale, 0.f, 1.f);
-			Vector3f rgb = Vector3f(v,v,v);
-			rgb = rgb.cwiseQuotient(wb);
-			developed(x,y) = Color4(rgb(0),rgb(1),rgb(2),1.f);
+			Vector3f rgb(v,v,v);
+			rgb = rgb / wb;
+			developed(x,y) = Color4(rgb.x(),rgb.y(),rgb.z(),1.f);
 		}
 	});
 
@@ -666,7 +686,7 @@ HDRImage develop(vector<float> & raw,
 		for (int x = 0; x < developed.width(); x++)
 		{
 			Vector3f rgb(developed(x,y).r, developed(x,y).g, developed(x,y).b);
-			rgb = rgb.cwiseProduct(wb);
+			rgb = rgb * wb;
 			Vector3f sRGB = CameraTosRGB * rgb;
 			developed(x,y) = Color4(sRGB.x(),sRGB.y(),sRGB.z(),1.f);
 		}

@@ -16,7 +16,6 @@
 #include <vector>                // for vector
 #include "common.h"              // for lerp, mod, clamp, getExtension
 #include "colorspace.h"
-#include "parallelfor.h"
 #include "timer.h"
 #include <spdlog/spdlog.h>
 
@@ -26,7 +25,6 @@
 
 
 using namespace std;
-using namespace Eigen;
 
 // local functions
 namespace
@@ -35,23 +33,23 @@ namespace
 const Color4 g_blackPixel(0,0,0,0);
 
 // create a vector containing the normalized values of a 1D Gaussian filter
-ArrayXXf horizontalGaussianKernel(float sigma, float truncate);
+Array2Df horizontalGaussianKernel(float sigma, float truncate);
 int wrapCoord(int p, int maxP, HDRImage::BorderMode m);
 void bilinearGreen(HDRImage &raw, int offsetX, int offsetY);
-void PhelippeauGreen(HDRImage &raw, const Vector2i & red_offset);
-void MalvarGreen(HDRImage &raw, int c, const Vector2i & red_offset);
-void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &red_offset, bool horizontal);
-void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &red_offset);
-void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & red_offset);
-void greenBasedRorB(HDRImage &raw, int c, const Vector2i &red_offset);
+void PhelippeauGreen(HDRImage &raw, const nanogui::Vector2i & red_offset);
+void MalvarGreen(HDRImage &raw, int c, const nanogui::Vector2i & red_offset);
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const nanogui::Vector2i &red_offset, bool horizontal);
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const nanogui::Vector2i &red_offset);
+void bilinearRedBlue(HDRImage &raw, int c, const nanogui::Vector2i & red_offset);
+void greenBasedRorB(HDRImage &raw, int c, const nanogui::Vector2i &red_offset);
 inline float clamp2(float value, float mn, float mx);
 inline float clamp4(float value, float a, float b, float c, float d);
 inline float interpGreenH(const HDRImage &raw, int x, int y);
 inline float interpGreenV(const HDRImage &raw, int x, int y);
-inline float ghG(const ArrayXXf & G, int i, int j);
-inline float gvG(const ArrayXXf & G, int i, int j);
+inline float ghG(const Array2Df & G, int i, int j);
+inline float gvG(const Array2Df & G, int i, int j);
 inline int bayerColor(int x, int y);
-inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, const vector<float> & LUT);
+inline nanogui::Vector3f cameraToLab(const nanogui::Vector3f c, const nanogui::Matrix3f & cameraToXYZ, const vector<float> & LUT);
 } // namespace
 
 
@@ -195,7 +193,7 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
 
 HDRImage HDRImage::resampled(int w, int h,
                              AtomicProgress progress,
-                             function<Vector2f(const Vector2f &)> warpFn,
+                             function<nanogui::Vector2f(const nanogui::Vector2f &)> warpFn,
                              int superSample, Sampler sampler, BorderMode mX, BorderMode mY) const
 {
     HDRImage result(w, h);
@@ -214,8 +212,8 @@ HDRImage HDRImage::resampled(int w, int h,
                 for (int xx = 0; xx < superSample; ++xx)
                 {
                     float i = (xx + 0.5f) / superSample;
-                    Vector2f srcUV = warpFn(Vector2f((x + i) / w, (y + j) / h)).array() * Array2f(width(), height());
-                    sum += sample(srcUV(0), srcUV(1), sampler, mX, mY);
+                    nanogui::Vector2f srcUV = warpFn(nanogui::Vector2f((x + i) / w, (y + j) / h)) * nanogui::Vector2f(width(), height());
+                    sum += sample(srcUV[0], srcUV[1], sampler, mX, mY);
                 }
             }
             result(x, y) = sum / (superSample * superSample);
@@ -227,7 +225,7 @@ HDRImage HDRImage::resampled(int w, int h,
 }
 
 
-HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
+HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress,
                              BorderMode mX, BorderMode mY, Box2i roi) const
 {
     HDRImage result = *this;
@@ -241,24 +239,24 @@ HDRImage HDRImage::convolved(const ArrayXXf &kernel, AtomicProgress progress,
     if (!roi.has_volume())
         return result;
 
-    int centerX = int((kernel.rows()-1.0)/2.0);
-    int centerY = int((kernel.cols()-1.0)/2.0);
+    int centerX = int((kernel.width()-1.0)/2.0);
+    int centerY = int((kernel.height()-1.0)/2.0);
 
     Timer timer;
 	progress.set_num_steps(roi.size().x());
     // for every pixel in the image
-    parallel_for(roi.min.x(), roi.max.x(), [this,&roi,&progress,kernel,mX,mY,&result,centerX,centerY](int x)
+    parallel_for(roi.min.x(), roi.max.x(), [this,&roi,&progress,&kernel,mX,mY,&result,centerX,centerY](int x)
     {
         for (int y = roi.min.y(); y < roi.max.y(); y++)
         {
             Color4 accum(0.0f, 0.0f, 0.0f, 0.0f);
             float weightSum = 0.0f;
             // for every pixel in the kernel
-            for (int xFilter = 0; xFilter < kernel.rows(); xFilter++)
+            for (int xFilter = 0; xFilter < kernel.width(); xFilter++)
             {
                 int xx = x-xFilter+centerX;
 
-                for (int yFilter = 0; yFilter < kernel.cols(); yFilter++)
+                for (int yFilter = 0; yFilter < kernel.height(); yFilter++)
                 {
                     int yy = y-yFilter+centerY;
                     accum += kernel(xFilter, yFilter) * pixel(xx, yy, mX, mY);
@@ -283,7 +281,7 @@ HDRImage HDRImage::gaussian_blurred_x(float sigmaX, AtomicProgress progress, Bor
 
 HDRImage HDRImage::gaussian_blurred_y(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY, Box2i roi) const
 {
-    return convolved(horizontalGaussianKernel(sigmaY, truncateY).transpose(), progress, mY, mY, roi);
+    return convolved(horizontalGaussianKernel(sigmaY, truncateY).swapped_dims(), progress, mY, mY, roi);
 }
 
 // Use principles of separability to blur an image using 2 1D Gaussian Filters
@@ -300,7 +298,7 @@ HDRImage HDRImage::gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress p
 // sharpen an image
 HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
 {
-    return *this + Color4(strength) * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
+    return *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
 }
 
 
@@ -609,9 +607,9 @@ HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const
     int oldH = height();
 
     // fill in new regions with border value
-    HDRImage img = HDRImage::Constant(newW, newH, bgColor);
+    HDRImage img = HDRImage(newW, newH, bgColor);
 
-    Vector2i tlDst(0,0);
+    nanogui::Vector2i tlDst(0,0);
     // find top-left corner
     switch (anchor)
     {
@@ -656,7 +654,7 @@ HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const
             break;
     }
 
-    Vector2i tlSrc(0,0);
+    nanogui::Vector2i tlSrc(0,0);
     if (tlDst.x() < 0)
     {
         tlSrc.x() = -tlDst.x();
@@ -668,11 +666,13 @@ HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const
         tlDst.y() = 0;
     }
 
-    Vector2i bs(std::min(oldW, newW), std::min(oldH, newH));
+    nanogui::Vector2i bs(std::min(oldW, newW), std::min(oldH, newH));
 
-    img.block(tlDst.x(), tlDst.y(),
-              bs.x(), bs.y()) = block(tlSrc.x(), tlSrc.y(),
-                                                    bs.x(), bs.y());
+    // FIXME
+    // img.block(tlDst.x(), tlDst.y(),
+    //           bs.x(), bs.y()) = block(tlSrc.x(), tlSrc.y(),
+    //                                                 bs.x(), bs.y());
+    // img.copy_subimage();
     return img;
 }
 
@@ -681,7 +681,7 @@ HDRImage HDRImage::resized(int w, int h) const
 {
     HDRImage newImage(w, h);
 
-    if (!stbir_resize_float((const float *)data(), width(), height(), 0,
+    if (!stbir_resize_float((const float *) data(), width(), height(), 0,
                             (float *) newImage.data(), w, h, 0, 4))
         throw runtime_error("Failed to resize image.");
 
@@ -707,7 +707,7 @@ HDRImage HDRImage::resized(int w, int h) const
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern
  */
-void HDRImage::bayer_mosaic(const Vector2i &red_offset)
+void HDRImage::bayer_mosaic(const nanogui::Vector2i &red_offset)
 {
     Color4 mosaic[2][2] = {{Color4(1.f, 0.f, 0.f, 1.f), Color4(0.f, 1.f, 0.f, 1.f)},
                            {Color4(0.f, 1.f, 0.f, 1.f), Color4(0.f, 0.f, 1.f, 1.f)}};
@@ -729,7 +729,7 @@ void HDRImage::bayer_mosaic(const Vector2i &red_offset)
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_linear(const Vector2i &red_offset)
+void HDRImage::demosaic_green_linear(const nanogui::Vector2i &red_offset)
 {
     bilinearGreen(*this, red_offset.x(), red_offset.y());
 }
@@ -740,7 +740,7 @@ void HDRImage::demosaic_green_linear(const Vector2i &red_offset)
  * @param raw       The source raw pixel data.
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &red_offset)
+void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const nanogui::Vector2i &red_offset)
 {
     parallel_for(red_offset.y(), height(), 2, [this,&raw,&red_offset](int y)
     {
@@ -759,7 +759,7 @@ void HDRImage::demosaic_green_horizontal(const HDRImage &raw, const Vector2i &re
  * @param raw       The source raw pixel data.
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &red_offset)
+void HDRImage::demosaic_green_vertical(const HDRImage &raw, const nanogui::Vector2i &red_offset)
 {
     parallel_for(2+red_offset.y(), height()-2, 2, [this,&raw,&red_offset](int y)
     {
@@ -780,12 +780,12 @@ void HDRImage::demosaic_green_vertical(const HDRImage &raw, const Vector2i &red_
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_malvar(const Vector2i &red_offset)
+void HDRImage::demosaic_green_malvar(const nanogui::Vector2i &red_offset)
 {
     // fill in missing green at red pixels
     MalvarGreen(*this, 0, red_offset);
     // fill in missing green at blue pixels
-    MalvarGreen(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
+    MalvarGreen(*this, 2, nanogui::Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
@@ -793,7 +793,7 @@ void HDRImage::demosaic_green_malvar(const Vector2i &red_offset)
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_green_phelippeau(const Vector2i &red_offset)
+void HDRImage::demosaic_green_phelippeau(const nanogui::Vector2i &red_offset)
 {
     PhelippeauGreen(*this, red_offset);
 }
@@ -803,10 +803,10 @@ void HDRImage::demosaic_green_phelippeau(const Vector2i &red_offset)
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_linear(const Vector2i &red_offset)
+void HDRImage::demosaic_red_blue_linear(const nanogui::Vector2i &red_offset)
 {
     bilinearRedBlue(*this, 0, red_offset);
-    bilinearRedBlue(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
+    bilinearRedBlue(*this, 2, nanogui::Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
@@ -820,10 +820,10 @@ void HDRImage::demosaic_red_blue_linear(const Vector2i &red_offset)
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &red_offset)
+void HDRImage::demosaic_red_blue_green_guided_linear(const nanogui::Vector2i &red_offset)
 {
     greenBasedRorB(*this, 0, red_offset);
-    greenBasedRorB(*this, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
+    greenBasedRorB(*this, 2, nanogui::Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
 }
 
 /*!
@@ -836,20 +836,20 @@ void HDRImage::demosaic_red_blue_green_guided_linear(const Vector2i &red_offset)
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void HDRImage::demosaic_red_blue_malvar(const Vector2i &red_offset)
+void HDRImage::demosaic_red_blue_malvar(const nanogui::Vector2i &red_offset)
 {
     // fill in missing red horizontally
-    MalvarRedOrBlueAtGreen(*this, 0, Vector2i((red_offset.x() + 1) % 2, red_offset.y()), true);
+    MalvarRedOrBlueAtGreen(*this, 0, nanogui::Vector2i((red_offset.x() + 1) % 2, red_offset.y()), true);
     // fill in missing red vertically
-    MalvarRedOrBlueAtGreen(*this, 0, Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), false);
+    MalvarRedOrBlueAtGreen(*this, 0, nanogui::Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), false);
 
     // fill in missing blue horizontally
-    MalvarRedOrBlueAtGreen(*this, 2, Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), true);
+    MalvarRedOrBlueAtGreen(*this, 2, nanogui::Vector2i(red_offset.x(), (red_offset.y() + 1) % 2), true);
     // fill in missing blue vertically
-    MalvarRedOrBlueAtGreen(*this, 2, Vector2i((red_offset.x() + 1) % 2, red_offset.y()), false);
+    MalvarRedOrBlueAtGreen(*this, 2, nanogui::Vector2i((red_offset.x() + 1) % 2, red_offset.y()), false);
 
     // fill in missing red at blue
-    MalvarRedOrBlue(*this, 0, 2, Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
+    MalvarRedOrBlue(*this, 0, 2, nanogui::Vector2i((red_offset.x() + 1) % 2, (red_offset.y() + 1) % 2));
     // fill in missing blue at red
     MalvarRedOrBlue(*this, 2, 0, red_offset);
 }
@@ -864,7 +864,7 @@ HDRImage HDRImage::median_filter_bayer_artifacts() const
     HDRImage colorDiff = apply_function([](const Color4 & c){return Color4(c.r-c.g,c.g,c.b-c.g,c.a);});
     colorDiff = colorDiff.median_filtered(1.f, 0, AtomicProgress(progress, .5f))
                          .median_filtered(1.f, 2, AtomicProgress(progress, .5f));
-    return binaryExpr(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);}).eval();
+    return apply_function(colorDiff, [](const Color4 & i, const Color4 & med){return Color4(med.r + i.g, i.g, med.b + i.g, i.a);});
 }
 
 /*!
@@ -893,16 +893,16 @@ HDRImage HDRImage::median_filter_bayer_artifacts() const
  * @param cameraToXYZ   The matrix that transforms from sensor values to XYZ with
  *                      D65 white point.
  */
-void HDRImage::demosaicAHD(const Vector2i &red_offset, const Matrix3f &cameraToXYZ)
+void HDRImage::demosaicAHD(const nanogui::Vector2i &red_offset, const nanogui::Matrix3f &cameraToXYZ)
 {
-    using Image3f = Array<Vector3f,Dynamic,Dynamic>;
-    using HomoMap = Array<uint8_t,Dynamic,Dynamic>;
+    using Image3f = Array2D<nanogui::Vector3f>;
+    using HomoMap = Array2D<uint8_t>;
     HDRImage rgbH = *this;
     HDRImage rgbV = *this;
-    Image3f labH(width(), height());
-    Image3f labV(width(), height());
-    HomoMap homoH = HomoMap::Zero(width(), height());
-    HomoMap homoV = HomoMap::Zero(width(), height());
+    Image3f labH(width(), height(), nanogui::Vector3f(0.f));
+    Image3f labV(width(), height(), nanogui::Vector3f(0.f));
+    HomoMap homoH = HomoMap(width(), height());
+    HomoMap homoV = HomoMap(width(), height());
 
     // interpolate green channel both horizontally and vertically
     rgbH.demosaic_green_horizontal(*this, red_offset);
@@ -913,7 +913,8 @@ void HDRImage::demosaicAHD(const Vector2i &red_offset, const Matrix3f &cameraToX
     rgbV.demosaic_red_blue_green_guided_linear(red_offset);
 
     // Scale factor to push XYZ values to [0,1] range
-    float scale = 1.0 / (maxCoeff().max() * cameraToXYZ.maxCoeff());
+    // FIXME
+    float scale = 1.0f;// / (max().max() * cameraToXYZ.max());
 
     // Precompute a table for the nonlinear part of the CIELab conversion
     vector<float> labLUT;
@@ -928,12 +929,12 @@ void HDRImage::demosaicAHD(const Vector2i &red_offset, const Matrix3f &cameraToX
     parallel_for(0, height(), [&rgbH,&labH,&cameraToXYZ,&labLUT,scale](int y)
     {
         for (int x = 0; x < rgbH.width(); ++x)
-            labH(x,y) = cameraToLab(Vector3f(rgbH(x,y)[0], rgbH(x,y)[1], rgbH(x,y)[2])*scale, cameraToXYZ, labLUT);
+            labH(x,y) = cameraToLab(nanogui::Vector3f(rgbH(x,y)[0], rgbH(x,y)[1], rgbH(x,y)[2])*scale, cameraToXYZ, labLUT);
     });
     parallel_for(0, height(), [&rgbV,&labV,&cameraToXYZ,&labLUT,scale](int y)
     {
         for (int x = 0; x < rgbV.width(); ++x)
-            labV(x,y) = cameraToLab(Vector3f(rgbV(x,y)[0], rgbV(x,y)[1], rgbV(x,y)[2])*scale, cameraToXYZ, labLUT);
+            labV(x,y) = cameraToLab(nanogui::Vector3f(rgbV(x,y)[0], rgbV(x,y)[1], rgbV(x,y)[2])*scale, cameraToXYZ, labLUT);
     });
 
     // Build homogeneity maps from the CIELab images which count, for each pixel,
@@ -941,7 +942,7 @@ void HDRImage::demosaicAHD(const Vector2i &red_offset, const Matrix3f &cameraToX
     static const int neighbor[4][2] = { {-1, 0}, {1, 0}, {0, -1}, {0, 1} };
     parallel_for(1, height()-1, [&homoH,&homoV,&labH,&labV](int y)
     {
-        for (int x = 1; x < labH.rows()-1; ++x)
+        for (int x = 1; x < labH.width()-1; ++x)
         {
             float ldiffH[4], ldiffV[4], abdiffH[4], abdiffV[4];
 
@@ -1031,8 +1032,8 @@ void HDRImage::demosaic_border(size_t border)
             if (x == border && y >= border && y < height() - border)
                 x = width() - border;
 
-            Vector3f sum = Vector3f::Zero();
-            Vector3i count = Vector3i::Zero();
+            nanogui::Vector3f sum = nanogui::Vector3f(0.f);
+            nanogui::Vector3i count = nanogui::Vector3i(0.f);
 
             for (size_t ys = y - 1; ys <= y + 1; ++ys)
             {
@@ -1043,8 +1044,8 @@ void HDRImage::demosaic_border(size_t border)
                     if (ys < (size_t)height() && xs < (size_t)width())
                     {
                         int c = bayerColor(xs, ys);
-                        sum(c) += (*this)(xs,ys)[c];
-                        ++count(c);
+                        sum[c] += (*this)(xs,ys)[c];
+                        ++count[c];
                     }
                 }
             }
@@ -1053,7 +1054,7 @@ void HDRImage::demosaic_border(size_t border)
             for (int c = 0; c < 3; ++c)
             {
                 if (col != c)
-                    (*this)(x,y)[c] = count(c) ? (sum(c) / count(c)) : 1.0f;
+                    (*this)(x,y)[c] = count[c] ? (sum[c] / count[c]) : 1.0f;
             }
         }
     });
@@ -1172,13 +1173,13 @@ namespace
 {
 
 // create a vector containing the normalized values of a 1D Gaussian filter
-ArrayXXf horizontalGaussianKernel(float sigma, float truncate)
+Array2Df horizontalGaussianKernel(float sigma, float truncate)
 {
     // calculate the size of the filter
     int offset = int(std::ceil(truncate * sigma));
     int filterSize = 2*offset+1;
 
-    ArrayXXf fData(filterSize, 1);
+    Array2Df fData(filterSize, 1);
 
     // compute the un-normalized value of the Gaussian
     float normalizer = 0.0f;
@@ -1217,14 +1218,14 @@ int wrapCoord(int p, int maxP, HDRImage::BorderMode m)
     }
 }
 
-inline Vector3f cameraToLab(const Vector3f c, const Matrix3f & cameraToXYZ, const vector<float> & LUT)
+inline nanogui::Vector3f cameraToLab(const nanogui::Vector3f c, const nanogui::Matrix3f & cameraToXYZ, const vector<float> & LUT)
 {
-    Vector3f xyz = cameraToXYZ * c;
+    nanogui::Vector3f xyz = cameraToXYZ * c;
 
     for (int i = 0; i < 3; ++i)
-        xyz(i) = LUT[::clamp((int) (xyz(i) * LUT.size()), 0, int(LUT.size()-1))];
+        xyz[i] = LUT[::clamp((int) (xyz[i] * LUT.size()), 0, int(LUT.size()-1))];
 
-    return Vector3f(116.0f * xyz[1] - 16, 500.0f * (xyz[0] - xyz[1]), 200.0f * (xyz[1] - xyz[2]));
+    return nanogui::Vector3f(116.0f * xyz[1] - 16, 500.0f * (xyz[0] - xyz[1]), 200.0f * (xyz[1] - xyz[2]));
 }
 
 inline int bayerColor(int x, int y)
@@ -1264,12 +1265,12 @@ inline float interpGreenV(const HDRImage &raw, int x, int y)
     return clamp2(v, raw(x, y - 1).g, raw(x, y + 1).g);
 }
 
-inline float ghG(const ArrayXXf & G, int i, int j)
+inline float ghG(const Array2Df & G, int i, int j)
 {
     return fabs(G(i-1,j) - G(i,j)) + fabs(G(i+1,j) - G(i,j));
 }
 
-inline float gvG(const ArrayXXf & G, int i, int j)
+inline float gvG(const Array2Df & G, int i, int j)
 {
     return fabs(G(i,j-1) - G(i,j)) + fabs(G(i,j+1) - G(i,j));
 }
@@ -1297,10 +1298,10 @@ void bilinearGreen(HDRImage &raw, int offsetX, int offsetY)
 }
 
 
-void PhelippeauGreen(HDRImage &raw, const Vector2i & red_offset)
+void PhelippeauGreen(HDRImage &raw, const nanogui::Vector2i & red_offset)
 {
-    ArrayXXf Gh(raw.width(), raw.height());
-    ArrayXXf Gv(raw.width(), raw.height());
+    Array2Df Gh(raw.width(), raw.height());
+    Array2Df Gv(raw.width(), raw.height());
 
     // populate horizontally interpolated green
     parallel_for(red_offset.y(), raw.height(), 2, [&raw,&Gh,&red_offset](int y)
@@ -1347,7 +1348,7 @@ void PhelippeauGreen(HDRImage &raw, const Vector2i & red_offset)
 }
 
 
-void MalvarGreen(HDRImage &raw, int c, const Vector2i & red_offset)
+void MalvarGreen(HDRImage &raw, int c, const nanogui::Vector2i & red_offset)
 {
     // fill in half of the missing locations (R or B)
     parallel_for(2, raw.height()-2-red_offset.y(), 2, [&raw,c,&red_offset](int yy)
@@ -1367,7 +1368,7 @@ void MalvarGreen(HDRImage &raw, int c, const Vector2i & red_offset)
     });
 }
 
-void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &red_offset, bool horizontal)
+void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const nanogui::Vector2i &red_offset, bool horizontal)
 {
     int dx = (horizontal) ? 1 : 0;
     int dy = (horizontal) ? 0 : 1;
@@ -1384,7 +1385,7 @@ void MalvarRedOrBlueAtGreen(HDRImage &raw, int c, const Vector2i &red_offset, bo
     });
 }
 
-void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &red_offset)
+void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const nanogui::Vector2i &red_offset)
 {
     // fill in half of the missing locations (R or B)
     parallel_for(2+red_offset.y(), raw.height()-2, 2, [&raw,c1,c2,&red_offset](int y)
@@ -1401,7 +1402,7 @@ void MalvarRedOrBlue(HDRImage &raw, int c1, int c2, const Vector2i &red_offset)
 
 // takes as input a raw image and returns a single-channel
 // 2D image corresponding to the red or blue channel using simple interpolation
-void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & red_offset)
+void bilinearRedBlue(HDRImage &raw, int c, const nanogui::Vector2i & red_offset)
 {
     // diagonal interpolation
     parallel_for(red_offset.y() + 1, raw.height()-1, 2, [&raw,c,&red_offset](int y)
@@ -1429,7 +1430,7 @@ void bilinearRedBlue(HDRImage &raw, int c, const Vector2i & red_offset)
 
 // takes as input a raw image and returns a single-channel
 // 2D image corresponding to the red or blue channel using green based interpolation
-void greenBasedRorB(HDRImage &raw, int c, const Vector2i &red_offset)
+void greenBasedRorB(HDRImage &raw, int c, const nanogui::Vector2i &red_offset)
 {
     // horizontal interpolation
     parallel_for(red_offset.y(), raw.height(), 2, [&raw,c,&red_offset](int y)
