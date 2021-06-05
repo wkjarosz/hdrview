@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <vector>
+
 //! Generic, resizable, 2D array class.
 template <typename T>
 class Array2D
