@@ -161,6 +161,8 @@ add_executable(HDRView
   src/hdrimage.h
   src/hdrimagedngio.cpp
   src/hdrimageio.cpp
+  src/hdrimageraw.cpp
+  src/hdrimageraw.h
   src/hdrview.cpp
   src/hdrviewscreen.cpp
   src/hdrviewscreen.h
@@ -242,6 +244,8 @@ add_executable(hdrbatch
   src/hdrimage.h
   src/hdrimagedngio.cpp
   src/hdrimageio.cpp
+  src/hdrimageraw.cpp
+  src/hdrimageraw.h
   src/hdrbatch.cpp
   src/parallelfor.cpp
   src/parallelfor.h

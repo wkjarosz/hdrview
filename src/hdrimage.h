@@ -274,15 +274,6 @@ public:
 
 
     //-----------------------------------------------------------------------
-    //@{ \name Bayer demosaicing.
-    //-----------------------------------------------------------------------
-    void bayer_mosaic(const nanogui::Vector2i &red_offset);
-
-    // HDRImage median_filter_bayer_artifacts() const;
-    //@}
-
-
-    //-----------------------------------------------------------------------
     //@{ \name Image filters.
     //-----------------------------------------------------------------------
     HDRImage inverted(Box2i roi = Box2i()) const;
