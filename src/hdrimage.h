@@ -15,6 +15,7 @@
 #include "array2d.h"
 #include "parallelfor.h"
 #include <nanogui/vector.h>
+#include <ImathMatrix.h>
 
 
 //! Floating point image
@@ -63,111 +64,19 @@ public:
 
 
     // makes a copy of the image, applies func for each pixel in roi of the copy, and returns the result
-    HDRImage apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i()) const
-    {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-            roi = box();
-
-        HDRImage result = (*this);
-
-        // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-        parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result](int y)
-        {
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                result(x,y) = func((*this)(x,y));
-        });
-
-        return result;
-    }
-
-
+    HDRImage apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i()) const;
     // applies func for each pixel in roi, and stores result back in this
-    HDRImage & apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i())
-    {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-            roi = box();
-
-        // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-        parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi](int y)
-        {
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                (*this)(x,y) = func((*this)(x,y));
-        });
-
-        return *this;
-    }
-
-
+    HDRImage & apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i());
     // for images this and other, computes result = func(this, other) for each pixel in roi, and returns the result
     // useful for something like c = a+b
-    HDRImage apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const
-    {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-            roi = box();
-
-        HDRImage result = (*this);
-
-        // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-        parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result,&other](int y)
-        {
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                result(x,y) = func((*this)(x,y), other(x,y));
-        });
-
-        return result;
-    }
-
+    HDRImage apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
     // for images this and other, computes this = func(this, other) for each pixel in roi, and stores result back in this
     // useful for something like a += b
-    HDRImage & apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i())
-    {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-        {
-            roi = box();
-            roi.intersect(other.box());
-        }
-
-        // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-        parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&other](int y)
-        {
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                (*this)(x,y) = func((*this)(x,y), other(x,y));
-        });
-
-        return *this;
-    }
-
+    HDRImage & apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i());
     HDRImage & square() {return apply_function([](const Color4 & c){return c * c;});}
     HDRImage & abs() {return apply_function([](const Color4 & c){return ::abs(c);});}
 
-    Color4 reduce(std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const
-    {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-            roi = box();
-
-        Color4 result = (*this)(roi.min.x(),roi.min.y());
-
-        // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-        parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result](int y)
-        {
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                if (x != roi.min.x() && y != roi.min.y())
-                    result = func(result, (*this)(x,y));
-        });
-
-        return result;
-    }
-
+    Color4 reduce(std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
     Color4 mean() const {return reduce([](const Color4 & a, const Color4 & b){return a + b;});}
     Color4 min() const {return reduce([](const Color4 & a, const Color4 & b){return ::min(a,b);});}
     Color4 max() const {return reduce([](const Color4 & a, const Color4 & b){return ::max(a,b);});}
@@ -175,11 +84,9 @@ public:
     void copy_subimage(const HDRImage & src, Box2i src_roi, int dst_x, int dst_y);
 
 
-
     //-----------------------------------------------------------------------
     //@{ \name Component-wise arithmetic and assignment.
     //-----------------------------------------------------------------------
-
     HDRImage operator+(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a + b;});}
     HDRImage operator-(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a - b;});}
     HDRImage operator*(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a * b;});}
@@ -371,38 +278,7 @@ public:
     //-----------------------------------------------------------------------
     void bayer_mosaic(const nanogui::Vector2i &red_offset);
 
-    void demosaic_linear(const nanogui::Vector2i &red_offset)
-    {
-        demosaic_green_linear(red_offset);
-        demosaic_red_blue_linear(red_offset);
-    }
-    void demosaic_green_guided_linear(const nanogui::Vector2i &red_offset)
-    {
-        demosaic_green_linear(red_offset);
-        demosaic_red_blue_green_guided_linear(red_offset);
-    }
-    void demosaic_malvar(const nanogui::Vector2i &red_offset)
-    {
-        demosaic_green_malvar(red_offset);
-        demosaic_red_blue_malvar(red_offset);
-    }
-    void demosaicAHD(const nanogui::Vector2i &red_offset, const nanogui::Matrix3f &cameraToXYZ);
-
-    // green channel
-    void demosaic_green_linear(const nanogui::Vector2i &red_offset);
-    void demosaic_green_horizontal(const HDRImage &raw, const nanogui::Vector2i &red_offset);
-    void demosaic_green_vertical(const HDRImage &raw, const nanogui::Vector2i &red_offset);
-    void demosaic_green_malvar(const nanogui::Vector2i &red_offset);
-    void demosaic_green_phelippeau(const nanogui::Vector2i &red_offset);
-
-    // red/blue channels
-    void demosaic_red_blue_linear(const nanogui::Vector2i &red_offset);
-    void demosaic_red_blue_green_guided_linear(const nanogui::Vector2i &red_offset);
-    void demosaic_red_blue_malvar(const nanogui::Vector2i &red_offset);
-
-    void demosaic_border(size_t border);
-
-    HDRImage median_filter_bayer_artifacts() const;
+    // HDRImage median_filter_bayer_artifacts() const;
     //@}
 
 
@@ -481,6 +357,7 @@ public:
     //@}
 
     bool load(const std::string & filename);
+    void load_dng(const std::string & filename);
     /*!
      * @brief           Write the file to disk.
      *

@@ -161,6 +161,7 @@ add_executable(HDRView
   src/hdrcolorpicker.h
   src/hdrimage.cpp
   src/hdrimage.h
+  src/hdrimagedngio.cpp
   src/hdrimageio.cpp
   src/hdrview.cpp
   src/hdrviewscreen.cpp
@@ -241,6 +242,7 @@ add_executable(hdrbatch
   src/fwd.h
   src/hdrimage.cpp
   src/hdrimage.h
+  src/hdrimagedngio.cpp
   src/hdrimageio.cpp
   src/hdrbatch.cpp
   src/parallelfor.cpp

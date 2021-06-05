@@ -19,8 +19,13 @@
 #include "multigraph.h"
 #include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
+#include <ImathMatrix.h>
 
 using namespace std;
+using Imath::V2f;
+using Imath::V3f;
+using Imath::M33f;
 
 namespace
 {
@@ -1402,8 +1407,8 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							Matrix3f t(1.f);
-							Vector2f origin(0.f, 0.f);
+							Imath::M33f t;
+							Imath::V2f origin(0.f, 0.f);
 
 							// find top-left corner
 							switch (anchor)
@@ -1411,20 +1416,20 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 								case HDRImage::TOP_RIGHT:
 								case HDRImage::MIDDLE_RIGHT:
 								case HDRImage::BOTTOM_RIGHT:
-									origin.x() = 1.f;
+									origin.x = 1.f;
 									break;
 
 								case HDRImage::TOP_CENTER:
 								case HDRImage::MIDDLE_CENTER:
 								case HDRImage::BOTTOM_CENTER:
-									origin.x() = 0.5f;
+									origin.x = 0.5f;
 									break;
 
 								case HDRImage::TOP_LEFT:
 								case HDRImage::MIDDLE_LEFT:
 								case HDRImage::BOTTOM_LEFT:
 								default:
-									origin.x() = 0.f;
+									origin.x = 0.f;
 									break;
 							}
 							switch (anchor)
@@ -1432,57 +1437,50 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 								case HDRImage::BOTTOM_LEFT:
 								case HDRImage::BOTTOM_CENTER:
 								case HDRImage::BOTTOM_RIGHT:
-									origin.y() = 1.f;
+									origin.y = 1.f;
 									break;
 
 								case HDRImage::MIDDLE_LEFT:
 								case HDRImage::MIDDLE_CENTER:
 								case HDRImage::MIDDLE_RIGHT:
-									origin.y() = 0.5f;
+									origin.y = 0.5f;
 									break;
 
 								case HDRImage::TOP_LEFT:
 								case HDRImage::TOP_CENTER:
 								case HDRImage::TOP_RIGHT:
 								default:
-									origin.y() = 0.f;
+									origin.y = 0.f;
 									break;
 							}
 
-							// t.translate(origin);
-							// t.scale(Vector2f(1.f/img->width(), 1.f/img->height()));
-							// t.translate(Vector2f(translate_x, translate_y));
+							t.translate(origin);
+							t.scale(V2f(1.f/img->width(), 1.f/img->height()));
+							t.translate(V2f(translate_x, translate_y));
+							t = M33f().setRotation(cw ? angle/180.f * M_PI : -angle/180.f * M_PI) * t;
 							// t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-							// Matrix2f sh;
-							// sh << 1, tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI), 1;
-							// t.linear() *= sh;
-							// t.scale(Vector2f(scale_x, scale_y)*.01f);
-							// t.scale(Vector2f(img->width(), img->height()));
-							// t.translate(-origin);
-							// FIXME
-							t = t * Matrix3f::translate(origin);
-							t = t * Matrix3f::scale(Vector2f(1.f/img->width(), 1.f/img->height()));
-							t = t * Matrix3f::translate(Vector2f(translate_x, translate_y));
-							// t *= Matrix3f::rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-							Matrix3f sh(1.f);
-							sh.m[0][0] = 1.f;
-							sh.m[0][1] = tan(shear_x/180.f * M_PI);
-							sh.m[1][0] = tan(shear_y/180.f * M_PI);
-							sh.m[1][1] = 1.f;
-							// t.linear() *= sh;
-							// t.scale(Vector2f(scale_x, scale_y)*.01f);
-							// t.scale(Vector2f(img->width(), img->height()));
-							// t.translate(-origin);
+							t.shear(V2f(tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI)));
+							t.scale(V2f(scale_x, scale_y)*.01f);
+							t.scale(V2f(img->width(), img->height()));
+							t.translate(-origin);
+							t.invert();
 
-							// t = t.inverse();
+							// t.translate(origin);
+							// t.scale(V2f(1.f/img->width(), 1.f/img->height()));
+							// t.scale(V2f(1.f/scale_x, 1.f/scale_y)*100.f);
+							// t.shear(V2f(-tan(shear_x/180.f * M_PI), -tan(shear_y/180.f * M_PI)));
+							// t = M33f().setRotation(cw ? -angle/180.f * M_PI : angle/180.f * M_PI) * t;
+							// t.translate(V2f(-translate_x, -translate_y));
+							// t.scale(V2f(img->width(), img->height()));
+							// t.translate(-origin);
 
 							function<Vector2f(const Vector2f &)> warp =
 								[t](const Vector2f &uv)
 								{
-									Vector3f uvh(uv.x(), uv.y(), 1.f);
-									Vector3f resh = t * uvh;
-									resh /= resh.z();
-									return Vector2f(resh.x(), resh.y());
+									V2f uvh(uv.x(), uv.y());
+									V2f res_h;
+									t.multVecMatrix(uvh, res_h);
+									return Vector2f(res_h.x, res_h.y);
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 																		progress, warp, samples, sampler,
