@@ -4,6 +4,13 @@
 // be found in the LICENSE.txt file.
 //
 
+#if defined(_WIN32)
+#  ifndef NOMINMAX
+#  define NOMINMAX 1
+#  endif
+#endif
+#include <GLFW/glfw3.h>
+
 #include "imagelistpanel.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
@@ -17,13 +24,6 @@
 #include <set>
 #include <spdlog/spdlog.h>
 #include <alphanum.h>
-
-#if defined(_WIN32)
-#  ifndef NOMINMAX
-#  define NOMINMAX 1
-#  endif
-#endif
-#include <GLFW/glfw3.h>
 
 using namespace nanogui;
 using namespace std;
