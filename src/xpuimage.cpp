@@ -18,7 +18,6 @@
 #include <nanovg.h>
 
 using namespace nanogui;
-// using namespace Eigen;
 using namespace std;
 
 shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &img, float exposure, AtomicProgress & prog)
@@ -47,7 +46,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 		Color4 gain(pow(2.f, exposure), 1.f);
 		float d = 1.f / (img.width() * img.height());
 
-		for (Eigen::DenseIndex i = 0; i < img.size(); ++i)
+		for (int i = 0; i < img.size(); ++i)
 		{
 			if (prog.canceled())
 				throw std::exception();

@@ -26,8 +26,7 @@ class ImageListPanel;
 class Timer;
 template<typename T> class Range;
 
-namespace nanogui
-{
+NAMESPACE_BEGIN(nanogui)
 class Widget;
 class Button;
 class CheckBox;
@@ -45,7 +44,7 @@ class MultiGraph;
 class Well;
 class ImageButton;
 class HSLGradient;
-}
+NAMESPACE_END(nanogui)
 
 // define some common types
 using Box2i     = Box<nanogui::Vector2i>;

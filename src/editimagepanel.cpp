@@ -19,9 +19,13 @@
 #include "multigraph.h"
 #include "filmictonecurve.h"
 #include <spdlog/spdlog.h>
-#include <Eigen/Geometry>
+#include <spdlog/fmt/ostr.h>
+#include <ImathMatrix.h>
 
 using namespace std;
+using Imath::V2f;
+using Imath::V3f;
+using Imath::M33f;
 
 namespace
 {
@@ -986,7 +990,7 @@ Button * create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel 
 //					auto dst2xyz = envMapUVToXYZ(to);
 //					auto xyz2src = XYZToEnvMapUV(from);
 //					auto warp = [dst2xyz,xyz2src](const Vector2f &uv) { return xyz2src(dst2xyz(uv)); };
-					auto warp = [](const Eigen::Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
+					auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
 
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
@@ -1044,10 +1048,10 @@ Button * create_shift_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
 							// by default use a no-op passthrough warp function
-							function<Eigen::Vector2f(const Eigen::Vector2f &)> shift =
-								[&](const Eigen::Vector2f &uv)
+							function<Vector2f(const Vector2f &)> shift =
+								[&](const Vector2f &uv)
 								{
-									return (uv + Eigen::Vector2f(dx / img->width(), dy / img->height())).eval();
+									return (uv + Vector2f(dx / img->width(), dy / img->height()));
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 							                                             progress, shift, 1, sampler,
@@ -1403,9 +1407,8 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img, AtomicProgress & progress) -> ImageCommandResult
 						{
-							Eigen::Affine2f t(Eigen::Affine2f::Identity());
-
-							Eigen::Vector2f origin(0.f, 0.f);
+							Imath::M33f t;
+							Imath::V2f origin(0.f, 0.f);
 
 							// find top-left corner
 							switch (anchor)
@@ -1413,20 +1416,20 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 								case HDRImage::TOP_RIGHT:
 								case HDRImage::MIDDLE_RIGHT:
 								case HDRImage::BOTTOM_RIGHT:
-									origin.x() = 1.f;
+									origin.x = 1.f;
 									break;
 
 								case HDRImage::TOP_CENTER:
 								case HDRImage::MIDDLE_CENTER:
 								case HDRImage::BOTTOM_CENTER:
-									origin.x() = 0.5f;
+									origin.x = 0.5f;
 									break;
 
 								case HDRImage::TOP_LEFT:
 								case HDRImage::MIDDLE_LEFT:
 								case HDRImage::BOTTOM_LEFT:
 								default:
-									origin.x() = 0.f;
+									origin.x = 0.f;
 									break;
 							}
 							switch (anchor)
@@ -1434,40 +1437,50 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 								case HDRImage::BOTTOM_LEFT:
 								case HDRImage::BOTTOM_CENTER:
 								case HDRImage::BOTTOM_RIGHT:
-									origin.y() = 1.f;
+									origin.y = 1.f;
 									break;
 
 								case HDRImage::MIDDLE_LEFT:
 								case HDRImage::MIDDLE_CENTER:
 								case HDRImage::MIDDLE_RIGHT:
-									origin.y() = 0.5f;
+									origin.y = 0.5f;
 									break;
 
 								case HDRImage::TOP_LEFT:
 								case HDRImage::TOP_CENTER:
 								case HDRImage::TOP_RIGHT:
 								default:
-									origin.y() = 0.f;
+									origin.y = 0.f;
 									break;
 							}
 
 							t.translate(origin);
-							t.scale(Eigen::Vector2f(1.f/img->width(), 1.f/img->height()));
-							t.translate(Eigen::Vector2f(translate_x, translate_y));
-							t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-							Eigen::Matrix2f sh;
-							sh << 1, tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI), 1;
-							t.linear() *= sh;
-							t.scale(Eigen::Vector2f(scale_x, scale_y)*.01f);
-							t.scale(Eigen::Vector2f(img->width(), img->height()));
+							t.scale(V2f(1.f/img->width(), 1.f/img->height()));
+							t.translate(V2f(translate_x, translate_y));
+							t = M33f().setRotation(cw ? angle/180.f * M_PI : -angle/180.f * M_PI) * t;
+							// t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+							t.shear(V2f(tan(shear_x/180.f * M_PI), tan(shear_y/180.f * M_PI)));
+							t.scale(V2f(scale_x, scale_y)*.01f);
+							t.scale(V2f(img->width(), img->height()));
 							t.translate(-origin);
+							t.invert();
 
-							t = t.inverse();
+							// t.translate(origin);
+							// t.scale(V2f(1.f/img->width(), 1.f/img->height()));
+							// t.scale(V2f(1.f/scale_x, 1.f/scale_y)*100.f);
+							// t.shear(V2f(-tan(shear_x/180.f * M_PI), -tan(shear_y/180.f * M_PI)));
+							// t = M33f().setRotation(cw ? -angle/180.f * M_PI : angle/180.f * M_PI) * t;
+							// t.translate(V2f(-translate_x, -translate_y));
+							// t.scale(V2f(img->width(), img->height()));
+							// t.translate(-origin);
 
-							function<Eigen::Vector2f(const Eigen::Vector2f &)> warp =
-								[t](const Eigen::Vector2f &uv)
+							function<Vector2f(const Vector2f &)> warp =
+								[t](const Vector2f &uv)
 								{
-									return (t * uv).eval();
+									V2f uvh(uv.x(), uv.y());
+									V2f res_h;
+									t.multVecMatrix(uvh, res_h);
+									return Vector2f(res_h.x, res_h.y);
 								};
 							return {make_shared<HDRImage>(img->resampled(img->width(), img->height(),
 																		progress, warp, samples, sampler,
@@ -1668,10 +1681,10 @@ void EditImagePanel::paste()
 
 
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
-	: Widget(parent), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
+	: Well(parent, 1, Color(150, 32), Color(0, 50)), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
 {
 	const int spacing = 2;
-	set_layout(new GroupLayout(2, 4, 8, 10));
+	set_layout(new GroupLayout(10, 4, 8, 10));
 
 	new Label(this, "History", "sans-bold");
 
@@ -1877,5 +1890,5 @@ void EditImagePanel::draw(NVGcontext *ctx)
 	m_redo_btn->set_enabled(can_modify && img->has_redo());
 
 
-	Widget::draw(ctx);
+	Well::draw(ctx);
 }

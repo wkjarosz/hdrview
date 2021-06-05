@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <nanogui/widget.h>
+#include "well.h"
 #include <vector>
 #include "common.h"
 #include "xpuimage.h"
@@ -14,7 +14,7 @@
 
 using namespace nanogui;
 
-class ImageListPanel : public Widget
+class ImageListPanel : public Well
 {
 public:
 	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * imgViewer);

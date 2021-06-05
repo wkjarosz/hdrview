@@ -64,6 +64,26 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // // panelTheme->m_button_gradient_top_pushed = panelTheme->m_transparent;
     // panelTheme->m_button_gradient_bot_pushed = panelTheme->m_button_gradient_top_pushed;
 
+	auto flat_theme = new Theme(m_nvg_context);
+	flat_theme = new Theme(m_nvg_context);
+	flat_theme->m_standard_font_size     		= 16;
+	flat_theme->m_button_font_size       		= 15;
+	flat_theme->m_text_box_font_size     		= 14;
+	flat_theme->m_window_corner_radius   		= 0;
+	flat_theme->m_window_fill_unfocused  		= Color(50, 255);
+	flat_theme->m_window_fill_focused    		= Color(52, 255);
+	flat_theme->m_window_header_height   		= 0;
+	flat_theme->m_window_drop_shadow_size 		= 0;
+	flat_theme->m_button_corner_radius   		= 4;
+	flat_theme->m_border_light			  		= flat_theme->m_transparent;
+	flat_theme->m_border_dark			  		= flat_theme->m_transparent;
+	flat_theme->m_button_gradient_top_focused 	= flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_focused 	= flat_theme->m_button_gradient_top_focused;
+    flat_theme->m_button_gradient_top_unfocused = flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_unfocused = flat_theme->m_transparent;
+    flat_theme->m_button_gradient_top_pushed 	= flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_pushed 	= flat_theme->m_button_gradient_top_pushed;
+
 
 	//
 	// Construct the top-level widgets
@@ -124,7 +144,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_side_panel_contents = new Widget(m_side_scroll_panel);
 	m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_side_panel_contents->set_fixed_width(213);
+	m_side_panel_contents->set_fixed_width(215);
 	m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
 	m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
 
@@ -134,6 +154,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
     auto btn = new Button(m_side_panel_contents, "File", FA_CARET_DOWN);
+	btn->set_theme(flat_theme);
 	btn->set_flags(Button::ToggleButton);
 	btn->set_pushed(true);
 	btn->set_font_size(18);
@@ -145,12 +166,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
 	auto btn2 = new Button(m_side_panel_contents, "Edit", FA_CARET_RIGHT);
+	btn2->set_theme(flat_theme);
 	btn2->set_flags(Button::ToggleButton);
 	btn2->set_font_size(18);
 	btn2->set_icon_position(Button::IconPosition::Left);
 
 	m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
-	m_edit_panel->set_visible(false);
+	m_edit_panel->set_fixed_height(4);
 
 	//
 	// image and edit panel callbacks
@@ -159,14 +181,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	auto toggle_panel = [this](Button * btn1, Button * btn2, Widget * panel1, Widget * panel2, bool value)
 		{
 			btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
-			panel1->set_visible(value);
+			panel1->set_visible(true);
+
+			panel1->set_fixed_height(value ? 0 : 4);
 
 			// close other panel
 			if (value)
 			{
 				btn2->set_pushed(false);
 				btn2->set_icon(FA_CARET_RIGHT);
-				panel2->set_visible(false);
+				panel2->set_fixed_height(4);
 			}
 
 			request_layout_update();
@@ -906,7 +930,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 	if (m_dragging_side_panel)
 	{
-		int w = ::clamp(p.x(), 206, m_size.x() - 10);
+		int w = ::clamp(p.x(), 215, m_size.x() - 10);
 		m_side_panel_contents->set_fixed_width(w);
 		m_side_scroll_panel->set_fixed_width(w + 12);
 		m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());

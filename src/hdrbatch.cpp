@@ -6,7 +6,7 @@
 
 #include <ctype.h>                       // for tolower
 #include <docopt.h>                      // for docopt
-#include <Eigen/Core>                    // for Vector2f
+#include <nanogui/vector.h>
 #include <iostream>                      // for string
 #include <random>                        // for normal_distribution, mt19937
 #include "common.h"                      // for getBasename, getExtension
@@ -16,7 +16,7 @@
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
-using namespace Eigen;
+using nanogui::Vector2f;
 
 namespace
 {
@@ -402,7 +402,7 @@ int main(int argc, char **argv)
                 else
                     throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", to));
 
-                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv[0], uv[1])));};
             }
 
             string interp = s3;
@@ -477,14 +477,14 @@ int main(int argc, char **argv)
             if (varN == 1)
             {
                 // set images to zeros
-                varImg = avgImg = image.unaryExpr([](const Color4 & c)
+                varImg = avgImg = image.apply_function([](const Color4 & c)
                 {
                     return Color4(0,0,0,0);
                 });
             }
 
             if (fixNaNs || !dryRun)
-                image = image.unaryExpr([nanColor](const Color4 & c)
+                image = image.apply_function([nanColor](const Color4 & c)
                 {
                     return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
                 });
@@ -606,7 +606,7 @@ int main(int argc, char **argv)
             varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
 
             // set alpha channel to 1
-            varImg = varImg.unaryExpr([](const Color4 & c)
+            varImg = varImg.apply_function([](const Color4 & c)
             {
                 return Color4(c.r,c.g,c.b,1);
             });

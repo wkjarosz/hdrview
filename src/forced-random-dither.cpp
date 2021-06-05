@@ -14,16 +14,15 @@
 //
 
 #include <iostream>
-#include <Eigen/Dense>
+#include "array2d.h"
+#include <nanogui/vector.h>
 #include <vector>
 #include <random>
 #include <algorithm>    // std::random_shuffle
 #include <ctime>        // std::time
 #include <cstdlib>      // std::rand, std::srand
 
-using Eigen::MatrixXd;
-using Eigen::ArrayXXd;
-using Eigen::Vector2i;
+using nanogui::Vector2i;
 using namespace std;
 
 const int Sm = 128;
@@ -52,8 +51,8 @@ int main(int, char **)
 	std::mt19937 g_rand(unsigned ( std::time(0) ) );
 
 	vector<Vector2i> freeLocations;
-	ArrayXXd M = ArrayXXd::Zero(Sm,Sm);
-	ArrayXXd forceField = ArrayXXd::Zero(Sm,Sm);
+	Array2Dd M = Array2Dd(Sm,Sm,0.0);
+	Array2Dd forceField = Array2Dd(Sm,Sm,0.0);
 
 	// initialize free locations
 	for (int y = 0; y < Sm; ++y)
@@ -100,7 +99,7 @@ int main(int, char **)
 		// }
 	}
 
-	std::cout << M << std::endl;
+	// std::cout << M << std::endl;
 
 	cout << "unsigned dither_matrix[" << Smk << "] = \n{\n ";
 	printf("%5d", (int)M(0));
