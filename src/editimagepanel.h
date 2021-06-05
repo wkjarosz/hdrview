@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include <nanogui/widget.h>
+#include "well.h"
 #include <memory>
 #include "fwd.h"
 
 using namespace nanogui;
 
-class EditImagePanel : public Widget
+class EditImagePanel : public Well
 {
 public:
 	EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel);

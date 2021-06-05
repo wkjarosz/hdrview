@@ -12,8 +12,6 @@ add_subdirectory(ext ext_build)
 include_directories(
   # tinyformat string formatting library
   ${TFM_INCLUDE_DIR}
-  # # Eigen linear algebra library
-  # SYSTEM ${EIGEN_INCLUDE_DIR}
   # OpenEXR high dynamic range bitmap library
   SYSTEM ${OPENEXR_INCLUDE_DIRS}
   # Pseudorandom number generator

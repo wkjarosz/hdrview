@@ -29,38 +29,29 @@ using namespace nanogui;
 using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
-	: Widget(parent),
+	: Well(parent, 1, Color(150, 32), Color(0, 50)),
 	  m_modify_done_callback([](int){}),
 	  m_num_images_callback([](){}),
       m_screen(screen),
       m_image_view(img_view)
 {
 	// set_id("image list panel");
-	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
+	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
 
 	// histogram mode selection GUI elements
 	{
 		auto grid = new Widget(this);
-		auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
-		grid->set_layout(agl);
-		agl->set_col_stretch(2, 1.0f);
-		agl->set_col_stretch(4, 1.0f);
+		grid->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
 
-		agl->append_row(0);
-		agl->set_anchor(new Label(grid, "Histogram:", "sans", 14),
-		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
+		new Label(grid, "Histogram:", "sans", 14);
 
 		m_yaxis_scale = new ComboBox(grid, {"Linear", "Log"});
 		m_yaxis_scale->set_tooltip("Set the scale for the Y axis.");
 		m_yaxis_scale->set_fixed_height(19);
-		agl->set_anchor(m_yaxis_scale,
-		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
 		m_xaxis_scale = new ComboBox(grid, {"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_tooltip("Set the scale for the X axis.");
 		m_xaxis_scale->set_fixed_height(19);
-		agl->set_anchor(m_xaxis_scale,
-		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
 		m_xaxis_scale->set_selected_index(1);
 		m_yaxis_scale->set_selected_index(0);
@@ -640,7 +631,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		}
 	}
 
-	Widget::draw(ctx);
+	Well::draw(ctx);
 }
 
 

@@ -1681,10 +1681,10 @@ void EditImagePanel::paste()
 
 
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
-	: Widget(parent), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
+	: Well(parent, 1, Color(150, 32), Color(0, 50)), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
 {
 	const int spacing = 2;
-	set_layout(new GroupLayout(2, 4, 8, 10));
+	set_layout(new GroupLayout(10, 4, 8, 10));
 
 	new Label(this, "History", "sans-bold");
 
@@ -1890,5 +1890,5 @@ void EditImagePanel::draw(NVGcontext *ctx)
 	m_redo_btn->set_enabled(can_modify && img->has_redo());
 
 
-	Widget::draw(ctx);
+	Well::draw(ctx);
 }

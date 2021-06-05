@@ -97,9 +97,11 @@ void MultiGraph::draw(NVGcontext *ctx)
 		                                m_size.x() - 2, m_size.y() - 2, 3, 4,
 		                                Color(0, 32), Color(0, 92));
 		nvgBeginPath(ctx);
-		nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), 2.5);
+		nvgRoundedRect(ctx, m_pos.x()+1, m_pos.y()+1, m_size.x()-2, m_size.y()-2, 2.5);
 		nvgFillPaint(ctx, paint);
 		nvgFill(ctx);
+		nvgStrokeColor(ctx, Color(0, 150));
+		nvgStroke(ctx);
 	}
 
 	if (num_plots() && m_values[0].size() >= 2)
