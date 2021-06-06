@@ -17,6 +17,9 @@ using namespace nanogui;
 class ImageListPanel : public Well
 {
 public:
+	using IntCallback = std::function<void(int)>;
+	using VoidCallback = std::function<void(void)>;
+
 	ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * imgViewer);
 
 	void draw(NVGcontext *ctx) override;
@@ -99,11 +102,6 @@ private:
 
 	bool m_image_modify_done_requested = false;
 
-	// various callback functions
-	std::function<void(int)> m_modify_done_callback;
-	std::function<void()> m_num_images_callback;
-
-
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageView * m_image_view = nullptr;
 	Button * m_save_btn = nullptr;
@@ -132,4 +130,8 @@ private:
 	bool m_dragging_image_btn = false;
     size_t m_dragged_image_btn_id;
     nanogui::Vector2i m_dragging_start_pos;
+
+	// various callback functions
+	IntCallback m_modify_done_callback;
+	VoidCallback m_num_images_callback;
 };

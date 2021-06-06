@@ -132,13 +132,14 @@ Color4 HDRImage::reduce(function<Color4(const Color4 &, const Color4 &)> func, B
 
     Color4 result = (*this)(roi.min.x(),roi.min.y());
 
-    // for (int y = roi.min.y(); y < roi.max.y(); ++y)
-    parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result](int y)
+    for (int y = roi.min.y(); y < roi.max.y(); ++y)
+    // parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result](int y)
     {
         for (int x = roi.min.x(); x < roi.max.x(); ++x)
             if (x != roi.min.x() && y != roi.min.y())
                 result = func(result, (*this)(x,y));
-    });
+    }
+    // );
 
     return result;
 }

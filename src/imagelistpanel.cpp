@@ -30,10 +30,10 @@ using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
 	: Well(parent, 1, Color(150, 32), Color(0, 50)),
-	  m_modify_done_callback([](int){}),
-	  m_num_images_callback([](){}),
       m_screen(screen),
-      m_image_view(img_view)
+      m_image_view(img_view),
+	  m_modify_done_callback([](int){}),
+	  m_num_images_callback([](){})
 {
 	// set_id("image list panel");
 	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
@@ -593,13 +593,17 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		auto lazyHist = current_image()->histograms();
 		int idx = m_xaxis_scale->selected_index();
 		int idxY = m_yaxis_scale->selected_index();
-		auto hist = lazyHist->get()->histogram[idx].values;
+		vector<float> hist[3];
+		hist[0] = lazyHist->get()->histogram[idx].values[0];
+		hist[1] = lazyHist->get()->histogram[idx].values[1];
+		hist[2] = lazyHist->get()->histogram[idx].values[2];
 		auto ticks = lazyHist->get()->histogram[idx].xTicks;
 		auto labels = lazyHist->get()->histogram[idx].xTickLabels;
 		
 		if (idxY != 0)
 			for (int c = 0; c < 3; ++c)
 				for_each(hist[c].begin(), hist[c].end(), [](float & v){v = normalizedLogScale(v);});
+		
 		m_graph->set_values(hist[0], 0);
 		m_graph->set_values(hist[1], 1);
 		m_graph->set_values(hist[2], 2);

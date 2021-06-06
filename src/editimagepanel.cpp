@@ -1714,7 +1714,14 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 	// flip h
 	m_filter_btns.push_back(new Button(grid, "Flip H", FA_ARROWS_ALT_H));
-	m_filter_btns.back()->set_callback([&](){m_screen->flip_image(true);});
+	m_filter_btns.back()->set_callback(
+		[&](){m_images_panel->modify_image(
+		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flipped_horizontal()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_horizontal(); })};
+		    });
+		});
 	m_filter_btns.back()->set_fixed_height(21);
 
 	// rotate cw
@@ -1734,7 +1741,14 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 	// flip v
 	m_filter_btns.push_back(new Button(grid, "Flip V", FA_ARROWS_ALT_V));
-	m_filter_btns.back()->set_callback([&](){m_screen->flip_image(false);});
+	m_filter_btns.back()->set_callback(
+		[&](){m_images_panel->modify_image(
+		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
+		    {
+			    return {make_shared<HDRImage>(img->flipped_vertical()),
+			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_vertical(); })};
+		    });
+		});
 	m_filter_btns.back()->set_fixed_height(21);
 
 	// rotate ccw

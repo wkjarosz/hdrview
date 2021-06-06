@@ -77,7 +77,8 @@ public:
     HDRImage & abs() {return apply_function([](const Color4 & c){return ::abs(c);});}
 
     Color4 reduce(std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
-    Color4 mean() const {return reduce([](const Color4 & a, const Color4 & b){return a + b;});}
+    Color4 sum() const {return reduce([](const Color4 & a, const Color4 & b){return a + b;});}
+    Color4 mean() const{return sum()/size();}
     Color4 min() const {return reduce([](const Color4 & a, const Color4 & b){return ::min(a,b);});}
     Color4 max() const {return reduce([](const Color4 & a, const Color4 & b){return ::max(a,b);});}
     
