@@ -18,6 +18,8 @@ NAMESPACE_BEGIN(nanogui)
 class MultiGraph : public Widget
 {
 public:
+	using DragCallback = std::function<void(const Vector2f &)>;
+
 	MultiGraph(Widget *parent, const Color & fg = Color(255, 192, 0, 128),
 	           const std::vector<float> & v = std::vector<float>());
 
@@ -54,8 +56,8 @@ public:
 	void set_center_header(const std::string & s) { m_center_header = s; }
 	void set_right_header(const std::string & s)  { m_right_header = s; }
 
-	std::function<void(const Vector2f &)> drag_callback() const { return m_drag_callback; }
-	void set_drag_callback(const std::function<void(const Vector2f &)> &callback) { m_drag_callback = callback; }
+	DragCallback drag_callback() const { return m_drag_callback; }
+	void set_drag_callback(const DragCallback & cb) { m_drag_callback = cb; }
 
 	virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 	virtual void draw(NVGcontext *ctx) override;
@@ -75,7 +77,7 @@ protected:
 	std::vector<float> m_xticks, m_yticks;
 	std::vector<std::string> m_xtick_labels;
 
-	std::function<void(const Vector2f &)> m_drag_callback;
+	DragCallback m_drag_callback;
 };
 
 NAMESPACE_END(nanogui)

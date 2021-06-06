@@ -17,6 +17,8 @@ NAMESPACE_BEGIN(nanogui)
 class HDRColorPicker : public PopupButton {
 public:
 
+    using ColorCallback = std::function<void(const Color &, float)>;
+
     enum Components : uint32_t
     {
         R_SLIDER    = ColorWheel2::TRANS_CORNER << 1,
@@ -59,8 +61,8 @@ public:
      * before the user clicks \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_pick_button.
      */
-    void set_callback(const std::function<void(const Color &, float)> &callback) {
-        m_callback = callback;
+    void set_callback(const ColorCallback & cb) {
+        m_callback = cb;
         m_callback(m_color, m_exposure);
     }
 
@@ -69,14 +71,14 @@ public:
      * **and** the user clicks the \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_reset_button.
      */
-    std::function<void(const Color &, float)> final_callback() const { return m_final_callback; }
+    ColorCallback final_callback() const { return m_final_callback; }
 
     /**
      * The callback to execute when a new Color is selected on the ColorWheel
      * **and** the user clicks the \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_reset_button.
      */
-    void set_final_callback(const std::function<void(const Color &, float)> &callback) { m_final_callback = callback; }
+    void set_final_callback(const ColorCallback &cb) { m_final_callback = cb; }
 
     /// Get the current color
     Color color() const         { return m_color; }
@@ -111,14 +113,14 @@ protected:
 
 
     /// The "fast" callback executed when the ColorWheel has changed.
-    std::function<void(const Color &, float)> m_callback;
+    ColorCallback m_callback;
 
     /**
      * The callback to execute when a new Color is selected on the ColorWheel
      * **and** the user clicks the \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_reset_button.
      */
-    std::function<void(const Color &, float)> m_final_callback;
+    ColorCallback m_final_callback;
 
     /// The ColorWheel for this HDRColorPicker (the actual widget allowing selection).
     ColorWheel2 *m_color_wheel;

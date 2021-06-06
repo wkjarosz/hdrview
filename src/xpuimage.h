@@ -105,8 +105,8 @@ public:
 	void recompute_histograms(float exposure) const;
 
 	/// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify
-	const VoidVoidFunc & modify_done_callback() const            { return m_modify_done_callback; }
-	void set_modify_done_callback(const VoidVoidFunc & callback)  { m_modify_done_callback = callback; }
+	VoidVoidFunc modify_done_callback() const            	{ return m_modify_done_callback; }
+	void set_modify_done_callback(const VoidVoidFunc & cb)  { m_modify_done_callback = cb; }
 
 protected:
 
