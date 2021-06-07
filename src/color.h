@@ -9,7 +9,7 @@
 #include <iostream>
 #include <cmath>
 #include <nanogui/vector.h>
-#include "fwd.h"
+// #include "fwd.h"
 
 class Color3
 {

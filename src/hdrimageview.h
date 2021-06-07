@@ -139,10 +139,6 @@ public:
 	void select_all();
 	void select_none();
 
-	void select_all();
-	void select_none();
-
-
 	// Callback functions
 
 	/// Callback executed whenever the gamma value has been changed, e.g. via @ref set_gamma
