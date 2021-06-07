@@ -1217,7 +1217,7 @@ void HDRViewScreen::draw_contents()
 
 				nvgBeginPath(m_nvg_context);
 				nvgCircle(m_nvg_context, center.x(), center.y(), 26);
-				nvgFillColor(m_nvg_context, Color(color_toned));
+				nvgFillColor(m_nvg_context, (Color)color_toned);
 				nvgFill(m_nvg_context);
 
 				nvgStrokeColor(m_nvg_context, Color(0, 255));
@@ -1230,7 +1230,7 @@ void HDRViewScreen::draw_contents()
 				
 				nvgFontSize(m_nvg_context, font_size());
 				nvgFontFace(m_nvg_context, "icons");
-				nvgFillColor(m_nvg_context, Color(color_toned).contrasting_color());
+				nvgFillColor(m_nvg_context, ((Color)color_toned).contrasting_color());
 				nvgTextAlign(m_nvg_context, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
 
 				nvgText(m_nvg_context, center.x(), center.y(), utf8(FA_EYE_DROPPER).data(), nullptr);
