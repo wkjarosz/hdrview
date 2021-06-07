@@ -1212,7 +1212,9 @@ void HDRViewScreen::draw_contents()
 			{
 				Color4 color_orig = image(pixel.x(), pixel.y());
 				Color4 color_toned = m_image_view->tonemap(color_orig);
-				Color ng_color(color_toned);
+				// FIXME: the conversion operator doesn't seem to work on linux
+				// Color ng_color(color_toned);
+				Color ng_color(color_toned[0], color_toned[1], color_toned[2], color_toned[3]);
 
 				m_active_colorpicker->set_color(color_orig);
 
