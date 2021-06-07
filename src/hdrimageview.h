@@ -133,10 +133,11 @@ public:
 	bool draw_values_on() const   		{return m_draw_values;}
 	void set_draw_values(bool b)  		{m_draw_values = b;}
 
+	Color4 tonemap(const Color4 & color) const;
+
 
 	void select_all();
 	void select_none();
-
 
 	// Callback functions
 

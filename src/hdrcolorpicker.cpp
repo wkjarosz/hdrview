@@ -13,11 +13,15 @@
 
 #include "hdrcolorpicker.h"
 #include "colorslider.h"
+#include "hdrviewscreen.h"
 #include <nanogui/textbox.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
+#include <nanogui/toolbutton.h>
 #include <nanogui/colorwheel.h>
+#include <nanogui/icons.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
 #include <iostream>
 
 NAMESPACE_BEGIN(nanogui)
@@ -46,20 +50,33 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
 	agrid->set_col_stretch(1, 1);
 	panel->set_layout(agrid);
 
-    // set the pick button to the specified color
-    m_pick_button = new Button(popup, "Pick");
-    m_pick_button->set_background_color(m_color);
-    m_pick_button->set_text_color(m_color.contrasting_color());
+    auto row = new Widget(popup);
+    row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 5));
 
     // set the reset button to the specified color
-    m_reset_button = new Button(popup, "Reset");
+    m_reset_button = new Button(row, "Reset");
     m_reset_button->set_background_color(m_color);
     m_reset_button->set_text_color(m_color.contrasting_color());
     m_reset_button->set_visible(components & RESET_BTN);
 
+    // set the pick button to the specified color
+    m_pick_button = new Button(row, "Pick");
+    m_pick_button->set_background_color(m_color);
+    m_pick_button->set_text_color(m_color.contrasting_color());
+
+    m_eyedropper = new ToolButton(row, FA_EYE_DROPPER);
+    m_eyedropper->set_icon_extra_scale(1.5f);
+
+    m_eyedropper->set_change_callback([this](bool b)
+        {
+            if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
+                s->set_active_colorpicker(this);
+        }
+    );
+
     PopupButton::set_change_callback([&](bool) {
         if (m_pick_button->pushed()) {
-            set_color(m_color);
+            // set_color(m_color);
             m_final_callback(m_color, m_exposure);
         }
     });
@@ -160,8 +177,20 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
 	m_pick_button->set_callback([this]() {
         if (m_pushed)
 		{
+            Color e_color = exposed_color();
+            Color t_color = e_color.contrasting_color();
+
             set_pushed(false);
-            set_color(m_color_wheel->color());
+            // set_color(e_color);
+
+            set_background_color(e_color);
+            set_text_color(t_color);
+
+            m_reset_button->set_background_color(e_color);
+            m_reset_button->set_text_color(t_color);
+            m_previous_color = m_color;
+            m_previous_exposure = m_exposure;
+
             m_final_callback(m_color, m_exposure);
 		}
 	});
@@ -182,8 +211,23 @@ Color HDRColorPicker::exposed_color() const {
 }
 
 void HDRColorPicker::update_all(const Color& c, float e) {
-        m_color = c;
-        m_exposure = e;
+        
+        // normalize Color to 0..1 range, and extract 
+        // extra exposure to get back original HDR color
+        float extra_exposure = 0.f;
+        Color normalized_color = c;
+        float max_comp = std::max({c[0], c[1], c[2]});
+        if (max_comp > 1.f)
+        {
+            extra_exposure = log2(max_comp);
+            normalized_color[0] /= max_comp;
+            normalized_color[1] /= max_comp;
+            normalized_color[2] /= max_comp;
+        }
+
+        m_color = normalized_color;
+        m_exposure = e + extra_exposure;
+        spdlog::trace("color {}, exposure {}", m_color, m_exposure);
 
         m_color_wheel->set_color(m_color);
 
@@ -195,24 +239,23 @@ void HDRColorPicker::update_all(const Color& c, float e) {
 
         m_sync_helper();
 
-        m_reset_button->set_background_color(e_color);
-        m_reset_button->set_text_color(t_color);
-        m_previous_color = m_color;
-        m_previous_exposure = m_exposure;
+        // m_reset_button->set_background_color(e_color);
+        // m_reset_button->set_text_color(t_color);
+        // m_previous_color = m_color;
+        // m_previous_exposure = m_exposure;
 }
 
 void HDRColorPicker::set_color(const Color& color) {
     /* Ignore set_color() calls when the user is currently editing */
-    if (!m_pushed) {
-        update_all(color, m_exposure);
-    }
+    // if (!m_pushed)
+        update_all(color, 0.f);
 }
 
 void HDRColorPicker::set_exposure(float e) {
     /* Ignore set_exposure() calls when the user is currently editing */
-    if (!m_pushed) {
-        m_exposure = e;
-        set_color(m_color);
+    // if (!m_pushed)
+    {
+        update_all(m_color, e);
     }
 }
 

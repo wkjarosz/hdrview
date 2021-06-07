@@ -203,7 +203,7 @@ int main(int argc, char **argv)
         verbosity = docargs["--verbose"].asLong();
 
         // Console logger with color
-        spdlog::set_pattern("[%l] %v");
+        spdlog::set_pattern("%^[%l]%$ %v");
         spdlog::set_level(spdlog::level::level_enum(2));
 
         if (verbosity < spdlog::level::trace || verbosity > spdlog::level::off)

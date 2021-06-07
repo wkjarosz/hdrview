@@ -122,16 +122,17 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # to force version.cmake to always be re-run before the build
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp
-           ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
-           ${CMAKE_CURRENT_BINARY_DIR}/hdrview_timestamp.cpp
-           ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_timestamp.cpp
+          #  ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
     COMMAND ${CMAKE_COMMAND} -P
           ${CMAKE_CURRENT_SOURCE_DIR}/resources/version.cmake
     COMMENT "Generating timestamp and git version info")
 
+# add_custom_target(version_info
+#   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_SOURCE_DIR}/resources/version.cmake
+#   ADD_DEPENDENCIES ${CMAKE_CURRENT_SOURCE_DIR}/resources/version.cmake
+#   COMMENT "Generating timestamp and git version info")
 
 add_executable(HDRView
-  # shaders, etc.
   hdrview_version.cpp
   hdrview_resources.cpp
   src/async.h
@@ -192,7 +193,8 @@ add_executable(HDRView
   src/well.h
   ${EXTRA_SOURCE})
 
-# add_dependencies(HDRView timestamp)
+# add_dependencies(HDRView version_info)
+
 
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if (APPLE)
@@ -259,7 +261,7 @@ add_executable(hdrbatch
   src/timer.h
 )
 
-# set_target_properties(hdrbatch PROPERTIES CXX_VISIBILITY_PRESET hidden)
+# add_dependencies(hdrbatch version_info)
 
 add_executable(force-random-dither
     src/forced-random-dither.cpp)          
