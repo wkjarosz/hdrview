@@ -27,43 +27,25 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 {
     set_background(Color(0.23f, 1.0f));
 
-    auto thm = new Theme(m_nvg_context);
-    thm->m_standard_font_size     = 16;
-    thm->m_button_font_size       = 15;
-    thm->m_text_box_font_size     = 14;
-	thm->m_window_corner_radius   = 4;
-	thm->m_window_fill_unfocused  = Color(40, 250);
-	thm->m_window_fill_focused    = Color(45, 250);
-	// thm->m_button_corner_radius   = 4;
-	// thm->m_border_light			  = thm->m_transparent;
-	// thm->m_border_dark			  = thm->m_transparent;
-	// // thm->m_button_gradient_top_focused = thm->m_transparent;
-    // thm->m_button_gradient_bot_focused = thm->m_button_gradient_top_focused;
-    // // thm->m_button_gradient_top_unfocused = thm->m_transparent;
-    // thm->m_button_gradient_bot_unfocused = thm->m_button_gradient_top_unfocused;
-    // // thm->m_button_gradient_top_pushed = thm->m_transparent;
-    // thm->m_button_gradient_bot_pushed = thm->m_button_gradient_top_pushed;
-    set_theme(thm);
+    auto theme = new Theme(m_nvg_context);
+    theme->m_standard_font_size     = 16;
+    theme->m_button_font_size       = 15;
+    theme->m_text_box_font_size     = 14;
+	theme->m_window_corner_radius   = 4;
+	theme->m_window_fill_unfocused  = Color(40, 250);
+	theme->m_window_fill_focused    = Color(45, 250);
+    set_theme(theme);
 
-	auto panelTheme = new Theme(m_nvg_context);
-	panelTheme = new Theme(m_nvg_context);
-	panelTheme->m_standard_font_size     = 16;
-	panelTheme->m_button_font_size       = 15;
-	panelTheme->m_text_box_font_size     = 14;
-	panelTheme->m_window_corner_radius   = 0;
-	panelTheme->m_window_fill_unfocused  = Color(50, 255);
-	panelTheme->m_window_fill_focused    = Color(52, 255);
-	panelTheme->m_window_header_height   = 0;
-	panelTheme->m_window_drop_shadow_size = 0;
-	// panelTheme->m_button_corner_radius   = 4;
-	// panelTheme->m_border_light			  = panelTheme->m_transparent;
-	// panelTheme->m_border_dark			  = panelTheme->m_transparent;
-	// // panelTheme->m_button_gradient_top_focused = panelTheme->m_transparent;
-    // panelTheme->m_button_gradient_bot_focused = panelTheme->m_button_gradient_top_focused;
-    // panelTheme->m_button_gradient_top_unfocused = panelTheme->m_transparent;
-    // panelTheme->m_button_gradient_bot_unfocused = panelTheme->m_transparent;
-    // // panelTheme->m_button_gradient_top_pushed = panelTheme->m_transparent;
-    // panelTheme->m_button_gradient_bot_pushed = panelTheme->m_button_gradient_top_pushed;
+	auto panel_theme = new Theme(m_nvg_context);
+	panel_theme = new Theme(m_nvg_context);
+	panel_theme->m_standard_font_size     = 16;
+	panel_theme->m_button_font_size       = 15;
+	panel_theme->m_text_box_font_size     = 14;
+	panel_theme->m_window_corner_radius   = 0;
+	panel_theme->m_window_fill_unfocused  = Color(50, 255);
+	panel_theme->m_window_fill_focused    = Color(52, 255);
+	panel_theme->m_window_header_height   = 0;
+	panel_theme->m_window_drop_shadow_size = 0;
 
 	auto flat_theme = new Theme(m_nvg_context);
 	flat_theme = new Theme(m_nvg_context);
@@ -91,17 +73,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	//
 
 	m_top_panel = new Window(this, "");
-	m_top_panel->set_theme(panelTheme);
+	m_top_panel->set_theme(panel_theme);
 	m_top_panel->set_position(nanogui::Vector2i(0,0));
 	m_top_panel->set_fixed_height(30);
 	m_top_panel->set_layout(new BoxLayout(Orientation::Horizontal,
 	                                    Alignment::Middle, 5, 5));
 
 	m_side_panel = new Window(this, "");
-	m_side_panel->set_theme(panelTheme);
+	m_side_panel->set_theme(panel_theme);
 
 	m_tool_panel = new Window(this, "");
-	m_tool_panel->set_theme(panelTheme);
+	m_tool_panel->set_theme(panel_theme);
 	m_tool_panel->set_fixed_width(32);
 	m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical,
 	                                       Alignment::Fill, 4, 4));
@@ -119,6 +101,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	b->set_callback([this]{m_tool = HDRViewScreen::Tool_Rectangular_Marquee;});
 	b->set_icon_extra_scale(1.5f);
 	m_toolbuttons.push_back(b);
+
+	(new Widget(m_tool_panel))->set_fixed_height(15);
 
 	m_info_btn = new PopupButton(m_tool_panel, "", FA_INFO_CIRCLE);
 	m_info_btn->set_flags(Button::Flags::ToggleButton);
@@ -211,7 +195,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_image_view->set_pixel_info_threshold(40);
 
 	m_status_bar = new Window(this, "");
-	m_status_bar->set_theme(panelTheme);
+	m_status_bar->set_theme(panel_theme);
 	m_status_bar->set_fixed_height(m_status_bar->theme()->m_text_box_font_size+1);
 
     //
@@ -219,11 +203,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
 	m_status_label = new Label(m_status_bar, "", "sans");
-	m_status_label->set_font_size(thm->m_text_box_font_size);
+	m_status_label->set_font_size(theme->m_text_box_font_size);
 	m_status_label->set_position(nanogui::Vector2i(6, 0));
 
 	m_zoom_label = new Label(m_status_bar, "100% (1 : 1)", "sans");
-	m_zoom_label->set_font_size(thm->m_text_box_font_size);
+	m_zoom_label->set_font_size(theme->m_text_box_font_size);
 
     //
     // create side panel widgets
@@ -260,7 +244,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	btn2->set_font_size(18);
 	btn2->set_icon_position(Button::IconPosition::Left);
 
-	m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
+	m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
 	m_edit_panel->set_fixed_height(4);
 
 	//
@@ -294,17 +278,20 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
 	m_help_button = new Button{m_top_panel, "", FA_QUESTION};
+	m_help_button->set_icon_extra_scale(1.25f);
 	m_help_button->set_fixed_size(nanogui::Vector2i(25, 25));
 	m_help_button->set_change_callback([this](bool) { toggle_help_window(); });
 	m_help_button->set_tooltip("Information about using HDRView.");
 	m_help_button->set_flags(Button::ToggleButton);
 
     m_side_panel_button = new Button(m_top_panel, "", FA_BARS);
+	m_side_panel_button->set_icon_extra_scale(1.25f);
     new Label(m_top_panel, "EV", "sans-bold");
     auto exposure_slider = new Slider(m_top_panel);
     auto exposure_textbox = new FloatBox<float>(m_top_panel, exposure);
 	auto normalize_button = new Button(m_top_panel, "", FA_MAGIC);
 	normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
+	normalize_button->set_icon_extra_scale(1.15f);
 	normalize_button->set_callback([this]()
 	                             {
 		                             auto img = m_images_panel->current_image();
@@ -319,6 +306,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	normalize_button->set_tooltip("Normalize exposure.");
 	auto reset_button = new Button(m_top_panel, "", FA_SYNC);
 	reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
+	reset_button->set_icon_extra_scale(1.15f);
 	reset_button->set_callback([this]()
 	                             {
 		                             m_image_view->set_exposure(0.0f);
@@ -460,6 +448,41 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 					snprintf(out[ch], size, "%f", value);
 				}
 			}
+		}
+	);
+
+	m_image_view->set_hover_callback(
+		[this](const Vector2i & pixel, const Color4 & color32, const Color4 & color8)
+		{
+			if (pixel.x() >= 0)
+			{
+				m_status_label->set_caption(fmt::format(
+					"({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
+					pixel.x(), pixel.y(),
+					color32[0], color32[1], color32[2], color32[3],
+					(int) round(color8[0]), (int) round(color8[1]),
+					(int) round(color8[2]), (int) round(color8[3])));
+				
+				m_color32_info_label->set_caption(fmt::format(
+					"{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}",
+					color32[0], color32[1], color32[2], color32[3]));
+
+				m_color8_info_label->set_caption(fmt::format(
+					"{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
+					(int) round(color8[0]), (int) round(color8[1]),
+					(int) round(color8[2]), (int) round(color8[3])));
+
+				m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+			}
+			else
+			{
+				m_status_label->set_caption("");
+				m_color32_info_label->set_caption("");
+				m_color8_info_label->set_caption("");
+				m_pixel_info_label->set_caption("");
+			}
+
+			m_status_bar->perform_layout(m_nvg_context);
 		}
 	);
 
@@ -975,64 +998,11 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 	else
 		m_dragging_side_panel = false;
 
-	if (m_active_colorpicker && down)
-	{
-		auto tmp = m_active_colorpicker;
-		m_active_colorpicker = nullptr;
-		tmp->close_eyedropper();
-		spdlog::trace("closing eyedropper");
-	}
-
 	return Screen::mouse_button_event(p, button, down, modifiers);
 }
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
 {
-	ConstImagePtr img = m_images_panel->current_image();
-	if (img)
-	{
-		nanogui::Vector2i pixel(m_image_view->image_coordinate_at((p - m_image_view->position())));
-		const HDRImage & image = img->image();
-
-		if (image.contains(pixel.x(), pixel.y()))
-		{
-			Color4 color32 = image(pixel.x(), pixel.y());
-			Color4 color8 = (color32 * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
-			string s = fmt::format(
-				"({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
-				pixel.x(), pixel.y(),
-				color32[0], color32[1], color32[2], color32[3],
-				(int) round(color8[0]), (int) round(color8[1]),
-				(int) round(color8[2]), (int) round(color8[3]));
-			m_status_label->set_caption(s);
-			
-			string s2 = fmt::format(
-				"{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}",
-				color32[0], color32[1], color32[2], color32[3]);
-			m_color32_info_label->set_caption(s2);
-
-			string s3 = fmt::format(
-				"{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
-				(int) round(color8[0]), (int) round(color8[1]),
-				(int) round(color8[2]), (int) round(color8[3]));
-			m_color8_info_label->set_caption(s3);
-
-			m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
-
-			if (m_active_colorpicker)
-				m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
-		}
-		else
-		{
-			m_status_label->set_caption("");
-			m_color32_info_label->set_caption("");
-			m_color8_info_label->set_caption("");
-			m_pixel_info_label->set_caption("");
-		}
-
-		m_status_bar->perform_layout(m_nvg_context);
-	}
-
 	if (m_dragging_side_panel || at_side_panel_edge(p))
 	{
 		m_side_panel->set_cursor(Cursor::HResize);
@@ -1165,11 +1135,23 @@ void HDRViewScreen::update_layout()
 	}
 }
 
+void HDRViewScreen::draw_all()
+{
+    if (m_redraw)
+	{
+        m_redraw = false;
+
+        draw_setup();
+        draw_contents();
+        draw_widgets();
+        draw_teardown();
+    }
+}
+
 void HDRViewScreen::draw_contents()
 {
 	clear();
 
-	// spdlog::trace("HDRViewScreen::draw_contents");
 	m_images_panel->run_requested_callbacks();
 
 	if (auto img = m_images_panel->current_image())
@@ -1197,47 +1179,74 @@ void HDRViewScreen::draw_contents()
 		// redraw();
 		m_need_layout_update = false;
 	}
+}
 
-	// draw the colorpicker's eyedropper
-	if (m_active_colorpicker)
-	{
-		if (auto img = m_images_panel->current_image())
-		{
-			auto center = mouse_pos();
 
-			nanogui::Vector2i pixel(m_image_view->image_coordinate_at((center - m_image_view->position())));
-			const HDRImage & image = img->image();
+void HDRViewScreen::draw_widgets()
+{
+    nvgBeginFrame(m_nvg_context, m_size[0], m_size[1], m_pixel_ratio);
 
-			if (image.contains(pixel.x(), pixel.y()))
-			{
-				Color4 color_orig = image(pixel.x(), pixel.y());
-				Color4 color_toned = m_image_view->tonemap(color_orig);
-				// FIXME: the conversion operator doesn't seem to work on linux
-				// Color ng_color(color_toned);
-				Color ng_color(color_toned[0], color_toned[1], color_toned[2], color_toned[3]);
+    draw(m_nvg_context);
 
-				m_active_colorpicker->set_color(color_orig);
+	// copied from nanogui::Screen
+	// FIXME: prevent tooltips from running off right edge of screen.
+    double elapsed = glfwGetTime() - m_last_interaction;
+    if (elapsed > 0.5f) {
+        /* Draw tooltips */
+        const Widget *widget = find_widget(m_mouse_pos);
+        if (widget && !widget->tooltip().empty()) {
+            int tooltip_width = 150;
 
-				nvgBeginPath(m_nvg_context);
-				nvgCircle(m_nvg_context, center.x(), center.y(), 26);
-				nvgFillColor(m_nvg_context, ng_color);
-				nvgFill(m_nvg_context);
+            float bounds[4];
+            nvgFontFace(m_nvg_context, "sans");
+            nvgFontSize(m_nvg_context, 15.0f);
+            nvgTextAlign(m_nvg_context, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+            nvgTextLineHeight(m_nvg_context, 1.1f);
+            Vector2i pos = widget->absolute_position() +
+                           Vector2i(widget->width() / 2, widget->height() + 10);
 
-				nvgStrokeColor(m_nvg_context, Color(0, 255));
-				nvgStrokeWidth(m_nvg_context, 2+1.f);
-				nvgStroke(m_nvg_context);
+            nvgTextBounds(m_nvg_context, pos.x(), pos.y(),
+                          widget->tooltip().c_str(), nullptr, bounds);
 
-				nvgStrokeColor(m_nvg_context, Color(192, 255));
-				nvgStrokeWidth(m_nvg_context, 2);
-				nvgStroke(m_nvg_context);
-				
-				nvgFontSize(m_nvg_context, font_size());
-				nvgFontFace(m_nvg_context, "icons");
-				nvgFillColor(m_nvg_context, ng_color.contrasting_color());
-				nvgTextAlign(m_nvg_context, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+            int h = (bounds[2] - bounds[0]) / 2;
+            if (h > tooltip_width / 2) {
+                nvgTextAlign(m_nvg_context, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+                nvgTextBoxBounds(m_nvg_context, pos.x(), pos.y(), tooltip_width,
+                                widget->tooltip().c_str(), nullptr, bounds);
 
-				nvgText(m_nvg_context, center.x(), center.y(), utf8(FA_EYE_DROPPER).data(), nullptr);
-			}
-		}
-	}
+                h = (bounds[2] - bounds[0]) / 2;
+            }
+            int shift = 0;
+
+            if (pos.x() - h - 8 < 0) {
+                /* Keep tooltips on screen */
+                shift = pos.x() - h - 8;
+                pos.x() -= shift;
+                bounds[0] -= shift;
+                bounds[2] -= shift;
+            }
+
+            nvgGlobalAlpha(m_nvg_context,
+                           std::min(1.0, 2 * (elapsed - 0.5f)) * 0.8);
+
+            nvgBeginPath(m_nvg_context);
+            nvgFillColor(m_nvg_context, Color(0, 255));
+            nvgRoundedRect(m_nvg_context, bounds[0] - 4 - h, bounds[1] - 4,
+                           (int) (bounds[2] - bounds[0]) + 8,
+                           (int) (bounds[3] - bounds[1]) + 8, 3);
+
+            int px = (int) ((bounds[2] + bounds[0]) / 2) - h + shift;
+            nvgMoveTo(m_nvg_context, px, bounds[1] - 10);
+            nvgLineTo(m_nvg_context, px + 7, bounds[1] + 1);
+            nvgLineTo(m_nvg_context, px - 7, bounds[1] + 1);
+            nvgFill(m_nvg_context);
+
+            nvgFillColor(m_nvg_context, Color(255, 255));
+            nvgFontBlur(m_nvg_context, 0.0f);
+            nvgTextBox(m_nvg_context, pos.x() - h, pos.y(), tooltip_width,
+                       widget->tooltip().c_str(), nullptr);
+        }
+    }
+
+    nvgEndFrame(m_nvg_context);
 }

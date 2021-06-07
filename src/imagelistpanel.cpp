@@ -72,27 +72,32 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
 
 		auto b = new Button(row, "", FA_FOLDER_OPEN);
+		b->set_icon_extra_scale(1.25f);
 		b->set_fixed_height(25);
 		b->set_tooltip("Load an image.");
 		b->set_callback([this] { m_screen->load_image(); });
 
 		b = new Button(row, "", FA_FILE);
+		b->set_icon_extra_scale(1.25f);
 		b->set_fixed_height(25);
 		b->set_tooltip("Create a new image.");
 		// b->set_callback([this] { m_screen->load_image(); });
 
 		b = new Button(row, "", FA_CLONE);
+		b->set_icon_extra_scale(1.25f);
 		b->set_fixed_height(25);
 		b->set_tooltip("Duplicate current image.");
 		// b->set_callback([this] { m_screen->load_image(); });
 
 		m_save_btn = new Button(row, "", FA_SAVE);
+		m_save_btn->set_icon_extra_scale(1.25f);
 		m_save_btn->set_enabled(current_image() != nullptr);
 		m_save_btn->set_fixed_height(25);
 		m_save_btn->set_tooltip("Save the image to disk.");
 		m_save_btn->set_callback([this] { m_screen->save_image(); });
 
 		m_close_btn = new Button(row, "", FA_TIMES_CIRCLE);
+		m_close_btn->set_icon_extra_scale(1.25f);
 		m_close_btn->set_fixed_height(25);
 		m_close_btn->set_tooltip("Close image");
 		m_close_btn->set_callback([this] { m_screen->ask_close_image(current_image_index()); });

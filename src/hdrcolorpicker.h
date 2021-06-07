@@ -19,6 +19,7 @@ class HDRColorPicker : public PopupButton {
 public:
 
     using ColorCallback = std::function<void(const Color &, float)>;
+    using VoidCallback = std::function<void(void)>;
 
     enum Components : uint32_t
     {
@@ -81,6 +82,10 @@ public:
      */
     void set_final_callback(const ColorCallback &cb) { m_final_callback = cb; }
 
+    void set_eyedropper_start_callback(const VoidCallback & cb) { m_eyedropper->set_change_callback([cb](bool){cb();}); }
+    void set_eyedropper_end_callback(const VoidCallback & cb) { m_eyedropper_end_callback = cb; }
+    void end_eyedropper() {m_eyedropper->set_pushed(false); m_eyedropper_end_callback(); }
+
     /// Get the current color
     Color color() const         { return m_color; }
     /// Set the current color
@@ -92,8 +97,6 @@ public:
 
     /// Get the color boosted by the exposure value
     Color exposed_color() const;
-
-    void close_eyedropper() const {m_eyedropper->set_pushed(false);}
 
     /// The current caption of the \ref nanogui::HDRColorPicker::m_pick_button.
     const std::string &pick_button_caption() { return m_pick_button->caption(); }
@@ -112,7 +115,7 @@ protected:
     void update_all(const Color& color, float exposure);
 
     /// Helper function to sync some of the widget values
-    std::function<void()> m_sync_helper;
+    VoidCallback m_sync_helper;
 
 
     /// The "fast" callback executed when the ColorWheel has changed.
@@ -124,6 +127,8 @@ protected:
      * \ref nanogui::HDRColorPicker::m_reset_button.
      */
     ColorCallback m_final_callback;
+
+    VoidCallback m_eyedropper_end_callback;
 
     /// The ColorWheel for this HDRColorPicker (the actual widget allowing selection).
     ColorWheel2 *m_color_wheel;

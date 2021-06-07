@@ -32,6 +32,7 @@ public:
 
 	// overridden virtual functions from Screen
     void draw_contents() override;
+	void draw_all() override;
     bool drop_event(const std::vector<std::string> &filenames) override;
 	bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 	bool mouse_motion_event(const Vector2i& p, const Vector2i& rel, int button, int modifiers) override;
@@ -54,9 +55,8 @@ public:
 
 	void update_caption();
 
-	void set_active_colorpicker(HDRColorPicker * cp) {m_active_colorpicker = cp;}
-
 private:
+	void draw_widgets();
 	void bring_to_focus() const;
 	void toggle_help_window();
 	void update_layout();
@@ -111,6 +111,4 @@ private:
 
 	std::thread m_gui_refresh_thread;
 	std::atomic<int> m_gui_refresh = 0;
-
-	HDRColorPicker * m_active_colorpicker = nullptr;
 };

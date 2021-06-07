@@ -13,7 +13,6 @@
 
 #include "hdrcolorpicker.h"
 #include "colorslider.h"
-#include "hdrviewscreen.h"
 #include <nanogui/textbox.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
@@ -28,17 +27,17 @@ NAMESPACE_BEGIN(nanogui)
 
 HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposure, int components)
     : PopupButton(parent, ""),
+    // initialize callback to do nothing; this is for users to hook into
+    // receiving a new color value
+    m_callback(),
+    m_final_callback(),
+    m_eyedropper_end_callback(),
     m_color(color), m_previous_color(color),
     m_exposure(exposure), m_previous_exposure(0.f)
 {
     set_background_color(m_color);
     Popup *popup = this->popup();
     popup->set_layout(new GroupLayout());
-
-    // initialize callback to do nothing; this is for users to hook into
-    // receiving a new color value
-    m_callback = [](const Color &, float) {};
-    m_final_callback = [](const Color &, float) {};
 
     // set the color wheel to the specified color
     m_color_wheel = new ColorWheel2(popup, m_color, components);
@@ -66,13 +65,6 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
 
     m_eyedropper = new ToolButton(row, FA_EYE_DROPPER);
     m_eyedropper->set_icon_extra_scale(1.5f);
-
-    m_eyedropper->set_change_callback([this](bool b)
-        {
-            if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
-                s->set_active_colorpicker(this);
-        }
-    );
 
     PopupButton::set_change_callback([&](bool) {
         if (m_pick_button->pushed()) {
@@ -203,6 +195,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
     });
 }
 
+
 Color HDRColorPicker::exposed_color() const {
     float gain = pow(2.f, m_exposure);
     Color e_color = m_color * gain;
@@ -227,7 +220,7 @@ void HDRColorPicker::update_all(const Color& c, float e) {
 
         m_color = normalized_color;
         m_exposure = e + extra_exposure;
-        spdlog::trace("color {}, exposure {}", m_color, m_exposure);
+        // spdlog::trace("color {}, exposure {}", m_color, m_exposure);
 
         m_color_wheel->set_color(m_color);
 

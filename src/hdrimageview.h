@@ -9,6 +9,7 @@
 #include <nanogui/canvas.h>
 #include <nanogui/texture.h>
 #include "xpuimage.h"
+#include <spdlog/spdlog.h>
 #include "fwd.h"
 
 
@@ -22,6 +23,7 @@ class HDRImageView : public Canvas {
 public:
 	using TextureRef = ref<Texture>;
 	using PixelCallback = std::function<void(const Vector2i &, char **, size_t)>;
+	using HoverCallback = std::function<void(const Vector2i &, const Color4 &, const Color4 &)>;
 	using FloatCallback = std::function<void(float)>;
 	using BoolCallback = std::function<void(bool)>;
 	using VoidCallback = std::function<void(void)>;
@@ -34,12 +36,18 @@ public:
     // Widget implementation
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 	virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+	virtual bool mouse_motion_event(const Vector2i &p, const Vector2i & rel, int button, int modifiers) override;
     virtual bool mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
     virtual bool scroll_event(const Vector2i &p, const Vector2f &rel) override;
     virtual void draw(NVGcontext *ctx) override;
     virtual void draw_contents() override;
 
 
+
+	void set_active_colorpicker(HDRColorPicker * cp)
+	{
+		m_active_colorpicker = cp;
+	}
 
     /// Callback executed when we change which image is displayed
     VoidCallback changed_callback() const { return m_changed_callback; }
@@ -161,6 +169,10 @@ public:
     PixelCallback pixel_callback() const { return m_pixel_callback; }
     void set_pixel_callback(const PixelCallback &cb) { m_pixel_callback = cb; }
 
+    /// Callback executed when the mouse hovers over pixels
+    HoverCallback hover_callback() const { return m_hover_callback; }
+    void set_hover_callback(const HoverCallback &cb) { m_hover_callback = cb; }
+
     /// Callback executed when the ROI changes
     ROICallback roi_callback() const { return m_roi_callback; }
     void set_roi_callback(const ROICallback &cb) { m_roi_callback = cb; }
@@ -176,6 +188,7 @@ protected:
 	Vector2f center_offset(ConstImagePtr img) const;
 
 	// Helper drawing methods.
+	void draw_eyedropper(NVGcontext* ctx) const;
 	void draw_widget_border(NVGcontext* ctx) const;
 	void draw_image_border(NVGcontext* ctx) const;
 	void draw_helpers(NVGcontext* ctx) const;
@@ -220,8 +233,11 @@ protected:
 	BoolCallback m_sRGB_callback;
 	FloatCallback m_zoom_callback;
     PixelCallback m_pixel_callback;
+	HoverCallback m_hover_callback;
 	ROICallback m_roi_callback;
 	VoidCallback m_changed_callback;
 
 	Vector2i m_clicked;
+
+	HDRColorPicker * m_active_colorpicker = nullptr;
 };

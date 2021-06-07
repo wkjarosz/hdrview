@@ -1093,7 +1093,7 @@ Widget * create_anchor_widget(Widget * window, HDRImage::CanvasAnchor & anchor, 
 	return row;
 }
 
-Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel, HDRImageView * image_view)
 {
 	static int width = 128, height = 128;
 	static Color bg(.8f, .8f, .8f, 1.f);
@@ -1104,7 +1104,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 	auto b = new Button(parent, name, FA_COMPRESS);
 	b->set_fixed_height(21);
 	b->set_callback(
-		[&, screen, images_panel]()
+		[&, screen, images_panel, image_view]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->set_fixed_size(Vector2i(75, 20));
@@ -1161,6 +1161,17 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->add_widget("", spacer);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
+			color_btn->set_eyedropper_start_callback([screen,image_view,color_btn]()
+				{
+					screen->push_gui_refresh();
+					image_view->set_active_colorpicker(color_btn);
+				}
+			);
+			color_btn->set_eyedropper_end_callback([screen]()
+				{
+					screen->pop_gui_refresh();
+				}
+			);
 			gui->add_widget("Background color:", color_btn);
 			color_btn->set_final_callback([](const Color & c, float e){
 				bg = c;
@@ -1495,7 +1506,7 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 	return b;
 }
 
-Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
+Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel, HDRImageView * image_view)
 {
 	static Color bg(.8f, .8f, .8f, 1.f);
 	static float EV = 0.f;
@@ -1503,7 +1514,7 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 	auto b = new Button(parent, name, FA_CHESS_BOARD);
 	b->set_fixed_height(21);
 	b->set_callback(
-		[&, screen, images_panel]()
+		[&, screen, images_panel, image_view]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->set_fixed_size(Vector2i(75, 20));
@@ -1512,6 +1523,17 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			window->set_modal(true);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
+			color_btn->set_eyedropper_start_callback([screen,image_view,color_btn]()
+				{
+					screen->push_gui_refresh();
+					image_view->set_active_colorpicker(color_btn);
+				}
+			);
+			color_btn->set_eyedropper_end_callback([screen]()
+				{
+					screen->pop_gui_refresh();
+				}
+			);
 			gui->add_widget("Background color:", color_btn);
 			color_btn->set_final_callback([](const Color & c, float e){
 				bg = c;
@@ -1680,8 +1702,10 @@ void EditImagePanel::paste()
 
 
 
-EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
-	: Well(parent, 1, Color(150, 32), Color(0, 50)), m_screen(screen), m_images_panel(images_panel), m_clipboard(nullptr)
+EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel, HDRImageView * image_view)
+	: Well(parent, 1, Color(150, 32), Color(0, 50)),
+	m_screen(screen), m_images_panel(images_panel), m_image_view(image_view),
+	m_clipboard(nullptr)
 {
 	const int spacing = 2;
 	set_layout(new GroupLayout(10, 4, 8, 10));
@@ -1769,7 +1793,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	// shift
 	m_filter_btns.push_back(create_shift_btn(grid, m_screen, m_images_panel));
 	// canvas size
-	m_filter_btns.push_back(create_canvas_size_btn(grid, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_canvas_size_btn(grid, m_screen, m_images_panel, m_image_view));
 
 	// resize
 	m_filter_btns.push_back(create_resize_btn(grid, m_screen, m_images_panel));
@@ -1846,7 +1870,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 	//
 	agrid->append_row(0);
-	m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
+	m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel, m_image_view));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 	m_filter_btns.push_back(create_fill_btn(button_row, m_screen, m_images_panel));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));

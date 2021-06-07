@@ -11,8 +11,10 @@
 #include <random>
 #include <sstream>
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/ostr.h>
 #include "hdrviewscreen.h"
 #include "colorspace.h"
+#include "hdrcolorpicker.h"
 
 using namespace nanogui;
 using namespace std;
@@ -282,6 +284,13 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
 {
     if (!m_enabled || !m_current_image)
         return false;
+    
+    if (m_active_colorpicker && down)
+	{
+		m_active_colorpicker->end_eyedropper();
+        m_active_colorpicker = nullptr;
+        return true;
+	}
 
     if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
     {
@@ -308,6 +317,30 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
             return true;
         }
     }
+
+    return false;
+}
+
+
+bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i & rel, int /*button*/, int /*modifiers*/)
+{
+	if (m_current_image && m_hover_callback)
+	{
+		Vector2i pixel(image_coordinate_at((p - position())));
+		const HDRImage & image = m_current_image->image();
+
+		if (image.contains(pixel.x(), pixel.y()))
+		{
+			Color4 color32 = image(pixel.x(), pixel.y());
+			Color4 color8 = (color32 * pow(2.f, exposure()) * 255).min(255.f).max(0.f);
+            m_hover_callback(pixel, color32, color8);
+
+            if (m_active_colorpicker)
+            	m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
+		}
+        else
+            m_hover_callback(Vector2i(-1), Color4(), Color4());
+	}
 
     return false;
 }
@@ -395,6 +428,49 @@ void HDRImageView::draw(NVGcontext *ctx)
     }
     
     draw_widget_border(ctx);
+    draw_eyedropper(ctx);
+}
+
+
+void HDRImageView::draw_eyedropper(NVGcontext* ctx) const
+{
+    // draw the colorpicker's eyedropper
+	if (m_active_colorpicker && m_current_image)
+    {
+        auto center = screen()->mouse_pos();
+
+        Vector2i pixel(image_coordinate_at((center - position())));
+        const HDRImage & image = m_current_image->image();
+
+        if (image.contains(pixel.x(), pixel.y()))
+        {
+            Color4 color_orig = image(pixel.x(), pixel.y());
+            Color4 color_toned = tonemap(color_orig);
+            // FIXME: the conversion operator doesn't seem to work on linux
+            // Color ng_color(color_toned);
+            Color ng_color(color_toned[0], color_toned[1], color_toned[2], color_toned[3]);
+
+            nvgBeginPath(ctx);
+            nvgCircle(ctx, center.x(), center.y(), 26);
+            nvgFillColor(ctx, ng_color);
+            nvgFill(ctx);
+
+            nvgStrokeColor(ctx, Color(0, 255));
+            nvgStrokeWidth(ctx, 2+1.f);
+            nvgStroke(ctx);
+
+            nvgStrokeColor(ctx, Color(192, 255));
+            nvgStrokeWidth(ctx, 2);
+            nvgStroke(ctx);
+            
+            nvgFontSize(ctx, font_size());
+            nvgFontFace(ctx, "icons");
+            nvgFillColor(ctx, ng_color.contrasting_color());
+            nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+
+            nvgText(ctx, center.x(), center.y(), utf8(FA_EYE_DROPPER).data(), nullptr);
+        }
+    }
 }
 
 
