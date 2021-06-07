@@ -69,14 +69,24 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		m_graph->add_plot(Color(0, 0, 255, 200));
 
 		row = new Widget(this);
-		row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
+		row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
 
-		auto b = new Button(row, "Open…", FA_FOLDER_OPEN);
+		auto b = new Button(row, "", FA_FOLDER_OPEN);
 		b->set_fixed_height(25);
-		b->set_tooltip("Load an image and add it to the set of opened images.");
+		b->set_tooltip("Load an image.");
 		b->set_callback([this] { m_screen->load_image(); });
 
-		m_save_btn = new Button(row, "Save…", FA_SAVE);
+		b = new Button(row, "", FA_FILE);
+		b->set_fixed_height(25);
+		b->set_tooltip("Create a new image.");
+		// b->set_callback([this] { m_screen->load_image(); });
+
+		b = new Button(row, "", FA_CLONE);
+		b->set_fixed_height(25);
+		b->set_tooltip("Duplicate current image.");
+		// b->set_callback([this] { m_screen->load_image(); });
+
+		m_save_btn = new Button(row, "", FA_SAVE);
 		m_save_btn->set_enabled(current_image() != nullptr);
 		m_save_btn->set_fixed_height(25);
 		m_save_btn->set_tooltip("Save the image to disk.");
