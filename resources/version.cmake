@@ -37,7 +37,7 @@ set(VERSION
 "const char* GIT_REV=\"${GIT_REV}${GIT_DIFF}\";
 const char* GIT_TAG=\"${GIT_TAG}\";
 const char* GIT_BRANCH=\"${GIT_BRANCH}\";
-const char* HDRVIEW_BUILD_TIME=\"${TIMEZ}\";\n")
+const char* HDRVIEW_BUILD_TIME=\"${TIMEZ}\";")
 
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp)
     file(READ ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp VERSION_)
@@ -46,7 +46,7 @@ else()
 endif()
 
 if (NOT "${VERSION}" STREQUAL "${VERSION_}")
-    message("Old VERSION file:\n${VERSION_}\nDoesn't match new version file:\n${VERSION}\n\tRegenerating...")
+    # message("Old VERSION file:\n${VERSION_}\nDoesn't match new version file:\n${VERSION}\n\tRegenerating...")
     file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp "${VERSION}")
     file(READ ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp MYVAR)
     message("Wrote out hdrview_version.cpp with contents:\n${MYVAR}")

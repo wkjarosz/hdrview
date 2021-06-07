@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <nanogui/vector.h>
 #include "fwd.h"
 
 class Color3
@@ -193,6 +194,9 @@ public:
     {
        return {s - c.r, s - c.g, s - c.b};
     }
+
+    /// Allows for conversion between this Color3 and nanogui's representation.
+    operator const nanogui::Color () const {return nanogui::Color(r,g,b,1.f);}
 };
 
 
@@ -365,6 +369,9 @@ public:
     {
        return {s - c.r, s - c.g, s - c.b, c.a};
     }
+
+    /// Allows for conversion between this Color3 and nanogui's representation.
+    operator const nanogui::Color &() const {return *(reinterpret_cast<const nanogui::Color*>(&r));}
 };
 
 

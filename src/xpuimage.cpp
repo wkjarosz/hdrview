@@ -51,8 +51,8 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 			if (prog.canceled())
 				throw std::exception();
 
+			ret->average += img(i)[0] + img(i)[1] + img(i)[2];
 			Color4 val = gain * img(i);
-			ret->average += val[0] + val[1] + val[2];
 
 			for (int c = 0; c < 3; ++c)
 			{

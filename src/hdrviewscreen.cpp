@@ -12,6 +12,7 @@
 #include "commandhistory.h"
 #include "helpwindow.h"
 #include "xpuimage.h"
+#include "hdrcolorpicker.h"
 #include <iostream>
 #include <nanogui/opengl.h>
 #define NOMINMAX
@@ -144,8 +145,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
 		new Label(row, "Resolution:", "sans-bold");
-		m_size_info_label = new Label(row, "");
-		m_size_info_label->set_fixed_width(135);
+		m_res_info_label = new Label(row, "");
+		m_res_info_label->set_fixed_width(135);
 
 		// spacer
 		(new Widget(well))->set_fixed_height(5);
@@ -159,10 +160,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		tb->set_icon_extra_scale(1.5f);
 
 		(new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
-		m_pixel_info_label2 = new Label(row, "");
-		m_pixel_info_label2->set_fixed_width(50+24+5);
-		m_pixel_info_label3 = new Label(row, "");
-		m_pixel_info_label3->set_fixed_width(50);
+		m_color32_info_label = new Label(row, "");
+		m_color32_info_label->set_fixed_width(50+24+5);
+		m_color8_info_label = new Label(row, "");
+		m_color8_info_label->set_fixed_width(50);
 
 		// spacer
 		(new Widget(well))->set_fixed_height(5);
@@ -176,8 +177,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		tb->set_icon_extra_scale(1.5f);
 
 		(new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
-		m_pixel_info_label4 = new Label(row, "");
-		m_pixel_info_label4->set_fixed_width(50);
+		m_pixel_info_label = new Label(row, "");
+		m_pixel_info_label->set_fixed_width(50);
 
 		tb = new ToolButton(row, FA_EXPAND);
 		tb->set_theme(flat_theme);
@@ -185,8 +186,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		tb->set_icon_extra_scale(1.5f);
 
 		(new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
-		m_pixel_info_label5 = new Label(row, "");
-		m_pixel_info_label5->set_fixed_width(50);
+		m_roi_info_label = new Label(row, "");
+		m_roi_info_label->set_fixed_width(50);
 
 		// spacer
 		(new Widget(well))->set_fixed_height(5);
@@ -217,9 +218,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create status bar widgets
     //
 
-	m_pixel_info_label = new Label(m_status_bar, "", "sans");
-	m_pixel_info_label->set_font_size(thm->m_text_box_font_size);
-	m_pixel_info_label->set_position(nanogui::Vector2i(6, 0));
+	m_status_label = new Label(m_status_bar, "", "sans");
+	m_status_label->set_font_size(thm->m_text_box_font_size);
+	m_status_label->set_position(nanogui::Vector2i(6, 0));
 
 	m_zoom_label = new Label(m_status_bar, "100% (1 : 1)", "sans");
 	m_zoom_label->set_font_size(thm->m_text_box_font_size);
@@ -467,14 +468,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 			if (auto img = m_images_panel->current_image())
 			{
 				m_path_info_label->set_caption(fmt::format("{}", img->filename()));
-				m_size_info_label->set_caption(fmt::format("{} × {}", img->width(), img->height()));
+				m_res_info_label->set_caption(fmt::format("{} × {}", img->width(), img->height()));
 
 				perform_layout();
 			}
 			else
 			{
 				m_path_info_label->set_caption("");
-				m_size_info_label->set_caption("");
+				m_res_info_label->set_caption("");
 				m_stats_label->set_caption("");
 			}
 		}
@@ -482,7 +483,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
 	m_image_view->set_roi_callback([this](const Box2i& roi)
 		{
-			m_pixel_info_label5->set_caption(roi.has_volume() ? fmt::format("{: 4d}\n{: 4d}", roi.size().x(), roi.size().y()) : "");
+			m_roi_info_label->set_caption(roi.has_volume() ? fmt::format("{: 4d}\n{: 4d}", roi.size().x(), roi.size().y()) : "");
 		}
 	);
 
@@ -974,6 +975,14 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 	else
 		m_dragging_side_panel = false;
 
+	if (m_active_colorpicker && down)
+	{
+		auto tmp = m_active_colorpicker;
+		m_active_colorpicker = nullptr;
+		tmp->close_eyedropper();
+		spdlog::trace("closing eyedropper");
+	}
+
 	return Screen::mouse_button_event(p, button, down, modifiers);
 }
 
@@ -982,40 +991,43 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 	ConstImagePtr img = m_images_panel->current_image();
 	if (img)
 	{
-		nanogui::Vector2i pixelCoord(m_image_view->image_coordinate_at((p - m_image_view->position())));
+		nanogui::Vector2i pixel(m_image_view->image_coordinate_at((p - m_image_view->position())));
 		const HDRImage & image = img->image();
 
-		if (image.contains(pixelCoord.x(), pixelCoord.y()))
+		if (image.contains(pixel.x(), pixel.y()))
 		{
-			Color4 pixelVal = image(pixelCoord.x(), pixelCoord.y());
-			Color4 iPixelVal = (pixelVal * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
+			Color4 color32 = image(pixel.x(), pixel.y());
+			Color4 color8 = (color32 * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
 			string s = fmt::format(
 				"({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
-				pixelCoord.x(), pixelCoord.y(),
-				pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3],
-				(int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
-				(int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
-			m_pixel_info_label->set_caption(s);
+				pixel.x(), pixel.y(),
+				color32[0], color32[1], color32[2], color32[3],
+				(int) round(color8[0]), (int) round(color8[1]),
+				(int) round(color8[2]), (int) round(color8[3]));
+			m_status_label->set_caption(s);
 			
 			string s2 = fmt::format(
 				"{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}",
-				pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3]);
-			m_pixel_info_label2->set_caption(s2);
+				color32[0], color32[1], color32[2], color32[3]);
+			m_color32_info_label->set_caption(s2);
 
 			string s3 = fmt::format(
 				"{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
-				(int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
-				(int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
-			m_pixel_info_label3->set_caption(s3);
+				(int) round(color8[0]), (int) round(color8[1]),
+				(int) round(color8[2]), (int) round(color8[3]));
+			m_color8_info_label->set_caption(s3);
 
-			m_pixel_info_label4->set_caption(fmt::format("{: 4d}\n{: 4d}", pixelCoord.x(), pixelCoord.y()));
+			m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+
+			if (m_active_colorpicker)
+				m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
 		}
 		else
 		{
+			m_status_label->set_caption("");
+			m_color32_info_label->set_caption("");
+			m_color8_info_label->set_caption("");
 			m_pixel_info_label->set_caption("");
-			m_pixel_info_label2->set_caption("");
-			m_pixel_info_label3->set_caption("");
-			m_pixel_info_label4->set_caption("");
 		}
 
 		m_status_bar->perform_layout(m_nvg_context);
@@ -1184,5 +1196,45 @@ void HDRViewScreen::draw_contents()
 		update_layout();
 		// redraw();
 		m_need_layout_update = false;
+	}
+
+	// draw the colorpicker's eyedropper
+	if (m_active_colorpicker)
+	{
+		if (auto img = m_images_panel->current_image())
+		{
+			auto center = mouse_pos();
+
+			nanogui::Vector2i pixel(m_image_view->image_coordinate_at((center - m_image_view->position())));
+			const HDRImage & image = img->image();
+
+			if (image.contains(pixel.x(), pixel.y()))
+			{
+				Color4 color_orig = image(pixel.x(), pixel.y());
+				Color4 color_toned = m_image_view->tonemap(color_orig);
+
+				m_active_colorpicker->set_color(color_orig);
+
+				nvgBeginPath(m_nvg_context);
+				nvgCircle(m_nvg_context, center.x(), center.y(), 26);
+				nvgFillColor(m_nvg_context, Color(color_toned));
+				nvgFill(m_nvg_context);
+
+				nvgStrokeColor(m_nvg_context, Color(0, 255));
+				nvgStrokeWidth(m_nvg_context, 2+1.f);
+				nvgStroke(m_nvg_context);
+
+				nvgStrokeColor(m_nvg_context, Color(192, 255));
+				nvgStrokeWidth(m_nvg_context, 2);
+				nvgStroke(m_nvg_context);
+				
+				nvgFontSize(m_nvg_context, font_size());
+				nvgFontFace(m_nvg_context, "icons");
+				nvgFillColor(m_nvg_context, Color(color_toned).contrasting_color());
+				nvgTextAlign(m_nvg_context, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+
+				nvgText(m_nvg_context, center.x(), center.y(), utf8(FA_EYE_DROPPER).data(), nullptr);
+			}
+		}
 	}
 }

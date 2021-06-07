@@ -1161,7 +1161,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->add_widget("", spacer);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			gui->add_widget(name, color_btn);
+			gui->add_widget("Background color:", color_btn);
 			color_btn->set_final_callback([](const Color & c, float e){
 				bg = c;
 				EV = e;
@@ -1512,7 +1512,7 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			window->set_modal(true);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			gui->add_widget(name, color_btn);
+			gui->add_widget("Background color:", color_btn);
 			color_btn->set_final_callback([](const Color & c, float e){
 				bg = c;
 				EV = e;

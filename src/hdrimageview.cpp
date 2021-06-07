@@ -12,6 +12,7 @@
 #include <sstream>
 #include <spdlog/spdlog.h>
 #include "hdrviewscreen.h"
+#include "colorspace.h"
 
 using namespace nanogui;
 using namespace std;
@@ -123,6 +124,12 @@ HDRImageView::HDRImageView(Widget *parent)
     {
         spdlog::trace("{}", e.what());
     }
+}
+
+Color4 HDRImageView::tonemap(const Color4 & color) const
+{
+    float gain = powf(2.0f, m_exposure);
+    return m_sRGB ? LinearToSRGB(color*gain) : pow(color*gain, Color4(1.0 / m_gamma));
 }
 
 void HDRImageView::set_current_image(ConstImagePtr cur)

@@ -8,6 +8,7 @@
 
 #include "colorwheel.h"
 #include <nanogui/popupbutton.h>
+#include <nanogui/toolbutton.h>
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -92,6 +93,8 @@ public:
     /// Get the color boosted by the exposure value
     Color exposed_color() const;
 
+    void close_eyedropper() const {m_eyedropper->set_pushed(false);}
+
     /// The current caption of the \ref nanogui::HDRColorPicker::m_pick_button.
     const std::string &pick_button_caption() { return m_pick_button->caption(); }
 
@@ -146,6 +149,8 @@ protected:
      * \ref nanogui::HDRColorPicker::set_reset_button_caption if you need.
      */
     Button *m_reset_button;
+
+    ToolButton * m_eyedropper;
 
     Color m_color, m_previous_color;
     float m_exposure, m_previous_exposure;

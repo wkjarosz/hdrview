@@ -54,6 +54,8 @@ public:
 
 	void update_caption();
 
+	void set_active_colorpicker(HDRColorPicker * cp) {m_active_colorpicker = cp;}
+
 private:
 	void bring_to_focus() const;
 	void toggle_help_window();
@@ -64,25 +66,30 @@ private:
 			   p.x() - m_side_panel->fixed_width() > -5;
 	}
 
-	Window * m_top_panel = nullptr;
-	Window * m_side_panel = nullptr;
-	Window * m_tool_panel = nullptr;
-	Window * m_status_bar = nullptr;
-	HDRImageView * m_image_view = nullptr;
-	ImageListPanel * m_images_panel = nullptr;
-	EditImagePanel * m_edit_panel = nullptr;
+	Window * m_top_panel,
+		   * m_side_panel,
+		   * m_tool_panel,
+		   * m_status_bar;
+	HDRImageView * m_image_view;
+	ImageListPanel * m_images_panel;
+	EditImagePanel * m_edit_panel;
 
-    Button * m_help_button = nullptr;
-    Button * m_side_panel_button = nullptr;
-	HelpWindow* m_help_window = nullptr;
-	Label * m_zoom_label = nullptr;
-	Label * m_pixel_info_label, * m_pixel_info_label2, * m_pixel_info_label3, * m_pixel_info_label4, * m_pixel_info_label5 = nullptr;
-	Label * m_path_info_label, *m_size_info_label = nullptr;
-	Label * m_stats_label = nullptr;
+    Button * m_help_button;
+    Button * m_side_panel_button;
+	HelpWindow * m_help_window = nullptr;
+	Label * m_zoom_label,
+		  * m_status_label,
+		  * m_path_info_label,
+		  * m_res_info_label,
+		  * m_color32_info_label,
+		  * m_color8_info_label,
+		  * m_pixel_info_label,
+		  * m_roi_info_label,
+		  * m_stats_label; 
 	PopupButton * m_info_btn;
 
-	VScrollPanel * m_side_scroll_panel = nullptr;
-	Widget * m_side_panel_contents = nullptr;
+	VScrollPanel * m_side_scroll_panel;
+	Widget * m_side_panel_contents;
 
 	double m_gui_animation_start;
 	bool m_animation_running = false;
@@ -104,4 +111,6 @@ private:
 
 	std::thread m_gui_refresh_thread;
 	std::atomic<int> m_gui_refresh = 0;
+
+	HDRColorPicker * m_active_colorpicker = nullptr;
 };
