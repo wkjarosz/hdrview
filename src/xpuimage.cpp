@@ -18,7 +18,6 @@
 #include <nanovg.h>
 
 using namespace nanogui;
-// using namespace Eigen;
 using namespace std;
 
 shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &img, float exposure, AtomicProgress & prog)
@@ -47,7 +46,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 		Color4 gain(pow(2.f, exposure), 1.f);
 		float d = 1.f / (img.width() * img.height());
 
-		for (Eigen::DenseIndex i = 0; i < img.size(); ++i)
+		for (int i = 0; i < img.size(); ++i)
 		{
 			if (prog.canceled())
 				throw std::exception();
@@ -113,7 +112,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 	}
 	catch(const std::exception& e)
 	{
-		spdlog::get("console")->trace("Interrupting histogram computation");
+		spdlog::trace("Interrupting histogram computation");
 		return nullptr;
 	}
 	
@@ -288,7 +287,7 @@ void XPUImage::upload_to_GPU() const
 	m_texture->resize(s);
 	m_texture->upload((const uint8_t *)m_image->data());
 	m_texture_dirty = false;
-	spdlog::get("console")->trace("Uploading texture to GPU took {} ms", timer.lap());
+	spdlog::trace("Uploading texture to GPU took {} ms", timer.lap());
 
 	// now that we grabbed the results and uploaded to GPU, destroy the task
 	modify_done();

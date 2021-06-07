@@ -142,7 +142,7 @@ void FilmicToneCurve::createCurve(FullCurve& dstCurve, const CurveParamsDirect& 
 		params.overshootY = std::pow(1.0f + params.overshootY, params.gamma) - 1.0f;
 	}
 
-	spdlog::get("console")->debug("\n"
+	spdlog::debug("\n"
 								  "x0:         {}\t\t{}\n"
 								  "y0:         {}\t\t{}\n"
 								  "x1:         {}\t\t{}\n"

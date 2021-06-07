@@ -6,7 +6,7 @@
 
 #include <ctype.h>                       // for tolower
 #include <docopt.h>                      // for docopt
-#include <Eigen/Core>                    // for Vector2f
+#include <nanogui/vector.h>
 #include <iostream>                      // for string
 #include <random>                        // for normal_distribution, mt19937
 #include "common.h"                      // for getBasename, getExtension
@@ -16,8 +16,7 @@
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
-namespace spd = spdlog;
-using namespace Eigen;
+using nanogui::Vector2f;
 
 namespace
 {
@@ -204,40 +203,39 @@ int main(int argc, char **argv)
         verbosity = docargs["--verbose"].asLong();
 
         // Console logger with color
-        auto console = spd::stdout_color_mt("console");
-        spd::set_pattern("[%l] %v");
-        spd::set_level(spd::level::level_enum(2));
+        spdlog::set_pattern("[%l] %v");
+        spdlog::set_level(spdlog::level::level_enum(2));
 
-        if (verbosity < spd::level::trace || verbosity > spd::level::off)
+        if (verbosity < spdlog::level::trace || verbosity > spdlog::level::off)
         {
-            console->error("Invalid verbosity threshold. Setting to default \"2\"");
+            spdlog::error("Invalid verbosity threshold. Setting to default \"2\"");
             verbosity = 2;
         }
 
-        spd::set_level(spd::level::level_enum(verbosity));
+        spdlog::set_level(spdlog::level::level_enum(verbosity));
 
-        console->flush_on(spd::level::level_enum(verbosity));
+        spdlog::flush_on(spdlog::level::level_enum(verbosity));
 
-        console->info("Welcome to HDRView!");
-        console->info("Verbosity threshold set to level {:d}.", verbosity);
+        spdlog::info("Welcome to HDRView!");
+        spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
-        console->debug("Running with the following commands/arguments/options:");
+        spdlog::debug("Running with the following commands/arguments/options:");
         for (auto const& arg : docargs)
-            console->debug("{:<13}: {}", arg.first, arg.second);
+            spdlog::debug("{:<13}: {}", arg.first, arg.second);
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
-        console->info("Setting intensity scale to {:f}", powf(2.0f, exposure));
+        spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
 
         // gamma or sRGB
         if (docargs["--gamma"])
         {
             sRGB = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
-            console->info("Setting gamma correction to g={:f}.", gamma);
+            spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
         else
-            console->info("Using sRGB response curve.");
+            spdlog::info("Using sRGB response curve.");
 
         // dithering
         dither = !docargs["--no-dither"].asBool();
@@ -259,7 +257,7 @@ int main(int argc, char **argv)
                 throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
         }
 
-        console->info("Setting border mode to: {}.", docargs["--border-mode"].asString());
+        spdlog::info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
         saveFiles = docargs["--save"].asBool();
         invert = docargs["--invert"].asBool();
@@ -267,23 +265,23 @@ int main(int argc, char **argv)
         if (docargs["--format"].isString())
         {
             ext = docargs["--format"].asString();
-            console->info("Converting to \"{}\".", ext);
+            spdlog::info("Converting to \"{}\".", ext);
         }
         else
-            console->info("Keeping original image file formats.");
+            spdlog::info("Keeping original image file formats.");
 
         if (docargs["--out"].isString())
         {
             basename = docargs["--out"].asString();
-            console->info("Setting base filename to \"{}\".", basename);
+            spdlog::info("Setting base filename to \"{}\".", basename);
         }
 
         if (docargs["--average"].isString())
         {
             avgFilename = docargs["--average"].asString();
-            console->info("Saving average image to \"{}\".", avgFilename);
+            spdlog::info("Saving average image to \"{}\".", avgFilename);
             if (docargs["FILE"].asStringList().size() < 2)
-                console->error("Computing an average from less than 2 images!");
+                spdlog::error("Computing an average from less than 2 images!");
         }
 
         if (docargs["--variance"].isString())
@@ -291,7 +289,7 @@ int main(int argc, char **argv)
             varFilename = docargs["--variance"].asString();
             if (docargs["FILE"].asStringList().size() < 2)
                 throw invalid_argument("Computing reference-less variance requires at least 2 images.");
-            console->info("Saving variance image to \"{}\".", varFilename);
+            spdlog::info("Saving variance image to \"{}\".", varFilename);
         }
 
         if (docargs["--filter"].isString())
@@ -330,7 +328,7 @@ int main(int argc, char **argv)
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
-            console->info("Filtering using {}({:f},{:f}).", filterType, filterArg1, filterArg2);
+            spdlog::info("Filtering using {}({:f},{:f}).", filterType, filterArg1, filterArg2);
         }
 
         if (docargs["--error"].isString())
@@ -348,7 +346,7 @@ int main(int argc, char **argv)
             else
                 throw invalid_argument("Need to specify a reference file for error computation.");
 
-            console->info("Computing {} error using {} as reference.", errorType, referenceFile);
+            spdlog::info("Computing {} error using {} as reference.", errorType, referenceFile);
         }
 
         if (docargs["--resize"].isString())
@@ -362,9 +360,9 @@ int main(int argc, char **argv)
 
             resize = true;
             if (relativeSize)
-                console->info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", relativeWidth, relativeHeight);
+                spdlog::info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", relativeWidth, relativeHeight);
             else
-                console->info("Resizing images to an absolute size of {:d} x {:d}.", absoluteWidth, absoluteHeight);
+                spdlog::info("Resizing images to an absolute size of {:d} x {:d}.", absoluteWidth, absoluteHeight);
         }
 
         if (docargs["--remap"].isString())
@@ -404,7 +402,7 @@ int main(int argc, char **argv)
                 else
                     throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", to));
 
-                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv(0), uv(1))));};
+                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv[0], uv[1])));};
             }
 
             string interp = s3;
@@ -417,7 +415,7 @@ int main(int argc, char **argv)
             else
                 throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized sampler type \"{}\"", interp));
 
-            console->info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
+            spdlog::info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
         }
 
         if (docargs["--random-noise"].isString())
@@ -426,7 +424,7 @@ int main(int argc, char **argv)
             if (sscanf(docargs["--random-noise"].asString().c_str(), "%f,%f", &noiseMean, &noiseVar) != 2)
                 throw invalid_argument("Cannot parse command-line parameter: --random-noise");
             normalDist = normal_distribution<float>(noiseMean, sqrt(noiseVar));
-            console->info("Replacing images with random-noise({:f},{:f}).", noiseMean, noiseVar);
+            spdlog::info("Replacing images with random-noise({:f},{:f}).", noiseMean, noiseVar);
         }
 
         if (docargs["--nan"].isString())
@@ -434,13 +432,13 @@ int main(int argc, char **argv)
             if (sscanf(docargs["--nan"].asString().c_str(), "%f,%f,%f", &nanColor[0], &nanColor[1], &nanColor[2]) != 3)
                 throw invalid_argument("Cannot parse command-line parameter: --nan");
 
-            console->info("Replacing NaNs and Infinities with ({}).", nanColor);
+            spdlog::info("Replacing NaNs and Infinities with ({}).", nanColor);
             fixNaNs = true;
         }
 
         dryRun = docargs["--dry-run"].asBool();
         if (dryRun)
-            console->info("Only testing. Will not write files.");
+            spdlog::info("Only testing. Will not write files.");
 
         // list of filenames
         inFiles = docargs["FILE"].asStringList();
@@ -453,10 +451,10 @@ int main(int argc, char **argv)
         HDRImage reference_image;
         if (!referenceFile.empty())
         {
-            console->info("Reading reference image \"{}\"...", referenceFile);
+            spdlog::info("Reading reference image \"{}\"...", referenceFile);
             if (!reference_image.load(referenceFile))
                 throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
-            console->info("Reference image size: {:d}x{:d}", reference_image.width(), reference_image.height());
+            spdlog::info("Reference image size: {:d}x{:d}", reference_image.width(), reference_image.height());
         }
 
         HDRImage avgImg;
@@ -466,27 +464,27 @@ int main(int argc, char **argv)
         for (size_t i = 0; i < inFiles.size(); ++i)
         {
             HDRImage image;
-            console->info("Reading image \"{}\"...", inFiles[i]);
+            spdlog::info("Reading image \"{}\"...", inFiles[i]);
             if (!image.load(inFiles[i]))
             {
-                console->error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
+                spdlog::error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
                 continue;
             }
-            console->info("Image size: {:d}x{:d}", image.width(), image.height());
+            spdlog::info("Image size: {:d}x{:d}", image.width(), image.height());
 
             varN += 1;
             // initialize variables for average and variance
             if (varN == 1)
             {
                 // set images to zeros
-                varImg = avgImg = image.unaryExpr([](const Color4 & c)
+                varImg = avgImg = image.apply_function([](const Color4 & c)
                 {
                     return Color4(0,0,0,0);
                 });
             }
 
             if (fixNaNs || !dryRun)
-                image = image.unaryExpr([nanColor](const Color4 & c)
+                image = image.apply_function([nanColor](const Color4 & c)
                 {
                     return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
                 });
@@ -505,7 +503,7 @@ int main(int argc, char **argv)
 
             if (filter)
             {
-                console->info("Filtering image with {}({})...", filterType, filterParams);
+                spdlog::info("Filtering image with {}({})...", filterType, filterParams);
 
                 if (!dryRun)
                     image = filter(image);
@@ -523,12 +521,12 @@ int main(int argc, char **argv)
 
                 if (!remap)
                 {
-                    console->info("Resizing image to {:d}x{:d}...", w, h);
+                    spdlog::info("Resizing image to {:d}x{:d}...", w, h);
                     image = image.resized(w, h);
                 }
                 else
                 {
-                    console->info("Remapping image to {:d}x{:d}...", w, h);
+                    spdlog::info("Remapping image to {:d}x{:d}...", w, h);
                     AtomicProgress progress;
                     image = image.resampled(w, h, progress, warp, samples,
                                             sampler, borderModeX, borderModeY);
@@ -550,7 +548,7 @@ int main(int argc, char **argv)
                 if (image.width() != reference_image.width() ||
                     image.height() != reference_image.height())
                 {
-                    console->error("Images must have same dimensions!");
+                    spdlog::error("Images must have same dimensions!");
                     continue;
                 }
 
@@ -566,8 +564,8 @@ int main(int argc, char **argv)
 
                 image.set_alpha(1.0f);
 
-                console->info(fmt::format("Mean {} error: {}.", errorType, meanError));
-                console->info(fmt::format("Max {} error: {}.", errorType, maxError));
+                spdlog::info(fmt::format("Mean {} error: {}.", errorType, meanError));
+                spdlog::info(fmt::format("Max {} error: {}.", errorType, maxError));
             }
 
             if (invert)
@@ -586,7 +584,7 @@ int main(int argc, char **argv)
                 else
                     filename = fmt::format("{}{}{:03d}.{}", thisBasename, extra, i, thisExt);
 
-                console->info("Writing image to \"{}\"...", filename);
+                spdlog::info("Writing image to \"{}\"...", filename);
 
                 if (!dryRun)
                     image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
@@ -597,7 +595,7 @@ int main(int argc, char **argv)
         {
             // avgImg *= Color4(1.0f/inFiles.size());
 
-            console->info("Writing average image to \"{}\"...", avgFilename);
+            spdlog::info("Writing average image to \"{}\"...", avgFilename);
 
             if (!dryRun)
                 avgImg.save(avgFilename, powf(2.0f, exposure), gamma, sRGB, dither);
@@ -608,26 +606,26 @@ int main(int argc, char **argv)
             varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
 
             // set alpha channel to 1
-            varImg = varImg.unaryExpr([](const Color4 & c)
+            varImg = varImg.apply_function([](const Color4 & c)
             {
                 return Color4(c.r,c.g,c.b,1);
             });
 
-            console->info("Writing variance image to \"{}\"...", varFilename);
+            spdlog::info("Writing variance image to \"{}\"...", varFilename);
 
             if (!dryRun)
                 varImg.save(varFilename, powf(2.0f, exposure), gamma, sRGB, dither);
         }
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
-    catch (const spd::spdlog_ex& e)
+    catch (const spdlog::spdlog_ex& e)
     {
         fprintf(stderr, "Log init failed: %s\n", e.what());
         return 1;
     }
     catch (const std::exception &e)
     {
-        spd::get("console")->critical("Error: {}", e.what());
+        spdlog::critical("Error: {}", e.what());
         fprintf(stderr, "%s", USAGE);
         return -1;
     }

@@ -7,12 +7,10 @@
 #pragma once
 
 #include <cstdint>             // for uint32_t
-#include <Eigen/Core>          // for Vector2i, Matrix4f, Vector3f
 #include <functional>          // for function
 #include <iosfwd>              // for string
 #include <type_traits>         // for swap
 #include <vector>              // for vector, allocator
-// #include <nanogui/opengl.h>
 #include <nanogui/texture.h>
 #include "hdrimage.h"          // for HDRImage
 #include "fwd.h"               // for HDRImage
@@ -107,8 +105,8 @@ public:
 	void recompute_histograms(float exposure) const;
 
 	/// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify
-	const VoidVoidFunc & modify_done_callback() const            { return m_modify_done_callback; }
-	void set_modify_done_callback(const VoidVoidFunc & callback)  { m_modify_done_callback = callback; }
+	VoidVoidFunc modify_done_callback() const            	{ return m_modify_done_callback; }
+	void set_modify_done_callback(const VoidVoidFunc & cb)  { m_modify_done_callback = cb; }
 
 protected:
 

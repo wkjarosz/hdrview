@@ -8,9 +8,7 @@
 
 #include <iostream>
 #include <cmath>
-#include <Eigen/Core>
 #include "fwd.h"
-
 
 class Color3
 {
@@ -24,7 +22,7 @@ public:
     // Color3(const Color3 & c) : r(c.r), g(c.g), b(c.b) {}
     Color3(const Color3 & c) = default;
     Color3(float x, float y, float z) : r(x), g(y), b(z) {}
-    explicit Color3(float c) : r(c), g(c), b(c) {}
+    explicit Color3(const float c) : r(c), g(c), b(c) {}
     explicit Color3(const float* c) : r(c[0]), g(c[1]), b(c[2]) {}
     Color3 & operator=(float c) {r = g = b = c; return *this;}
     //@}
@@ -54,7 +52,11 @@ public:
     //-----------------------------------------------------------------------
     Color3 operator+(const Color3& c) const
     {
-        return Color3(r + c.r, g + c.g, b + c.b);
+        return {r + c.r, g + c.g, b + c.b};
+    }
+    Color3 operator+(float f) const
+    {
+        return {r + f, g + f, b + f};
     }
     const Color3 & operator+=(const Color3& c)
     {
@@ -72,7 +74,11 @@ public:
     //-----------------------------------------------------------------------
     Color3 operator-(const Color3& c) const
     {
-        return Color3(r - c.r, g - c.g, b - c.b);
+        return {r - c.r, g - c.g, b - c.b};
+    }
+    Color3 operator-(float f) const
+    {
+        return {r - f, g - f, b - f};
     }
     const Color3 & operator-=(const Color3& c)
     {
@@ -90,11 +96,11 @@ public:
     //-----------------------------------------------------------------------
     Color3 operator*(float a) const
     {
-        return Color3(r * a, g * a, b * a);
+        return {r * a, g * a, b * a};
     }
     Color3 operator*(const Color3& c) const
     {
-        return Color3(r * c.r, g * c.g, b * c.b);
+        return {r * c.r, g * c.g, b * c.b};
     }
     const Color3 & operator*=(float a)
     {
@@ -114,11 +120,11 @@ public:
     Color3 operator/(float a) const
     {
         float inv = 1.0f / a;
-        return Color3(r * inv, g * inv, b * inv);
+        return {r * inv, g * inv, b * inv};
     }
     Color3 operator/(const Color3 & c) const
     {
-        return Color3(r / c.r, g / c.g, b / c.b);
+        return {r / c.r, g / c.g, b / c.b};
     }
     const Color3 & operator/=(float a)
     {
@@ -140,20 +146,20 @@ public:
     float min() const {return std::min(std::min(r, g), b);}
     Color3 min(const Color3 & m) const
     {
-        return Color3(std::min(r,m.r), std::min(g,m.g), std::min(b,m.b));
+        return {std::min(r,m.r), std::min(g,m.g), std::min(b,m.b)};
     }
     Color3 min(float m) const
     {
-        return Color3(std::min(r,m), std::min(g,m), std::min(b,m));
+        return {std::min(r,m), std::min(g,m), std::min(b,m)};
     }
     float max() const {return std::max(std::max(r, g), b);}
     Color3 max(const Color3 & m) const
     {
-        return Color3(std::max(r,m.r), std::max(g,m.g), std::max(b,m.b));
+        return {std::max(r,m.r), std::max(g,m.g), std::max(b,m.b)};
     }
     Color3 max(float m) const
     {
-        return Color3(std::max(r,m), std::max(g,m), std::max(b,m));
+        return {std::max(r,m), std::max(g,m), std::max(b,m)};
     }
     Color3 pow(const Color3& exp) const
     {
@@ -165,23 +171,27 @@ public:
 
     friend std::ostream& operator<<(std::ostream& out, const Color3& c)
     {
-	   return(out << c.r << " " << c.g << " " << c.b);
+	   return (out << c.r << " " << c.g << " " << c.b);
     }
     friend std::istream& operator>>(std::istream& in, Color3& c)
     {
-	   return(in >> c.r >> c.g >> c.b);
+	   return (in >> c.r >> c.g >> c.b);
     }
     friend Color3 operator*(float s, const Color3& c)
     {
-	   return Color3(c.r * s, c.g * s, c.b * s);
+	   return {c.r * s, c.g * s, c.b * s};
+    }
+    friend Color3 operator/(float s, const Color3& c)
+    {
+	   return {s / c.r, s / c.g, s / c.b};
     }
     friend Color3 operator+(float s, const Color3& c)
     {
-       return Color3(s + c.r, s + c.g, s + c.b);
+       return {s + c.r, s + c.g, s + c.b};
     }
     friend Color3 operator-(float s, const Color3& c)
     {
-       return Color3(s - c.r, s - c.g, s - c.b);
+       return {s - c.r, s - c.g, s - c.b};
     }
 };
 
@@ -199,7 +209,7 @@ public:
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
     Color4(float g, float a) : Color3(g), a(a) {}
     Color4(const Color3 &c, float a) : Color3(c), a(a) {}
-    explicit Color4(float x) : Color3(x), a(x) {}
+    explicit Color4(const float x) : Color3(x), a(x) {}
     explicit Color4(const float* c) : Color3(c), a(c[3]) {}
     const Color4 & operator=(float c) {r = g = b = a = c; return *this;}
     //@}
@@ -230,6 +240,10 @@ public:
     {
         return {r + v.r, g + v.g, b + v.b, a + v.a};
     }
+    Color4 operator+(float f) const
+    {
+        return {r + f, g + f, b + f, a + f};
+    }
     const Color4 & operator+=(const Color4& v)
     {
         r += v.r; g += v.g; b += v.b; a += v.a; return *this;
@@ -247,6 +261,10 @@ public:
     Color4 operator-(const Color4& v) const
     {
         return {r - v.r, g - v.g, b - v.b, a - v.a};
+    }
+    Color4 operator-(float f) const
+    {
+        return {r - f, g - f, b - f, a - f};
     }
     const Color4 & operator-=(const Color4& v)
     {
@@ -268,7 +286,7 @@ public:
     }
     Color4 operator*(const Color4& v) const
     {
-        return Color4(r * v.r, g * v.g, b * v.b, a * v.a);
+        return {r * v.r, g * v.g, b * v.b, a * v.a};
     }
     const Color4 & operator*=(float c)
     {
@@ -325,15 +343,19 @@ public:
 
     friend std::ostream& operator<<(std::ostream& out, const Color4& c)
     {
-	   return(out << c.r << " " << c.g << " " << c.b << " " << c.a);
+	   return (out << c.r << " " << c.g << " " << c.b << " " << c.a);
     }
     friend std::istream& operator>>(std::istream& in, Color4& c)
     {
-	   return(in >> c.r >> c.g >> c.b >> c.a);
+	   return (in >> c.r >> c.g >> c.b >> c.a);
     }
     friend Color4 operator*(float s, const Color4& c)
     {
 	   return {c.r * s, c.g * s, c.b * s, c.a * s};
+    }
+    friend Color4 operator/(float s, const Color4& c)
+    {
+	   return {s / c.r, s / c.g, s / c.b, s / c.a};
     }
     friend Color4 operator+(float s, const Color4& c)
     {
@@ -424,24 +446,3 @@ COLOR_FUNCTION_WRAPPER2(fmax)
 COLOR_FUNCTION_WRAPPER2(min)
 COLOR_FUNCTION_WRAPPER2(max)
 
-namespace Eigen
-{
-
-template<> struct NumTraits<Color4>
- : NumTraits<float> // permits to get the epsilon, dummy_precision, lowest, highest functions
-{
-    typedef Color4 Real;
-    typedef Color4 NonInteger;
-    typedef Color4 & Nested;
-    enum {
-        IsComplex = 0,
-        IsInteger = 0,
-        IsSigned = 1,
-        RequireInitialization = 1,
-        ReadCost = 1,
-        AddCost = 3,
-        MulCost = 3
-    };
-};
-
-} // namespace Eigen

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>             // for uint32_t
-#include <Eigen/Core>          // for Vector2i, Matrix4f, Vector3f
 #include <vector>              // for vector, allocator
 #include "hdrimage.h"          // for HDRImage
 #include "fwd.h"               // for HDRImage

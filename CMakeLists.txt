@@ -12,8 +12,6 @@ add_subdirectory(ext ext_build)
 include_directories(
   # tinyformat string formatting library
   ${TFM_INCLUDE_DIR}
-  # Eigen linear algebra library
-  SYSTEM ${EIGEN_INCLUDE_DIR}
   # OpenEXR high dynamic range bitmap library
   SYSTEM ${OPENEXR_INCLUDE_DIRS}
   # Pseudorandom number generator
@@ -161,7 +159,10 @@ add_executable(HDRView
   src/hdrcolorpicker.h
   src/hdrimage.cpp
   src/hdrimage.h
+  src/hdrimagedngio.cpp
   src/hdrimageio.cpp
+  src/hdrimageraw.cpp
+  src/hdrimageraw.h
   src/hdrview.cpp
   src/hdrviewscreen.cpp
   src/hdrviewscreen.h
@@ -241,7 +242,10 @@ add_executable(hdrbatch
   src/fwd.h
   src/hdrimage.cpp
   src/hdrimage.h
+  src/hdrimagedngio.cpp
   src/hdrimageio.cpp
+  src/hdrimageraw.cpp
+  src/hdrimageraw.h
   src/hdrbatch.cpp
   src/parallelfor.cpp
   src/parallelfor.h

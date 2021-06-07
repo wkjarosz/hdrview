@@ -13,7 +13,6 @@
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
-namespace spd = spdlog;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
@@ -90,38 +89,37 @@ int main(int argc, char **argv)
         verbosity = docargs["--verbose"].asLong();
 
         // Console logger with color
-        auto console = spd::stdout_color_mt("console");
-        spd::set_pattern("[%l] %v");
-        spd::set_level(spd::level::level_enum(2));
+        spdlog::set_pattern("[%l] %v");
+        spdlog::set_level(spdlog::level::level_enum(2));
 
-        if (verbosity < spd::level::trace || verbosity > spd::level::off)
+        if (verbosity < spdlog::level::trace || verbosity > spdlog::level::off)
         {
-            console->error("Invalid verbosity threshold. Setting to default \"2\"");
+            spdlog::error("Invalid verbosity threshold. Setting to default \"2\"");
             verbosity = 2;
         }
 
-        spd::set_level(spd::level::level_enum(verbosity));
+        spdlog::set_level(spdlog::level::level_enum(verbosity));
 
-        console->info("Welcome to HDRView!");
-        console->info("Verbosity threshold set to level {:d}.", verbosity);
+        spdlog::info("Welcome to HDRView!");
+        spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
-        console->debug("Running with the following commands/arguments/options:");
+        spdlog::debug("Running with the following commands/arguments/options:");
         for (auto const& arg : docargs)
-            console->debug("{:<13}: {}", arg.first, arg.second);
+            spdlog::debug("{:<13}: {}", arg.first, arg.second);
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
-        console->info("Setting intensity scale to {:f}", powf(2.0f, exposure));
+        spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
 
         // gamma or sRGB
         if (docargs["--gamma"])
         {
             sRGB = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
-            console->info("Setting gamma correction to g={:f}.", gamma);
+            spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
         else
-            console->info("Using sRGB response curve.");
+            spdlog::info("Using sRGB response curve.");
 
         // dithering
         dither = !docargs["--no-dither"].asBool();
@@ -129,7 +127,7 @@ int main(int argc, char **argv)
 	    // list of filenames
 	    inFiles = docargs["FILE"].asStringList();
 
-        console->info("Launching GUI.");
+        spdlog::info("Launching GUI.");
         nanogui::init();
 
 #if defined(__APPLE__)
@@ -147,14 +145,14 @@ int main(int argc, char **argv)
         nanogui::shutdown();
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
-    catch (const spd::spdlog_ex& e)
+    catch (const spdlog::spdlog_ex& e)
     {
         fprintf(stderr, "Log init failed: %s\n", e.what());
         return 1;
     }
     catch (const std::exception &e)
     {
-        spd::get("console")->critical("Error: {}", e.what());
+        spdlog::critical("Error: {}", e.what());
         fprintf(stderr, "%s", USAGE);
         return -1;
     }

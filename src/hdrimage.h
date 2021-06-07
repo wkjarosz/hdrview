@@ -6,76 +6,45 @@
 
 #pragma once
 
-#include <Eigen/Core>            // for Array, CwiseUnaryOp, Dynamic, DenseC...
 #include <functional>            // for function
 #include <vector>                // for vector
 #include <string>                // for string
 #include "color.h"               // for Color4, max, min
 #include "progress.h"
 #include "box.h"
+#include "array2d.h"
+#include "parallelfor.h"
 #include <nanogui/vector.h>
+#include <ImathMatrix.h>
 
 
 //! Floating point image
-class HDRImage : public Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>
+class HDRImage : public Array2D<Color4>
 {
-using Base = Eigen::Array<Color4,Eigen::Dynamic,Eigen::Dynamic>;
+using Base = Array2D<Color4>;
 public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors, destructors, etc.
     //-----------------------------------------------------------------------
     HDRImage(void) : Base() {}
-    HDRImage(int w, int h) : Base(w, h) {}
-    HDRImage(const Base & other) : Base(other) {}
-
-    //! This constructor allows you to construct a HDRImage from Eigen expressions
-    template <typename OtherDerived>
-    HDRImage(const Eigen::ArrayBase<OtherDerived>& other) : Base(other) { }
-
-    //! This method allows you to assign Eigen expressions to a HDRImage
-    template <typename OtherDerived>
-    HDRImage& operator=(const Eigen::ArrayBase <OtherDerived>& other)
-    {
-        this->Base::operator=(other);
-        return *this;
-    }
+    HDRImage(int w, int h, const Color4 & c = Color4(0.f)) : Base(w, h, c) {}
     //@}
 
     bool contains(int x, int y) const
 	{
-		return x >= 0 && y >= 0 && x < width() && y < height();
+		return x >= 0 && y >= 0 && x < (int)width() && y < (int)height();
 	}
-    int width() const       { return (int)rows(); }
-    int height() const      { return (int)cols(); }
     Box2i box() const       { return Box2i(0, nanogui::Vector2i(width(), height())); }
-    bool is_null() const    { return rows() == 0 || cols() == 0; }
+    bool is_null() const    { return width() == 0 || height() == 0; }
 
     void set_alpha(float a)
     {
-        *this = unaryExpr([a](const Color4 & c){return Color4(c.r,c.g,c.b,a);});
+        *this = apply_function([a](const Color4 & c){return Color4(c.r,c.g,c.b,a);});
     }
 
     void set_channel_from(int c, const HDRImage & other)
     {
-        *this = binaryExpr(other, [c](const Color4 & a, const Color4 & b){Color4 ret = a; ret[c] = b[c]; return ret;});
-    }
-
-    Color4 min() const
-    {
-        Color4 m = (*this)(0,0);
-        for (int y = 0; y < height(); ++y)
-            for (int x = 0; x < width(); ++x)
-                m = ::min(m, (*this)(x,y));
-        return m;
-    }
-
-    Color4 max() const
-    {
-        Color4 m = (*this)(0,0);
-        for (int y = 0; y < height(); ++y)
-            for (int x = 0; x < width(); ++x)
-                m = ::max(m, (*this)(x,y));
-        return m;
+        *this = apply_function(other, [c](const Color4 & a, const Color4 & b){Color4 ret = a; ret[c] = b[c]; return ret;});
     }
 
     //-----------------------------------------------------------------------
@@ -94,23 +63,113 @@ public:
     //@}
 
 
-    HDRImage apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i()) const
+    // makes a copy of the image, applies func for each pixel in roi of the copy, and returns the result
+    HDRImage apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i()) const;
+    // applies func for each pixel in roi, and stores result back in this
+    HDRImage & apply_function(std::function<Color4(const Color4 &)> func, Box2i roi = Box2i());
+    // for images this and other, computes result = func(this, other) for each pixel in roi, and returns the result
+    // useful for something like c = a+b
+    HDRImage apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
+    // for images this and other, computes this = func(this, other) for each pixel in roi, and stores result back in this
+    // useful for something like a += b
+    HDRImage & apply_function(const HDRImage & other, std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i());
+    HDRImage & square() {return apply_function([](const Color4 & c){return c * c;});}
+    HDRImage & abs() {return apply_function([](const Color4 & c){return ::abs(c);});}
+
+    Color4 reduce(std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
+    Color4 sum() const {return reduce([](const Color4 & a, const Color4 & b){return a + b;});}
+    Color4 mean() const{return sum()/size();}
+    Color4 min() const {return reduce([](const Color4 & a, const Color4 & b){return ::min(a,b);});}
+    Color4 max() const {return reduce([](const Color4 & a, const Color4 & b){return ::max(a,b);});}
+    
+    void copy_subimage(const HDRImage & src, Box2i src_roi, int dst_x, int dst_y);
+
+
+    //-----------------------------------------------------------------------
+    //@{ \name Component-wise arithmetic and assignment.
+    //-----------------------------------------------------------------------
+    HDRImage operator+(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a + b;});}
+    HDRImage operator-(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a - b;});}
+    HDRImage operator*(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a * b;});}
+    HDRImage operator/(const HDRImage &b) const {return apply_function(b, [](const Color4 & a, const Color4 & b){return a / b;});}
+
+    HDRImage & operator+=(const HDRImage &b) {return apply_function(b, [](const Color4 & a, const Color4 & b){return a + b;});}
+    HDRImage & operator-=(const HDRImage &b) {return apply_function(b, [](const Color4 & a, const Color4 & b){return a - b;});}
+    HDRImage & operator*=(const HDRImage &b) {return apply_function(b, [](const Color4 & a, const Color4 & b){return a * b;});}
+    HDRImage & operator/=(const HDRImage &b) {return apply_function(b, [](const Color4 & a, const Color4 & b){return a / b;});}
+
+    HDRImage & operator+=(const Color4 & s)  {return apply_function([s](const Color4 & a){return a + s;});}
+    HDRImage & operator-=(const Color4 & s)  {return *this += -s;}
+    HDRImage & operator*=(const Color4 & s)  {return apply_function([s](const Color4 & a){return a * s;});}
+    HDRImage & operator/=(const Color4 & s)  {return *this *= 1.f/s;}
+
+    HDRImage operator*(const Color4 & s) const {return apply_function([s](const Color4 & a){return s * a;});}
+    HDRImage operator/(const Color4 & s) const {return *this * (1.0f/s);}
+    HDRImage operator+(const Color4 & s) const {return apply_function([s](const Color4 & a){return s + a;});}
+    HDRImage operator-(const Color4 & s) const {return *this + (-s);}
+
+    HDRImage & operator+=(float s)  {return *this += Color4(s);}
+    HDRImage & operator-=(float s)  {return *this += -s;}
+    HDRImage & operator*=(float s)  {return *this *= Color4(s);}
+    HDRImage & operator/=(float s)  {return *this *= 1.f/s;}
+    
+    HDRImage operator*(float s) const {return *this * Color4(s);}
+    HDRImage operator/(float s) const {return *this * (1.0f/s);}
+    HDRImage operator+(float s) const {return *this + Color4(s);}
+    HDRImage operator-(float s) const {return *this + (-s);}
+
+    friend HDRImage operator*(float s, const HDRImage &other)
     {
-        if (roi.has_volume())
-            roi.intersect(box());
-        else
-            roi = box();
+        HDRImage ret(other);
+        return ret *= s;
+    }
 
-        HDRImage ret = (*this);
+    friend HDRImage operator/(float s, const HDRImage &other)
+    {
+        HDRImage ret(other);
+        return ret *= 1.f/s;
+    }
 
-        for (int y = roi.min.y(); y < roi.max.y(); ++y)
-            for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                ret(x,y) = func((*this)(x,y));
+    friend HDRImage operator+(float s, const HDRImage &other)
+    {
+        HDRImage ret(other);
+        return ret += s;
+    }
 
+    friend HDRImage operator-(float s, const HDRImage &other)
+    {
+        HDRImage ret(other);
+        for (int i = 0; i < ret.size(); ++i)
+            ret(i) = s - ret(i);
         return ret;
     }
 
-    void copy_subimage(const HDRImage & src, Box2i src_roi, int dst_x, int dst_y);
+    friend HDRImage operator*(const Color4 & s, const HDRImage &other)
+    {
+    	HDRImage ret(other);
+    	return ret *= s;
+    }
+
+    friend HDRImage operator/(const Color4 & s, const HDRImage &other)
+    {
+    	HDRImage ret(other);
+        return ret *= 1.f/s;
+    }
+
+    friend HDRImage operator+(const Color4 & s, const HDRImage &other)
+    {
+    	HDRImage ret(other);
+    	return ret += s;
+    }
+
+    friend HDRImage operator-(const Color4 & s, const HDRImage &other)
+    {
+    	HDRImage ret(other);
+    	for (int i = 0; i < ret.size(); ++i)
+    		ret(i) = s - ret(i);
+    	return ret;
+    }
+    //@}
 
     //-----------------------------------------------------------------------
     //@{ \name Pixel samplers.
@@ -149,8 +208,8 @@ public:
     HDRImage resized(int width, int height) const;
     HDRImage resampled(int width, int height,
                        AtomicProgress progress = AtomicProgress(),
-                       std::function<Eigen::Vector2f(const Eigen::Vector2f &)> warpFn =
-                       [](const Eigen::Vector2f &uv) { return uv; },
+                       std::function<nanogui::Vector2f(const nanogui::Vector2f &)> warpFn =
+                       [](const nanogui::Vector2f &uv) { return uv; },
                        int superSample = 1, Sampler s = NEAREST, BorderMode mX = REPEAT, BorderMode mY = REPEAT) const;
     //@}
 
@@ -158,50 +217,60 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    HDRImage flipped_vertical() const    {return rowwise().reverse().eval();}
-    HDRImage flipped_horizontal() const  {return colwise().reverse().eval();}
-    HDRImage rotated_90_cw() const       {return transpose().colwise().reverse().eval();}
-    HDRImage rotated_90_ccw() const      {return transpose().rowwise().reverse().eval();}
-    //@}
-
-
-    //-----------------------------------------------------------------------
-    //@{ \name Bayer demosaicing.
-    //-----------------------------------------------------------------------
-    void bayer_mosaic(const Eigen::Vector2i &red_offset);
-
-    void demosaic_linear(const Eigen::Vector2i &red_offset)
+    void swap_rows(int a, int b)
     {
-        demosaic_green_linear(red_offset);
-        demosaic_red_blue_linear(red_offset);
+        for (int x = 0; x < width(); x++)
+            std::swap(pixel(x, a), pixel(x, b));
     }
-    void demosaic_green_guided_linear(const Eigen::Vector2i &red_offset)
+    void swap_columns(int a, int b)
     {
-        demosaic_green_linear(red_offset);
-        demosaic_red_blue_green_guided_linear(red_offset);
+        for (int y = 0; y < height(); y++)
+            std::swap(pixel(a, y), pixel(b, y));
     }
-    void demosaic_malvar(const Eigen::Vector2i &red_offset)
+    HDRImage flipped_vertical() const
     {
-        demosaic_green_malvar(red_offset);
-        demosaic_red_blue_malvar(red_offset);
+        HDRImage flipped = *this;
+        int top = height() - 1;
+        int bottom = 0;
+        while (top > bottom)
+        {
+            flipped.swap_rows(top, bottom);
+            top--;
+            bottom++;
+        }
+        return flipped;
     }
-    void demosaicAHD(const Eigen::Vector2i &red_offset, const Eigen::Matrix3f &cameraToXYZ);
-
-    // green channel
-    void demosaic_green_linear(const Eigen::Vector2i &red_offset);
-    void demosaic_green_horizontal(const HDRImage &raw, const Eigen::Vector2i &red_offset);
-    void demosaic_green_vertical(const HDRImage &raw, const Eigen::Vector2i &red_offset);
-    void demosaic_green_malvar(const Eigen::Vector2i &red_offset);
-    void demosaic_green_phelippeau(const Eigen::Vector2i &red_offset);
-
-    // red/blue channels
-    void demosaic_red_blue_linear(const Eigen::Vector2i &red_offset);
-    void demosaic_red_blue_green_guided_linear(const Eigen::Vector2i &red_offset);
-    void demosaic_red_blue_malvar(const Eigen::Vector2i &red_offset);
-
-    void demosaic_border(size_t border);
-
-    HDRImage median_filter_bayer_artifacts() const;
+    HDRImage flipped_horizontal() const
+    {
+        HDRImage flipped = *this;
+        int right = width() - 1;
+        int left = 0;
+        while (right > left)
+        {
+            flipped.swap_columns(right, left);
+            right--;
+            left++;
+        }
+        return flipped;
+    }
+    HDRImage rotated_90_cw() const
+    {
+        HDRImage rotated(height(), width());
+        for (int y = 0; y < height(); y++)
+            for (int x = 0; x < width(); x++)
+                rotated(y, x) = (*this)(x, y);
+        
+        return rotated.flipped_horizontal();
+    }
+    HDRImage rotated_90_ccw() const
+    {
+        HDRImage rotated(height(), width());
+        for (int y = 0; y < height(); y++)
+            for (int x = 0; x < width(); x++)
+                rotated(y, x) = (*this)(x, y);
+        
+        return rotated.flipped_vertical();
+    }
     //@}
 
 
@@ -210,7 +279,7 @@ public:
     //-----------------------------------------------------------------------
     HDRImage inverted(Box2i roi = Box2i()) const;
 	HDRImage brightness_contrast(float brightness, float contrast, bool linear, EChannel c, Box2i roi = Box2i()) const;
-    HDRImage convolved(const Eigen::ArrayXXf &kernel,
+    HDRImage convolved(const Array2Df &kernel,
                        AtomicProgress progress,
                        BorderMode mX = EDGE, BorderMode mY = EDGE,
                        Box2i roi = Box2i()) const;
@@ -280,6 +349,7 @@ public:
     //@}
 
     bool load(const std::string & filename);
+    void load_dng(const std::string & filename);
     /*!
      * @brief           Write the file to disk.
      *

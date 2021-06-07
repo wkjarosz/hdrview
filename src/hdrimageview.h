@@ -20,10 +20,12 @@ using namespace nanogui;
  */
 class HDRImageView : public Canvas {
 public:
-    using TextureRef = ref<Texture>;
-    using PixelCallback = std::function<void(const Vector2i &, char **, size_t)>;
+	using TextureRef = ref<Texture>;
+	using PixelCallback = std::function<void(const Vector2i &, char **, size_t)>;
 	using FloatCallback = std::function<void(float)>;
 	using BoolCallback = std::function<void(bool)>;
+	using VoidCallback = std::function<void(void)>;
+	using ROICallback = std::function<void(const Box2i &)>;
 
     /// Initialize the widget
     HDRImageView(Widget *parent);
@@ -38,10 +40,16 @@ public:
     virtual void draw_contents() override;
 
 
-	// Getters and setters
 
+    /// Callback executed when we change which image is displayed
+    VoidCallback changed_callback() const { return m_changed_callback; }
+    void set_changed_callback(const VoidCallback &cb) { m_changed_callback = cb; }
+
+
+	// Getters and setters
 	void set_current_image(ConstImagePtr cur);
 	void set_reference_image(ConstImagePtr ref);
+
 
     /// Return the pixel offset of the zoomed image rectangle
     Vector2f offset() const 						  		  { return m_offset; }
@@ -126,28 +134,35 @@ public:
 	void set_draw_values(bool b)  		{m_draw_values = b;}
 
 
+	void select_all();
+	void select_none();
+
 
 	// Callback functions
 
 	/// Callback executed whenever the gamma value has been changed, e.g. via @ref set_gamma
-	const FloatCallback& gamma_callback() const { return m_gamma_callback; }
+	FloatCallback gamma_callback() const { return m_gamma_callback; }
 	void set_gamma_callback(const FloatCallback &cb) { m_gamma_callback = cb; }
 
 	/// Callback executed whenever the exposure value has been changed, e.g. via @ref set_exposure
-	const FloatCallback& exposure_callback() const { return m_exposure_callback; }
+	FloatCallback exposure_callback() const { return m_exposure_callback; }
 	void set_exposure_callback(const FloatCallback &cb) { m_exposure_callback = cb; }
 
 	/// Callback executed whenever the sRGB setting has been changed, e.g. via @ref set_sRGB
-	const BoolCallback& sRGB_callback() const { return m_sRGB_callback; }
+	BoolCallback sRGB_callback() const { return m_sRGB_callback; }
 	void set_sRGB_callback(const BoolCallback &cb) { m_sRGB_callback = cb; }
 
 	/// Callback executed when the zoom level changes
-	const FloatCallback& zoom_callback() const { return m_zoom_callback; }
+	FloatCallback zoom_callback() const { return m_zoom_callback; }
 	void set_zoom_callback(const FloatCallback &cb) { m_zoom_callback = cb; }
 
     /// Callback that is used to acquire information about pixel components
-    const PixelCallback &pixel_callback() const { return m_pixel_callback; }
+    PixelCallback pixel_callback() const { return m_pixel_callback; }
     void set_pixel_callback(const PixelCallback &cb) { m_pixel_callback = cb; }
+
+    /// Callback executed when the ROI changes
+    ROICallback roi_callback() const { return m_roi_callback; }
+    void set_roi_callback(const ROICallback &cb) { m_roi_callback = cb; }
 
 protected:
     Vector2f position_f() const                             { return Vector2f(m_pos); }
@@ -204,6 +219,8 @@ protected:
 	BoolCallback m_sRGB_callback;
 	FloatCallback m_zoom_callback;
     PixelCallback m_pixel_callback;
+	ROICallback m_roi_callback;
+	VoidCallback m_changed_callback;
 
 	Vector2i m_clicked;
 };

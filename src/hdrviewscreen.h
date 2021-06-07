@@ -12,7 +12,6 @@
 #include <nanogui/renderpass.h>
 #include <vector>
 #include <thread>
-#include <spdlog/spdlog.h>
 #include "fwd.h"
 #include "hdrimageview.h"
 
@@ -45,7 +44,6 @@ public:
 	void save_image();
 	void ask_close_image(int index);
 	void ask_close_all_images();
-	void flip_image(bool h);
 	void clear_focus_path() {m_focus_path.clear();}
 
 	void push_gui_refresh() {++m_gui_refresh;}
@@ -78,7 +76,10 @@ private:
     Button * m_side_panel_button = nullptr;
 	HelpWindow* m_help_window = nullptr;
 	Label * m_zoom_label = nullptr;
-	Label * m_pixel_info_label = nullptr;
+	Label * m_pixel_info_label, * m_pixel_info_label2, * m_pixel_info_label3, * m_pixel_info_label4, * m_pixel_info_label5 = nullptr;
+	Label * m_path_info_label, *m_size_info_label = nullptr;
+	Label * m_stats_label = nullptr;
+	PopupButton * m_info_btn;
 
 	VScrollPanel * m_side_scroll_panel = nullptr;
 	Widget * m_side_panel_contents = nullptr;
@@ -100,8 +101,6 @@ private:
 
 	bool m_dragging_side_panel = false;
 	bool m_need_layout_update = true;
-
-    std::shared_ptr<spdlog::logger> console;
 
 	std::thread m_gui_refresh_thread;
 	std::atomic<int> m_gui_refresh = 0;

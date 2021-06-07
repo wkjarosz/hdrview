@@ -17,12 +17,12 @@
 #define NOMINMAX
 #include <tinydir.h>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
-    Screen(nanogui::Vector2i(800,600), "HDRView", true),
-    console(spdlog::get("console"))
+    Screen(nanogui::Vector2i(800,600), "HDRView", true)
 {
     set_background(Color(0.23f, 1.0f));
 
@@ -64,6 +64,26 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // // panelTheme->m_button_gradient_top_pushed = panelTheme->m_transparent;
     // panelTheme->m_button_gradient_bot_pushed = panelTheme->m_button_gradient_top_pushed;
 
+	auto flat_theme = new Theme(m_nvg_context);
+	flat_theme = new Theme(m_nvg_context);
+	flat_theme->m_standard_font_size     		= 16;
+	flat_theme->m_button_font_size       		= 15;
+	flat_theme->m_text_box_font_size     		= 14;
+	flat_theme->m_window_corner_radius   		= 0;
+	flat_theme->m_window_fill_unfocused  		= Color(50, 255);
+	flat_theme->m_window_fill_focused    		= Color(52, 255);
+	flat_theme->m_window_header_height   		= 0;
+	flat_theme->m_window_drop_shadow_size 		= 0;
+	flat_theme->m_button_corner_radius   		= 4;
+	flat_theme->m_border_light			  		= flat_theme->m_transparent;
+	flat_theme->m_border_dark			  		= flat_theme->m_transparent;
+	flat_theme->m_button_gradient_top_focused 	= flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_focused 	= flat_theme->m_button_gradient_top_focused;
+    flat_theme->m_button_gradient_top_unfocused = flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_unfocused = flat_theme->m_transparent;
+    flat_theme->m_button_gradient_top_pushed 	= flat_theme->m_transparent;
+    flat_theme->m_button_gradient_bot_pushed 	= flat_theme->m_button_gradient_top_pushed;
+
 
 	//
 	// Construct the top-level widgets
@@ -89,15 +109,103 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	b->set_flags(Button::Flags::RadioButton);
 	b->set_callback([this]{m_tool = HDRViewScreen::Tool_None;});
 	b->set_tooltip("Switch to default zoom/pan mode.");
+	b->set_icon_extra_scale(1.5f);
 	m_toolbuttons.push_back(b);
 	
 	b = new ToolButton(m_tool_panel, FA_EXPAND);
 	b->set_flags(Button::Flags::RadioButton);
 	b->set_tooltip("Switch to rectangular marquee selection mode.");
 	b->set_callback([this]{m_tool = HDRViewScreen::Tool_Rectangular_Marquee;});
+	b->set_icon_extra_scale(1.5f);
 	m_toolbuttons.push_back(b);
 
-	m_image_view = new ::HDRImageView(this);
+	m_info_btn = new PopupButton(m_tool_panel, "", FA_INFO_CIRCLE);
+	m_info_btn->set_flags(Button::Flags::ToggleButton);
+	m_info_btn->set_tooltip("Show info");
+	m_info_btn->set_side(Popup::Left);
+	m_info_btn->set_chevron_icon(0);
+	m_info_btn->set_icon_extra_scale(1.5f);
+
+	// create info popup
+	{
+		m_info_btn->popup()->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
+		auto well = new Well(m_info_btn->popup(), 1, Color(150, 32), Color(0, 50));
+		
+		well->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
+
+		auto row = new Widget(well);
+		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+		new Label(row, "File:", "sans-bold");
+		m_path_info_label = new Label(row, "");
+		m_path_info_label->set_fixed_width(135);
+
+		row = new Widget(well);
+		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+		new Label(row, "Resolution:", "sans-bold");
+		m_size_info_label = new Label(row, "");
+		m_size_info_label->set_fixed_width(135);
+
+		// spacer
+		(new Widget(well))->set_fixed_height(5);
+
+		row = new Widget(well);
+		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+		auto tb = new ToolButton(row, FA_EYE_DROPPER);
+		tb->set_theme(flat_theme);
+		tb->set_enabled(false);
+		tb->set_icon_extra_scale(1.5f);
+
+		(new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+		m_pixel_info_label2 = new Label(row, "");
+		m_pixel_info_label2->set_fixed_width(50+24+5);
+		m_pixel_info_label3 = new Label(row, "");
+		m_pixel_info_label3->set_fixed_width(50);
+
+		// spacer
+		(new Widget(well))->set_fixed_height(5);
+
+		row = new Widget(well);
+		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+		tb = new ToolButton(row, FA_CROSSHAIRS);
+		tb->set_theme(flat_theme);
+		tb->set_enabled(false);
+		tb->set_icon_extra_scale(1.5f);
+
+		(new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
+		m_pixel_info_label4 = new Label(row, "");
+		m_pixel_info_label4->set_fixed_width(50);
+
+		tb = new ToolButton(row, FA_EXPAND);
+		tb->set_theme(flat_theme);
+		tb->set_enabled(false);
+		tb->set_icon_extra_scale(1.5f);
+
+		(new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
+		m_pixel_info_label5 = new Label(row, "");
+		m_pixel_info_label5->set_fixed_width(50);
+
+		// spacer
+		(new Widget(well))->set_fixed_height(5);
+
+		row = new Widget(well);
+		row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+		tb = new ToolButton(row, FA_PERCENTAGE);
+		tb->set_theme(flat_theme);
+		tb->set_enabled(false);
+		tb->set_icon_extra_scale(1.5f);
+
+		(new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
+		m_stats_label = new Label(row, "");
+		m_stats_label->set_fixed_width(135);
+	}
+
+
+	m_image_view = new HDRImageView(this);
 	m_image_view->set_grid_threshold(10);
 	m_image_view->set_pixel_info_threshold(40);
 
@@ -124,7 +232,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	m_side_panel_contents = new Widget(m_side_scroll_panel);
 	m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical,
 	                                             Alignment::Fill, 4, 4));
-	m_side_panel_contents->set_fixed_width(213);
+	m_side_panel_contents->set_fixed_width(215);
 	m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
 	m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
 
@@ -134,6 +242,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
     auto btn = new Button(m_side_panel_contents, "File", FA_CARET_DOWN);
+	btn->set_theme(flat_theme);
 	btn->set_flags(Button::ToggleButton);
 	btn->set_pushed(true);
 	btn->set_font_size(18);
@@ -145,12 +254,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
 	auto btn2 = new Button(m_side_panel_contents, "Edit", FA_CARET_RIGHT);
+	btn2->set_theme(flat_theme);
 	btn2->set_flags(Button::ToggleButton);
 	btn2->set_font_size(18);
 	btn2->set_icon_position(Button::IconPosition::Left);
 
 	m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel);
-	m_edit_panel->set_visible(false);
+	m_edit_panel->set_fixed_height(4);
 
 	//
 	// image and edit panel callbacks
@@ -159,14 +269,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 	auto toggle_panel = [this](Button * btn1, Button * btn2, Widget * panel1, Widget * panel2, bool value)
 		{
 			btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
-			panel1->set_visible(value);
+			panel1->set_visible(true);
+
+			panel1->set_fixed_height(value ? 0 : 4);
 
 			// close other panel
 			if (value)
 			{
 				btn2->set_pushed(false);
 				btn2->set_icon(FA_CARET_RIGHT);
-				panel2->set_visible(false);
+				panel2->set_fixed_height(4);
 			}
 
 			request_layout_update();
@@ -199,7 +311,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 			                             return;
 		                             Color4 mC = img->image().max();
 		                             float mCf = max(mC[0], mC[1], mC[2]);
-		                             console->debug("max value: {}", mCf);
+		                             spdlog::debug("max value: {}", mCf);
 		                             m_image_view->set_exposure(log2(1.0f/mCf));
 		                             m_images_panel->request_histogram_update(true);
 	                             });
@@ -350,6 +462,30 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 		}
 	);
 
+	m_image_view->set_changed_callback([this]()
+		{
+			if (auto img = m_images_panel->current_image())
+			{
+				m_path_info_label->set_caption(fmt::format("{}", img->filename()));
+				m_size_info_label->set_caption(fmt::format("{} × {}", img->width(), img->height()));
+
+				perform_layout();
+			}
+			else
+			{
+				m_path_info_label->set_caption("");
+				m_size_info_label->set_caption("");
+				m_stats_label->set_caption("");
+			}
+		}
+	);
+
+	m_image_view->set_roi_callback([this](const Box2i& roi)
+		{
+			m_pixel_info_label5->set_caption(roi.has_volume() ? fmt::format("{: 4d}\n{: 4d}", roi.size().x(), roi.size().y()) : "");
+		}
+	);
+
 
 
 	drop_event(args);
@@ -379,7 +515,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 				std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
 				this->redraw();
 				if (anim)
-					console->trace("refreshing gui");
+					spdlog::trace("refreshing gui");
             }
         }
     );
@@ -422,6 +558,8 @@ bool HDRViewScreen::drop_event(const vector<string> & filenames)
 
 		// Ensure the new image button will have the correct visibility state.
 		m_images_panel->set_filter(m_images_panel->filter());
+		
+		request_layout_update();
 	}
 	catch (const exception &e)
 	{
@@ -556,25 +694,6 @@ void HDRViewScreen::save_image()
 }
 
 
-void HDRViewScreen::flip_image(bool h)
-{
-    if (h)
-		m_images_panel->modify_image(
-		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
-		    {
-			    return {make_shared<HDRImage>(img->flipped_horizontal()),
-			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_horizontal(); })};
-		    });
-    else
-		m_images_panel->modify_image(
-		    [](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
-		    {
-			    return {make_shared<HDRImage>(img->flipped_vertical()),
-			            make_shared<LambdaUndo>([](shared_ptr<HDRImage> & img2) { *img2 = img2->flipped_vertical(); })};
-		    });
-}
-
-
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
 	if (Screen::keyboard_event(key, scancode, action, modifiers))
@@ -629,11 +748,11 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return false;
 
         case GLFW_KEY_BACKSPACE:
-			console->trace("KEY BACKSPACE pressed");
+			spdlog::trace("KEY BACKSPACE pressed");
 	        ask_close_image(m_images_panel->current_image_index());
             return true;
         case 'W':
-			console->trace("KEY `W` pressed");
+			spdlog::trace("KEY `W` pressed");
             if (modifiers & SYSTEM_COMMAND_MOD)
             {
 	            if (modifiers & GLFW_MOD_SHIFT)
@@ -645,7 +764,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return false;
 
 	    case 'O':
-			console->trace("KEY `O` pressed");
+			spdlog::trace("KEY `O` pressed");
 		    if (modifiers & SYSTEM_COMMAND_MOD)
 		    {
 			    load_image();
@@ -655,18 +774,18 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         case '=':
         case GLFW_KEY_KP_ADD:
-			console->trace("KEY `=` pressed");
+			spdlog::trace("KEY `=` pressed");
 			m_image_view->zoom_in();
             return true;
 
         case '-':
         case GLFW_KEY_KP_SUBTRACT:
-			console->trace("KEY `-` pressed");
+			spdlog::trace("KEY `-` pressed");
 			m_image_view->zoom_out();
             return true;
 
         case 'G':
-			console->trace("KEY `G` pressed");
+			spdlog::trace("KEY `G` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
 				m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
@@ -677,7 +796,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			}
             return true;
         case 'E':
-			console->trace("KEY `E` pressed");
+			spdlog::trace("KEY `E` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
 			{
 				m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
@@ -689,7 +808,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
 
         case 'F':
-			console->trace("KEY `F` pressed");
+			spdlog::trace("KEY `F` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 			{
 				m_images_panel->focus_filter();
@@ -698,47 +817,41 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 			break;
 
 		case 'A':
-			console->trace("Key `A` pressed");
+			spdlog::trace("Key `A` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
-			{
-				if (auto img = m_images_panel->current_image())
-					img->roi() = img->box();
-			}
+				m_image_view->select_all();
 			break;
 
 		case 'D':
-			console->trace("Key `D` pressed");
+			spdlog::trace("Key `D` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
-			{
-				if (auto img = m_images_panel->current_image())
-					img->roi() = Box2i();
-			}
+				m_image_view->select_none();
 			break;
 
 		case 'C':
-			console->trace("Key `C` pressed");
+			spdlog::trace("Key `C` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 				m_edit_panel->copy();
 			break;
 
 		case 'V':
-			console->trace("Key `V` pressed");
+			spdlog::trace("Key `V` pressed");
 			if (modifiers & SYSTEM_COMMAND_MOD)
 				m_edit_panel->paste();
 			break;
 
         case 'M':
-			console->trace("KEY `M` pressed");
+			spdlog::trace("KEY `M` pressed");
             set_tool(Tool_Rectangular_Marquee);
             return true;
 
         case ' ':
-			console->trace("KEY ` ` pressed");
+			spdlog::trace("KEY ` ` pressed");
 	        set_tool(Tool_None);
             return true;
 
         case 'T':
-			console->trace("KEY `T` pressed");
+			spdlog::trace("KEY `T` pressed");
 		    m_gui_animation_start = glfwGetTime();
 			push_gui_refresh();
 			m_animation_running = true;
@@ -747,12 +860,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
 
         case 'H':
-			console->trace("KEY `H` pressed");
+			spdlog::trace("KEY `H` pressed");
 		    toggle_help_window();
             return true;
 
         case GLFW_KEY_TAB:
-			console->trace("KEY TAB pressed");
+			spdlog::trace("KEY TAB pressed");
 	        if (modifiers & GLFW_MOD_SHIFT)
 	        {
 		        bool setVis = !((m_animation_goal & SIDE_PANEL) || (m_animation_goal & TOP_PANEL) || (m_animation_goal & BOTTOM_PANEL));
@@ -871,6 +984,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 	{
 		nanogui::Vector2i pixelCoord(m_image_view->image_coordinate_at((p - m_image_view->position())));
 		const HDRImage & image = img->image();
+
 		if (image.contains(pixelCoord.x(), pixelCoord.y()))
 		{
 			Color4 pixelVal = image(pixelCoord.x(), pixelCoord.y());
@@ -882,9 +996,27 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 				(int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
 				(int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
 			m_pixel_info_label->set_caption(s);
+			
+			string s2 = fmt::format(
+				"{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}",
+				pixelVal[0], pixelVal[1], pixelVal[2], pixelVal[3]);
+			m_pixel_info_label2->set_caption(s2);
+
+			string s3 = fmt::format(
+				"{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
+				(int) round(iPixelVal[0]), (int) round(iPixelVal[1]),
+				(int) round(iPixelVal[2]), (int) round(iPixelVal[3]));
+			m_pixel_info_label3->set_caption(s3);
+
+			m_pixel_info_label4->set_caption(fmt::format("{: 4d}\n{: 4d}", pixelCoord.x(), pixelCoord.y()));
 		}
 		else
+		{
 			m_pixel_info_label->set_caption("");
+			m_pixel_info_label2->set_caption("");
+			m_pixel_info_label3->set_caption("");
+			m_pixel_info_label4->set_caption("");
+		}
 
 		m_status_bar->perform_layout(m_nvg_context);
 	}
@@ -906,7 +1038,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 	if (m_dragging_side_panel)
 	{
-		int w = ::clamp(p.x(), 206, m_size.x() - 10);
+		int w = ::clamp(p.x(), 215, m_size.x() - 10);
 		m_side_panel_contents->set_fixed_width(w);
 		m_side_scroll_panel->set_fixed_width(w + 12);
 		m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
@@ -1025,13 +1157,26 @@ void HDRViewScreen::draw_contents()
 {
 	clear();
 
-	// console->trace("HDRViewScreen::draw_contents");
+	// spdlog::trace("HDRViewScreen::draw_contents");
 	m_images_panel->run_requested_callbacks();
 
 	if (auto img = m_images_panel->current_image())
 	{
 		img->check_async_result();
 		img->upload_to_GPU();
+
+
+		if (!img->is_null() &&
+			img->histograms() &&
+			img->histograms()->ready() &&
+			img->histograms()->get())
+		{
+			auto lazyHist = img->histograms();
+			m_stats_label->set_caption(fmt::format("{:.3f}\n{:.3f}\n{:.3f}",
+										lazyHist->get()->minimum, lazyHist->get()->average, lazyHist->get()->maximum));
+		}
+		else
+			m_stats_label->set_caption("");
 	}
 
 	if (m_need_layout_update || m_animation_running)

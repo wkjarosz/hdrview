@@ -4,6 +4,13 @@
 // be found in the LICENSE.txt file.
 //
 
+#if defined(_WIN32)
+#  ifndef NOMINMAX
+#  define NOMINMAX 1
+#  endif
+#endif
+#include <GLFW/glfw3.h>
+
 #include "imagelistpanel.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
@@ -16,45 +23,35 @@
 #include <tinydir.h>
 #include <set>
 #include <spdlog/spdlog.h>
-#include <GLFW/glfw3.h>
 #include <alphanum.h>
 
 using namespace nanogui;
 using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageView * img_view)
-	: Widget(parent),
-	  m_modify_done_callback([](int){}),
-	  m_num_images_callback([](){}),
+	: Well(parent, 1, Color(150, 32), Color(0, 50)),
       m_screen(screen),
-      m_image_view(img_view)
+      m_image_view(img_view),
+	  m_modify_done_callback([](int){}),
+	  m_num_images_callback([](){})
 {
 	// set_id("image list panel");
-	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
+	set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
 
 	// histogram mode selection GUI elements
 	{
 		auto grid = new Widget(this);
-		auto agl = new AdvancedGridLayout({0, 4, 0, 4, 0});
-		grid->set_layout(agl);
-		agl->set_col_stretch(2, 1.0f);
-		agl->set_col_stretch(4, 1.0f);
+		grid->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 2));
 
-		agl->append_row(0);
-		agl->set_anchor(new Label(grid, "Histogram:", "sans", 14),
-		               AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
+		new Label(grid, "Histogram:", "sans", 14);
 
 		m_yaxis_scale = new ComboBox(grid, {"Linear", "Log"});
 		m_yaxis_scale->set_tooltip("Set the scale for the Y axis.");
 		m_yaxis_scale->set_fixed_height(19);
-		agl->set_anchor(m_yaxis_scale,
-		               AdvancedGridLayout::Anchor(2, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
 		m_xaxis_scale = new ComboBox(grid, {"Linear", "sRGB", "Log"});
 		m_xaxis_scale->set_tooltip("Set the scale for the X axis.");
 		m_xaxis_scale->set_fixed_height(19);
-		agl->set_anchor(m_xaxis_scale,
-		               AdvancedGridLayout::Anchor(4, agl->row_count() - 1, 1, 1, Alignment::Fill, Alignment::Fill));
 
 		m_xaxis_scale->set_selected_index(1);
 		m_yaxis_scale->set_selected_index(0);
@@ -278,7 +275,7 @@ void ImageListPanel::repopulate_image_list()
 		remove_child(m_image_list);
 
 	m_image_list = new Well(this);
-	m_image_list->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
+	m_image_list->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 1));
 	
 	for (int i = 0; i < num_images(); ++i)
 	{
@@ -596,13 +593,17 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		auto lazyHist = current_image()->histograms();
 		int idx = m_xaxis_scale->selected_index();
 		int idxY = m_yaxis_scale->selected_index();
-		auto hist = lazyHist->get()->histogram[idx].values;
+		vector<float> hist[3];
+		hist[0] = lazyHist->get()->histogram[idx].values[0];
+		hist[1] = lazyHist->get()->histogram[idx].values[1];
+		hist[2] = lazyHist->get()->histogram[idx].values[2];
 		auto ticks = lazyHist->get()->histogram[idx].xTicks;
 		auto labels = lazyHist->get()->histogram[idx].xTickLabels;
 		
 		if (idxY != 0)
 			for (int c = 0; c < 3; ++c)
 				for_each(hist[c].begin(), hist[c].end(), [](float & v){v = normalizedLogScale(v);});
+		
 		m_graph->set_values(hist[0], 0);
 		m_graph->set_values(hist[1], 1);
 		m_graph->set_values(hist[2], 2);
@@ -621,7 +622,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 	enable_disable_buttons();
 
 	if (num_images() != (int)m_image_list->children().size())
-		spdlog::get("console")->error("Number of buttons and images don't match!");
+		spdlog::error("Number of buttons and images don't match!");
 	else
 	{
 		auto& buttons = m_image_list->children();
@@ -634,7 +635,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 		}
 	}
 
-	Widget::draw(ctx);
+	Well::draw(ctx);
 }
 
 
@@ -685,7 +686,7 @@ void ImageListPanel::run_requested_callbacks()
 {
 	if (m_image_modify_done_requested)
 	{
-		spdlog::get("console")->trace("running requested callbacks");
+		spdlog::trace("running requested callbacks");
 		// remove any images that are not being modified and are null
 		bool num_images_changed = false;
 
@@ -776,7 +777,7 @@ bool ImageListPanel::set_reference_image_index(int index)
 
 void ImageListPanel::load_images(const vector<string> & filenames)
 {
-	vector<string> allFilenames;
+	vector<string> all_filenames;
 
 	const static set<string> extensions = {"exr", "png", "jpg", "jpeg", "hdr", "pic", "pfm", "ppm", "bmp", "tga", "psd"};
 
@@ -789,7 +790,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 			try
 			{
 				// filename is actually a directory, traverse it
-				spdlog::get("console")->info("Loading images in \"{}\"...", dir.path);
+				spdlog::info("Loading images in \"{}\"...", dir.path);
 				while (dir.has_next)
 				{
 					tinydir_file file;
@@ -813,7 +814,7 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 						continue;
 					}
 
-					allFilenames.push_back(file.path);
+					all_filenames.push_back(file.path);
 
 					if (tinydir_next(&dir) == -1)
 						throw runtime_error("Error getting next file");
@@ -823,18 +824,18 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 			}
 			catch (const exception & e)
 			{
-				spdlog::get("console")->error("Error listing directory: ({}).", e.what());
+				spdlog::error("Error listing directory: ({}).", e.what());
 			}
 		}
 		else
 		{
-			allFilenames.push_back(i);
+			all_filenames.push_back(i);
 		}
 		tinydir_close(&dir);
 	}
 
 	// now start a bunch of asynchronous image loads
-	for (auto filename : allFilenames)
+	for (auto filename : all_filenames)
 	{
 		shared_ptr<XPUImage> image = make_shared<XPUImage>();
 		image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
@@ -845,12 +846,12 @@ void ImageListPanel::load_images(const vector<string> & filenames)
 				[filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 				{
 					Timer timer;
-					spdlog::get("console")->info("Trying to load image \"{}\"", filename);
+					spdlog::info("Trying to load image \"{}\"", filename);
 					shared_ptr<HDRImage> ret = load_image(filename);
 					if (ret)
-						spdlog::get("console")->info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
+						spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(), timer.elapsed() / 1000.f);
 					else
-						spdlog::get("console")->info("Loading \"{}\" failed", filename);
+						spdlog::info("Loading \"{}\" failed", filename);
 					return {ret, nullptr};
 				});
         image->recompute_histograms(m_image_view->exposure());

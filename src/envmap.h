@@ -9,10 +9,10 @@
 #include "fwd.h"
 #include <string>
 #include <vector>
-#include <Eigen/Core>
+#include <nanogui/vector.h>
 
-using UV2XYZFn = Eigen::Vector3f(const Eigen::Vector2f &);
-using XYZ2UVFn = Eigen::Vector2f(const Eigen::Vector3f &);
+using UV2XYZFn = nanogui::Vector3f(const nanogui::Vector2f &);
+using XYZ2UVFn = nanogui::Vector2f(const nanogui::Vector3f &);
 
 
 enum EEnvMappingUVMode : int
@@ -36,26 +36,26 @@ enum EEnvMappingUVMode : int
  * @param src	Source envmap parametrization
  * @param srcUV	2D uv coordinates in source parametrization
  */
-Eigen::Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const Eigen::Vector2f & srcUV);
+nanogui::Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const nanogui::Vector2f & srcUV);
 
 const std::vector<std::string> & envMappingNames();
 
 // functions that convert from UV image plane coordinates to
 // XYZ world coordinates for the various light probe representations
-Eigen::Vector3f angularMapToXYZ(const Eigen::Vector2f & uv);
-Eigen::Vector3f mirrorBallToXYZ(const Eigen::Vector2f & uv);
-Eigen::Vector3f latLongToXYZ(const Eigen::Vector2f & uv);
-Eigen::Vector3f cylindricalToXYZ(const Eigen::Vector2f & uv);
-Eigen::Vector3f cubeMapToXYZ(const Eigen::Vector2f & uv);
+nanogui::Vector3f angularMapToXYZ(const nanogui::Vector2f & uv);
+nanogui::Vector3f mirrorBallToXYZ(const nanogui::Vector2f & uv);
+nanogui::Vector3f latLongToXYZ(const nanogui::Vector2f & uv);
+nanogui::Vector3f cylindricalToXYZ(const nanogui::Vector2f & uv);
+nanogui::Vector3f cubeMapToXYZ(const nanogui::Vector2f & uv);
 
 UV2XYZFn * envMapUVToXYZ(EEnvMappingUVMode mode);
 
 // functions that convert from XYZ world coordinates to
 // UV image plane coordinates for the various light probe representations
-Eigen::Vector2f XYZToAngularMap(const Eigen::Vector3f & xyz);
-Eigen::Vector2f XYZToMirrorBall(const Eigen::Vector3f & xyz);
-Eigen::Vector2f XYZToLatLong(const Eigen::Vector3f & xyz);
-Eigen::Vector2f XYZToCylindrical(const Eigen::Vector3f & xyz);
-Eigen::Vector2f XYZToCubeMap(const Eigen::Vector3f & xyz);
+nanogui::Vector2f XYZToAngularMap(const nanogui::Vector3f & xyz);
+nanogui::Vector2f XYZToMirrorBall(const nanogui::Vector3f & xyz);
+nanogui::Vector2f XYZToLatLong(const nanogui::Vector3f & xyz);
+nanogui::Vector2f XYZToCylindrical(const nanogui::Vector3f & xyz);
+nanogui::Vector2f XYZToCubeMap(const nanogui::Vector3f & xyz);
 
 XYZ2UVFn * XYZToEnvMapUV(EEnvMappingUVMode mode);

@@ -14,7 +14,7 @@
 #include <nanogui/theme.h>
 #include <nanogui/icons.h>
 #include <iostream>
-#include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 

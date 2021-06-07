@@ -49,7 +49,7 @@ std::string add_includes(std::string shader_string)
             oss << line << std::endl;
         } while (std::getline(iss, line));
 
-        // spdlog::get("console")->trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
+        // spdlog::trace("GLSL #includes: {};\n MERGED: {}", includes, oss.str());
         
         shader_string = oss.str();
     }
@@ -64,8 +64,12 @@ std::string add_includes(std::string shader_string)
 
 HDRImageView::HDRImageView(Widget *parent)
     : Canvas(parent, 1, false, false, true),
-    m_exposure_callback(std::function<void(float)>()), m_gamma_callback(std::function<void(float)>()),
-	m_sRGB_callback(std::function<void(bool)>()), m_zoom_callback(std::function<void(float)>())
+    m_exposure_callback(FloatCallback()),
+    m_gamma_callback(FloatCallback()),
+    m_sRGB_callback(BoolCallback()),
+    m_zoom_callback(FloatCallback()),
+    m_roi_callback(ROICallback()),
+    m_changed_callback(VoidCallback())
 {
     m_zoom = 1.f / screen()->pixel_ratio();
     m_offset = Vector2f(0.0f);
@@ -117,23 +121,25 @@ HDRImageView::HDRImageView(Widget *parent)
     }
     catch(const std::exception& e)
     {
-        spdlog::get("console")->trace("{}", e.what());
+        spdlog::trace("{}", e.what());
     }
 }
 
 void HDRImageView::set_current_image(ConstImagePtr cur)
 {
-    // spdlog::get("console")->debug("setting current image: {}", cur.get());
+    // spdlog::debug("setting current image: {}", cur.get());
     m_current_image = cur;
     if (m_current_image && m_current_image->texture())
         m_image_shader->set_texture("primary_texture", m_current_image->texture());
     else
         m_image_shader->set_texture("primary_texture", m_null_image);
+
+    m_changed_callback();
 }
 
 void HDRImageView::set_reference_image(ConstImagePtr ref)
 {
-    // spdlog::get("console")->debug("setting reference image: {}", ref.get());
+    // spdlog::debug("setting reference image: {}", ref.get());
     m_reference_image = ref;
     if (m_reference_image && m_reference_image->texture())
         m_image_shader->set_texture("secondary_texture", m_reference_image->texture());
@@ -247,6 +253,24 @@ void HDRImageView::zoom_out()
 	m_zoom_callback(m_zoom);
 }
 
+void HDRImageView::select_all()
+{
+	if (m_current_image)
+    {
+		m_current_image->roi() = m_current_image->box();
+	    m_roi_callback(m_current_image->roi());
+    }
+}
+
+void HDRImageView::select_none()
+{
+	if (m_current_image)
+    {
+        m_current_image->roi() = Box2i();
+	    m_roi_callback(m_current_image->roi());
+    }
+}
+
 bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (!m_enabled || !m_current_image)
@@ -254,6 +278,11 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
 
     if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
     {
+        if (down)
+            s->push_gui_refresh();
+        else
+            s->pop_gui_refresh();
+
         if (s->tool() == HDRViewScreen::Tool_Rectangular_Marquee)
         {
             if (down)
@@ -266,6 +295,8 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
             {
                 if (!m_current_image->roi().has_volume())
                     m_current_image->roi() = Box2i();
+
+                m_roi_callback(m_current_image->roi());
             }
             return true;
         }
@@ -291,10 +322,12 @@ bool HDRImageView::mouse_drag_event(const Vector2i& p, const Vector2i& rel, int 
             m_current_image->roi() = Box2i(m_current_image->box().clamp(m_clicked));
             m_current_image->roi().enclose(drag_pixel);
             m_current_image->roi().intersect(m_current_image->box());
+
+            m_roi_callback(m_current_image->roi());
         }
     }
     
-    return true;
+    return false;
 }
 
 bool HDRImageView::scroll_event(const Vector2i& p, const Vector2f& rel)
