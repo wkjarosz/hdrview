@@ -139,6 +139,9 @@ public:
 	void select_all();
 	void select_none();
 
+	void select_all();
+	void select_none();
+
 
 	// Callback functions
 
