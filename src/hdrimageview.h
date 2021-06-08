@@ -43,18 +43,6 @@ public:
     virtual void draw_contents() override;
 
 
-	const HDRColorPicker * active_colorpicker() const {return m_active_colorpicker;}
-	void set_active_colorpicker(HDRColorPicker * cp)
-	{
-		if (m_current_image)
-			m_active_colorpicker = cp;
-	}
-
-    /// Callback executed when we change which image is displayed
-    VoidCallback changed_callback() const { return m_changed_callback; }
-    void set_changed_callback(const VoidCallback &cb) { m_changed_callback = cb; }
-
-
 	// Getters and setters
 	void set_current_image(ConstImagePtr cur);
 	void set_reference_image(ConstImagePtr ref);
@@ -142,6 +130,9 @@ public:
 	bool draw_values_on() const   		{return m_draw_values;}
 	void set_draw_values(bool b)  		{m_draw_values = b;}
 
+	bool draw_eyedropper_on() const		{return m_draw_eyedropper;}
+	void set_draw_eyedropper(bool b)	{m_draw_eyedropper = b;}
+
 	Color4 tonemap(const Color4 & color) const;
 
 
@@ -178,6 +169,10 @@ public:
     ROICallback roi_callback() const { return m_roi_callback; }
     void set_roi_callback(const ROICallback &cb) { m_roi_callback = cb; }
 
+    /// Callback executed when we change which image is displayed
+    VoidCallback changed_callback() const { return m_changed_callback; }
+    void set_changed_callback(const VoidCallback &cb) { m_changed_callback = cb; }
+
 protected:
     Vector2f position_f() const                             { return Vector2f(m_pos); }
 	Vector2f size_f() const                                 { return Vector2f(m_size); }
@@ -209,10 +204,11 @@ protected:
 
     float m_exposure = 0.f,
 		  m_gamma = 2.2f;
-	bool m_sRGB = true,
-		 m_dither = true,
-		 m_draw_grid = true,
-		 m_draw_values = true;
+	bool m_sRGB 			= true,
+		 m_dither 			= true,
+		 m_draw_grid 		= true,
+		 m_draw_values 		= true,
+		 m_draw_eyedropper  = false;
 
 	// Image display parameters.
 	float m_zoom;                           ///< The scale/zoom of the image
@@ -239,6 +235,4 @@ protected:
 	VoidCallback m_changed_callback;
 
 	Vector2i m_clicked;
-
-	HDRColorPicker * m_active_colorpicker = nullptr;
 };

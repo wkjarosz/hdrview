@@ -41,6 +41,9 @@ public:
 	ETool tool() const {return m_tool;}
 	void set_tool(ETool t);
 
+	const HDRColorPicker * active_colorpicker() const {return m_active_colorpicker;}
+	void set_active_colorpicker(HDRColorPicker * cp);
+
 	bool load_image();
 	void new_image();
 	void duplicate_image();
@@ -97,13 +100,14 @@ private:
 	bool m_animation_running = false;
 	enum EAnimationGoal : uint32_t
 	{
-		TOP_PANEL       = 1 << 0,
-		SIDE_PANEL      = 1 << 1,
-		BOTTOM_PANEL    = 1 << 2,
+		TOP_PANEL      = 1 << 0,
+		SIDE_PANEL     = 1 << 1,
+		BOTTOM_PANEL   = 1 << 2,
 	} m_animation_goal = EAnimationGoal(TOP_PANEL|SIDE_PANEL|BOTTOM_PANEL);
 
 	ETool m_tool = Tool_None;
 	std::vector<ToolButton*> m_toolbuttons;
+	HDRColorPicker * m_active_colorpicker = nullptr;
 	
 
     MessageDialog * m_ok_to_quit_dialog = nullptr;

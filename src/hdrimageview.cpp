@@ -287,20 +287,6 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
 
     if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
     {
-        if (down)
-            s->push_gui_refresh();
-        else
-            s->pop_gui_refresh();
-    }
-    
-    if (m_active_colorpicker)
-	{
-		m_active_colorpicker->end_eyedropper();
-        return true;
-	}
-
-    if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
-    {
         if (s->tool() == HDRViewScreen::Tool_Rectangular_Marquee)
         {
             if (down)
@@ -336,9 +322,6 @@ bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i & rel, i
 			Color4 color32 = image(pixel.x(), pixel.y());
 			Color4 color8 = (color32 * pow(2.f, exposure()) * 255).min(255.f).max(0.f);
             m_hover_callback(pixel, color32, color8);
-
-            if (m_active_colorpicker)
-            	m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
 		}
         else
             m_hover_callback(Vector2i(-1), Color4(), Color4());
@@ -437,7 +420,7 @@ void HDRImageView::draw(NVGcontext *ctx)
 void HDRImageView::draw_eyedropper(NVGcontext* ctx) const
 {
     // draw the colorpicker's eyedropper
-	if (m_active_colorpicker && m_current_image)
+	if (m_draw_eyedropper && m_current_image)
     {
         auto center = screen()->mouse_pos();
 

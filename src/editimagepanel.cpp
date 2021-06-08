@@ -1093,7 +1093,7 @@ Widget * create_anchor_widget(Widget * window, HDRImage::CanvasAnchor & anchor, 
 	return row;
 }
 
-Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel, HDRImageView * image_view)
+Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static int width = 128, height = 128;
 	static Color bg(.8f, .8f, .8f, 1.f);
@@ -1104,7 +1104,7 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 	auto b = new Button(parent, name, FA_COMPRESS);
 	b->set_fixed_height(21);
 	b->set_callback(
-		[&, screen, images_panel, image_view]()
+		[&, screen, images_panel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->set_fixed_size(Vector2i(75, 20));
@@ -1161,18 +1161,9 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->add_widget("", spacer);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			color_btn->set_eyedropper_callback([screen,image_view,color_btn](bool pushed)
+			color_btn->set_eyedropper_callback([screen,color_btn](bool pushed)
 				{
-					if (pushed)
-					{
-						screen->push_gui_refresh();
-						image_view->set_active_colorpicker(color_btn);
-					}
-					else
-					{
-        				image_view->set_active_colorpicker(nullptr);
-						screen->pop_gui_refresh();
-					}
+					screen->set_active_colorpicker(pushed ? color_btn : nullptr);
 				}
 			);
 			gui->add_widget("Background color:", color_btn);
@@ -1185,10 +1176,8 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
-				[&,popup,image_view,color_btn]()
+				[&,popup]()
 				{
-					if (image_view->active_colorpicker())
-						color_btn->end_eyedropper();
 					popup->dispose();
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1203,10 +1192,8 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 							        nullptr};
 						});
 				},
-				[&,popup,image_view,color_btn]()
+				[popup]()
 				{
-					if (image_view->active_colorpicker())
-						color_btn->end_eyedropper();
 					popup->dispose();
 				});
 
@@ -1516,7 +1503,7 @@ Button * create_free_xform_btn(Widget *parent, HDRViewScreen * screen, ImageList
 	return b;
 }
 
-Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel, HDRImageView * image_view)
+Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPanel * images_panel)
 {
 	static Color bg(.8f, .8f, .8f, 1.f);
 	static float EV = 0.f;
@@ -1524,7 +1511,7 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 	auto b = new Button(parent, name, FA_CHESS_BOARD);
 	b->set_fixed_height(21);
 	b->set_callback(
-		[&, screen, images_panel, image_view]()
+		[&, screen, images_panel]()
 		{
 			FormHelper *gui = new FormHelper(screen);
 			gui->set_fixed_size(Vector2i(75, 20));
@@ -1533,18 +1520,9 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			window->set_modal(true);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			color_btn->set_eyedropper_callback([screen,image_view,color_btn](bool pushed)
+			color_btn->set_eyedropper_callback([screen,color_btn](bool pushed)
 				{
-					if (pushed)
-					{
-						screen->push_gui_refresh();
-						image_view->set_active_colorpicker(color_btn);
-					}
-					else
-					{
-        				image_view->set_active_colorpicker(nullptr);
-						screen->pop_gui_refresh();
-					}
+					screen->set_active_colorpicker(pushed ? color_btn : nullptr);
 				}
 			);
 			gui->add_widget("Background color:", color_btn);
@@ -1557,10 +1535,8 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
-				[&,popup,image_view,color_btn]()
+				[&,popup]()
 				{
-					if (image_view->active_colorpicker())
-						color_btn->end_eyedropper();
 					popup->dispose();
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1575,10 +1551,8 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 								}, images_panel->current_image()->roi())), nullptr };
 						});
 				},
-				[&,popup,image_view,color_btn]()
+				[popup]()
 				{
-					if (image_view->active_colorpicker())
-						color_btn->end_eyedropper();
 					popup->dispose();
 				});
 
@@ -1813,7 +1787,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 	// shift
 	m_filter_btns.push_back(create_shift_btn(grid, m_screen, m_images_panel));
 	// canvas size
-	m_filter_btns.push_back(create_canvas_size_btn(grid, m_screen, m_images_panel, m_image_view));
+	m_filter_btns.push_back(create_canvas_size_btn(grid, m_screen, m_images_panel));
 
 	// resize
 	m_filter_btns.push_back(create_resize_btn(grid, m_screen, m_images_panel));
@@ -1890,7 +1864,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen * screen, ImageList
 
 	//
 	agrid->append_row(0);
-	m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel, m_image_view));
+	m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count()-1));
 	m_filter_btns.push_back(create_fill_btn(button_row, m_screen, m_images_panel));
 	agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count()-1));

@@ -473,6 +473,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 					(int) round(color8[2]), (int) round(color8[3])));
 
 				m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+
+				if (m_active_colorpicker)
+					m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
 			}
 			else
 			{
@@ -548,6 +551,24 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 HDRViewScreen::~HDRViewScreen()
 {
 	m_gui_refresh_thread.join();
+}
+
+
+void HDRViewScreen::set_active_colorpicker(HDRColorPicker * cp)
+{
+	spdlog::trace("setting colorpicker to {}", intptr_t(cp));
+	if (m_images_panel->current_image())
+	{
+		m_active_colorpicker = cp;
+		if (cp)
+			push_gui_refresh();
+		else
+			pop_gui_refresh();
+	}
+	else
+		m_active_colorpicker = nullptr;
+
+	m_image_view->set_draw_eyedropper(m_images_panel->current_image() && cp);
 }
 
 
@@ -722,16 +743,7 @@ void HDRViewScreen::new_image()
 	auto color_btn = new HDRColorPicker(window, bg, EV);
 	color_btn->set_eyedropper_callback([this,color_btn](bool pushed)
 		{
-			if (pushed)
-			{
-				push_gui_refresh();
-				m_image_view->set_active_colorpicker(color_btn);
-			}
-			else
-			{
-        		m_image_view->set_active_colorpicker(nullptr);
-				pop_gui_refresh();
-			}
+			set_active_colorpicker(pushed ? color_btn : nullptr);
 		}
 	);
 	gui->add_widget("Background color:", color_btn);
@@ -754,8 +766,8 @@ void HDRViewScreen::new_image()
 	b->set_callback(
 		[this,window,popup,color_btn]()
 		{
-			if (m_image_view->active_colorpicker())
-				color_btn->end_eyedropper();
+			// if (m_active_colorpicker)
+			// 	color_btn->end_eyedropper();
 			popup->dispose();
 			window->dispose();
 		});
@@ -763,8 +775,8 @@ void HDRViewScreen::new_image()
 	b->set_callback(
 		[this,window,popup,color_btn]()
 		{
-			if (m_image_view->active_colorpicker())
-				color_btn->end_eyedropper();
+			// if (m_active_colorpicker)
+			// 	color_btn->end_eyedropper();
 			popup->dispose();
 			float gain = powf(2.f, EV);
 
@@ -1116,11 +1128,25 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
+	// temporarily increase the gui refresh rate between mouse down and up events.
+	// makes things like dragging smoother
+	if (down)
+		push_gui_refresh();
+	else
+		pop_gui_refresh();
+
+    if (m_active_colorpicker && down)
+	{
+		spdlog::trace("ending eyedropper");
+		m_active_colorpicker->end_eyedropper();
+        return true;
+	}
+
 	if (button == GLFW_MOUSE_BUTTON_1 && down && at_side_panel_edge(p))
 	{
 		m_dragging_side_panel = true;
 
-		// prevent Screen::cursorPosCallbackEvent from calling dragEvent on other widgets
+		// prevent Screen::cursorPosCallbackEvent from calling drag_event on other widgets
 		m_drag_active = false;
 		m_drag_widget = nullptr;
 		return true;
@@ -1133,7 +1159,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers)
 {
-	if (m_dragging_side_panel || at_side_panel_edge(p))
+	if ((m_dragging_side_panel || at_side_panel_edge(p)) && !m_active_colorpicker)
 	{
 		m_side_panel->set_cursor(Cursor::HResize);
 		m_side_scroll_panel->set_cursor(Cursor::HResize);
@@ -1164,15 +1190,15 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 void HDRViewScreen::update_layout()
 {
-	int headerHeight = m_top_panel->fixed_height();
-	int sidePanelWidth = m_side_panel->fixed_width();
-	int toolPanelWidth = m_tool_panel->fixed_width();
-	int footerHeight = m_status_bar->fixed_height();
+	int header_height = m_top_panel->fixed_height();
+	int sidepanel_width = m_side_panel->fixed_width();
+	int toolpanel_width = m_tool_panel->fixed_width();
+	int footer_height = m_status_bar->fixed_height();
 
-	static int headerShift = 0;
-	static int sidePanelShift = 0;
-	static int toolPanelShift = 0;
-	static int footerShift = 0;
+	static int header_shift = 0;
+	static int sidepanel_shift = 0;
+	static int toolpanel_shift = 0;
+	static int footer_shift = 0;
 
 	if (m_animation_running)
 	{
@@ -1183,10 +1209,10 @@ void HDRViewScreen::update_layout()
 		{
 			pop_gui_refresh();
 			m_animation_running = false;
-			sidePanelShift = (m_animation_goal & SIDE_PANEL) ? 0 : -sidePanelWidth;
-			toolPanelShift = (m_animation_goal & SIDE_PANEL) ? 0 : toolPanelWidth;
-			headerShift = (m_animation_goal & TOP_PANEL) ? 0 : -headerHeight;
-			footerShift = (m_animation_goal & BOTTOM_PANEL) ? 0 : footerHeight;
+			sidepanel_shift = (m_animation_goal & SIDE_PANEL) ? 0 : -sidepanel_width;
+			toolpanel_shift = (m_animation_goal & SIDE_PANEL) ? 0 : toolpanel_width;
+			header_shift = (m_animation_goal & TOP_PANEL) ? 0 : -header_height;
+			footer_shift = (m_animation_goal & BOTTOM_PANEL) ? 0 : footer_height;
 
 			m_side_panel_button->set_pushed(m_animation_goal & SIDE_PANEL);
 		}
@@ -1194,58 +1220,58 @@ void HDRViewScreen::update_layout()
 		else
 		{
 			// only animate the sidepanel if it isn't already at the goal position
-			if (((m_animation_goal & SIDE_PANEL) && sidePanelShift != 0) ||
-				(!(m_animation_goal & SIDE_PANEL) && sidePanelShift != -sidePanelWidth))
+			if (((m_animation_goal & SIDE_PANEL) && sidepanel_shift != 0) ||
+				(!(m_animation_goal & SIDE_PANEL) && sidepanel_shift != -sidepanel_width))
 			{
-				double start = (m_animation_goal & SIDE_PANEL) ? double(-sidePanelWidth) : 0.0;
-				double end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(-sidePanelWidth);
-				sidePanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
+				double start = (m_animation_goal & SIDE_PANEL) ? double(-sidepanel_width) : 0.0;
+				double end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(-sidepanel_width);
+				sidepanel_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 
-				start = (m_animation_goal & SIDE_PANEL) ? double(toolPanelWidth) : 0.0;
-				end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(toolPanelWidth);
-				toolPanelShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
+				start = (m_animation_goal & SIDE_PANEL) ? double(toolpanel_width) : 0.0;
+				end = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(toolpanel_width);
+				toolpanel_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 				m_side_panel_button->set_pushed(true);
 			}
 			// only animate the header if it isn't already at the goal position
-			if (((m_animation_goal & TOP_PANEL) && headerShift != 0) ||
-				(!(m_animation_goal & TOP_PANEL) && headerShift != -headerHeight))
+			if (((m_animation_goal & TOP_PANEL) && header_shift != 0) ||
+				(!(m_animation_goal & TOP_PANEL) && header_shift != -header_height))
 			{
-				double start = (m_animation_goal & TOP_PANEL) ? double(-headerHeight) : 0.0;
-				double end = (m_animation_goal & TOP_PANEL) ? 0.0 : double(-headerHeight);
-				headerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
+				double start = (m_animation_goal & TOP_PANEL) ? double(-header_height) : 0.0;
+				double end = (m_animation_goal & TOP_PANEL) ? 0.0 : double(-header_height);
+				header_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 
 			// only animate the footer if it isn't already at the goal position
-			if (((m_animation_goal & BOTTOM_PANEL) && footerShift != 0) ||
-				(!(m_animation_goal & BOTTOM_PANEL) && footerShift != footerHeight))
+			if (((m_animation_goal & BOTTOM_PANEL) && footer_shift != 0) ||
+				(!(m_animation_goal & BOTTOM_PANEL) && footer_shift != footer_height))
 			{
-				double start = (m_animation_goal & BOTTOM_PANEL) ? double(footerHeight) : 0.0;
-				double end = (m_animation_goal & BOTTOM_PANEL) ? 0.0 : double(footerHeight);
-				footerShift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
+				double start = (m_animation_goal & BOTTOM_PANEL) ? double(footer_height) : 0.0;
+				double end = (m_animation_goal & BOTTOM_PANEL) ? 0.0 : double(footer_height);
+				footer_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 			}
 		}
 	}
 
-	m_top_panel->set_position(nanogui::Vector2i(0,headerShift));
+	m_top_panel->set_position(nanogui::Vector2i(0,header_shift));
 	m_top_panel->set_fixed_width(width());
 
-	int middleHeight = height() - headerHeight - footerHeight - headerShift + footerShift;
-	int middleWidth = width() - toolPanelWidth + toolPanelShift;
+	int middle_height = height() - header_height - footer_height - header_shift + footer_shift;
+	int middleWidth = width() - toolpanel_width + toolpanel_shift;
 
-	m_side_panel->set_position(nanogui::Vector2i(sidePanelShift,headerShift+headerHeight));
-	m_side_panel->set_fixed_height(middleHeight);
+	m_side_panel->set_position(nanogui::Vector2i(sidepanel_shift,header_shift+header_height));
+	m_side_panel->set_fixed_height(middle_height);
 
-	m_tool_panel->set_position(nanogui::Vector2i(middleWidth, headerShift+headerHeight));
-	m_tool_panel->set_fixed_height(middleHeight);
+	m_tool_panel->set_position(nanogui::Vector2i(middleWidth, header_shift+header_height));
+	m_tool_panel->set_fixed_height(middle_height);
 
-	m_image_view->set_position(nanogui::Vector2i(sidePanelShift+sidePanelWidth,headerShift+headerHeight));
-	m_image_view->set_fixed_width(width() - sidePanelShift-sidePanelWidth-toolPanelWidth+toolPanelShift);
-	m_image_view->set_fixed_height(middleHeight);
+	m_image_view->set_position(nanogui::Vector2i(sidepanel_shift+sidepanel_width,header_shift+header_height));
+	m_image_view->set_fixed_width(width() - sidepanel_shift-sidepanel_width-toolpanel_width+toolpanel_shift);
+	m_image_view->set_fixed_height(middle_height);
 
-	m_status_bar->set_position(nanogui::Vector2i(0,headerShift+headerHeight+middleHeight));
+	m_status_bar->set_position(nanogui::Vector2i(0,header_shift+header_height+middle_height));
 	m_status_bar->set_fixed_width(width());
 
-	int lh = std::min(middleHeight, m_side_panel_contents->preferred_size(m_nvg_context).y());
+	int lh = std::min(middle_height, m_side_panel_contents->preferred_size(m_nvg_context).y());
 	m_side_scroll_panel->set_fixed_height(lh);
 
 	int zoomWidth = m_zoom_label->preferred_size(m_nvg_context).x();
