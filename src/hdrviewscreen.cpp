@@ -749,14 +749,13 @@ void HDRViewScreen::new_image()
     b->set_callback(
         [window, popup]()
         {
-            popup->dispose();
             window->dispose();
+            popup->dispose();
         });
     b = new Button(row, "OK", window->theme()->m_message_primary_button_icon);
     b->set_callback(
         [this, window, popup]()
         {
-            popup->dispose();
             float gain = powf(2.f, EV);
 
             shared_ptr<HDRImage> img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3]) * gain);
@@ -770,6 +769,7 @@ void HDRViewScreen::new_image()
             request_layout_update();
 
             window->dispose();
+            popup->dispose();
         });
     gui->add_widget("", row);
 

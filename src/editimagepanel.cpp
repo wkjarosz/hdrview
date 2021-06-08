@@ -73,16 +73,16 @@ void add_ok_cancel_btns(FormHelper *gui, Window *window, const function<void()> 
     b->set_callback(
         [window, cancelCallback]()
         {
+            window->dispose();
             if (cancelCallback)
                 cancelCallback();
-            window->dispose();
         });
     b = new Button(w, "OK", window->theme()->m_message_primary_button_icon);
     b->set_callback(
         [window, OKCallback]()
         {
-            OKCallback();
             window->dispose();
+            OKCallback();
         });
     gui->add_widget("", w);
 }

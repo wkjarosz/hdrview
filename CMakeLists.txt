@@ -3,6 +3,10 @@ project(hdrview)
 
 set(HDRVIEW_VERSION "1.2.0")
 
+# set(USE_SANITIZER "Address")
+# set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/ext/cmake" ${CMAKE_MODULE_PATH})
+# include(sanitizers)
+
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT hdrview)
