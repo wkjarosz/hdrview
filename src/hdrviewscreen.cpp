@@ -682,6 +682,129 @@ bool HDRViewScreen::load_image()
 	return false;
 }
 
+void HDRViewScreen::new_image()
+{
+	static int width = 800, height = 600;
+	static string name = "New image...";
+	static Color bg(.8f, .8f, .8f, 1.f);
+	static float EV = 0.f;
+
+	FormHelper *gui = new FormHelper(this);
+	gui->set_fixed_size(Vector2i(0, 20));
+
+	auto window = gui->add_window(Vector2i(10, 10), name);
+	window->set_modal(true);
+
+	if (m_images_panel->current_image() && m_images_panel->current_image()->roi().has_volume())
+	{
+		width = m_images_panel->current_image()->roi().size().x();
+		height = m_images_panel->current_image()->roi().size().y();
+	}
+
+	{
+		auto w = gui->add_variable("Width:", width);
+		w->set_spinnable(true);
+		w->set_min_value(1);
+		w->set_units("px");
+	}
+
+	{
+		auto h = gui->add_variable("Height:", height);
+		h->set_spinnable(true);
+		h->set_min_value(1);
+		h->set_units("px");
+	}
+
+	auto spacer = new Widget(window);
+	spacer->set_fixed_height(5);
+	gui->add_widget("", spacer);
+
+	auto color_btn = new HDRColorPicker(window, bg, EV);
+	color_btn->set_eyedropper_start_callback([this,color_btn]()
+		{
+			push_gui_refresh();
+			m_image_view->set_active_colorpicker(color_btn);
+		}
+	);
+	color_btn->set_eyedropper_end_callback([this]()
+		{
+			pop_gui_refresh();
+		}
+	);
+	gui->add_widget("Background color:", color_btn);
+	color_btn->set_final_callback([](const Color & c, float e){
+		bg = c;
+		EV = e;
+	});
+
+	auto popup = color_btn->popup();
+	request_layout_update();
+
+	spacer = new Widget(window);
+	spacer->set_fixed_height(15);
+	gui->add_widget("", spacer);
+
+	auto row = new Widget(window);
+	row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+
+	auto b = new Button(row, "Cancel", window->theme()->m_message_alt_button_icon);
+	b->set_callback(
+		[window,popup]()
+		{
+			popup->dispose();
+			window->dispose();
+		});
+	b = new Button(row, "OK", window->theme()->m_message_primary_button_icon);
+	b->set_callback(
+		[this,window,popup]()
+		{
+			popup->dispose();
+			float gain = powf(2.f, EV);
+
+			shared_ptr<HDRImage> img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3])*gain);
+			m_images_panel->new_image(img);
+
+			bring_to_focus();
+
+			// Ensure the new image button will have the correct visibility state.
+			m_images_panel->set_filter(m_images_panel->filter());
+			
+			request_layout_update();
+
+			window->dispose();
+		}
+	);
+	gui->add_widget("", row);
+
+	window->center();
+	window->request_focus();
+}
+
+
+void HDRViewScreen::duplicate_image()
+{
+	shared_ptr<HDRImage> clipboard;
+	if (auto img = m_images_panel->current_image())
+	{
+		auto roi = img->roi();
+		if (!roi.has_volume())
+			roi = img->box();
+		clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+		clipboard->copy_subimage(img->image(), roi, 0, 0);
+	}
+	else
+		clipboard = make_shared<HDRImage>(m_images_panel->current_image()->image());
+	
+	m_images_panel->new_image(clipboard);
+
+	bring_to_focus();
+
+	// Ensure the new image button will have the correct visibility state.
+	m_images_panel->set_filter(m_images_panel->filter());
+	
+	request_layout_update();
+}
+
 void HDRViewScreen::save_image()
 {
 	try

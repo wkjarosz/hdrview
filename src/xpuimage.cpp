@@ -118,11 +118,12 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 	
 }
 
-XPUImage::XPUImage() :
+XPUImage::XPUImage(bool modified) :
     m_image(make_shared<HDRImage>()),
     m_filename(),
     m_cached_histogram_exposure(NAN),
     m_histogram_dirty(true),
+	m_history(modified),
     m_modify_done_callback(XPUImage::VoidVoidFunc())
 {
     m_texture = new Texture(Texture::PixelFormat::RGBA,
@@ -238,7 +239,7 @@ bool XPUImage::wait_for_async_result() const
 		{
 			if (result.first)
 			{
-				m_history = CommandHistory();
+				m_history = CommandHistory(m_history.is_modified());
 				m_image = result.first;
 			}
 		}

@@ -64,8 +64,8 @@ private:
 class CommandHistory
 {
 public:
-    CommandHistory() :
-        m_currentState(0), m_savedState(0)
+    CommandHistory(bool already_modified = false) :
+        m_currentState(0), m_savedState(already_modified ? -1 : 0)
     {
         // empty
     }

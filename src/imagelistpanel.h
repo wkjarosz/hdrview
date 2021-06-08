@@ -50,6 +50,7 @@ public:
 	void sort_images();
 
 	// Loading, saving, closing, and rearranging the images in the image stack
+	void new_image(std::shared_ptr<HDRImage> img);
 	void load_images(const std::vector<std::string> & filenames);
 	bool save_image(const std::string & filename, float exposure = 0.f, float gamma = 2.2f,
 				   bool sRGB = true, bool dither = true);
@@ -105,6 +106,7 @@ private:
 	HDRViewScreen * m_screen = nullptr;
 	HDRImageView * m_image_view = nullptr;
 	Button * m_save_btn = nullptr;
+	Button * m_clone_btn = nullptr;
 	Button * m_close_btn = nullptr;
 	TextBox * m_filter = nullptr;
 	Button* m_erase_btn = nullptr;

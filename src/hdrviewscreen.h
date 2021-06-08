@@ -42,6 +42,8 @@ public:
 	void set_tool(ETool t);
 
 	bool load_image();
+	void new_image();
+	void duplicate_image();
 	void save_image();
 	void ask_close_image(int index);
 	void ask_close_all_images();

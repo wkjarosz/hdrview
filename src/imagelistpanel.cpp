@@ -81,13 +81,13 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen * screen, HDRImageV
 		b->set_icon_extra_scale(1.25f);
 		b->set_fixed_height(25);
 		b->set_tooltip("Create a new image.");
-		// b->set_callback([this] { m_screen->load_image(); });
+		b->set_callback([this] { m_screen->new_image(); });
 
-		b = new Button(row, "", FA_CLONE);
-		b->set_icon_extra_scale(1.25f);
-		b->set_fixed_height(25);
-		b->set_tooltip("Duplicate current image.");
-		// b->set_callback([this] { m_screen->load_image(); });
+		m_clone_btn = new Button(row, "", FA_CLONE);
+		m_clone_btn->set_icon_extra_scale(1.25f);
+		m_clone_btn->set_fixed_height(25);
+		m_clone_btn->set_tooltip("Duplicate current image.");
+		m_clone_btn->set_callback([this] { m_screen->duplicate_image(); });
 
 		m_save_btn = new Button(row, "", FA_SAVE);
 		m_save_btn->set_icon_extra_scale(1.25f);
@@ -336,6 +336,7 @@ void ImageListPanel::enable_disable_buttons()
 	bool has_valid_image = has_image && !current_image()->is_null();
 	m_save_btn->set_enabled(has_valid_image);
 	m_close_btn->set_enabled(has_image);
+	m_clone_btn->set_enabled(has_image);
 }
 
 void ImageListPanel::sort_images()
@@ -789,6 +790,28 @@ bool ImageListPanel::set_reference_image_index(int index)
 	m_image_view->set_reference_image(reference_image());
 
 	return true;
+}
+
+
+void ImageListPanel::new_image(std::shared_ptr<HDRImage> img)
+{
+	static int file_number = 1;
+
+	shared_ptr<XPUImage> image = make_shared<XPUImage>(true);
+	image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
+	image->set_filename(fmt::format("Untitled-{}", file_number++));
+	image->async_modify(
+			[img](const shared_ptr<const HDRImage> &) -> ImageCommandResult
+			{
+				spdlog::info("Creating [{:d}x{:d}] image", img->width(), img->height());
+				return {img, nullptr};
+			});
+	image->recompute_histograms(m_image_view->exposure());
+	
+	m_images.emplace_back(image);
+
+	m_num_images_callback();
+	set_current_image_index(int(m_images.size() - 1));
 }
 
 void ImageListPanel::load_images(const vector<string> & filenames)

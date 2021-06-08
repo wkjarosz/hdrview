@@ -67,7 +67,7 @@ public:
 	using VoidVoidFunc = std::function<void(void)>;
 
 
-    XPUImage();
+    XPUImage(bool modified = false);
     ~XPUImage();
 
 	bool can_modify() const;
