@@ -195,6 +195,8 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
         m_callback(m_color, m_exposure);
         m_final_callback(m_color, m_exposure);
     });
+
+    popup->set_anchor_offset(popup->height());
 }
 
 
