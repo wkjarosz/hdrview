@@ -7,9 +7,9 @@
 #pragma once
 
 #include "fwd.h"
-#include <limits>    // for numeric_limits
 #include <algorithm> // for min, max
-
+#include <iostream>
+#include <limits> // for numeric_limits
 
 //! Represents a bounded interval in higher dimensions.
 /*!
@@ -21,37 +21,35 @@ class Box
 public:
     using BoxT = Box<Vec, Value, Dims>;
 
-    Vec min;            //!< The lower-bound of the interval
-    Vec max;            //!< The upper-bound of the interval
-
+    Vec min; //!< The lower-bound of the interval
+    Vec max; //!< The upper-bound of the interval
 
     //-----------------------------------------------------------------------
     //@{ \name Constructors
     //-----------------------------------------------------------------------
-    Box() {make_empty();}
-    Box(const Vec & point) : min(point), max(point) {}
-    Box(const Vec & minT, const Vec & maxT) : min(minT), max(maxT) {}
+    Box() { make_empty(); }
+    Box(const Vec &point) : min(point), max(point) {}
+    Box(const Vec &minT, const Vec &maxT) : min(minT), max(maxT) {}
+
     template <typename T>
-    Box(const Box<T> & box) : min((Vec)box.min), max((Vec)box.max) {}
+    Box(const Box<T> &box) : min((Vec)box.min), max((Vec)box.max)
+    {
+    }
+
     template <typename T, typename S>
-    Box(const Box<T> & box1, const Box<S> & box2) :
-        min((Vec)box1.min), max((Vec)box1.max)
+    Box(const Box<T> &box1, const Box<S> &box2) : min((Vec)box1.min), max((Vec)box1.max)
     {
         enclose((BoxT)box2);
     }
     //@}
 
-    
     //-----------------------------------------------------------------------
     //@{ \name Equality and inequality
     //-----------------------------------------------------------------------
-    bool operator==(const BoxT & other) const
-        {return(min == other.min && max == other.max);}
-    bool operator!=(const BoxT & other) const
-        {return(min != other.min || max != other.max);}
+    bool operator==(const BoxT &other) const { return (min == other.min && max == other.max); }
+    bool operator!=(const BoxT &other) const { return (min != other.min || max != other.max); }
     //@}
 
-    
     //-----------------------------------------------------------------------
     //@{ \name Box manipulation
     //-----------------------------------------------------------------------
@@ -60,7 +58,7 @@ public:
         min = Vec(std::numeric_limits<Value>::max());
         max = Vec(std::numeric_limits<Value>::lowest());
     }
-    void enclose(const Vec & point)
+    void enclose(const Vec &point)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
@@ -68,19 +66,10 @@ public:
             max[i] = std::max(point[i], max[i]);
         }
     }
-    BoxT expanded(Value d) const
-    {
-        return BoxT(min-d, max+d);
-    }
-    BoxT expanded(const Vec & d) const
-    {
-        return BoxT(min-d, max+d);
-    }
-    BoxT expanded(const BoxT & d) const
-    {
-        return BoxT(min-d.min, max+d.max);
-    }
-    void enclose(const BoxT & box)
+    BoxT expanded(Value d) const { return BoxT(min - d, max + d); }
+    BoxT expanded(const Vec &d) const { return BoxT(min - d, max + d); }
+    BoxT expanded(const BoxT &d) const { return BoxT(min - d.min, max + d.max); }
+    void enclose(const BoxT &box)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
@@ -88,7 +77,7 @@ public:
             max[i] = std::max(box.max[i], max[i]);
         }
     }
-    void intersect(const BoxT & box)
+    void intersect(const BoxT &box)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
@@ -118,19 +107,17 @@ public:
     }
     //@}
 
-    
     //-----------------------------------------------------------------------
     //@{ \name Query functions
     //-----------------------------------------------------------------------
-    Vec  size() const {return max-min;}
-    Vec  center() const {return (max+min)/Value(2);}
-    Vec  clamp(Vec point) const
+    Vec size() const { return max - min; }
+    Vec center() const { return (max + min) / Value(2); }
+    Vec clamp(Vec point) const
     {
-        for (size_t i = 0; i < Dims; ++i)
-            point[i] = std::min(std::max(point[i], min[i]), max[i]);
+        for (size_t i = 0; i < Dims; ++i) point[i] = std::min(std::max(point[i], min[i]), max[i]);
         return point;
     }
-    bool contains(const Vec & point, bool proper = false) const
+    bool contains(const Vec &point, bool proper = false) const
     {
         if (proper)
         {
@@ -147,7 +134,7 @@ public:
             return true;
         }
     }
-    bool intersects(const BoxT & box, bool proper = false) const
+    bool intersects(const BoxT &box, bool proper = false) const
     {
         if (proper)
         {
@@ -167,37 +154,34 @@ public:
     Value volume() const
     {
         Value ret_val(1);
-        Vec s = size();
-        for (size_t i = 0; i < Dims; ++i)
-            ret_val *= s[i];
+        Vec   s = size();
+        for (size_t i = 0; i < Dims; ++i) ret_val *= s[i];
         return ret_val;
     }
     Value area() const
     {
         Value ret_val(0);
-        Vec s = size();
+        Vec   s = size();
         for (size_t i = 0; i < Dims; ++i)
-            for (size_t j = i+1; j < Dims; j++)
-                ret_val += s[i]*s[j];
-        return 2*ret_val;
+            for (size_t j = i + 1; j < Dims; j++) ret_val += s[i] * s[j];
+        return 2 * ret_val;
     }
     size_t major_axis() const
     {
         size_t major = 0;
-        Vec s = size();
-    
+        Vec    s     = size();
+
         for (size_t i = 1; i < Dims; ++i)
             if (s[i] > s[major])
                 major = i;
         return major;
     }
-    void bounding_sphere(Vec* center, Value* radius) const
+    void bounding_sphere(Vec *center, Value *radius) const
     {
         *center = center();
-        *radius = intersects(*center) ?(*center - max).length() : 0.0f;
+        *radius = intersects(*center) ? (*center - max).length() : 0.0f;
     }
     //@}
-
 
     //-----------------------------------------------------------------------
     //@{ \name Classification
@@ -219,11 +203,8 @@ public:
     //@}
 };
 
-
 template <typename Vec, typename Value, size_t Dims>
-inline std::ostream&
-operator<<(std::ostream &o, const Box<Vec,Value,Dims> &b)
+inline std::ostream &operator<<(std::ostream &o, const Box<Vec, Value, Dims> &b)
 {
     return o << "[(" << b.min << "),(" << b.max << ")]";
 }
-

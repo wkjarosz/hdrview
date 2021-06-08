@@ -25,25 +25,25 @@
  * @param[in] B  	Second component of the source color
  * @param[in] C  	Third component of the source color
  */
-void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
-Color3 convertColorSpace(const Color3 & c, EColorSpace dst, EColorSpace src);
-Color4 convertColorSpace(const Color4 & c, EColorSpace dst, EColorSpace src);
+void   convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
+Color3 convertColorSpace(const Color3 &c, EColorSpace dst, EColorSpace src);
+Color4 convertColorSpace(const Color4 &c, EColorSpace dst, EColorSpace src);
 
 // to/from linear to sRGB and AdobeRGB
-float SRGBToLinear(float a);
-void SRGBToLinear(float * r, float * g, float * b);
+float  SRGBToLinear(float a);
+void   SRGBToLinear(float *r, float *g, float *b);
 Color3 SRGBToLinear(const Color3 &c);
 Color4 SRGBToLinear(const Color4 &c);
-float LinearToSRGB(float a);
-void LinearToSRGB(float * r, float * g, float * b);
+float  LinearToSRGB(float a);
+void   LinearToSRGB(float *r, float *g, float *b);
 Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);
-float AdobeRGBToLinear(float a);
-void AdobeRGBToLinear(float * r, float * g, float * b);
+float  AdobeRGBToLinear(float a);
+void   AdobeRGBToLinear(float *r, float *g, float *b);
 Color3 AdobeRGBToLinear(const Color3 &c);
 Color4 AdobeRGBToLinear(const Color4 &c);
-float LinearToAdobeRGB(float a);
-void LinearToAdobeRGB(float * r, float * g, float * b);
+float  LinearToAdobeRGB(float a);
+void   LinearToAdobeRGB(float *r, float *g, float *b);
 Color3 LinearToAdobeRGB(const Color3 &c);
 Color4 LinearToAdobeRGB(const Color4 &c);
 
@@ -64,9 +64,9 @@ void XYZToHSV(float *H, float *S, float *V, float X, float Y, float Z);
 void HSVToXYZ(float *X, float *Y, float *Z, float H, float S, float V);
 
 //! Normalize the L,a,b values to each fall within the range [0,1]
-void normalizeLab(float * L, float * a, float * b);
+void normalizeLab(float *L, float *a, float *b);
 //! Take normalized L,a,b values and undo the normalization back to the original range
-void unnormalizeLab(float * L, float * a, float * b);
+void unnormalizeLab(float *L, float *a, float *b);
 
 // HLS and HSV are more naturally defined as transformations to/from RGB, so
 // define those explicitly
@@ -78,6 +78,4 @@ void HSIAdjust(float *R, float *G, float *B, float h, float s, float i);
 void HSLAdjust(float *R, float *G, float *B, float h, float s, float l);
 void SatAdjust(float *R, float *G, float *B, float s);
 
-
-
-const std::vector<std::string> & colorSpaceNames();
+const std::vector<std::string> &colorSpaceNames();

@@ -4,14 +4,14 @@
 // be found in the LICENSE.txt file.
 //
 
-#include <ctype.h>                       // for tolower
-#include <docopt.h>                      // for docopt
+#include "common.h"   // for getBasename, getExtension
+#include "envmap.h"   // for XYZToAngularMap, XYZToCubeMap
+#include "hdrimage.h" // for HDRImage
+#include <ctype.h>    // for tolower
+#include <docopt.h>   // for docopt
+#include <iostream>   // for string
 #include <nanogui/vector.h>
-#include <iostream>                      // for string
-#include <random>                        // for normal_distribution, mt19937
-#include "common.h"                      // for getBasename, getExtension
-#include "hdrimage.h"                    // for HDRImage
-#include "envmap.h"                      // for XYZToAngularMap, XYZToCubeMap
+#include <random> // for normal_distribution, mt19937
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/ostr.h>
 
@@ -24,21 +24,21 @@ std::mt19937 g_rand(53);
 
 HDRImage::BorderMode parseBorderMode(const string &mode)
 {
-	if (mode == "black")
-		return HDRImage::BLACK;
-	if (mode == "mirror")
-		return HDRImage::MIRROR;
-	if (mode == "repeat")
-		return HDRImage::REPEAT;
-	if (mode == "edge")
-		return HDRImage::EDGE;
+    if (mode == "black")
+        return HDRImage::BLACK;
+    if (mode == "mirror")
+        return HDRImage::MIRROR;
+    if (mode == "repeat")
+        return HDRImage::REPEAT;
+    if (mode == "edge")
+        return HDRImage::EDGE;
 
-	throw invalid_argument(fmt::format("Invalid border mode \"{}\".", mode));
+    throw invalid_argument(fmt::format("Invalid border mode \"{}\".", mode));
 }
-}
+} // namespace
 
 static const char USAGE[] =
-R"(HDRBatch. Copyright (c) Wojciech Jarosz.
+    R"(HDRBatch. Copyright (c) Wojciech Jarosz.
 
 HDRBatch is a simple research-oriented tool for batch
 processing high-dynamic range images. HDRBatch is freely
@@ -142,43 +142,27 @@ Options:
                            be done.
 )";
 
-
 int main(int argc, char **argv)
 {
-    vector<string> argVector = { argv + 1, argv + argc };
+    vector<string>             argVector = {argv + 1, argv + argc};
     map<string, docopt::value> docargs;
-    string ext = "",
-           avgFilename = "",
-           varFilename = "",
-           basename = "",
-           filterType = "",
-           filterParams = "",
-           errorType = "",
-           referenceFile = "";
-    int verbosity = 0, absoluteWidth, absoluteHeight, samples = 1;
-    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f,
-          noiseMean = 0, noiseVar = 0;
-    bool dither = true,
-         sRGB = true,
-         dryRun = true,
-         fixNaNs = false,
-         resize = false,
-         remap = false,
-         relativeSize = true,
-         saveFiles = false,
-         makeNoise = false,
-         invert = false;
+    string ext = "", avgFilename = "", varFilename = "", basename = "", filterType = "", filterParams = "",
+           errorType = "", referenceFile = "";
+    int   verbosity = 0, absoluteWidth, absoluteHeight, samples = 1;
+    float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f, noiseMean = 0, noiseVar = 0;
+    bool dither = true, sRGB = true, dryRun = true, fixNaNs = false, resize = false, remap = false, relativeSize = true,
+         saveFiles = false, makeNoise = false, invert = false;
     HDRImage::BorderMode borderModeX, borderModeY;
-    Color3 nanColor(0.0f,0.0f,0.0f);
+    Color3               nanColor(0.0f, 0.0f, 0.0f);
     // by default use a no-op passthrough warp function
-    function<Vector2f(const Vector2f&)> warp = [](const Vector2f & uv) {return uv;};
+    function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
     // use bilinear lookup by default
     HDRImage::Sampler sampler = HDRImage::BILINEAR;
     // no filter by default
     function<HDRImage(const HDRImage &)> filter;
 
-    vector<string> inFiles;
-    normal_distribution<float> normalDist(0,0);
+    vector<string>             inFiles;
+    normal_distribution<float> normalDist(0, 0);
 
     try
     {
@@ -197,8 +181,8 @@ int main(int argc, char **argv)
         }
 #endif
         docargs = docopt::docopt(USAGE, argVector,
-                                 true,             // show help if requested
-                                 "HDRBatch " HDRVIEW_VERSION);  // version string
+                                 true,                         // show help if requested
+                                 "HDRBatch " HDRVIEW_VERSION); // version string
 
         verbosity = docargs["--verbose"].asLong();
 
@@ -220,8 +204,7 @@ int main(int argc, char **argv)
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
         spdlog::debug("Running with the following commands/arguments/options:");
-        for (auto const& arg : docargs)
-            spdlog::debug("{:<13}: {}", arg.first, arg.second);
+        for (auto const &arg : docargs) spdlog::debug("{:<13}: {}", arg.first, arg.second);
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
@@ -230,7 +213,7 @@ int main(int argc, char **argv)
         // gamma or sRGB
         if (docargs["--gamma"])
         {
-            sRGB = false;
+            sRGB  = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
             spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
@@ -260,7 +243,7 @@ int main(int argc, char **argv)
         spdlog::info("Setting border mode to: {}.", docargs["--border-mode"].asString());
 
         saveFiles = docargs["--save"].asBool();
-        invert = docargs["--invert"].asBool();
+        invert    = docargs["--invert"].asBool();
 
         if (docargs["--format"].isString())
         {
@@ -295,36 +278,38 @@ int main(int argc, char **argv)
         if (docargs["--filter"].isString())
         {
             float filterArg1, filterArg2;
-            char type[22], params[32];
+            char  type[22], params[32];
             if (sscanf(docargs["--filter"].asString().c_str(), "%20[^','],%30s", type, params) != 2)
-                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
+                throw invalid_argument(
+                    fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
 
             filterParams = params;
             if (sscanf(filterParams.c_str(), "%f,%f", &filterArg1, &filterArg2) != 2)
-                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
+                throw invalid_argument(
+                    fmt::format("Cannot parse command-line parameter: --filter:\t{}", docargs["--filter"].asString()));
 
             filterType = type;
             transform(filterType.begin(), filterType.end(), filterType.begin(), ::tolower);
 
             AtomicProgress progress;
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .box_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.box_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .fast_gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.fast_gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .median_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.median_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .bilateral_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.bilateral_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage & i) {return i
-                    .unsharp_masked(filterArg1, filterArg2, progress, borderModeX, borderModeY);};
+                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
+                { return i.unsharp_masked(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -335,11 +320,13 @@ int main(int argc, char **argv)
         {
             char type[22];
             if (sscanf(docargs["--error"].asString().c_str(), "%s", type) != 1)
-                throw invalid_argument(fmt::format("Cannot parse command-line parameter: --error:\t{}", docargs["--error"].asString()));
+                throw invalid_argument(
+                    fmt::format("Cannot parse command-line parameter: --error:\t{}", docargs["--error"].asString()));
 
             errorType = type;
             if (errorType != "squared" && errorType != "absolute" && errorType != "relative-squared")
-                throw invalid_argument(fmt::format("Invalid error TYPE specified in --error:\t{}", docargs["--error"].asString()));
+                throw invalid_argument(
+                    fmt::format("Invalid error TYPE specified in --error:\t{}", docargs["--error"].asString()));
 
             if (docargs["--reference"].isString())
                 referenceFile = docargs["--reference"].asString();
@@ -356,7 +343,8 @@ int main(int argc, char **argv)
             else if (sscanf(docargs["--resize"].asString().c_str(), "%f%%x%f%%", &relativeWidth, &relativeHeight) == 2)
                 relativeSize = true;
             else
-                throw invalid_argument(fmt::format("Cannot parse --resize parameters:\t{}", docargs["--resize"].asString()));
+                throw invalid_argument(
+                    fmt::format("Cannot parse --resize parameters:\t{}", docargs["--resize"].asString()));
 
             resize = true;
             if (relativeSize)
@@ -368,13 +356,15 @@ int main(int argc, char **argv)
         if (docargs["--remap"].isString())
         {
             char s1[32], s2[32], s3[32] = "bilinear";
-            if (sscanf(docargs["--remap"].asString().c_str(), "%30[^','],%30[^','],%d,%30[^',']", s1, s2, &samples, s3) < 2)
-                throw invalid_argument(fmt::format("Cannot parse --remap parameters:\t{}", docargs["--remap"].asString()));
+            if (sscanf(docargs["--remap"].asString().c_str(), "%30[^','],%30[^','],%d,%30[^',']", s1, s2, &samples,
+                       s3) < 2)
+                throw invalid_argument(
+                    fmt::format("Cannot parse --remap parameters:\t{}", docargs["--remap"].asString()));
 
             remap = true;
 
-            UV2XYZFn * dst2xyz;
-            XYZ2UVFn * xyz2src;
+            UV2XYZFn *dst2xyz;
+            XYZ2UVFn *xyz2src;
 
             string from = s1, to = s2;
 
@@ -389,7 +379,8 @@ int main(int argc, char **argv)
                 else if (from == "cubemap")
                     xyz2src = XYZToCubeMap;
                 else
-                    throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", from));
+                    throw invalid_argument(
+                        fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", from));
 
                 if (to == "angularmap")
                     dst2xyz = angularMapToXYZ;
@@ -400,9 +391,10 @@ int main(int argc, char **argv)
                 else if (to == "cubemap")
                     dst2xyz = cubeMapToXYZ;
                 else
-                    throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", to));
+                    throw invalid_argument(
+                        fmt::format("Cannot parse --remap parameters, unrecognized mapping type \"{}\"", to));
 
-                warp = [&](const Vector2f & uv) {return xyz2src(dst2xyz(Vector2f(uv[0], uv[1])));};
+                warp = [&](const Vector2f &uv) { return xyz2src(dst2xyz(Vector2f(uv[0], uv[1]))); };
             }
 
             string interp = s3;
@@ -413,9 +405,11 @@ int main(int argc, char **argv)
             else if (interp == "bicubic")
                 sampler = HDRImage::BICUBIC;
             else
-                throw invalid_argument(fmt::format("Cannot parse --remap parameters, unrecognized sampler type \"{}\"", interp));
+                throw invalid_argument(
+                    fmt::format("Cannot parse --remap parameters, unrecognized sampler type \"{}\"", interp));
 
-            spdlog::info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp, samples);
+            spdlog::info("Remapping from {} to {} using {} interpolation with {:d} samples.", from, to, interp,
+                         samples);
         }
 
         if (docargs["--random-noise"].isString())
@@ -443,7 +437,6 @@ int main(int argc, char **argv)
         // list of filenames
         inFiles = docargs["FILE"].asStringList();
 
-
         // now actually do stuff
         if (!inFiles.size())
             throw invalid_argument("No files specified!");
@@ -459,7 +452,7 @@ int main(int argc, char **argv)
 
         HDRImage avgImg;
         HDRImage varImg;
-        int varN = 0;
+        int      varN = 0;
 
         for (size_t i = 0; i < inFiles.size(); ++i)
         {
@@ -477,17 +470,12 @@ int main(int argc, char **argv)
             if (varN == 1)
             {
                 // set images to zeros
-                varImg = avgImg = image.apply_function([](const Color4 & c)
-                {
-                    return Color4(0,0,0,0);
-                });
+                varImg = avgImg = image.apply_function([](const Color4 &c) { return Color4(0, 0, 0, 0); });
             }
 
             if (fixNaNs || !dryRun)
-                image = image.apply_function([nanColor](const Color4 & c)
-                {
-                    return isfinite(c.sum()) ? c : Color4(nanColor, c[3]);
-                });
+                image = image.apply_function([nanColor](const Color4 &c)
+                                             { return isfinite(c.sum()) ? c : Color4(nanColor, c[3]); });
 
             if (!avgFilename.empty() || !varFilename.empty())
             {
@@ -496,7 +484,7 @@ int main(int argc, char **argv)
 
                 // incremental average and variance computation
                 auto delta = image - avgImg;
-                avgImg += delta/Color4(varN,varN,varN,varN);
+                avgImg += delta / Color4(varN, varN, varN, varN);
                 auto delta2 = image - avgImg;
                 varImg += delta * delta2;
             }
@@ -511,8 +499,8 @@ int main(int argc, char **argv)
 
             if (resize || remap)
             {
-                int w = (int)round(relativeWidth/100.f*image.width());
-                int h = (int)round(relativeHeight/100.f*image.height());
+                int w = (int)round(relativeWidth / 100.f * image.width());
+                int h = (int)round(relativeHeight / 100.f * image.height());
                 if (!relativeSize)
                 {
                     w = absoluteWidth;
@@ -528,8 +516,7 @@ int main(int argc, char **argv)
                 {
                     spdlog::info("Remapping image to {:d}x{:d}...", w, h);
                     AtomicProgress progress;
-                    image = image.resampled(w, h, progress, warp, samples,
-                                            sampler, borderModeX, borderModeY);
+                    image = image.resampled(w, h, progress, warp, samples, sampler, borderModeX, borderModeY);
                 }
             }
 
@@ -538,29 +525,28 @@ int main(int argc, char **argv)
                 for (int y = 0; y < image.height(); ++y)
                     for (int x = 0; x < image.width(); ++x)
                     {
-                        image(x,y) = Color4(normalDist(g_rand), normalDist(g_rand),
-                                      normalDist(g_rand), 1.0f);
+                        image(x, y) = Color4(normalDist(g_rand), normalDist(g_rand), normalDist(g_rand), 1.0f);
                     }
             }
 
             if (!errorType.empty())
             {
-                if (image.width() != reference_image.width() ||
-                    image.height() != reference_image.height())
+                if (image.width() != reference_image.width() || image.height() != reference_image.height())
                 {
                     spdlog::error("Images must have same dimensions!");
                     continue;
                 }
 
                 if (errorType == "squared")
-                    image = (image-reference_image).square();
+                    image = (image - reference_image).square();
                 else if (errorType == "absolute")
-                    image = (image-reference_image).abs();
-                else //if (errorType == "relative-squared")
-                    image = (image-reference_image).square() / (reference_image.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
+                    image = (image - reference_image).abs();
+                else // if (errorType == "relative-squared")
+                    image = (image - reference_image).square() /
+                            (reference_image.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
 
                 Color4 meanError = image.mean();
-                Color4 maxError = image.max();
+                Color4 maxError  = image.max();
 
                 image.set_alpha(1.0f);
 
@@ -575,7 +561,7 @@ int main(int argc, char **argv)
 
             if (saveFiles)
             {
-                string thisExt = ext.size() ? ext : getExtension(inFiles[i]);
+                string thisExt      = ext.size() ? ext : getExtension(inFiles[i]);
                 string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
                 string filename;
                 string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
@@ -606,10 +592,7 @@ int main(int argc, char **argv)
             varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
 
             // set alpha channel to 1
-            varImg = varImg.apply_function([](const Color4 & c)
-            {
-                return Color4(c.r,c.g,c.b,1);
-            });
+            varImg = varImg.apply_function([](const Color4 &c) { return Color4(c.r, c.g, c.b, 1); });
 
             spdlog::info("Writing variance image to \"{}\"...", varFilename);
 
@@ -618,7 +601,7 @@ int main(int argc, char **argv)
         }
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
-    catch (const spdlog::spdlog_ex& e)
+    catch (const spdlog::spdlog_ex &e)
     {
         fprintf(stderr, "Log init failed: %s\n", e.what());
         return 1;

@@ -7,17 +7,16 @@
 #pragma once
 
 #if defined(_MSC_VER)
-	// Make MS cmath define M_PI
-	#define _USE_MATH_DEFINES
+// Make MS cmath define M_PI
+#define _USE_MATH_DEFINES
 #endif
 
+#include "fwd.h"
+#include <algorithm>
 #include <cmath>
+#include <memory>
 #include <string>
 #include <vector>
-#include <algorithm>
-#include <memory>
-#include "fwd.h"
-
 
 // Also define control key for windows/mac/linux
 #if defined(__APPLE__) || defined(DOXYGEN_DOCUMENTATION_BUILD)
@@ -27,9 +26,11 @@
 #define SYSTEM_CONTROL_MOD GLFW_MOD_SUPER
 #endif
 
-
 template <typename T>
-inline T sign(T a) {return (a > 0) ? T (1) : (a < 0) ? T (-1) : 0;}
+inline T sign(T a)
+{
+    return (a > 0) ? T(1) : (a < 0) ? T(-1) : 0;
+}
 
 /*!
  * @brief   Clamps a double between two bounds.
@@ -47,13 +48,11 @@ inline T clamp(T a, T l, T h)
     return (a >= l) ? ((a <= h) ? a : h) : l;
 }
 
-
 template <typename T>
 inline T clamp01(T a)
 {
-	return ::clamp(a, T(0), T(1));
+    return ::clamp(a, T(0), T(1));
 }
-
 
 /*!
  * @brief  Linear interpolation.
@@ -69,20 +68,17 @@ inline T clamp01(T a)
 template <typename T, typename S>
 inline T lerp(T a, T b, S t)
 {
-    return T((S(1)-t) * a + t * b);
+    return T((S(1) - t) * a + t * b);
 }
-
 
 template <typename T>
 std::vector<T> linspaced(size_t num, T a, T b)
 {
-	std::vector<T> retVal(num);
-	for (size_t i = 0; i < num; ++i)
-		retVal[i] = lerp(a, b, T(i)/(num-1));
+    std::vector<T> retVal(num);
+    for (size_t i = 0; i < num; ++i) retVal[i] = lerp(a, b, T(i) / (num - 1));
 
-	return retVal;
+    return retVal;
 }
-
 
 /*!
  * @brief Inverse linear interpolation.
@@ -101,7 +97,6 @@ inline T lerpFactor(T a, T b, T m)
     return (m - a) / (b - a);
 }
 
-
 /*!
  * @brief Smoothly interpolates between 0 and 1 as x moves between a and b.
  *
@@ -115,8 +110,8 @@ inline T lerpFactor(T a, T b, T m)
 template <typename T>
 inline T smoothStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
-    return t*t*(T(3) - T(2)*t);
+    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    return t * t * (T(3) - T(2) * t);
 }
 
 /*!
@@ -133,8 +128,8 @@ inline T smoothStep(T a, T b, T x)
 template <typename T>
 inline T smootherStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
-    return t*t*t*(t*(t*T(6) - T(15)) + T(10));
+    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    return t * t * t * (t * (t * T(6) - T(15)) + T(10));
 }
 
 /*!
@@ -144,22 +139,21 @@ inline T smootherStep(T a, T b, T x)
  * @param b Another value.
  * @param x A number between \a a and \a b.
  * @return  A value between 0.0 and 1.0.
-*/
+ */
 template <typename T>
 inline T cosStep(T a, T b, T x)
 {
-	T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
-	return T(0.5)*(T(1)-cos(t*T(M_PI)));
+    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    return T(0.5) * (T(1) - cos(t * T(M_PI)));
 }
 
 //! The inverse of the cosStep function.
 template <typename T>
 inline T inverseCosStep(T a, T b, T x)
 {
-	T t = ::clamp(lerpFactor(a,b,x), T(0), T(1));
-	return acos(T(1) - T(2)*t)*T(M_1_PI);
+    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    return acos(T(1) - T(2) * t) * T(M_1_PI);
 }
-
 
 /*!
  * @brief  Evaluates Perlin's bias function to control the mean/midpoint of a function.
@@ -184,7 +178,7 @@ inline T inverseCosStep(T a, T b, T x)
 template <typename T>
 inline T biasPerlin(T t, T a)
 {
-	return pow(t, -log2(a));
+    return pow(t, -log2(a));
 }
 
 /*!
@@ -214,10 +208,10 @@ inline T biasPerlin(T t, T a)
 template <typename T>
 inline T gainPerlin(T t, T P)
 {
-	if (t > T(0.5))
-		return T(1) - T(0.5)*pow(T(2) - T(2)*t, P);
-	else
-		return T(0.5)*pow(T(2)*t, P);
+    if (t > T(0.5))
+        return T(1) - T(0.5) * pow(T(2) - T(2) * t, P);
+    else
+        return T(0.5) * pow(T(2) * t, P);
 }
 
 /*!
@@ -235,7 +229,7 @@ inline T gainPerlin(T t, T P)
 template <typename T>
 inline T biasSchlick(T t, T a)
 {
-	return t / ((((T(1)/a) - T(2)) * (T(1) - t)) + T(1));
+    return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
 }
 
 /*!
@@ -253,46 +247,43 @@ inline T biasSchlick(T t, T a)
 template <typename T>
 inline T gainSchlick(T t, T a)
 {
-	if (t < T(0.5))
-		return biasSchlick(t * T(2), a)/T(2);
-	else
-		return biasSchlick(t * T(2) - T(1), T(1) - a)/T(2) + T(0.5);
+    if (t < T(0.5))
+        return biasSchlick(t * T(2), a) / T(2);
+    else
+        return biasSchlick(t * T(2) - T(1), T(1) - a) / T(2) + T(0.5);
 }
 
 template <typename T>
 inline T brightnessContrastL(T v, T slope, T midpoint)
 {
-	return (v - midpoint) * slope + T(0.5);
+    return (v - midpoint) * slope + T(0.5);
 }
 
 template <typename T>
 inline T brightnessContrastNL(T v, T slope, T bias)
 {
-	return gainPerlin(biasSchlick(clamp01(v), bias), slope);
+    return gainPerlin(biasSchlick(clamp01(v), bias), slope);
 }
-
 
 //! Returns a modulus b.
 template <typename T>
 inline T mod(T a, T b)
 {
-    int n = (int)(a/b);
-    a -= n*b;
+    int n = (int)(a / b);
+    a -= n * b;
     if (a < 0)
         a += b;
     return a;
 }
 
-
 template <typename T>
 inline T logScale(T val)
 {
-    static const T eps = T(0.001);
+    static const T eps    = T(0.001);
     static const T logeps = std::log(eps);
 
     return val > 0 ? (std::log(val + eps) - logeps) : -(std::log(-val + eps) - logeps);
 }
-
 
 template <typename T>
 inline T normalizedLogScale(T val, T minLog, T diffLog)
@@ -300,48 +291,46 @@ inline T normalizedLogScale(T val, T minLog, T diffLog)
     return (logScale(val) - minLog) / diffLog;
 }
 
-
 template <typename T>
 inline T normalizedLogScale(T val)
 {
-    static const T minLog = logScale(T(0));
+    static const T minLog  = logScale(T(0));
     static const T diffLog = logScale(T(1)) - minLog;
     return normalizedLogScale(val, minLog, diffLog);
 }
 
-
 template <typename T>
-inline const T& min(const T& a, const T& b, const T& c)
+inline const T &min(const T &a, const T &b, const T &c)
 {
     return std::min(std::min(a, b), c);
 }
 
 template <typename T>
-inline const T& min(const T& a, const T& b, const T& c, const T& d)
+inline const T &min(const T &a, const T &b, const T &c, const T &d)
 {
     return std::min(min(a, b, c), d);
 }
 
 template <typename T>
-inline const T& min(const T& a, const T& b, const T& c, const T& d, const T& e)
+inline const T &min(const T &a, const T &b, const T &c, const T &d, const T &e)
 {
     return std::min(min(a, b, c, d), e);
 }
 
 template <typename T>
-inline const T& max(const T& a, const T& b, const T& c)
+inline const T &max(const T &a, const T &b, const T &c)
 {
     return std::max(std::max(a, b), c);
 }
 
 template <typename T>
-inline const T& max(const T& a, const T& b, const T& c, const T& d)
+inline const T &max(const T &a, const T &b, const T &c, const T &d)
 {
     return std::max(max(a, b, c), d);
 }
 
 template <typename T>
-inline const T& max(const T& a, const T& b, const T& c, const T& d, const T& e)
+inline const T &max(const T &a, const T &b, const T &c, const T &d, const T &e)
 {
     return std::max(max(a, b, c, d), e);
 }
@@ -349,61 +338,56 @@ inline const T& max(const T& a, const T& b, const T& c, const T& d, const T& e)
 template <typename T>
 inline T square(T value)
 {
-    return value*value;
+    return value * value;
 }
 
-std::string getExtension(const std::string& filename);
-std::string getBasename(const std::string& filename);
+std::string getExtension(const std::string &filename);
+std::string getBasename(const std::string &filename);
 
-
-const std::vector<std::string> & channelNames();
-const std::vector<std::string> & blendModeNames();
-std::string channelToString(EChannel channel);
-std::string blendModeToString(EBlendMode mode);
-
+const std::vector<std::string> &channelNames();
+const std::vector<std::string> &blendModeNames();
+std::string                     channelToString(EChannel channel);
+std::string                     blendModeToString(EBlendMode mode);
 
 inline int codePointLength(char first)
 {
-	if ((first & 0xf8) == 0xf0)
-		return 4;
-	else if ((first & 0xf0) == 0xe0)
-		return 3;
-	else if ((first & 0xe0) == 0xc0)
-		return 2;
-	else
-		return 1;
+    if ((first & 0xf8) == 0xf0)
+        return 4;
+    else if ((first & 0xf0) == 0xe0)
+        return 3;
+    else if ((first & 0xe0) == 0xc0)
+        return 2;
+    else
+        return 1;
 }
 
-std::vector<std::string> split(std::string text, const std::string& delim);
-std::string toLower(std::string str);
-std::string toUpper(std::string str);
-bool matches(std::string text, std::string filter, bool isRegex);
-
+std::vector<std::string> split(std::string text, const std::string &delim);
+std::string              toLower(std::string str);
+std::string              toUpper(std::string str);
+bool                     matches(std::string text, std::string filter, bool isRegex);
 
 enum EDirection
 {
-	Forward,
-	Backward,
+    Forward,
+    Backward,
 };
-
-
 
 /// Access binary data stored in hdrview_resources.cpp
 #define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
 
 /// Access a shader stored in hdrview_resources.cpp
 #if defined(NANOGUI_USE_OPENGL)
-#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
-#  define HDRVIEW_BACKEND "OpenGL"
+#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
+#define HDRVIEW_BACKEND      "OpenGL"
 #elif defined(NANOGUI_USE_GLES)
-#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
-#  define HDRVIEW_BACKEND "OpenGL ES"
+#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
+#define HDRVIEW_BACKEND      "OpenGL ES"
 #elif defined(NANOGUI_USE_METAL)
-#  define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
-#  define HDRVIEW_BACKEND "Metal"
+#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
+#define HDRVIEW_BACKEND      "Metal"
 #endif
 
-const char* hdrview_git_version();
-const char* hdrview_git_revision();
-const char* hdrview_git_branch();
-const char* hdrview_timestamp();
+const char *hdrview_git_version();
+const char *hdrview_git_revision();
+const char *hdrview_git_branch();
+const char *hdrview_timestamp();

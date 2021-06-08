@@ -6,6 +6,6 @@
 
 #pragma once
 
-bool is_ppm_image(const char *filename);
-bool write_ppm_image(const char *filename, int width, int height, int num_channels, const unsigned char *data);
-float * load_ppm_image(const char *filename, int *width, int *height, int *num_channels);
+bool   is_ppm_image(const char *filename);
+bool   write_ppm_image(const char *filename, int width, int height, int num_channels, const unsigned char *data);
+float *load_ppm_image(const char *filename, int *width, int *height, int *num_channels);

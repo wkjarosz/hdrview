@@ -15,10 +15,12 @@ NAMESPACE_BEGIN(nanogui)
 /**
  * \brief Based off the nanogui ColorPicker class, but enhanced to offer exposure and alpha controls.
  */
-class HDRColorPicker : public PopupButton {
+class HDRColorPicker : public PopupButton
+{
 public:
-
     using ColorCallback = std::function<void(const Color &, float)>;
+    using VoidCallback  = std::function<void(void)>;
+    using BoolCallback  = std::function<void(bool)>;
 
     enum Components : uint32_t
     {
@@ -28,17 +30,15 @@ public:
         A_SLIDER    = R_SLIDER << 4,
         E_SLIDER    = R_SLIDER << 5,
         ALL_SLIDERS = R_SLIDER | G_SLIDER | B_SLIDER | A_SLIDER | E_SLIDER,
-
         R_BOX       = R_SLIDER << 6,
         G_BOX       = R_SLIDER << 7,
         B_BOX       = R_SLIDER << 8,
         A_BOX       = R_SLIDER << 9,
         E_BOX       = R_SLIDER << 10,
         ALL_BOXES   = R_BOX | G_BOX | B_BOX | A_BOX | E_BOX,
-
         RESET_BTN   = R_SLIDER << 11,
-        
-        ALL         = ColorWheel2::ALL | ALL_SLIDERS | ALL_BOXES | RESET_BTN
+        EYEDROPPER  = R_SLIDER << 12,
+        ALL         = ColorWheel2::ALL | ALL_SLIDERS | ALL_BOXES | RESET_BTN | EYEDROPPER
     };
 
     /**
@@ -51,7 +51,8 @@ public:
      *     The color initially selected by this HDRColorPicker (default: Red).
      */
 
-    HDRColorPicker(Widget *parent, const Color& color = Color(1.f, 0.f, 0.f, 1.f), float exposure = 0.f, int comp = ALL);
+    HDRColorPicker(Widget *parent, const Color &color = Color(1.f, 0.f, 0.f, 1.f), float exposure = 0.f,
+                   int comp = ALL);
 
     /// The callback executed when the ColorWheel changes.
     std::function<void(const Color &, float)> callback() const { return m_callback; }
@@ -62,7 +63,8 @@ public:
      * before the user clicks \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_pick_button.
      */
-    void set_callback(const ColorCallback & cb) {
+    void set_callback(const ColorCallback &cb)
+    {
         m_callback = cb;
         m_callback(m_color, m_exposure);
     }
@@ -81,19 +83,24 @@ public:
      */
     void set_final_callback(const ColorCallback &cb) { m_final_callback = cb; }
 
+    void set_eyedropper_callback(const BoolCallback &cb) { m_eyedropper->set_change_callback(cb); }
+    void end_eyedropper()
+    {
+        m_eyedropper->set_pushed(false);
+        m_eyedropper->change_callback()(false);
+    }
+
     /// Get the current color
-    Color color() const         { return m_color; }
+    Color color() const { return m_color; }
     /// Set the current color
-    void set_color(const Color& color);
+    void set_color(const Color &color);
 
     /// Get the exposure
-    float exposure() const      { return m_exposure; }
-    void set_exposure(float e);
+    float exposure() const { return m_exposure; }
+    void  set_exposure(float e);
 
     /// Get the color boosted by the exposure value
     Color exposed_color() const;
-
-    void close_eyedropper() const {m_eyedropper->set_pushed(false);}
 
     /// The current caption of the \ref nanogui::HDRColorPicker::m_pick_button.
     const std::string &pick_button_caption() { return m_pick_button->caption(); }
@@ -106,14 +113,13 @@ public:
 
     /// Sets the current caption of the \ref nanogui::HDRColorPicker::m_reset_button.
     void set_reset_button_caption(const std::string &caption) { m_reset_button->set_caption(caption); }
-protected:
 
+protected:
     /// Update all internal color and exposure values and propagate to other widgets.
-    void update_all(const Color& color, float exposure);
+    void update_all(const Color &color, float exposure);
 
     /// Helper function to sync some of the widget values
-    std::function<void()> m_sync_helper;
-
+    VoidCallback m_sync_helper;
 
     /// The "fast" callback executed when the ColorWheel has changed.
     ColorCallback m_callback;
@@ -150,7 +156,7 @@ protected:
      */
     Button *m_reset_button;
 
-    ToolButton * m_eyedropper;
+    ToolButton *m_eyedropper;
 
     Color m_color, m_previous_color;
     float m_exposure, m_previous_exposure;
