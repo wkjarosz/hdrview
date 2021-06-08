@@ -720,15 +720,18 @@ void HDRViewScreen::new_image()
 	gui->add_widget("", spacer);
 
 	auto color_btn = new HDRColorPicker(window, bg, EV);
-	color_btn->set_eyedropper_start_callback([this,color_btn]()
+	color_btn->set_eyedropper_callback([this,color_btn](bool pushed)
 		{
-			push_gui_refresh();
-			m_image_view->set_active_colorpicker(color_btn);
-		}
-	);
-	color_btn->set_eyedropper_end_callback([this]()
-		{
-			pop_gui_refresh();
+			if (pushed)
+			{
+				push_gui_refresh();
+				m_image_view->set_active_colorpicker(color_btn);
+			}
+			else
+			{
+        		m_image_view->set_active_colorpicker(nullptr);
+				pop_gui_refresh();
+			}
 		}
 	);
 	gui->add_widget("Background color:", color_btn);
@@ -749,15 +752,19 @@ void HDRViewScreen::new_image()
 
 	auto b = new Button(row, "Cancel", window->theme()->m_message_alt_button_icon);
 	b->set_callback(
-		[window,popup]()
+		[this,window,popup,color_btn]()
 		{
+			if (m_image_view->active_colorpicker())
+				color_btn->end_eyedropper();
 			popup->dispose();
 			window->dispose();
 		});
 	b = new Button(row, "OK", window->theme()->m_message_primary_button_icon);
 	b->set_callback(
-		[this,window,popup]()
+		[this,window,popup,color_btn]()
 		{
+			if (m_image_view->active_colorpicker())
+				color_btn->end_eyedropper();
 			popup->dispose();
 			float gain = powf(2.f, EV);
 

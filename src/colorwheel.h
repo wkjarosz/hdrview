@@ -116,7 +116,7 @@ protected:
     Region m_drag_region;
 
     /// The current callback to execute when the color value has changed.
-    std::function<void(const Color &)> m_callback;
+    std::function<void(const Color &)> m_callback = nullptr;
 
     int m_visible_componets;
 };

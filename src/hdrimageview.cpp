@@ -284,13 +284,6 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
 {
     if (!m_enabled || !m_current_image)
         return false;
-    
-    if (m_active_colorpicker && down)
-	{
-		m_active_colorpicker->end_eyedropper();
-        m_active_colorpicker = nullptr;
-        return true;
-	}
 
     if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
     {
@@ -298,7 +291,16 @@ bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, 
             s->push_gui_refresh();
         else
             s->pop_gui_refresh();
+    }
+    
+    if (m_active_colorpicker)
+	{
+		m_active_colorpicker->end_eyedropper();
+        return true;
+	}
 
+    if (auto s = dynamic_cast<HDRViewScreen*>(screen()))
+    {
         if (s->tool() == HDRViewScreen::Tool_Rectangular_Marquee)
         {
             if (down)

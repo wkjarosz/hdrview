@@ -27,14 +27,14 @@ NAMESPACE_BEGIN(nanogui)
 
 HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposure, int components)
     : PopupButton(parent, ""),
-    // initialize callback to do nothing; this is for users to hook into
-    // receiving a new color value
-    m_callback(),
-    m_final_callback(),
-    m_eyedropper_end_callback(),
     m_color(color), m_previous_color(color),
     m_exposure(exposure), m_previous_exposure(0.f)
 {
+    // initialize callback to do nothing; this is for users to hook into
+    // receiving a new color value
+    m_callback = [](const Color &, float) {};
+    m_final_callback = [](const Color &, float) {};
+    
     set_background_color(m_color);
     Popup *popup = this->popup();
     popup->set_layout(new GroupLayout());
@@ -50,7 +50,8 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
 	panel->set_layout(agrid);
 
     auto row = new Widget(popup);
-    row->set_layout(new GridLayout(Orientation::Horizontal, 3, Alignment::Fill, 0, 5));
+    int num = 1 + bool(components & RESET_BTN) + bool(components & EYEDROPPER);
+    row->set_layout(new GridLayout(Orientation::Horizontal, num, Alignment::Fill, 0, 5));
 
     // set the reset button to the specified color
     m_reset_button = new Button(row, "Reset");
@@ -65,6 +66,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color& color, float exposur
 
     m_eyedropper = new ToolButton(row, FA_EYE_DROPPER);
     m_eyedropper->set_icon_extra_scale(1.5f);
+    m_eyedropper->set_visible(components & EYEDROPPER);
 
     PopupButton::set_change_callback([&](bool) {
         if (m_pick_button->pushed()) {

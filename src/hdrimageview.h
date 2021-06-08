@@ -43,10 +43,11 @@ public:
     virtual void draw_contents() override;
 
 
-
+	const HDRColorPicker * active_colorpicker() const {return m_active_colorpicker;}
 	void set_active_colorpicker(HDRColorPicker * cp)
 	{
-		m_active_colorpicker = cp;
+		if (m_current_image)
+			m_active_colorpicker = cp;
 	}
 
     /// Callback executed when we change which image is displayed

@@ -800,6 +800,7 @@ void ImageListPanel::new_image(std::shared_ptr<HDRImage> img)
 	shared_ptr<XPUImage> image = make_shared<XPUImage>(true);
 	image->set_modify_done_callback([this](){m_screen->pop_gui_refresh(); m_image_modify_done_requested = true;});
 	image->set_filename(fmt::format("Untitled-{}", file_number++));
+	m_screen->push_gui_refresh();
 	image->async_modify(
 			[img](const shared_ptr<const HDRImage> &) -> ImageCommandResult
 			{

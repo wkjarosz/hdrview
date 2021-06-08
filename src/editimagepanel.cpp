@@ -1161,15 +1161,18 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			gui->add_widget("", spacer);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			color_btn->set_eyedropper_start_callback([screen,image_view,color_btn]()
+			color_btn->set_eyedropper_callback([screen,image_view,color_btn](bool pushed)
 				{
-					screen->push_gui_refresh();
-					image_view->set_active_colorpicker(color_btn);
-				}
-			);
-			color_btn->set_eyedropper_end_callback([screen]()
-				{
-					screen->pop_gui_refresh();
+					if (pushed)
+					{
+						screen->push_gui_refresh();
+						image_view->set_active_colorpicker(color_btn);
+					}
+					else
+					{
+        				image_view->set_active_colorpicker(nullptr);
+						screen->pop_gui_refresh();
+					}
 				}
 			);
 			gui->add_widget("Background color:", color_btn);
@@ -1182,8 +1185,10 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
-				[&, popup]()
+				[&,popup,image_view,color_btn]()
 				{
+					if (image_view->active_colorpicker())
+						color_btn->end_eyedropper();
 					popup->dispose();
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1198,7 +1203,12 @@ Button * create_canvas_size_btn(Widget *parent, HDRViewScreen * screen, ImageLis
 							        nullptr};
 						});
 				},
-				[popup](){ popup->dispose(); });
+				[&,popup,image_view,color_btn]()
+				{
+					if (image_view->active_colorpicker())
+						color_btn->end_eyedropper();
+					popup->dispose();
+				});
 
 			window->center();
 			window->request_focus();
@@ -1523,15 +1533,18 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			window->set_modal(true);
 
 			auto color_btn = new HDRColorPicker(window, bg, EV);
-			color_btn->set_eyedropper_start_callback([screen,image_view,color_btn]()
+			color_btn->set_eyedropper_callback([screen,image_view,color_btn](bool pushed)
 				{
-					screen->push_gui_refresh();
-					image_view->set_active_colorpicker(color_btn);
-				}
-			);
-			color_btn->set_eyedropper_end_callback([screen]()
-				{
-					screen->pop_gui_refresh();
+					if (pushed)
+					{
+						screen->push_gui_refresh();
+						image_view->set_active_colorpicker(color_btn);
+					}
+					else
+					{
+        				image_view->set_active_colorpicker(nullptr);
+						screen->pop_gui_refresh();
+					}
 				}
 			);
 			gui->add_widget("Background color:", color_btn);
@@ -1544,8 +1557,10 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 			screen->request_layout_update();
 
 			add_ok_cancel_btns(gui, window,
-				[&, popup]()
+				[&,popup,image_view,color_btn]()
 				{
+					if (image_view->active_colorpicker())
+						color_btn->end_eyedropper();
 					popup->dispose();
 					images_panel->modify_image(
 						[&](const shared_ptr<const HDRImage> & img) -> ImageCommandResult
@@ -1560,7 +1575,12 @@ Button * create_flatten_btn(Widget *parent, HDRViewScreen * screen, ImageListPan
 								}, images_panel->current_image()->roi())), nullptr };
 						});
 				},
-				[popup](){ popup->dispose(); });
+				[&,popup,image_view,color_btn]()
+				{
+					if (image_view->active_colorpicker())
+						color_btn->end_eyedropper();
+					popup->dispose();
+				});
 
 			window->center();
 			window->request_focus();
