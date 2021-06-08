@@ -12,24 +12,21 @@ NAMESPACE_BEGIN(nanogui)
 
 /**
  * \brief Based off the nanogui ColorWheel class, but enhanced to offer:
- *        alpha controls, and preset buttons for white, black, opaque, and transparent. 
+ *        alpha controls, and preset buttons for white, black, opaque, and transparent.
  */
-class ColorWheel2 : public Widget {
+class ColorWheel2 : public Widget
+{
 public:
-
     enum Components : uint32_t
     {
-        WHEEL           = 1 << 0,
-
-        PATCH           = 1 << 1,
-
-        WHITE_CORNER    = 1 << 2,
-        BLACK_CORNER    = 1 << 3,
-        OPAQUE_CORNER   = 1 << 4,
-        TRANS_CORNER    = 1 << 5,
-        ALL_CORNERS     = WHITE_CORNER | BLACK_CORNER | OPAQUE_CORNER | TRANS_CORNER,
-
-        ALL             = WHEEL | PATCH | ALL_CORNERS
+        WHEEL         = 1 << 0,
+        PATCH         = 1 << 1,
+        WHITE_CORNER  = 1 << 2,
+        BLACK_CORNER  = 1 << 3,
+        OPAQUE_CORNER = 1 << 4,
+        TRANS_CORNER  = 1 << 5,
+        ALL_CORNERS   = WHITE_CORNER | BLACK_CORNER | OPAQUE_CORNER | TRANS_CORNER,
+        ALL           = WHEEL | PATCH | ALL_CORNERS
     };
 
     /**
@@ -40,14 +37,14 @@ public:
      *
      * \param color
      *     The initial color of the ColorWheel (default: Red).
-     * 
+     *
      * \param comp
      *     The components to display (bitwise or of \ref nanogui::ColorWheel2::Components)
      */
-    ColorWheel2(Widget *parent, const Color& color = Color(1.0f, 0.0f, 0.0f, 1.0f), int comp = ALL);
+    ColorWheel2(Widget *parent, const Color &color = Color(1.0f, 0.0f, 0.0f, 1.0f), int comp = ALL);
 
     /// The callback to execute when a user changes the ColorWheel value.
-    std::function<void(const Color &)> callback() const                  { return m_callback; }
+    std::function<void(const Color &)> callback() const { return m_callback; }
 
     /// Sets the callback to execute when a user changes the ColorWheel value.
     void set_callback(const std::function<void(const Color &)> &callback) { m_callback = callback; }
@@ -56,7 +53,7 @@ public:
     Color color() const;
 
     /// Sets the current Color this ColorWheel has selected.
-    void set_color(const Color& color);
+    void set_color(const Color &color);
 
     /// The preferred size of this ColorWheel.
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
@@ -72,18 +69,20 @@ public:
 
     /// Handle a mouse motion event (default implementation: propagate to children)
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+
 private:
     // Used to describe where the mouse is interacting
-    enum Region {
-        None        = 0,
-        InnerPatch  = 1 << 1,
-        HueCircle   = 1 << 2,
-        TLCircle    = 1 << 3,
-        BLCircle    = 1 << 4,
-        BRCircle    = 1 << 5,
-        TRCircle    = 1 << 6,
-        Circles     = TLCircle | BLCircle | BRCircle | TRCircle,
-        All         = InnerPatch | HueCircle | Circles
+    enum Region
+    {
+        None       = 0,
+        InnerPatch = 1 << 1,
+        HueCircle  = 1 << 2,
+        TLCircle   = 1 << 3,
+        BLCircle   = 1 << 4,
+        BRCircle   = 1 << 5,
+        TRCircle   = 1 << 6,
+        Circles    = TLCircle | BLCircle | BRCircle | TRCircle,
+        All        = InnerPatch | HueCircle | Circles
     };
 
     // Converts a specified hue (with saturation = value = 1) to RGB space.

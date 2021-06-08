@@ -5,11 +5,11 @@
 //
 
 #include "ppm.h"
+#include <cmath>
 #include <cstdio>
-#include <string>
 #include <iostream>
 #include <stdexcept>
-#include <cmath>
+#include <string>
 
 using namespace std;
 
@@ -27,9 +27,9 @@ struct RGB
 
 bool is_ppm_image(const char *filename)
 {
-    FILE *infile = nullptr;
-    int numInputsRead = 0;
-    char buffer[256];
+    FILE *infile        = nullptr;
+    int   numInputsRead = 0;
+    char  buffer[256];
 
     try
     {
@@ -42,7 +42,9 @@ bool is_ppm_image(const char *filename)
             throw std::runtime_error("image is not a binary PPM file.");
 
         // skip comments
-        do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
+        do {
+            fgets(buffer, sizeof(buffer), infile);
+        } while (buffer[0] == '#');
 
         // read image size
         int width, height;
@@ -51,7 +53,9 @@ bool is_ppm_image(const char *filename)
             throw runtime_error("could not read number of channels in header.");
 
         // skip comments
-        do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
+        do {
+            fgets(buffer, sizeof(buffer), infile);
+        } while (buffer[0] == '#');
 
         // read maximum pixel value (usually 255)
         int colors;
@@ -73,16 +77,15 @@ bool is_ppm_image(const char *filename)
     }
 }
 
-
-float * load_ppm_image(const char *filename, int *width, int *height, int *numChannels)
+float *load_ppm_image(const char *filename, int *width, int *height, int *numChannels)
 {
-    FILE *infile = nullptr;
-    float * img = nullptr;
-    int colors;
-    int numInputsRead = 0;
-    float invColors;
-    char buffer[256];
-    RGB *buf = nullptr;
+    FILE * infile = nullptr;
+    float *img    = nullptr;
+    int    colors;
+    int    numInputsRead = 0;
+    float  invColors;
+    char   buffer[256];
+    RGB *  buf = nullptr;
 
     try
     {
@@ -97,7 +100,9 @@ float * load_ppm_image(const char *filename, int *width, int *height, int *numCh
         *numChannels = 3;
 
         // skip comments
-        do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
+        do {
+            fgets(buffer, sizeof(buffer), infile);
+        } while (buffer[0] == '#');
 
         // read image size
         numInputsRead = sscanf(buffer, "%d %d", width, height);
@@ -105,18 +110,20 @@ float * load_ppm_image(const char *filename, int *width, int *height, int *numCh
             throw runtime_error("could not read number of channels in header.");
 
         // skip comments
-        do {fgets(buffer, sizeof(buffer), infile);} while(buffer[0] == '#');
+        do {
+            fgets(buffer, sizeof(buffer), infile);
+        } while (buffer[0] == '#');
 
         // read maximum pixel value (usually 255)
         numInputsRead = sscanf(buffer, "%d", &colors);
         if (numInputsRead != 1)
             throw runtime_error("could not read max color value.");
-        invColors = 1.0f/colors;
+        invColors = 1.0f / colors;
 
         if (colors != 255)
             throw std::runtime_error("max color value must be 255.");
 
-        img = new float [*width * *height * 3];
+        img = new float[*width * *height * 3];
 
         buf = new RGB[*width];
         for (int y = 0; y < *height; ++y)
@@ -124,34 +131,31 @@ float * load_ppm_image(const char *filename, int *width, int *height, int *numCh
             if (fread(buf, *width * sizeof(RGB), 1, infile) != 1)
                 throw std::runtime_error("cannot read pixel data.");
 
-            RGB *cur = buf;
-            float * curLine = &img[y * *width * 3];
+            RGB *  cur     = buf;
+            float *curLine = &img[y * *width * 3];
             for (int x = 0; x < *width; x++)
             {
-                curLine[3*x + 0] = cur->r * invColors;
-                curLine[3*x + 1] = cur->g * invColors;
-                curLine[3*x + 2] = cur->b * invColors;
+                curLine[3 * x + 0] = cur->r * invColors;
+                curLine[3 * x + 1] = cur->g * invColors;
+                curLine[3 * x + 2] = cur->b * invColors;
                 cur++;
             }
         }
-        delete [] buf;
+        delete[] buf;
 
         fclose(infile);
         return img;
     }
     catch (const std::exception &e)
     {
-        delete [] buf;
-        delete [] img;
+        delete[] buf;
+        delete[] img;
         if (infile)
             fclose(infile);
-        throw std::runtime_error(string("ERROR in load_ppm_image: ") +
-                                 string(e.what()) +
-                                 string(" Unable to read PPM file '") +
-                                 filename + "'");
+        throw std::runtime_error(string("ERROR in load_ppm_image: ") + string(e.what()) +
+                                 string(" Unable to read PPM file '") + filename + "'");
     }
 }
-
 
 bool write_ppm_image(const char *filename, int width, int height, int numChannels, const unsigned char *data)
 {
@@ -168,20 +172,18 @@ bool write_ppm_image(const char *filename, int width, int height, int numChannel
         fprintf(outfile, "%d %d\n", width, height);
         fprintf(outfile, "255\n");
 
-        auto numChars = static_cast<size_t>(numChannels*width*height);
+        auto numChars = static_cast<size_t>(numChannels * width * height);
         if (fwrite(data, sizeof(unsigned char), numChars, outfile) != numChars)
             throw std::runtime_error("cannot write pixel data.");
 
-        fclose (outfile);
+        fclose(outfile);
         return true;
     }
     catch (const std::exception &e)
     {
         if (outfile)
-            fclose (outfile);
-        throw std::runtime_error(string("ERROR in write_ppm_image: ") +
-                                 string(e.what()) +
-                                 string(" Unable to write PPM file '") +
-                                 string(filename) + "'");
+            fclose(outfile);
+        throw std::runtime_error(string("ERROR in write_ppm_image: ") + string(e.what()) +
+                                 string(" Unable to write PPM file '") + string(filename) + "'");
     }
 }

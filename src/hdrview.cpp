@@ -4,13 +4,13 @@
 // be found in the LICENSE.txt file.
 //
 
-#include <cstdlib>
-#include <iostream>
-#include <docopt.h>
-#include "hdrviewscreen.h"
 #include "common.h"
-#include <spdlog/spdlog.h>
+#include "hdrviewscreen.h"
+#include <cstdlib>
+#include <docopt.h>
+#include <iostream>
 #include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 
@@ -18,7 +18,7 @@ using namespace std;
 NANOGUI_FORCE_DISCRETE_GPU();
 
 static const char USAGE[] =
-R"(HDRView. Copyright (c) Wojciech Jarosz.
+    R"(HDRView. Copyright (c) Wojciech Jarosz.
 
 HDRView is a simple research-oriented tool for examining,
 comparing, and converting high-dynamic range images. HDRView
@@ -51,14 +51,13 @@ Options:
   --version                Show the version.
 )";
 
-
 int main(int argc, char **argv)
 {
-    vector<string> arg_vector = { argv + 1, argv + argc };
+    vector<string>             arg_vector = {argv + 1, argv + argc};
     map<string, docopt::value> docargs;
-    int verbosity = 0;
-    float gamma = 2.2f, exposure;
-    bool dither = true, sRGB = true;
+    int                        verbosity = 0;
+    float                      gamma     = 2.2f, exposure;
+    bool                       dither = true, sRGB = true;
 
     vector<string> inFiles;
 
@@ -78,13 +77,12 @@ int main(int argc, char **argv)
             }
         }
 #endif
-        string version_string = fmt::format(
-            "HDRView {}. (built on {} from git {}-{}-{} using {} backend)",
-            HDRVIEW_VERSION, hdrview_timestamp(),
-            hdrview_git_branch(), hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
-        docargs = docopt::docopt(USAGE, arg_vector,
+        string version_string = fmt::format("HDRView {}. (built on {} from git {}-{}-{} using {} backend)",
+                                            HDRVIEW_VERSION, hdrview_timestamp(), hdrview_git_branch(),
+                                            hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
+        docargs               = docopt::docopt(USAGE, arg_vector,
                                  true,            // show help if requested
-                                 version_string);  // version string
+                                 version_string); // version string
 
         verbosity = docargs["--verbose"].asLong();
 
@@ -104,8 +102,7 @@ int main(int argc, char **argv)
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
 
         spdlog::debug("Running with the following commands/arguments/options:");
-        for (auto const& arg : docargs)
-            spdlog::debug("{:<13}: {}", arg.first, arg.second);
+        for (auto const &arg : docargs) spdlog::debug("{:<13}: {}", arg.first, arg.second);
 
         // exposure
         exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
@@ -114,7 +111,7 @@ int main(int argc, char **argv)
         // gamma or sRGB
         if (docargs["--gamma"])
         {
-            sRGB = false;
+            sRGB  = false;
             gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
             spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
@@ -124,8 +121,8 @@ int main(int argc, char **argv)
         // dithering
         dither = !docargs["--no-dither"].asBool();
 
-	    // list of filenames
-	    inFiles = docargs["FILE"].asStringList();
+        // list of filenames
+        inFiles = docargs["FILE"].asStringList();
 
         spdlog::info("Launching GUI.");
         nanogui::init();
@@ -145,7 +142,7 @@ int main(int argc, char **argv)
         nanogui::shutdown();
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
-    catch (const spdlog::spdlog_ex& e)
+    catch (const spdlog::spdlog_ex &e)
     {
         fprintf(stderr, "Log init failed: %s\n", e.what());
         return 1;

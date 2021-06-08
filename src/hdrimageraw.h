@@ -28,32 +28,28 @@
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern
  */
-void bayer_mosaic(HDRImage & raw, const nanogui::Vector2i &red_offset);
-
+void bayer_mosaic(HDRImage &raw, const nanogui::Vector2i &red_offset);
 
 /*!
  * \brief Demosaic the image using simple bilinear interpolation.
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void demosaic_linear(HDRImage & raw, const nanogui::Vector2i &red_offset);
-
+void demosaic_linear(HDRImage &raw, const nanogui::Vector2i &red_offset);
 
 /*!
  * \brief First interpolate the green channel linearly, then use this channel to guide the
  *          interpolation of the red-green and blue-green differences.
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void demosaic_green_guided_linear(HDRImage & raw, const nanogui::Vector2i &red_offset);
-
+void demosaic_green_guided_linear(HDRImage &raw, const nanogui::Vector2i &red_offset);
 
 /*!
  * \brief Demosaic using the method by Malvar et al. 2004.
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void demosaic_Malvar(HDRImage & raw, const nanogui::Vector2i &red_offset);
-
+void demosaic_Malvar(HDRImage &raw, const nanogui::Vector2i &red_offset);
 
 /*!
  * \brief Demosaic the image using the "Adaptive Homogeneity-Directed" interpolation
@@ -81,16 +77,14 @@ void demosaic_Malvar(HDRImage & raw, const nanogui::Vector2i &red_offset);
  * @param camera_to_XYZ   The matrix that transforms from sensor values to XYZ with
  *                      D65 white point.
  */
-void demosaic_AHD(HDRImage & raw, const nanogui::Vector2i &red_offset, const Imath::Matrix33<float> &camera_to_XYZ);
-
+void demosaic_AHD(HDRImage &raw, const nanogui::Vector2i &red_offset, const Imath::Matrix33<float> &camera_to_XYZ);
 
 /*!
  * \brief Interpolate the missing green pixels using the method by Phelippeau et al. 2009.
  *
  * @param red_offset The x,y offset to the first red pixel in the Bayer pattern.
  */
-void demosaic_green_Phelippeau(HDRImage & raw, const nanogui::Vector2i &red_offset);
-
+void demosaic_green_Phelippeau(HDRImage &raw, const nanogui::Vector2i &red_offset);
 
 /*!
  * \brief   Demosaic the border of the image using naive averaging.
@@ -101,4 +95,4 @@ void demosaic_green_Phelippeau(HDRImage & raw, const nanogui::Vector2i &red_offs
  *
  * @param border    The size of the border in pixels.
  */
-void demosaic_border(HDRImage & raw, size_t border);
+void demosaic_border(HDRImage &raw, size_t border);
