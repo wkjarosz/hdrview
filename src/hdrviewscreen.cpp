@@ -1329,7 +1329,7 @@ void HDRViewScreen::draw_widgets()
     double elapsed = glfwGetTime() - m_last_interaction;
     if (elapsed > 0.5f)
     {
-        /* Draw tooltips */
+        // Draw tooltips
         const Widget *widget = find_widget(m_mouse_pos);
         if (widget && !widget->tooltip().empty())
         {
@@ -1344,21 +1344,29 @@ void HDRViewScreen::draw_widgets()
 
             nvgTextBounds(m_nvg_context, pos.x(), pos.y(), widget->tooltip().c_str(), nullptr, bounds);
 
-            int h = (bounds[2] - bounds[0]) / 2;
-            if (h > tooltip_width / 2)
+            int w = (bounds[2] - bounds[0]) / 2;
+            if (w > tooltip_width / 2)
             {
                 nvgTextAlign(m_nvg_context, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
                 nvgTextBoxBounds(m_nvg_context, pos.x(), pos.y(), tooltip_width, widget->tooltip().c_str(), nullptr,
                                  bounds);
 
-                h = (bounds[2] - bounds[0]) / 2;
+                w = (bounds[2] - bounds[0]) / 2;
             }
             int shift = 0;
 
-            if (pos.x() - h - 8 < 0)
+            if (pos.x() - w - 8 < 0)
             {
-                /* Keep tooltips on screen */
-                shift = pos.x() - h - 8;
+                // Keep tooltips on screen
+                shift = pos.x() - w - 8;
+                pos.x() -= shift;
+                bounds[0] -= shift;
+                bounds[2] -= shift;
+            }
+            else if (pos.x() + w + 8 > width())
+            {
+                // Keep tooltips on screen
+                shift = pos.x() + w + 8 - width();
                 pos.x() -= shift;
                 bounds[0] -= shift;
                 bounds[2] -= shift;
@@ -1368,10 +1376,10 @@ void HDRViewScreen::draw_widgets()
 
             nvgBeginPath(m_nvg_context);
             nvgFillColor(m_nvg_context, Color(0, 255));
-            nvgRoundedRect(m_nvg_context, bounds[0] - 4 - h, bounds[1] - 4, (int)(bounds[2] - bounds[0]) + 8,
+            nvgRoundedRect(m_nvg_context, bounds[0] - 4 - w, bounds[1] - 4, (int)(bounds[2] - bounds[0]) + 8,
                            (int)(bounds[3] - bounds[1]) + 8, 3);
 
-            int px = (int)((bounds[2] + bounds[0]) / 2) - h + shift;
+            int px = (int)((bounds[2] + bounds[0]) / 2) - w + shift;
             nvgMoveTo(m_nvg_context, px, bounds[1] - 10);
             nvgLineTo(m_nvg_context, px + 7, bounds[1] + 1);
             nvgLineTo(m_nvg_context, px - 7, bounds[1] + 1);
@@ -1379,7 +1387,7 @@ void HDRViewScreen::draw_widgets()
 
             nvgFillColor(m_nvg_context, Color(255, 255));
             nvgFontBlur(m_nvg_context, 0.0f);
-            nvgTextBox(m_nvg_context, pos.x() - h, pos.y(), tooltip_width, widget->tooltip().c_str(), nullptr);
+            nvgTextBox(m_nvg_context, pos.x() - w, pos.y(), tooltip_width, widget->tooltip().c_str(), nullptr);
         }
     }
 
