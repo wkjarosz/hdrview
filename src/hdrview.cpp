@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "hdrviewscreen.h"
+#include <cfgpath.h>
 #include <cstdlib>
 #include <docopt.h>
 #include <iostream>
@@ -58,6 +59,15 @@ int main(int argc, char **argv)
     int                        verbosity = 0;
     float                      gamma     = 2.2f, exposure;
     bool                       dither = true, sRGB = true;
+
+    char cfgdir[MAX_PATH];
+    get_user_config_file(cfgdir, sizeof(cfgdir), "hdrview");
+    if (cfgdir[0] == 0)
+    {
+        printf("Unable to find home directory.\n");
+        return 1;
+    }
+    printf("Saving configuration file to %s\n", cfgdir);
 
     vector<string> inFiles;
 

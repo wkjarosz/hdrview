@@ -65,10 +65,7 @@ private:
     void bring_to_focus() const;
     void toggle_help_window();
     void update_layout();
-    bool at_side_panel_edge(const Vector2i &p)
-    {
-        return p.x() - m_side_panel->fixed_width() < 10 && p.x() - m_side_panel->fixed_width() > -5;
-    }
+    bool at_side_panel_edge(const Vector2i &p);
 
     Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView *  m_image_view;

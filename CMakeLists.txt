@@ -37,8 +37,8 @@ include_directories(
   ${DOCOPT_INCLUDE_DIR}
   # spdlog
   ${SPDLOG_INCLUDE_DIR}
-  # boost REGEX
-  ${Boost_INCLUDE_DIRS}
+  # cfgpath
+  ${CFGPATH_INCLUDE_DIR}
   # stb
   ${STB_INCLUDE_DIR}
   # tinydngloader
@@ -187,6 +187,8 @@ add_executable(HDRView
   src/parallelfor.h
   src/pfm.h
   src/pfm.cpp
+  src/popupmenu.cpp
+  src/popupmenu.h
   src/ppm.h
   src/ppm.cpp
   src/progress.cpp

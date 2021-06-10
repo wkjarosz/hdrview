@@ -222,6 +222,8 @@ set(ALPHANUM_INCLUDE_DIR
     ${CMAKE_CURRENT_SOURCE_DIR}/alphanum)
 set(SPDLOG_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include)
+set(CFGPATH_INCLUDE_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/cfgpath)
 
 
 
@@ -257,6 +259,7 @@ set(CompilerFlags
       STB_INCLUDE_DIR
       ALPHANUM_INCLUDE_DIR
       SPDLOG_INCLUDE_DIR
+      CFGPATH_INCLUDE_DIR
 )
 foreach(CompilerFlag ${CompilerFlags})
   set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)

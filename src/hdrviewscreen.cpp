@@ -12,6 +12,7 @@
 #include "hdrimageview.h"
 #include "helpwindow.h"
 #include "imagelistpanel.h"
+#include "popupmenu.h"
 #include "xpuimage.h"
 #include <iostream>
 #include <nanogui/opengl.h>
@@ -209,65 +210,127 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create side panel widgets
     //
 
-    m_side_scroll_panel   = new VScrollPanel(m_side_panel);
-    m_side_panel_contents = new Widget(m_side_scroll_panel);
-    m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
-    m_side_panel_contents->set_fixed_width(215);
-    m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
-    m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
-
-    //
-    // create file/images panel
-    //
-
-    auto btn = new Button(m_side_panel_contents, "File", FA_CARET_DOWN);
-    btn->set_theme(flat_theme);
-    btn->set_flags(Button::ToggleButton);
-    btn->set_pushed(true);
-    btn->set_font_size(18);
-    btn->set_icon_position(Button::IconPosition::Left);
-    m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
-
-    //
-    // create edit panel
-    //
-
-    auto btn2 = new Button(m_side_panel_contents, "Edit", FA_CARET_RIGHT);
-    btn2->set_theme(flat_theme);
-    btn2->set_flags(Button::ToggleButton);
-    btn2->set_font_size(18);
-    btn2->set_icon_position(Button::IconPosition::Left);
-
-    m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
-    m_edit_panel->set_fixed_height(4);
-
-    //
-    // image and edit panel callbacks
-    //
-
-    auto toggle_panel = [this](Button *btn1, Button *btn2, Widget *panel1, Widget *panel2, bool value)
     {
-        btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
-        panel1->set_visible(true);
+        m_side_scroll_panel   = new VScrollPanel(m_side_panel);
+        m_side_panel_contents = new Widget(m_side_scroll_panel);
+        m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
+        m_side_panel_contents->set_fixed_width(215);
+        m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
+        m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
 
-        panel1->set_fixed_height(value ? 0 : 4);
+        //
+        // create file/images panel
+        //
 
-        // close other panel
-        if (value)
+        auto menu1 = new PopupMenu(this, m_side_panel);
+        auto menu2 = new PopupMenu(this, m_side_panel);
+
+        auto btn1 = m_side_panel_contents->add<PopupWrapper>(menu1)->add<Button>("File", FA_CARET_DOWN);
+        btn1->set_theme(flat_theme);
+        btn1->set_flags(Button::ToggleButton);
+        btn1->set_pushed(true);
+        btn1->set_font_size(18);
+        btn1->set_icon_position(Button::IconPosition::Left);
+        m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
+
+        //
+        // create edit panel
+        //
+
+        auto btn2 = m_side_panel_contents->add<PopupWrapper>(menu2)->add<Button>("Edit", FA_CARET_RIGHT);
+        btn2->set_theme(flat_theme);
+        btn2->set_flags(Button::ToggleButton);
+        btn2->set_font_size(18);
+        btn2->set_icon_position(Button::IconPosition::Left);
+        m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
+        m_edit_panel->set_fixed_height(4);
+
+        //
+        // image and edit panel callbacks
+        //
+
+        static bool solo = false;
+
+        auto toggle_panel = [this](Button *btn1, Button *btn2, Widget *panel1, Widget *panel2, bool value)
         {
-            btn2->set_pushed(false);
-            btn2->set_icon(FA_CARET_RIGHT);
-            panel2->set_fixed_height(4);
-        }
+            btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
+            panel1->set_visible(true);
 
-        request_layout_update();
-        m_side_panel_contents->perform_layout(m_nvg_context);
-    };
+            panel1->set_fixed_height(value ? 0 : 4);
 
-    btn->set_change_callback([this, btn, btn2, toggle_panel](bool value)
-                             { toggle_panel(btn, btn2, m_images_panel, m_edit_panel, value); });
-    btn2->set_change_callback([this, btn, btn2, toggle_panel](bool value)
-                              { toggle_panel(btn2, btn, m_edit_panel, m_images_panel, value); });
+            // close other panel
+            if (value && solo)
+            {
+                btn2->set_pushed(false);
+                btn2->set_icon(FA_CARET_RIGHT);
+                panel2->set_fixed_height(4);
+            }
+
+            request_layout_update();
+            m_side_panel_contents->perform_layout(m_nvg_context);
+        };
+
+        btn1->set_change_callback([this, btn1, btn2, toggle_panel](bool value)
+                                  { toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, value); });
+        btn2->set_change_callback([this, btn1, btn2, toggle_panel](bool value)
+                                  { toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, value); });
+
+        auto solo_item1     = menu1->add_item("Solo mode");
+        auto expand_item1   = menu1->add_item("Expand all");
+        auto collapse_item1 = menu1->add_item("Collapse all");
+
+        auto solo_item2     = menu2->add_item("Solo mode");
+        auto expand_item2   = menu2->add_item("Expand all");
+        auto collapse_item2 = menu2->add_item("Collapse all");
+
+        solo_item1->set_callback(
+            [this, solo_item1, solo_item2, btn1, btn2, toggle_panel, expand_item1, expand_item2]
+            {
+                solo = !solo;
+                solo_item1->set_icon(solo ? FA_CHECK : 0);
+                solo_item2->set_icon(solo ? FA_CHECK : 0);
+                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, solo ? true : btn1->pushed());
+                expand_item1->set_enabled(!solo);
+                expand_item2->set_enabled(!solo);
+            });
+        expand_item1->set_callback(
+            [this, btn1, btn2, toggle_panel]
+            {
+                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, true);
+                if (!solo)
+                    toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, true);
+            });
+        collapse_item1->set_callback(
+            [this, btn1, btn2, toggle_panel]
+            {
+                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, false);
+                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, false);
+            });
+
+        solo_item2->set_callback(
+            [this, solo_item1, solo_item2, btn1, btn2, toggle_panel, expand_item1, expand_item2]
+            {
+                solo = !solo;
+                solo_item1->set_icon(solo ? FA_CHECK : 0);
+                solo_item2->set_icon(solo ? FA_CHECK : 0);
+                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, solo ? true : btn2->pushed());
+                expand_item1->set_enabled(!solo);
+                expand_item2->set_enabled(!solo);
+            });
+        expand_item2->set_callback(
+            [this, btn1, btn2, toggle_panel]
+            {
+                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, true);
+                if (!solo)
+                    toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, true);
+            });
+        collapse_item2->set_callback(
+            [this, btn1, btn2, toggle_panel]
+            {
+                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, false);
+                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, false);
+            });
+    }
 
     //
     // create top panel controls
@@ -1111,6 +1174,13 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     return false;
 }
 
+bool HDRViewScreen::at_side_panel_edge(const Vector2i &p)
+{
+    auto w = find_widget(p);
+    return p.x() - m_side_panel->fixed_width() < 10 && p.x() - m_side_panel->fixed_width() > -5 &&
+           (w == m_side_panel || w == m_image_view || w == m_side_panel_contents || w == m_side_scroll_panel);
+}
+
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
     // temporarily increase the gui refresh rate between mouse down and up events.
@@ -1127,6 +1197,23 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
         return true;
     }
 
+    // close all popup menus
+    if (down)
+    {
+        bool closed_a_menu = false;
+        for (auto it = m_children.rbegin(); it != m_children.rend(); ++it)
+        {
+            Widget *child = *it;
+            if (child->visible() && !child->contains(p - m_pos) && dynamic_cast<PopupMenu *>(child))
+            {
+                child->set_visible(false);
+                closed_a_menu = true;
+            }
+        }
+        if (closed_a_menu)
+            return true;
+    }
+
     if (button == GLFW_MOUSE_BUTTON_1 && down && at_side_panel_edge(p))
     {
         m_dragging_side_panel = true;
@@ -1139,7 +1226,9 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     else
         m_dragging_side_panel = false;
 
-    return Screen::mouse_button_event(p, button, down, modifiers);
+    bool ret = Screen::mouse_button_event(p, button, down, modifiers);
+
+    return ret;
 }
 
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
