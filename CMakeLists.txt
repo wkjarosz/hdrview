@@ -151,6 +151,8 @@ add_executable(HDRView
   src/common.cpp
   src/common.h
   src/dithermatrix256.h
+  src/dropdown.cpp
+  src/dropdown.h
   src/editimagepanel.cpp
   src/editimagepanel.h
   src/envmap.cpp

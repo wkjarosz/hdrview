@@ -12,6 +12,7 @@
 #include <GLFW/glfw3.h>
 
 #include "colorslider.h"
+#include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
@@ -42,11 +43,11 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         new Label(grid, "Histogram:", "sans", 14);
 
-        m_yaxis_scale = new ComboBox(grid, {"Linear", "Log"});
+        m_yaxis_scale = new Dropdown(grid, {"Linear", "Log"});
         m_yaxis_scale->set_tooltip("Set the scale for the Y axis.");
         m_yaxis_scale->set_fixed_height(19);
 
-        m_xaxis_scale = new ComboBox(grid, {"Linear", "sRGB", "Log"});
+        m_xaxis_scale = new Dropdown(grid, {"Linear", "sRGB", "Log"});
         m_xaxis_scale->set_tooltip("Set the scale for the X axis.");
         m_xaxis_scale->set_fixed_height(19);
 
@@ -110,7 +111,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_blend_modes = new ComboBox(grid, blendModeNames());
+        m_blend_modes = new Dropdown(grid, blendModeNames());
         m_blend_modes->set_fixed_height(19);
         m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
         agl->set_anchor(m_blend_modes,
@@ -122,7 +123,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Channel:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_channels = new ComboBox(grid, channelNames());
+        m_channels = new Dropdown(grid, channelNames());
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);
         m_channels->set_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });

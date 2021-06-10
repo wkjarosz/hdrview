@@ -297,6 +297,8 @@ bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i &rel, in
         else
             m_hover_callback(Vector2i(-1), Color4(), Color4());
     }
+    else if (m_hover_callback)
+        m_hover_callback(Vector2i(-1), Color4(), Color4());
 
     return false;
 }

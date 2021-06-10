@@ -117,10 +117,10 @@ private:
     Button *       m_sort_btn      = nullptr;
     Button *       m_use_short_btn = nullptr;
     Widget *       m_image_list    = nullptr;
-    ComboBox *     m_blend_modes   = nullptr;
-    ComboBox *     m_channels      = nullptr;
+    Dropdown *     m_blend_modes   = nullptr;
+    Dropdown *     m_channels      = nullptr;
 
-    ComboBox *  m_xaxis_scale = nullptr, *m_yaxis_scale = nullptr;
+    Dropdown *  m_xaxis_scale = nullptr, *m_yaxis_scale = nullptr;
     MultiGraph *m_graph                      = nullptr;
     bool        m_histogram_dirty            = false;
     bool        m_histogram_update_requested = false;

@@ -62,6 +62,7 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
         if (down)
         {
             set_visible(false);
+            m_parent_window->request_focus();
 
             for (auto it = m_children.begin(); it != m_children.end(); ++it)
             {
@@ -123,7 +124,6 @@ bool PopupWrapper::mouse_button_event(const Vector2i &p, int button, bool down, 
     {
         if (m_right_click_menu->visible() && down)
         {
-            // m_right_pushed = false;
             m_right_click_menu->set_visible(false);
             return true;
         }

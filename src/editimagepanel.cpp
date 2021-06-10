@@ -9,6 +9,7 @@
 #include "colorspace.h"
 #include "colorwheel.h"
 #include "common.h"
+#include "dropdown.h"
 #include "envmap.h"
 #include "filmictonecurve.h"
 #include "hdrcolorpicker.h"
@@ -30,9 +31,8 @@ using Imath::V3f;
 namespace
 {
 
-std::function<void(float)> create_floatbox_and_slider(FormHelper *gui, Widget *parent, string name, float &variable,
-                                                      float mn, float mx, float step, std::function<void(void)> cb,
-                                                      string help = "")
+std::function<void(float)> create_floatbox_and_slider(FormHelper *gui, string name, float &variable, float mn, float mx,
+                                                      float step, std::function<void(void)> cb, string help = "")
 {
     auto box = gui->add_variable(name, variable);
     box->set_spinnable(true);
@@ -42,7 +42,7 @@ std::function<void(float)> create_floatbox_and_slider(FormHelper *gui, Widget *p
     box->set_fixed_width(65);
     box->set_tooltip(help);
 
-    auto slider = new Slider(parent);
+    auto slider = new Slider(gui->window());
     slider->set_value(variable);
     slider->set_range({mn, mx});
     slider->set_tooltip(help);
@@ -60,28 +60,53 @@ std::function<void(float)> create_floatbox_and_slider(FormHelper *gui, Widget *p
     return f_cb;
 }
 
-void add_ok_cancel_btns(FormHelper *gui, Window *window, const function<void()> &OKCallback,
+template <typename T>
+Dropdown *add_dropdown(FormHelper *gui, const std::string &label, T &variable, const std::vector<std::string> &names,
+                       const std::function<void(const T &)> &cb = std::function<void(const T &)>())
+{
+    auto spacer = new Widget(gui->window());
+    spacer->set_fixed_height(5);
+    gui->add_widget("", spacer);
+
+    auto dp = new Dropdown(gui->window(), names);
+    dp->set_selected_index((int)variable);
+    Vector2i fs = dp->fixed_size();
+    dp->set_fixed_size({fs.x() != 0 ? fs.x() : gui->fixed_size().x(), fs.y() != 0 ? fs.y() : gui->fixed_size().y()});
+    gui->add_widget(label, dp);
+
+    dp->set_callback(
+        [&variable, cb](int i)
+        {
+            variable = (T)i;
+            if (cb)
+                cb((T)i);
+        });
+
+    return dp;
+}
+
+void add_ok_cancel_btns(FormHelper *gui, const function<void()> &OKCallback,
                         const function<void()> &cancelCallback = nullptr)
 {
-    auto spacer = new Widget(window);
+    auto spacer = new Widget(gui->window());
     spacer->set_fixed_height(15);
     gui->add_widget("", spacer);
 
-    auto w = new Widget(window);
+    auto w = new Widget(gui->window());
     w->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
-    auto b = new Button(w, "Cancel", window->theme()->m_message_alt_button_icon);
+    auto b = new Button(w, "Cancel", gui->window()->theme()->m_message_alt_button_icon);
     b->set_callback(
-        [window, cancelCallback]()
+        [gui, cancelCallback]()
         {
-            window->dispose();
+            gui->window()->dispose();
             if (cancelCallback)
                 cancelCallback();
         });
-    b = new Button(w, "OK", window->theme()->m_message_primary_button_icon);
+    b = new Button(w, "OK", gui->window()->theme()->m_message_primary_button_icon);
     b->set_callback(
-        [window, OKCallback]()
+        [gui, OKCallback]()
         {
-            window->dispose();
+            gui->window()->dispose();
             OKCallback();
         });
     gui->add_widget("", w);
@@ -101,12 +126,12 @@ Button *create_colorspace_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
 
             auto window = gui->add_window(Vector2i(10, 10), name);
 
-            gui->add_variable("Source:", src, true)->set_items(colorSpaceNames());
-            gui->add_variable("Destination:", dst, true)->set_items(colorSpaceNames());
+            add_dropdown(gui, "Source:", src, colorSpaceNames());
+            add_dropdown(gui, "Destination:", dst, colorSpaceNames());
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(gui, window,
+            add_ok_cancel_btns(gui,
                                [&]()
                                {
                                    images_panel->modify_image(
@@ -170,13 +195,13 @@ Button *create_exposure_gamma_btn(Widget *parent, HDRViewScreen *screen, ImageLi
 
             graphCb();
 
-            create_floatbox_and_slider(gui, window, "Exposure:", exposure, -10.f, 10.f, 0.1f, graphCb);
+            create_floatbox_and_slider(gui, "Exposure:", exposure, -10.f, 10.f, 0.1f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Offset:", offset, -1.f, 1.f, 0.01f, graphCb);
+            create_floatbox_and_slider(gui, "Offset:", offset, -1.f, 1.f, 0.01f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Gamma:", gamma, 0.0001f, 10.f, 0.1f, graphCb);
+            create_floatbox_and_slider(gui, "Gamma:", gamma, 0.0001f, 10.f, 0.1f, graphCb);
 
-            add_ok_cancel_btns(gui, window,
+            add_ok_cancel_btns(gui,
                                [&]()
                                {
                                    images_panel->modify_image(
@@ -271,14 +296,13 @@ Button *create_brightness_constract_btn(Widget *parent, HDRViewScreen *screen, I
                           "Setting brightness > 0 boosts a previously darker value to 50%, "
                           "while brightness < 0 dims a previously brighter value to 50%.";
 
-            auto bCb =
-                create_floatbox_and_slider(gui, window, "Brightness:", brightness, -1.f, 1.f, 0.01f, graphCb, help);
+            auto bCb = create_floatbox_and_slider(gui, "Brightness:", brightness, -1.f, 1.f, 0.01f, graphCb, help);
 
             help     = "Change the slope/gradient at the new 50% midpoint.";
-            auto cCb = create_floatbox_and_slider(gui, window, "Contrast:", contrast, -1.f, 1.f, 0.01f, graphCb, help);
+            auto cCb = create_floatbox_and_slider(gui, "Contrast:", contrast, -1.f, 1.f, 0.01f, graphCb, help);
 
             auto lCheck = gui->add_variable("Linear:", linear, true);
-            gui->add_variable("Channel:", channel, true)->set_items({"RGB", "Luminance", "Chromaticity"});
+            add_dropdown(gui, "Channel:", channel, {"RGB", "Luminance", "Chromaticity"});
 
             lCheck->set_callback(
                 [graph](bool b)
@@ -297,7 +321,7 @@ Button *create_brightness_constract_btn(Widget *parent, HDRViewScreen *screen, I
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(gui, window,
+            add_ok_cancel_btns(gui,
                                [&]()
                                {
                                    images_panel->modify_image(
@@ -366,24 +390,22 @@ Button *create_filmic_tonemapping_btn(Widget *parent, HDRViewScreen *screen, Ima
 
             graphCb();
 
-            create_floatbox_and_slider(gui, window, "Graph F-stops:", vizFstops, 0.f, 10.f, 0.1f, graphCb);
+            create_floatbox_and_slider(gui, "Graph F-stops:", vizFstops, 0.f, 10.f, 0.1f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Toe strength:", params.toeStrength, 0.f, 1.f, 0.01f, graphCb);
+            create_floatbox_and_slider(gui, "Toe strength:", params.toeStrength, 0.f, 1.f, 0.01f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Toe length:", params.toeLength, 0.f, 1.f, 0.01f, graphCb);
+            create_floatbox_and_slider(gui, "Toe length:", params.toeLength, 0.f, 1.f, 0.01f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Shoulder strength:", params.shoulderStrength, 0.f, 10.f, 0.1f,
-                                       graphCb);
+            create_floatbox_and_slider(gui, "Shoulder strength:", params.shoulderStrength, 0.f, 10.f, 0.1f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Shoulder length:", params.shoulderLength, 0.f, 1.f, 0.01f,
-                                       graphCb);
+            create_floatbox_and_slider(gui, "Shoulder length:", params.shoulderLength, 0.f, 1.f, 0.01f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Shoulder angle:", params.shoulderAngle, 0.f, 1.f, 0.01f, graphCb);
+            create_floatbox_and_slider(gui, "Shoulder angle:", params.shoulderAngle, 0.f, 1.f, 0.01f, graphCb);
 
-            create_floatbox_and_slider(gui, window, "Gamma:", params.gamma, 0.f, 5.f, 0.01f, graphCb);
+            create_floatbox_and_slider(gui, "Gamma:", params.gamma, 0.f, 5.f, 0.01f, graphCb);
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -434,11 +456,11 @@ Button *create_hsl_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *im
                 dynamicRainbow->set_lightness((lightness + 100.f) / 200.f);
             };
 
-            create_floatbox_and_slider(gui, window, "Hue:", hue, -180.f, 180.f, 1.f, cb);
+            create_floatbox_and_slider(gui, "Hue:", hue, -180.f, 180.f, 1.f, cb);
 
-            create_floatbox_and_slider(gui, window, "Saturation:", saturation, -100.f, 100.f, 1.f, cb);
+            create_floatbox_and_slider(gui, "Saturation:", saturation, -100.f, 100.f, 1.f, cb);
 
-            create_floatbox_and_slider(gui, window, "Lightness:", lightness, -100.f, 100.f, 1.f, cb);
+            create_floatbox_and_slider(gui, "Lightness:", lightness, -100.f, 100.f, 1.f, cb);
 
             spacer = new Widget(window);
             spacer->set_fixed_height(5);
@@ -452,7 +474,7 @@ Button *create_hsl_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *im
 
             gui->add_widget("", dynamicRainbow);
 
-            add_ok_cancel_btns(gui, window,
+            add_ok_cancel_btns(gui,
                                [&]()
                                {
                                    images_panel->modify_image(
@@ -504,15 +526,15 @@ Button *create_gaussian_filter_btn(Widget *parent, HDRViewScreen *screen, ImageL
             w->set_value_increment(5.f);
             w->set_units("px");
 
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             gui->add_variable("Exact (slow!):", exact, true);
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -559,13 +581,13 @@ Button *create_box_filter_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
             w->set_min_value(0.0f);
             w->set_units("px");
 
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -607,13 +629,13 @@ Button *create_bilateral_filter_btn(Widget *parent, HDRViewScreen *screen, Image
             w->set_spinnable(true);
             w->set_min_value(0.0f);
 
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -654,13 +676,13 @@ Button *create_unsharp_mask_filter_btn(Widget *parent, HDRViewScreen *screen, Im
             w->set_spinnable(true);
             w->set_min_value(0.0f);
 
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -699,13 +721,13 @@ Button *create_median_filter_btn(Widget *parent, HDRViewScreen *screen, ImageLis
             w->set_spinnable(true);
             w->set_min_value(0.0f);
 
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -812,7 +834,7 @@ Button *create_resize_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel 
 
             gui->add_widget("", row);
 
-            add_ok_cancel_btns(gui, window,
+            add_ok_cancel_btns(gui,
                                [&]()
                                {
                                    images_panel->modify_image(
@@ -891,25 +913,14 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
 
             auto auto_aspect_checkbox = gui->add_variable("Auto aspect ratio:", autoAspect, true);
 
-            auto src = gui->add_variable("Source map:", from, true);
-            auto dst = gui->add_variable("Target map:", to, true);
+            const std::function<void(const EEnvMappingUVMode &)> cb = [gui, recompute_w](const EEnvMappingUVMode &)
+            {
+                recompute_w();
+                gui->refresh();
+            };
 
-            src->set_items(envMappingNames());
-            src->set_callback(
-                [gui, recompute_w](EEnvMappingUVMode m)
-                {
-                    from = m;
-                    recompute_w();
-                    gui->refresh();
-                });
-            dst->set_items(envMappingNames());
-            dst->set_callback(
-                [gui, recompute_w](EEnvMappingUVMode m)
-                {
-                    to = m;
-                    recompute_w();
-                    gui->refresh();
-                });
+            add_dropdown(gui, "Source map:", from, envMappingNames(), cb);
+            add_dropdown(gui, "Target map:", to, envMappingNames(), cb);
 
             auto spacer = new Widget(window);
             spacer->set_fixed_height(5);
@@ -938,9 +949,9 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
             recompute_w();
             gui->refresh();
 
-            gui->add_variable("Sampler:", sampler, true)->set_items(HDRImage::sampler_names());
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Sampler:", sampler, HDRImage::sampler_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             w = gui->add_variable("Super-samples:", samples);
             w->set_spinnable(true);
@@ -949,7 +960,7 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     //					auto dst2xyz = envMapUVToXYZ(to);
@@ -998,14 +1009,14 @@ Button *create_shift_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
             w->set_spinnable(true);
             w->set_units("px");
 
-            gui->add_variable("Sampler:", sampler, true)->set_items(HDRImage::sampler_names());
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Sampler:", sampler, HDRImage::sampler_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -1138,7 +1149,7 @@ Button *create_canvas_size_btn(Widget *parent, HDRViewScreen *screen, ImageListP
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&, popup]()
                 {
                     popup->dispose();
@@ -1348,9 +1359,9 @@ Button *create_free_xform_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
             spacer->set_fixed_height(10);
             gui->add_widget("", spacer);
 
-            gui->add_variable("Sampler:", sampler, true)->set_items(HDRImage::sampler_names());
-            gui->add_variable("Border mode X:", border_mode_x, true)->set_items(HDRImage::border_mode_names());
-            gui->add_variable("Border mode Y:", border_mode_y, true)->set_items(HDRImage::border_mode_names());
+            add_dropdown(gui, "Sampler:", sampler, HDRImage::sampler_names());
+            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
             auto s = gui->add_variable("Super-samples:", samples);
             s->set_spinnable(true);
@@ -1359,7 +1370,7 @@ Button *create_free_xform_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
@@ -1471,7 +1482,7 @@ Button *create_flatten_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel
             screen->request_layout_update();
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&, popup]()
                 {
                     popup->dispose();
@@ -1575,7 +1586,7 @@ Button *create_fill_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *i
             gui->add_widget("", row);
 
             add_ok_cancel_btns(
-                gui, window,
+                gui,
                 [&]()
                 {
                     images_panel->modify_image(
