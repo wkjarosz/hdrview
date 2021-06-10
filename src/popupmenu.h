@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <nanogui/button.h>
 #include <nanogui/popup.h>
 
 NAMESPACE_BEGIN(nanogui)
@@ -26,6 +27,14 @@ public:
 
     /// Draw the popup window
     virtual void draw(NVGcontext *ctx) override;
+
+    class Separator : public Button
+    {
+    public:
+        Separator(Widget *parent);
+
+        virtual void draw(NVGcontext *ctx) override;
+    };
 };
 
 /// Wrap another widget with a right-click popup menu

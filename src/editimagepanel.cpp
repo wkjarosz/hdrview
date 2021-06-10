@@ -919,8 +919,8 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
                 gui->refresh();
             };
 
-            add_dropdown(gui, "Source map:", from, envMappingNames(), cb);
-            add_dropdown(gui, "Target map:", to, envMappingNames(), cb);
+            auto src = add_dropdown(gui, "Source map:", from, envMappingNames(), cb);
+            auto dst = add_dropdown(gui, "Target map:", to, envMappingNames(), cb);
 
             auto spacer = new Widget(window);
             spacer->set_fixed_height(5);
@@ -928,12 +928,20 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
 
             auto btn = new Button(window, "Swap source/target", FA_EXCHANGE_ALT);
             btn->set_callback(
-                [gui, recompute_w, recompute_h]()
+                [gui, recompute_w, recompute_h, src, dst]()
                 {
                     std::swap(from, to);
                     recompute_w();
                     recompute_h();
                     gui->refresh();
+                    EEnvMappingUVMode src_v = from, src_current = (EEnvMappingUVMode)src->selected_index();
+                    EEnvMappingUVMode dst_v = to, dst_current = (EEnvMappingUVMode)dst->selected_index();
+
+                    if (src_v != src_current)
+                        src->set_selected_index((int)src_v);
+
+                    if (dst_v != dst_current)
+                        dst->set_selected_index((int)dst_v);
                 });
             btn->set_fixed_size(gui->fixed_size());
             gui->add_widget(" ", btn);

@@ -49,9 +49,18 @@ PopupMenu::PopupMenu(Widget *parent, Window *parent_window) : Popup(parent, pare
 
 Button *PopupMenu::add_item(const std::string &name, int icon)
 {
-    auto b = add<Button>(name, icon);
-    b->set_fixed_height(24);
-    return b;
+    if (name == "")
+    {
+        auto b = add<Separator>();
+        b->set_fixed_height(8);
+        return b;
+    }
+    else
+    {
+        auto b = add<Button>(name, icon);
+        b->set_fixed_height(24);
+        return b;
+    }
 }
 
 bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
@@ -137,6 +146,23 @@ bool PopupWrapper::mouse_button_event(const Vector2i &p, int button, bool down, 
     }
 
     return Widget::mouse_button_event(p, button, down, modifiers);
+}
+
+PopupMenu::Separator::Separator(Widget *parent) : Button(parent, "") { set_enabled(false); }
+
+void PopupMenu::Separator::draw(NVGcontext *ctx)
+{
+    if (!m_enabled && m_pushed)
+        m_pushed = false;
+
+    Button::draw(ctx);
+
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, m_pos.x() + 8, m_pos.y() + m_size.y() * 0.5f);
+    nvgLineTo(ctx, m_pos.x() + m_size.x() - 8, m_pos.y() + m_size.y() * 0.5f);
+    nvgStrokeColor(ctx, Color(89, 255));
+    nvgStrokeWidth(ctx, 1.f);
+    nvgStroke(ctx);
 }
 
 NAMESPACE_END(nanogui)

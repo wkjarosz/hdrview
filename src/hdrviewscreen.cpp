@@ -275,11 +275,13 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         btn2->set_change_callback([this, btn1, btn2, toggle_panel](bool value)
                                   { toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, value); });
 
-        auto solo_item1     = menu1->add_item("Solo mode");
+        auto solo_item1 = menu1->add_item("Solo mode");
+        menu1->add_item(""); // separator
         auto expand_item1   = menu1->add_item("Expand all");
         auto collapse_item1 = menu1->add_item("Collapse all");
 
-        auto solo_item2     = menu2->add_item("Solo mode");
+        auto solo_item2 = menu2->add_item("Solo mode");
+        menu2->add_item(""); // separator
         auto expand_item2   = menu2->add_item("Expand all");
         auto collapse_item2 = menu2->add_item("Collapse all");
 
