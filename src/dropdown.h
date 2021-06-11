@@ -69,7 +69,8 @@ protected:
     std::function<void(int)> m_callback;
 
     /// The current index this Dropdown has selected.
-    int m_selected_index;
+    int   m_selected_index;
+    float m_selected_index_f;
 };
 
 NAMESPACE_END(nanogui)

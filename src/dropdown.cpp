@@ -12,12 +12,14 @@
 #include <nanogui/popup.h>
 #include <nanogui/screen.h>
 
+#include <spdlog/spdlog.h>
+
 using std::string;
 using std::vector;
 
 NAMESPACE_BEGIN(nanogui)
 
-Dropdown::Dropdown(Widget *parent) : Button(parent), m_selected_index(0)
+Dropdown::Dropdown(Widget *parent) : Button(parent), m_selected_index(0), m_selected_index_f(0.f)
 {
     set_flags(Flags::ToggleButton);
 
@@ -43,7 +45,8 @@ void Dropdown::set_selected_index(int idx)
 {
     if (m_items_short.empty())
         return;
-    m_selected_index = idx;
+    m_selected_index   = idx;
+    m_selected_index_f = (float)m_selected_index;
     set_caption(m_items_short[idx]);
 }
 
@@ -54,7 +57,10 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
     m_items_short = items_short;
 
     if (m_selected_index < 0 || m_selected_index >= (int)items.size())
-        m_selected_index = 0;
+    {
+        m_selected_index   = 0;
+        m_selected_index_f = (float)m_selected_index;
+    }
     while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
 
     int index = 0;
@@ -65,7 +71,8 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
         button->set_callback(
             [&, index]
             {
-                m_selected_index = index;
+                m_selected_index   = index;
+                m_selected_index_f = (float)m_selected_index;
                 set_caption(m_items_short[index]);
                 // set_pushed(false);
                 m_popup->set_visible(false);
@@ -79,23 +86,17 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
 
 bool Dropdown::scroll_event(const Vector2i &p, const Vector2f &rel)
 {
+    float speed = 0.1f;
     set_pushed(false);
     m_popup->set_visible(false);
-    if (rel.y() < 0)
-    {
-        set_selected_index(std::min(m_selected_index + 1, (int)(items().size() - 1)));
-        if (m_callback)
-            m_callback(m_selected_index);
-        return true;
-    }
-    else if (rel.y() > 0)
-    {
-        set_selected_index(std::max(m_selected_index - 1, 0));
-        if (m_callback)
-            m_callback(m_selected_index);
-        return true;
-    }
-    return Widget::scroll_event(p, rel);
+
+    m_selected_index_f = std::clamp(m_selected_index_f + rel.y() * speed, 0.0f, items().size() - 1.f);
+    m_selected_index   = std::clamp((int)round(m_selected_index_f), 0, (int)(items().size() - 1));
+    set_caption(m_items_short[m_selected_index]);
+
+    if (m_callback)
+        m_callback(m_selected_index);
+    return true;
 }
 
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
