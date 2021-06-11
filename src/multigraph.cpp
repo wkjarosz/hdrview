@@ -17,8 +17,8 @@ using std::vector;
 
 namespace
 {
-const int hpad    = 10;
-const int textPad = 4;
+const int hpad     = 11;
+const int text_pad = 4;
 } // namespace
 
 NAMESPACE_BEGIN(nanogui)
@@ -29,7 +29,7 @@ NAMESPACE_BEGIN(nanogui)
  * @param v 		The value vector for the first plot
  */
 MultiGraph::MultiGraph(Widget *parent, const Color &fg, const std::vector<float> &v) :
-    Widget(parent), m_background_color(20, 128), m_text_color(240, 192)
+    Well(parent), m_background_color(20, 128), m_text_color(240, 192)
 {
     m_foreground_colors.push_back(fg);
     m_values.push_back(v);
@@ -58,20 +58,18 @@ float MultiGraph::x_position(float xfrac) const { return m_pos.x() + hpad + xfra
 
 float MultiGraph::y_position(float value) const
 {
-    bool hasHeaders = (m_left_header.size() + m_center_header.size() + m_right_header.size()) != 0;
-    bool hasFooters = m_xticks.size() >= 2;
+    bool has_headers = (m_left_header.size() + m_center_header.size() + m_right_header.size()) != 0;
+    bool has_footers = m_xticks.size() >= 2;
 
-    int bpad = hasFooters ? 12 : 5;
-    int tpad = hasHeaders ? 15 : 5;
+    int bpad = has_footers ? 12 : 5;
+    int tpad = has_headers ? 15 : 5;
 
     return m_pos.y() + m_size.y() - clamp01(value) * (m_size.y() - tpad - bpad) - bpad;
 }
 
 void MultiGraph::draw(NVGcontext *ctx)
 {
-    Widget::draw(ctx);
-
-    bool hasFooters = m_xticks.size() >= 2;
+    bool has_footers = m_xticks.size() >= 2;
 
     float y0 = y_position(0.0f);
     float y1 = y_position(1.0f);
@@ -80,18 +78,7 @@ void MultiGraph::draw(NVGcontext *ctx)
 
     nvgStrokeWidth(ctx, 1.0f);
 
-    if (m_in_well)
-    {
-        // draw a background well
-        NVGpaint paint = nvgBoxGradient(ctx, m_pos.x() + 1, m_pos.y() + 1, m_size.x() - 2, m_size.y() - 2, 3, 4,
-                                        Color(0, 32), Color(0, 92));
-        nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, m_pos.x() + 1, m_pos.y() + 1, m_size.x() - 2, m_size.y() - 2, 2.5);
-        nvgFillPaint(ctx, paint);
-        nvgFill(ctx);
-        nvgStrokeColor(ctx, Color(0, 150));
-        nvgStroke(ctx);
-    }
+    Well::draw(ctx);
 
     if (num_plots() && m_values[0].size() >= 2)
     {
@@ -135,71 +122,71 @@ void MultiGraph::draw(NVGcontext *ctx)
 
     nvgFontFace(ctx, "sans");
 
-    Color axisColor = Color(0.8f, 0.8f);
+    Color axis_color = Color(0.8f, 0.8f);
 
-    float prevTextBound = 0;
-    float lastTextBound = 0;
-    float xPos          = 0;
-    float yPos          = 0;
-    float textWidth     = 0.0f;
+    float prev_text_bound = 0;
+    float last_text_bound = 0;
+    float x_pos           = 0;
+    float y_pos           = 0;
+    float text_width      = 0.0f;
 
-    if (hasFooters)
+    if (has_footers)
     {
         // draw horizontal axis
         nvgBeginPath(ctx);
-        nvgStrokeColor(ctx, axisColor);
+        nvgStrokeColor(ctx, axis_color);
         nvgMoveTo(ctx, x0, y0);
         nvgLineTo(ctx, x1, y0);
         nvgStroke(ctx);
 
         nvgFontSize(ctx, 9.0f);
         nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
-        nvgFillColor(ctx, axisColor);
+        nvgFillColor(ctx, axis_color);
 
         // tick and label at 0
-        xPos = x_position(m_xticks[0]);
+        x_pos = x_position(m_xticks[0]);
         nvgBeginPath(ctx);
-        nvgMoveTo(ctx, xPos, y0 - 3);
-        nvgLineTo(ctx, xPos, y0 + 3);
+        nvgMoveTo(ctx, x_pos, y0 - 3);
+        nvgLineTo(ctx, x_pos, y0 + 3);
         nvgStroke(ctx);
 
-        textWidth = nvgTextBounds(ctx, 0, 0, m_xtick_labels.front().c_str(), nullptr, nullptr);
-        xPos -= textWidth / 2;
-        nvgText(ctx, xPos, y0 + 2, m_xtick_labels.front().c_str(), NULL);
-        prevTextBound = xPos + textWidth;
+        text_width = nvgTextBounds(ctx, 0, 0, m_xtick_labels.front().c_str(), nullptr, nullptr);
+        x_pos -= text_width / 2;
+        nvgText(ctx, x_pos, y0 + 2, m_xtick_labels.front().c_str(), NULL);
+        prev_text_bound = x_pos + text_width;
 
         // tick and label at max
-        xPos = x_position(m_xticks[m_xticks.size() - 1]);
+        x_pos = x_position(m_xticks[m_xticks.size() - 1]);
         nvgBeginPath(ctx);
-        nvgMoveTo(ctx, xPos, y0 - 3);
-        nvgLineTo(ctx, xPos, y0 + 3);
+        nvgMoveTo(ctx, x_pos, y0 - 3);
+        nvgLineTo(ctx, x_pos, y0 + 3);
         nvgStroke(ctx);
 
-        textWidth = nvgTextBounds(ctx, 0, 0, m_xtick_labels.back().c_str(), nullptr, nullptr);
-        xPos -= textWidth / 2;
-        nvgText(ctx, xPos, y0 + 2, m_xtick_labels.back().c_str(), NULL);
-        lastTextBound = xPos;
+        text_width = nvgTextBounds(ctx, 0, 0, m_xtick_labels.back().c_str(), nullptr, nullptr);
+        x_pos -= text_width / 2;
+        nvgText(ctx, x_pos, y0 + 2, m_xtick_labels.back().c_str(), NULL);
+        last_text_bound = x_pos;
 
-        int numTicks = m_xticks.size();
-        for (int i = 1; i < numTicks; ++i)
+        int num_ticks = m_xticks.size();
+        for (int i = 1; i < num_ticks; ++i)
         {
             // tick
-            xPos = x_position(m_xticks[i]);
+            x_pos = x_position(m_xticks[i]);
             nvgBeginPath(ctx);
-            nvgMoveTo(ctx, xPos, y0 - 2);
-            nvgLineTo(ctx, xPos, y0 + 2);
+            nvgMoveTo(ctx, x_pos, y0 - 2);
+            nvgLineTo(ctx, x_pos, y0 + 2);
             nvgStroke(ctx);
 
             // tick label
-            textWidth = nvgTextBounds(ctx, 0, 0, m_xtick_labels[i].c_str(), nullptr, nullptr);
-            xPos -= textWidth / 2;
+            text_width = nvgTextBounds(ctx, 0, 0, m_xtick_labels[i].c_str(), nullptr, nullptr);
+            x_pos -= text_width / 2;
 
             // only draw the label if it doesn't overlap with the previous one
             // and the last one
-            if (xPos > prevTextBound + textPad && xPos + textWidth < lastTextBound - textPad)
+            if (x_pos > prev_text_bound + text_pad && x_pos + text_width < last_text_bound - text_pad)
             {
-                nvgText(ctx, xPos, y0 + 2, m_xtick_labels[i].c_str(), NULL);
-                prevTextBound = xPos + textWidth;
+                nvgText(ctx, x_pos, y0 + 2, m_xtick_labels[i].c_str(), NULL);
+                prev_text_bound = x_pos + text_width;
             }
         }
     }
@@ -208,22 +195,22 @@ void MultiGraph::draw(NVGcontext *ctx)
     {
         // draw vertical axis
         nvgBeginPath(ctx);
-        nvgStrokeColor(ctx, axisColor);
+        nvgStrokeColor(ctx, axis_color);
         nvgMoveTo(ctx, x0, y0);
         nvgLineTo(ctx, x0, y1);
         nvgStroke(ctx);
 
-        nvgFillColor(ctx, axisColor);
+        nvgFillColor(ctx, axis_color);
 
-        int numTicks = m_yticks.size();
-        for (int i = 0; i < numTicks; ++i)
+        int num_ticks = m_yticks.size();
+        for (int i = 0; i < num_ticks; ++i)
         {
             // tick
-            yPos = y_position(m_yticks[i]);
+            y_pos = y_position(m_yticks[i]);
             nvgBeginPath(ctx);
-            int w2 = (i == 0 || i == numTicks - 1) ? 3 : 2;
-            nvgMoveTo(ctx, x0 - w2, yPos);
-            nvgLineTo(ctx, x0 + w2, yPos);
+            int w2 = (i == 0 || i == num_ticks - 1) ? 3 : 2;
+            nvgMoveTo(ctx, x0 - w2, y_pos);
+            nvgLineTo(ctx, x0 + w2, y_pos);
             nvgStroke(ctx);
         }
     }
@@ -236,8 +223,8 @@ void MultiGraph::draw(NVGcontext *ctx)
     nvgText(ctx, m_pos.x() + 3, m_pos.y() + 1, m_left_header.c_str(), NULL);
 
     nvgTextAlign(ctx, NVG_ALIGN_MIDDLE | NVG_ALIGN_TOP);
-    textWidth = nvgTextBounds(ctx, 0, 0, m_center_header.c_str(), nullptr, nullptr);
-    nvgText(ctx, m_pos.x() + m_size.x() / 2 - textWidth / 2, m_pos.y() + 1, m_center_header.c_str(), NULL);
+    text_width = nvgTextBounds(ctx, 0, 0, m_center_header.c_str(), nullptr, nullptr);
+    nvgText(ctx, m_pos.x() + m_size.x() / 2 - text_width / 2, m_pos.y() + 1, m_center_header.c_str(), NULL);
 
     nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
     nvgText(ctx, m_pos.x() + m_size.x() - 3, m_pos.y() + 1, m_right_header.c_str(), NULL);

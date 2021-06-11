@@ -276,7 +276,7 @@ void ImageListPanel::repopulate_image_list()
         remove_child(m_image_list);
 
     m_image_list = new Well(this);
-    m_image_list->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 1));
+    m_image_list->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 2));
 
     for (int i = 0; i < num_images(); ++i)
     {

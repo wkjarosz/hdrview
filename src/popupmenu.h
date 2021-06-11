@@ -28,6 +28,9 @@ public:
     /// Draw the popup window
     virtual void draw(NVGcontext *ctx) override;
 
+    static constexpr int menu_item_height = 20;
+    static constexpr int seperator_height = 8;
+
     class Separator : public Button
     {
     public:

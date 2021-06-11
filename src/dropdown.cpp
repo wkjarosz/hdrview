@@ -103,7 +103,7 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
     if (m_enabled)
     {
         int xoffset = std::max(size().x() - m_popup->size().x(), 0) / 2;
-        int yoffset = -m_selected_index * 24 - 5;
+        int yoffset = -m_selected_index * PopupMenu::menu_item_height - 4;
         m_popup->set_position(absolute_position() + Vector2i(xoffset, yoffset));
 
         if (down)

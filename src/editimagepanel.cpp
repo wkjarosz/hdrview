@@ -173,7 +173,7 @@ Button *create_exposure_gamma_btn(Widget *parent, HDRViewScreen *screen, ImageLi
             graph->add_plot(Color(255, 255, 255, 50));
             graph->set_fixed_size(Vector2i(200, 200));
             graph->set_filled(false);
-            graph->set_well(false);
+            graph->set_no_well();
             graph->set_values(linspaced(257, 0.0f, 1.0f), 0);
             graph->set_values({0.5f, 0.5f}, 2);
             int numTicks = 5;
@@ -258,7 +258,7 @@ Button *create_brightness_constract_btn(Widget *parent, HDRViewScreen *screen, I
             graph->add_plot(Color(255, 255, 255, 50));
             graph->set_fixed_size(Vector2i(200, 200));
             graph->set_filled(false);
-            graph->set_well(false);
+            graph->set_no_well();
             graph->set_values(linspaced(257, 0.0f, 1.0f), 0);
             graph->set_values({0.5f, 0.5f}, 3);
             int numTicks = 5;
@@ -363,7 +363,7 @@ Button *create_filmic_tonemapping_btn(Widget *parent, HDRViewScreen *screen, Ima
             graph->add_plot(activeColor);
             graph->set_fixed_size(Vector2i(200, 200));
             graph->set_filled(false);
-            graph->set_well(false);
+            graph->set_no_well();
             gui->add_widget("", graph);
 
             auto graphCb = [graph]()

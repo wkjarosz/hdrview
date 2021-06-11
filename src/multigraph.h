@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <nanogui/widget.h>
+#include "well.h"
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -15,7 +15,7 @@ NAMESPACE_BEGIN(nanogui)
  *
  * \brief A generalization of nanogui's graph widget which can plot multiple graphs on top of each other
  */
-class MultiGraph : public Widget
+class MultiGraph : public Well
 {
 public:
     using DragCallback = std::function<void(const Vector2f &)>;
@@ -41,8 +41,7 @@ public:
         m_foreground_colors.pop_back();
     }
 
-    bool well() const { return m_in_well; }
-    void set_well(bool b) { m_in_well = b; }
+    void set_no_well() { m_inner_color = m_outer_color = m_border_color = Color(0, 0); }
 
     bool filled() const { return m_filled; }
     void set_filled(bool b) { m_filled = b; }
@@ -79,7 +78,7 @@ protected:
     Color                           m_background_color, m_text_color;
     std::vector<Color>              m_foreground_colors;
     std::vector<std::vector<float>> m_values;
-    bool                            m_filled = true, m_in_well = true;
+    bool                            m_filled = true;
     std::string                     m_left_header, m_center_header, m_right_header;
     std::vector<float>              m_xticks, m_yticks;
     std::vector<std::string>        m_xtick_labels;

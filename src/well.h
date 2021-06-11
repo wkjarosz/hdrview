@@ -12,7 +12,8 @@ NAMESPACE_BEGIN(nanogui)
 class Well : public Widget
 {
 public:
-    Well(Widget *parent, float radius = 3.0f, const Color &inner = Color(0, 32), const Color &outer = Color(0, 92));
+    Well(Widget *parent, float radius = 3.0f, const Color &inner = Color(0, 32), const Color &outer = Color(0, 92),
+         const Color &border = Color(25, 255));
 
     /// Return the inner well color
     const Color &inner_color() const { return m_inner_color; }
@@ -28,7 +29,7 @@ public:
 
 protected:
     float m_radius;
-    Color m_inner_color, m_outer_color;
+    Color m_inner_color, m_outer_color, m_border_color;
 };
 
 NAMESPACE_END(nanogui)

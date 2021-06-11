@@ -52,13 +52,13 @@ Button *PopupMenu::add_item(const std::string &name, int icon)
     if (name == "")
     {
         auto b = add<Separator>();
-        b->set_fixed_height(8);
+        b->set_fixed_height(seperator_height);
         return b;
     }
     else
     {
         auto b = add<Button>(name, icon);
-        b->set_fixed_height(24);
+        b->set_fixed_height(menu_item_height);
         return b;
     }
 }
