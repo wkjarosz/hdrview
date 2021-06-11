@@ -31,6 +31,9 @@ class Range;
 NAMESPACE_BEGIN(nanogui)
 class Widget;
 class Button;
+class Dropdown;
+class PopupMenu;
+class PopupWrapper;
 class CheckBox;
 class Label;
 class MessageDialog;

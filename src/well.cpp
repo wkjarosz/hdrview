@@ -9,8 +9,8 @@
 
 NAMESPACE_BEGIN(nanogui)
 
-Well::Well(Widget *parent, float radius, const Color &inner, const Color &outer) :
-    Widget(parent), m_radius(radius), m_inner_color(inner), m_outer_color(outer)
+Well::Well(Widget *parent, float radius, const Color &inner, const Color &outer, const Color &border) :
+    Widget(parent), m_radius(radius), m_inner_color(inner), m_outer_color(outer), m_border_color(border)
 {
 }
 
@@ -23,7 +23,7 @@ void Well::draw(NVGcontext *ctx)
     nvgFillPaint(ctx, paint);
     nvgFill(ctx);
     nvgStrokeWidth(ctx, 1.0f);
-    nvgStrokeColor(ctx, Color(0, 150));
+    nvgStrokeColor(ctx, m_border_color);
     nvgStroke(ctx);
 
     Widget::draw(ctx);

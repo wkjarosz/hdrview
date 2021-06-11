@@ -50,9 +50,7 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
     Widget::mouse_button_event(p, button, down, modifiers);
 
     if (!m_enabled || !down)
-    {
         return false;
-    }
 
     if (button == GLFW_MOUSE_BUTTON_2 || (button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT))
     {
@@ -141,13 +139,19 @@ void ImageButton::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
 
-    int extraBorder = 0;
+    Color reference_color = Color(180, 100, 100, 255);
+    Color selected_color  = Color(77, 124, 233, 255);
+
+    Color progress_top    = Color(36, 80, 128, 245);
+    Color progress_bottom = Color(12, 13, 36, 245);
+
+    int extra_border = 0;
     if (m_is_reference)
     {
-        extraBorder = 2;
+        extra_border = 2;
         nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), 3 + 1);
-        nvgFillColor(ctx, Color(0.7f, 0.4f, 0.4f, 1.0f));
+        nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), 3);
+        nvgFillColor(ctx, reference_color);
         nvgFill(ctx);
     }
 
@@ -155,42 +159,41 @@ void ImageButton::draw(NVGcontext *ctx)
     if (m_is_selected || m_mouse_focus)
     {
         nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, m_pos.x() + extraBorder, m_pos.y() + extraBorder, m_size.x() - 2 * extraBorder,
-                       m_size.y() - 2 * extraBorder, 3);
-        nvgFillColor(ctx, m_is_selected ? m_theme->m_button_gradient_bot_pushed : m_theme->m_border_medium);
+        nvgRoundedRect(ctx, m_pos.x() + extra_border, m_pos.y() + extra_border, m_size.x() - 2 * extra_border,
+                       m_size.y() - 2 * extra_border, 3);
+        nvgFillColor(ctx, m_is_selected ? selected_color : m_theme->m_border_medium);
         nvgFill(ctx);
     }
 
     // percent progress bar
     if (m_progress >= 0.f && m_progress < 1.f)
     {
-        int barPos = (int)std::round((m_size.x() - 4) * m_progress);
+        int bar_pos = (int)std::round((m_size.x() - 4) * m_progress);
 
-        auto paint =
-            nvgBoxGradient(ctx, m_pos.x() + 2 - 1, m_pos.y() + 2 - 1, barPos + 1.5f, m_size.y() - 2 * extraBorder + 1,
-                           3, 4, Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
+        auto paint = nvgBoxGradient(ctx, m_pos.x() + 2 - 1, m_pos.y() + 2 - 1, bar_pos + 1.5f,
+                                    m_size.y() - 2 * extra_border + 1, 3, 4, progress_top, progress_bottom);
 
         nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2, barPos, m_size.y() - 2 * 2, 3);
+        nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2, bar_pos, m_size.y() - 2 * 2, 3);
         nvgFillPaint(ctx, paint);
         nvgFill(ctx);
     }
     // busy progress bar
     else if (m_progress < 0.f)
     {
-        int   leftEdge = m_pos.x() + 2;
-        float time     = glfwGetTime();
+        int   left_edge = m_pos.x() + 2;
+        float time      = glfwGetTime();
         float anim1 = smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, triangleWave(time / 4.f))));
         float anim2 = smoothStep(0.0f, 1.0f, triangleWave(time / 4.f * 2.f));
 
-        int barSize = (int)std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
-        int left    = (int)std::round(lerp((float)leftEdge, float(m_size.x() - 2 - barSize), anim1));
+        int bar_size = (int)std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
+        int left     = (int)std::round(lerp((float)left_edge, float(m_size.x() - 2 - bar_size), anim1));
 
-        auto paint = nvgBoxGradient(ctx, left - 1, m_pos.y() + 2 - 1, barSize + 1.5f, m_size.y() - 2 * extraBorder + 1,
-                                    3, 4, Color(.14f, .31f, .5f, .95f), Color(.045f, .05f, .141f, .95f));
+        auto paint = nvgBoxGradient(ctx, left - 1, m_pos.y() + 2 - 1, bar_size + 1.5f,
+                                    m_size.y() - 2 * extra_border + 1, 3, 4, progress_top, progress_bottom);
 
         nvgBeginPath(ctx);
-        nvgRoundedRect(ctx, left, m_pos.y() + 2, barSize, m_size.y() - 2 * 2, 3);
+        nvgRoundedRect(ctx, left, m_pos.y() + 2, bar_size, m_size.y() - 2 * 2, 3);
         nvgFillPaint(ctx, paint);
         nvgFill(ctx);
     }
@@ -255,7 +258,7 @@ void ImageButton::draw(NVGcontext *ctx)
         {
             // only draw the middle (highlighted) piece
             nvgFontFace(ctx, "sans");
-            nvgFillColor(ctx, regular_text_color);
+            nvgFillColor(ctx, highlighted_text_color);
             nvgText(ctx, text_pos.x(), text_pos.y(), pieces[1].c_str(), nullptr);
             text_pos.x() += direction * nvgTextBounds(ctx, 0, 0, pieces[1].c_str(), nullptr, nullptr);
         }

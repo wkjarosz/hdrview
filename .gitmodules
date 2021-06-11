@@ -21,3 +21,6 @@
 [submodule "ext/nanogui"]
 	path = ext/nanogui
 	url = https://github.com/mitsuba-renderer/nanogui
+[submodule "ext/cfgpath"]
+	path = ext/cfgpath
+	url = https://github.com/Malvineous/cfgpath.git

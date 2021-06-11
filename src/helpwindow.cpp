@@ -56,11 +56,11 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback) :
     copyright_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
     string about = fmt::format("HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
-                               "(built on {} from git {}-{}-{} using {} backend)\n\n"
+                               "(built on {} from git branch {} {} using {} backend)\n\n"
                                "HDRView is a simple research-oriented tool for examining, "
                                "comparing, manipulating, and converting high-dynamic range images.\n\n"
                                "HDRView is freely available under a 3-clause BSD license.\n\n",
-                               HDRVIEW_VERSION, hdrview_timestamp(), hdrview_git_branch(), hdrview_git_version(),
+                               hdrview_git_version(), hdrview_timestamp(), hdrview_git_branch(),
                                hdrview_git_revision(), HDRVIEW_BACKEND);
     (new Label(copyright_widget, about))->set_fixed_width(715);
 
