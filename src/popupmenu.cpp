@@ -73,11 +73,7 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
             set_visible(false);
             m_parent_window->request_focus();
 
-            for (auto it = m_children.begin(); it != m_children.end(); ++it)
-            {
-                Widget *child = *it;
-                child->mouse_enter_event(p, false);
-            }
+            for (auto it = m_children.begin(); it != m_children.end(); ++it) (*it)->mouse_enter_event(p, false);
         }
         return true;
     }

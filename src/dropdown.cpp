@@ -106,25 +106,24 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         int yoffset = -m_selected_index * 24 - 5;
         m_popup->set_position(absolute_position() + Vector2i(xoffset, yoffset));
 
-        if (m_popup->visible() && down)
-        {
-            m_popup->set_visible(false);
-            // window()->request_focus();
-            return true;
-        }
-
         if (down)
         {
-            m_popup->set_visible(!m_popup->visible());
-            m_popup->mouse_enter_event(p, true);
-            for (auto it = m_popup->children().rbegin(); it != m_popup->children().rend(); ++it)
+            if (m_popup->visible())
             {
-                Widget *child = *it;
-                child->mouse_enter_event(p - position(), false);
+                m_popup->set_visible(false);
+                return true;
             }
+            else
+            {
+                m_popup->set_visible(true);
+                // m_popup->mouse_enter_event(p, true);
+                for (auto it = m_popup->children().rbegin(); it != m_popup->children().rend(); ++it)
+                    (*it)->mouse_enter_event(p - position(), false);
 
-            m_popup->children()[m_selected_index]->mouse_enter_event(p - position(), true);
+                m_popup->children()[m_selected_index]->mouse_enter_event(p - position(), true);
+            }
         }
+        return true;
     }
 
     return Widget::mouse_button_event(p, button, down, modifiers);
