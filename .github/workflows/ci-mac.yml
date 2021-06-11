@@ -25,6 +25,7 @@ jobs:
         run: |
           MACOSX_DEPLOYMENT_TARGET=10.14
           cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
+          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
 
       - name: Build (Metal backend)
         run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
@@ -62,6 +63,7 @@ jobs:
       - name: Configure CMake (OpenGL backend)
         run: |
           MACOSX_DEPLOYMENT_TARGET=10.14
+          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
           cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
 
       - name: Build (OpenGL backend)
