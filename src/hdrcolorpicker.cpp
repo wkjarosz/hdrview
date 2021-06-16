@@ -1,27 +1,27 @@
-/*
-    src/colorpicker.cpp -- push button with a popup to tweak a color value
-
-    This widget was contributed by Christian Schueller.
-
-    NanoGUI was developed by Wenzel Jakob <wenzel.jakob@epfl.ch>.
-    The widget drawing code is based on the NanoVG demo application
-    by Mikko Mononen.
-
-    All rights reserved. Use of this source code is governed by a
-    BSD-style license that can be found in the LICENSE.txt file.
-*/
+//
+// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
 
 #include "hdrcolorpicker.h"
+#include "box.h"
 #include "colorslider.h"
+#include "xpuimage.h"
+#include <hdrview_resources.h>
 #include <iostream>
 #include <nanogui/colorwheel.h>
 #include <nanogui/icons.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
+#include <nanogui/opengl.h>
+#include <nanogui/screen.h>
 #include <nanogui/textbox.h>
 #include <nanogui/toolbutton.h>
-#include <spdlog/fmt/ostr.h>
+
 #include <spdlog/spdlog.h>
+
+#include <spdlog/fmt/ostr.h>
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -204,7 +204,8 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
             m_final_callback(m_color, m_exposure);
         });
 
-    popup->set_anchor_offset(popup->height());
+    // popup->set_anchor_offset(popup->height());
+    // popup->set_anchor_offset(0);
 }
 
 Color HDRColorPicker::exposed_color() const
@@ -265,6 +266,140 @@ void HDRColorPicker::set_exposure(float e)
     {
         update_all(m_color, e);
     }
+}
+
+void HDRColorPicker::draw(NVGcontext *ctx)
+{
+    if (!m_enabled && m_pushed)
+        m_pushed = false;
+
+    m_popup->set_visible(m_pushed);
+
+    int w = std::min(size().x(), size().y());
+
+    nvgBeginPath(ctx);
+    nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2, w - 4, w - 4, 1);
+
+    nvgStrokeWidth(ctx, 4.0f);
+    nvgStrokeColor(ctx, Color(255, 255));
+    nvgStroke(ctx);
+
+    nvgStrokeWidth(ctx, 2.0f);
+    nvgStrokeColor(ctx, Color(0, 255));
+    nvgStroke(ctx);
+
+    int  h;
+    auto checker = hdrview_image_icon(ctx, checker4, NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY | NVG_IMAGE_NEAREST);
+    nvgImageSize(ctx, checker, &w, &h);
+    NVGpaint paint = nvgImagePattern(ctx, m_pos.x(), m_pos.y() - 1, w, h, 0, checker, 1.f);
+    nvgFillPaint(ctx, paint);
+    nvgFill(ctx);
+
+    nvgFillColor(ctx, m_background_color);
+    nvgFill(ctx);
+}
+
+DualHDRColorPicker::DualHDRColorPicker(Widget *parent, const Color &fgcolor, float fgexp, int fgcomp,
+                                       const Color &bgcolor, float bgexp, int bgcomp) :
+    Widget(parent),
+    m_background(new HDRColorPicker(this, bgcolor, bgexp, bgcomp)),
+    m_foreground(new HDRColorPicker(this, fgcolor, fgexp, fgcomp))
+{
+    set_tooltip("Swap foreground and background colors.");
+}
+
+Box2i DualHDRColorPicker::foreground_box() const
+{
+    int w = std::min(size().x(), size().y());
+    return Box2i(Vector2i(0), Vector2i((w * 2) / 3));
+}
+
+Box2i DualHDRColorPicker::background_box() const
+{
+    int w = std::min(size().x(), size().y());
+    return foreground_box().move_max_to(Vector2i(w));
+}
+
+void DualHDRColorPicker::perform_layout(NVGcontext *ctx)
+{
+    auto fgb = foreground_box();
+    auto bgb = background_box();
+
+    m_foreground->set_position(fgb.min);
+    m_foreground->set_size(fgb.size());
+
+    m_background->set_position(bgb.min);
+    m_background->set_size(bgb.size());
+
+    m_foreground->perform_layout(ctx);
+    m_background->perform_layout(ctx);
+}
+
+void DualHDRColorPicker::draw(NVGcontext *ctx)
+{
+    auto fgb = foreground_box();
+    auto bgb = background_box();
+
+    nvgTranslate(ctx, m_pos.x(), m_pos.y());
+
+    float pad        = 1;
+    float arrow_size = 2;
+
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size);
+    nvgLineTo(ctx, bgb.max.x() - arrow_size, fgb.min.y() + arrow_size);
+    nvgLineTo(ctx, bgb.max.x() - arrow_size, bgb.min.y() - pad);
+
+    nvgStrokeWidth(ctx, 1.0f);
+    nvgStrokeColor(ctx, Color(255, 255));
+    nvgStroke(ctx);
+
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size);
+    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y());
+    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y() + 2 * arrow_size);
+    nvgClosePath(ctx);
+
+    nvgFillColor(ctx, Color(255, 255));
+    nvgFill(ctx);
+
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, bgb.max.x() - arrow_size, bgb.min.y() - pad);
+    nvgLineTo(ctx, bgb.max.x(), bgb.min.y() - pad - arrow_size);
+    nvgLineTo(ctx, bgb.max.x() - 2 * arrow_size, bgb.min.y() - pad - arrow_size);
+    nvgClosePath(ctx);
+
+    nvgFillColor(ctx, Color(255, 255));
+    nvgFill(ctx);
+
+    m_background->draw(ctx);
+    m_foreground->draw(ctx);
+    nvgTranslate(ctx, -m_pos.x(), -m_pos.y());
+}
+
+bool DualHDRColorPicker::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
+{
+    if (down && p.x() - m_pos.x() > foreground_box().max.x() && p.y() - m_pos.y() < background_box().min.y())
+    {
+        swap_colors();
+        return true;
+    }
+
+    return Widget::mouse_button_event(p, button, down, modifiers);
+}
+
+void DualHDRColorPicker::swap_colors()
+{
+    // swap colors
+    spdlog::trace("swapping colors");
+    Color tmp_c = m_foreground->color();
+    float tmp_e = m_foreground->exposure();
+
+    m_foreground->set_color(m_background->color());
+    m_foreground->set_exposure(m_background->exposure());
+
+    m_background->set_color(tmp_c);
+    m_background->set_exposure(tmp_e);
 }
 
 NAMESPACE_END(nanogui)

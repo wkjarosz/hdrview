@@ -17,16 +17,16 @@ class ImageCommandUndo
 public:
     virtual ~ImageCommandUndo() = default;
 
-    virtual void undo(std::shared_ptr<HDRImage> &img) = 0;
-    virtual void redo(std::shared_ptr<HDRImage> &img) = 0;
+    virtual void undo(HDRImagePtr &img) = 0;
+    virtual void redo(HDRImagePtr &img) = 0;
 };
 
 using UndoPtr            = std::shared_ptr<ImageCommandUndo>;
-using ImageCommandResult = std::pair<std::shared_ptr<HDRImage>, UndoPtr>;
+using ImageCommandResult = std::pair<HDRImagePtr, UndoPtr>;
 
-using ImageCommand = std::function<ImageCommandResult(const std::shared_ptr<const HDRImage> &)>;
-using ImageCommandWithProgress =
-    std::function<ImageCommandResult(const std::shared_ptr<const HDRImage> &, AtomicProgress &)>;
+using ImageCommand                  = std::function<void(const HDRImagePtr &)>;
+using ConstImageCommand             = std::function<ImageCommandResult(const ConstHDRImagePtr &)>;
+using ConstImageCommandWithProgress = std::function<ImageCommandResult(const ConstHDRImagePtr &, AtomicProgress &)>;
 
 //! Brute-force undo: Saves the entire image data so that we can copy it back
 class FullImageUndo : public ImageCommandUndo
@@ -35,32 +35,32 @@ public:
     explicit FullImageUndo(const HDRImage &img) : m_undoImage(std::make_shared<HDRImage>(img)) {}
     ~FullImageUndo() override = default;
 
-    void undo(std::shared_ptr<HDRImage> &img) override { img.swap(m_undoImage); }
-    void redo(std::shared_ptr<HDRImage> &img) override { undo(img); }
+    void undo(HDRImagePtr &img) override { img.swap(m_undoImage); }
+    void redo(HDRImagePtr &img) override { undo(img); }
 
-    const std::shared_ptr<HDRImage> image() const { return m_undoImage; }
+    const HDRImagePtr image() const { return m_undoImage; }
 
-private:
-    std::shared_ptr<HDRImage> m_undoImage;
+protected:
+    HDRImagePtr m_undoImage;
 };
 
 //! Specify the undo and redo commands using lambda expressions
 class LambdaUndo : public ImageCommandUndo
 {
 public:
-    explicit LambdaUndo(const std::function<void(std::shared_ptr<HDRImage> &img)> &undoCmd,
-                        const std::function<void(std::shared_ptr<HDRImage> &img)> &redoCmd = nullptr) :
+    explicit LambdaUndo(const std::function<void(HDRImagePtr &img)> &undoCmd,
+                        const std::function<void(HDRImagePtr &img)> &redoCmd = nullptr) :
         m_undo(undoCmd),
         m_redo(redoCmd ? redoCmd : undoCmd)
     {
     }
     ~LambdaUndo() override = default;
 
-    void undo(std::shared_ptr<HDRImage> &img) override { m_undo(img); }
-    void redo(std::shared_ptr<HDRImage> &img) override { m_redo(img); }
+    void undo(HDRImagePtr &img) override { m_undo(img); }
+    void redo(HDRImagePtr &img) override { m_redo(img); }
 
-private:
-    std::function<void(std::shared_ptr<HDRImage> &img)> m_undo, m_redo;
+protected:
+    std::function<void(HDRImagePtr &img)> m_undo, m_redo;
 };
 
 //! Stores and manages an undo history list for image modifications
@@ -96,7 +96,7 @@ public:
         m_currentState++;
     }
 
-    bool undo(std::shared_ptr<HDRImage> &img)
+    bool undo(HDRImagePtr &img)
     {
         // check if there is anything to undo
         if (!has_undo() || m_currentState > size())
@@ -105,7 +105,7 @@ public:
         m_history[--m_currentState]->undo(img);
         return true;
     }
-    bool redo(std::shared_ptr<HDRImage> &img)
+    bool redo(HDRImagePtr &img)
     {
         // check if there is anything to redo
         if (!has_redo() || m_currentState < 0)
@@ -115,7 +115,7 @@ public:
         return true;
     }
 
-private:
+protected:
     std::vector<UndoPtr> m_history;
 
     // it is best to think of this state as pointing in between the entries in the m_history vector

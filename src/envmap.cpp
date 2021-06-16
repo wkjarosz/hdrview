@@ -78,7 +78,7 @@ Vector3f angularMapToXYZ(const Vector2f &UV)
     Vector2f XY = 2 * UV - Vector2f(1.f);
 
     // phi varies linearly with the radius from center
-    float phi   = ::clamp(norm(XY) * M_PI, 0.0, M_PI);
+    float phi   = std::clamp(norm(XY) * M_PI, 0.0, M_PI);
     float theta = std::atan2(XY[1], XY[0]);
 
     float sinPhi = std::sin(phi);
@@ -92,7 +92,7 @@ Vector3f mirrorBallToXYZ(const Vector2f &UV)
     Vector2f XY = 2 * UV - Vector2f(1.f);
 
     // sin(phi) varies linearly with the radius from center
-    float phi   = 2 * std::asin(::clamp(norm(XY), 0.0f, 1.0f));
+    float phi   = 2 * std::asin(std::clamp(norm(XY), 0.0f, 1.0f));
     float theta = std::atan2(XY[1], XY[0]);
 
     float sinPhi = std::sin(phi);
@@ -127,21 +127,21 @@ Vector3f cubeMapToXYZ(const Vector2f &UV)
     Vector3f xyz;
     float    k, j;
 
-    if (::clamp(UV[0], (1.0f / 3.0f), (2.0f / 3.0f)) == UV[0])
+    if (std::clamp(UV[0], (1.0f / 3.0f), (2.0f / 3.0f)) == UV[0])
     {
-        j      = ::clamp(UV[0], (1.0f / 3.0f), (2.0f / 3.0f));
+        j      = std::clamp(UV[0], (1.0f / 3.0f), (2.0f / 3.0f));
         xyz[0] = (UV[0] - 0.5f) * 6.0f;
-        if (::clamp(UV[1], 0.0f, 0.25f) == UV[1])
+        if (std::clamp(UV[1], 0.0f, 0.25f) == UV[1])
         {
             xyz[1] = 1;
             xyz[2] = (UV[1] - 0.125f) * 8.0f;
         }
-        else if (::clamp(UV[1], 0.25f, 0.5f) == UV[1])
+        else if (std::clamp(UV[1], 0.25f, 0.5f) == UV[1])
         {
             xyz[1] = (0.375f - UV[1]) * 8.0f;
             xyz[2] = 1;
         }
-        else if (::clamp(UV[1], 0.5f, 0.75f) == UV[1])
+        else if (std::clamp(UV[1], 0.5f, 0.75f) == UV[1])
         {
             xyz[1] = -1;
             xyz[2] = (0.625f - UV[1]) * 8.0f;
@@ -152,19 +152,19 @@ Vector3f cubeMapToXYZ(const Vector2f &UV)
             xyz[2] = -1;
         }
     }
-    else if (::clamp(UV[0], 0.0f, (1.0f / 3.0f)) == UV[0])
+    else if (std::clamp(UV[0], 0.0f, (1.0f / 3.0f)) == UV[0])
     {
         xyz[0] = -1;
-        k      = ::clamp(UV[1], 0.25f, 0.5f);
-        j      = ::clamp(UV[0], 0.0f, (1.0f / 3.0f));
+        k      = std::clamp(UV[1], 0.25f, 0.5f);
+        j      = std::clamp(UV[0], 0.0f, (1.0f / 3.0f));
         xyz[1] = (0.375f - k) * 8.0f;
         xyz[2] = (j - (1.0f / 6.0f)) * 6.0f;
     }
     else
     {
         xyz[0] = 1;
-        k      = ::clamp(UV[1], 0.25f, 0.5f);
-        j      = ::clamp(UV[0], (2.0f / 3.0f), 1.0f);
+        k      = std::clamp(UV[1], 0.25f, 0.5f);
+        j      = std::clamp(UV[0], (2.0f / 3.0f), 1.0f);
         xyz[1] = (0.375f - k) * 8.0f;
         xyz[2] = ((5.0f / 6.0f) - j) * 6.0f;
     }

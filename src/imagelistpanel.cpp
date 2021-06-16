@@ -31,7 +31,7 @@ using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageView *img_view) :
     Well(parent, 1, Color(150, 32), Color(0, 50)), m_screen(screen), m_image_view(img_view),
-    m_modify_done_callback([](int) {}), m_num_images_callback([]() {})
+    m_async_modify_done_callback([](int) {}), m_num_images_callback([]() {})
 {
     // set_id("image list panel");
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
@@ -233,14 +233,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         set_reference_image_index(-1);
     };
 
-    m_modify_done_callback = [this](int i)
+    m_async_modify_done_callback = [this](int i)
     {
         m_screen->update_caption();
         request_buttons_update();
         set_filter(filter());
         request_histogram_update();
         m_screen->redraw();
-        m_image_modify_done_requested = true;
+        m_image_async_modify_done_requested = true;
     };
 }
 
@@ -510,6 +510,103 @@ bool ImageListPanel::send_image_backward()
     return true;
 }
 
+bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)
+{
+    if (action == GLFW_RELEASE)
+        return false;
+
+    switch (key)
+    {
+    case 'Z':
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            if (modifiers & GLFW_MOD_SHIFT)
+                redo();
+            else
+                undo();
+
+            return true;
+        }
+        return false;
+
+    case 'F':
+        spdlog::trace("KEY `F` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            focus_filter();
+            return true;
+        }
+        return false;
+
+    case GLFW_KEY_TAB:
+        spdlog::trace("KEY TAB pressed");
+        if (modifiers & GLFW_MOD_ALT)
+        {
+            swap_current_selected_with_previous();
+            return true;
+        }
+        return false;
+
+    case GLFW_KEY_DOWN:
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            send_image_backward();
+            return true;
+        }
+        else if (num_images())
+        {
+            if (modifiers & GLFW_MOD_SHIFT)
+                set_reference_image_index(next_visible_image(reference_image_index(), Backward));
+            else
+                set_current_image_index(next_visible_image(current_image_index(), Backward));
+            return true;
+        }
+        return false;
+
+    case GLFW_KEY_UP:
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            bring_image_forward();
+            return true;
+        }
+        else if (num_images())
+        {
+            if (modifiers & GLFW_MOD_SHIFT)
+                set_reference_image_index(next_visible_image(reference_image_index(), Forward));
+            else
+                set_current_image_index(next_visible_image(current_image_index(), Forward));
+            return true;
+        }
+        return false;
+    }
+
+    if ((key >= GLFW_KEY_1 && key <= GLFW_KEY_9) || (key >= GLFW_KEY_KP_1 && key <= GLFW_KEY_KP_9))
+    {
+        int keyOffset = (key >= GLFW_KEY_KP_1) ? GLFW_KEY_KP_1 : GLFW_KEY_1;
+        int idx       = (key - keyOffset) % 10;
+
+        if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
+        {
+            set_channel(EChannel(idx));
+            return true;
+        }
+        else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
+        {
+            set_blend_mode(EBlendMode(idx));
+            return true;
+        }
+        else
+        {
+            auto nth = nth_visible_image_index(idx);
+            if (nth >= 0)
+                set_current_image_index(nth);
+        }
+        return false;
+    }
+
+    return false;
+}
+
 bool ImageListPanel::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
     // check if we are trying to drag an image button
@@ -676,7 +773,7 @@ void ImageListPanel::request_buttons_update()
 
 void ImageListPanel::run_requested_callbacks()
 {
-    if (m_image_modify_done_requested)
+    if (m_image_async_modify_done_requested)
     {
         spdlog::trace("running requested callbacks");
         // remove any images that are not being modified and are null
@@ -712,9 +809,9 @@ void ImageListPanel::run_requested_callbacks()
             m_num_images_callback();
         }
 
-        m_modify_done_callback(m_current); // TODO: make this use the modified image
+        m_async_modify_done_callback(m_current); // TODO: make this use the modified image
 
-        m_image_modify_done_requested = false;
+        m_image_async_modify_done_requested = false;
     }
 }
 
@@ -764,21 +861,21 @@ bool ImageListPanel::set_reference_image_index(int index)
     return true;
 }
 
-void ImageListPanel::new_image(std::shared_ptr<HDRImage> img)
+void ImageListPanel::new_image(HDRImagePtr img)
 {
     static int file_number = 1;
 
     shared_ptr<XPUImage> image = make_shared<XPUImage>(true);
-    image->set_modify_done_callback(
+    image->set_async_modify_done_callback(
         [this]()
         {
             m_screen->pop_gui_refresh();
-            m_image_modify_done_requested = true;
+            m_image_async_modify_done_requested = true;
         });
     image->set_filename(fmt::format("Untitled-{}", file_number++));
     m_screen->push_gui_refresh();
     image->async_modify(
-        [img](const shared_ptr<const HDRImage> &) -> ImageCommandResult
+        [img](const ConstHDRImagePtr &) -> ImageCommandResult
         {
             spdlog::info("Creating [{:d}x{:d}] image", img->width(), img->height());
             return {img, nullptr};
@@ -855,21 +952,21 @@ void ImageListPanel::load_images(const vector<string> &filenames)
     for (auto filename : all_filenames)
     {
         shared_ptr<XPUImage> image = make_shared<XPUImage>();
-        image->set_modify_done_callback(
+        image->set_async_modify_done_callback(
             [this]()
             {
                 m_screen->pop_gui_refresh();
-                m_image_modify_done_requested = true;
+                m_image_async_modify_done_requested = true;
             });
         image->set_filename(filename);
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         image->async_modify(
-            [filename](const shared_ptr<const HDRImage> &) -> ImageCommandResult
+            [filename](const ConstHDRImagePtr &) -> ImageCommandResult
             {
                 Timer timer;
                 spdlog::info("Trying to load image \"{}\"", filename);
-                shared_ptr<HDRImage> ret = load_image(filename);
+                HDRImagePtr ret = load_image(filename);
                 if (ret)
                     spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(),
                                  timer.elapsed() / 1000.f);
@@ -893,7 +990,7 @@ bool ImageListPanel::save_image(const string &filename, float exposure, float ga
     if (current_image()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither))
     {
         current_image()->set_filename(filename);
-        m_modify_done_callback(m_current);
+        m_async_modify_done_callback(m_current);
 
         return true;
     }
@@ -941,20 +1038,20 @@ void ImageListPanel::close_all_images()
     m_num_images_callback();
 }
 
-void ImageListPanel::modify_image(const ImageCommand &command)
+void ImageListPanel::async_modify_image(const ConstImageCommand &command)
 {
     if (current_image())
     {
-        m_images[m_current]->set_modify_done_callback(
+        m_images[m_current]->set_async_modify_done_callback(
             [this]()
             {
                 m_screen->pop_gui_refresh();
-                m_image_modify_done_requested = true;
+                m_image_async_modify_done_requested = true;
             });
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         m_images[m_current]->async_modify(
-            [command](const shared_ptr<const HDRImage> &img)
+            [command](const ConstHDRImagePtr &img)
             {
                 auto ret = command(img);
 
@@ -968,20 +1065,20 @@ void ImageListPanel::modify_image(const ImageCommand &command)
     }
 }
 
-void ImageListPanel::modify_image(const ImageCommandWithProgress &command)
+void ImageListPanel::async_modify_image(const ConstImageCommandWithProgress &command)
 {
     if (current_image())
     {
-        m_images[m_current]->set_modify_done_callback(
+        m_images[m_current]->set_async_modify_done_callback(
             [this]()
             {
                 m_screen->pop_gui_refresh();
-                m_image_modify_done_requested = true;
+                m_image_async_modify_done_requested = true;
             });
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         m_images[m_current]->async_modify(
-            [command](const shared_ptr<const HDRImage> &img, AtomicProgress &progress)
+            [command](const ConstHDRImagePtr &img, AtomicProgress &progress)
             {
                 auto ret = command(img, progress);
 
@@ -999,9 +1096,9 @@ void ImageListPanel::undo()
 {
     if (current_image())
     {
-        m_images[m_current]->set_modify_done_callback(nullptr);
+        m_images[m_current]->set_async_modify_done_callback(nullptr);
         if (m_images[m_current]->undo())
-            m_modify_done_callback(m_current);
+            m_async_modify_done_callback(m_current);
     }
 }
 
@@ -1009,9 +1106,9 @@ void ImageListPanel::redo()
 {
     if (current_image())
     {
-        m_images[m_current]->set_modify_done_callback(nullptr);
+        m_images[m_current]->set_async_modify_done_callback(nullptr);
         if (m_images[m_current]->redo())
-            m_modify_done_callback(m_current);
+            m_async_modify_done_callback(m_current);
     }
 }
 

@@ -21,6 +21,8 @@
 #include <thread>
 #include <tinydir.h>
 
+#include "tool.h"
+
 using namespace std;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
@@ -83,109 +85,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_tool_panel = new Window(this, "");
     m_tool_panel->set_theme(panel_theme);
-    m_tool_panel->set_fixed_width(32);
+    m_tool_panel->set_fixed_width(33);
     m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
-    auto b = new ToolButton(m_tool_panel, FA_HAND_PAPER);
-    b->set_pushed(true);
-    b->set_flags(Button::Flags::RadioButton);
-    b->set_callback([this] { m_tool = HDRViewScreen::Tool_None; });
-    b->set_tooltip("Switch to default zoom/pan mode.");
-    b->set_icon_extra_scale(1.5f);
-    m_toolbuttons.push_back(b);
-
-    b = new ToolButton(m_tool_panel, FA_EXPAND);
-    b->set_flags(Button::Flags::RadioButton);
-    b->set_tooltip("Switch to rectangular marquee selection mode.");
-    b->set_callback([this] { m_tool = HDRViewScreen::Tool_Rectangular_Marquee; });
-    b->set_icon_extra_scale(1.5f);
-    m_toolbuttons.push_back(b);
-
-    (new Widget(m_tool_panel))->set_fixed_height(15);
-
-    m_info_btn = new PopupButton(m_tool_panel, "", FA_INFO_CIRCLE);
-    m_info_btn->set_flags(Button::Flags::ToggleButton);
-    m_info_btn->set_tooltip("Show info");
-    m_info_btn->set_side(Popup::Left);
-    m_info_btn->set_chevron_icon(0);
-    m_info_btn->set_icon_extra_scale(1.5f);
-
-    // create info popup
-    {
-        m_info_btn->popup()->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5, 5));
-        auto well = new Well(m_info_btn->popup(), 1, Color(150, 32), Color(0, 50));
-
-        well->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
-
-        auto row = new Widget(well);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        new Label(row, "File:", "sans-bold");
-        m_path_info_label = new Label(row, "");
-        m_path_info_label->set_fixed_width(135);
-
-        row = new Widget(well);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        new Label(row, "Resolution:", "sans-bold");
-        m_res_info_label = new Label(row, "");
-        m_res_info_label->set_fixed_width(135);
-
-        // spacer
-        (new Widget(well))->set_fixed_height(5);
-
-        row = new Widget(well);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        auto tb = new ToolButton(row, FA_EYE_DROPPER);
-        tb->set_theme(flat_theme);
-        tb->set_enabled(false);
-        tb->set_icon_extra_scale(1.5f);
-
-        (new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
-        m_color32_info_label = new Label(row, "");
-        m_color32_info_label->set_fixed_width(50 + 24 + 5);
-        m_color8_info_label = new Label(row, "");
-        m_color8_info_label->set_fixed_width(50);
-
-        // spacer
-        (new Widget(well))->set_fixed_height(5);
-
-        row = new Widget(well);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        tb = new ToolButton(row, FA_CROSSHAIRS);
-        tb->set_theme(flat_theme);
-        tb->set_enabled(false);
-        tb->set_icon_extra_scale(1.5f);
-
-        (new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
-        m_pixel_info_label = new Label(row, "");
-        m_pixel_info_label->set_fixed_width(50);
-
-        tb = new ToolButton(row, FA_EXPAND);
-        tb->set_theme(flat_theme);
-        tb->set_enabled(false);
-        tb->set_icon_extra_scale(1.5f);
-
-        (new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
-        m_roi_info_label = new Label(row, "");
-        m_roi_info_label->set_fixed_width(50);
-
-        // spacer
-        (new Widget(well))->set_fixed_height(5);
-
-        row = new Widget(well);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        tb = new ToolButton(row, FA_PERCENTAGE);
-        tb->set_theme(flat_theme);
-        tb->set_enabled(false);
-        tb->set_icon_extra_scale(1.5f);
-
-        (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
-        m_stats_label = new Label(row, "");
-        m_stats_label->set_fixed_width(135);
-    }
 
     m_image_view = new HDRImageView(this);
     m_image_view->set_grid_threshold(10);
@@ -211,6 +112,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
 
     {
+        vector<Button *>    panel_btns;
+        vector<Widget *>    panels;
+        vector<PopupMenu *> popup_menus;
         m_side_scroll_panel   = new VScrollPanel(m_side_panel);
         m_side_panel_contents = new Widget(m_side_scroll_panel);
         m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
@@ -222,116 +126,210 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         // create file/images panel
         //
 
-        auto menu1 = new PopupMenu(this, m_side_panel);
-        auto menu2 = new PopupMenu(this, m_side_panel);
+        // auto menu1 = new PopupMenu(this, m_side_panel);
+        // auto menu2 = new PopupMenu(this, m_side_panel);
 
-        auto btn1 = m_side_panel_contents->add<PopupWrapper>(menu1)->add<Button>("File", FA_CARET_DOWN);
-        btn1->set_theme(flat_theme);
-        btn1->set_flags(Button::ToggleButton);
-        btn1->set_pushed(true);
-        btn1->set_font_size(18);
-        btn1->set_icon_position(Button::IconPosition::Left);
+        popup_menus.push_back(new PopupMenu(this, m_side_panel));
+        panel_btns.push_back(
+            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("File", FA_CARET_DOWN));
+        panel_btns.back()->set_theme(flat_theme);
+        panel_btns.back()->set_flags(Button::ToggleButton);
+        panel_btns.back()->set_pushed(true);
+        panel_btns.back()->set_font_size(18);
+        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
         m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
+        panels.push_back(m_images_panel);
+
+        //
+        // create info panel
+        //
+
+        popup_menus.push_back(new PopupMenu(this, m_side_panel));
+        panel_btns.push_back(
+            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Info", FA_CARET_RIGHT));
+        panel_btns.back()->set_theme(flat_theme);
+        panel_btns.back()->set_flags(Button::ToggleButton);
+        panel_btns.back()->set_pushed(false);
+        panel_btns.back()->set_font_size(18);
+        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
+        {
+            auto info_panel = new Well(m_side_panel_contents, 1, Color(150, 32), Color(0, 50));
+            info_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
+
+            auto row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            new Label(row, "File:", "sans-bold");
+            m_path_info_label = new Label(row, "");
+            m_path_info_label->set_fixed_width(135);
+
+            row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            new Label(row, "Resolution:", "sans-bold");
+            m_res_info_label = new Label(row, "");
+            m_res_info_label->set_fixed_width(135);
+
+            // spacer
+            (new Widget(info_panel))->set_fixed_height(5);
+
+            row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            auto tb = new ToolButton(row, FA_EYE_DROPPER);
+            tb->set_theme(flat_theme);
+            tb->set_enabled(false);
+            tb->set_icon_extra_scale(1.5f);
+
+            (new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+            m_color32_info_label = new Label(row, "");
+            m_color32_info_label->set_fixed_width(50 + 24 + 5);
+            m_color8_info_label = new Label(row, "");
+            m_color8_info_label->set_fixed_width(50);
+
+            // spacer
+            (new Widget(info_panel))->set_fixed_height(5);
+
+            row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            tb = new ToolButton(row, FA_CROSSHAIRS);
+            tb->set_theme(flat_theme);
+            tb->set_enabled(false);
+            tb->set_icon_extra_scale(1.5f);
+
+            (new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
+            m_pixel_info_label = new Label(row, "");
+            m_pixel_info_label->set_fixed_width(50);
+
+            tb = new ToolButton(row, FA_EXPAND);
+            tb->set_theme(flat_theme);
+            tb->set_enabled(false);
+            tb->set_icon_extra_scale(1.5f);
+
+            (new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
+            m_roi_info_label = new Label(row, "");
+            m_roi_info_label->set_fixed_width(50);
+
+            // spacer
+            (new Widget(info_panel))->set_fixed_height(5);
+
+            row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            tb = new ToolButton(row, FA_PERCENTAGE);
+            tb->set_theme(flat_theme);
+            tb->set_enabled(false);
+            tb->set_icon_extra_scale(1.5f);
+
+            (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
+            m_stats_label = new Label(row, "");
+            m_stats_label->set_fixed_width(135);
+
+            info_panel->set_fixed_height(4);
+            panels.push_back(info_panel);
+        }
 
         //
         // create edit panel
         //
 
-        auto btn2 = m_side_panel_contents->add<PopupWrapper>(menu2)->add<Button>("Edit", FA_CARET_RIGHT);
-        btn2->set_theme(flat_theme);
-        btn2->set_flags(Button::ToggleButton);
-        btn2->set_font_size(18);
-        btn2->set_icon_position(Button::IconPosition::Left);
+        popup_menus.push_back(new PopupMenu(this, m_side_panel));
+        panel_btns.push_back(
+            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Edit", FA_CARET_RIGHT));
+        panel_btns.back()->set_theme(flat_theme);
+        panel_btns.back()->set_flags(Button::ToggleButton);
+        panel_btns.back()->set_font_size(18);
+        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
         m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
         m_edit_panel->set_fixed_height(4);
+        panels.push_back(m_edit_panel);
 
         //
-        // image and edit panel callbacks
+        // panel callbacks
         //
 
         static bool solo = false;
 
-        auto toggle_panel = [this](Button *btn1, Button *btn2, Widget *panel1, Widget *panel2, bool value)
+        auto toggle_panel = [this, panel_btns, panels](size_t index, bool value)
         {
-            btn1->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
-            panel1->set_visible(true);
+            // expand of collapse the specified panel
+            panel_btns[index]->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
+            panel_btns[index]->set_pushed(value);
+            panels[index]->set_fixed_height(value ? 0 : 4);
+            panels[index]->set_visible(true);
 
-            panel1->set_fixed_height(value ? 0 : 4);
-
-            // close other panel
+            // close other panels if solo mode is on
             if (value && solo)
             {
-                btn2->set_pushed(false);
-                btn2->set_icon(FA_CARET_RIGHT);
-                panel2->set_fixed_height(4);
+                for (size_t i = 0; i < panels.size(); ++i)
+                {
+                    if (i == index)
+                        continue;
+                    panel_btns[i]->set_pushed(false);
+                    panel_btns[i]->set_icon(FA_CARET_RIGHT);
+                    panels[i]->set_fixed_height(4);
+                }
             }
 
             request_layout_update();
             m_side_panel_contents->perform_layout(m_nvg_context);
         };
 
-        btn1->set_change_callback([this, btn1, btn2, toggle_panel](bool value)
-                                  { toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, value); });
-        btn2->set_change_callback([this, btn1, btn2, toggle_panel](bool value)
-                                  { toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, value); });
+        for (size_t i = 0; i < panel_btns.size(); ++i)
+            panel_btns[i]->set_change_callback([i, toggle_panel](bool value) { toggle_panel(i, value); });
 
-        auto solo_item1 = menu1->add_item("Solo mode");
-        menu1->add_item(""); // separator
-        auto expand_item1   = menu1->add_item("Expand all");
-        auto collapse_item1 = menu1->add_item("Collapse all");
+        //
+        // create the right-click menus
+        //
+        for (size_t i = 0; i < popup_menus.size(); ++i)
+        {
+            popup_menus[i]->add_item("Solo mode");
+            popup_menus[i]->add_item(""); // separator
+            popup_menus[i]->add_item("Expand all");
+            popup_menus[i]->add_item("Collapse all");
+        }
 
-        auto solo_item2 = menu2->add_item("Solo mode");
-        menu2->add_item(""); // separator
-        auto expand_item2   = menu2->add_item("Expand all");
-        auto collapse_item2 = menu2->add_item("Collapse all");
+        for (size_t i = 0; i < popup_menus.size(); ++i)
+        {
+            dynamic_cast<Button *>(popup_menus[i]->child_at(0))
+                ->set_callback(
+                    [popup_menus, panel_btns, toggle_panel, i]
+                    {
+                        solo = !solo;
+                        // update all "Solo mode" buttons and "Expand all" buttons
+                        for (size_t j = 0; j < popup_menus.size(); ++j)
+                        {
+                            dynamic_cast<Button *>(popup_menus[j]->child_at(0))->set_icon(solo ? FA_CHECK : 0);
+                            popup_menus[j]->child_at(2)->set_enabled(!solo);
+                        }
 
-        solo_item1->set_callback(
-            [this, solo_item1, solo_item2, btn1, btn2, toggle_panel, expand_item1, expand_item2]
-            {
-                solo = !solo;
-                solo_item1->set_icon(solo ? FA_CHECK : 0);
-                solo_item2->set_icon(solo ? FA_CHECK : 0);
-                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, solo ? true : btn1->pushed());
-                expand_item1->set_enabled(!solo);
-                expand_item2->set_enabled(!solo);
-            });
-        expand_item1->set_callback(
-            [this, btn1, btn2, toggle_panel]
-            {
-                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, true);
-                if (!solo)
-                    toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, true);
-            });
-        collapse_item1->set_callback(
-            [this, btn1, btn2, toggle_panel]
-            {
-                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, false);
-                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, false);
-            });
+                        toggle_panel(i, solo ? true : panel_btns[i]->pushed());
+                    });
 
-        solo_item2->set_callback(
-            [this, solo_item1, solo_item2, btn1, btn2, toggle_panel, expand_item1, expand_item2]
-            {
-                solo = !solo;
-                solo_item1->set_icon(solo ? FA_CHECK : 0);
-                solo_item2->set_icon(solo ? FA_CHECK : 0);
-                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, solo ? true : btn2->pushed());
-                expand_item1->set_enabled(!solo);
-                expand_item2->set_enabled(!solo);
-            });
-        expand_item2->set_callback(
-            [this, btn1, btn2, toggle_panel]
-            {
-                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, true);
-                if (!solo)
-                    toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, true);
-            });
-        collapse_item2->set_callback(
-            [this, btn1, btn2, toggle_panel]
-            {
-                toggle_panel(btn1, btn2, m_images_panel, m_edit_panel, false);
-                toggle_panel(btn2, btn1, m_edit_panel, m_images_panel, false);
-            });
+            dynamic_cast<Button *>(popup_menus[i]->child_at(2))
+                ->set_callback(
+                    [panel_btns, toggle_panel, popup_menus, i]
+                    {
+                        // expand this panel, and all other panels if solo mode isn't on
+                        for (size_t j = 0; j < popup_menus.size(); ++j)
+                        {
+                            if (j == i || !solo)
+                                toggle_panel(j, true);
+                        }
+                    });
+
+            dynamic_cast<Button *>(popup_menus[i]->child_at(3))
+                ->set_callback(
+                    [panel_btns, toggle_panel, popup_menus]
+                    {
+                        // collapse all panels
+                        for (size_t j = 0; j < popup_menus.size(); ++j) toggle_panel(j, false);
+                    });
+        }
     }
 
     //
@@ -347,43 +345,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_side_panel_button = new Button(m_top_panel, "", FA_BARS);
     m_side_panel_button->set_icon_extra_scale(1.25f);
-    new Label(m_top_panel, "EV", "sans-bold");
-    auto exposure_slider  = new Slider(m_top_panel);
-    auto exposure_textbox = new FloatBox<float>(m_top_panel, exposure);
-    auto normalize_button = new Button(m_top_panel, "", FA_MAGIC);
-    normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
-    normalize_button->set_icon_extra_scale(1.15f);
-    normalize_button->set_callback(
-        [this]()
-        {
-            auto img = m_images_panel->current_image();
-            if (!img)
-                return;
-            Color4 mC  = img->image().max();
-            float  mCf = max(mC[0], mC[1], mC[2]);
-            spdlog::debug("max value: {}", mCf);
-            m_image_view->set_exposure(log2(1.0f / mCf));
-            m_images_panel->request_histogram_update(true);
-        });
-    normalize_button->set_tooltip("Normalize exposure.");
-    auto reset_button = new Button(m_top_panel, "", FA_SYNC);
-    reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
-    reset_button->set_icon_extra_scale(1.15f);
-    reset_button->set_callback(
-        [this]()
-        {
-            m_image_view->set_exposure(0.0f);
-            m_image_view->set_gamma(2.2f);
-            m_image_view->set_sRGB(true);
-            m_images_panel->request_histogram_update(true);
-        });
-    reset_button->set_tooltip("Reset tonemapping.");
-
-    auto sRGB_checkbox = new CheckBox(m_top_panel, "sRGB   ");
-    auto gamma_label   = new Label(m_top_panel, "Gamma", "sans-bold");
-    auto gamma_slider  = new Slider(m_top_panel);
-    auto gamma_textbox = new FloatBox<float>(m_top_panel);
-
     m_side_panel_button->set_tooltip(
         "Bring up the images dialog to load/remove images, and cycle through open images.");
     m_side_panel_button->set_flags(Button::ToggleButton);
@@ -399,107 +360,67 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             request_layout_update();
         });
 
-    exposure_textbox->number_format("%1.2f");
-    exposure_textbox->set_editable(true);
-    exposure_textbox->set_spinnable(true);
-    exposure_textbox->set_fixed_width(50);
-    exposure_textbox->set_min_value(-9.0f);
-    exposure_textbox->set_max_value(9.0f);
-    exposure_textbox->set_alignment(TextBox::Alignment::Right);
-    exposure_textbox->set_callback([this](float e) { m_image_view->set_exposure(e); });
-    exposure_slider->set_callback([this](float v) { m_image_view->set_exposure(round(4 * v) / 4.0f); });
-    exposure_slider->set_final_callback(
-        [this](float v)
-        {
-            m_image_view->set_exposure(round(4 * v) / 4.0f);
-            m_images_panel->request_histogram_update(true);
-        });
-    exposure_slider->set_fixed_width(100);
-    exposure_slider->set_range({-9.0f, 9.0f});
-    exposure_textbox->set_value(exposure);
+    //
+    // create tools
+    //
 
-    gamma_textbox->set_editable(true);
-    gamma_textbox->set_spinnable(true);
-    gamma_textbox->number_format("%1.3f");
-    gamma_textbox->set_fixed_width(55);
-    gamma_textbox->set_min_value(0.02f);
-    gamma_textbox->set_max_value(9.0f);
+    m_tools.push_back(new HandTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new RectangularMarquee(this, m_image_view, m_images_panel));
+    m_tools.push_back(new BrushTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new EraserTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new CloneStampTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new Eyedropper(this, m_image_view, m_images_panel));
 
-    gamma_textbox->set_alignment(TextBox::Alignment::Right);
-    gamma_textbox->set_callback(
-        [this, gamma_slider](float value)
-        {
-            m_image_view->set_gamma(value);
-            gamma_slider->set_value(value);
-        });
-    gamma_slider->set_callback(
-        [&, gamma_slider, gamma_textbox](float value)
-        {
-            float g = max(gamma_slider->range().first, round(10 * value) / 10.0f);
-            m_image_view->set_gamma(g);
-            gamma_textbox->set_value(g);
-            gamma_slider->set_value(g); // snap values
-        });
-    gamma_slider->set_fixed_width(100);
-    gamma_slider->set_range({0.02f, 9.0f});
-    gamma_slider->set_value(gamma);
-    gamma_textbox->set_value(gamma);
+    for (auto t : m_tools) t->create_toolbutton(m_tool_panel);
 
-    m_image_view->set_exposure_callback(
-        [this, exposure_textbox, exposure_slider](float e)
-        {
-            exposure_textbox->set_value(e);
-            exposure_slider->set_value(e);
-            m_images_panel->request_histogram_update();
-        });
-    m_image_view->set_gamma_callback(
-        [gamma_textbox, gamma_slider](float g)
-        {
-            gamma_textbox->set_value(g);
-            gamma_slider->set_value(g);
-        });
-    m_image_view->set_sRGB_callback(
-        [sRGB_checkbox, gamma_textbox, gamma_slider](bool b)
-        {
-            sRGB_checkbox->set_checked(b);
-            gamma_textbox->set_enabled(!b);
-            gamma_textbox->set_spinnable(!b);
-            gamma_slider->set_enabled(!b);
-        });
-    m_image_view->set_exposure(exposure);
-    m_image_view->set_gamma(gamma);
+    (new Widget(m_tool_panel))->set_fixed_height(15);
+
+    m_color_btns = new DualHDRColorPicker(m_tool_panel);
+    m_color_btns->set_fixed_size(Vector2i(25));
+    // m_color_btns->set_tooltip("Select foreground and background colors.");
+    m_color_btns->foreground()->popup()->set_anchor_offset(100);
+    m_color_btns->background()->popup()->set_anchor_offset(100);
+    m_color_btns->foreground()->set_side(Popup::Left);
+    m_color_btns->background()->set_side(Popup::Left);
+
+    m_color_btns->foreground()->set_tooltip("Set foreground color.");
+    m_color_btns->background()->set_tooltip("Set background color.");
+    m_color_btns->foreground()->set_eyedropper_callback(
+        [this](bool pushed) { set_active_colorpicker(pushed ? m_color_btns->foreground() : nullptr); });
+    m_color_btns->background()->set_eyedropper_callback(
+        [this](bool pushed) { set_active_colorpicker(pushed ? m_color_btns->background() : nullptr); });
+
+    {
+        // create default options bar
+        auto default_tool = m_tools[Tool::Tool_None]->create_options_bar(m_top_panel);
+
+        // marquee tool uses the default options bar
+        m_tools[Tool::Tool_Rectangular_Marquee]->set_options_bar(default_tool);
+
+        // brush tool uses its own options bar
+        m_tools[Tool::Tool_Brush]->create_options_bar(m_top_panel);
+
+        // brush tool uses its own options bar
+        m_tools[Tool::Tool_Eraser]->create_options_bar(m_top_panel);
+
+        // clone stamp uses its own options bar
+        m_tools[Tool::Tool_Clone_Stamp]->create_options_bar(m_top_panel);
+
+        // eyedropper uses its own options bar
+        m_tools[Tool::Tool_Eyedropper]->create_options_bar(m_top_panel);
+    }
+
+    m_tools[Tool::Tool_None]->set_active(true);
 
     m_image_view->set_zoom_callback(
         [this](float zoom)
         {
-            float realZoom = zoom * pixel_ratio();
-            int   numer    = (realZoom < 1.0f) ? 1 : (int)round(realZoom);
-            int   denom    = (realZoom < 1.0f) ? (int)round(1.0f / realZoom) : 1;
-            m_zoom_label->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", realZoom * 100, numer, denom));
+            float real_zoom = zoom * pixel_ratio();
+            int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
+            int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
+            m_zoom_label->set_caption(fmt::format("{:7.2f}% ({:d} : {:d})", real_zoom * 100, numer, denom));
             request_layout_update();
         });
-
-    sRGB_checkbox->set_callback(
-        [&, gamma_slider, gamma_textbox, gamma_label](bool value)
-        {
-            m_image_view->set_sRGB(value);
-            gamma_slider->set_enabled(!value);
-            gamma_textbox->set_spinnable(!value);
-            gamma_textbox->set_enabled(!value);
-            gamma_label->set_enabled(!value);
-            gamma_label->set_color(value ? m_theme->m_disabled_text_color : m_theme->m_text_color);
-            request_layout_update();
-        });
-
-    sRGB_checkbox->set_checked(sRGB);
-    sRGB_checkbox->callback()(sRGB);
-
-    (new CheckBox(m_top_panel, "Dither  ", [&](bool v) { m_image_view->set_dithering(v); }))
-        ->set_checked(m_image_view->dithering_on());
-    (new CheckBox(m_top_panel, "Grid  ", [&](bool v) { m_image_view->set_draw_grid(v); }))
-        ->set_checked(m_image_view->draw_grid_on());
-    (new CheckBox(m_top_panel, "RGB values  ", [&](bool v) { m_image_view->set_draw_values(v); }))
-        ->set_checked(m_image_view->draw_values_on());
 
     m_image_view->set_pixel_callback(
         [this](const nanogui::Vector2i &index, char **out, size_t size)
@@ -515,6 +436,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 }
             }
         });
+
+    m_image_view->set_mouse_callback([this](const Vector2i &p, int button, bool down, int modifiers) -> bool
+                                     { return m_tools[m_tool]->mouse_button(p, button, down, modifiers); });
+
+    m_image_view->set_drag_callback([this](const Vector2i &p, const Vector2i &rel, int button, int modifiers) -> bool
+                                    { return m_tools[m_tool]->mouse_drag(p, rel, button, modifiers); });
+
+    m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
 
     m_image_view->set_hover_callback(
         [this](const Vector2i &pixel, const Color4 &color32, const Color4 &color8)
@@ -567,13 +496,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             }
         });
 
-    m_image_view->set_roi_callback(
-        [this](const Box2i &roi)
-        {
-            m_roi_info_label->set_caption(
-                roi.has_volume() ? fmt::format("{: 4d}\n{: 4d}", roi.size().x(), roi.size().y()) : "");
-        });
-
     drop_event(args);
 
     this->set_size(nanogui::Vector2i(1024, 800));
@@ -613,17 +535,22 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
             push_gui_refresh();
         else
             pop_gui_refresh();
+
+        set_tool(Tool::Tool_Eyedropper);
     }
     else
+    {
         m_active_colorpicker = nullptr;
-
-    m_image_view->set_draw_eyedropper(m_images_panel->current_image() && cp);
+        set_tool(Tool::Tool_None);
+    }
 }
 
-void HDRViewScreen::set_tool(ETool t)
+void HDRViewScreen::set_tool(Tool::ETool t)
 {
     m_tool = t;
-    for (int i = 0; i < (int)Tool_Num_Tools; ++i) m_toolbuttons[i]->set_pushed(i == (int)t);
+    for (int i = 0; i < (int)Tool::Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
+
+    m_tools[t]->set_active(true);
 }
 
 void HDRViewScreen::update_caption()
@@ -756,7 +683,7 @@ void HDRViewScreen::new_image()
 {
     static int    width = 800, height = 600;
     static string name = "New image...";
-    static Color  bg(.8f, .8f, .8f, 1.f);
+    static Color  bg(0, 255);
     static float  EV = 0.f;
 
     FormHelper *gui = new FormHelper(this);
@@ -789,7 +716,10 @@ void HDRViewScreen::new_image()
     spacer->set_fixed_height(5);
     gui->add_widget("", spacer);
 
+    bg             = background()->color();
+    EV             = background()->exposure();
     auto color_btn = new HDRColorPicker(window, bg, EV);
+    color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
     color_btn->set_eyedropper_callback([this, color_btn](bool pushed)
                                        { set_active_colorpicker(pushed ? color_btn : nullptr); });
     gui->add_widget("Background color:", color_btn);
@@ -823,7 +753,7 @@ void HDRViewScreen::new_image()
         {
             float gain = powf(2.f, EV);
 
-            shared_ptr<HDRImage> img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3]) * gain);
+            HDRImagePtr img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3]) * gain);
             m_images_panel->new_image(img);
 
             bring_to_focus();
@@ -844,7 +774,7 @@ void HDRViewScreen::new_image()
 
 void HDRViewScreen::duplicate_image()
 {
-    shared_ptr<HDRImage> clipboard;
+    HDRImagePtr clipboard;
     if (auto img = m_images_panel->current_image())
     {
         auto roi = img->roi();
@@ -907,8 +837,17 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
 
-    if (!action)
+    if (action == GLFW_RELEASE)
         return false;
+
+    if (m_tools[m_tool]->keyboard(key, scancode, action, modifiers))
+        return true;
+
+    if (m_image_view->keyboard_event(key, scancode, action, modifiers))
+        return true;
+
+    if (m_images_panel->keyboard_event(key, scancode, action, modifiers))
+        return true;
 
     switch (key)
     {
@@ -944,18 +883,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
     }
 
-    case 'Z':
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                m_images_panel->redo();
-            else
-                m_images_panel->undo();
-
-            return true;
-        }
-        return false;
-
     case GLFW_KEY_BACKSPACE:
         spdlog::trace("KEY BACKSPACE pressed");
         ask_close_image(m_images_panel->current_image_index());
@@ -982,83 +909,33 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
         return false;
 
-    case '=':
-    case GLFW_KEY_KP_ADD:
-        spdlog::trace("KEY `=` pressed");
-        m_image_view->zoom_in();
-        return true;
-
-    case '-':
-    case GLFW_KEY_KP_SUBTRACT:
-        spdlog::trace("KEY `-` pressed");
-        m_image_view->zoom_out();
-        return true;
-
-    case 'G':
-        spdlog::trace("KEY `G` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-        {
-            m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-        }
-        else
-        {
-            m_image_view->set_gamma(max(0.02f, m_image_view->gamma() - 0.02f));
-        }
-        return true;
-
-    case 'E':
-        spdlog::trace("KEY `E` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-        {
-            m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-        }
-        else
-        {
-            m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-        }
-        return true;
-
-    case 'F':
-        spdlog::trace("KEY `F` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_images_panel->focus_filter();
-            return true;
-        }
-        break;
-
-    case 'A':
-        spdlog::trace("Key `A` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-            m_image_view->select_all();
-        break;
-
-    case 'D':
-        spdlog::trace("Key `D` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-            m_image_view->select_none();
-        break;
-
     case 'C':
         spdlog::trace("Key `C` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)
+        {
             m_edit_panel->copy();
+            return true;
+        }
         break;
 
     case 'V':
         spdlog::trace("Key `V` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)
+        {
             m_edit_panel->paste();
+            return true;
+        }
         break;
 
-    case 'M':
-        spdlog::trace("KEY `M` pressed");
-        set_tool(Tool_Rectangular_Marquee);
+    case 'D':
+        spdlog::trace("Key `D` pressed");
+        m_color_btns->foreground()->set_color(Color(0, 255));
+        m_color_btns->background()->set_color(Color(255, 255));
         return true;
 
-    case ' ':
-        spdlog::trace("KEY ` ` pressed");
-        set_tool(Tool_None);
+    case 'X':
+        spdlog::trace("Key `X` pressed");
+        m_color_btns->swap_colors();
         return true;
 
     case 'T':
@@ -1086,10 +963,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             m_animation_running = true;
             m_animation_goal    = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
         }
-        else if (modifiers & GLFW_MOD_ALT)
-        {
-            m_images_panel->swap_current_selected_with_previous();
-        }
         else
         {
             m_gui_animation_start = glfwGetTime();
@@ -1100,77 +973,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         request_layout_update();
         return true;
-
-    case GLFW_KEY_DOWN:
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_images_panel->send_image_backward();
-            return true;
-        }
-        else if (m_images_panel->num_images())
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                m_images_panel->set_reference_image_index(
-                    m_images_panel->next_visible_image(m_images_panel->reference_image_index(), Backward));
-            else
-                m_images_panel->set_current_image_index(
-                    m_images_panel->next_visible_image(m_images_panel->current_image_index(), Backward));
-            return true;
-        }
-        return false;
-
-    case GLFW_KEY_UP:
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_images_panel->bring_image_forward();
-            return true;
-        }
-        else if (m_images_panel->num_images())
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                m_images_panel->set_reference_image_index(
-                    m_images_panel->next_visible_image(m_images_panel->reference_image_index(), Forward));
-            else
-                m_images_panel->set_current_image_index(
-                    m_images_panel->next_visible_image(m_images_panel->current_image_index(), Forward));
-            return true;
-        }
-        return false;
-
-    case GLFW_KEY_KP_0:
-    case '0':
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_image_view->center();
-            m_image_view->fit();
-            draw_all();
-            return true;
-        }
-        return false;
-    }
-
-    if ((key >= GLFW_KEY_1 && key <= GLFW_KEY_9) || (key >= GLFW_KEY_KP_1 && key <= GLFW_KEY_KP_9))
-    {
-        int keyOffset = (key >= GLFW_KEY_KP_1) ? GLFW_KEY_KP_1 : GLFW_KEY_1;
-        int idx       = (key - keyOffset) % 10;
-
-        if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
-        {
-            m_images_panel->set_channel(EChannel(idx));
-            return true;
-        }
-        else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
-        {
-            m_images_panel->set_blend_mode(EBlendMode(idx));
-            return true;
-        }
-        else
-        {
-            auto nth = m_images_panel->nth_visible_image_index(idx);
-            if (nth >= 0)
-                m_images_panel->set_current_image_index(nth);
-        }
-        return false;
     }
 
     return false;
@@ -1178,8 +980,11 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
 bool HDRViewScreen::at_side_panel_edge(const Vector2i &p)
 {
+    if (!(m_animation_goal & SIDE_PANEL))
+        return false;
     auto w = find_widget(p);
-    return p.x() - m_side_panel->fixed_width() < 10 && p.x() - m_side_panel->fixed_width() > -5 &&
+    auto x = p.x() - m_side_panel->position().x() - m_side_panel->fixed_width();
+    return x < 10 && x > -5 &&
            (w == m_side_panel || w == m_image_view || w == m_side_panel_contents || w == m_side_scroll_panel);
 }
 
@@ -1196,6 +1001,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     {
         spdlog::trace("ending eyedropper");
         m_active_colorpicker->end_eyedropper();
+        set_tool(Tool::Tool_None);
         return true;
     }
 
@@ -1399,6 +1205,9 @@ void HDRViewScreen::draw_contents()
         }
         else
             m_stats_label->set_caption("");
+
+        m_roi_info_label->set_caption(
+            img->roi().has_volume() ? fmt::format("{: 4d}\n{: 4d}", img->roi().size().x(), img->roi().size().y()) : "");
     }
 
     if (m_need_layout_update || m_animation_running)

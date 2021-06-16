@@ -71,8 +71,10 @@ public:
 
     bool  can_modify() const;
     float progress() const;
-    void  async_modify(const ImageCommand &command);
-    void  async_modify(const ImageCommandWithProgress &command);
+    void  async_modify(const ConstImageCommand &command);
+    void  async_modify(const ConstImageCommandWithProgress &command);
+    void  start_modify(const ConstImageCommand &command);
+    void  direct_modify(const ImageCommand &command);
     bool  is_modified() const;
     bool  undo();
     bool  redo();
@@ -121,21 +123,21 @@ public:
     void             recompute_histograms(float exposure) const;
 
     /// Callback executed whenever an image finishes being modified, e.g. via @ref async_modify
-    VoidVoidFunc modify_done_callback() const { return m_modify_done_callback; }
-    void         set_modify_done_callback(const VoidVoidFunc &cb) { m_modify_done_callback = cb; }
+    VoidVoidFunc async_modify_done_callback() const { return m_async_modify_done_callback; }
+    void         set_async_modify_done_callback(const VoidVoidFunc &cb) { m_async_modify_done_callback = cb; }
 
 protected:
     bool wait_for_async_result() const;
-    void modify_done() const;
+    void async_modify_done() const;
 
-    mutable std::shared_ptr<HDRImage> m_image;
-    mutable TextureRef                m_texture;
-    mutable bool                      m_texture_dirty = false;
-    std::string                       m_filename;
-    mutable float                     m_cached_histogram_exposure;
-    mutable std::atomic<bool>         m_histogram_dirty;
-    mutable HistogramTaskPtr          m_histograms;
-    mutable CommandHistory            m_history;
+    mutable HDRImagePtr       m_image;
+    mutable TextureRef        m_texture;
+    mutable bool              m_texture_dirty = false;
+    std::string               m_filename;
+    mutable float             m_cached_histogram_exposure;
+    mutable std::atomic<bool> m_histogram_dirty;
+    mutable HistogramTaskPtr  m_histograms;
+    mutable CommandHistory    m_history;
 
     mutable ModifyingTaskPtr m_async_command   = nullptr;
     mutable bool             m_async_retrieved = false;
@@ -143,12 +145,9 @@ protected:
     mutable Box2i m_roi = Box2i();
 
     // various callback functions
-    VoidVoidFunc m_modify_done_callback;
+    VoidVoidFunc m_async_modify_done_callback;
 };
 
 #define hdrview_image_icon(ctx, name, imageFlags)                                                                      \
     hdrview_get_icon(ctx, #name, imageFlags, (uint8_t *)name##_png, name##_png_size)
 int hdrview_get_icon(NVGcontext *ctx, const std::string &name, int imageFlags, uint8_t *data, uint32_t size);
-
-using ConstImagePtr = std::shared_ptr<const XPUImage>;
-using ImagePtr      = std::shared_ptr<XPUImage>;

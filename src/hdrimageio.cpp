@@ -237,9 +237,9 @@ bool HDRImage::load(const string &filename)
     return false;
 }
 
-shared_ptr<HDRImage> load_image(const string &filename)
+HDRImagePtr load_image(const string &filename)
 {
-    shared_ptr<HDRImage> ret = make_shared<HDRImage>();
+    HDRImagePtr ret = make_shared<HDRImage>();
     if (ret->load(filename))
         return ret;
     return nullptr;

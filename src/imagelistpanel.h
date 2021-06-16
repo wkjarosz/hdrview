@@ -24,21 +24,22 @@ public:
 
     void draw(NVGcontext *ctx) override;
 
-    bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
-    bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+    virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
+    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 
     void repopulate_image_list();
 
     // Const access to the loaded images. Modification only possible via modify_image, undo, redo
-    int           num_images() const { return int(m_images.size()); }
-    int           current_image_index() const { return m_current; }
-    int           reference_image_index() const { return m_reference; }
-    ConstImagePtr current_image() const { return image(m_current); }
-    ImagePtr      current_image() { return image(m_current); }
-    ConstImagePtr reference_image() const { return image(m_reference); }
-    ImagePtr      reference_image() { return image(m_reference); }
-    ConstImagePtr image(int index) const;
-    ImagePtr      image(int index);
+    int              num_images() const { return int(m_images.size()); }
+    int              current_image_index() const { return m_current; }
+    int              reference_image_index() const { return m_reference; }
+    ConstXPUImagePtr current_image() const { return image(m_current); }
+    XPUImagePtr      current_image() { return image(m_current); }
+    ConstXPUImagePtr reference_image() const { return image(m_reference); }
+    XPUImagePtr      reference_image() { return image(m_reference); }
+    ConstXPUImagePtr image(int index) const;
+    XPUImagePtr      image(int index);
 
     bool set_current_image_index(int newIndex, bool forceCallback = false);
     bool set_reference_image_index(int newIndex);
@@ -53,7 +54,7 @@ public:
     void sort_images();
 
     // Loading, saving, closing, and rearranging the images in the image stack
-    void new_image(std::shared_ptr<HDRImage> img);
+    void new_image(HDRImagePtr img);
     void load_images(const std::vector<std::string> &filenames);
     bool save_image(const std::string &filename, float exposure = 0.f, float gamma = 2.2f, bool sRGB = true,
                     bool dither = true);
@@ -61,8 +62,8 @@ public:
     void close_all_images();
 
     // Modify the image data
-    void modify_image(const ImageCommand &command);
-    void modify_image(const ImageCommandWithProgress &command);
+    void async_modify_image(const ConstImageCommand &command);
+    void async_modify_image(const ConstImageCommandWithProgress &command);
     void undo();
     void redo();
 
@@ -96,13 +97,13 @@ private:
     void update_filter();
     bool is_valid(int index) const { return index >= 0 && index < num_images(); }
 
-    std::vector<ImagePtr> m_images;         ///< The loaded images
-    int                   m_current   = -1; ///< The currently selected image
-    int                   m_reference = -1; ///< The currently selected reference image
+    std::vector<XPUImagePtr> m_images;         ///< The loaded images
+    int                      m_current   = -1; ///< The currently selected image
+    int                      m_reference = -1; ///< The currently selected reference image
 
     int m_previous = -1; ///< The previously selected image
 
-    bool m_image_modify_done_requested = false;
+    bool m_image_async_modify_done_requested = false;
 
     HDRViewScreen *m_screen        = nullptr;
     HDRImageView * m_image_view    = nullptr;
@@ -133,6 +134,6 @@ private:
     nanogui::Vector2i m_dragging_start_pos;
 
     // various callback functions
-    IntCallback  m_modify_done_callback;
+    IntCallback  m_async_modify_done_callback;
     VoidCallback m_num_images_callback;
 };
