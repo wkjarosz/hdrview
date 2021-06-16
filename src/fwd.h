@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <nanogui/vector.h>
 
 // forward declarations
@@ -25,8 +26,21 @@ class HelpWindow;
 class EditImagePanel;
 class ImageListPanel;
 class Timer;
+
+class Brush;
+class Tool;
+class RectangularMarquee;
+class HandTool;
+class BrushTool;
+
 template <typename T>
 class Range;
+
+using ConstHDRImagePtr = std::shared_ptr<const HDRImage>;
+using HDRImagePtr      = std::shared_ptr<HDRImage>;
+
+using ConstXPUImagePtr = std::shared_ptr<const XPUImage>;
+using XPUImagePtr      = std::shared_ptr<XPUImage>;
 
 NAMESPACE_BEGIN(nanogui)
 class Widget;
@@ -44,6 +58,7 @@ template <typename Scalar>
 class FloatBox;
 
 class HDRColorPicker;
+class DualHDRColorPicker;
 class ColorWheel2;
 class ColorSlider;
 class MultiGraph;

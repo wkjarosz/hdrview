@@ -7,7 +7,9 @@
 #pragma once
 
 #include "fwd.h"
+#include "hdrcolorpicker.h"
 #include "hdrimageview.h"
+#include "tool.h"
 #include <nanogui/nanogui.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>
@@ -20,13 +22,6 @@ using namespace nanogui;
 class HDRViewScreen : public Screen
 {
 public:
-    enum ETool : uint32_t
-    {
-        Tool_None = 0,
-        Tool_Rectangular_Marquee,
-        Tool_Num_Tools
-    };
-
     HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
     ~HDRViewScreen() override;
 
@@ -38,11 +33,16 @@ public:
     bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
-    ETool tool() const { return m_tool; }
-    void  set_tool(ETool t);
+    Tool::ETool tool() const { return m_tool; }
+    void        set_tool(Tool::ETool t);
 
     const HDRColorPicker *active_colorpicker() const { return m_active_colorpicker; }
     void                  set_active_colorpicker(HDRColorPicker *cp);
+
+    const HDRColorPicker *foreground() const { return m_color_btns->foreground(); }
+    HDRColorPicker *      foreground() { return m_color_btns->foreground(); }
+    const HDRColorPicker *background() const { return m_color_btns->background(); }
+    HDRColorPicker *      background() { return m_color_btns->background(); }
 
     bool load_image();
     void new_image();
@@ -72,19 +72,19 @@ private:
     ImageListPanel *m_images_panel;
     EditImagePanel *m_edit_panel;
 
-    Button *     m_help_button;
-    Button *     m_side_panel_button;
-    HelpWindow * m_help_window = nullptr;
-    Label *      m_zoom_label;
-    Label *      m_status_label;
-    Label *      m_path_info_label;
-    Label *      m_res_info_label;
-    Label *      m_color32_info_label;
-    Label *      m_color8_info_label;
-    Label *      m_pixel_info_label;
-    Label *      m_roi_info_label;
-    Label *      m_stats_label;
-    PopupButton *m_info_btn;
+    Button *            m_help_button;
+    Button *            m_side_panel_button;
+    HelpWindow *        m_help_window = nullptr;
+    Label *             m_zoom_label;
+    Label *             m_status_label;
+    Label *             m_path_info_label;
+    Label *             m_res_info_label;
+    Label *             m_color32_info_label;
+    Label *             m_color8_info_label;
+    Label *             m_pixel_info_label;
+    Label *             m_roi_info_label;
+    Label *             m_stats_label;
+    DualHDRColorPicker *m_color_btns;
 
     VScrollPanel *m_side_scroll_panel;
     Widget *      m_side_panel_contents;
@@ -98,9 +98,9 @@ private:
         BOTTOM_PANEL = 1 << 2,
     } m_animation_goal = EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL);
 
-    ETool                     m_tool = Tool_None;
-    std::vector<ToolButton *> m_toolbuttons;
-    HDRColorPicker *          m_active_colorpicker = nullptr;
+    Tool::ETool         m_tool = Tool::Tool_None;
+    std::vector<Tool *> m_tools;
+    HDRColorPicker *    m_active_colorpicker = nullptr;
 
     MessageDialog *m_ok_to_quit_dialog = nullptr;
 
@@ -109,4 +109,6 @@ private:
 
     std::thread      m_gui_refresh_thread;
     std::atomic<int> m_gui_refresh = 0;
+
+    Vector2i m_roi_clicked;
 };

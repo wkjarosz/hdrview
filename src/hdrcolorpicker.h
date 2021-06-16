@@ -7,6 +7,7 @@
 #pragma once
 
 #include "colorwheel.h"
+#include "fwd.h"
 #include <nanogui/popupbutton.h>
 #include <nanogui/toolbutton.h>
 
@@ -51,11 +52,12 @@ public:
      *     The color initially selected by this HDRColorPicker (default: Red).
      */
 
-    HDRColorPicker(Widget *parent, const Color &color = Color(1.f, 0.f, 0.f, 1.f), float exposure = 0.f,
-                   int comp = ALL);
+    HDRColorPicker(Widget *parent, const Color &color = Color(255, 255), float exp = 0.f, int comp = ALL);
+
+    virtual void draw(NVGcontext *ctx) override;
 
     /// The callback executed when the ColorWheel changes.
-    std::function<void(const Color &, float)> callback() const { return m_callback; }
+    // std::function<void(const Color &, float)> callback() const { return m_callback; }
 
     /**
      * Sets the callback that is executed as the ColorWheel itself is changed.  Set
@@ -63,11 +65,11 @@ public:
      * before the user clicks \ref nanogui::HDRColorPicker::m_pick_button or
      * \ref nanogui::HDRColorPicker::m_pick_button.
      */
-    void set_callback(const ColorCallback &cb)
-    {
-        m_callback = cb;
-        m_callback(m_color, m_exposure);
-    }
+    // void set_callback(const ColorCallback &cb)
+    // {
+    //     m_callback = cb;
+    //     m_callback(m_color, m_exposure);
+    // }
 
     /**
      * The callback to execute when a new Color is selected on the ColorWheel
@@ -160,6 +162,31 @@ protected:
 
     Color m_color, m_previous_color;
     float m_exposure, m_previous_exposure;
+};
+
+class DualHDRColorPicker : public Widget
+{
+public:
+    DualHDRColorPicker(Widget *parent, const Color &fgcolor = Color(255, 255), float fgexp = 0.f,
+                       int fgcomp = HDRColorPicker::ALL, const Color &bgcolor = Color(0, 255), float bgexp = 0.f,
+                       int bgcomp = HDRColorPicker::ALL);
+
+    virtual void draw(NVGcontext *ctx) override;
+    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+    virtual void perform_layout(NVGcontext *ctx) override;
+
+    const HDRColorPicker *foreground() const { return m_foreground; }
+    HDRColorPicker *      foreground() { return m_foreground; }
+    const HDRColorPicker *background() const { return m_background; }
+    HDRColorPicker *      background() { return m_background; }
+
+    void swap_colors();
+
+protected:
+    Box2i foreground_box() const;
+    Box2i background_box() const;
+
+    HDRColorPicker *m_background, *m_foreground;
 };
 
 NAMESPACE_END(nanogui)

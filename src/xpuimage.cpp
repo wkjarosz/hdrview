@@ -124,7 +124,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 
 XPUImage::XPUImage(bool modified) :
     m_image(make_shared<HDRImage>()), m_filename(), m_cached_histogram_exposure(NAN), m_histogram_dirty(true),
-    m_history(modified), m_modify_done_callback(XPUImage::VoidVoidFunc())
+    m_history(modified), m_async_modify_done_callback(XPUImage::VoidVoidFunc())
 {
     m_texture = new Texture(Texture::PixelFormat::RGBA, Texture::ComponentFormat::Float32, nanogui::Vector2i(1, 1),
                             Texture::InterpolationMode::Trilinear, Texture::InterpolationMode::Nearest,
@@ -156,18 +156,17 @@ bool XPUImage::has_redo() const
 
 bool XPUImage::can_modify() const { return !m_async_command; }
 
-void XPUImage::async_modify(const ImageCommandWithProgress &command)
+void XPUImage::async_modify(const ConstImageCommandWithProgress &command)
 {
     // make sure any pending edits are done
     wait_for_async_result();
 
-    m_async_command =
-        make_shared<ModifyingTask>([this, command](AtomicProgress &prog) { return command(m_image, prog); });
+    m_async_command   = make_shared<ModifyingTask>([this, command](AtomicProgress &p) { return command(m_image, p); });
     m_async_retrieved = false;
     m_async_command->compute();
 }
 
-void XPUImage::async_modify(const ImageCommand &command)
+void XPUImage::async_modify(const ConstImageCommand &command)
 {
     // make sure any pending edits are done
     wait_for_async_result();
@@ -175,6 +174,43 @@ void XPUImage::async_modify(const ImageCommand &command)
     m_async_command   = make_shared<ModifyingTask>([this, command](void) { return command(m_image); });
     m_async_retrieved = false;
     m_async_command->compute();
+}
+
+void XPUImage::direct_modify(const ImageCommand &command)
+{
+    // make sure any pending edits are done
+    wait_for_async_result();
+
+    command(m_image);
+
+    m_texture_dirty = true;
+
+    upload_to_GPU();
+}
+
+void XPUImage::start_modify(const ConstImageCommand &command)
+{
+    // make sure any pending edits are done
+    wait_for_async_result();
+
+    auto result = command(m_image);
+
+    if (!result.second)
+    {
+        // if there is no undo, treat this as a continuation of the previous edit
+        // so don't create a new undo record
+        if (result.first)
+            m_image = result.first;
+    }
+    else
+    {
+        m_history.add_command(result.second);
+        m_image = result.first;
+    }
+
+    m_texture_dirty = true;
+
+    upload_to_GPU();
 }
 
 bool XPUImage::undo()
@@ -215,11 +251,11 @@ bool XPUImage::check_async_result() const
     return wait_for_async_result();
 }
 
-void XPUImage::modify_done() const
+void XPUImage::async_modify_done() const
 {
     m_async_command = nullptr;
-    if (m_modify_done_callback)
-        m_modify_done_callback();
+    if (m_async_modify_done_callback)
+        m_async_modify_done_callback();
 }
 
 bool XPUImage::wait_for_async_result() const
@@ -258,7 +294,7 @@ bool XPUImage::wait_for_async_result() const
         if (!result.first)
         {
             // image loading failed
-            modify_done();
+            async_modify_done();
             return false;
         }
     }
@@ -292,7 +328,7 @@ void XPUImage::upload_to_GPU() const
     spdlog::trace("Uploading texture to GPU took {} ms", timer.lap());
 
     // now that we grabbed the results and uploaded to GPU, destroy the task
-    modify_done();
+    async_modify_done();
 }
 
 XPUImage::TextureRef XPUImage::texture() const

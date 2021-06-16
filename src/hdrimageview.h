@@ -24,10 +24,13 @@ public:
     using TextureRef    = ref<Texture>;
     using PixelCallback = std::function<void(const Vector2i &, char **, size_t)>;
     using HoverCallback = std::function<void(const Vector2i &, const Color4 &, const Color4 &)>;
+    using MouseCallback = std::function<bool(const Vector2i &p, int button, bool down, int modifiers)>;
+    using DragCallback  = std::function<bool(const Vector2i &p, const Vector2i &rel, int button, int modifiers)>;
     using FloatCallback = std::function<void(float)>;
     using BoolCallback  = std::function<void(bool)>;
     using VoidCallback  = std::function<void(void)>;
     using ROICallback   = std::function<void(const Box2i &)>;
+    using DrawCallback  = std::function<void(NVGcontext *ctx)>;
 
     /// Initialize the widget
     HDRImageView(Widget *parent);
@@ -42,8 +45,8 @@ public:
     virtual void draw_contents() override;
 
     // Getters and setters
-    void set_current_image(ConstImagePtr cur);
-    void set_reference_image(ConstImagePtr ref);
+    void set_current_image(XPUImagePtr cur);
+    void set_reference_image(XPUImagePtr ref);
 
     /// Return the pixel offset of the zoomed image rectangle
     Vector2f offset() const { return m_offset; }
@@ -99,6 +102,8 @@ public:
     float zoom_level() const { return m_zoom_level; }
     void  set_zoom_level(float l);
 
+    float zoom() const { return m_zoom; }
+
     EChannel channel() { return m_channel; }
     void     set_channel(EChannel c) { m_channel = c; }
 
@@ -141,13 +146,7 @@ public:
     bool draw_values_on() const { return m_draw_values; }
     void set_draw_values(bool b) { m_draw_values = b; }
 
-    bool draw_eyedropper_on() const { return m_draw_eyedropper; }
-    void set_draw_eyedropper(bool b) { m_draw_eyedropper = b; }
-
     Color4 tonemap(const Color4 &color) const;
-
-    void select_all();
-    void select_none();
 
     // Callback functions
 
@@ -175,43 +174,50 @@ public:
     HoverCallback hover_callback() const { return m_hover_callback; }
     void          set_hover_callback(const HoverCallback &cb) { m_hover_callback = cb; }
 
-    /// Callback executed when the ROI changes
-    ROICallback roi_callback() const { return m_roi_callback; }
-    void        set_roi_callback(const ROICallback &cb) { m_roi_callback = cb; }
+    /// Callback executed on mouse clicks
+    MouseCallback mouse_callback() const { return m_mouse_callback; }
+    void          set_mouse_callback(const MouseCallback &cb) { m_mouse_callback = cb; }
+
+    /// Callback executed on mouse clicks
+    DragCallback drag_callback() const { return m_drag_callback; }
+    void         set_drag_callback(const DragCallback &cb) { m_drag_callback = cb; }
 
     /// Callback executed when we change which image is displayed
     VoidCallback changed_callback() const { return m_changed_callback; }
     void         set_changed_callback(const VoidCallback &cb) { m_changed_callback = cb; }
 
+    /// Callback executed at the end of drawing
+    DrawCallback draw_callback() const { return m_draw_callback; }
+    void         set_draw_callback(const DrawCallback &cb) { m_draw_callback = cb; }
+
 protected:
     Vector2f position_f() const { return Vector2f(m_pos); }
     Vector2f size_f() const { return Vector2f(m_size); }
 
-    Vector2i image_size(ConstImagePtr img) const { return img ? img->size() : Vector2i(0, 0); }
-    Vector2f image_size_f(ConstImagePtr img) const { return Vector2f(image_size(img)); }
-    Vector2f scaled_image_size_f(ConstImagePtr img) const { return m_zoom * image_size_f(img); }
+    Vector2i image_size(ConstXPUImagePtr img) const { return img ? img->size() : Vector2i(0, 0); }
+    Vector2f image_size_f(ConstXPUImagePtr img) const { return Vector2f(image_size(img)); }
+    Vector2f scaled_image_size_f(ConstXPUImagePtr img) const { return m_zoom * image_size_f(img); }
 
-    Vector2f center_offset(ConstImagePtr img) const;
+    Vector2f center_offset(ConstXPUImagePtr img) const;
 
     // Helper drawing methods.
-    void draw_eyedropper(NVGcontext *ctx) const;
     void draw_widget_border(NVGcontext *ctx) const;
     void draw_image_border(NVGcontext *ctx) const;
     void draw_helpers(NVGcontext *ctx) const;
     void draw_pixel_grid(NVGcontext *ctx) const;
     void draw_pixel_info(NVGcontext *ctx) const;
     void draw_ROI(NVGcontext *ctx) const;
-    void image_position_and_scale(Vector2f &position, Vector2f &scale, ConstImagePtr image);
+    void image_position_and_scale(Vector2f &position, Vector2f &scale, ConstXPUImagePtr image);
 
-    ConstImagePtr m_current_image;
-    ConstImagePtr m_reference_image;
-    TextureRef    m_null_image;
+    XPUImagePtr m_current_image;
+    XPUImagePtr m_reference_image;
+    TextureRef  m_null_image;
 
     ref<Shader> m_image_shader;
     TextureRef  m_dither_tex;
 
     float m_exposure = 0.f, m_gamma = 2.2f;
-    bool  m_sRGB = true, m_dither = true, m_draw_grid = true, m_draw_values = true, m_draw_eyedropper = false;
+    bool  m_sRGB = true, m_dither = true, m_draw_grid = true, m_draw_values = true;
 
     // Image display parameters.
     float      m_zoom;                                  ///< The scale/zoom of the image
@@ -234,8 +240,10 @@ protected:
     FloatCallback m_zoom_callback;
     PixelCallback m_pixel_callback;
     HoverCallback m_hover_callback;
-    ROICallback   m_roi_callback;
+    MouseCallback m_mouse_callback;
+    DragCallback  m_drag_callback;
     VoidCallback  m_changed_callback;
+    DrawCallback  m_draw_callback;
 
     Vector2i m_clicked;
 };

@@ -53,57 +53,69 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Box manipulation
     //-----------------------------------------------------------------------
-    void make_empty()
+    BoxT &make_empty()
     {
         min = Vec(std::numeric_limits<Value>::max());
         max = Vec(std::numeric_limits<Value>::lowest());
+        return *this;
     }
-    void enclose(const Vec &point)
+    BoxT  expanded(Value d) const { return BoxT(min - d, max + d); }
+    BoxT  expanded(const Vec &d) const { return BoxT(min - d, max + d); }
+    BoxT  expanded(const BoxT &d) const { return BoxT(min - d.min, max + d.max); }
+    BoxT &set_size(const Vec &s)
+    {
+        max = min + s;
+        return *this;
+    }
+    BoxT &enclose(const Vec &point)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::min(point[i], min[i]);
             max[i] = std::max(point[i], max[i]);
         }
+        return *this;
     }
-    BoxT expanded(Value d) const { return BoxT(min - d, max + d); }
-    BoxT expanded(const Vec &d) const { return BoxT(min - d, max + d); }
-    BoxT expanded(const BoxT &d) const { return BoxT(min - d.min, max + d.max); }
-    void enclose(const BoxT &box)
+    BoxT &enclose(const BoxT &box)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::min(box.min[i], min[i]);
             max[i] = std::max(box.max[i], max[i]);
         }
+        return *this;
     }
-    void intersect(const BoxT &box)
+    BoxT &intersect(const BoxT &box)
     {
         for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::max(box.min[i], min[i]);
             max[i] = std::min(box.max[i], max[i]);
         }
+        return *this;
     }
-    void move_min_to(const Vec &newMin)
+    BoxT &move_min_to(const Vec &newMin)
     {
         Vec diff(newMin - min);
         min = newMin;
         max += diff;
+        return *this;
     }
-    void move_max_to(const Vec &newMax)
+    BoxT &move_max_to(const Vec &newMax)
     {
         Vec diff(newMax - max);
         max = newMax;
         min += diff;
+        return *this;
     }
-    void make_valid()
+    BoxT &make_valid()
     {
         for (size_t i = 0; i < Dims; ++i)
         {
             if (min[i] > max[i])
                 std::swap(min[i], max[i]);
         }
+        return *this;
     }
     //@}
 

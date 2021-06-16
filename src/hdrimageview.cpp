@@ -65,7 +65,13 @@ std::string add_includes(std::string shader_string)
 
 HDRImageView::HDRImageView(Widget *parent) :
     Canvas(parent, 1, false, false, true), m_exposure_callback(FloatCallback()), m_gamma_callback(FloatCallback()),
-    m_sRGB_callback(BoolCallback()), m_zoom_callback(FloatCallback()), m_roi_callback(ROICallback()),
+    m_sRGB_callback(BoolCallback()), m_zoom_callback(FloatCallback()),
+    m_drag_callback(
+        [this](const Vector2i &p, const Vector2i &rel, int, int)
+        {
+            set_image_coordinate_at(p + rel, image_coordinate_at(p));
+            return false;
+        }),
     m_changed_callback(VoidCallback())
 {
     m_zoom   = 1.f / screen()->pixel_ratio();
@@ -113,7 +119,7 @@ Color4 HDRImageView::tonemap(const Color4 &color) const
     return m_sRGB ? LinearToSRGB(color * gain) : pow(color * gain, Color4(1.0 / m_gamma));
 }
 
-void HDRImageView::set_current_image(ConstImagePtr cur)
+void HDRImageView::set_current_image(XPUImagePtr cur)
 {
     // spdlog::debug("setting current image: {}", cur.get());
     m_current_image = cur;
@@ -125,7 +131,7 @@ void HDRImageView::set_current_image(ConstImagePtr cur)
     m_changed_callback();
 }
 
-void HDRImageView::set_reference_image(ConstImagePtr ref)
+void HDRImageView::set_reference_image(XPUImagePtr ref)
 {
     // spdlog::debug("setting reference image: {}", ref.get());
     m_reference_image = ref;
@@ -135,7 +141,7 @@ void HDRImageView::set_reference_image(ConstImagePtr ref)
         m_image_shader->set_texture("secondary_texture", m_null_image);
 }
 
-Vector2f HDRImageView::center_offset(ConstImagePtr img) const { return (size_f() - scaled_image_size_f(img)) / 2; }
+Vector2f HDRImageView::center_offset(ConstXPUImagePtr img) const { return (size_f() - scaled_image_size_f(img)) / 2; }
 
 Vector2f HDRImageView::image_coordinate_at(const Vector2f &position) const
 {
@@ -165,7 +171,7 @@ void HDRImageView::set_image_coordinate_at(const Vector2f &position, const Vecto
     m_offset -= center_offset(m_current_image);
 }
 
-void HDRImageView::image_position_and_scale(Vector2f &position, Vector2f &scale, ConstImagePtr image)
+void HDRImageView::image_position_and_scale(Vector2f &position, Vector2f &scale, ConstXPUImagePtr image)
 {
     scale    = scaled_image_size_f(image) / Vector2f(size());
     position = (m_offset + center_offset(image)) / Vector2f(size());
@@ -234,49 +240,13 @@ void HDRImageView::zoom_out()
     m_zoom_callback(m_zoom);
 }
 
-void HDRImageView::select_all()
-{
-    if (m_current_image)
-    {
-        m_current_image->roi() = m_current_image->box();
-        m_roi_callback(m_current_image->roi());
-    }
-}
-
-void HDRImageView::select_none()
-{
-    if (m_current_image)
-    {
-        m_current_image->roi() = Box2i();
-        m_roi_callback(m_current_image->roi());
-    }
-}
-
 bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (!m_enabled || !m_current_image)
         return false;
 
-    if (auto s = dynamic_cast<HDRViewScreen *>(screen()))
-    {
-        if (s->tool() == HDRViewScreen::Tool_Rectangular_Marquee)
-        {
-            if (down)
-            {
-                auto ic                = image_coordinate_at(p - position());
-                m_clicked              = Vector2i(round(ic.x()), round(ic.y()));
-                m_current_image->roi() = Box2i(m_current_image->box().clamp(m_clicked));
-            }
-            else
-            {
-                if (!m_current_image->roi().has_volume())
-                    m_current_image->roi() = Box2i();
-
-                m_roi_callback(m_current_image->roi());
-            }
-            return true;
-        }
-    }
+    if (m_mouse_callback)
+        m_mouse_callback(p, button, down, modifiers);
 
     return false;
 }
@@ -303,29 +273,12 @@ bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i &rel, in
     return false;
 }
 
-bool HDRImageView::mouse_drag_event(const Vector2i &p, const Vector2i &rel, int /* button */, int /*modifiers*/)
+bool HDRImageView::mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
     if (!m_enabled || !m_current_image)
         return false;
 
-    if (auto s = dynamic_cast<HDRViewScreen *>(screen()))
-    {
-        if (s->tool() == HDRViewScreen::Tool_None)
-            set_image_coordinate_at(p + rel, image_coordinate_at(p));
-        else
-        {
-            auto     ic = image_coordinate_at(p - position());
-            Vector2i drag_pixel(round(ic.x()), round(ic.y()));
-
-            m_current_image->roi() = Box2i(m_current_image->box().clamp(m_clicked));
-            m_current_image->roi().enclose(drag_pixel);
-            m_current_image->roi().intersect(m_current_image->box());
-
-            m_roi_callback(m_current_image->roi());
-        }
-    }
-
-    return false;
+    return m_drag_callback(p, rel, button, modifiers);
 }
 
 bool HDRImageView::scroll_event(const Vector2i &p, const Vector2f &rel)
@@ -357,19 +310,42 @@ bool HDRImageView::scroll_event(const Vector2i &p, const Vector2f &rel)
     return false;
 }
 
-bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int /* modifiers */)
+bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int modifiers)
 {
     if (!m_enabled || !m_current_image)
         return false;
 
-    if (action == GLFW_PRESS)
+    if (action != GLFW_PRESS)
+        return false;
+
+    switch (key)
     {
-        if (key == GLFW_KEY_R)
+    case '=':
+    case GLFW_KEY_KP_ADD:
+        spdlog::trace("KEY `=` pressed");
+        zoom_in();
+        return true;
+
+    case '-':
+    case GLFW_KEY_KP_SUBTRACT:
+        spdlog::trace("KEY `-` pressed");
+        zoom_out();
+        return true;
+
+    case GLFW_KEY_KP_0:
+    case '0':
+        if (modifiers & SYSTEM_COMMAND_MOD)
         {
             center();
+            fit();
+            // draw_all();
             return true;
         }
+        return false;
+
+    case GLFW_KEY_R: center(); return true;
     }
+
     return false;
 }
 
@@ -385,52 +361,12 @@ void HDRImageView::draw(NVGcontext *ctx)
         draw_image_border(ctx);
         draw_pixel_grid(ctx);
         draw_pixel_info(ctx);
-        draw_ROI(ctx);
     }
 
     draw_widget_border(ctx);
-    draw_eyedropper(ctx);
-}
 
-void HDRImageView::draw_eyedropper(NVGcontext *ctx) const
-{
-    // draw the colorpicker's eyedropper
-    if (m_draw_eyedropper && m_current_image)
-    {
-        auto center = screen()->mouse_pos();
-
-        Vector2i        pixel(image_coordinate_at((center - position())));
-        const HDRImage &image = m_current_image->image();
-
-        if (image.contains(pixel.x(), pixel.y()))
-        {
-            Color4 color_orig  = image(pixel.x(), pixel.y());
-            Color4 color_toned = tonemap(color_orig);
-            // FIXME: the conversion operator doesn't seem to work on linux
-            // Color ng_color(color_toned);
-            Color ng_color(color_toned[0], color_toned[1], color_toned[2], color_toned[3]);
-
-            nvgBeginPath(ctx);
-            nvgCircle(ctx, center.x(), center.y(), 26);
-            nvgFillColor(ctx, ng_color);
-            nvgFill(ctx);
-
-            nvgStrokeColor(ctx, Color(0, 255));
-            nvgStrokeWidth(ctx, 2 + 1.f);
-            nvgStroke(ctx);
-
-            nvgStrokeColor(ctx, Color(192, 255));
-            nvgStrokeWidth(ctx, 2);
-            nvgStroke(ctx);
-
-            nvgFontSize(ctx, font_size());
-            nvgFontFace(ctx, "icons");
-            nvgFillColor(ctx, ng_color.contrasting_color());
-            nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-
-            nvgText(ctx, center.x(), center.y(), utf8(FA_EYE_DROPPER).data(), nullptr);
-        }
-    }
+    if (m_draw_callback)
+        m_draw_callback(ctx);
 }
 
 void HDRImageView::draw_image_border(NVGcontext *ctx) const

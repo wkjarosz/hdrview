@@ -27,31 +27,21 @@
 #endif
 
 template <typename T>
+inline T sqr(T x)
+{
+    return x * x;
+}
+
+template <typename T>
 inline T sign(T a)
 {
     return (a > 0) ? T(1) : (a < 0) ? T(-1) : 0;
 }
 
-/*!
- * @brief   Clamps a double between two bounds.
- *
- * This function has been specially crafted to prevent NaNs from propagating.
- *
- * @param a The value to clamp.
- * @param l The lower bound.
- * @param h The upper bound.
- * @return  The value \a a clamped to the lower and upper bounds.
- */
-template <typename T>
-inline T clamp(T a, T l, T h)
-{
-    return (a >= l) ? ((a <= h) ? a : h) : l;
-}
-
 template <typename T>
 inline T clamp01(T a)
 {
-    return ::clamp(a, T(0), T(1));
+    return std::clamp(a, T(0), T(1));
 }
 
 /*!
@@ -110,7 +100,7 @@ inline T lerpFactor(T a, T b, T m)
 template <typename T>
 inline T smoothStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
     return t * t * (T(3) - T(2) * t);
 }
 
@@ -128,7 +118,7 @@ inline T smoothStep(T a, T b, T x)
 template <typename T>
 inline T smootherStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
     return t * t * t * (t * (t * T(6) - T(15)) + T(10));
 }
 
@@ -143,7 +133,7 @@ inline T smootherStep(T a, T b, T x)
 template <typename T>
 inline T cosStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
     return T(0.5) * (T(1) - cos(t * T(M_PI)));
 }
 
@@ -151,7 +141,7 @@ inline T cosStep(T a, T b, T x)
 template <typename T>
 inline T inverseCosStep(T a, T b, T x)
 {
-    T t = ::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
     return acos(T(1) - T(2) * t) * T(M_1_PI);
 }
 

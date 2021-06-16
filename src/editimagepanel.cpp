@@ -134,8 +134,8 @@ Button *create_colorspace_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
             add_ok_cancel_btns(gui,
                                [&]()
                                {
-                                   images_panel->modify_image(
-                                       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                                        {
                                            return {make_shared<HDRImage>(img->apply_function(
                                                        [](const Color4 &c) { return convertColorSpace(c, dst, src); },
@@ -204,8 +204,8 @@ Button *create_exposure_gamma_btn(Widget *parent, HDRViewScreen *screen, ImageLi
             add_ok_cancel_btns(gui,
                                [&]()
                                {
-                                   images_panel->modify_image(
-                                       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                                        {
                                            spdlog::debug("{}; {}; {}", exposure, offset, gamma);
                                            return {make_shared<HDRImage>(img->apply_function(
@@ -324,8 +324,8 @@ Button *create_brightness_constract_btn(Widget *parent, HDRViewScreen *screen, I
             add_ok_cancel_btns(gui,
                                [&]()
                                {
-                                   images_panel->modify_image(
-                                       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                                        {
                                            return {make_shared<HDRImage>(img->brightness_contrast(
                                                        brightness, contrast, linear, channelMap[channel],
@@ -408,8 +408,8 @@ Button *create_filmic_tonemapping_btn(Widget *parent, HDRViewScreen *screen, Ima
                 gui,
                 [&]()
                 {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                         {
                             return {make_shared<HDRImage>(img->apply_function(
                                         [](const Color4 &c)
@@ -477,8 +477,8 @@ Button *create_hsl_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *im
             add_ok_cancel_btns(gui,
                                [&]()
                                {
-                                   images_panel->modify_image(
-                                       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                                        {
                                            return {make_shared<HDRImage>(img->apply_function(
                                                        [](Color4 c)
@@ -537,8 +537,8 @@ Button *create_gaussian_filter_btn(Widget *parent, HDRViewScreen *screen, ImageL
                 gui,
                 [&]()
                 {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
                         {
                             auto roi = images_panel->current_image()->roi();
                             return {make_shared<HDRImage>(
@@ -586,19 +586,18 @@ Button *create_box_filter_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(
-                gui,
-                [&]()
-                {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->box_blurred(width, height, progress, border_mode_x,
-                                                                           border_mode_y,
-                                                                           images_panel->current_image()->roi())),
-                                    nullptr};
-                        });
-                });
+            add_ok_cancel_btns(gui,
+                               [&]()
+                               {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
+                                       {
+                                           return {make_shared<HDRImage>(img->box_blurred(
+                                                       width, height, progress, border_mode_x, border_mode_y,
+                                                       images_panel->current_image()->roi())),
+                                                   nullptr};
+                                       });
+                               });
 
             window->center();
             window->request_focus();
@@ -634,18 +633,17 @@ Button *create_bilateral_filter_btn(Widget *parent, HDRViewScreen *screen, Image
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(
-                gui,
-                [&]()
-                {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->bilateral_filtered(valueSigma, rangeSigma, progress,
-                                                                                  border_mode_x, border_mode_y)),
-                                    nullptr};
-                        });
-                });
+            add_ok_cancel_btns(gui,
+                               [&]()
+                               {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
+                                       {
+                                           return {make_shared<HDRImage>(img->bilateral_filtered(
+                                                       valueSigma, rangeSigma, progress, border_mode_x, border_mode_y)),
+                                                   nullptr};
+                                       });
+                               });
 
             window->center();
             window->request_focus();
@@ -681,19 +679,18 @@ Button *create_unsharp_mask_filter_btn(Widget *parent, HDRViewScreen *screen, Im
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(
-                gui,
-                [&]()
-                {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->unsharp_masked(sigma, strength, progress, border_mode_x,
-                                                                              border_mode_y,
-                                                                              images_panel->current_image()->roi())),
-                                    nullptr};
-                        });
-                });
+            add_ok_cancel_btns(gui,
+                               [&]()
+                               {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
+                                       {
+                                           return {make_shared<HDRImage>(img->unsharp_masked(
+                                                       sigma, strength, progress, border_mode_x, border_mode_y,
+                                                       images_panel->current_image()->roi())),
+                                                   nullptr};
+                                       });
+                               });
 
             window->center();
             window->request_focus();
@@ -726,19 +723,18 @@ Button *create_median_filter_btn(Widget *parent, HDRViewScreen *screen, ImageLis
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(
-                gui,
-                [&]()
-                {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->median_filtered(radius, progress, border_mode_x,
-                                                                               border_mode_y, false,
-                                                                               images_panel->current_image()->roi())),
-                                    nullptr};
-                        });
-                });
+            add_ok_cancel_btns(gui,
+                               [&]()
+                               {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
+                                       {
+                                           return {make_shared<HDRImage>(img->median_filtered(
+                                                       radius, progress, border_mode_x, border_mode_y, false,
+                                                       images_panel->current_image()->roi())),
+                                                   nullptr};
+                                       });
+                               });
 
             window->center();
             window->request_focus();
@@ -837,8 +833,8 @@ Button *create_resize_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel 
             add_ok_cancel_btns(gui,
                                [&]()
                                {
-                                   images_panel->modify_image(
-                                       [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img) -> ImageCommandResult {
                                            return {make_shared<HDRImage>(img->resized(width, height)), nullptr};
                                        });
                                });
@@ -977,8 +973,8 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
                     //};
                     auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
 
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
                         {
                             return {make_shared<HDRImage>(img->resampled(width, height, progress, warp, samples,
                                                                          sampler, border_mode_x, border_mode_y)),
@@ -1027,8 +1023,8 @@ Button *create_shift_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
                 gui,
                 [&]()
                 {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
                         {
                             // by default use a no-op passthrough warp function
                             function<Vector2f(const Vector2f &)> shift = [&](const Vector2f &uv)
@@ -1078,7 +1074,7 @@ Widget *create_anchor_widget(Widget *window, HDRImage::CanvasAnchor &anchor, int
 Button *create_canvas_size_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {
     static int                    width = 128, height = 128;
-    static Color                  bg(.8f, .8f, .8f, 1.f);
+    static Color                  bg       = Color(0, 0);
     static float                  EV       = 0.f;
     static HDRImage::CanvasAnchor anchor   = HDRImage::MIDDLE_CENTER;
     static string                 name     = "Canvas size...";
@@ -1142,7 +1138,10 @@ Button *create_canvas_size_btn(Widget *parent, HDRViewScreen *screen, ImageListP
             spacer->set_fixed_height(5);
             gui->add_widget("", spacer);
 
+            bg             = screen->background()->color();
+            EV             = screen->background()->exposure();
             auto color_btn = new HDRColorPicker(window, bg, EV);
+            color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
             color_btn->set_eyedropper_callback([screen, color_btn](bool pushed)
                                                { screen->set_active_colorpicker(pushed ? color_btn : nullptr); });
             gui->add_widget("Background color:", color_btn);
@@ -1161,8 +1160,8 @@ Button *create_canvas_size_btn(Widget *parent, HDRViewScreen *screen, ImageListP
                 [&, popup]()
                 {
                     popup->dispose();
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                         {
                             int newW = relative ? width + img->width() : width;
                             int newH = relative ? height + img->height() : height;
@@ -1377,81 +1376,81 @@ Button *create_free_xform_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
 
             screen->request_layout_update();
 
-            add_ok_cancel_btns(
-                gui,
-                [&]()
-                {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img, AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            Imath::M33f t;
-                            Imath::V2f  origin(0.f, 0.f);
+            add_ok_cancel_btns(gui,
+                               [&]()
+                               {
+                                   images_panel->async_modify_image(
+                                       [&](const ConstHDRImagePtr &img, AtomicProgress &progress) -> ImageCommandResult
+                                       {
+                                           Imath::M33f t;
+                                           Imath::V2f  origin(0.f, 0.f);
 
-                            // find top-left corner
-                            switch (anchor)
-                            {
-                            case HDRImage::TOP_RIGHT:
-                            case HDRImage::MIDDLE_RIGHT:
-                            case HDRImage::BOTTOM_RIGHT: origin.x = 1.f; break;
+                                           // find top-left corner
+                                           switch (anchor)
+                                           {
+                                           case HDRImage::TOP_RIGHT:
+                                           case HDRImage::MIDDLE_RIGHT:
+                                           case HDRImage::BOTTOM_RIGHT: origin.x = 1.f; break;
 
-                            case HDRImage::TOP_CENTER:
-                            case HDRImage::MIDDLE_CENTER:
-                            case HDRImage::BOTTOM_CENTER: origin.x = 0.5f; break;
+                                           case HDRImage::TOP_CENTER:
+                                           case HDRImage::MIDDLE_CENTER:
+                                           case HDRImage::BOTTOM_CENTER: origin.x = 0.5f; break;
 
-                            case HDRImage::TOP_LEFT:
-                            case HDRImage::MIDDLE_LEFT:
-                            case HDRImage::BOTTOM_LEFT:
-                            default: origin.x = 0.f; break;
-                            }
-                            switch (anchor)
-                            {
-                            case HDRImage::BOTTOM_LEFT:
-                            case HDRImage::BOTTOM_CENTER:
-                            case HDRImage::BOTTOM_RIGHT: origin.y = 1.f; break;
+                                           case HDRImage::TOP_LEFT:
+                                           case HDRImage::MIDDLE_LEFT:
+                                           case HDRImage::BOTTOM_LEFT:
+                                           default: origin.x = 0.f; break;
+                                           }
+                                           switch (anchor)
+                                           {
+                                           case HDRImage::BOTTOM_LEFT:
+                                           case HDRImage::BOTTOM_CENTER:
+                                           case HDRImage::BOTTOM_RIGHT: origin.y = 1.f; break;
 
-                            case HDRImage::MIDDLE_LEFT:
-                            case HDRImage::MIDDLE_CENTER:
-                            case HDRImage::MIDDLE_RIGHT: origin.y = 0.5f; break;
+                                           case HDRImage::MIDDLE_LEFT:
+                                           case HDRImage::MIDDLE_CENTER:
+                                           case HDRImage::MIDDLE_RIGHT: origin.y = 0.5f; break;
 
-                            case HDRImage::TOP_LEFT:
-                            case HDRImage::TOP_CENTER:
-                            case HDRImage::TOP_RIGHT:
-                            default: origin.y = 0.f; break;
-                            }
+                                           case HDRImage::TOP_LEFT:
+                                           case HDRImage::TOP_CENTER:
+                                           case HDRImage::TOP_RIGHT:
+                                           default: origin.y = 0.f; break;
+                                           }
 
-                            t.translate(origin);
-                            t.scale(V2f(1.f / img->width(), 1.f / img->height()));
-                            t.translate(V2f(translate_x, translate_y));
-                            t = M33f().setRotation(cw ? angle / 180.f * M_PI : -angle / 180.f * M_PI) * t;
-                            // t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
-                            t.shear(V2f(tan(shear_x / 180.f * M_PI), tan(shear_y / 180.f * M_PI)));
-                            t.scale(V2f(scale_x, scale_y) * .01f);
-                            t.scale(V2f(img->width(), img->height()));
-                            t.translate(-origin);
-                            t.invert();
+                                           t.translate(origin);
+                                           t.scale(V2f(1.f / img->width(), 1.f / img->height()));
+                                           t.translate(V2f(translate_x, translate_y));
+                                           t = M33f().setRotation(cw ? angle / 180.f * M_PI : -angle / 180.f * M_PI) *
+                                               t;
+                                           // t.rotate(cw ? angle/180.f * M_PI : -angle/180.f * M_PI);
+                                           t.shear(V2f(tan(shear_x / 180.f * M_PI), tan(shear_y / 180.f * M_PI)));
+                                           t.scale(V2f(scale_x, scale_y) * .01f);
+                                           t.scale(V2f(img->width(), img->height()));
+                                           t.translate(-origin);
+                                           t.invert();
 
-                            // t.translate(origin);
-                            // t.scale(V2f(1.f/img->width(), 1.f/img->height()));
-                            // t.scale(V2f(1.f/scale_x, 1.f/scale_y)*100.f);
-                            // t.shear(V2f(-tan(shear_x/180.f * M_PI), -tan(shear_y/180.f * M_PI)));
-                            // t = M33f().setRotation(cw ? -angle/180.f * M_PI : angle/180.f * M_PI) * t;
-                            // t.translate(V2f(-translate_x, -translate_y));
-                            // t.scale(V2f(img->width(), img->height()));
-                            // t.translate(-origin);
+                                           // t.translate(origin);
+                                           // t.scale(V2f(1.f/img->width(), 1.f/img->height()));
+                                           // t.scale(V2f(1.f/scale_x, 1.f/scale_y)*100.f);
+                                           // t.shear(V2f(-tan(shear_x/180.f * M_PI), -tan(shear_y/180.f * M_PI)));
+                                           // t = M33f().setRotation(cw ? -angle/180.f * M_PI : angle/180.f * M_PI) * t;
+                                           // t.translate(V2f(-translate_x, -translate_y));
+                                           // t.scale(V2f(img->width(), img->height()));
+                                           // t.translate(-origin);
 
-                            function<Vector2f(const Vector2f &)> warp = [t](const Vector2f &uv)
-                            {
-                                V2f uvh(uv.x(), uv.y());
-                                V2f res_h;
-                                t.multVecMatrix(uvh, res_h);
-                                return Vector2f(res_h.x, res_h.y);
-                            };
-                            return {
-                                make_shared<HDRImage>(img->resampled(img->width(), img->height(), progress, warp,
-                                                                     samples, sampler, border_mode_x, border_mode_y)),
-                                nullptr};
-                        });
-                });
+                                           function<Vector2f(const Vector2f &)> warp = [t](const Vector2f &uv)
+                                           {
+                                               V2f uvh(uv.x(), uv.y());
+                                               V2f res_h;
+                                               t.multVecMatrix(uvh, res_h);
+                                               return Vector2f(res_h.x, res_h.y);
+                                           };
+                                           return {make_shared<HDRImage>(
+                                                       img->resampled(img->width(), img->height(), progress, warp,
+                                                                      samples, sampler, border_mode_x, border_mode_y)),
+                                                   nullptr};
+                                       });
+                               });
 
             window->center();
             window->request_focus();
@@ -1461,7 +1460,7 @@ Button *create_free_xform_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
 
 Button *create_flatten_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    static Color  bg(.8f, .8f, .8f, 1.f);
+    static Color  bg   = Color(0, 255);
     static float  EV   = 0.f;
     static string name = "Flatten...";
     auto          b    = new Button(parent, name, FA_CHESS_BOARD);
@@ -1475,7 +1474,10 @@ Button *create_flatten_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel
             auto window = gui->add_window(Vector2i(10, 10), name);
             window->set_modal(true);
 
+            bg             = screen->background()->color();
+            EV             = screen->background()->exposure();
             auto color_btn = new HDRColorPicker(window, bg, EV);
+            color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
             color_btn->set_eyedropper_callback([screen, color_btn](bool pushed)
                                                { screen->set_active_colorpicker(pushed ? color_btn : nullptr); });
             gui->add_widget("Background color:", color_btn);
@@ -1494,8 +1496,8 @@ Button *create_flatten_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel
                 [&, popup]()
                 {
                     popup->dispose();
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                         {
                             return {make_shared<HDRImage>(img->apply_function(
                                         [](const Color4 &c)
@@ -1597,8 +1599,8 @@ Button *create_fill_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *i
                 gui,
                 [&]()
                 {
-                    images_panel->modify_image(
-                        [&](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+                    images_panel->async_modify_image(
+                        [&](const ConstHDRImagePtr &img) -> ImageCommandResult
                         {
                             return {make_shared<HDRImage>(img->apply_function(
                                         [&](const Color4 &c)
@@ -1645,8 +1647,8 @@ void EditImagePanel::paste()
     if (!roi.has_volume())
         roi = img->box();
 
-    m_images_panel->modify_image(
-        [this, roi](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+    m_images_panel->async_modify_image(
+        [this, roi](const ConstHDRImagePtr &img) -> ImageCommandResult
         {
             auto result = make_shared<HDRImage>(*img);
             result->copy_subimage(*m_clipboard, Box2i(), roi.min.x(), roi.min.y());
@@ -1694,12 +1696,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [&]()
         {
-            m_images_panel->modify_image(
-                [](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     return {make_shared<HDRImage>(img->flipped_horizontal()),
-                            make_shared<LambdaUndo>([](shared_ptr<HDRImage> &img2)
-                                                    { *img2 = img2->flipped_horizontal(); })};
+                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->flipped_horizontal(); })};
                 });
         });
     m_filter_btns.back()->set_fixed_height(21);
@@ -1710,12 +1711,12 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [this]()
         {
-            m_images_panel->modify_image(
-                [](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     return {make_shared<HDRImage>(img->rotated_90_cw()),
-                            make_shared<LambdaUndo>([](shared_ptr<HDRImage> &img2) { *img2 = img2->rotated_90_ccw(); },
-                                                    [](shared_ptr<HDRImage> &img2) { *img2 = img2->rotated_90_cw(); })};
+                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->rotated_90_ccw(); },
+                                                    [](HDRImagePtr &img2) { *img2 = img2->rotated_90_cw(); })};
                 });
         });
 
@@ -1724,12 +1725,11 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [&]()
         {
-            m_images_panel->modify_image(
-                [](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
-                    return {
-                        make_shared<HDRImage>(img->flipped_vertical()),
-                        make_shared<LambdaUndo>([](shared_ptr<HDRImage> &img2) { *img2 = img2->flipped_vertical(); })};
+                    return {make_shared<HDRImage>(img->flipped_vertical()),
+                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->flipped_vertical(); })};
                 });
         });
     m_filter_btns.back()->set_fixed_height(21);
@@ -1740,13 +1740,12 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [this]()
         {
-            m_images_panel->modify_image(
-                [](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     return {make_shared<HDRImage>(img->rotated_90_ccw()),
-                            make_shared<LambdaUndo>([](shared_ptr<HDRImage> &img2) { *img2 = img2->rotated_90_cw(); },
-                                                    [](shared_ptr<HDRImage> &img2)
-                                                    { *img2 = img2->rotated_90_ccw(); })};
+                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->rotated_90_cw(); },
+                                                    [](HDRImagePtr &img2) { *img2 = img2->rotated_90_ccw(); })};
                 });
         });
 
@@ -1764,8 +1763,8 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [this]()
         {
-            m_images_panel->modify_image(
-                [this](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [this](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     auto roi = m_images_panel->current_image()->roi();
                     if (!roi.has_volume())
@@ -1797,13 +1796,12 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [this]()
         {
-            m_images_panel->modify_image(
-                [this](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [this](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     auto roi = m_images_panel->current_image()->roi();
-                    return {
-                        make_shared<HDRImage>(img->inverted(roi)),
-                        make_shared<LambdaUndo>([roi](shared_ptr<HDRImage> &img2) { *img2 = img2->inverted(roi); })};
+                    return {make_shared<HDRImage>(img->inverted(roi)),
+                            make_shared<LambdaUndo>([roi](HDRImagePtr &img2) { *img2 = img2->inverted(roi); })};
                 });
         });
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count() - 1));
@@ -1814,8 +1812,8 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.back()->set_callback(
         [this]()
         {
-            m_images_panel->modify_image(
-                [this](const shared_ptr<const HDRImage> &img) -> ImageCommandResult
+            m_images_panel->async_modify_image(
+                [this](const ConstHDRImagePtr &img) -> ImageCommandResult
                 {
                     return {make_shared<HDRImage>(img->apply_function(
                                 [](const Color4 &c)

@@ -140,6 +140,9 @@ add_executable(HDRView
   hdrview_version.cpp
   hdrview_resources.cpp
   src/async.h
+  src/box.h
+  src/brush.cpp
+  src/brush.h
   src/color.h
   src/colorslider.cpp
   src/colorslider.h
@@ -151,6 +154,8 @@ add_executable(HDRView
   src/common.cpp
   src/common.h
   src/dithermatrix256.h
+  src/drawline.cpp
+  src/drawline.h
   src/dropdown.cpp
   src/dropdown.h
   src/editimagepanel.cpp
@@ -197,6 +202,8 @@ add_executable(HDRView
   src/progress.h
   src/range.h
   src/timer.h
+  src/tool.cpp
+  src/tool.h
   src/well.cpp
   src/well.h
   ${EXTRA_SOURCE})

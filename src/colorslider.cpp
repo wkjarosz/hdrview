@@ -80,8 +80,7 @@ void ColorSlider::draw(NVGcontext *ctx)
     if (m_mode == ColorMode::ALPHA)
     {
         int  w, h;
-        auto checker = hdrview_image_icon(screen()->nvg_context(), checker4,
-                                          NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY | NVG_IMAGE_NEAREST);
+        auto checker = hdrview_image_icon(ctx, checker4, NVG_IMAGE_REPEATX | NVG_IMAGE_REPEATY | NVG_IMAGE_NEAREST);
         nvgImageSize(ctx, checker, &w, &h);
         NVGpaint paint = nvgImagePattern(ctx, m_pos.x(), m_pos.y() - 1, w, h, 0, checker, m_enabled ? 0.5f : 0.25f);
         nvgFillPaint(ctx, paint);

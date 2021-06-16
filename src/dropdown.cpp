@@ -38,7 +38,7 @@ Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<str
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-    return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    return Vector2i(m_popup->preferred_size(ctx).x() + 6, font_size + 5);
 }
 
 void Dropdown::set_selected_index(int idx)
@@ -103,9 +103,22 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
 {
     if (m_enabled)
     {
-        int xoffset = std::max(size().x() - m_popup->size().x(), 0) / 2;
-        int yoffset = -m_selected_index * PopupMenu::menu_item_height - 4;
-        m_popup->set_position(absolute_position() + Vector2i(xoffset, yoffset));
+        if (button == GLFW_MOUSE_BUTTON_1 && down && !m_focused)
+            request_focus();
+
+        Vector2i offset(std::max(size().x() - m_popup->size().x(), 0) / 2,
+                        -m_selected_index * PopupMenu::menu_item_height - 4);
+        Vector2i abs_pos = absolute_position() + offset;
+
+        // prevent bottom of menu from getting clipped off screen
+        if (abs_pos.y() + m_popup->size().y() >= screen()->height())
+            abs_pos.y() = absolute_position().y() - m_popup->size().y() + 2;
+
+        // prevent top of menu from getting clipped off screen
+        if (abs_pos.y() <= 1)
+            abs_pos.y() = absolute_position().y() + size().y() - 2;
+
+        m_popup->set_position(abs_pos);
 
         if (down)
         {
