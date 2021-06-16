@@ -3,6 +3,7 @@ name: Publish to releases
 on:
   push:
     tags:
+      - 'v*.*'
       - 'v*.*.*'
   workflow_dispatch:
 
