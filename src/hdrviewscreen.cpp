@@ -664,7 +664,17 @@ void HDRViewScreen::ask_close_all_images()
 
 void HDRViewScreen::show_help_window()
 {
-    (new HelpWindow(this))->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+    auto w = new HelpWindow(this);
+    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+
+    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    close_button->set_callback(
+        [w]()
+        {
+            w->callback()(0);
+            w->dispose();
+        });
+
     m_help_button->set_pushed(true);
 
     request_layout_update();
