@@ -21,6 +21,8 @@ public:
         Tool_Eraser,
         Tool_Clone_Stamp,
         Tool_Eyedropper,
+        Tool_Ruler,
+        Tool_Line,
         Tool_Num_Tools
     };
 
@@ -38,6 +40,8 @@ public:
     virtual bool keyboard(int key, int scancode, int action, int modifiers);
 
 protected:
+    void draw_crosshairs(NVGcontext *ctx, const nanogui::Vector2i &p) const;
+
     std::string m_name;
     std::string m_tooltip;
     int         m_icon;
@@ -97,7 +101,7 @@ protected:
     bool                   m_smoothing = true;
 
     nanogui::Vector2i m_p0, m_p1;
-    ;
+    nanogui::Vector2i m_clicked;
 };
 
 class EraserTool : public BrushTool
@@ -151,4 +155,47 @@ public:
 
 protected:
     int m_size = 0;
+};
+
+class Ruler : public Tool
+{
+public:
+    Ruler(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Ruler",
+          const std::string &tooltip = "Measure distances and angles.", int icon = FA_RULER, ETool tool = Tool_Ruler);
+
+    float distance() const;
+    float angle() const;
+
+    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
+                            int modifiers) override;
+
+    virtual void draw(NVGcontext *ctx) const override;
+
+protected:
+    bool is_valid(const nanogui::Vector2i &p) const;
+
+    nanogui::Vector2i m_start_pixel, m_end_pixel;
+};
+
+class LineTool : public Ruler
+{
+public:
+    LineTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Line tool",
+             const std::string &tooltip = "Draw lines.", int icon = FA_SLASH, ETool tool = Tool_Line);
+
+    virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
+
+    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
+                            int modifiers) override;
+
+    virtual void draw(NVGcontext *ctx) const override;
+
+protected:
+    float                     m_width = 2.f;
+    nanogui::Slider *         m_width_slider;
+    nanogui::FloatBox<float> *m_width_textbox;
+    bool                      m_dragging = false;
 };

@@ -153,6 +153,8 @@ add_executable(HDRView
   src/commandhistory.h
   src/common.cpp
   src/common.h
+  src/dialog.cpp
+  src/dialog.h
   src/dithermatrix256.h
   src/drawline.cpp
   src/drawline.h

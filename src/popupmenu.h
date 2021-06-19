@@ -31,6 +31,21 @@ public:
     static constexpr int menu_item_height = 20;
     static constexpr int seperator_height = 8;
 
+    class Item : public Button
+    {
+    public:
+        Item(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
+
+        virtual void     draw(NVGcontext *ctx) override;
+        virtual Vector2i preferred_size(NVGcontext *ctx) const override;
+
+        virtual void set_checked(bool b) { m_checked = b; }
+        virtual bool checked() const { return m_checked; }
+
+    protected:
+        bool m_checked = false;
+    };
+
     class Separator : public Button
     {
     public:

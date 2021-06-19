@@ -18,62 +18,6 @@ using namespace nanogui;
 namespace
 {
 
-inline void draw_line_x(int x1, int y1, int x2, int incdec, int e, int e_noinc, int e_inc, float inv_denom, int dx,
-                        const SmoothPlotPixelFunc &plot)
-{
-    int   two_v_dx         = 0;
-    float two_dx_inv_denom = 2.0f * dx * inv_denom;
-    for (int x = x1; x <= x2; x++)
-    {
-        if (!plot(x, y1, two_v_dx * inv_denom, x1, x2, x))
-            break;
-
-        float offset = incdec * two_v_dx * inv_denom;
-        plot(x, y1 + 1, two_dx_inv_denom - offset, x1, x2, x);
-        plot(x, y1 - 1, two_dx_inv_denom + offset, x1, x2, x);
-
-        if (e < 0)
-        {
-            two_v_dx = e + dx;
-            e += e_noinc;
-        }
-        else
-        {
-            two_v_dx = e - dx;
-            y1 += incdec;
-            e += e_inc;
-        }
-    }
-}
-
-inline void draw_line_y(int x1, int y1, int y2, int incdec, int e, int e_noinc, int e_inc, float inv_denom, int dy,
-                        const SmoothPlotPixelFunc &plot)
-{
-    int   two_v_dy         = 0;
-    float two_dy_inv_denom = 2.0f * dy * inv_denom;
-    for (int y = y1; y <= y2; y++)
-    {
-        if (!plot(x1, y, two_v_dy * inv_denom, y1, y2, y))
-            break;
-
-        float offset = incdec * two_v_dy * inv_denom;
-        plot(x1 + 1, y, two_dy_inv_denom - offset, y1, y2, y);
-        plot(x1 - 1, y, two_dy_inv_denom + offset, y1, y2, y);
-
-        if (e < 0)
-        {
-            two_v_dy = e + dy;
-            e += e_noinc;
-        }
-        else
-        {
-            two_v_dy = e - dy;
-            x1 += incdec;
-            e += e_inc;
-        }
-    }
-}
-
 //
 // from: https://en.wikipedia.org/wiki/Centripetal_Catmull–Rom_spline
 //
@@ -113,11 +57,15 @@ inline void chaikin(std::vector<Vector2f> &out, const std::vector<Vector2f> &in)
 
 } // namespace
 
+// Bresenham/midpoint line drawing algorithm
 void draw_line(int x1, int y1, int x2, int y2, const PlotPixelFunc &plot)
 {
     // Difference of x and y values
     int dx = x2 - x1;
     int dy = y2 - y1;
+
+    int sx = dx < 0 ? -1 : 1;
+    int sy = dy < 0 ? -1 : 1;
 
     // Absolute values of differences
     int ix = dx < 0 ? -dx : dx;
@@ -128,9 +76,6 @@ void draw_line(int x1, int y1, int x2, int y2, const PlotPixelFunc &plot)
 
     int x = 0, y = 0;
 
-    // plot at plotx, ploty
-    // plot(x1, y1);
-
     for (int i = 0; i < inc; i++)
     {
         x += ix;
@@ -139,52 +84,17 @@ void draw_line(int x1, int y1, int x2, int y2, const PlotPixelFunc &plot)
         if (x > inc)
         {
             x -= inc;
-            if (dx < 0)
-                x1--;
-            else
-                x1++;
+            x1 += sx;
         }
 
         if (y > inc)
         {
             y -= inc;
-            if (dy < 0)
-                y1--;
-            else
-                y1++;
+            y1 += sy;
         }
 
-        // plot at plotx, ploty
         plot(x1, y1);
     }
-}
-
-void draw_line(int x1, int y1, int x2, int y2, const SmoothPlotPixelFunc &plot)
-{
-    if (x1 > x2)
-    {
-        std::swap(x1, x2);
-        std::swap(y1, y2);
-    }
-
-    int dx = x2 - x1;
-    int dy = y2 - y1;
-
-    if (dy <= dx && dy >= 0) // 0 <= slope <= 1
-        draw_line_x(x1, y1, x2, 1, 2 * dy - dx, 2 * dy, 2 * (dy - dx), 1.0f / (2.0f * sqrtf(dx * dx + dy * dy)), dx,
-                    plot);
-
-    else if (dy > dx && dy >= 0) // 1 < slope <= infinity
-        draw_line_y(x1, y1, y2, 1, 2 * dx - dy, 2 * dx, 2 * (dx - dy), 1.0f / (2.0f * sqrtf(dx * dx + dy * dy)), dy,
-                    plot);
-
-    else if (-dy <= dx && dy <= 0) // 0 >= slope >= -1
-        draw_line_x(x1, y1, x2, -1, -2 * dy - dx, -2 * dy, 2 * (-dy - dx), 1.0f / (2.0f * sqrtf(dx * dx + dy * dy)), dx,
-                    plot);
-
-    else if (-dy > dx && dy <= 0) // -1 > slope >= 0
-        draw_line_y(x2, y2, y1, -1, -2 * dx - dy, 2 * dx, -2 * (-dx - dy), 1.0f / (2.0f * sqrtf(dx * dx + dy * dy)),
-                    -dy, plot);
 }
 
 void draw_CatmullRom(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, int p3x, int p3y, const PlotPixelFunc &plot,
@@ -241,4 +151,222 @@ void draw_quadratic(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, const 
     size_t end = include_end ? out->size() - 1 : out->size() - 2;
     for (size_t i = 0; i < end; ++i)
         draw_line(round((*out)[i].x()), round((*out)[i].y()), round((*out)[i + 1].x()), round((*out)[i + 1].y()), plot);
+}
+
+// from http://members.chello.at/~easyfilter/bresenham.html
+// author Zingl Alois
+
+// draw a black (0) anti-aliased line on white (255) background
+void draw_line(int x0, int y0, int x1, int y1, const PlotAAPixelFunc &plot)
+{
+    int   dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int   dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int   err = dx - dy, e2, x2; // error value e_xy
+    float ed  = dx + dy == 0 ? 1 : sqrt(dx * dx + dy * dy);
+
+    // pixel loop
+    for (;;)
+    {
+        plot(x0, y0, abs(err - dx + dy) / ed);
+        e2 = err;
+        x2 = x0;
+
+        // x step
+        if (2 * e2 >= -dx)
+        {
+            if (x0 == x1)
+                break;
+            if (e2 + dy < ed)
+                plot(x0, y0 + sy, (e2 + dy) / ed);
+            err -= dy;
+            x0 += sx;
+        }
+
+        // y step
+        if (2 * e2 <= dy)
+        {
+            if (y0 == y1)
+                break;
+            if (dx - e2 < ed)
+                plot(x2 + sx, y0, (dx - e2) / ed);
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+// from http://members.chello.at/~easyfilter/bresenham.html
+// author Zingl Alois
+
+// plot an anti-aliased line of width wd pixel
+void draw_line(int x0, int y0, int x1, int y1, float wd, const PlotAAPixelFunc &plot)
+{
+    int   dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int   dy = abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int   err;
+    float e2 = sqrt(dx * dx + dy * dy); // length
+
+    if (wd <= 1 || e2 == 0)
+        return draw_line(x0, y0, x1, y1, plot); // assert
+
+    dx *= 255 / e2;
+    dy *= 255 / e2;
+    wd = 255 * (wd - 1); // scale values
+
+    if (dx < dy)
+    {                                    // steep line
+        x1  = round((e2 + wd / 2) / dy); // start offset
+        err = x1 * dy - wd / 2;          // shift error value to offset width
+        for (x0 -= x1 * sx;; y0 += sy)
+        {
+            // aliasing pre-pixel
+            plot(x1 = x0, y0, err / 255.0f);
+            // pixel on the line
+            for (e2 = dy - err - wd; e2 + dy < 255; e2 += dy) plot(x1 += sx, y0, 0.f);
+            // aliasing post-pixel
+            plot(x1 + sx, y0, e2 / 255.0f);
+            if (y0 == y1)
+                break;
+            err += dx; // y-step
+            if (err > 255)
+            {
+                err -= dy;
+                x0 += sx;
+            } // x-step
+        }
+    }
+    else
+    {                                    // flat line
+        y1  = round((e2 + wd / 2) / dx); // start offset
+        err = y1 * dx - wd / 2;          // shift error value to offset width
+        for (y0 -= y1 * sy;; x0 += sx)
+        {
+            // aliasing pre-pixel
+            plot(x0, y1 = y0, err / 255.0f);
+            // pixel on the line
+            for (e2 = dx - err - wd; e2 + dx < 255; e2 += dx) plot(x0, y1 += sy, 0.f);
+            // aliasing post-pixel
+            plot(x0, y1 + sy, e2 / 255.0f);
+            if (x0 == x1)
+                break;
+            err += dy; // x-step
+            if (err > 255)
+            {
+                err -= dx;
+                y0 += sy;
+            } // y-step
+        }
+    }
+}
+
+// plot a limited quadratic Bezier segment
+void draw_quad_Bezier_seg(int x0, int y0, int x1, int y1, int x2, int y2, const PlotPixelFunc &plot)
+{
+    int    sx = x2 - x1, sy = y2 - y1;
+    long   xx = x0 - x1, yy = y0 - y1, xy;       // relative values for checks
+    double dx, dy, err, cur = xx * sy - yy * sx; // curvature
+
+    assert(xx * sx <= 0 && yy * sy <= 0); // sign of gradient must not change
+
+    // begin with longer part
+    if (sx * (long)sx + sy * (long)sy > xx * xx + yy * yy)
+    {
+        x2  = x0;
+        x0  = sx + x1;
+        y2  = y0;
+        y0  = sy + y1;
+        cur = -cur; // swap P0 P2
+    }
+    // no straight line
+    if (cur != 0)
+    {
+        xx += sx;
+        xx *= sx = x0 < x2 ? 1 : -1; // x step direction
+        yy += sy;
+        yy *= sy = y0 < y2 ? 1 : -1; // y step direction
+        xy       = 2 * xx * yy;
+        xx *= xx;
+        yy *= yy; // differences 2nd degree
+        // negated curvature?
+        if (cur * sx * sy < 0)
+        {
+            xx  = -xx;
+            yy  = -yy;
+            xy  = -xy;
+            cur = -cur;
+        }
+        dx = 4.0 * sy * cur * (x1 - x0) + xx - xy; // differences 1st degree
+        dy = 4.0 * sx * cur * (y0 - y1) + yy - xy;
+        xx += xx;
+        yy += yy;
+        err = dx + dy + xy; // error 1st step
+        do {
+            plot(x0, y0); // plot curve
+            if (x0 == x2 && y0 == y2)
+                return;        // last pixel -> curve finished
+            y1 = 2 * err < dx; // save value for test of y step
+            if (2 * err > dy)
+            {
+                x0 += sx;
+                dx -= xy;
+                err += dy += yy;
+            } // x step
+            if (y1)
+            {
+                y0 += sy;
+                dy -= xy;
+                err += dx += xx;
+            }                       // y step
+        } while (dy < 0 && dx > 0); // gradient negates -> algorithm fails
+    }
+    draw_line(x0, y0, x2, y2, plot); // plot remaining part to end
+}
+
+// plot any quadratic Bezier curve
+void draw_quad_Bezier(int x0, int y0, int x1, int y1, int x2, int y2, const PlotPixelFunc &plot)
+{
+    int    x = x0 - x1, y = y0 - y1;
+    double t = x0 - 2 * x1 + x2, r;
+
+    if ((long)x * (x2 - x1) > 0)
+    {                                // horizontal cut at P4?
+        if ((long)y * (y2 - y1) > 0) // vertical cut at P6 too?
+            // which first?
+            if (fabs((y0 - 2 * y1 + y2) / t * x) > abs(y))
+            {
+                x0 = x2;
+                x2 = x + x1;
+                y0 = y2;
+                y2 = y + y1; // swap points
+            }                // now horizontal cut at P4 comes first
+        t = (x0 - x1) / t;
+        r = (1 - t) * ((1 - t) * y0 + 2.0 * t * y1) + t * t * y2; // By(t=P4)
+        t = (x0 * x2 - x1 * x1) * t / (x0 - x1);                  // gradient dP4/dx=0
+        x = floor(t + 0.5);
+        y = floor(r + 0.5);
+        r = (y1 - y0) * (t - x0) / (x1 - x0) + y0; // intersect P3 | P0 P1
+        draw_quad_Bezier_seg(x0, y0, x, floor(r + 0.5), x, y, plot);
+        r  = (y1 - y2) * (t - x2) / (x1 - x2) + y2; // intersect P4 | P1 P2
+        x0 = x1 = x;
+        y0      = y;
+        y1      = floor(r + 0.5); // P0 = P4, P1 = P8
+    }
+
+    // vertical cut at P6?
+    if ((long)(y0 - y1) * (y2 - y1) > 0)
+    {
+        t = y0 - 2 * y1 + y2;
+        t = (y0 - y1) / t;
+        r = (1 - t) * ((1 - t) * x0 + 2.0 * t * x1) + t * t * x2; // Bx(t=P6)
+        t = (y0 * y2 - y1 * y1) * t / (y0 - y1);                  // gradient dP6/dy=0
+        x = floor(r + 0.5);
+        y = floor(t + 0.5);
+        r = (x1 - x0) * (t - y0) / (y1 - y0) + x0; // intersect P6 | P0 P1
+        draw_quad_Bezier_seg(x0, y0, floor(r + 0.5), y, x, y, plot);
+        r  = (x1 - x2) * (t - y2) / (y1 - y2) + x2; // intersect P7 | P1 P2
+        x0 = x;
+        x1 = floor(r + 0.5);
+        y0 = y1 = y; // P0 = P6, P1 = P7
+    }
+    draw_quad_Bezier_seg(x0, y0, x1, y1, x2, y2, plot); // remaining part
 }

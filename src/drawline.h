@@ -12,13 +12,15 @@
 using PlotPixelFunc = std::function<void(int x, int y)>;
 
 /// function to plot the pixel at position (x,y) with signed distance to the line
-using SmoothPlotPixelFunc = std::function<bool(int x, int y, float distance, int t0, int t1, int t)>;
+using PlotAAPixelFunc = std::function<void(int x, int y, float alpha)>;
 
 /// Draw a line between pixels (x1,y1) and (x2,y2), calling plot on each pixel along the way
 void draw_line(int x1, int y1, int x2, int y2, const PlotPixelFunc &plot);
 
 /// Draw an antialiased line between pixels (x1,y1) and (x2,y2), calling plot on each pixel along the way
-void draw_line(int x1, int y1, int x2, int y2, const SmoothPlotPixelFunc &plot);
+void draw_line(int x1, int y1, int x2, int y2, const PlotAAPixelFunc &plot);
+/// Draw an antialiased line of width w between pixels (x1,y1) and (x2,y2), calling plot on each pixel along the way
+void draw_line(int x1, int y1, int x2, int y2, float w, const PlotAAPixelFunc &plot);
 
 /// Draw a cubic Catmull-Rom split between pixels (x1,y1) and (x2,y2), using (x0,y0) and (x3,y3) to compute smooth
 /// tangents
@@ -27,3 +29,5 @@ void draw_CatmullRom(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, int p
 
 void draw_quadratic(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, const PlotPixelFunc &plot, int levels = 2,
                     bool include_start = false, bool include_end = false);
+
+void draw_quad_Bezier(int x0, int y0, int x1, int y1, int x2, int y2, const PlotPixelFunc &plot);
