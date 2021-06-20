@@ -53,4 +53,31 @@ Widget *Dialog::add_buttons(const std::string &button_text, const std::string &a
     return button_panel;
 }
 
+SimpleDialog::SimpleDialog(Widget *parent, Type type, const std::string &title, const std::string &message,
+                           const std::string &button_text, const std::string &alt_button_text, bool alt_button) :
+    Dialog(parent, title, false)
+{
+    set_layout(new BoxLayout(Orientation::Vertical, Alignment::Middle, 10, 10));
+
+    Widget *message_panel = new Widget(this);
+    message_panel->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 10, 15));
+    int icon = 0;
+    switch (type)
+    {
+    case Type::Empty: icon = 0; break;
+    case Type::Information: icon = m_theme->m_message_information_icon; break;
+    case Type::Question: icon = m_theme->m_message_question_icon; break;
+    case Type::Warning: icon = m_theme->m_message_warning_icon; break;
+    }
+    Label *icon_label = new Label(message_panel, std::string(utf8(icon).data()), "icons");
+    icon_label->set_font_size(50);
+    m_message_label = new Label(message_panel, message);
+    m_message_label->set_fixed_width(icon ? 200 : 0);
+
+    add_buttons(button_text, alt_button_text, alt_button);
+
+    center();
+    request_focus();
+}
+
 NAMESPACE_END(nanogui)

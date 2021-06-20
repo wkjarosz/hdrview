@@ -606,7 +606,7 @@ bool HDRViewScreen::drop_event(const vector<string> &filenames)
     }
     catch (const exception &e)
     {
-        new MessageDialog(this, MessageDialog::Type::Warning, "Error", string("Could not load:\n ") + e.what());
+        new SimpleDialog(this, SimpleDialog::Type::Warning, "Error", string("Could not load:\n ") + e.what());
         return false;
     }
     return true;
@@ -627,8 +627,8 @@ void HDRViewScreen::ask_close_image(int)
     {
         if (img->is_modified())
         {
-            auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                            "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
+            auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
+                                           "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
             dialog->set_callback(
                 [curr, next, closeit](int cancel)
                 {
@@ -644,14 +644,14 @@ void HDRViewScreen::ask_close_image(int)
 
 void HDRViewScreen::ask_close_all_images()
 {
-    bool anyModified = false;
-    for (int i = 0; i < m_images_panel->num_images(); ++i) anyModified |= m_images_panel->image(i)->is_modified();
+    bool any_modified = false;
+    for (int i = 0; i < m_images_panel->num_images(); ++i) any_modified |= m_images_panel->image(i)->is_modified();
 
-    if (anyModified)
+    if (any_modified)
     {
-        auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                        "Some images have unsaved modifications. Close all images anyway?", "Yes",
-                                        "Cancel", true);
+        auto dialog =
+            new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
+                             "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
         dialog->set_callback(
             [this](int close)
             {
@@ -844,8 +844,8 @@ void HDRViewScreen::save_image()
     }
     catch (const exception &e)
     {
-        new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-                          string("Could not save image due to an error:\n") + e.what());
+        new SimpleDialog(this, SimpleDialog::Type::Warning, "Error",
+                         string("Could not save image due to an error:\n") + e.what());
     }
 }
 
@@ -859,30 +859,16 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     if (m_focus_path.size() > 1)
     {
-        auto window = dynamic_cast<Window *>(m_focus_path[m_focus_path.size() - 2]);
-        if (window && window->modal())
+        if (auto dialog = dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]))
         {
-            spdlog::trace("Modal window: {}", window->title());
+            spdlog::trace("Modal dialog: {}", dialog->title());
 
-            if (auto dialog = dynamic_cast<MessageDialog *>(window))
+            if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
             {
-                if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
-                {
-                    if (dialog->callback())
-                        dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
-                    dialog->dispose();
-                    return true;
-                }
-            }
-            if (auto dialog = dynamic_cast<Dialog *>(window))
-            {
-                if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
-                {
-                    if (dialog->callback())
-                        dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
-                    dialog->dispose();
-                    return true;
-                }
+                if (dialog->callback())
+                    dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
+                dialog->dispose();
+                return true;
             }
             return true;
         }
@@ -890,8 +876,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     if (key == GLFW_KEY_ESCAPE)
     {
-        auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!", "Do you really want to quit?",
-                                        "Yes", "No", true);
+        auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?",
+                                       "Yes", "No", true);
         dialog->set_callback([this](int result) { this->set_visible(result != 0); });
         dialog->request_focus();
         return true;
