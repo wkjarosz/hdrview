@@ -63,9 +63,10 @@ public:
 private:
     void draw_widgets();
     void bring_to_focus() const;
-    void toggle_help_window();
+    void show_help_window();
     void update_layout();
     bool at_side_panel_edge(const Vector2i &p);
+    bool at_tool_panel_edge(const Vector2i &p);
 
     Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView *  m_image_view;
@@ -74,13 +75,13 @@ private:
 
     Button *            m_help_button;
     Button *            m_side_panel_button;
-    HelpWindow *        m_help_window = nullptr;
     Label *             m_zoom_label;
     Label *             m_status_label;
     Label *             m_path_info_label;
     Label *             m_res_info_label;
     Label *             m_color32_info_label;
     Label *             m_color8_info_label;
+    Label *             m_ruler_info_label;
     Label *             m_pixel_info_label;
     Label *             m_roi_info_label;
     Label *             m_stats_label;
@@ -94,17 +95,16 @@ private:
     enum EAnimationGoal : uint32_t
     {
         TOP_PANEL    = 1 << 0,
-        SIDE_PANEL   = 1 << 1,
+        SIDE_PANELS  = 1 << 1,
         BOTTOM_PANEL = 1 << 2,
-    } m_animation_goal = EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL);
+    } m_animation_goal = EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL);
 
     Tool::ETool         m_tool = Tool::Tool_None;
     std::vector<Tool *> m_tools;
     HDRColorPicker *    m_active_colorpicker = nullptr;
 
-    MessageDialog *m_ok_to_quit_dialog = nullptr;
-
     bool m_dragging_side_panel = false;
+    bool m_dragging_tool_panel = false;
     bool m_need_layout_update  = true;
 
     std::thread      m_gui_refresh_thread;

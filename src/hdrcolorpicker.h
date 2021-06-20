@@ -167,13 +167,13 @@ protected:
 class DualHDRColorPicker : public Widget
 {
 public:
-    DualHDRColorPicker(Widget *parent, const Color &fgcolor = Color(255, 255), float fgexp = 0.f,
-                       int fgcomp = HDRColorPicker::ALL, const Color &bgcolor = Color(0, 255), float bgexp = 0.f,
-                       int bgcomp = HDRColorPicker::ALL);
+    DualHDRColorPicker(Widget *parent, int fgcomp = HDRColorPicker::ALL, int bgcomp = HDRColorPicker::ALL);
 
-    virtual void draw(NVGcontext *ctx) override;
-    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
-    virtual void perform_layout(NVGcontext *ctx) override;
+    virtual Vector2i preferred_size(NVGcontext *) const override;
+    virtual void     draw(NVGcontext *ctx) override;
+    virtual bool     mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool     mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+    virtual void     perform_layout(NVGcontext *ctx) override;
 
     const HDRColorPicker *foreground() const { return m_foreground; }
     HDRColorPicker *      foreground() { return m_foreground; }
@@ -181,6 +181,7 @@ public:
     HDRColorPicker *      background() { return m_background; }
 
     void swap_colors();
+    void set_default_colors();
 
 protected:
     Box2i foreground_box() const;

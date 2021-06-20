@@ -7,6 +7,7 @@
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
 #include "common.h"
+#include "dialog.h"
 #include "editimagepanel.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
@@ -86,7 +87,9 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_tool_panel = new Window(this, "");
     m_tool_panel->set_theme(panel_theme);
     m_tool_panel->set_fixed_width(33);
-    m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
+    m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 20));
+    auto tool_holder = m_tool_panel->add<Widget>();
+    tool_holder->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
 
     m_image_view = new HDRImageView(this);
     m_image_view->set_grid_threshold(10);
@@ -100,11 +103,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create status bar widgets
     //
 
-    m_status_label = new Label(m_status_bar, "", "sans");
+    m_status_label = new Label(m_status_bar, "");
     m_status_label->set_font_size(theme->m_text_box_font_size);
     m_status_label->set_position(nanogui::Vector2i(6, 0));
 
-    m_zoom_label = new Label(m_status_bar, "100% (1 : 1)", "sans");
+    m_zoom_label = new Label(m_status_bar, "100% (1 : 1)");
     m_zoom_label->set_font_size(theme->m_text_box_font_size);
 
     //
@@ -226,7 +229,22 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
             (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
             m_stats_label = new Label(row, "");
-            m_stats_label->set_fixed_width(135);
+            m_stats_label->set_fixed_width(130);
+
+            // spacer
+            (new Widget(info_panel))->set_fixed_height(5);
+
+            row = new Widget(info_panel);
+            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+            tb = new ToolButton(row, FA_RULER);
+            tb->set_theme(flat_theme);
+            tb->set_enabled(false);
+            tb->set_icon_extra_scale(1.5f);
+
+            (new Label(row, "°:\nΔ:", "sans-bold"))->set_fixed_width(20);
+            m_ruler_info_label = new Label(row, "");
+            m_ruler_info_label->set_fixed_width(50);
 
             info_panel->set_fixed_height(4);
             panels.push_back(info_panel);
@@ -303,7 +321,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                         // update all "Solo mode" buttons and "Expand all" buttons
                         for (size_t j = 0; j < popup_menus.size(); ++j)
                         {
-                            dynamic_cast<Button *>(popup_menus[j]->child_at(0))->set_icon(solo ? FA_CHECK : 0);
+                            if (auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0)))
+                                item->set_checked(solo);
                             popup_menus[j]->child_at(2)->set_enabled(!solo);
                         }
 
@@ -339,7 +358,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_help_button = new Button{m_top_panel, "", FA_QUESTION};
     m_help_button->set_icon_extra_scale(1.25f);
     m_help_button->set_fixed_size(nanogui::Vector2i(25, 25));
-    m_help_button->set_change_callback([this](bool) { toggle_help_window(); });
+    m_help_button->set_change_callback([this](bool) { show_help_window(); });
     m_help_button->set_tooltip("Information about using HDRView.");
     m_help_button->set_flags(Button::ToggleButton);
 
@@ -356,7 +375,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             m_gui_animation_start = glfwGetTime();
             push_gui_refresh();
             m_animation_running = true;
-            m_animation_goal    = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
+            m_animation_goal    = EAnimationGoal(m_animation_goal ^ SIDE_PANELS);
             request_layout_update();
         });
 
@@ -370,13 +389,15 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_tools.push_back(new EraserTool(this, m_image_view, m_images_panel));
     m_tools.push_back(new CloneStampTool(this, m_image_view, m_images_panel));
     m_tools.push_back(new Eyedropper(this, m_image_view, m_images_panel));
+    m_tools.push_back(new Ruler(this, m_image_view, m_images_panel));
+    m_tools.push_back(new LineTool(this, m_image_view, m_images_panel));
 
-    for (auto t : m_tools) t->create_toolbutton(m_tool_panel);
+    for (auto t : m_tools) t->create_toolbutton(tool_holder);
 
-    (new Widget(m_tool_panel))->set_fixed_height(15);
+    // (new Widget(m_tool_panel))->set_fixed_height(15);
 
     m_color_btns = new DualHDRColorPicker(m_tool_panel);
-    m_color_btns->set_fixed_size(Vector2i(25));
+    m_color_btns->set_fixed_size(Vector2i(0));
     // m_color_btns->set_tooltip("Select foreground and background colors.");
     m_color_btns->foreground()->popup()->set_anchor_offset(100);
     m_color_btns->background()->popup()->set_anchor_offset(100);
@@ -408,6 +429,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         // eyedropper uses its own options bar
         m_tools[Tool::Tool_Eyedropper]->create_options_bar(m_top_panel);
+
+        // ruler uses the default options bar
+        m_tools[Tool::Tool_Ruler]->set_options_bar(default_tool);
+
+        // line tool uses the default options bar
+        m_tools[Tool::Tool_Line]->create_options_bar(m_top_panel);
     }
 
     m_tools[Tool::Tool_None]->set_active(true);
@@ -579,7 +606,7 @@ bool HDRViewScreen::drop_event(const vector<string> &filenames)
     }
     catch (const exception &e)
     {
-        new MessageDialog(this, MessageDialog::Type::Warning, "Error", string("Could not load:\n ") + e.what());
+        new SimpleDialog(this, SimpleDialog::Type::Warning, "Error", string("Could not load:\n ") + e.what());
         return false;
     }
     return true;
@@ -600,12 +627,13 @@ void HDRViewScreen::ask_close_image(int)
     {
         if (img->is_modified())
         {
-            auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                            "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
+            auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
+                                           "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
             dialog->set_callback(
-                [curr, next, closeit](int close)
+                [curr, next, closeit](int cancel)
                 {
-                    if (close == 0)
+                    spdlog::trace("closing image callback {} {} {}", cancel, curr, next);
+                    if (!cancel)
                         closeit(curr, next);
                 });
         }
@@ -616,14 +644,14 @@ void HDRViewScreen::ask_close_image(int)
 
 void HDRViewScreen::ask_close_all_images()
 {
-    bool anyModified = false;
-    for (int i = 0; i < m_images_panel->num_images(); ++i) anyModified |= m_images_panel->image(i)->is_modified();
+    bool any_modified = false;
+    for (int i = 0; i < m_images_panel->num_images(); ++i) any_modified |= m_images_panel->image(i)->is_modified();
 
-    if (anyModified)
+    if (any_modified)
     {
-        auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                        "Some images have unsaved modifications. Close all images anyway?", "Yes",
-                                        "Cancel", true);
+        auto dialog =
+            new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
+                             "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
         dialog->set_callback(
             [this](int close)
             {
@@ -635,21 +663,21 @@ void HDRViewScreen::ask_close_all_images()
         m_images_panel->close_all_images();
 }
 
-void HDRViewScreen::toggle_help_window()
+void HDRViewScreen::show_help_window()
 {
-    if (m_help_window)
-    {
-        m_help_window->dispose();
-        m_help_window = nullptr;
-        m_help_button->set_pushed(false);
-    }
-    else
-    {
-        m_help_window = new HelpWindow{this, [this] { toggle_help_window(); }};
-        m_help_window->center();
-        m_help_window->request_focus();
-        m_help_button->set_pushed(true);
-    }
+    auto w = new HelpWindow(this);
+    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+
+    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    close_button->set_callback(
+        [w]()
+        {
+            if (w->callback())
+                w->callback()(0);
+            w->dispose();
+        });
+
+    m_help_button->set_pushed(true);
 
     request_layout_update();
 }
@@ -689,8 +717,8 @@ void HDRViewScreen::new_image()
     FormHelper *gui = new FormHelper(this);
     gui->set_fixed_size(Vector2i(0, 20));
 
-    auto window = gui->add_window(Vector2i(10, 10), name);
-    window->set_modal(true);
+    auto window = new Dialog(this, name);
+    gui->set_window(window);
 
     if (m_images_panel->current_image() && m_images_panel->current_image()->roi().has_volume())
     {
@@ -737,36 +765,25 @@ void HDRViewScreen::new_image()
     spacer->set_fixed_height(15);
     gui->add_widget("", spacer);
 
-    auto row = new Widget(window);
-    row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+    window->set_callback(
+        [this, popup](int close)
+        {
+            popup->set_visible(false);
+            if (close != 0)
+                return;
 
-    auto b = new Button(row, "Cancel", window->theme()->m_message_alt_button_icon);
-    b->set_callback(
-        [window, popup]()
-        {
-            window->dispose();
-            popup->dispose();
-        });
-    b = new Button(row, "OK", window->theme()->m_message_primary_button_icon);
-    b->set_callback(
-        [this, window, popup]()
-        {
             float gain = powf(2.f, EV);
 
             HDRImagePtr img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3]) * gain);
             m_images_panel->new_image(img);
 
-            bring_to_focus();
-
             // Ensure the new image button will have the correct visibility state.
             m_images_panel->set_filter(m_images_panel->filter());
 
             request_layout_update();
-
-            window->dispose();
-            popup->dispose();
         });
-    gui->add_widget("", row);
+
+    gui->add_widget("", window->add_buttons());
 
     window->center();
     window->request_focus();
@@ -827,8 +844,8 @@ void HDRViewScreen::save_image()
     }
     catch (const exception &e)
     {
-        new MessageDialog(this, MessageDialog::Type::Warning, "Error",
-                          string("Could not save image due to an error:\n") + e.what());
+        new SimpleDialog(this, SimpleDialog::Type::Warning, "Error",
+                         string("Could not save image due to an error:\n") + e.what());
     }
 }
 
@@ -839,6 +856,32 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     if (action == GLFW_RELEASE)
         return false;
+
+    if (m_focus_path.size() > 1)
+    {
+        if (auto dialog = dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]))
+        {
+            spdlog::trace("Modal dialog: {}", dialog->title());
+
+            if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
+            {
+                if (dialog->callback())
+                    dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
+                dialog->dispose();
+                return true;
+            }
+            return true;
+        }
+    }
+
+    if (key == GLFW_KEY_ESCAPE)
+    {
+        auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?",
+                                       "Yes", "No", true);
+        dialog->set_callback([this](int result) { this->set_visible(result != 0); });
+        dialog->request_focus();
+        return true;
+    }
 
     if (m_tools[m_tool]->keyboard(key, scancode, action, modifiers))
         return true;
@@ -851,42 +894,19 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     switch (key)
     {
-    case GLFW_KEY_ESCAPE:
-    {
-        if (!m_ok_to_quit_dialog)
-        {
-            m_ok_to_quit_dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
-                                                    "Do you really want to quit?", "Yes", "No", true);
-            m_ok_to_quit_dialog->set_callback(
-                [this](int result)
-                {
-                    this->set_visible(result != 0);
-                    m_ok_to_quit_dialog = nullptr;
-                });
-            m_ok_to_quit_dialog->request_focus();
-        }
-        else if (m_ok_to_quit_dialog->visible())
-        {
-            // dialog already visible, dismiss it
-            m_ok_to_quit_dialog->dispose();
-            m_ok_to_quit_dialog = nullptr;
-        }
-        return true;
-    }
-
-    case GLFW_KEY_ENTER:
-    {
-        if (m_ok_to_quit_dialog && m_ok_to_quit_dialog->visible())
-            // quit dialog already visible, "enter" clicks OK, and quits
-            m_ok_to_quit_dialog->callback()(0);
-        else
-            return true;
-    }
-
     case GLFW_KEY_BACKSPACE:
         spdlog::trace("KEY BACKSPACE pressed");
         ask_close_image(m_images_panel->current_image_index());
         return true;
+
+    case 'N':
+        spdlog::trace("KEY `N` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            new_image();
+            return true;
+        }
+        return false;
 
     case 'W':
         spdlog::trace("KEY `W` pressed");
@@ -949,26 +969,26 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     case 'H':
         spdlog::trace("KEY `H` pressed");
-        toggle_help_window();
+        show_help_window();
         return true;
 
     case GLFW_KEY_TAB:
         spdlog::trace("KEY TAB pressed");
         if (modifiers & GLFW_MOD_SHIFT)
         {
-            bool setVis           = !((m_animation_goal & SIDE_PANEL) || (m_animation_goal & TOP_PANEL) ||
+            bool setVis           = !((m_animation_goal & SIDE_PANELS) || (m_animation_goal & TOP_PANEL) ||
                             (m_animation_goal & BOTTOM_PANEL));
             m_gui_animation_start = glfwGetTime();
             push_gui_refresh();
             m_animation_running = true;
-            m_animation_goal    = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANEL | BOTTOM_PANEL) : EAnimationGoal(0);
+            m_animation_goal    = setVis ? EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL) : EAnimationGoal(0);
         }
         else
         {
             m_gui_animation_start = glfwGetTime();
             push_gui_refresh();
             m_animation_running = true;
-            m_animation_goal    = EAnimationGoal(m_animation_goal ^ SIDE_PANEL);
+            m_animation_goal    = EAnimationGoal(m_animation_goal ^ SIDE_PANELS);
         }
 
         request_layout_update();
@@ -980,12 +1000,21 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
 bool HDRViewScreen::at_side_panel_edge(const Vector2i &p)
 {
-    if (!(m_animation_goal & SIDE_PANEL))
+    if (!(m_animation_goal & SIDE_PANELS))
         return false;
     auto w = find_widget(p);
     auto x = p.x() - m_side_panel->position().x() - m_side_panel->fixed_width();
     return x < 10 && x > -5 &&
            (w == m_side_panel || w == m_image_view || w == m_side_panel_contents || w == m_side_scroll_panel);
+}
+
+bool HDRViewScreen::at_tool_panel_edge(const Vector2i &p)
+{
+    if (!(m_animation_goal & SIDE_PANELS))
+        return false;
+    auto w = find_widget(p);
+    auto x = p.x() - m_tool_panel->position().x();
+    return x < 10 && x > -5 && (w == m_tool_panel || w == m_image_view);
 }
 
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
@@ -1034,6 +1063,18 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     else
         m_dragging_side_panel = false;
 
+    if (button == GLFW_MOUSE_BUTTON_1 && down && at_tool_panel_edge(p))
+    {
+        m_dragging_tool_panel = true;
+
+        // prevent Screen::cursorPosCallbackEvent from calling drag_event on other widgets
+        m_drag_active = false;
+        m_drag_widget = nullptr;
+        return true;
+    }
+    else
+        m_dragging_tool_panel = false;
+
     bool ret = Screen::mouse_button_event(p, button, down, modifiers);
 
     return ret;
@@ -1042,27 +1083,54 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                                        int modifiers)
 {
-    if ((m_dragging_side_panel || at_side_panel_edge(p)) && !m_active_colorpicker)
+    m_side_panel->set_cursor(Cursor::Arrow);
+    m_side_scroll_panel->set_cursor(Cursor::Arrow);
+    m_side_panel_contents->set_cursor(Cursor::Arrow);
+    m_image_view->set_cursor(Cursor::Arrow);
+    m_tool_panel->set_cursor(Cursor::Arrow);
+
+    if (!m_active_colorpicker)
     {
-        m_side_panel->set_cursor(Cursor::HResize);
-        m_side_scroll_panel->set_cursor(Cursor::HResize);
-        m_side_panel_contents->set_cursor(Cursor::HResize);
-        m_image_view->set_cursor(Cursor::HResize);
-    }
-    else
-    {
-        m_side_panel->set_cursor(Cursor::Arrow);
-        m_side_scroll_panel->set_cursor(Cursor::Arrow);
-        m_side_panel_contents->set_cursor(Cursor::Arrow);
-        m_image_view->set_cursor(Cursor::Arrow);
+        if (m_dragging_side_panel || at_side_panel_edge(p))
+        {
+            m_side_panel->set_cursor(Cursor::HResize);
+            m_side_scroll_panel->set_cursor(Cursor::HResize);
+            m_side_panel_contents->set_cursor(Cursor::HResize);
+            m_image_view->set_cursor(Cursor::HResize);
+        }
+
+        if (m_dragging_tool_panel || at_tool_panel_edge(p))
+        {
+            m_tool_panel->set_cursor(Cursor::HResize);
+            m_image_view->set_cursor(Cursor::HResize);
+        }
     }
 
     if (m_dragging_side_panel)
     {
-        int w = ::clamp(p.x(), 215, m_size.x() - 10);
+        int w = std::clamp(p.x(), 215, width() - 100);
         m_side_panel_contents->set_fixed_width(w);
         m_side_scroll_panel->set_fixed_width(w + 12);
         m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
+        request_layout_update();
+        return true;
+    }
+
+    if (m_dragging_tool_panel)
+    {
+        int w = std::clamp(width() - p.x(), 33, 62);
+        if (w == 62 && w != m_tool_panel->fixed_width())
+            m_tool_panel->child_at(0)->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 4));
+
+        if (m_tool_panel->fixed_width() == 62 && w != 62)
+            m_tool_panel->child_at(0)->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
+
+        if (w == 62)
+            for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i((w - 12) / 2));
+        else
+            for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i(w - 8, 0));
+
+        m_tool_panel->set_fixed_width(w);
         request_layout_update();
         return true;
     }
@@ -1091,26 +1159,26 @@ void HDRViewScreen::update_layout()
         {
             pop_gui_refresh();
             m_animation_running = false;
-            sidepanel_shift     = (m_animation_goal & SIDE_PANEL) ? 0 : -sidepanel_width;
-            toolpanel_shift     = (m_animation_goal & SIDE_PANEL) ? 0 : toolpanel_width;
+            sidepanel_shift     = (m_animation_goal & SIDE_PANELS) ? 0 : -sidepanel_width;
+            toolpanel_shift     = (m_animation_goal & SIDE_PANELS) ? 0 : toolpanel_width;
             header_shift        = (m_animation_goal & TOP_PANEL) ? 0 : -header_height;
             footer_shift        = (m_animation_goal & BOTTOM_PANEL) ? 0 : footer_height;
 
-            m_side_panel_button->set_pushed(m_animation_goal & SIDE_PANEL);
+            m_side_panel_button->set_pushed(m_animation_goal & SIDE_PANELS);
         }
         // animate the location of the panels
         else
         {
             // only animate the sidepanel if it isn't already at the goal position
-            if (((m_animation_goal & SIDE_PANEL) && sidepanel_shift != 0) ||
-                (!(m_animation_goal & SIDE_PANEL) && sidepanel_shift != -sidepanel_width))
+            if (((m_animation_goal & SIDE_PANELS) && sidepanel_shift != 0) ||
+                (!(m_animation_goal & SIDE_PANELS) && sidepanel_shift != -sidepanel_width))
             {
-                double start    = (m_animation_goal & SIDE_PANEL) ? double(-sidepanel_width) : 0.0;
-                double end      = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(-sidepanel_width);
+                double start    = (m_animation_goal & SIDE_PANELS) ? double(-sidepanel_width) : 0.0;
+                double end      = (m_animation_goal & SIDE_PANELS) ? 0.0 : double(-sidepanel_width);
                 sidepanel_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
 
-                start           = (m_animation_goal & SIDE_PANEL) ? double(toolpanel_width) : 0.0;
-                end             = (m_animation_goal & SIDE_PANEL) ? 0.0 : double(toolpanel_width);
+                start           = (m_animation_goal & SIDE_PANELS) ? double(toolpanel_width) : 0.0;
+                end             = (m_animation_goal & SIDE_PANELS) ? 0.0 : double(toolpanel_width);
                 toolpanel_shift = static_cast<int>(round(lerp(start, end, smoothStep(0.0, duration, elapsed))));
                 m_side_panel_button->set_pushed(true);
             }
@@ -1162,7 +1230,7 @@ void HDRViewScreen::update_layout()
 
     perform_layout();
 
-    if (!m_dragging_side_panel)
+    if (!m_dragging_side_panel && !m_dragging_tool_panel)
     {
         // With a changed layout the relative position of the mouse
         // within children changes and therefore should get updated.
@@ -1208,6 +1276,11 @@ void HDRViewScreen::draw_contents()
 
         m_roi_info_label->set_caption(
             img->roi().has_volume() ? fmt::format("{: 4d}\n{: 4d}", img->roi().size().x(), img->roi().size().y()) : "");
+
+        auto   ruler      = dynamic_cast<Ruler *>(m_tools[Tool::Tool_Ruler]);
+        string angle_str  = isnan(ruler->angle()) ? "" : fmt::format("{:3.2f} °", ruler->angle());
+        string length_str = isnan(ruler->distance()) ? "" : fmt::format("{:.1f} px", ruler->distance());
+        m_ruler_info_label->set_caption(angle_str + "\n" + length_str);
     }
 
     if (m_need_layout_update || m_animation_running)

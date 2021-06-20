@@ -18,8 +18,9 @@
 #include <nanogui/window.h>
 #include <spdlog/spdlog.h>
 
-using namespace nanogui;
 using namespace std;
+
+NAMESPACE_BEGIN(nanogui)
 
 #ifdef __APPLE__
 string HelpWindow::COMMAND = "Cmd";
@@ -33,13 +34,8 @@ string HelpWindow::ALT = "Opt";
 string HelpWindow::ALT     = "Alt";
 #endif
 
-HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback) :
-    Window{parent, "Help"}, m_close_callback{closeCallback}
+HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
-
-    auto closeButton = new Button{button_panel(), "", FA_TIMES};
-    closeButton->set_callback(m_close_callback);
-
     set_layout(new GroupLayout());
 
     auto add_row = [](Widget *current, string keys, string desc)
@@ -60,8 +56,8 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback) :
                                "HDRView is a simple research-oriented tool for examining, "
                                "comparing, manipulating, and converting high-dynamic range images.\n\n"
                                "HDRView is freely available under a 3-clause BSD license.\n\n",
-                               hdrview_git_version(), hdrview_timestamp(), hdrview_git_branch(),
-                               hdrview_git_revision(), HDRVIEW_BACKEND);
+                               hdrview_git_version(), hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(),
+                               HDRVIEW_BACKEND);
     (new Label(copyright_widget, about))->set_fixed_width(715);
 
     new Label(this, "Keybindings", "sans-bold", 18);
@@ -137,20 +133,8 @@ HelpWindow::HelpWindow(Widget *parent, function<void()> closeCallback) :
     add_row(interface, "Tab", "Show/Hide the Side Panel");
     add_row(interface, "Shift+Tab", "Show/Hide All Panels");
     add_row(interface, COMMAND + "+Q or Esc", "Quit");
+
+    center();
 }
 
-bool HelpWindow::keyboard_event(int key, int scancode, int action, int modifiers)
-{
-    if (Window::keyboard_event(key, scancode, action, modifiers))
-    {
-        return true;
-    }
-
-    if (key == GLFW_KEY_ESCAPE)
-    {
-        m_close_callback();
-        return true;
-    }
-
-    return false;
-}
+NAMESPACE_END(nanogui)

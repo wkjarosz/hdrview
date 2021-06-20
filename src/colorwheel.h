@@ -67,7 +67,7 @@ public:
     /// Handles mouse drag events for the ColorWheel.
     virtual bool mouse_drag_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 
-    /// Handle a mouse motion event (default implementation: propagate to children)
+    /// Handle a mouse motion event
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 
 private:

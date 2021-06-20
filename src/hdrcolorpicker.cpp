@@ -193,6 +193,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
 
                 m_final_callback(m_color, m_exposure);
             }
+            request_focus();
         });
 
     m_reset_button->set_callback(
@@ -202,6 +203,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
 
             m_callback(m_color, m_exposure);
             m_final_callback(m_color, m_exposure);
+            request_focus();
         });
 
     // popup->set_anchor_offset(popup->height());
@@ -277,15 +279,13 @@ void HDRColorPicker::draw(NVGcontext *ctx)
 
     int w = std::min(size().x(), size().y());
 
+    int border_w = 1;
+
     nvgBeginPath(ctx);
-    nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2, w - 4, w - 4, 1);
+    nvgRoundedRect(ctx, m_pos.x() + border_w, m_pos.y() + border_w, w - 2 * border_w, w - 2 * border_w, 0);
 
-    nvgStrokeWidth(ctx, 4.0f);
-    nvgStrokeColor(ctx, Color(255, 255));
-    nvgStroke(ctx);
-
-    nvgStrokeWidth(ctx, 2.0f);
-    nvgStrokeColor(ctx, Color(0, 255));
+    nvgStrokeWidth(ctx, 2 * border_w);
+    nvgStrokeColor(ctx, m_background_color.contrasting_color());
     nvgStroke(ctx);
 
     int  h;
@@ -299,14 +299,14 @@ void HDRColorPicker::draw(NVGcontext *ctx)
     nvgFill(ctx);
 }
 
-DualHDRColorPicker::DualHDRColorPicker(Widget *parent, const Color &fgcolor, float fgexp, int fgcomp,
-                                       const Color &bgcolor, float bgexp, int bgcomp) :
-    Widget(parent),
-    m_background(new HDRColorPicker(this, bgcolor, bgexp, bgcomp)),
-    m_foreground(new HDRColorPicker(this, fgcolor, fgexp, fgcomp))
+DualHDRColorPicker::DualHDRColorPicker(Widget *parent, int fgcomp, int bgcomp) :
+    Widget(parent), m_background(new HDRColorPicker(this, Color(0), 0.f, bgcomp)),
+    m_foreground(new HDRColorPicker(this, Color(0), 0.f, fgcomp))
 {
-    set_tooltip("Swap foreground and background colors.");
+    set_default_colors();
 }
+
+Vector2i DualHDRColorPicker::preferred_size(NVGcontext *) const { return Vector2i(64, 64); }
 
 Box2i DualHDRColorPicker::foreground_box() const
 {
@@ -342,50 +342,99 @@ void DualHDRColorPicker::draw(NVGcontext *ctx)
 
     nvgTranslate(ctx, m_pos.x(), m_pos.y());
 
-    float pad        = 1;
+    m_background->draw(ctx);
+    m_foreground->draw(ctx);
+
+    //
+    // draw the swapping arrows
+    //
+    int   min_size   = std::min(size().x(), size().y());
+    float pad        = (fgb.size().x() / 8) / 2.f;
     float arrow_size = 2;
 
-    nvgBeginPath(ctx);
-    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size);
-    nvgLineTo(ctx, bgb.max.x() - arrow_size, fgb.min.y() + arrow_size);
-    nvgLineTo(ctx, bgb.max.x() - arrow_size, bgb.min.y() - pad);
+    int corner_size       = min_size - fgb.size().x();
+    int corner_small_size = ceil(corner_size * 3.f / 4) - pad;
 
+    // corner line
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size + pad);
+    nvgLineTo(ctx, bgb.max.x() - arrow_size - pad, fgb.min.y() + arrow_size + pad);
+    nvgLineTo(ctx, bgb.max.x() - arrow_size - pad, bgb.min.y() - pad);
     nvgStrokeWidth(ctx, 1.0f);
     nvgStrokeColor(ctx, Color(255, 255));
     nvgStroke(ctx);
 
+    // top left arrowhead
     nvgBeginPath(ctx);
-    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size);
-    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y());
-    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y() + 2 * arrow_size);
+    nvgMoveTo(ctx, fgb.max.x() + pad, fgb.min.y() + arrow_size + pad);
+    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y() + pad);
+    nvgLineTo(ctx, fgb.max.x() + pad + arrow_size, fgb.min.y() + 2 * arrow_size + pad);
     nvgClosePath(ctx);
-
     nvgFillColor(ctx, Color(255, 255));
     nvgFill(ctx);
 
+    // bottom right arrowhead
     nvgBeginPath(ctx);
-    nvgMoveTo(ctx, bgb.max.x() - arrow_size, bgb.min.y() - pad);
-    nvgLineTo(ctx, bgb.max.x(), bgb.min.y() - pad - arrow_size);
-    nvgLineTo(ctx, bgb.max.x() - 2 * arrow_size, bgb.min.y() - pad - arrow_size);
+    nvgMoveTo(ctx, bgb.max.x() - arrow_size - pad, bgb.min.y() - pad);
+    nvgLineTo(ctx, bgb.max.x() - pad, bgb.min.y() - pad - arrow_size);
+    nvgLineTo(ctx, bgb.max.x() - 2 * arrow_size - pad, bgb.min.y() - pad - arrow_size);
     nvgClosePath(ctx);
-
     nvgFillColor(ctx, Color(255, 255));
     nvgFill(ctx);
 
-    m_background->draw(ctx);
-    m_foreground->draw(ctx);
+    //
+    // draw the default color button
+    //
+
+    // white background square
+    nvgBeginPath(ctx);
+    nvgRect(ctx, bgb.min.x() - corner_small_size - pad, bgb.max.y() - corner_small_size, corner_small_size,
+            corner_small_size);
+    nvgFillColor(ctx, Color(255, 255));
+    nvgFill(ctx);
+
+    // black foreground square with white border
+    nvgBeginPath(ctx);
+    nvgRect(ctx, fgb.min.x() + 0.5f, fgb.max.y() + pad + 0.5f, corner_small_size - 1, corner_small_size - 1);
+    nvgFillColor(ctx, Color(0, 255));
+    nvgFill(ctx);
+    nvgStrokeWidth(ctx, 1.f);
+    nvgStrokeColor(ctx, Color(255, 255));
+    nvgStroke(ctx);
+
     nvgTranslate(ctx, -m_pos.x(), -m_pos.y());
 }
 
 bool DualHDRColorPicker::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-    if (down && p.x() - m_pos.x() > foreground_box().max.x() && p.y() - m_pos.y() < background_box().min.y())
-    {
-        swap_colors();
+    if (Widget::mouse_button_event(p, button, down, modifiers))
         return true;
-    }
 
-    return Widget::mouse_button_event(p, button, down, modifiers);
+    if (down)
+    {
+        if (p.x() - m_pos.x() > p.y() - m_pos.y())
+        {
+            swap_colors();
+            return true;
+        }
+        else
+        {
+            set_default_colors();
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Handle a mouse motion event
+bool DualHDRColorPicker::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
+{
+    if (p.x() - m_pos.x() > foreground_box().max.x() && p.y() - m_pos.y() < background_box().min.y())
+        set_tooltip("Swap foreground and background colors.");
+    else
+        set_tooltip("");
+
+    return Widget::mouse_motion_event(p, rel, button, modifiers);
 }
 
 void DualHDRColorPicker::swap_colors()
@@ -400,6 +449,15 @@ void DualHDRColorPicker::swap_colors()
 
     m_background->set_color(tmp_c);
     m_background->set_exposure(tmp_e);
+}
+
+void DualHDRColorPicker::set_default_colors()
+{
+    m_foreground->set_color(Color(0, 255));
+    m_foreground->set_exposure(0.f);
+
+    m_background->set_color(Color(255, 255));
+    m_background->set_exposure(0.f);
 }
 
 NAMESPACE_END(nanogui)

@@ -11,20 +11,18 @@
 
 #include "common.h"
 
-#include <nanogui/window.h>
+#include "dialog.h"
 
 #include <string>
 
-class HelpWindow : public nanogui::Window
+NAMESPACE_BEGIN(nanogui)
+class HelpWindow : public Dialog
 {
 public:
-    HelpWindow(nanogui::Widget *parent, std::function<void()> closeCallback);
-
-    bool keyboard_event(int key, int scancode, int action, int modifiers) override;
+    HelpWindow(nanogui::Widget *parent);
 
     static std::string COMMAND;
     static std::string ALT;
-
-private:
-    std::function<void()> m_close_callback;
 };
+
+NAMESPACE_END(nanogui)

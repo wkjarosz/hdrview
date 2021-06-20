@@ -242,6 +242,7 @@ void HDRImageView::zoom_out()
 
 bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
+    spdlog::trace("image view button pos {}; position: {}; mouse pos: {}", p, m_pos, screen()->mouse_pos());
     if (!m_enabled || !m_current_image)
         return false;
 
@@ -366,7 +367,11 @@ void HDRImageView::draw(NVGcontext *ctx)
     draw_widget_border(ctx);
 
     if (m_draw_callback)
+    {
+        nvgTranslate(ctx, m_pos.x(), m_pos.y());
         m_draw_callback(ctx);
+        nvgTranslate(ctx, -m_pos.x(), -m_pos.y());
+    }
 }
 
 void HDRImageView::draw_image_border(NVGcontext *ctx) const

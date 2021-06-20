@@ -34,6 +34,7 @@ Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *imag
 ToolButton *Tool::create_toolbutton(Widget *toolbar)
 {
     m_button = new ToolButton(toolbar, m_icon);
+    m_button->set_fixed_size(Vector2i(0));
     m_button->set_flags(Button::Flags::RadioButton);
     m_button->set_callback([this] { m_screen->set_tool(m_tool); });
     m_button->set_tooltip(m_name + ": " + m_tooltip);
@@ -61,6 +62,25 @@ void Tool::set_active(bool b)
     spdlog::trace("set_visible worked");
 }
 
+void Tool::draw_crosshairs(NVGcontext *ctx, const Vector2i &p) const
+{
+    nvgLineCap(ctx, NVG_ROUND);
+    nvgBeginPath(ctx);
+    nvgMoveTo(ctx, p.x() - 5, p.y());
+    nvgLineTo(ctx, p.x() + 5, p.y());
+
+    nvgMoveTo(ctx, p.x(), p.y() - 5);
+    nvgLineTo(ctx, p.x(), p.y() + 5);
+
+    nvgStrokeColor(ctx, Color(0, 255));
+    nvgStrokeWidth(ctx, 2.f);
+    nvgStroke(ctx);
+
+    nvgStrokeColor(ctx, Color(255, 255));
+    nvgStrokeWidth(ctx, 1.f);
+    nvgStroke(ctx);
+}
+
 void Tool::draw(NVGcontext *ctx) const
 {
     auto img = m_images_panel->current_image();
@@ -75,8 +95,8 @@ void Tool::draw(NVGcontext *ctx) const
     nvgStrokePaint(ctx, paint);
 
     nvgBeginPath(ctx);
-    Vector2i tl          = m_image_view->screen_position_for_coordinate(img->roi().min);
-    Vector2i br          = m_image_view->screen_position_for_coordinate(img->roi().max);
+    Vector2i tl          = m_image_view->position_for_coordinate(img->roi().min);
+    Vector2i br          = m_image_view->position_for_coordinate(img->roi().max);
     Vector2i border_size = br - tl;
     nvgRect(ctx, tl.x(), tl.y(), border_size.x(), border_size.y());
     nvgStrokeWidth(ctx, 1.0f);
@@ -119,6 +139,11 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
     case 'B':
         spdlog::trace("KEY `B` pressed");
         m_screen->set_tool(Tool_Brush);
+        return true;
+
+    case 'U':
+        spdlog::trace("KEY `U` pressed");
+        m_screen->set_tool(Tool_Line);
         return true;
 
     case 'I':
@@ -353,7 +378,8 @@ bool RectangularMarquee::mouse_drag(const Vector2i &p, const Vector2i &rel, int 
 BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
                      const string &tooltip, int icon, ETool tool) :
     Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
-    m_brush(make_shared<Brush>(80))
+    m_brush(make_shared<Brush>(80)), m_p0(std::numeric_limits<int>::lowest()), m_p1(std::numeric_limits<int>::lowest()),
+    m_clicked(std::numeric_limits<int>::lowest())
 {
     // empty
 }
@@ -587,56 +613,27 @@ bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
 
 bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 {
-    if (down)
-    {
-        m_screen->request_layout_update();
-        auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
-        auto pixel = Vector2i(round(coord.x()), round(coord.y()));
-        spdlog::trace("modifier: {}", modifiers);
-        auto color = modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color()
-                                              : m_screen->foreground()->exposed_color();
+    spdlog::trace("modifier: {}", modifiers);
+    auto color =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
 
-        m_p0 = m_p1 = std::numeric_limits<int>::lowest();
-        m_images_panel->current_image()->start_modify(
-            [pixel, color, this](const ConstHDRImagePtr &img) -> ImageCommandResult
-            {
-                auto new_image = make_shared<HDRImage>(*img);
-
-                Box2i roi = m_images_panel->current_image()->roi();
-                if (roi.has_volume())
-                    roi.intersect(img->box());
-                else
-                    roi = img->box();
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(
-                    *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
-
-                return {new_image, make_shared<FullImageUndo>(*img)};
-            });
-        m_screen->update_caption();
-        return true;
-    }
+    Box2i roi = m_images_panel->current_image()->roi();
+    if (roi.has_volume())
+        roi.intersect(m_images_panel->current_image()->box());
     else
+        roi = m_images_panel->current_image()->box();
+
+    auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
+    auto pixel = Vector2i(round(coord.x()), round(coord.y()));
+
+    if (!down)
     {
-        // draw the last
-        if (m_smoothing && m_p1.x() != std::numeric_limits<int>::lowest())
+        // draw a line for the last part of the stroke
+        if (m_p1.x() != std::numeric_limits<int>::lowest())
         {
-            m_screen->request_layout_update();
-            auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
-            auto pixel = Vector2i(round(coord.x()), round(coord.y()));
-
-            auto color = modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color()
-                                                  : m_screen->foreground()->exposed_color();
             m_images_panel->current_image()->direct_modify(
-                [&pixel, &color, this](const HDRImagePtr &new_image)
+                [&pixel, &color, &roi, this](const HDRImagePtr &new_image)
                 {
-                    Box2i roi = m_images_panel->current_image()->roi();
-                    if (roi.has_volume())
-                        roi.intersect(new_image->box());
-                    else
-                        roi = new_image->box();
-
                     auto put_pixel = [this, new_image, &color, &roi](int x, int y)
                     {
                         m_brush->stamp_onto(
@@ -644,12 +641,57 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
                     };
 
                     draw_line(m_p1.x(), m_p1.y(), pixel.x(), pixel.y(), put_pixel);
-                    m_screen->update_caption();
                 });
-            return true;
         }
     }
-    return false;
+    else if (down && modifiers & GLFW_MOD_SHIFT)
+    {
+        // draw a straight line from the previously clicked point
+        if (m_clicked.x() != std::numeric_limits<int>::lowest())
+        {
+            m_images_panel->current_image()->start_modify(
+                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+                {
+                    auto new_image = make_shared<HDRImage>(*img);
+
+                    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
+                    {
+                        m_brush->stamp_onto(
+                            *new_image, x, y, [&color](int, int) { return color; }, roi);
+                    };
+
+                    draw_line(m_clicked.x(), m_clicked.y(), pixel.x(), pixel.y(), put_pixel);
+
+                    return {new_image, make_shared<FullImageUndo>(*img)};
+                });
+
+            m_screen->update_caption();
+        }
+    }
+    else if (down)
+    {
+        m_images_panel->current_image()->start_modify(
+            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            {
+                auto new_image = make_shared<HDRImage>(*img);
+
+                m_brush->set_step(0);
+                m_brush->stamp_onto(
+                    *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
+
+                return {new_image, make_shared<FullImageUndo>(*img)};
+            });
+    }
+
+    m_screen->request_layout_update();
+    m_screen->update_caption();
+
+    m_clicked = pixel;
+
+    m_p0 = std::numeric_limits<int>::lowest();
+    m_p1 = std::numeric_limits<int>::lowest();
+
+    return true;
 }
 
 bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
@@ -688,6 +730,10 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
                     // pixel.x(), pixel.y(), put_pixel1, 0.5f);
                     draw_quadratic(m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(), put_pixel,
                                    4, m_p0.x() == std::numeric_limits<int>::lowest());
+                    // auto a = (m_p1 + prev_pixel) / 2;
+                    // auto b = prev_pixel;
+                    // auto c = (prev_pixel + pixel) / 2;
+                    // draw_quad_Bezier(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), put_pixel);
                 }
             }
             else
@@ -705,7 +751,7 @@ void BrushTool::draw(NVGcontext *ctx) const
     if (!m_images_panel->current_image())
         return;
 
-    auto center = m_screen->mouse_pos();
+    auto center = m_screen->mouse_pos() - m_image_view->absolute_position();
 
     nvgSave(ctx);
     nvgTranslate(ctx, center.x(), center.y());
@@ -908,7 +954,7 @@ void CloneStampTool::draw(NVGcontext *ctx) const
 
     if (m_has_dst && m_has_src)
     {
-        auto center = m_screen->mouse_pos() - m_dst_click + m_src_click;
+        auto center = m_screen->mouse_pos() - m_image_view->absolute_position() - m_dst_click + m_src_click;
 
         nvgSave(ctx);
         nvgTranslate(ctx, center.x(), center.y());
@@ -925,24 +971,9 @@ void CloneStampTool::draw(NVGcontext *ctx) const
         nvgStrokeColor(ctx, Color(255, 255));
         nvgStrokeWidth(ctx, 1.f);
         nvgStroke(ctx);
-
-        nvgLineCap(ctx, NVG_ROUND);
-        nvgBeginPath(ctx);
-        nvgMoveTo(ctx, -5, 0);
-        nvgLineTo(ctx, 5, 0);
-
-        nvgMoveTo(ctx, 0, -5);
-        nvgLineTo(ctx, 0, 5);
-
-        nvgStrokeColor(ctx, Color(0, 255));
-        nvgStrokeWidth(ctx, 2.f);
-        nvgStroke(ctx);
-
-        nvgStrokeColor(ctx, Color(255, 255));
-        nvgStrokeWidth(ctx, 1.f);
-        nvgStroke(ctx);
-
         nvgRestore(ctx);
+
+        draw_crosshairs(ctx, center);
     }
     else
         BrushTool::draw(ctx);
@@ -1019,9 +1050,9 @@ void Eyedropper::draw(NVGcontext *ctx) const
     if (!img)
         return;
 
-    auto center = m_screen->mouse_pos();
+    auto center = m_screen->mouse_pos() - m_image_view->absolute_position();
 
-    Vector2i        center_pixel(m_image_view->image_coordinate_at((center - m_image_view->position())));
+    Vector2i        center_pixel(m_image_view->image_coordinate_at((center)));
     const HDRImage &image = img->image();
 
     if (image.contains(center.x(), center.y()))
@@ -1067,4 +1098,256 @@ void Eyedropper::draw(NVGcontext *ctx) const
     }
 
     Tool::draw(ctx);
+}
+
+Ruler::Ruler(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
+             const string &tooltip, int icon, ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
+    m_start_pixel(std::numeric_limits<int>::lowest()), m_end_pixel(std::numeric_limits<int>::lowest())
+{
+    // empty
+}
+
+bool Ruler::is_valid(const Vector2i &p) const { return p.x() != std::numeric_limits<int>::lowest(); }
+
+float Ruler::distance() const
+{
+    if (!is_valid(m_start_pixel) || !is_valid(m_end_pixel))
+        return std::numeric_limits<float>::quiet_NaN();
+
+    return norm(Vector2f(m_end_pixel - m_start_pixel));
+}
+
+float Ruler::angle() const
+{
+    if (!is_valid(m_start_pixel) || !is_valid(m_end_pixel))
+        return std::numeric_limits<float>::quiet_NaN();
+
+    auto to = Vector2f(m_end_pixel - m_start_pixel);
+    return mod(nvgRadToDeg(-atan2(to.y(), to.x())), 360.0f);
+}
+
+bool Ruler::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
+{
+    auto img = m_images_panel->current_image();
+    if (!img)
+        return false;
+
+    if (down)
+    {
+        m_start_pixel   = m_image_view->image_coordinate_at(p - m_image_view->position());
+        m_end_pixel.x() = std::numeric_limits<int>::lowest();
+        return true;
+    }
+    else if (is_valid(m_start_pixel))
+    {
+        m_end_pixel = m_image_view->image_coordinate_at(p - m_image_view->position());
+        if (modifiers & GLFW_MOD_SHIFT)
+        {
+            auto to           = m_end_pixel - m_start_pixel;
+            int  axis         = abs(to.y()) < abs(to.x());
+            m_end_pixel[axis] = m_start_pixel[axis];
+        }
+        return true;
+    }
+
+    return false;
+}
+
+bool Ruler::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
+{
+    return mouse_button(p, button, false, modifiers);
+}
+
+void Ruler::draw(NVGcontext *ctx) const
+{
+    auto img = m_images_panel->current_image();
+    if (!img)
+        return;
+
+    Vector2i start_pos(m_image_view->position_for_coordinate(Vector2f(m_start_pixel) + 0.5f));
+    if (is_valid(m_end_pixel))
+    {
+        Vector2i end_pos(m_image_view->position_for_coordinate(Vector2f(m_end_pixel) + 0.5f));
+        nvgBeginPath(ctx);
+        nvgMoveTo(ctx, start_pos.x(), start_pos.y());
+        nvgLineTo(ctx, end_pos.x(), end_pos.y());
+
+        nvgStrokeColor(ctx, Color(0, 255));
+        nvgStrokeWidth(ctx, 2.f);
+        nvgStroke(ctx);
+
+        nvgStrokeColor(ctx, Color(255, 255));
+        nvgStrokeWidth(ctx, 1.f);
+        nvgStroke(ctx);
+
+        draw_crosshairs(ctx, end_pos);
+    }
+
+    draw_crosshairs(ctx, start_pos);
+
+    Tool::draw(ctx);
+}
+
+LineTool::LineTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
+                   const string &tooltip, int icon, ETool tool) :
+    Ruler(screen, image_view, images_panel, name, tooltip, icon, tool)
+{
+    // empty
+}
+
+Widget *LineTool::create_options_bar(nanogui::Widget *parent)
+{
+    m_options = new Widget(parent);
+    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+
+    m_options->add<Label>("Width:");
+    m_width_slider  = new Slider(m_options);
+    m_width_textbox = new FloatBox<float>(m_options);
+
+    m_width_textbox->number_format("%3.1f");
+    m_width_textbox->set_editable(true);
+    m_width_textbox->set_spinnable(true);
+    m_width_textbox->set_fixed_width(60);
+    m_width_textbox->set_units("px");
+    m_width_textbox->set_min_value(1.f);
+    m_width_textbox->set_max_value(100);
+    m_width_textbox->set_alignment(TextBox::Alignment::Right);
+    m_width_textbox->set_callback(
+        [this](float v)
+        {
+            m_width = v;
+            m_width_slider->set_value(v);
+        });
+    m_width_slider->set_fixed_width(100);
+    m_width_slider->set_range({1.f, 50.f});
+    m_width_slider->set_callback(
+        [this](float v)
+        {
+            m_width = v;
+            m_width_textbox->set_value(v);
+        });
+
+    m_width_textbox->set_value(m_width);
+    m_width_slider->set_value(m_width);
+
+    return m_options;
+}
+
+bool LineTool::keyboard(int key, int scancode, int action, int modifiers)
+{
+    switch (key)
+    {
+    case '[':
+    {
+        spdlog::trace("Key `[` pressed");
+        float dw = std::min(-1.f, std::ceil(m_width / 1.1f - m_width));
+        float w  = std::clamp(m_width + dw, 1.f, m_width_slider->range().second);
+        m_width  = w;
+        m_width_textbox->set_value(m_width);
+        m_width_slider->set_value(m_width);
+        return true;
+    }
+
+    case ']':
+        spdlog::trace("Key `]` pressed");
+        float dw = std::max(1.f, std::ceil(m_width * 1.1f - m_width));
+        float w  = std::clamp(m_width + dw, 1.f, m_width_slider->range().second);
+        m_width  = w;
+        m_width_textbox->set_value(m_width);
+        m_width_slider->set_value(m_width);
+        return true;
+    }
+
+    return Tool::keyboard(key, scancode, action, modifiers);
+}
+
+bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
+{
+    Ruler::mouse_button(p, button, down, modifiers);
+
+    auto color =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+
+    Box2i roi = m_images_panel->current_image()->roi();
+    if (roi.has_volume())
+        roi.intersect(m_images_panel->current_image()->box());
+    else
+        roi = m_images_panel->current_image()->box();
+
+    // draw a straight line from the previously clicked point
+    if (!down)
+    {
+        m_images_panel->current_image()->start_modify(
+            [&color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            {
+                auto new_image = make_shared<HDRImage>(*img);
+
+                auto put_pixel = [new_image, &color, &roi](int x, int y, float alpha)
+                {
+                    if (!roi.contains(Vector2i(x, y)))
+                        return;
+
+                    Color4 c(color.r(), color.g(), color.b(), color.a());
+                    (*new_image)(x, y) = c * (1.0f - alpha) + (*new_image)(x, y) * alpha;
+                };
+
+                draw_line(m_start_pixel.x(), m_start_pixel.y(), m_end_pixel.x(), m_end_pixel.y(), (float)m_width,
+                          put_pixel);
+
+                return {new_image, make_shared<FullImageUndo>(*img)};
+            });
+
+        m_screen->update_caption();
+    }
+
+    m_dragging = down;
+
+    return true;
+}
+
+bool LineTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
+{
+    m_dragging = true;
+    return Ruler::mouse_button(p, button, false, modifiers);
+}
+
+void LineTool::draw(NVGcontext *ctx) const
+{
+    Tool::draw(ctx);
+    if (m_dragging)
+    {
+        auto img = m_images_panel->current_image();
+        if (!img)
+            return;
+
+        Vector2i start_pos(m_image_view->position_for_coordinate(Vector2f(m_start_pixel) + 0.5f));
+        if (is_valid(m_end_pixel))
+        {
+            auto color = m_screen->foreground()->exposed_color();
+
+            // draw a rectangle for the line (just drawing an nvgLine only works up to a max stroke width)
+            nvgSave(ctx);
+            Vector2i end_pos(m_image_view->position_for_coordinate(Vector2f(m_end_pixel) + 0.5f));
+            Vector2f to = end_pos - start_pos;
+            Vector2f u  = normalize(to);
+            Vector2f v(u.y(), -u.x());
+            v *= m_width * m_image_view->zoom();
+            nvgTransform(ctx, u.x(), u.y(), v.x(), v.y(), start_pos.x(), start_pos.y());
+
+            nvgBeginPath(ctx);
+            nvgRect(ctx, 0, -0.5f, norm(to), 1.f);
+
+            nvgFillColor(ctx, color);
+            nvgFill(ctx);
+
+            nvgRestore(ctx);
+
+            draw_crosshairs(ctx, end_pos);
+        }
+
+        draw_crosshairs(ctx, start_pos);
+
+        Tool::draw(ctx);
+    }
 }

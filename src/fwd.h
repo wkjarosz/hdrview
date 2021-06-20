@@ -22,7 +22,6 @@ class XPUImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageView;
-class HelpWindow;
 class EditImagePanel;
 class ImageListPanel;
 class Timer;
@@ -50,10 +49,12 @@ class PopupMenu;
 class PopupWrapper;
 class CheckBox;
 class Label;
-class MessageDialog;
 class Slider;
 class VScrollPanel;
 class Window;
+class HelpWindow;
+class Dialog;
+class SimpleDialog;
 template <typename Scalar>
 class FloatBox;
 
