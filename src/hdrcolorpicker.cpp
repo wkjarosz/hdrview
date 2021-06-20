@@ -193,6 +193,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
 
                 m_final_callback(m_color, m_exposure);
             }
+            request_focus();
         });
 
     m_reset_button->set_callback(
@@ -202,6 +203,7 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
 
             m_callback(m_color, m_exposure);
             m_final_callback(m_color, m_exposure);
+            request_focus();
         });
 
     // popup->set_anchor_offset(popup->height());

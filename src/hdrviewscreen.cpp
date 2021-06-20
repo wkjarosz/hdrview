@@ -630,9 +630,10 @@ void HDRViewScreen::ask_close_image(int)
             auto dialog = new MessageDialog(this, MessageDialog::Type::Warning, "Warning!",
                                             "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
             dialog->set_callback(
-                [curr, next, closeit](int close)
+                [curr, next, closeit](int cancel)
                 {
-                    if (close == 0)
+                    spdlog::trace("closing image callback {} {} {}", cancel, curr, next);
+                    if (!cancel)
                         closeit(curr, next);
                 });
         }
@@ -671,7 +672,8 @@ void HDRViewScreen::show_help_window()
     close_button->set_callback(
         [w]()
         {
-            w->callback()(0);
+            if (w->callback())
+                w->callback()(0);
             w->dispose();
         });
 
@@ -764,9 +766,9 @@ void HDRViewScreen::new_image()
     gui->add_widget("", spacer);
 
     window->set_callback(
-        [this, window, popup](int close)
+        [this, popup](int close)
         {
-            popup->dispose();
+            popup->set_visible(false);
             if (close != 0)
                 return;
 
@@ -775,14 +777,10 @@ void HDRViewScreen::new_image()
             HDRImagePtr img = make_shared<HDRImage>(width, height, Color4(bg[0], bg[1], bg[2], bg[3]) * gain);
             m_images_panel->new_image(img);
 
-            bring_to_focus();
-
             // Ensure the new image button will have the correct visibility state.
             m_images_panel->set_filter(m_images_panel->filter());
 
             request_layout_update();
-
-            window->dispose();
         });
 
     gui->add_widget("", window->add_buttons());
@@ -870,16 +868,20 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             {
                 if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
                 {
-                    dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
+                    if (dialog->callback())
+                        dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
                     dialog->dispose();
+                    return true;
                 }
             }
             if (auto dialog = dynamic_cast<Dialog *>(window))
             {
                 if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
                 {
-                    dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
+                    if (dialog->callback())
+                        dialog->callback()(key == GLFW_KEY_ENTER ? 0 : 1);
                     dialog->dispose();
+                    return true;
                 }
             }
             return true;

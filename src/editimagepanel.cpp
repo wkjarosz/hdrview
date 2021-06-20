@@ -572,8 +572,6 @@ Button *create_gaussian_filter_btn(Widget *parent, HDRViewScreen *screen, ImageL
 
             gui->add_widget("", window->add_buttons());
 
-            gui->add_widget("", window->add_buttons());
-
             window->center();
             window->request_focus();
         });
@@ -1242,7 +1240,7 @@ Button *create_canvas_size_btn(Widget *parent, HDRViewScreen *screen, ImageListP
             window->set_callback(
                 [&, popup](int cancel)
                 {
-                    popup->dispose();
+                    popup->set_visible(false);
 
                     if (cancel)
                         return;
@@ -1594,7 +1592,7 @@ Button *create_flatten_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel
             window->set_callback(
                 [&, popup](int cancel)
                 {
-                    popup->dispose();
+                    popup->set_visible(false);
 
                     if (cancel)
                         return;
