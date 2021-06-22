@@ -161,7 +161,8 @@ void XPUImage::async_modify(const ConstImageCommandWithProgress &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    m_async_command   = make_shared<ModifyingTask>([this, command](AtomicProgress &p) { return command(m_image, p); });
+    m_async_command   = make_shared<ModifyingTask>([this, command](AtomicProgress &p)
+                                                 { return command(m_image, shared_from_this(), p); });
     m_async_retrieved = false;
     m_async_command->compute();
 }
@@ -171,7 +172,8 @@ void XPUImage::async_modify(const ConstImageCommand &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    m_async_command   = make_shared<ModifyingTask>([this, command](void) { return command(m_image); });
+    m_async_command =
+        make_shared<ModifyingTask>([this, command](void) { return command(m_image, shared_from_this()); });
     m_async_retrieved = false;
     m_async_command->compute();
 }
@@ -193,7 +195,7 @@ void XPUImage::start_modify(const ConstImageCommand &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    auto result = command(m_image);
+    auto result = command(m_image, shared_from_this());
 
     if (!result.second)
     {

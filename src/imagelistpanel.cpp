@@ -22,6 +22,7 @@
 #include "well.h"
 #include "xpuimage.h"
 #include <alphanum.h>
+#include <nanogui/opengl.h>
 #include <set>
 #include <spdlog/spdlog.h>
 #include <tinydir.h>
@@ -244,6 +245,12 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
     };
 }
 
+bool ImageListPanel::is_selected(int index) const
+{
+    return m_image_list->child_at(index)->visible() &&
+           dynamic_cast<ImageButton *>(m_image_list->child_at(index))->is_selected();
+}
+
 EBlendMode ImageListPanel::blend_mode() const { return EBlendMode(m_blend_modes->selected_index()); }
 
 void ImageListPanel::set_blend_mode(EBlendMode mode)
@@ -282,18 +289,19 @@ void ImageListPanel::repopulate_image_list()
     {
         auto btn = new ImageButton(m_image_list, image(i)->filename());
         btn->set_image_id(i + 1);
-        btn->set_selected_callback([&](int j) { set_current_image_index(nth_visible_image_index(j)); });
+        btn->set_current_callback([&](int j) { set_current_image_index(nth_visible_image_index(j)); });
+        btn->set_selected_callback([&](int j) { select_image_index(nth_visible_image_index(j)); });
         btn->set_reference_callback([&](int j) { set_reference_image_index(nth_visible_image_index(j)); });
     }
 
-    update_buttons();
+    update_buttons(true);
 
     update_filter();
 
     m_screen->perform_layout();
 }
 
-void ImageListPanel::update_buttons()
+void ImageListPanel::update_buttons(bool just_created)
 {
     auto &buttons = m_image_list->children();
     for (int i = 0; i < num_images(); ++i)
@@ -301,7 +309,8 @@ void ImageListPanel::update_buttons()
         auto img = image(i);
         auto btn = dynamic_cast<ImageButton *>(buttons[i]);
 
-        btn->set_is_selected(i == m_current);
+        btn->set_is_selected(just_created ? i == m_current : btn->is_selected());
+        btn->set_is_current(i == m_current);
         btn->set_is_reference(i == m_reference);
         btn->set_caption(img->filename());
         btn->set_is_modified(img->is_modified());
@@ -548,9 +557,16 @@ bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int
         return false;
 
     case GLFW_KEY_DOWN:
-        if (modifiers & SYSTEM_COMMAND_MOD)
+        if (modifiers & GLFW_MOD_ALT)
         {
             send_image_backward();
+            m_screen->request_layout_update();
+            return true;
+        }
+        else if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            select_image_index(next_visible_image(current_image_index(), Backward));
+            set_current_image_index(next_visible_image(current_image_index(), Backward));
             return true;
         }
         else if (num_images())
@@ -564,9 +580,16 @@ bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int
         return false;
 
     case GLFW_KEY_UP:
-        if (modifiers & SYSTEM_COMMAND_MOD)
+        if (modifiers & GLFW_MOD_ALT)
         {
             bring_image_forward();
+            m_screen->request_layout_update();
+            return true;
+        }
+        else if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            select_image_index(next_visible_image(current_image_index(), Forward));
+            set_current_image_index(next_visible_image(current_image_index(), Forward));
             return true;
         }
         else if (num_images())
@@ -827,13 +850,23 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
     if (index == m_current && !forceCallback)
         return false;
 
-    auto &buttons = m_image_list->children();
-    if (is_valid(m_current))
-        dynamic_cast<ImageButton *>(buttons[m_current])->set_is_selected(false);
-    // for (size_t i = 0; i < buttons.size(); ++i)
-    // 	dynamic_cast<ImageButton*>(buttons[i])->set_is_selected(false);
+    auto &buttons          = m_image_list->children();
+    bool  already_selected = false;
     if (is_valid(index))
-        dynamic_cast<ImageButton *>(buttons[index])->set_is_selected(true);
+    {
+        auto btn         = dynamic_cast<ImageButton *>(buttons[index]);
+        already_selected = btn->is_selected();
+        btn->set_is_current(true);
+    }
+
+    for (size_t i = 0; i < buttons.size(); ++i)
+        if ((int)i != index)
+        {
+            dynamic_cast<ImageButton *>(buttons[i])->set_is_current(false);
+            // if the image wasn't already selected, deselect others
+            if (!already_selected)
+                dynamic_cast<ImageButton *>(buttons[i])->set_is_selected(false);
+        }
 
     m_previous = m_current;
     m_current  = index;
@@ -844,16 +877,78 @@ bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
     return true;
 }
 
+bool ImageListPanel::select_image_index(int index)
+{
+    auto &buttons = m_image_list->children();
+
+    int num_selected = 0;
+    for (size_t i = 0; i < buttons.size(); ++i) num_selected += dynamic_cast<ImageButton *>(buttons[i])->is_selected();
+
+    // logic:
+    // if index is not selected, then select it
+    // if index is already selected, then deselect it (but only if some other image is selected)
+    //   if index was also the current image, then need to find a different current image from the selected one
+
+    if (is_valid(index))
+    {
+        auto btn = dynamic_cast<ImageButton *>(buttons[index]);
+        if (!btn->is_selected())
+            btn->set_is_selected(true);
+        else
+        {
+            if (num_selected > 1)
+            {
+                btn->set_is_selected(false);
+
+                if (index == m_current)
+                {
+                    // make one of the other selected images the current image
+                    for (size_t i = 0; i < buttons.size(); ++i)
+                    {
+                        if ((int)i == m_current)
+                            continue;
+
+                        // just use the first selected image that isn't the current image
+                        auto other = dynamic_cast<ImageButton *>(buttons[i]);
+                        if (other && other->is_selected())
+                            index = i;
+                    }
+
+                    m_previous = m_current;
+                    m_current  = index;
+                    m_image_view->set_current_image(current_image());
+                    m_screen->update_caption();
+                    update_histogram();
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 bool ImageListPanel::set_reference_image_index(int index)
 {
-    if (index == m_reference)
-        return false;
-
     auto &buttons = m_image_list->children();
-    if (is_valid(m_reference))
-        dynamic_cast<ImageButton *>(buttons[m_reference])->set_is_reference(false);
-    if (is_valid(index))
-        dynamic_cast<ImageButton *>(buttons[index])->set_is_reference(true);
+    if (index == m_reference)
+    {
+        if (is_valid(m_reference))
+        {
+            auto btn = dynamic_cast<ImageButton *>(buttons[m_reference]);
+            btn->set_is_reference(!btn->is_reference());
+            if (!btn->is_reference())
+                index = -1;
+        }
+        else
+            return false;
+    }
+    else
+    {
+        if (is_valid(m_reference))
+            dynamic_cast<ImageButton *>(buttons[m_reference])->set_is_reference(false);
+        if (is_valid(index))
+            dynamic_cast<ImageButton *>(buttons[index])->set_is_reference(true);
+    }
 
     m_reference = index;
     m_image_view->set_reference_image(reference_image());
@@ -875,7 +970,7 @@ void ImageListPanel::new_image(HDRImagePtr img)
     image->set_filename(fmt::format("Untitled-{}", file_number++));
     m_screen->push_gui_refresh();
     image->async_modify(
-        [img](const ConstHDRImagePtr &) -> ImageCommandResult
+        [img](const ConstHDRImagePtr &, const ConstXPUImagePtr &) -> ImageCommandResult
         {
             spdlog::info("Creating [{:d}x{:d}] image", img->width(), img->height());
             return {img, nullptr};
@@ -962,7 +1057,7 @@ void ImageListPanel::load_images(const vector<string> &filenames)
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         image->async_modify(
-            [filename](const ConstHDRImagePtr &) -> ImageCommandResult
+            [filename](const ConstHDRImagePtr &, const ConstXPUImagePtr &) -> ImageCommandResult
             {
                 Timer timer;
                 spdlog::info("Trying to load image \"{}\"", filename);
@@ -1038,7 +1133,7 @@ void ImageListPanel::close_all_images()
     m_num_images_callback();
 }
 
-void ImageListPanel::async_modify_image(const ConstImageCommand &command)
+void ImageListPanel::async_modify_current(const ConstImageCommand &command)
 {
     if (current_image())
     {
@@ -1051,9 +1146,9 @@ void ImageListPanel::async_modify_image(const ConstImageCommand &command)
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         m_images[m_current]->async_modify(
-            [command](const ConstHDRImagePtr &img)
+            [command](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg)
             {
-                auto ret = command(img);
+                auto ret = command(img, xpuimg);
 
                 // if no undo was provided, just create a FullImageUndo
                 if (!ret.second)
@@ -1065,7 +1160,7 @@ void ImageListPanel::async_modify_image(const ConstImageCommand &command)
     }
 }
 
-void ImageListPanel::async_modify_image(const ConstImageCommandWithProgress &command)
+void ImageListPanel::async_modify_current(const ConstImageCommandWithProgress &command)
 {
     if (current_image())
     {
@@ -1078,9 +1173,9 @@ void ImageListPanel::async_modify_image(const ConstImageCommandWithProgress &com
         m_screen->push_gui_refresh();
         m_screen->request_layout_update();
         m_images[m_current]->async_modify(
-            [command](const ConstHDRImagePtr &img, AtomicProgress &progress)
+            [command](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg, AtomicProgress &progress)
             {
-                auto ret = command(img, progress);
+                auto ret = command(img, xpuimg, progress);
 
                 // if no undo was provided, just create a FullImageUndo
                 if (!ret.second)
@@ -1090,6 +1185,66 @@ void ImageListPanel::async_modify_image(const ConstImageCommandWithProgress &com
             });
         m_screen->update_caption();
     }
+}
+
+void ImageListPanel::async_modify_selected(const ConstImageCommand &command)
+{
+    for (size_t i = 0; i < m_images.size(); ++i)
+    {
+        if (!is_selected(i) || !image(i))
+            continue;
+
+        m_images[i]->set_async_modify_done_callback(
+            [this]()
+            {
+                m_screen->pop_gui_refresh();
+                m_image_async_modify_done_requested = true;
+            });
+        m_screen->push_gui_refresh();
+        m_images[i]->async_modify(
+            [command](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg)
+            {
+                auto ret = command(img, xpuimg);
+
+                // if no undo was provided, just create a FullImageUndo
+                if (!ret.second)
+                    ret.second = make_shared<FullImageUndo>(*img);
+
+                return ret;
+            });
+    }
+    m_screen->request_layout_update();
+    m_screen->update_caption();
+}
+
+void ImageListPanel::async_modify_selected(const ConstImageCommandWithProgress &command)
+{
+    for (size_t i = 0; i < m_images.size(); ++i)
+    {
+        if (!is_selected(i) || !image(i))
+            continue;
+
+        m_images[i]->set_async_modify_done_callback(
+            [this]()
+            {
+                m_screen->pop_gui_refresh();
+                m_image_async_modify_done_requested = true;
+            });
+        m_screen->push_gui_refresh();
+        m_images[i]->async_modify(
+            [command](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg, AtomicProgress &progress)
+            {
+                auto ret = command(img, xpuimg, progress);
+
+                // if no undo was provided, just create a FullImageUndo
+                if (!ret.second)
+                    ret.second = make_shared<FullImageUndo>(*img);
+
+                return ret;
+            });
+    }
+    m_screen->request_layout_update();
+    m_screen->update_caption();
 }
 
 void ImageListPanel::undo()

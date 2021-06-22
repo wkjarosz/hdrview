@@ -23,11 +23,11 @@ public:
     void draw(NVGcontext *ctx) override;
 
 private:
-    HDRViewScreen *       m_screen       = nullptr;
-    ImageListPanel *      m_images_panel = nullptr;
-    HDRImageView *        m_image_view   = nullptr;
-    Button *              m_undo_btn     = nullptr;
-    Button *              m_redo_btn     = nullptr;
+    HDRViewScreen * m_screen       = nullptr;
+    ImageListPanel *m_images_panel = nullptr;
+    // HDRImageView *        m_image_view   = nullptr;
+    Button *              m_undo_btn = nullptr;
+    Button *              m_redo_btn = nullptr;
     std::vector<Button *> m_filter_btns;
 
     HDRImagePtr m_clipboard;

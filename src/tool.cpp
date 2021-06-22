@@ -650,7 +650,8 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
         if (m_clicked.x() != std::numeric_limits<int>::lowest())
         {
             m_images_panel->current_image()->start_modify(
-                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
+                                             const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                 {
                     auto new_image = make_shared<HDRImage>(*img);
 
@@ -671,7 +672,8 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
     else if (down)
     {
         m_images_panel->current_image()->start_modify(
-            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
+                                         const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -789,7 +791,7 @@ bool EraserTool::mouse_button(const Vector2i &p, int button, bool down, int modi
         auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
         auto pixel = Vector2i(round(coord.x()), round(coord.y()));
         m_images_panel->current_image()->start_modify(
-            [&pixel, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -870,7 +872,7 @@ bool CloneStampTool::mouse_button(const Vector2i &p, int button, bool down, int 
         auto coord_src = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
         auto dpixel    = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
         m_images_panel->current_image()->start_modify(
-            [&pixel, &dpixel, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, &dpixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -1200,6 +1202,7 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 {
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options->set_visible(false);
 
     m_options->add<Label>("Width:");
     m_width_slider  = new Slider(m_options);
@@ -1279,7 +1282,7 @@ bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifi
     if (!down)
     {
         m_images_panel->current_image()->start_modify(
-            [&color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&color, &roi, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 

@@ -56,7 +56,7 @@ struct ImageStatistics
     Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing
    commands
 */
-class XPUImage
+class XPUImage : public std::enable_shared_from_this<XPUImage>
 {
 public:
     using TextureRef       = nanogui::ref<nanogui::Texture>;

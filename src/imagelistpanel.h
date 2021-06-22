@@ -14,6 +14,18 @@
 
 using namespace nanogui;
 
+/**
+ * @brief Manages a list of open images along with associated widgets.
+ *
+ * An image can have four states:
+ *   * deselected
+ *   * selected
+ *   * current
+ *   * reference
+ *
+ * Multiple images can be selected, but only one image can be current, and only one can be reference.
+ * If an image is current, it is automatically selected.
+ */
 class ImageListPanel : public Well
 {
 public:
@@ -34,6 +46,7 @@ public:
     int              num_images() const { return int(m_images.size()); }
     int              current_image_index() const { return m_current; }
     int              reference_image_index() const { return m_reference; }
+    bool             is_selected(int index) const;
     ConstXPUImagePtr current_image() const { return image(m_current); }
     XPUImagePtr      current_image() { return image(m_current); }
     ConstXPUImagePtr reference_image() const { return image(m_reference); }
@@ -41,8 +54,9 @@ public:
     ConstXPUImagePtr image(int index) const;
     XPUImagePtr      image(int index);
 
-    bool set_current_image_index(int newIndex, bool forceCallback = false);
-    bool set_reference_image_index(int newIndex);
+    bool set_current_image_index(int new_index, bool force_callback = false);
+    bool set_reference_image_index(int new_index);
+    bool select_image_index(int index);
     bool swap_current_selected_with_previous()
     {
         return is_valid(m_previous) ? set_current_image_index(m_previous) : false;
@@ -62,8 +76,10 @@ public:
     void close_all_images();
 
     // Modify the image data
-    void async_modify_image(const ConstImageCommand &command);
-    void async_modify_image(const ConstImageCommandWithProgress &command);
+    void async_modify_current(const ConstImageCommand &command);
+    void async_modify_current(const ConstImageCommandWithProgress &command);
+    void async_modify_selected(const ConstImageCommand &command);
+    void async_modify_selected(const ConstImageCommandWithProgress &command);
     void undo();
     void redo();
 
@@ -91,7 +107,7 @@ public:
     void        focus_filter();
 
 private:
-    void update_buttons();
+    void update_buttons(bool just_created = false);
     void enable_disable_buttons();
     void update_histogram();
     void update_filter();
