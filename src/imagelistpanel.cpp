@@ -9,14 +9,13 @@
 #define NOMINMAX 1
 #endif
 #endif
-#include <GLFW/glfw3.h>
 
+#include "imagelistpanel.h"
 #include "colorslider.h"
 #include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "imagebutton.h"
-#include "imagelistpanel.h"
 #include "multigraph.h"
 #include "timer.h"
 #include "well.h"

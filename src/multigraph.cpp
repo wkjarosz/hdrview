@@ -8,10 +8,9 @@
 #include "colorspace.h"
 #include "common.h"
 #include <iostream>
+#include <nanogui/opengl.h>
 #include <nanogui/theme.h>
 #include <spdlog/fmt/fmt.h>
-
-#include <nanogui/opengl.h>
 
 using std::string;
 using std::vector;
