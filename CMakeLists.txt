@@ -9,7 +9,7 @@ set(HDRVIEW_VERSION "1.2.0")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
-set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT hdrview)
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
 add_subdirectory(ext ext_build)
 
