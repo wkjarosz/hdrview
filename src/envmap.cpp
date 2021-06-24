@@ -6,6 +6,7 @@
 
 #include "envmap.h"
 #include "common.h"
+#include <cmath>
 
 using namespace nanogui;
 using std::string;
