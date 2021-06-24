@@ -14,37 +14,22 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 add_subdirectory(ext ext_build)
 
 include_directories(
-  # tinyformat string formatting library
   ${TFM_INCLUDE_DIR}
-  # OpenEXR high dynamic range bitmap library
   SYSTEM ${OPENEXR_INCLUDE_DIRS}
-  # Pseudorandom number generator
-  ${PCG32_INCLUDE_DIR}
-  # Helper functions for statistical hypothesis tests
-  ${HYPOTHESIS_INCLUDE_DIR}
-  # GLFW library for OpenGL context creation
   SYSTEM ${GLFW_INCLUDE_DIR}
-  # GLEW library for accessing OpenGL functions
   SYSTEM ${GLEW_INCLUDE_DIR}
-  # NanoVG drawing library
   SYSTEM ${NANOVG_INCLUDE_DIR}
-  # NanoGUI user interface library
   SYSTEM ${NANOGUI_INCLUDE_DIR}
   SYSTEM ${NANOGUI_EXTRA_INCS}
-  # docopt
   ${DOCOPT_INCLUDE_DIR}
-  # spdlog
   ${SPDLOG_INCLUDE_DIR}
-  # stb
   ${STB_INCLUDE_DIR}
-  # tinydngloader
   ${TINYDNG_INCLUDE_DIR}
-  # alphanum
+  SYSTEM ${TINYDIR_INCLUDE_DIR}
   ${ALPHANUM_INCLUDE_DIR}
-  #nlohmann/json
   ${JSON_INCLUDE_DIR}
-  #platformfolders
   ${PLATFORMFOLDERS_INCLUDE_DIR}
+  ${FILESYSTEM_INCLUDE}
 )
 
 # Resource file (icons etc.)
