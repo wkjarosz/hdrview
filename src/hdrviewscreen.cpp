@@ -11,6 +11,7 @@
 #include "common.h"
 #include "dialog.h"
 #include "editimagepanel.h"
+#include "filesystem/path.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
@@ -18,7 +19,6 @@
 #include "popupmenu.h"
 #include "tool.h"
 #include "xpuimage.h"
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <nanogui/opengl.h>
@@ -27,7 +27,12 @@
 
 #include "json.h"
 
-using namespace std;
+using std::cout;
+using std::endl;
+using std::exception;
+using std::make_shared;
+using std::string;
+using std::vector;
 using json = nlohmann::json;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
@@ -576,7 +581,7 @@ void HDRViewScreen::read_settings()
     try
     {
         string directory = config_directory();
-        std::filesystem::create_directories(directory);
+        filesystem::create_directories(directory);
         string filename = directory + "settings.json";
         spdlog::info("Reading configuration from file {}", filename);
 
@@ -599,7 +604,7 @@ void HDRViewScreen::write_settings()
     try
     {
         string directory = config_directory();
-        std::filesystem::create_directories(directory);
+        filesystem::create_directories(directory);
         string filename = directory + "settings.json";
 
         spdlog::info("Saving configuration file to {}", filename);
