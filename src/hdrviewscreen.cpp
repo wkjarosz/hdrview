@@ -585,7 +585,6 @@ HDRViewScreen::~HDRViewScreen()
     m_join_requested = true;
     spdlog::trace("quitting HDRView");
     m_gui_refresh_thread.join();
-    Screen::~Screen();
 }
 
 void HDRViewScreen::read_settings()
