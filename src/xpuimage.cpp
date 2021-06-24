@@ -61,7 +61,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
                 ret->histogram[ESRGB].values[c][::clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1)] +=
                     d;
                 ret->histogram[ELog]
-                    .values[c][::clamp(int(floor(normalizedLogScale(val[c]) * numBins)), 0, numBins - 1)] += d;
+                    .values[c][::clamp(int(floor(normalized_log_scale(val[c]) * numBins)), 0, numBins - 1)] += d;
             }
         }
 
@@ -105,7 +105,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
         for_each(ret->histogram[ESRGB].xTicks.begin(), ret->histogram[ESRGB].xTicks.end(),
                  [](float &v) { v = LinearToSRGB(v); });
         for_each(ret->histogram[ELog].xTicks.begin(), ret->histogram[ELog].xTicks.end(),
-                 [](float &v) { v = normalizedLogScale(v); });
+                 [](float &v) { v = normalized_log_scale(v); });
 
         // create the tick labels
         auto &hist = ret->histogram[ELinear];

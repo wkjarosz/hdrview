@@ -209,7 +209,7 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
         if (modifiers & GLFW_MOD_SHIFT)
             m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
         else
-            m_image_view->set_gamma(max(0.02f, m_image_view->gamma() - 0.02f));
+            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
         return true;
 
     case 'E':
@@ -253,7 +253,7 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
             if (!img)
                 return;
             Color4 mC  = img->image().max();
-            float  mCf = max(mC[0], mC[1], mC[2]);
+            float  mCf = std::max({mC[0], mC[1], mC[2]});
             spdlog::debug("max value: {}", mCf);
             m_image_view->set_exposure(log2(1.0f / mCf));
             m_images_panel->request_histogram_update(true);

@@ -4,6 +4,11 @@
 // be found in the LICENSE.txt file.
 //
 
+#if defined(_MSC_VER)
+// Make MS cmath define M_PI
+#define _USE_MATH_DEFINES
+#endif
+
 #include "envmap.h"
 #include "common.h"
 #include <cmath>

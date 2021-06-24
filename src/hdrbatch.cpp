@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "common.h"   // for getBasename, getExtension
+#include "common.h"   // for get_basename, get_extension
 #include "envmap.h"   // for XYZToAngularMap, XYZToCubeMap
 #include "hdrimage.h" // for HDRImage
 #include <ctype.h>    // for tolower

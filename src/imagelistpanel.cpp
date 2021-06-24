@@ -715,7 +715,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 
         if (idxY != 0)
             for (int c = 0; c < 3; ++c)
-                for_each(hist[c].begin(), hist[c].end(), [](float &v) { v = normalizedLogScale(v); });
+                for_each(hist[c].begin(), hist[c].end(), [](float &v) { v = normalized_log_scale(v); });
 
         m_graph->set_values(hist[0], 0);
         m_graph->set_values(hist[1], 1);
@@ -724,7 +724,7 @@ void ImageListPanel::draw(NVGcontext *ctx)
 
         auto yTicks = linspaced(9, 0.0f, 1.0f);
         if (idxY != 0)
-            for_each(yTicks.begin(), yTicks.end(), [](float &v) { v = normalizedLogScale(v); });
+            for_each(yTicks.begin(), yTicks.end(), [](float &v) { v = normalized_log_scale(v); });
         m_graph->set_yticks(yTicks);
 
         float gain = pow(2.f, m_image_view->exposure());

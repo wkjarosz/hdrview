@@ -123,29 +123,6 @@ inline T smootherStep(T a, T b, T x)
 }
 
 /*!
- * @brief Cosine interpolation between between 0 and 1 as x moves between a and b.
- *
- * @param a A value.
- * @param b Another value.
- * @param x A number between \a a and \a b.
- * @return  A value between 0.0 and 1.0.
- */
-template <typename T>
-inline T cosStep(T a, T b, T x)
-{
-    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
-    return T(0.5) * (T(1) - cos(t * T(M_PI)));
-}
-
-//! The inverse of the cosStep function.
-template <typename T>
-inline T inverseCosStep(T a, T b, T x)
-{
-    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
-    return acos(T(1) - T(2) * t) * T(M_1_PI);
-}
-
-/*!
  * @brief  Evaluates Perlin's bias function to control the mean/midpoint of a function.
  *
  * Remaps the value t to increase/decrease the midpoint while preserving the values at t=0 and t=1.
@@ -267,7 +244,7 @@ inline T mod(T a, T b)
 }
 
 template <typename T>
-inline T logScale(T val)
+inline T log_scale(T val)
 {
     static const T eps    = T(0.001);
     static const T logeps = std::log(eps);
@@ -276,53 +253,17 @@ inline T logScale(T val)
 }
 
 template <typename T>
-inline T normalizedLogScale(T val, T minLog, T diffLog)
+inline T normalized_log_scale(T val, T minLog, T diffLog)
 {
-    return (logScale(val) - minLog) / diffLog;
+    return (log_scale(val) - minLog) / diffLog;
 }
 
 template <typename T>
-inline T normalizedLogScale(T val)
+inline T normalized_log_scale(T val)
 {
-    static const T minLog  = logScale(T(0));
-    static const T diffLog = logScale(T(1)) - minLog;
-    return normalizedLogScale(val, minLog, diffLog);
-}
-
-template <typename T>
-inline const T &min(const T &a, const T &b, const T &c)
-{
-    return std::min(std::min(a, b), c);
-}
-
-template <typename T>
-inline const T &min(const T &a, const T &b, const T &c, const T &d)
-{
-    return std::min(min(a, b, c), d);
-}
-
-template <typename T>
-inline const T &min(const T &a, const T &b, const T &c, const T &d, const T &e)
-{
-    return std::min(min(a, b, c, d), e);
-}
-
-template <typename T>
-inline const T &max(const T &a, const T &b, const T &c)
-{
-    return std::max(std::max(a, b), c);
-}
-
-template <typename T>
-inline const T &max(const T &a, const T &b, const T &c, const T &d)
-{
-    return std::max(max(a, b, c), d);
-}
-
-template <typename T>
-inline const T &max(const T &a, const T &b, const T &c, const T &d, const T &e)
-{
-    return std::max(max(a, b, c, d), e);
+    static const T minLog  = log_scale(T(0));
+    static const T diffLog = log_scale(T(1)) - minLog;
+    return normalized_log_scale(val, minLog, diffLog);
 }
 
 template <typename T>

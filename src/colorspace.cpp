@@ -227,8 +227,8 @@ void xyYToXZ(float *X, float *Z, float x, float y, float Y)
 void RGBToHSV(float *H, float *S, float *V, float R, float G, float B)
 {
     // Calculate the max and min of red, green and blue.
-    float mx    = max(R, G, B);
-    float mn    = min(R, G, B);
+    float mx    = std::max({R, G, B});
+    float mn    = std::min({R, G, B});
     float delta = mx - mn;
 
     // Set the saturation and value
@@ -329,8 +329,8 @@ void HSVToRGB(float *R, float *G, float *B, float H, float S, float V)
 */
 void RGBToHSL(float *H, float *S, float *L, float R, float G, float B)
 {
-    float mn = min(R, G, B);
-    float mx = max(R, G, B);
+    float mn = std::min({R, G, B});
+    float mx = std::max({R, G, B});
 
     // compute lightness: average of min and max rgb values
     float sum  = mn + mx;
@@ -366,8 +366,8 @@ void RGBToHSL(float *H, float *S, float *L, float R, float G, float B)
 
 void SatAdjust(float *R, float *G, float *B, float s)
 {
-    float mn = min(*R, *G, *B);
-    float mx = max(*R, *G, *B);
+    float mn = std::min({*R, *G, *B});
+    float mx = std::max({*R, *G, *B});
 
     if (mn == mx) // achromatic
         return;
