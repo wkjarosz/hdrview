@@ -274,7 +274,7 @@ add_executable(force-random-dither
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
 target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
-target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s)
+target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)
