@@ -22,11 +22,12 @@
 #include "well.h"
 #include "xpuimage.h"
 #include <alphanum.h>
+#include <filesystem>
 #include <nanogui/opengl.h>
 #include <set>
 #include <spdlog/spdlog.h>
-#include <tinydir.h>
 
+namespace fs = std::filesystem;
 using namespace nanogui;
 using namespace std;
 
@@ -987,60 +988,35 @@ void ImageListPanel::load_images(const vector<string> &filenames)
 {
     vector<string> all_filenames;
 
-    const static set<string> extensions = {"exr", "png", "jpg", "jpeg", "hdr", "pic",
-                                           "pfm", "ppm", "bmp", "tga",  "psd"};
+    auto try_add_file = [&all_filenames](const fs::path &path)
+    {
+        const static set<string> extensions = {".exr", ".png", ".jpg", ".jpeg", ".hdr", ".pic",
+                                               ".pfm", ".ppm", ".bmp", ".tga",  ".psd"};
+        if (fs::is_regular_file(path))
+        {
+            // only consider image files we support
+            string ext = path.extension();
+            transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (extensions.count(ext))
+                all_filenames.push_back(path);
+        }
+    };
 
     // first just assemble all the images we will need to load by traversing any directories
-    for (auto i : filenames)
+    for (auto filename : filenames)
     {
-        tinydir_dir dir;
-        if (tinydir_open(&dir, i.c_str()) != -1)
+        spdlog::trace("Checking path: {}", filename);
+        fs::path path(filename);
+
+        if (fs::is_directory(path))
         {
-            try
-            {
-                // filename is actually a directory, traverse it
-                spdlog::info("Loading images in \"{}\"...", dir.path);
-                while (dir.has_next)
-                {
-                    tinydir_file file;
-                    if (tinydir_readfile(&dir, &file) == -1)
-                        throw runtime_error("Error getting file");
+            // filename is actually a directory, try all images in it
+            spdlog::info("Loading images in directory \"{}\"...", filename);
 
-                    if (!file.is_reg)
-                    {
-                        if (tinydir_next(&dir) == -1)
-                            throw runtime_error("Error getting next file");
-                        continue;
-                    }
-
-                    // only consider image files we support
-                    string ext = file.extension;
-                    transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                    if (!extensions.count(ext))
-                    {
-                        if (tinydir_next(&dir) == -1)
-                            throw runtime_error("Error getting next file");
-                        continue;
-                    }
-
-                    all_filenames.push_back(file.path);
-
-                    if (tinydir_next(&dir) == -1)
-                        throw runtime_error("Error getting next file");
-                }
-
-                tinydir_close(&dir);
-            }
-            catch (const exception &e)
-            {
-                spdlog::error("Error listing directory: ({}).", e.what());
-            }
+            for (auto &p : fs::directory_iterator(path)) try_add_file(p.path());
         }
         else
-        {
-            all_filenames.push_back(i);
-        }
-        tinydir_close(&dir);
+            try_add_file(path);
     }
 
     // now start a bunch of asynchronous image loads

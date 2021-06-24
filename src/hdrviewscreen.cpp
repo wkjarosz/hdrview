@@ -4,9 +4,6 @@
 // be found in the LICENSE.txt file.
 //
 
-#define WINVER       0x0601 // Kernel 6.1 == Windows 7/Server 2008 R2
-#define _WIN32_WINNT WINVER
-#define _WIN32_IE    0x0800 // IE8
 #define NOMINMAX
 
 #include "hdrviewscreen.h"
@@ -21,34 +18,17 @@
 #include "popupmenu.h"
 #include "tool.h"
 #include "xpuimage.h"
-#include <cfgpath.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <nanogui/opengl.h>
 #include <spdlog/spdlog.h>
 #include <thread>
-#include <tinydir.h>
 
 #include "json.h"
 
 using namespace std;
 using json = nlohmann::json;
-
-namespace
-{
-string config_filename()
-{
-    char filename[MAX_PATH];
-    get_user_config_file(filename, sizeof(filename), "hdrview");
-    if (filename[0] == 0)
-    {
-        spdlog::error("Unable to find home directory.");
-        return string();
-    }
-
-    return string(filename);
-}
-} // namespace
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
     Screen(nanogui::Vector2i(800, 600), "HDRView")
@@ -595,10 +575,9 @@ void HDRViewScreen::read_settings()
 {
     try
     {
-        string filename = config_filename();
-        if (filename.empty())
-            throw std::runtime_error("Cannot find config file location.");
-
+        string directory = config_directory();
+        std::filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
         spdlog::info("Reading configuration from file {}", filename);
 
         std::ifstream stream(filename);
@@ -619,9 +598,9 @@ void HDRViewScreen::write_settings()
 {
     try
     {
-        string filename = config_filename();
-        if (filename.empty())
-            throw std::runtime_error("Cannot find config file location.");
+        string directory = config_directory();
+        std::filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
 
         spdlog::info("Saving configuration file to {}", filename);
 

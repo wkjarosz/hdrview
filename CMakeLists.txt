@@ -31,14 +31,10 @@ include_directories(
   # NanoGUI user interface library
   SYSTEM ${NANOGUI_INCLUDE_DIR}
   SYSTEM ${NANOGUI_EXTRA_INCS}
-  # tinydir
-  ${TINYDIR_INCLUDE_DIR}
   # docopt
   ${DOCOPT_INCLUDE_DIR}
   # spdlog
   ${SPDLOG_INCLUDE_DIR}
-  # cfgpath
-  ${CFGPATH_INCLUDE_DIR}
   # stb
   ${STB_INCLUDE_DIR}
   # tinydngloader
@@ -47,6 +43,8 @@ include_directories(
   ${ALPHANUM_INCLUDE_DIR}
   #nlohmann/json
   ${JSON_INCLUDE_DIR}
+  #platformfolders
+  ${PLATFORMFOLDERS_INCLUDE_DIR}
 )
 
 # Resource file (icons etc.)
@@ -290,8 +288,8 @@ add_executable(force-random-dither
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
-target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s ${Boost_REGEX_LIBRARY})
+target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
+target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)

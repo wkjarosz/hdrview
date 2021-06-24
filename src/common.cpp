@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include <regex>
+#include <sago/platform_folders.h>
 
 using namespace std;
 
@@ -20,6 +21,8 @@ const char *hdrview_git_version() { return GIT_TAG; }
 const char *hdrview_git_revision() { return GIT_REV; }
 const char *hdrview_git_branch() { return GIT_BRANCH; }
 const char *hdrview_timestamp() { return HDRVIEW_BUILD_TIME; }
+
+string config_directory() { return sago::getConfigHome() + "/HDRView/"; }
 
 string get_extension(const string &filename)
 {

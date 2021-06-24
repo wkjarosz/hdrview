@@ -322,3 +322,4 @@ const char *hdrview_git_version();
 const char *hdrview_git_revision();
 const char *hdrview_git_branch();
 const char *hdrview_timestamp();
+std::string config_directory();
