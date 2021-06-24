@@ -21,3 +21,9 @@
 [submodule "ext/nanogui"]
 	path = ext/nanogui
 	url = https://github.com/mitsuba-renderer/nanogui
+[submodule "ext/filesystem"]
+	path = ext/filesystem
+	url = https://github.com/wjakob/filesystem.git
+[submodule "ext/PlatformFolders"]
+	path = ext/PlatformFolders
+	url = https://github.com/sago007/PlatformFolders.git
