@@ -6,7 +6,6 @@
 #include "hdrviewscreen.h"
 #include <hdrview_resources.h>
 #include <iostream>
-#include <nanogui/opengl.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/screen.h>
 #include <nanogui/shader.h>
@@ -15,6 +14,8 @@
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 #include <sstream>
+
+#include <nanogui/opengl.h>
 
 using namespace nanogui;
 using namespace std;

@@ -13,11 +13,12 @@
 #include "imagelistpanel.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
-#include <nanogui/opengl.h>
 #include <nanogui/toolbutton.h>
 
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+
+#include <nanogui/opengl.h>
 
 using namespace nanogui;
 using namespace std;
