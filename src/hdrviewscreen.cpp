@@ -4,6 +4,11 @@
 // be found in the LICENSE.txt file.
 //
 
+#define WINVER       0x0601 // Kernel 6.1 == Windows 7/Server 2008 R2
+#define _WIN32_WINNT WINVER
+#define _WIN32_IE    0x0800 // IE8
+#define NOMINMAX
+
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
 #include "common.h"
@@ -14,13 +19,12 @@
 #include "helpwindow.h"
 #include "imagelistpanel.h"
 #include "popupmenu.h"
-#include "xpuimage.h"
-#include <iostream>
-#include <nanogui/opengl.h>
-#define NOMINMAX
 #include "tool.h"
+#include "xpuimage.h"
 #include <cfgpath.h>
 #include <fstream>
+#include <iostream>
+#include <nanogui/opengl.h>
 #include <spdlog/spdlog.h>
 #include <thread>
 #include <tinydir.h>
