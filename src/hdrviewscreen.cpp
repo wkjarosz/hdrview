@@ -4,31 +4,42 @@
 // be found in the LICENSE.txt file.
 //
 
+#define NOMINMAX
+
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
 #include "common.h"
 #include "dialog.h"
 #include "editimagepanel.h"
+#include "filesystem/path.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
 #include "imagelistpanel.h"
 #include "popupmenu.h"
+#include "tool.h"
 #include "xpuimage.h"
+#include <fstream>
 #include <iostream>
 #include <nanogui/opengl.h>
-#define NOMINMAX
 #include <spdlog/spdlog.h>
 #include <thread>
-#include <tinydir.h>
 
-#include "tool.h"
+#include "json.h"
 
-using namespace std;
+using std::cout;
+using std::endl;
+using std::exception;
+using std::make_shared;
+using std::string;
+using std::vector;
+using json = nlohmann::json;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView", true)
+    Screen(nanogui::Vector2i(800, 600), "HDRView")
 {
+    read_settings();
+
     set_background(Color(0.23f, 1.0f));
 
     auto theme                     = new Theme(m_nvg_context);
@@ -41,7 +52,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     set_theme(theme);
 
     auto panel_theme                       = new Theme(m_nvg_context);
-    panel_theme                            = new Theme(m_nvg_context);
     panel_theme->m_standard_font_size      = 16;
     panel_theme->m_button_font_size        = 15;
     panel_theme->m_text_box_font_size      = 14;
@@ -52,7 +62,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     panel_theme->m_window_drop_shadow_size = 0;
 
     auto flat_theme                             = new Theme(m_nvg_context);
-    flat_theme                                  = new Theme(m_nvg_context);
     flat_theme->m_standard_font_size            = 16;
     flat_theme->m_button_font_size              = 15;
     flat_theme->m_text_box_font_size            = 14;
@@ -86,14 +95,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     m_tool_panel = new Window(this, "");
     m_tool_panel->set_theme(panel_theme);
-    m_tool_panel->set_fixed_width(33);
     m_tool_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 20));
     auto tool_holder = m_tool_panel->add<Widget>();
     tool_holder->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
 
-    m_image_view = new HDRImageView(this);
-    m_image_view->set_grid_threshold(10);
-    m_image_view->set_pixel_info_threshold(40);
+    m_image_view = new HDRImageView(this, m_settings);
 
     m_status_bar = new Window(this, "");
     m_status_bar->set_theme(panel_theme);
@@ -114,241 +120,243 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     // create side panel widgets
     //
 
+    vector<Widget *>    panels;
+    vector<PopupMenu *> popup_menus;
+    m_side_scroll_panel   = new VScrollPanel(m_side_panel);
+    m_side_panel_contents = new Widget(m_side_scroll_panel);
+    m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
+    resize_side_panel(m_settings.value("geometry", json::object()).value("side panel width", 215));
+
+    //
+    // create file/images panel
+    //
+
+    popup_menus.push_back(new PopupMenu(this, m_side_panel));
+    m_panel_btns.push_back(
+        m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("File", FA_CARET_DOWN));
+    m_panel_btns.back()->set_theme(flat_theme);
+    m_panel_btns.back()->set_flags(Button::ToggleButton);
+    m_panel_btns.back()->set_pushed(false);
+    m_panel_btns.back()->set_font_size(18);
+    m_panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
+    m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
+    m_images_panel->set_visible(false);
+    panels.push_back(m_images_panel);
+
+    //
+    // create info panel
+    //
+
+    popup_menus.push_back(new PopupMenu(this, m_side_panel));
+    m_panel_btns.push_back(
+        m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Info", FA_CARET_RIGHT));
+    m_panel_btns.back()->set_theme(flat_theme);
+    m_panel_btns.back()->set_flags(Button::ToggleButton);
+    m_panel_btns.back()->set_pushed(false);
+    m_panel_btns.back()->set_font_size(18);
+    m_panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
     {
-        vector<Button *>    panel_btns;
-        vector<Widget *>    panels;
-        vector<PopupMenu *> popup_menus;
-        m_side_scroll_panel   = new VScrollPanel(m_side_panel);
-        m_side_panel_contents = new Widget(m_side_scroll_panel);
-        m_side_panel_contents->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 4, 4));
-        m_side_panel_contents->set_fixed_width(215);
-        m_side_scroll_panel->set_fixed_width(m_side_panel_contents->fixed_width() + 12);
-        m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
+        auto info_panel = new Well(m_side_panel_contents, 1, Color(150, 32), Color(0, 50));
+        info_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
 
-        //
-        // create file/images panel
-        //
+        auto row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-        // auto menu1 = new PopupMenu(this, m_side_panel);
-        // auto menu2 = new PopupMenu(this, m_side_panel);
+        new Label(row, "File:", "sans-bold");
+        m_path_info_label = new Label(row, "");
+        m_path_info_label->set_fixed_width(135);
 
-        popup_menus.push_back(new PopupMenu(this, m_side_panel));
-        panel_btns.push_back(
-            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("File", FA_CARET_DOWN));
-        panel_btns.back()->set_theme(flat_theme);
-        panel_btns.back()->set_flags(Button::ToggleButton);
-        panel_btns.back()->set_pushed(true);
-        panel_btns.back()->set_font_size(18);
-        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+        row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-        m_images_panel = new ImageListPanel(m_side_panel_contents, this, m_image_view);
-        panels.push_back(m_images_panel);
+        new Label(row, "Resolution:", "sans-bold");
+        m_res_info_label = new Label(row, "");
+        m_res_info_label->set_fixed_width(135);
 
-        //
-        // create info panel
-        //
+        // spacer
+        (new Widget(info_panel))->set_fixed_height(5);
 
-        popup_menus.push_back(new PopupMenu(this, m_side_panel));
-        panel_btns.push_back(
-            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Info", FA_CARET_RIGHT));
-        panel_btns.back()->set_theme(flat_theme);
-        panel_btns.back()->set_flags(Button::ToggleButton);
-        panel_btns.back()->set_pushed(false);
-        panel_btns.back()->set_font_size(18);
-        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+        row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
+        auto tb = new ToolButton(row, FA_EYE_DROPPER);
+        tb->set_theme(flat_theme);
+        tb->set_enabled(false);
+        tb->set_icon_extra_scale(1.5f);
+
+        (new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+        m_color32_info_label = new Label(row, "");
+        m_color32_info_label->set_fixed_width(50 + 24 + 5);
+        m_color8_info_label = new Label(row, "");
+        m_color8_info_label->set_fixed_width(50);
+
+        // spacer
+        (new Widget(info_panel))->set_fixed_height(5);
+
+        row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+        tb = new ToolButton(row, FA_CROSSHAIRS);
+        tb->set_theme(flat_theme);
+        tb->set_enabled(false);
+        tb->set_icon_extra_scale(1.5f);
+
+        (new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
+        m_pixel_info_label = new Label(row, "");
+        m_pixel_info_label->set_fixed_width(50);
+
+        tb = new ToolButton(row, FA_EXPAND);
+        tb->set_theme(flat_theme);
+        tb->set_enabled(false);
+        tb->set_icon_extra_scale(1.5f);
+
+        (new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
+        m_roi_info_label = new Label(row, "");
+        m_roi_info_label->set_fixed_width(50);
+
+        // spacer
+        (new Widget(info_panel))->set_fixed_height(5);
+
+        row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+        tb = new ToolButton(row, FA_PERCENTAGE);
+        tb->set_theme(flat_theme);
+        tb->set_enabled(false);
+        tb->set_icon_extra_scale(1.5f);
+
+        (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
+        m_stats_label = new Label(row, "");
+        m_stats_label->set_fixed_width(130);
+
+        // spacer
+        (new Widget(info_panel))->set_fixed_height(5);
+
+        row = new Widget(info_panel);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+
+        tb = new ToolButton(row, FA_RULER);
+        tb->set_theme(flat_theme);
+        tb->set_enabled(false);
+        tb->set_icon_extra_scale(1.5f);
+
+        (new Label(row, "°:\nΔ:", "sans-bold"))->set_fixed_width(20);
+        m_ruler_info_label = new Label(row, "");
+        m_ruler_info_label->set_fixed_width(50);
+
+        info_panel->set_fixed_height(4);
+        panels.push_back(info_panel);
+    }
+
+    //
+    // create edit panel
+    //
+
+    popup_menus.push_back(new PopupMenu(this, m_side_panel));
+    m_panel_btns.push_back(
+        m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Edit", FA_CARET_RIGHT));
+    m_panel_btns.back()->set_theme(flat_theme);
+    m_panel_btns.back()->set_flags(Button::ToggleButton);
+    m_panel_btns.back()->set_pushed(false);
+    m_panel_btns.back()->set_font_size(18);
+    m_panel_btns.back()->set_icon_position(Button::IconPosition::Left);
+
+    m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
+    m_edit_panel->set_fixed_height(4);
+    panels.push_back(m_edit_panel);
+
+    //
+    // panel callbacks
+    //
+
+    m_solo_mode = m_settings.value("side panel", json::object()).value("solo mode", false);
+
+    auto toggle_panel = [this, panels](size_t index, bool value)
+    {
+        // expand of collapse the specified panel
+        m_panel_btns[index]->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
+        m_panel_btns[index]->set_pushed(value);
+        panels[index]->set_fixed_height(value ? 0 : 4);
+        panels[index]->set_visible(true);
+
+        // close other panels if solo mode is on
+        if (value && m_solo_mode)
         {
-            auto info_panel = new Well(m_side_panel_contents, 1, Color(150, 32), Color(0, 50));
-            info_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
-
-            auto row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            new Label(row, "File:", "sans-bold");
-            m_path_info_label = new Label(row, "");
-            m_path_info_label->set_fixed_width(135);
-
-            row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            new Label(row, "Resolution:", "sans-bold");
-            m_res_info_label = new Label(row, "");
-            m_res_info_label->set_fixed_width(135);
-
-            // spacer
-            (new Widget(info_panel))->set_fixed_height(5);
-
-            row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            auto tb = new ToolButton(row, FA_EYE_DROPPER);
-            tb->set_theme(flat_theme);
-            tb->set_enabled(false);
-            tb->set_icon_extra_scale(1.5f);
-
-            (new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
-            m_color32_info_label = new Label(row, "");
-            m_color32_info_label->set_fixed_width(50 + 24 + 5);
-            m_color8_info_label = new Label(row, "");
-            m_color8_info_label->set_fixed_width(50);
-
-            // spacer
-            (new Widget(info_panel))->set_fixed_height(5);
-
-            row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            tb = new ToolButton(row, FA_CROSSHAIRS);
-            tb->set_theme(flat_theme);
-            tb->set_enabled(false);
-            tb->set_icon_extra_scale(1.5f);
-
-            (new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
-            m_pixel_info_label = new Label(row, "");
-            m_pixel_info_label->set_fixed_width(50);
-
-            tb = new ToolButton(row, FA_EXPAND);
-            tb->set_theme(flat_theme);
-            tb->set_enabled(false);
-            tb->set_icon_extra_scale(1.5f);
-
-            (new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
-            m_roi_info_label = new Label(row, "");
-            m_roi_info_label->set_fixed_width(50);
-
-            // spacer
-            (new Widget(info_panel))->set_fixed_height(5);
-
-            row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            tb = new ToolButton(row, FA_PERCENTAGE);
-            tb->set_theme(flat_theme);
-            tb->set_enabled(false);
-            tb->set_icon_extra_scale(1.5f);
-
-            (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
-            m_stats_label = new Label(row, "");
-            m_stats_label->set_fixed_width(130);
-
-            // spacer
-            (new Widget(info_panel))->set_fixed_height(5);
-
-            row = new Widget(info_panel);
-            row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-            tb = new ToolButton(row, FA_RULER);
-            tb->set_theme(flat_theme);
-            tb->set_enabled(false);
-            tb->set_icon_extra_scale(1.5f);
-
-            (new Label(row, "°:\nΔ:", "sans-bold"))->set_fixed_width(20);
-            m_ruler_info_label = new Label(row, "");
-            m_ruler_info_label->set_fixed_width(50);
-
-            info_panel->set_fixed_height(4);
-            panels.push_back(info_panel);
-        }
-
-        //
-        // create edit panel
-        //
-
-        popup_menus.push_back(new PopupMenu(this, m_side_panel));
-        panel_btns.push_back(
-            m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Edit", FA_CARET_RIGHT));
-        panel_btns.back()->set_theme(flat_theme);
-        panel_btns.back()->set_flags(Button::ToggleButton);
-        panel_btns.back()->set_font_size(18);
-        panel_btns.back()->set_icon_position(Button::IconPosition::Left);
-
-        m_edit_panel = new EditImagePanel(m_side_panel_contents, this, m_images_panel, m_image_view);
-        m_edit_panel->set_fixed_height(4);
-        panels.push_back(m_edit_panel);
-
-        //
-        // panel callbacks
-        //
-
-        static bool solo = false;
-
-        auto toggle_panel = [this, panel_btns, panels](size_t index, bool value)
-        {
-            // expand of collapse the specified panel
-            panel_btns[index]->set_icon(value ? FA_CARET_DOWN : FA_CARET_RIGHT);
-            panel_btns[index]->set_pushed(value);
-            panels[index]->set_fixed_height(value ? 0 : 4);
-            panels[index]->set_visible(true);
-
-            // close other panels if solo mode is on
-            if (value && solo)
+            for (size_t i = 0; i < panels.size(); ++i)
             {
-                for (size_t i = 0; i < panels.size(); ++i)
-                {
-                    if (i == index)
-                        continue;
-                    panel_btns[i]->set_pushed(false);
-                    panel_btns[i]->set_icon(FA_CARET_RIGHT);
-                    panels[i]->set_fixed_height(4);
-                }
+                if (i == index)
+                    continue;
+                m_panel_btns[i]->set_pushed(false);
+                m_panel_btns[i]->set_icon(FA_CARET_RIGHT);
+                panels[i]->set_fixed_height(4);
             }
-
-            request_layout_update();
-            m_side_panel_contents->perform_layout(m_nvg_context);
-        };
-
-        for (size_t i = 0; i < panel_btns.size(); ++i)
-            panel_btns[i]->set_change_callback([i, toggle_panel](bool value) { toggle_panel(i, value); });
-
-        //
-        // create the right-click menus
-        //
-        for (size_t i = 0; i < popup_menus.size(); ++i)
-        {
-            popup_menus[i]->add_item("Solo mode");
-            popup_menus[i]->add_item(""); // separator
-            popup_menus[i]->add_item("Expand all");
-            popup_menus[i]->add_item("Collapse all");
         }
 
-        for (size_t i = 0; i < popup_menus.size(); ++i)
-        {
-            dynamic_cast<Button *>(popup_menus[i]->child_at(0))
-                ->set_callback(
-                    [popup_menus, panel_btns, toggle_panel, i]
-                    {
-                        solo = !solo;
-                        // update all "Solo mode" buttons and "Expand all" buttons
-                        for (size_t j = 0; j < popup_menus.size(); ++j)
-                        {
-                            if (auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0)))
-                                item->set_checked(solo);
-                            popup_menus[j]->child_at(2)->set_enabled(!solo);
-                        }
+        request_layout_update();
+        m_side_panel_contents->perform_layout(m_nvg_context);
+    };
 
-                        toggle_panel(i, solo ? true : panel_btns[i]->pushed());
-                    });
+    for (size_t i = 0; i < m_panel_btns.size(); ++i)
+        m_panel_btns[i]->set_change_callback([i, toggle_panel](bool value) { toggle_panel(i, value); });
 
-            dynamic_cast<Button *>(popup_menus[i]->child_at(2))
-                ->set_callback(
-                    [panel_btns, toggle_panel, popup_menus, i]
-                    {
-                        // expand this panel, and all other panels if solo mode isn't on
-                        for (size_t j = 0; j < popup_menus.size(); ++j)
-                        {
-                            if (j == i || !solo)
-                                toggle_panel(j, true);
-                        }
-                    });
+    //
+    // create the right-click menus
+    //
+    for (size_t i = 0; i < popup_menus.size(); ++i)
+    {
+        popup_menus[i]->add_item("Solo mode");
+        popup_menus[i]->add_item(""); // separator
+        popup_menus[i]->add_item("Expand all");
+        popup_menus[i]->add_item("Collapse all");
+    }
 
-            dynamic_cast<Button *>(popup_menus[i]->child_at(3))
-                ->set_callback(
-                    [panel_btns, toggle_panel, popup_menus]
+    auto visible_panels =
+        m_settings.value("side panel", json::object()).value("visible panels", json::array()).get<std::vector<int>>();
+    for (size_t i = 0; i < popup_menus.size(); ++i)
+    {
+        auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[i]->child_at(0));
+        item->set_checked(m_solo_mode);
+        item->set_callback(
+            [popup_menus, toggle_panel, i, this]
+            {
+                m_solo_mode = !m_solo_mode;
+                // update all "Solo mode" buttons and "Expand all" buttons
+                for (size_t j = 0; j < popup_menus.size(); ++j)
+                {
+                    if (auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0)))
+                        item->set_checked(m_solo_mode);
+                    popup_menus[j]->child_at(2)->set_enabled(!m_solo_mode);
+                }
+
+                toggle_panel(i, m_solo_mode ? true : m_panel_btns[i]->pushed());
+            });
+
+        popup_menus[i]->child_at(2)->set_enabled(!m_solo_mode);
+        dynamic_cast<Button *>(popup_menus[i]->child_at(2))
+            ->set_callback(
+                [toggle_panel, popup_menus, i, this]
+                {
+                    // expand this panel, and all other panels if solo mode isn't on
+                    for (size_t j = 0; j < popup_menus.size(); ++j)
                     {
-                        // collapse all panels
-                        for (size_t j = 0; j < popup_menus.size(); ++j) toggle_panel(j, false);
-                    });
-        }
+                        if (j == i || !m_solo_mode)
+                            toggle_panel(j, true);
+                    }
+                });
+
+        dynamic_cast<Button *>(popup_menus[i]->child_at(3))
+            ->set_callback(
+                [toggle_panel, popup_menus]
+                {
+                    // collapse all panels
+                    for (size_t j = 0; j < popup_menus.size(); ++j) toggle_panel(j, false);
+                });
+
+        bool b = find(visible_panels.begin(), visible_panels.end(), i) != visible_panels.end();
+        m_panel_btns[i]->set_pushed(b);
+        toggle_panel(i, b);
     }
 
     //
@@ -394,15 +402,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     for (auto t : m_tools) t->create_toolbutton(tool_holder);
 
-    // (new Widget(m_tool_panel))->set_fixed_height(15);
-
     m_color_btns = new DualHDRColorPicker(m_tool_panel);
     m_color_btns->set_fixed_size(Vector2i(0));
-    // m_color_btns->set_tooltip("Select foreground and background colors.");
     m_color_btns->foreground()->popup()->set_anchor_offset(100);
     m_color_btns->background()->popup()->set_anchor_offset(100);
     m_color_btns->foreground()->set_side(Popup::Left);
     m_color_btns->background()->set_side(Popup::Left);
+    m_color_btns->foreground()->set_color(
+        m_settings.value("color picker", json::object()).value("foreground", Color(0, 255)));
+    m_color_btns->background()->set_color(
+        m_settings.value("color picker", json::object()).value("background", Color(255, 255)));
 
     m_color_btns->foreground()->set_tooltip("Set foreground color.");
     m_color_btns->background()->set_tooltip("Set background color.");
@@ -437,7 +446,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_tools[Tool::Tool_Line]->create_options_bar(m_top_panel);
     }
 
-    m_tools[Tool::Tool_None]->set_active(true);
+    // set the active tool
+    set_tool((Tool::ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool::Tool_None),
+                                     (int)Tool::Tool_None, (int)Tool::Tool_Num_Tools - 1));
+
+    resize_tool_panel(m_settings.value("geometry", json::object()).value("tool panel width", 33));
 
     m_image_view->set_zoom_callback(
         [this](float zoom)
@@ -525,7 +538,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     drop_event(args);
 
-    this->set_size(nanogui::Vector2i(1024, 800));
+    set_size(m_settings.value("geometry", json::object()).value("size", Vector2i(800, 600)));
+
+    Vector2i desired_pos = m_settings.value("geometry", json::object()).value("position", Vector2i(0, 0));
+    glfwSetWindowPos(glfw_window(), desired_pos.x(), desired_pos.y());
+
     request_layout_update();
     set_resize_callback([&](nanogui::Vector2i) { request_layout_update(); });
 
@@ -541,6 +558,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             std::chrono::microseconds anim_quantum = std::chrono::microseconds(1000 * 1000 / 120);
             while (true)
             {
+                if (m_join_requested)
+                    return;
                 bool anim = this->should_refresh_gui();
                 std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
                 this->redraw();
@@ -550,7 +569,80 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         });
 }
 
-HDRViewScreen::~HDRViewScreen() { m_gui_refresh_thread.join(); }
+HDRViewScreen::~HDRViewScreen()
+{
+    m_join_requested = true;
+    spdlog::trace("quitting HDRView");
+    m_gui_refresh_thread.join();
+}
+
+void HDRViewScreen::read_settings()
+{
+    try
+    {
+        string directory = config_directory();
+        filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
+        spdlog::info("Reading configuration from file {}", filename);
+
+        std::ifstream stream(filename);
+        if (!stream.good())
+            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
+
+        stream >> m_settings;
+    }
+    catch (const exception &e)
+    {
+        spdlog::warn("Error while reading settings file: {}", e.what());
+        spdlog::info("Using default settings.");
+        m_settings = json::object();
+    }
+}
+
+void HDRViewScreen::write_settings()
+{
+    try
+    {
+        string directory = config_directory();
+        filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
+
+        spdlog::info("Saving configuration file to {}", filename);
+
+        // open file
+        std::ofstream stream(filename);
+        if (!stream.good())
+            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
+
+        Vector2i position(0, 0);
+        glfwGetWindowPos(glfw_window(), &position.x(), &position.y());
+        m_settings["geometry"] = {{"tool panel width", m_tool_panel->fixed_width()},
+                                  {"side panel width", m_side_panel_contents->fixed_width()},
+                                  {"position", position},
+                                  {"size", size()}};
+
+        m_settings["color picker"] = {{"foreground", m_color_btns->foreground()->color()},
+                                      {"background", m_color_btns->background()->color()}};
+
+        m_settings["side panel"] = {{"solo mode", m_solo_mode}, {"visible panels", json::array()}};
+        for (size_t i = 0; i < m_panel_btns.size(); ++i)
+            if (m_panel_btns[i]->pushed())
+                m_settings["side panel"]["visible panels"].push_back(i);
+
+        m_image_view->write_settings(m_settings);
+
+        for (auto t : m_tools) t->write_settings();
+
+        m_tools.front()->all_tool_settings()["active tool"] = m_tool;
+
+        stream << std::setw(4) << m_settings << std::endl;
+        stream.close();
+    }
+    catch (const exception &e)
+    {
+        spdlog::warn("Error while writing settings file: {}", e.what());
+    }
+}
 
 void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
 {
@@ -1080,6 +1172,32 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     return ret;
 }
 
+void HDRViewScreen::resize_side_panel(int w)
+{
+    w = std::clamp(w, 215, width() - 100);
+    m_side_panel_contents->set_fixed_width(w);
+    m_side_scroll_panel->set_fixed_width(w + 12);
+    m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
+    request_layout_update();
+}
+void HDRViewScreen::resize_tool_panel(int w)
+{
+    w = std::clamp(w, 33, 62);
+    if (w == 62 && w != m_tool_panel->fixed_width())
+        m_tool_panel->child_at(0)->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 4));
+
+    if (m_tool_panel->fixed_width() == 62 && w != 62)
+        m_tool_panel->child_at(0)->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
+
+    if (w == 62)
+        for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i((w - 12) / 2));
+    else
+        for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i(w - 8, 0));
+
+    m_tool_panel->set_fixed_width(w);
+    request_layout_update();
+}
+
 bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                                        int modifiers)
 {
@@ -1108,30 +1226,13 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
     if (m_dragging_side_panel)
     {
-        int w = std::clamp(p.x(), 215, width() - 100);
-        m_side_panel_contents->set_fixed_width(w);
-        m_side_scroll_panel->set_fixed_width(w + 12);
-        m_side_panel->set_fixed_width(m_side_scroll_panel->fixed_width());
-        request_layout_update();
+        resize_side_panel(p.x());
         return true;
     }
 
     if (m_dragging_tool_panel)
     {
-        int w = std::clamp(width() - p.x(), 33, 62);
-        if (w == 62 && w != m_tool_panel->fixed_width())
-            m_tool_panel->child_at(0)->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 4));
-
-        if (m_tool_panel->fixed_width() == 62 && w != 62)
-            m_tool_panel->child_at(0)->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
-
-        if (w == 62)
-            for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i((w - 12) / 2));
-        else
-            for (auto c : m_tool_panel->child_at(0)->children()) c->set_fixed_size(Vector2i(w - 8, 0));
-
-        m_tool_panel->set_fixed_width(w);
-        request_layout_update();
+        resize_tool_panel(width() - p.x());
         return true;
     }
 

@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "common.h"   // for getBasename, getExtension
+#include "common.h"   // for get_basename, get_extension
 #include "envmap.h"   // for XYZToAngularMap, XYZToCubeMap
 #include "hdrimage.h" // for HDRImage
 #include <ctype.h>    // for tolower
@@ -13,6 +13,7 @@
 #include <nanogui/vector.h>
 #include <random> // for normal_distribution, mt19937
 #include <spdlog/spdlog.h>
+
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
@@ -22,7 +23,7 @@ namespace
 {
 std::mt19937 g_rand(53);
 
-HDRImage::BorderMode parseBorderMode(const string &mode)
+HDRImage::BorderMode parse_border_mode(const string &mode)
 {
     if (mode == "black")
         return HDRImage::BLACK;
@@ -35,6 +36,7 @@ HDRImage::BorderMode parseBorderMode(const string &mode)
 
     throw invalid_argument(fmt::format("Invalid border mode \"{}\".", mode));
 }
+
 } // namespace
 
 static const char USAGE[] =
@@ -152,7 +154,7 @@ int main(int argc, char **argv)
     float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f, noiseMean = 0, noiseVar = 0;
     bool dither = true, sRGB = true, dryRun = true, fixNaNs = false, resize = false, remap = false, relativeSize = true,
          saveFiles = false, makeNoise = false, invert = false;
-    HDRImage::BorderMode borderModeX, borderModeY;
+    HDRImage::BorderMode border_mode_x, border_mode_y;
     Color3               nanColor(0.0f, 0.0f, 0.0f);
     // by default use a no-op passthrough warp function
     function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
@@ -233,8 +235,8 @@ int main(int argc, char **argv)
                     throw invalid_argument(
                         fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
 
-                borderModeX = parseBorderMode(first);
-                borderModeY = parseBorderMode(second);
+                border_mode_x = parse_border_mode(first);
+                border_mode_y = parse_border_mode(second);
             }
             else
                 throw invalid_argument(fmt::format("Invalid border mode \"{}\".", docargs["--border-mode"].asString()));
@@ -293,23 +295,23 @@ int main(int argc, char **argv)
 
             AtomicProgress progress;
             if (filterType == "gaussian")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.gaussian_blurred(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else if (filterType == "box")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.box_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.box_blurred(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else if (filterType == "fast-gaussian")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.fast_gaussian_blurred(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.fast_gaussian_blurred(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else if (filterType == "median")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.median_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.median_filtered(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else if (filterType == "bilateral")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.bilateral_filtered(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.bilateral_filtered(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else if (filterType == "unsharp")
-                filter = [filterArg1, filterArg2, progress, borderModeX, borderModeY](const HDRImage &i)
-                { return i.unsharp_masked(filterArg1, filterArg2, progress, borderModeX, borderModeY); };
+                filter = [filterArg1, filterArg2, progress, border_mode_x, border_mode_y](const HDRImage &i)
+                { return i.unsharp_masked(filterArg1, filterArg2, progress, border_mode_x, border_mode_y); };
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", filterType));
 
@@ -516,7 +518,7 @@ int main(int argc, char **argv)
                 {
                     spdlog::info("Remapping image to {:d}x{:d}...", w, h);
                     AtomicProgress progress;
-                    image = image.resampled(w, h, progress, warp, samples, sampler, borderModeX, borderModeY);
+                    image = image.resampled(w, h, progress, warp, samples, sampler, border_mode_x, border_mode_y);
                 }
             }
 
@@ -561,8 +563,8 @@ int main(int argc, char **argv)
 
             if (saveFiles)
             {
-                string thisExt      = ext.size() ? ext : getExtension(inFiles[i]);
-                string thisBasename = basename.size() ? basename : getBasename(inFiles[i]);
+                string thisExt      = ext.size() ? ext : get_extension(inFiles[i]);
+                string thisBasename = basename.size() ? basename : get_basename(inFiles[i]);
                 string filename;
                 string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
                 if (inFiles.size() == 1 || !basename.size())

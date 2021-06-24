@@ -13,14 +13,16 @@
 #include "imagelistpanel.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
-#include <nanogui/opengl.h>
 #include <nanogui/toolbutton.h>
 
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
+#include <nanogui/opengl.h>
+
 using namespace nanogui;
 using namespace std;
+using json = nlohmann::json;
 
 Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
            const string &tooltip, int icon, ETool tool) :
@@ -29,6 +31,42 @@ Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *imag
     m_images_panel(images_panel), m_button(nullptr), m_options(nullptr)
 {
     // empty
+}
+
+nlohmann::json &Tool::all_tool_settings()
+{
+    if (!m_screen->settings().contains("tools") || !m_screen->settings()["tools"].is_object())
+        m_screen->settings()["tools"] = json::object();
+    return m_screen->settings()["tools"];
+}
+
+const nlohmann::json Tool::all_tool_settings() const
+{
+    json j = json::object();
+    if (m_screen->settings().contains("tools") && m_screen->settings()["tools"].is_object())
+        j = m_screen->settings()["tools"];
+    return j;
+}
+
+nlohmann::json &Tool::this_tool_settings()
+{
+    if (!all_tool_settings().contains(m_name) || !all_tool_settings()[m_name].is_object())
+        all_tool_settings()[m_name] = json::object();
+    return all_tool_settings()[m_name];
+}
+
+const nlohmann::json Tool::this_tool_settings() const
+{
+    json j = json::object();
+    if (all_tool_settings().contains(m_name) && all_tool_settings()[m_name].is_object())
+        j = all_tool_settings()[m_name];
+    return j;
+}
+
+void Tool::write_settings()
+{
+    // create a json object to hold the tool's settings
+    // settings();
 }
 
 ToolButton *Tool::create_toolbutton(Widget *toolbar)
@@ -45,21 +83,19 @@ ToolButton *Tool::create_toolbutton(Widget *toolbar)
 
 void Tool::set_active(bool b)
 {
-    spdlog::trace("setting active tool {}; {}", m_name, b);
+    spdlog::trace("setting {} active: {}.", m_name, b);
     if (m_button)
         m_button->set_pushed(b);
     else
-        spdlog::trace("set_active set_pushed failed: {}; {}", m_name, m_tooltip);
+        spdlog::error("Button for {} never created.", m_name);
 
-    spdlog::trace("set_pushed worked");
     if (m_options)
     {
         m_options->set_visible(b);
         m_screen->request_layout_update();
     }
     else
-        spdlog::trace("set_active set_visible failed: {}; {}", m_name, m_tooltip);
-    spdlog::trace("set_visible worked");
+        spdlog::error("Options widget for {} never created.", m_name);
 }
 
 void Tool::draw_crosshairs(NVGcontext *ctx, const Vector2i &p) const
@@ -174,7 +210,7 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
         if (modifiers & GLFW_MOD_SHIFT)
             m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
         else
-            m_image_view->set_gamma(max(0.02f, m_image_view->gamma() - 0.02f));
+            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
         return true;
 
     case 'E':
@@ -198,9 +234,9 @@ HandTool::HandTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPan
 
 Widget *HandTool::create_options_bar(nanogui::Widget *parent)
 {
-    bool  sRGB     = true;
-    float gamma    = 2.2f;
-    float exposure = 0.f;
+    bool  sRGB     = m_image_view->sRGB();
+    float gamma    = m_image_view->gamma();
+    float exposure = m_image_view->exposure();
 
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
@@ -218,7 +254,7 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
             if (!img)
                 return;
             Color4 mC  = img->image().max();
-            float  mCf = max(mC[0], mC[1], mC[2]);
+            float  mCf = std::max({mC[0], mC[1], mC[2]});
             spdlog::debug("max value: {}", mCf);
             m_image_view->set_exposure(log2(1.0f / mCf));
             m_images_panel->request_histogram_update(true);
@@ -331,8 +367,8 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
         ->set_checked(m_image_view->dithering_on());
     (new CheckBox(m_options, "Grid", [&](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
-    (new CheckBox(m_options, "RGB values", [&](bool v) { m_image_view->set_draw_values(v); }))
-        ->set_checked(m_image_view->draw_values_on());
+    (new CheckBox(m_options, "RGB values", [&](bool v) { m_image_view->set_draw_pixel_info(v); }))
+        ->set_checked(m_image_view->draw_pixel_info_on());
 
     return m_options;
 }
@@ -384,8 +420,30 @@ BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListP
     // empty
 }
 
+void BrushTool::write_settings()
+{
+    // create a json object to hold the tool's settings
+    auto &settings        = this_tool_settings();
+    settings["size"]      = m_size_slider->value();
+    settings["hardness"]  = m_hardness_slider->value();
+    settings["flow"]      = m_flow_slider->value();
+    settings["angle"]     = m_angle_slider->value();
+    settings["roundness"] = m_roundness_slider->value();
+    settings["spacing"]   = m_spacing_slider->value();
+    settings["smoothing"] = m_smoothing_checkbox->pushed();
+}
+
 Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 {
+    auto &settings = this_tool_settings();
+
+    m_brush->set_radius(settings.value("size", 15));
+    m_brush->set_hardness(settings.value("hardness", 0.f));
+    m_brush->set_flow(settings.value("flow", 100) / 100.f);
+    m_brush->set_angle(settings.value("angle", 0));
+    m_brush->set_roundness(settings.value("roundness", 100));
+    m_brush->set_spacing(settings.value("spacing", 0));
+
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 0));
     m_options->set_visible(false);
@@ -422,163 +480,163 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Hard:");
-    auto hardness_slider  = new Slider(m_options);
-    auto hardness_textbox = new IntBox<int>(m_options);
+    m_hardness_slider  = new Slider(m_options);
+    m_hardness_textbox = new IntBox<int>(m_options);
 
-    hardness_textbox->set_editable(true);
-    hardness_textbox->set_fixed_width(40);
-    hardness_textbox->set_min_value(0);
-    hardness_textbox->set_max_value(100);
-    hardness_textbox->set_units("%");
-    hardness_textbox->set_alignment(TextBox::Alignment::Right);
-    hardness_textbox->set_callback(
-        [this, hardness_slider](int v)
+    m_hardness_textbox->set_editable(true);
+    m_hardness_textbox->set_fixed_width(40);
+    m_hardness_textbox->set_min_value(0);
+    m_hardness_textbox->set_max_value(100);
+    m_hardness_textbox->set_units("%");
+    m_hardness_textbox->set_alignment(TextBox::Alignment::Right);
+    m_hardness_textbox->set_callback(
+        [this](int v)
         {
             m_brush->set_hardness(v / 100.f);
-            hardness_slider->set_value(v);
+            m_hardness_slider->set_value(v);
         });
-    hardness_slider->set_fixed_width(75);
-    hardness_slider->set_range({0, 100});
-    hardness_slider->set_callback(
-        [this, hardness_textbox](int v)
+    m_hardness_slider->set_fixed_width(75);
+    m_hardness_slider->set_range({0, 100});
+    m_hardness_slider->set_callback(
+        [this](int v)
         {
             m_brush->set_hardness(v / 100.f);
-            hardness_textbox->set_value(v);
+            m_hardness_textbox->set_value(v);
         });
 
-    hardness_textbox->set_value(m_brush->hardness());
-    hardness_slider->set_value(m_brush->hardness());
+    m_hardness_textbox->set_value(m_brush->hardness());
+    m_hardness_slider->set_value(m_brush->hardness());
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Flow:");
-    auto flow_slider  = new Slider(m_options);
-    auto flow_textbox = new IntBox<int>(m_options);
+    m_flow_slider  = new Slider(m_options);
+    m_flow_textbox = new IntBox<int>(m_options);
 
-    flow_textbox->set_editable(true);
-    flow_textbox->set_fixed_width(40);
-    flow_textbox->set_min_value(1);
-    flow_textbox->set_max_value(100);
-    flow_textbox->set_units("%");
-    flow_textbox->set_alignment(TextBox::Alignment::Right);
-    flow_textbox->set_callback(
-        [this, flow_slider](int v)
+    m_flow_textbox->set_editable(true);
+    m_flow_textbox->set_fixed_width(40);
+    m_flow_textbox->set_min_value(1);
+    m_flow_textbox->set_max_value(100);
+    m_flow_textbox->set_units("%");
+    m_flow_textbox->set_alignment(TextBox::Alignment::Right);
+    m_flow_textbox->set_callback(
+        [this](int v)
         {
             m_brush->set_flow(v / 100.f);
-            flow_slider->set_value(v);
+            m_flow_slider->set_value(v);
         });
-    flow_slider->set_fixed_width(75);
-    flow_slider->set_range({1, 100});
-    flow_slider->set_callback(
-        [this, flow_textbox](int v)
+    m_flow_slider->set_fixed_width(75);
+    m_flow_slider->set_range({1, 100});
+    m_flow_slider->set_callback(
+        [this](int v)
         {
             m_brush->set_flow(v / 100.f);
-            flow_textbox->set_value(v);
+            m_flow_textbox->set_value(v);
         });
 
-    flow_textbox->set_value(int(m_brush->flow() * 100));
-    flow_slider->set_value(int(m_brush->flow() * 100));
+    m_flow_textbox->set_value(int(m_brush->flow() * 100));
+    m_flow_slider->set_value(int(m_brush->flow() * 100));
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Angle:");
-    auto angle_slider  = new Slider(m_options);
-    auto angle_textbox = new IntBox<int>(m_options);
+    m_angle_slider  = new Slider(m_options);
+    m_angle_textbox = new IntBox<int>(m_options);
 
-    angle_textbox->set_editable(true);
-    angle_textbox->set_fixed_width(35);
-    angle_textbox->set_min_value(0);
-    angle_textbox->set_max_value(180);
-    angle_textbox->set_units("°");
-    angle_textbox->set_alignment(TextBox::Alignment::Right);
-    angle_textbox->set_callback(
-        [this, angle_slider](int v)
+    m_angle_textbox->set_editable(true);
+    m_angle_textbox->set_fixed_width(35);
+    m_angle_textbox->set_min_value(0);
+    m_angle_textbox->set_max_value(180);
+    m_angle_textbox->set_units("°");
+    m_angle_textbox->set_alignment(TextBox::Alignment::Right);
+    m_angle_textbox->set_callback(
+        [this](int v)
         {
             m_brush->set_angle(v);
-            angle_slider->set_value(v);
+            m_angle_slider->set_value(v);
         });
-    angle_slider->set_fixed_width(75);
-    angle_slider->set_range({0, 180});
-    angle_slider->set_callback(
-        [this, angle_textbox](int v)
+    m_angle_slider->set_fixed_width(75);
+    m_angle_slider->set_range({0, 180});
+    m_angle_slider->set_callback(
+        [this](int v)
         {
             m_brush->set_angle(v);
-            angle_textbox->set_value(v);
+            m_angle_textbox->set_value(v);
         });
 
-    angle_textbox->set_value(m_brush->angle());
-    angle_slider->set_value(m_brush->angle());
+    m_angle_textbox->set_value(m_brush->angle());
+    m_angle_slider->set_value(m_brush->angle());
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Round:");
-    auto roundness_slider  = new Slider(m_options);
-    auto roundness_textbox = new IntBox<int>(m_options);
+    m_roundness_slider  = new Slider(m_options);
+    m_roundness_textbox = new IntBox<int>(m_options);
 
-    roundness_textbox->set_editable(true);
-    roundness_textbox->set_fixed_width(40);
-    roundness_textbox->set_min_value(1);
-    roundness_textbox->set_max_value(100);
-    roundness_textbox->set_units("%");
-    roundness_textbox->set_alignment(TextBox::Alignment::Right);
-    roundness_textbox->set_callback(
-        [this, roundness_slider](int v)
+    m_roundness_textbox->set_editable(true);
+    m_roundness_textbox->set_fixed_width(40);
+    m_roundness_textbox->set_min_value(1);
+    m_roundness_textbox->set_max_value(100);
+    m_roundness_textbox->set_units("%");
+    m_roundness_textbox->set_alignment(TextBox::Alignment::Right);
+    m_roundness_textbox->set_callback(
+        [this](int v)
         {
             m_brush->set_roundness(v);
-            roundness_slider->set_value(v);
+            m_roundness_slider->set_value(v);
         });
-    roundness_slider->set_fixed_width(75);
-    roundness_slider->set_range({1, 100});
-    roundness_slider->set_callback(
-        [this, roundness_textbox](int v)
+    m_roundness_slider->set_fixed_width(75);
+    m_roundness_slider->set_range({1, 100});
+    m_roundness_slider->set_callback(
+        [this](int v)
         {
             m_brush->set_roundness(v);
-            roundness_textbox->set_value(v);
+            m_roundness_textbox->set_value(v);
         });
 
-    roundness_textbox->set_value(m_brush->roundness());
-    roundness_slider->set_value(m_brush->roundness());
+    m_roundness_textbox->set_value(m_brush->roundness());
+    m_roundness_slider->set_value(m_brush->roundness());
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Spacing:");
-    auto spacing_slider  = new Slider(m_options);
-    auto spacing_textbox = new IntBox<int>(m_options);
+    m_spacing_slider  = new Slider(m_options);
+    m_spacing_textbox = new IntBox<int>(m_options);
 
-    spacing_textbox->set_editable(true);
-    spacing_textbox->set_fixed_width(40);
-    spacing_textbox->set_min_value(0);
-    spacing_textbox->set_max_value(100);
-    spacing_textbox->set_units("%");
-    spacing_textbox->set_alignment(TextBox::Alignment::Right);
-    spacing_textbox->set_callback(
-        [this, spacing_slider](int v)
+    m_spacing_textbox->set_editable(true);
+    m_spacing_textbox->set_fixed_width(40);
+    m_spacing_textbox->set_min_value(0);
+    m_spacing_textbox->set_max_value(100);
+    m_spacing_textbox->set_units("%");
+    m_spacing_textbox->set_alignment(TextBox::Alignment::Right);
+    m_spacing_textbox->set_callback(
+        [this](int v)
         {
             m_brush->set_spacing(v);
-            spacing_slider->set_value(v);
+            m_spacing_slider->set_value(v);
         });
-    spacing_slider->set_fixed_width(75);
-    spacing_slider->set_range({0, 100});
-    spacing_slider->set_callback(
-        [this, spacing_textbox](int v)
+    m_spacing_slider->set_fixed_width(75);
+    m_spacing_slider->set_range({0, 100});
+    m_spacing_slider->set_callback(
+        [this](int v)
         {
             m_brush->set_spacing(v);
-            spacing_textbox->set_value(v);
+            m_spacing_textbox->set_value(v);
         });
 
-    spacing_textbox->set_value(m_brush->spacing());
-    spacing_slider->set_value(m_brush->spacing());
+    m_spacing_textbox->set_value(m_brush->spacing());
+    m_spacing_slider->set_value(m_brush->spacing());
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
-    auto smoothing_checkbox = new CheckBox(m_options, "Smoothing");
-    smoothing_checkbox->set_checked(m_smoothing);
-    smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
+    m_smoothing_checkbox = new CheckBox(m_options, "Smoothing");
+    m_smoothing_checkbox->set_checked(settings.value("smoothing", true));
+    m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
 
     return m_options;
 }
@@ -650,7 +708,8 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
         if (m_clicked.x() != std::numeric_limits<int>::lowest())
         {
             m_images_panel->current_image()->start_modify(
-                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
+                                             const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                 {
                     auto new_image = make_shared<HDRImage>(*img);
 
@@ -671,7 +730,8 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
     else if (down)
     {
         m_images_panel->current_image()->start_modify(
-            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
+                                         const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -789,7 +849,7 @@ bool EraserTool::mouse_button(const Vector2i &p, int button, bool down, int modi
         auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
         auto pixel = Vector2i(round(coord.x()), round(coord.y()));
         m_images_panel->current_image()->start_modify(
-            [&pixel, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -870,7 +930,7 @@ bool CloneStampTool::mouse_button(const Vector2i &p, int button, bool down, int 
         auto coord_src = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
         auto dpixel    = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
         m_images_panel->current_image()->start_modify(
-            [&pixel, &dpixel, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&pixel, &dpixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 
@@ -986,8 +1046,17 @@ Eyedropper::Eyedropper(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
     // empty
 }
 
+void Eyedropper::write_settings()
+{
+    // create a json object to hold the tool's settings
+    auto &settings   = this_tool_settings();
+    settings["size"] = m_size;
+}
+
 Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
 {
+    auto &settings = this_tool_settings();
+
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
     m_options->set_visible(false);
@@ -997,6 +1066,7 @@ Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
     auto size = new Dropdown(m_options, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
     size->set_tooltip("The number of pixels sampled by the eyedropper.");
     size->set_callback([this](int s) { m_size = s; });
+    size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
     size->set_fixed_height(19);
 
     return m_options;
@@ -1124,7 +1194,7 @@ float Ruler::angle() const
         return std::numeric_limits<float>::quiet_NaN();
 
     auto to = Vector2f(m_end_pixel - m_start_pixel);
-    return mod(nvgRadToDeg(-atan2(to.y(), to.x())), 360.0f);
+    return fabs(mod(nvgRadToDeg(-atan2(to.y(), to.x())), 360.0f));
 }
 
 bool Ruler::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -1196,10 +1266,22 @@ LineTool::LineTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPan
     // empty
 }
 
+void LineTool::write_settings()
+{
+    // create a json object to hold the tool's settings
+    auto &settings    = this_tool_settings();
+    settings["width"] = m_width_slider->value();
+}
+
 Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 {
+    auto &settings = this_tool_settings();
+
+    m_width = std::clamp(settings.value("width", 2.f), 1.f, 100.f);
+
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options->set_visible(false);
 
     m_options->add<Label>("Width:");
     m_width_slider  = new Slider(m_options);
@@ -1279,7 +1361,7 @@ bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifi
     if (!down)
     {
         m_images_panel->current_image()->start_modify(
-            [&color, &roi, this](const ConstHDRImagePtr &img) -> ImageCommandResult
+            [&color, &roi, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
 

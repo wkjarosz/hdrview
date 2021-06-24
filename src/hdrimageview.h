@@ -10,6 +10,7 @@
 #include "xpuimage.h"
 #include <nanogui/canvas.h>
 #include <nanogui/texture.h>
+#include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
 using namespace nanogui;
@@ -33,7 +34,9 @@ public:
     using DrawCallback  = std::function<void(NVGcontext *ctx)>;
 
     /// Initialize the widget
-    HDRImageView(Widget *parent);
+    HDRImageView(Widget *parent, const nlohmann::json &settings = nlohmann::json::object());
+
+    void write_settings(nlohmann::json &j) const;
 
     // Widget implementation
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
@@ -143,8 +146,8 @@ public:
     bool draw_grid_on() const { return m_draw_grid; }
     void set_draw_grid(bool b) { m_draw_grid = b; }
 
-    bool draw_values_on() const { return m_draw_values; }
-    void set_draw_values(bool b) { m_draw_values = b; }
+    bool draw_pixel_info_on() const { return m_draw_pixel_info; }
+    void set_draw_pixel_info(bool b) { m_draw_pixel_info = b; }
 
     Color4 tonemap(const Color4 &color) const;
 
@@ -217,7 +220,7 @@ protected:
     TextureRef  m_dither_tex;
 
     float m_exposure = 0.f, m_gamma = 2.2f;
-    bool  m_sRGB = true, m_dither = true, m_draw_grid = true, m_draw_values = true;
+    bool  m_sRGB = true, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
 
     // Image display parameters.
     float      m_zoom;                                  ///< The scale/zoom of the image

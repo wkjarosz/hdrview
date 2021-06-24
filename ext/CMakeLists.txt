@@ -174,14 +174,13 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 # Build docopt.cpp
 #============================================================================
 add_subdirectory(docopt EXCLUDE_FROM_ALL)
-# if (WIN32)
-#   cmake_policy(SET CMP0074 NEW)
-#   add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
-#   set(Boost_USE_STATIC_LIBS ON)
-#   set(Boost_USE_STATIC_RUNTIME ON)
-#   find_package(Boost 1.53 REQUIRED COMPONENTS regex)
-# endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
+
+
+#============================================================================
+# Build PlatformFolders
+#============================================================================
+add_subdirectory(PlatformFolders)
 
 #============================================================================
 # Define variables for the include directories for the various dependencies
@@ -210,10 +209,10 @@ set(NANOVG_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/nanogui/ext/nanovg/src)
 set(NANOGUI_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/nanogui/include)
-set(DOCOPT_INCLUDE_DIR
-  ${CMAKE_CURRENT_SOURCE_DIR}/docopt)
 set(TINYDIR_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/tinydir)
+set(DOCOPT_INCLUDE_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/docopt)
 set(TINYDNG_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/tinydngloader)
 set(STB_INCLUDE_DIR
@@ -222,8 +221,10 @@ set(ALPHANUM_INCLUDE_DIR
     ${CMAKE_CURRENT_SOURCE_DIR}/alphanum)
 set(SPDLOG_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include)
-set(CFGPATH_INCLUDE_DIR
-  ${CMAKE_CURRENT_SOURCE_DIR}/cfgpath)
+set(JSON_INCLUDE_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/json)
+set(PLATFORMFOLDERS_INCLUDE_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/PlatformFolders)
 
 
 
@@ -254,13 +255,16 @@ set(CompilerFlags
       NANOVG_INCLUDE_DIR NANOGUI_EXTRA_INCS NANOGUI_EXTRA_DEFS
 	    NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR NANOGUI_BACKEND
       DOCOPT_INCLUDE_DIR
-      TINYDIR_INCLUDE_DIR
       TINYDNG_INCLUDE_DIR
+      TINYDIR_INCLUDE_DIR
       STB_INCLUDE_DIR
       ALPHANUM_INCLUDE_DIR
       SPDLOG_INCLUDE_DIR
-      CFGPATH_INCLUDE_DIR
+      JSON_INCLUDE_DIR
+      PLATFORMFOLDERS_INCLUDE_DIR
 )
 foreach(CompilerFlag ${CompilerFlags})
   set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)
 endforeach()
+
+set(FILESYSTEM_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/filesystem PARENT_SCOPE)

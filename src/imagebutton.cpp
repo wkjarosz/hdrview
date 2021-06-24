@@ -9,6 +9,7 @@
 
 #include "imagebutton.h"
 #include "common.h"
+#include "imagelistpanel.h"
 #include <iostream>
 #include <nanogui/icons.h>
 #include <nanogui/opengl.h>
@@ -54,49 +55,24 @@ bool ImageButton::mouse_button_event(const Vector2i &p, int button, bool down, i
 
     if (button == GLFW_MOUSE_BUTTON_2 || (button == GLFW_MOUSE_BUTTON_1 && modifiers & GLFW_MOD_SHIFT))
     {
-        // If we already were the reference, then let's disable using as a reference.
-        m_is_reference = !m_is_reference;
-
-        // If we newly became the reference, then we need to disable the existing reference
-        // if it exists.
-        if (m_is_reference)
-        {
-            for (auto widget : parent()->children())
-            {
-                ImageButton *b = dynamic_cast<ImageButton *>(widget);
-                if (b && b != this)
-                    b->m_is_reference = false;
-            }
-        }
-
-        // Invoke the callback in any case, such that the surrounding code can
-        // react to new references or a loss of a reference image.
         if (m_reference_callback)
-        {
-            if (m_is_reference)
-                m_reference_callback(m_id - 1);
-            else
-                m_reference_callback(-1);
-        }
+            m_reference_callback(m_id - 1);
 
         return true;
     }
     else if (button == GLFW_MOUSE_BUTTON_1)
     {
-        if (!m_is_selected)
+        if (modifiers & SYSTEM_COMMAND_MOD)
         {
-            // Unselect the other, currently selected image.
-            for (auto widget : parent()->children())
-            {
-                ImageButton *b = dynamic_cast<ImageButton *>(widget);
-                if (b && b != this)
-                    b->m_is_selected = false;
-            }
-
-            m_is_selected = true;
             if (m_selected_callback)
                 m_selected_callback(m_id - 1);
         }
+        else
+        {
+            if (m_current_callback)
+                m_current_callback(m_id - 1);
+        }
+
         return true;
     }
 
@@ -140,10 +116,8 @@ void ImageButton::draw(NVGcontext *ctx)
     Widget::draw(ctx);
 
     Color reference_color = Color(180, 100, 100, 255);
-    Color selected_color  = Color(77, 124, 233, 255);
-
-    Color progress_top    = Color(36, 80, 128, 245);
-    Color progress_bottom = Color(12, 13, 36, 245);
+    Color selected_color  = Color(77 * 3 / 4, 124 * 3 / 4, 233 * 3 / 4, 255);
+    Color current_color   = Color(77, 124, 233, 255);
 
     int extra_border = 0;
     if (m_is_reference)
@@ -156,22 +130,33 @@ void ImageButton::draw(NVGcontext *ctx)
     }
 
     // Fill the button with color.
-    if (m_is_selected || m_mouse_focus)
+    if (m_is_selected)
     {
         nvgBeginPath(ctx);
         nvgRoundedRect(ctx, m_pos.x() + extra_border, m_pos.y() + extra_border, m_size.x() - 2 * extra_border,
                        m_size.y() - 2 * extra_border, 3);
-        nvgFillColor(ctx, m_is_selected ? selected_color : m_theme->m_border_medium);
+        nvgFillColor(ctx, m_is_current ? current_color : selected_color);
         nvgFill(ctx);
     }
+
+    if (m_mouse_focus)
+    {
+        nvgBeginPath(ctx);
+        nvgRoundedRect(ctx, position().x(), position().y(), size().x(), size().y(), 3);
+        nvgFillColor(ctx, Color(255, 25));
+        nvgFill(ctx);
+    }
+
+    Color progress_top    = Color(245, 137, 3, 255);
+    Color progress_bottom = Color(245, 137, 3, 255);
 
     // percent progress bar
     if (m_progress >= 0.f && m_progress < 1.f)
     {
         int bar_pos = (int)std::round((m_size.x() - 4) * m_progress);
 
-        auto paint = nvgBoxGradient(ctx, m_pos.x() + 2 - 1, m_pos.y() + 2 - 1, bar_pos + 1.5f,
-                                    m_size.y() - 2 * extra_border + 1, 3, 4, progress_top, progress_bottom);
+        auto paint = nvgBoxGradient(ctx, m_pos.x() + 2 - 1, m_pos.y() + 2 - 1, bar_pos + 1.5f, m_size.y() + 1, 3, 4,
+                                    progress_top, progress_bottom);
 
         nvgBeginPath(ctx);
         nvgRoundedRect(ctx, m_pos.x() + 2, m_pos.y() + 2, bar_pos, m_size.y() - 2 * 2, 3);
@@ -189,8 +174,8 @@ void ImageButton::draw(NVGcontext *ctx)
         int bar_size = (int)std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
         int left     = (int)std::round(lerp((float)left_edge, float(m_size.x() - 2 - bar_size), anim1));
 
-        auto paint = nvgBoxGradient(ctx, left - 1, m_pos.y() + 2 - 1, bar_size + 1.5f,
-                                    m_size.y() - 2 * extra_border + 1, 3, 4, progress_top, progress_bottom);
+        auto paint = nvgBoxGradient(ctx, left - 1, m_pos.y() + 2 - 1, bar_size + 1.5f, m_size.y() + 1, 3, 4,
+                                    progress_top, progress_bottom);
 
         nvgBeginPath(ctx);
         nvgRoundedRect(ctx, left, m_pos.y() + 2, bar_size, m_size.y() - 2 * 2, 3);

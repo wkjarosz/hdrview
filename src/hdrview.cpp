@@ -6,7 +6,6 @@
 
 #include "common.h"
 #include "hdrviewscreen.h"
-#include <cfgpath.h>
 #include <cstdlib>
 #include <docopt.h>
 #include <iostream>
@@ -52,6 +51,16 @@ Options:
   --version                Show the version.
 )";
 
+HDRViewScreen *g_screen = nullptr;
+
+void write_settings()
+{
+    if (g_screen)
+    {
+        g_screen->write_settings();
+    }
+}
+
 int main(int argc, char **argv)
 {
     vector<string>             arg_vector = {argv + 1, argv + argc};
@@ -59,15 +68,6 @@ int main(int argc, char **argv)
     int                        verbosity = 0;
     float                      gamma     = 2.2f, exposure;
     bool                       dither = true, sRGB = true;
-
-    char cfgdir[MAX_PATH];
-    get_user_config_file(cfgdir, sizeof(cfgdir), "hdrview");
-    if (cfgdir[0] == 0)
-    {
-        printf("Unable to find home directory.\n");
-        return 1;
-    }
-    printf("Saving configuration file to %s\n", cfgdir);
 
     vector<string> inFiles;
 
@@ -143,12 +143,12 @@ int main(int argc, char **argv)
 #endif
 
         {
-            nanogui::ref<HDRViewScreen> app = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
+            nanogui::ref<HDRViewScreen> app(g_screen = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles));
             app->draw_all();
             app->set_visible(true);
             nanogui::mainloop(-1.f);
+            write_settings();
         }
-
         nanogui::shutdown();
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)

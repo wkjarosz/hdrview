@@ -4,8 +4,14 @@
 // be found in the LICENSE.txt file.
 //
 
+#if defined(_MSC_VER)
+// Make MS cmath define M_PI
+#define _USE_MATH_DEFINES
+#endif
+
 #include "envmap.h"
 #include "common.h"
+#include <cmath>
 
 using namespace nanogui;
 using std::string;
@@ -78,7 +84,7 @@ Vector3f angularMapToXYZ(const Vector2f &UV)
     Vector2f XY = 2 * UV - Vector2f(1.f);
 
     // phi varies linearly with the radius from center
-    float phi   = std::clamp(norm(XY) * M_PI, 0.0, M_PI);
+    float phi   = std::clamp<float>(norm(XY) * M_PI, 0.0, M_PI);
     float theta = std::atan2(XY[1], XY[0]);
 
     float sinPhi = std::sin(phi);

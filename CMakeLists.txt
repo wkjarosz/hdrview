@@ -9,42 +9,27 @@ set(HDRVIEW_VERSION "1.2.0")
 
 # Set ourselves as the startup project in visual studio.
 # Not available until cmake 3.6, but doesn't break older versions.
-set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT hdrview)
+set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
 add_subdirectory(ext ext_build)
 
 include_directories(
-  # tinyformat string formatting library
   ${TFM_INCLUDE_DIR}
-  # OpenEXR high dynamic range bitmap library
   SYSTEM ${OPENEXR_INCLUDE_DIRS}
-  # Pseudorandom number generator
-  ${PCG32_INCLUDE_DIR}
-  # Helper functions for statistical hypothesis tests
-  ${HYPOTHESIS_INCLUDE_DIR}
-  # GLFW library for OpenGL context creation
   SYSTEM ${GLFW_INCLUDE_DIR}
-  # GLEW library for accessing OpenGL functions
   SYSTEM ${GLEW_INCLUDE_DIR}
-  # NanoVG drawing library
   SYSTEM ${NANOVG_INCLUDE_DIR}
-  # NanoGUI user interface library
   SYSTEM ${NANOGUI_INCLUDE_DIR}
   SYSTEM ${NANOGUI_EXTRA_INCS}
-  # tinydir
-  ${TINYDIR_INCLUDE_DIR}
-  # docopt
   ${DOCOPT_INCLUDE_DIR}
-  # spdlog
   ${SPDLOG_INCLUDE_DIR}
-  # cfgpath
-  ${CFGPATH_INCLUDE_DIR}
-  # stb
   ${STB_INCLUDE_DIR}
-  # tinydngloader
   ${TINYDNG_INCLUDE_DIR}
-  # alphanum
+  SYSTEM ${TINYDIR_INCLUDE_DIR}
   ${ALPHANUM_INCLUDE_DIR}
+  ${JSON_INCLUDE_DIR}
+  ${PLATFORMFOLDERS_INCLUDE_DIR}
+  ${FILESYSTEM_INCLUDE}
 )
 
 # Resource file (icons etc.)
@@ -188,6 +173,7 @@ add_executable(HDRView
   src/imagebutton.h
   src/imagelistpanel.cpp
   src/imagelistpanel.h
+  src/json.h
   src/hdrimageview.cpp
   src/hdrimageview.h
   src/multigraph.cpp
@@ -266,6 +252,7 @@ add_executable(hdrbatch
   src/hdrimageraw.cpp
   src/hdrimageraw.h
   src/hdrbatch.cpp
+  src/json.h
   src/parallelfor.cpp
   src/parallelfor.h
   src/pfm.cpp
@@ -286,8 +273,8 @@ add_executable(force-random-dither
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} ${Boost_REGEX_LIBRARY})
-target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s ${Boost_REGEX_LIBRARY})
+target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
+target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)

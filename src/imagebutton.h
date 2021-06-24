@@ -48,8 +48,21 @@ public:
     void set_is_modified(bool b) { m_is_modified = b; }
     bool is_modified() const { return m_is_modified; }
 
+    bool is_current() const { return m_is_current; }
+    void set_is_current(bool is_current)
+    {
+        m_is_current = is_current;
+        if (m_is_current)
+            m_is_selected = true;
+    }
+
     bool is_selected() const { return m_is_selected; }
-    void set_is_selected(bool is_selected) { m_is_selected = is_selected; }
+    void set_is_selected(bool is_selected)
+    {
+        m_is_selected = is_selected;
+        if (!m_is_selected)
+            m_is_current = false;
+    }
 
     bool is_reference() const { return m_is_reference; }
     void set_is_reference(bool is_reference) { m_is_reference = is_reference; }
@@ -60,8 +73,8 @@ public:
     void set_hide_unhighlighted(bool h) { m_hide_unhighlighted = h; }
     bool hide_unhighlighted() const { return m_hide_unhighlighted; }
 
+    void set_current_callback(const IntCallback &callback) { m_current_callback = callback; }
     void set_selected_callback(const IntCallback &callback) { m_selected_callback = callback; }
-
     void set_reference_callback(const IntCallback &callback) { m_reference_callback = callback; }
 
 private:
@@ -69,8 +82,10 @@ private:
 
     Alignment   m_alignment    = Alignment::Right;
     bool        m_is_modified  = false;
+    bool        m_is_current   = false;
     bool        m_is_selected  = false;
     bool        m_is_reference = false;
+    IntCallback m_current_callback;
     IntCallback m_selected_callback;
     IntCallback m_reference_callback;
 

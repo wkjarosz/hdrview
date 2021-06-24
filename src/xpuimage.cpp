@@ -61,7 +61,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
                 ret->histogram[ESRGB].values[c][::clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1)] +=
                     d;
                 ret->histogram[ELog]
-                    .values[c][::clamp(int(floor(normalizedLogScale(val[c]) * numBins)), 0, numBins - 1)] += d;
+                    .values[c][::clamp(int(floor(normalized_log_scale(val[c]) * numBins)), 0, numBins - 1)] += d;
             }
         }
 
@@ -105,7 +105,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
         for_each(ret->histogram[ESRGB].xTicks.begin(), ret->histogram[ESRGB].xTicks.end(),
                  [](float &v) { v = LinearToSRGB(v); });
         for_each(ret->histogram[ELog].xTicks.begin(), ret->histogram[ELog].xTicks.end(),
-                 [](float &v) { v = normalizedLogScale(v); });
+                 [](float &v) { v = normalized_log_scale(v); });
 
         // create the tick labels
         auto &hist = ret->histogram[ELinear];
@@ -161,7 +161,8 @@ void XPUImage::async_modify(const ConstImageCommandWithProgress &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    m_async_command   = make_shared<ModifyingTask>([this, command](AtomicProgress &p) { return command(m_image, p); });
+    m_async_command   = make_shared<ModifyingTask>([this, command](AtomicProgress &p)
+                                                 { return command(m_image, shared_from_this(), p); });
     m_async_retrieved = false;
     m_async_command->compute();
 }
@@ -171,7 +172,8 @@ void XPUImage::async_modify(const ConstImageCommand &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    m_async_command   = make_shared<ModifyingTask>([this, command](void) { return command(m_image); });
+    m_async_command =
+        make_shared<ModifyingTask>([this, command](void) { return command(m_image, shared_from_this()); });
     m_async_retrieved = false;
     m_async_command->compute();
 }
@@ -193,7 +195,7 @@ void XPUImage::start_modify(const ConstImageCommand &command)
     // make sure any pending edits are done
     wait_for_async_result();
 
-    auto result = command(m_image);
+    auto result = command(m_image, shared_from_this());
 
     if (!result.second)
     {

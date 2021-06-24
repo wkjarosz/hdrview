@@ -24,9 +24,10 @@ public:
 using UndoPtr            = std::shared_ptr<ImageCommandUndo>;
 using ImageCommandResult = std::pair<HDRImagePtr, UndoPtr>;
 
-using ImageCommand                  = std::function<void(const HDRImagePtr &)>;
-using ConstImageCommand             = std::function<ImageCommandResult(const ConstHDRImagePtr &)>;
-using ConstImageCommandWithProgress = std::function<ImageCommandResult(const ConstHDRImagePtr &, AtomicProgress &)>;
+using ImageCommand      = std::function<void(const HDRImagePtr &)>;
+using ConstImageCommand = std::function<ImageCommandResult(const ConstHDRImagePtr &, const ConstXPUImagePtr &)>;
+using ConstImageCommandWithProgress =
+    std::function<ImageCommandResult(const ConstHDRImagePtr &, const ConstXPUImagePtr &, AtomicProgress &)>;
 
 //! Brute-force undo: Saves the entire image data so that we can copy it back
 class FullImageUndo : public ImageCommandUndo
