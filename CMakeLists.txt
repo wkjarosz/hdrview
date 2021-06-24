@@ -45,6 +45,8 @@ include_directories(
   ${TINYDNG_INCLUDE_DIR}
   # alphanum
   ${ALPHANUM_INCLUDE_DIR}
+  #nlohmann/json
+  ${JSON_INCLUDE_DIR}
 )
 
 # Resource file (icons etc.)
@@ -188,6 +190,7 @@ add_executable(HDRView
   src/imagebutton.h
   src/imagelistpanel.cpp
   src/imagelistpanel.h
+  src/json.h
   src/hdrimageview.cpp
   src/hdrimageview.h
   src/multigraph.cpp
@@ -266,6 +269,7 @@ add_executable(hdrbatch
   src/hdrimageraw.cpp
   src/hdrimageraw.h
   src/hdrbatch.cpp
+  src/json.h
   src/parallelfor.cpp
   src/parallelfor.h
   src/pfm.cpp

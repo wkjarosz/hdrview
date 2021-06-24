@@ -14,6 +14,7 @@
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>
 #include <nanogui/texture.h>
+#include <nlohmann/json.hpp>
 #include <thread>
 #include <vector>
 
@@ -23,7 +24,12 @@ class HDRViewScreen : public Screen
 {
 public:
     HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
-    ~HDRViewScreen() override;
+    virtual ~HDRViewScreen() override;
+
+    void                  read_settings();
+    void                  write_settings();
+    const nlohmann::json &settings() const { return m_settings; }
+    nlohmann::json &      settings() { return m_settings; }
 
     // overridden virtual functions from Screen
     void draw_contents() override;
@@ -67,6 +73,8 @@ private:
     void update_layout();
     bool at_side_panel_edge(const Vector2i &p);
     bool at_tool_panel_edge(const Vector2i &p);
+    void resize_side_panel(int w);
+    void resize_tool_panel(int w);
 
     Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView *  m_image_view;
@@ -87,8 +95,9 @@ private:
     Label *             m_stats_label;
     DualHDRColorPicker *m_color_btns;
 
-    VScrollPanel *m_side_scroll_panel;
-    Widget *      m_side_panel_contents;
+    VScrollPanel *        m_side_scroll_panel;
+    Widget *              m_side_panel_contents;
+    std::vector<Button *> m_panel_btns;
 
     double m_gui_animation_start;
     bool   m_animation_running = false;
@@ -106,9 +115,13 @@ private:
     bool m_dragging_side_panel = false;
     bool m_dragging_tool_panel = false;
     bool m_need_layout_update  = true;
+    bool m_solo_mode           = false;
 
-    std::thread      m_gui_refresh_thread;
-    std::atomic<int> m_gui_refresh = 0;
+    std::thread       m_gui_refresh_thread;
+    std::atomic<int>  m_gui_refresh    = 0;
+    std::atomic<bool> m_join_requested = false;
+
+    nlohmann::json m_settings;
 
     Vector2i m_roi_clicked;
 };

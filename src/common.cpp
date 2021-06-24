@@ -17,21 +17,18 @@ extern const char *GIT_BRANCH;
 extern const char *HDRVIEW_BUILD_TIME;
 
 const char *hdrview_git_version() { return GIT_TAG; }
-
 const char *hdrview_git_revision() { return GIT_REV; }
-
 const char *hdrview_git_branch() { return GIT_BRANCH; }
-
 const char *hdrview_timestamp() { return HDRVIEW_BUILD_TIME; }
 
-string getExtension(const string &filename)
+string get_extension(const string &filename)
 {
     if (filename.find_last_of(".") != string::npos)
         return filename.substr(filename.find_last_of(".") + 1);
     return "";
 }
 
-string getBasename(const string &filename)
+string get_basename(const string &filename)
 {
     auto lastSlash = filename.find_last_of("/\\");
     auto lastDot   = filename.find_last_of(".");
@@ -43,7 +40,7 @@ string getBasename(const string &filename)
     return filename.substr(start, length);
 }
 
-const vector<string> &channelNames()
+const vector<string> &channel_names()
 {
     static const vector<string> names = {"RGB",         "Red",
                                          "Green",       "Blue",
@@ -54,7 +51,7 @@ const vector<string> &channelNames()
     return names;
 }
 
-const vector<string> &blendModeNames()
+const vector<string> &blend_mode_names()
 {
     static const vector<string> names = {
         "Normal", "Multiply", "Divide", "Add", "Average", "Subtract", "Difference", "Relative difference",
@@ -62,9 +59,9 @@ const vector<string> &blendModeNames()
     return names;
 }
 
-string channelToString(EChannel channel) { return channelNames()[channel]; }
+string channel_to_string(EChannel channel) { return channel_names()[channel]; }
 
-string blendModeToString(EBlendMode mode) { return blendModeNames()[mode]; }
+string blend_mode_to_string(EBlendMode mode) { return blend_mode_names()[mode]; }
 
 // The following functions are adapted from tev:
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
@@ -91,13 +88,13 @@ vector<string> split(string text, const string &delim)
     return result;
 }
 
-string toLower(string str)
+string to_lower(string str)
 {
     transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)tolower(c); });
     return str;
 }
 
-string toUpper(string str)
+string to_upper(string str)
 {
     transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)toupper(c); });
     return str;
@@ -111,8 +108,8 @@ bool matches(string text, string filter, bool isRegex)
             return true;
 
         // Perform matching on lowercase strings
-        text   = toLower(text);
-        filter = toLower(filter);
+        text   = to_lower(text);
+        filter = to_lower(filter);
 
         auto words = split(filter, ", ");
         // We don't want people entering multiple spaces in a row to match everything.

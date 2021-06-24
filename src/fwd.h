@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <nanogui/vector.h>
+#include <nlohmann/json_fwd.hpp>
 
 // forward declarations
 template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size>

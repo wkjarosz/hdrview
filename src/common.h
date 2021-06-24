@@ -331,13 +331,13 @@ inline T square(T value)
     return value * value;
 }
 
-std::string getExtension(const std::string &filename);
-std::string getBasename(const std::string &filename);
+std::string get_extension(const std::string &filename);
+std::string get_basename(const std::string &filename);
 
-const std::vector<std::string> &channelNames();
-const std::vector<std::string> &blendModeNames();
-std::string                     channelToString(EChannel channel);
-std::string                     blendModeToString(EBlendMode mode);
+const std::vector<std::string> &channel_names();
+const std::vector<std::string> &blend_mode_names();
+std::string                     channel_to_string(EChannel channel);
+std::string                     blend_mode_to_string(EBlendMode mode);
 
 inline int codePointLength(char first)
 {
@@ -352,8 +352,8 @@ inline int codePointLength(char first)
 }
 
 std::vector<std::string> split(std::string text, const std::string &delim);
-std::string              toLower(std::string str);
-std::string              toUpper(std::string str);
+std::string              to_lower(std::string str);
+std::string              to_upper(std::string str);
 bool                     matches(std::string text, std::string filter, bool isRegex);
 
 enum EDirection

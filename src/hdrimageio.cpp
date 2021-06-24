@@ -105,7 +105,7 @@ bool isSTBImage(const string &filename)
 bool HDRImage::load(const string &filename)
 {
     string errors;
-    string extension = getExtension(filename);
+    string extension = get_extension(filename);
     transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
     int n, w, h;
@@ -247,7 +247,7 @@ HDRImagePtr load_image(const string &filename)
 
 bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, bool dither) const
 {
-    string extension = getExtension(filename);
+    string extension = get_extension(filename);
 
     transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 

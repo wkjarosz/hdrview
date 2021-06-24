@@ -29,13 +29,19 @@ public:
     Tool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name, const std::string &tooltip,
          int icon, ETool tool);
 
-    void                         set_options_bar(nanogui::Widget *options) { m_options = options; }
+    nlohmann::json &     all_tool_settings();
+    const nlohmann::json all_tool_settings() const;
+    nlohmann::json &     this_tool_settings();
+    const nlohmann::json this_tool_settings() const;
+    virtual void         write_settings();
+
+    void set_options_bar(nanogui::Widget *options) { m_options = options; }
+
     virtual nanogui::Widget *    create_options_bar(nanogui::Widget *parent) { return m_options; }
     virtual nanogui::ToolButton *create_toolbutton(nanogui::Widget *parent);
     virtual void                 set_active(bool b);
-
-    virtual void draw(NVGcontext *ctx) const;
-    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
+    virtual void                 draw(NVGcontext *ctx) const;
+    virtual bool                 mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers);
     virtual bool keyboard(int key, int scancode, int action, int modifiers);
 
@@ -86,18 +92,29 @@ public:
               const std::string &tooltip = "Paint with the foreground or background color.", int icon = FA_PAINT_BRUSH,
               ETool tool = Tool_Brush);
 
+    virtual void             write_settings() override;
     virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
-
-    virtual void draw(NVGcontext *ctx) const override;
-    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
-    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
-                            int modifiers) override;
-    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void             draw(NVGcontext *ctx) const override;
+    virtual bool             mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool             mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
+                                        int modifiers) override;
+    virtual bool             keyboard(int key, int scancode, int action, int modifiers) override;
 
 protected:
     std::shared_ptr<Brush> m_brush;
     nanogui::Slider *      m_size_slider;
     nanogui::IntBox<int> * m_size_textbox;
+    nanogui::Slider *      m_hardness_slider;
+    nanogui::IntBox<int> * m_hardness_textbox;
+    nanogui::Slider *      m_flow_slider;
+    nanogui::IntBox<int> * m_flow_textbox;
+    nanogui::Slider *      m_angle_slider;
+    nanogui::IntBox<int> * m_angle_textbox;
+    nanogui::Slider *      m_roundness_slider;
+    nanogui::IntBox<int> * m_roundness_textbox;
+    nanogui::Slider *      m_spacing_slider;
+    nanogui::IntBox<int> * m_spacing_textbox;
+    nanogui::CheckBox *    m_smoothing_checkbox;
     bool                   m_smoothing = true;
 
     nanogui::Vector2i m_p0, m_p1;
@@ -145,13 +162,12 @@ public:
                const std::string &tooltip = "Sample colors from the image.", int icon = FA_EYE_DROPPER,
                ETool tool = Tool_Eyedropper);
 
+    virtual void             write_settings() override;
     virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
-
-    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
-    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
-                            int modifiers) override;
-
-    virtual void draw(NVGcontext *ctx) const override;
+    virtual bool             mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool             mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
+                                        int modifiers) override;
+    virtual void             draw(NVGcontext *ctx) const override;
 
 protected:
     int m_size = 0;
@@ -169,7 +185,6 @@ public:
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
-
     virtual void draw(NVGcontext *ctx) const override;
 
 protected:
@@ -184,6 +199,7 @@ public:
     LineTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Line tool",
              const std::string &tooltip = "Draw lines.", int icon = FA_SLASH, ETool tool = Tool_Line);
 
+    virtual void             write_settings() override;
     virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
 
     virtual bool keyboard(int key, int scancode, int action, int modifiers) override;

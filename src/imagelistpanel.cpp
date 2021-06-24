@@ -112,7 +112,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_blend_modes = new Dropdown(grid, blendModeNames());
+        m_blend_modes = new Dropdown(grid, blend_mode_names());
         m_blend_modes->set_fixed_height(19);
         m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
         agl->set_anchor(m_blend_modes,
@@ -124,7 +124,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Channel:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_channels = new Dropdown(grid, channelNames());
+        m_channels = new Dropdown(grid, channel_names());
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);
         m_channels->set_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });

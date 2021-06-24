@@ -18,6 +18,7 @@
 
 using namespace nanogui;
 using namespace std;
+using json = nlohmann::json;
 
 namespace
 {
@@ -63,7 +64,7 @@ std::string add_includes(std::string shader_string)
 
 } // namespace
 
-HDRImageView::HDRImageView(Widget *parent) :
+HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     Canvas(parent, 1, false, false, true), m_exposure_callback(FloatCallback()), m_gamma_callback(FloatCallback()),
     m_sRGB_callback(BoolCallback()), m_zoom_callback(FloatCallback()),
     m_drag_callback(
@@ -76,6 +77,21 @@ HDRImageView::HDRImageView(Widget *parent) :
 {
     m_zoom   = 1.f / screen()->pixel_ratio();
     m_offset = Vector2f(0.0f);
+
+    // read settings
+    json j = json::object();
+    if (settings.contains("image view") && settings["image view"].is_object())
+        j = settings["image view"];
+
+    m_exposure             = j.value("exposure", 0.0f);
+    m_gamma                = j.value("gamma", 2.2f);
+    m_sRGB                 = j.value("sRGB", true);
+    m_dither               = j.value("dithering", true);
+    m_draw_grid            = j.value("grid", true);
+    m_grid_threshold       = j.value("grid threshold", 10);
+    m_draw_pixel_info      = j.value("pixel info", true);
+    m_pixel_info_threshold = j.value("pixel info threshold", 40);
+    m_zoom_sensitivity     = j.value("zoom sensitivity", 1.0717734625f);
 
     set_background_color(Color(0.15f, 0.15f, 0.15f, 1.f));
 
@@ -111,6 +127,22 @@ HDRImageView::HDRImageView(Widget *parent) :
     {
         spdlog::trace("{}", e.what());
     }
+}
+
+void HDRImageView::write_settings(json &settings) const
+{
+    if (!settings.contains("image view") || !settings["image view"].is_object())
+        settings["image view"] = json::object();
+
+    settings["image view"]["exposure"]             = exposure();
+    settings["image view"]["gamma"]                = gamma();
+    settings["image view"]["sRGB"]                 = sRGB();
+    settings["image view"]["dithering"]            = dithering_on();
+    settings["image view"]["grid"]                 = draw_grid_on();
+    settings["image view"]["grid threshold"]       = grid_threshold();
+    settings["image view"]["pixel info"]           = draw_pixel_info_on();
+    settings["image view"]["pixel info threshold"] = pixel_info_threshold();
+    settings["image view"]["zoom sensitivity"]     = zoom_sensitivity();
 }
 
 Color4 HDRImageView::tonemap(const Color4 &color) const
@@ -485,7 +517,7 @@ void HDRImageView::draw_widget_border(NVGcontext *ctx) const
 
 void HDRImageView::draw_pixel_info(NVGcontext *ctx) const
 {
-    if (!m_draw_values || (m_pixel_info_threshold == -1) || (m_zoom <= m_pixel_info_threshold))
+    if (!m_draw_pixel_info || (m_pixel_info_threshold == -1) || (m_zoom <= m_pixel_info_threshold))
         return;
 
     float factor = clamp01((m_zoom - m_pixel_info_threshold) / (2 * m_pixel_info_threshold));

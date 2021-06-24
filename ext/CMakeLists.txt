@@ -224,6 +224,8 @@ set(SPDLOG_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/spdlog/include)
 set(CFGPATH_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/cfgpath)
+set(JSON_INCLUDE_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/json)
 
 
 
@@ -260,6 +262,7 @@ set(CompilerFlags
       ALPHANUM_INCLUDE_DIR
       SPDLOG_INCLUDE_DIR
       CFGPATH_INCLUDE_DIR
+      JSON_INCLUDE_DIR
 )
 foreach(CompilerFlag ${CompilerFlags})
   set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)
