@@ -128,7 +128,7 @@ add_executable(HDRView
   hdrview_version.cpp
   hdrview_resources.cpp
   src/filters/bilateral.cpp
-  src/filters/box.cpp
+  src/filters/box_blur.cpp
   src/filters/brightness_contrast.cpp
   src/filters/canvas_size.cpp
   src/filters/channel_mixer.cpp

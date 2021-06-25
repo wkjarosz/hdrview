@@ -4,16 +4,13 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "dropdown.h"           // for Dropdown
-#include "fwd.h"                // for HDRViewScreen
-#include "hdrimage.h"           // for HDRImage, HDRImage::CanvasAnchor
-#include <functional>           // for function
-#include <iosfwd>               // for string
-#include <nanogui/formhelper.h> // for FormHelper
-#include <nanogui/vector.h>     // for Vector2i
-#include <nanogui/widget.h>     // for Widget
-#include <nanogui/window.h>     // for Window
-#include <vector>               // for vector
+#include "dropdown.h"        // for Dropdown
+#include "fwd.h"             // for HDRViewScreen
+#include "hdrimage.h"        // for HDRImage, HDRImage::CanvasAnchor
+#include <functional>        // for function
+#include <iosfwd>            // for string
+#include <nanogui/nanogui.h> // for FormHelper, Vector2i, Widget, Window
+#include <vector>            // for vector
 
 template <typename T>
 nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &label, T &variable,
@@ -55,7 +52,7 @@ nanogui::Button *create_filmic_tonemapping_btn(nanogui::Widget *parent, HDRViewS
 nanogui::Button *create_hsl_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
 nanogui::Button *create_gaussian_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,
                                             ImageListPanel *images_panel);
-nanogui::Button *create_box_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
+nanogui::Button *create_box_blur_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
 nanogui::Button *create_bilateral_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,
                                              ImageListPanel *images_panel);
 nanogui::Button *create_unsharp_mask_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,

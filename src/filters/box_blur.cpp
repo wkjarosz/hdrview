@@ -6,28 +6,18 @@
 
 #include "filters/filters.h"
 
-#include "colorslider.h"
-#include "colorspace.h"
-#include "colorwheel.h"
 #include "common.h"
 #include "dialog.h"
-#include "dropdown.h"
-#include "editimagepanel.h"
-#include "envmap.h"
-#include "filmictonecurve.h"
-#include "hdrcolorpicker.h"
 #include "hdrimage.h"
 #include "hdrviewscreen.h"
-#include "hslgradient.h"
 #include "imagelistpanel.h"
-#include "multigraph.h"
 #include "xpuimage.h"
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
 
-Button *create_box_filter_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
+Button *create_box_blur_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {
     static float                width = 1.0f, height = 1.0f;
     static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;

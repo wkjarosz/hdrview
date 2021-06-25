@@ -273,7 +273,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     button_row = new Widget(this);
     button_row->set_layout(new GridLayout(Orientation::Horizontal, 1, Alignment::Fill, 0, spacing));
     m_filter_btns.push_back(create_gaussian_filter_btn(button_row, m_screen, m_images_panel));
-    m_filter_btns.push_back(create_box_filter_btn(button_row, m_screen, m_images_panel));
+    m_filter_btns.push_back(create_box_blur_btn(button_row, m_screen, m_images_panel));
     m_filter_btns.push_back(create_bilateral_filter_btn(button_row, m_screen, m_images_panel));
     m_filter_btns.push_back(create_unsharp_mask_filter_btn(button_row, m_screen, m_images_panel));
     m_filter_btns.push_back(create_median_filter_btn(button_row, m_screen, m_images_panel));

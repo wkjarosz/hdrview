@@ -4,27 +4,24 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "common.h"             // for linspaced, lerp, clamp01, brightness...
-#include "dialog.h"             // for Dialog
-#include "filters/filters.h"    // for create_floatbox_and_slider, add_drop...
-#include "hdrimage.h"           // for HDRImage
-#include "hdrviewscreen.h"      // for HDRViewScreen
-#include "imagelistpanel.h"     // for ImageListPanel
-#include "multigraph.h"         // for MultiGraph
-#include <cmath>                // for tan, M_PI_2
-#include <commandhistory.h>     // for ImageCommandResult
-#include <functional>           // for function
-#include <fwd.h>                // for EChannel, CIE_CHROMATICITY, ConstHDR...
-#include <memory>               // for shared_ptr, make_shared
-#include <nanogui/button.h>     // for Button
-#include <nanogui/formhelper.h> // for FormHelper, FormWidget
-#include <nanogui/icons.h>      // for FA_ADJUST
-#include <nanogui/vector.h>     // for Color, Vector2f, Vector2i
-#include <nanogui/widget.h>     // for Widget
-#include <spdlog/fmt/fmt.h>     // for format
-#include <type_traits>          // for remove_extent_t
-#include <utility>              // for pair
-#include <vector>               // for vector, __vector_base<>::value_type
+#include "filters/filters.h" // for create_floatbox_and_slider, add_drop...
+
+#include "commandhistory.h"  // for ImageCommandResult
+#include "common.h"          // for linspaced, lerp, clamp01, brightness...
+#include "dialog.h"          // for Dialog
+#include "fwd.h"             // for EChannel, CIE_CHROMATICITY, ConstHDR...
+#include "hdrimage.h"        // for HDRImage
+#include "hdrviewscreen.h"   // for HDRViewScreen
+#include "imagelistpanel.h"  // for ImageListPanel
+#include "multigraph.h"      // for MultiGraph
+#include <cmath>             // for tan, M_PI_2
+#include <functional>        // for function
+#include <memory>            // for shared_ptr, make_shared
+#include <nanogui/nanogui.h> // for widgets
+#include <spdlog/fmt/fmt.h>  // for format
+#include <type_traits>       // for remove_extent_t
+#include <utility>           // for pair
+#include <vector>            // for vector, __vector_base<>::value_type
 
 using namespace std;
 

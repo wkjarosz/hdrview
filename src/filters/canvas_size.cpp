@@ -4,26 +4,22 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "dialog.h"             // for Dialog
-#include "filters/filters.h"    // for create_anchor_widget, create_canvas_...
-#include "hdrcolorpicker.h"     // for HDRColorPicker
-#include "hdrimage.h"           // for HDRImage, HDRImage::CanvasAnchor
-#include "hdrviewscreen.h"      // for HDRViewScreen
-#include "imagelistpanel.h"     // for ImageListPanel
-#include <cmath>                // for pow
-#include <color.h>              // for Color4
-#include <commandhistory.h>     // for ImageCommandResult
-#include <functional>           // for __base
-#include <fwd.h>                // for ConstHDRImagePtr, ConstXPUImagePtr
-#include <memory>               // for shared_ptr, make_shared, shared_ptr<...
-#include <nanogui/button.h>     // for Button
-#include <nanogui/formhelper.h> // for FormWidget, FormHelper
-#include <nanogui/icons.h>      // for FA_COMPRESS
-#include <nanogui/popup.h>      // for Popup
-#include <nanogui/vector.h>     // for Color, Vector2i
-#include <nanogui/widget.h>     // for Widget
-#include <sstream>              // for basic_stringbuf<>::int_type, basic_s...
-#include <utility>              // for pair
+#include "filters/filters.h" // for create_anchor_widget, create_canvas_...
+
+#include "color.h"           // for Color4
+#include "commandhistory.h"  // for ImageCommandResult
+#include "dialog.h"          // for Dialog
+#include "hdrcolorpicker.h"  // for HDRColorPicker
+#include "hdrimage.h"        // for HDRImage, HDRImage::CanvasAnchor
+#include "hdrviewscreen.h"   // for HDRViewScreen
+#include "imagelistpanel.h"  // for ImageListPanel
+#include <cmath>             // for pow
+#include <functional>        // for __base
+#include <fwd.h>             // for ConstHDRImagePtr, ConstXPUImagePtr
+#include <memory>            // for shared_ptr, make_shared, shared_ptr<...
+#include <nanogui/nanogui.h> // for widgets
+#include <sstream>           // for basic_stringbuf<>::int_type, basic_s...
+#include <utility>           // for pair
 
 using namespace std;
 

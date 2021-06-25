@@ -6,27 +6,12 @@
 
 #include "filters/filters.h"
 
-#include "colorslider.h"
-#include "colorspace.h"
-#include "colorwheel.h"
-#include "common.h"
-#include "dialog.h"
-#include "dropdown.h"
-#include "editimagepanel.h"
-#include "envmap.h"
-#include "filmictonecurve.h"
-#include "hdrcolorpicker.h"
-#include "hdrimage.h"
-#include "hdrviewscreen.h"
-#include "hslgradient.h"
-#include "imagelistpanel.h"
-#include "multigraph.h"
-#include "xpuimage.h"
-#include <ImathMatrix.h>
+#include <nanogui/nanogui.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
+using namespace nanogui;
 
 function<void(float)> create_floatbox_and_slider(FormHelper *gui, string name, float &variable, float mn, float mx,
                                                  float step, function<void(void)> cb, string help)

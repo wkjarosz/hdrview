@@ -6,30 +6,17 @@
 
 #include "filters/filters.h"
 
-#include "colorslider.h"
-#include "colorspace.h"
-#include "colorwheel.h"
 #include "common.h"
 #include "dialog.h"
-#include "dropdown.h"
-#include "editimagepanel.h"
 #include "envmap.h"
-#include "filmictonecurve.h"
-#include "hdrcolorpicker.h"
 #include "hdrimage.h"
 #include "hdrviewscreen.h"
-#include "hslgradient.h"
 #include "imagelistpanel.h"
-#include "multigraph.h"
 #include "xpuimage.h"
-#include <ImathMatrix.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
-using Imath::M33f;
-using Imath::V2f;
-using Imath::V3f;
 
 Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {

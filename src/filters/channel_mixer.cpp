@@ -4,34 +4,26 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "color.h"              // for Color4
-#include "colorslider.h"        // for ColorSlider, ColorSlider::ColorMode
-#include "commandhistory.h"     // for ImageCommandResult
-#include "dialog.h"             // for Dialog
-#include "dropdown.h"           // for Dropdown
-#include "filters/filters.h"    // for add_dropdown, create_channel_mixer_btn
-#include "fwd.h"                // for ConstHDRImagePtr, ConstXPUImagePtr
-#include "hdrimage.h"           // for HDRImage
-#include "hdrviewscreen.h"      // for HDRViewScreen
-#include "imagelistpanel.h"     // for ImageListPanel
-#include <array>                // for array, array<>::value_type
-#include <exception>            // for exception
-#include <functional>           // for __base, function
-#include <iosfwd>               // for string
-#include <memory>               // for shared_ptr, make_shared
-#include <nanogui/button.h>     // for Button
-#include <nanogui/formhelper.h> // for FormHelper, FormWidget
-#include <nanogui/icons.h>      // for FA_BLENDER
-#include <nanogui/label.h>      // for Label
-#include <nanogui/layout.h>     // for AdvancedGridLayout, AdvancedGridLayo...
-#include <nanogui/textbox.h>    // for FloatBox, TextBox, TextBox::Alignment
-#include <nanogui/vector.h>     // for Color, dot, Array, Vector2i
-#include <nanogui/widget.h>     // for Widget
-#include <spdlog/fmt/fmt.h>     // for format_to
-#include <spdlog/spdlog.h>      // for trace
-#include <stddef.h>             // for size_t
-#include <utility>              // for pair
-#include <vector>               // for vector
+#include "filters/filters.h" // for add_dropdown, create_channel_mixer_btn
+
+#include "color.h"          // for Color4
+#include "colorslider.h"    // for ColorSlider, ColorSlider::ColorMode
+#include "commandhistory.h" // for ImageCommandResult
+#include "dialog.h"         // for Dialog
+#include "fwd.h"            // for ConstHDRImagePtr, ConstXPUImagePtr
+#include "hdrimage.h"       // for HDRImage
+#include "hdrviewscreen.h"  // for HDRViewScreen
+#include "imagelistpanel.h" // for ImageListPanel
+#include <array>            // for array, array<>::value_type
+#include <exception>        // for exception
+#include <functional>       // for __base, function
+#include <iosfwd>           // for string
+#include <memory>           // for shared_ptr, make_shared
+#include <spdlog/fmt/fmt.h> // for format_to
+#include <spdlog/spdlog.h>  // for trace
+#include <stddef.h>         // for size_t
+#include <utility>          // for pair
+#include <vector>           // for vector
 
 using namespace std;
 
