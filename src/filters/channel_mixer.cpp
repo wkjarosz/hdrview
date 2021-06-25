@@ -4,38 +4,42 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "filters/filters.h"
-
-#include "colorslider.h"
-#include "colorspace.h"
-#include "colorwheel.h"
-#include "common.h"
-#include "dialog.h"
-#include "dropdown.h"
-#include "editimagepanel.h"
-#include "envmap.h"
-#include "filmictonecurve.h"
-#include "hdrcolorpicker.h"
-#include "hdrimage.h"
-#include "hdrviewscreen.h"
-#include "hslgradient.h"
-#include "imagelistpanel.h"
-#include "multigraph.h"
-#include "xpuimage.h"
-#include <ImathMatrix.h>
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/spdlog.h>
+#include "color.h"              // for Color4
+#include "colorslider.h"        // for ColorSlider, ColorSlider::ColorMode
+#include "commandhistory.h"     // for ImageCommandResult
+#include "dialog.h"             // for Dialog
+#include "dropdown.h"           // for Dropdown
+#include "filters/filters.h"    // for add_dropdown, create_channel_mixer_btn
+#include "fwd.h"                // for ConstHDRImagePtr, ConstXPUImagePtr
+#include "hdrimage.h"           // for HDRImage
+#include "hdrviewscreen.h"      // for HDRViewScreen
+#include "imagelistpanel.h"     // for ImageListPanel
+#include <array>                // for array, array<>::value_type
+#include <exception>            // for exception
+#include <functional>           // for __base, function
+#include <iosfwd>               // for string
+#include <memory>               // for shared_ptr, make_shared
+#include <nanogui/button.h>     // for Button
+#include <nanogui/formhelper.h> // for FormHelper, FormWidget
+#include <nanogui/icons.h>      // for FA_BLENDER
+#include <nanogui/label.h>      // for Label
+#include <nanogui/layout.h>     // for AdvancedGridLayout, AdvancedGridLayo...
+#include <nanogui/textbox.h>    // for FloatBox, TextBox, TextBox::Alignment
+#include <nanogui/vector.h>     // for Color, dot, Array, Vector2i
+#include <nanogui/widget.h>     // for Widget
+#include <spdlog/fmt/fmt.h>     // for format_to
+#include <spdlog/spdlog.h>      // for trace
+#include <stddef.h>             // for size_t
+#include <utility>              // for pair
+#include <vector>               // for vector
 
 using namespace std;
-using Imath::M33f;
-using Imath::V2f;
-using Imath::V3f;
 
 Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    static string     name = "Channel mixer...";
-    static std::array weights{Color(1.f, 0.f, 0.f, 1.f), Color(0.f, 1.f, 0.f, 1.f), Color(0.f, 0.f, 1.f, 1.f),
-                              Color(1.f / 3.f, 1.f)};
+    static string               name = "Channel mixer...";
+    static std::array<Color, 4> weights{Color(1.f, 0.f, 0.f, 1.f), Color(0.f, 1.f, 0.f, 1.f), Color(0.f, 0.f, 1.f, 1.f),
+                                        Color(1.f / 3.f, 1.f)};
     static enum EChannel
     {
         RED = 0,

@@ -22,14 +22,10 @@
 #include "imagelistpanel.h"
 #include "multigraph.h"
 #include "xpuimage.h"
-#include <ImathMatrix.h>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
-using Imath::M33f;
-using Imath::V2f;
-using Imath::V3f;
 
 Button *create_box_filter_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
 {

@@ -4,10 +4,16 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "dropdown.h"
-#include "hdrimage.h"
-#include <nanogui/formhelper.h>
-#include <nanogui/widget.h>
+#include "dropdown.h"           // for Dropdown
+#include "fwd.h"                // for HDRViewScreen
+#include "hdrimage.h"           // for HDRImage, HDRImage::CanvasAnchor
+#include <functional>           // for function
+#include <iosfwd>               // for string
+#include <nanogui/formhelper.h> // for FormHelper
+#include <nanogui/vector.h>     // for Vector2i
+#include <nanogui/widget.h>     // for Widget
+#include <nanogui/window.h>     // for Window
+#include <vector>               // for vector
 
 template <typename T>
 nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &label, T &variable,

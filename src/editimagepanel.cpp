@@ -5,21 +5,23 @@
 //
 
 #include "editimagepanel.h"
-#include "colorslider.h"
-#include "colorspace.h"
-#include "colorwheel.h"
-#include "common.h"
-#include "dialog.h"
-#include "dropdown.h"
-#include "filters/filters.h"
-#include "hdrcolorpicker.h"
-#include "hdrimage.h"
-#include "hdrviewscreen.h"
-#include "hslgradient.h"
-#include "imagelistpanel.h"
-#include "xpuimage.h"
-#include <spdlog/fmt/ostr.h>
-#include <spdlog/spdlog.h>
+#include "box.h"             // for Box
+#include "color.h"           // for Color4
+#include "common.h"          // for clamp01
+#include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
+#include "fwd.h"             // for ConstHDRImagePtr, ConstXPUImagePtr, HDR...
+#include "hdrimage.h"        // for HDRImage
+#include "imagelistpanel.h"  // for ImageListPanel
+#include <commandhistory.h>  // for ImageCommandResult, LambdaUndo
+#include <memory>            // for shared_ptr, make_shared
+#include <nanogui/button.h>  // for Button
+#include <nanogui/icons.h>   // for FA_ADJUST, FA_ARROWS_ALT_H, FA_ARROWS_A...
+#include <nanogui/label.h>   // for Label
+#include <nanogui/layout.h>  // for AdvancedGridLayout, AdvancedGridLayout:...
+#include <nanogui/vector.h>  // for Array, Color
+#include <nanogui/widget.h>  // for Widget
+#include <utility>           // for pair
+#include <well.h>            // for Well
 
 using namespace std;
 
