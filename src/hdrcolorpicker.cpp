@@ -83,11 +83,11 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
     //
 
     std::string                    channel_names[]     = {"Red", "Green", "Blue", "Alpha", "Exposure"};
-    int                            slider_components[] = {R_SLIDER, G_SLIDER, B_SLIDER, A_SLIDER, E_SLIDER};
-    int                            box_components[]    = {R_BOX, G_BOX, B_BOX, A_BOX, E_BOX};
+    std::array                     slider_components{R_SLIDER, G_SLIDER, B_SLIDER, A_SLIDER, E_SLIDER};
+    std::array                     box_components{R_BOX, G_BOX, B_BOX, A_BOX, E_BOX};
     std::vector<ColorSlider *>     sliders;
     std::vector<FloatBox<float> *> float_boxes;
-    for (int c = 0; c < 5; ++c)
+    for (size_t c = 0; c < box_components.size(); ++c)
     {
         std::string tip = fmt::format("Change the color's {} value", channel_names[c]);
         agrid->append_row(0);
