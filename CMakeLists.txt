@@ -11,6 +11,8 @@ set(HDRVIEW_VERSION "1.2.0")
 # Not available until cmake 3.6, but doesn't break older versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
+set(USE_IWYU  OFF CACHE BOOL "INCLUDE WHAT YOU USE")
+
 add_subdirectory(ext ext_build)
 
 include_directories(
@@ -30,6 +32,7 @@ include_directories(
   ${JSON_INCLUDE_DIR}
   ${PLATFORMFOLDERS_INCLUDE_DIR}
   ${FILESYSTEM_INCLUDE}
+  ${CMAKE_SOURCE_DIR}/src
 )
 
 # Resource file (icons etc.)
@@ -124,6 +127,26 @@ add_custom_command(
 add_executable(HDRView
   hdrview_version.cpp
   hdrview_resources.cpp
+  src/filters/bilateral.cpp
+  src/filters/box.cpp
+  src/filters/brightness_contrast.cpp
+  src/filters/canvas_size.cpp
+  src/filters/channel_mixer.cpp
+  src/filters/colorspace.cpp
+  src/filters/exposure.cpp
+  src/filters/fill.cpp
+  src/filters/filmic.cpp
+  src/filters/filters.cpp
+  src/filters/filters.h
+  src/filters/flatten.cpp
+  src/filters/free_xform.cpp
+  src/filters/gaussian.cpp
+  src/filters/hsl.cpp
+  src/filters/median.cpp
+  src/filters/remap.cpp
+  src/filters/resize.cpp
+  src/filters/shift.cpp
+  src/filters/unsharp_mask.cpp
   src/async.h
   src/box.h
   src/brush.cpp
@@ -277,9 +300,12 @@ target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_L
 target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
-if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND IWYU)
+if (NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
     find_program(iwyu_path NAMES include-what-you-use iwyu)
+    message("Found iwyu: ${iwyu_path}")
     if (iwyu_path)
+        set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
+        set(CMAKE_C_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
         set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
     endif()
 endif()
