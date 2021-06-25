@@ -83,7 +83,7 @@ Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageLis
                 agrid->set_col_stretch(1, 1);
                 color_panels[c]->set_layout(agrid);
 
-                std::array                     names{"Red :", "Green : ", "Blue :"};
+                std::array<std::string, 3>     names{"Red :", "Green : ", "Blue :"};
                 std::vector<ColorSlider *>     sliders;
                 std::vector<FloatBox<float> *> float_boxes;
                 for (size_t i = 0; i < names.size(); ++i)
@@ -175,7 +175,7 @@ Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageLis
                         [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                         {
                             // compute normalized weights
-                            std::array n_weights = weights;
+                            auto n_weights = weights;
                             for (size_t c = 0; c < n_weights.size(); ++c)
                             {
                                 n_weights[c].a() = 0.f;
@@ -186,7 +186,7 @@ Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageLis
                             {
                                 return {make_shared<HDRImage>(
                                             img->apply_function([&](const Color4 &c)
-                                                                { return Color4(dot(Color(c), n_weights[GRAY]), c.a); },
+                                                                { return Color4(dot((Color)c, n_weights[GRAY]), c.a); },
                                                                 xpuimg->roi())),
                                         nullptr};
                             }

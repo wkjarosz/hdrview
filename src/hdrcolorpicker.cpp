@@ -82,9 +82,9 @@ HDRColorPicker::HDRColorPicker(Widget *parent, const Color &color, float exposur
     // RGBA
     //
 
-    std::string                    channel_names[]     = {"Red", "Green", "Blue", "Alpha", "Exposure"};
-    std::array                     slider_components{R_SLIDER, G_SLIDER, B_SLIDER, A_SLIDER, E_SLIDER};
-    std::array                     box_components{R_BOX, G_BOX, B_BOX, A_BOX, E_BOX};
+    std::array<std::string, 5>     channel_names{"Red", "Green", "Blue", "Alpha", "Exposure"};
+    std::array<int, 5>             slider_components{R_SLIDER, G_SLIDER, B_SLIDER, A_SLIDER, E_SLIDER};
+    std::array<int, 5>             box_components{R_BOX, G_BOX, B_BOX, A_BOX, E_BOX};
     std::vector<ColorSlider *>     sliders;
     std::vector<FloatBox<float> *> float_boxes;
     for (size_t c = 0; c < box_components.size(); ++c)
