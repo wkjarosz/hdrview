@@ -45,18 +45,25 @@ string get_basename(const string &filename)
 
 const vector<string> &channel_names()
 {
-    static const vector<string> names = {"RGB",         "Red",
-                                         "Green",       "Blue",
-                                         "Alpha",       "Luminance",
-                                         "CIE L*",      "CIE a*",
-                                         "CIE b*",      "CIE chromaticity",
-                                         "False color", "Negative-positive"};
+    static const vector<string> names{"RGB",
+                                      "Red",
+                                      "Green",
+                                      "Blue",
+                                      "Alpha",
+                                      "Luminance",
+                                      "Gray",
+                                      "CIE L*",
+                                      "CIE a*",
+                                      "CIE b*",
+                                      "CIE chromaticity",
+                                      "False color",
+                                      "Negative-positive"};
     return names;
 }
 
 const vector<string> &blend_mode_names()
 {
-    static const vector<string> names = {
+    static const vector<string> names{
         "Normal", "Multiply", "Divide", "Add", "Average", "Subtract", "Difference", "Relative difference",
     };
     return names;
@@ -103,7 +110,7 @@ string to_upper(string str)
     return str;
 }
 
-bool matches(string text, string filter, bool isRegex)
+bool matches(string text, string filter, bool is_regex)
 {
     auto matchesFuzzy = [](string text, string filter)
     {
@@ -145,5 +152,5 @@ bool matches(string text, string filter, bool isRegex)
         }
     };
 
-    return isRegex ? matchesRegex(text, filter) : matchesFuzzy(text, filter);
+    return is_regex ? matchesRegex(text, filter) : matchesFuzzy(text, filter);
 }

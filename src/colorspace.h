@@ -14,7 +14,7 @@
  * @brief		Generic color space conversion
  *
  * Converts from a source color space \a src to a destination color space \a dst,
- * each specified using the \a EColorSpace enumeriation
+ * each specified using the \a EColorSpace enumeration
  *
  * @param[in] dst 	Destination color space
  * @param[out] a 	First component of the destination color

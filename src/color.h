@@ -349,8 +349,10 @@ public:
     friend Color4        operator-(float s, const Color4 &c) { return {s - c.r, s - c.g, s - c.b, c.a}; }
 
     /// Allows for conversion between this Color4 and nanogui's representation.
-    operator const nanogui::Color &() const { return *(reinterpret_cast<const nanogui::Color *>(&r)); }
-    operator nanogui::Color &() { return *(reinterpret_cast<nanogui::Color *>(&r)); }
+    // operator const nanogui::Color &() const { return reinterpret_cast<const nanogui::Color *>(&(this->r))); }
+    // operator nanogui::Color &() { return *(reinterpret_cast<nanogui::Color *>(&r)); }
+
+    operator const nanogui::Color() const { return nanogui::Color(r, g, b, a); }
 };
 
 #define COLOR_FUNCTION_WRAPPER(FUNC)                                                                                   \
