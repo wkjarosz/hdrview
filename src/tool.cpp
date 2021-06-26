@@ -675,47 +675,50 @@ bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
     return Tool::keyboard(key, scancode, action, modifiers);
 }
 
+void BrushTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
+{
+    Color4 c =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+    float alpha  = a * c.a;
+    c.a          = 1.f;
+    (*img)(x, y) = c * alpha + (*img)(x, y) * (1.0f - alpha);
+}
+
 void BrushTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const
 {
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
-
     m_brush->set_step(0);
     m_brush->stamp_onto(
-        *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
+        pixel.x(), pixel.y(),
+        [this, new_image, modifiers](int x, int y, float a) { plot_pixel(new_image, x, y, a, modifiers); }, roi);
 }
 
 void BrushTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
                           const Box2i &roi, int modifiers) const
 {
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
-
-    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
     {
         m_brush->stamp_onto(
-            *new_image, x, y, [&color](int, int) { return color; }, roi);
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
     };
 
-    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(), put_pixel);
+    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(), splat);
 }
 
 void BrushTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
 {
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
-
-    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
     {
         m_brush->stamp_onto(
-            *new_image, x, y, [&color](int, int) { return color; }, roi);
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
     };
 
     // draw_CatmullRom(m_p0.x(), m_p0.y(), m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(),
     // pixel.x(), pixel.y(), put_pixel1, 0.5f);
     draw_quadratic(from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
-                   put_pixel, 4, include_start);
+                   splat, 4, include_start);
     // auto a = (m_p1 + prev_pixel) / 2;
     // auto b = prev_pixel;
     // auto c = (prev_pixel + pixel) / 2;
@@ -851,35 +854,9 @@ EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
     // empty
 }
 
-void EraserTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                              int modifiers) const
+void EraserTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
 {
-    auto plot_pixel = [new_image](int x, int y, float a)
-    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
-
-    m_brush->set_step(0);
-    m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
-}
-
-void EraserTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
-                           const Box2i &roi, int modifiers) const
-{
-    auto plot_pixel = [new_image](int x, int y, float a)
-    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
-
-    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(),
-                [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
-}
-
-void EraserTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
-                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
-{
-    auto plot_pixel = [new_image](int x, int y, float a)
-    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
-
-    ::draw_quadratic(
-        from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
-        [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); }, 4, include_start);
+    (*img)(x, y).a = 0.f * a + (*img)(x, y).a * (1.0f - a);
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -889,68 +866,18 @@ CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, 
     // empty
 }
 
-void CloneStampTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                                  int modifiers) const
+void CloneStampTool::plot_pixel(const HDRImagePtr &img, int dst_x, int dst_y, float a, int modifiers) const
 {
-    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
-    {
-        int src_x = dst_x + m_dpixel.x();
-        int src_y = dst_y + m_dpixel.y();
+    int src_x = dst_x + m_dpixel.x();
+    int src_y = dst_y + m_dpixel.y();
 
-        Color4 src_color(0.f);
-        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
-            src_color = (*new_image)(src_x, src_y);
+    Color4 src_color(0.f);
+    if (src_x >= 0 && src_y >= 0 && src_x < img->width() && src_y < img->height())
+        src_color = (*img)(src_x, src_y);
 
-        float alpha                = a * src_color.a;
-        src_color.a                = 1.f;
-        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
-    };
-
-    m_brush->set_step(0);
-    m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
-}
-
-void CloneStampTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
-                               const Box2i &roi, int modifiers) const
-{
-    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
-    {
-        int src_x = dst_x + m_dpixel.x();
-        int src_y = dst_y + m_dpixel.y();
-
-        Color4 src_color(0.f);
-        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
-            src_color = (*new_image)(src_x, src_y);
-
-        float alpha                = a * src_color.a;
-        src_color.a                = 1.f;
-        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
-    };
-
-    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(),
-                [this, new_image, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
-}
-
-void CloneStampTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
-                                const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
-{
-    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
-    {
-        int src_x = dst_x + m_dpixel.x();
-        int src_y = dst_y + m_dpixel.y();
-
-        Color4 src_color(0.f);
-        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
-            src_color = (*new_image)(src_x, src_y);
-
-        float alpha                = a * src_color.a;
-        src_color.a                = 1.f;
-        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
-    };
-
-    ::draw_quadratic(from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
-                     [this, new_image, &plot_pixel, &roi](int x, int y)
-                     { m_brush->stamp_onto(x, y, plot_pixel, roi); });
+    float alpha          = a * src_color.a;
+    src_color.a          = 1.f;
+    (*img)(dst_x, dst_y) = src_color * alpha + (*img)(dst_x, dst_y) * (1.0f - alpha);
 }
 
 bool CloneStampTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)

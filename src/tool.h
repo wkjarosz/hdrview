@@ -95,6 +95,8 @@ public:
                             const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
                             int modifiers, bool include_start) const;
 
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const;
+
 protected:
     std::shared_ptr<Brush>    m_brush;
     nanogui::Slider *         m_size_slider;
@@ -123,13 +125,7 @@ public:
                const std::string &tooltip = "Makes pixels transparent.", int icon = FA_ERASER,
                ETool tool = Tool_Eraser);
 
-    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                              int modifiers) const override;
-    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
-                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const override;
-    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
-                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                            int modifiers, bool include_start) const override;
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
 protected:
 };
@@ -146,13 +142,7 @@ public:
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
 
-    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                              int modifiers) const override;
-    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
-                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const override;
-    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
-                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                            int modifiers, bool include_start) const override;
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
 protected:
     nanogui::Vector2i m_src_click;
