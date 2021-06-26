@@ -430,7 +430,7 @@ void BrushTool::write_settings()
     settings["angle"]     = m_brush->angle();
     settings["roundness"] = m_brush->roundness();
     settings["spacing"]   = m_brush->spacing();
-    settings["smoothing"] = m_smoothing_checkbox->pushed();
+    settings["smoothing"] = m_smoothing_checkbox->checked();
 }
 
 Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
@@ -640,8 +640,9 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_smoothing_checkbox = new CheckBox(m_options, "Smoothing");
-    m_smoothing_checkbox->set_checked(settings.value("smoothing", true));
     m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
+    m_smoothing = settings.value("smoothing", true);
+    m_smoothing_checkbox->set_checked(m_smoothing);
 
     return m_options;
 }
@@ -674,11 +675,56 @@ bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
     return Tool::keyboard(key, scancode, action, modifiers);
 }
 
+void BrushTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const
+{
+    auto color =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+
+    m_brush->set_step(0);
+    m_brush->stamp_onto(
+        *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
+}
+
+void BrushTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
+                          const Box2i &roi, int modifiers) const
+{
+    auto color =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+
+    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            *new_image, x, y, [&color](int, int) { return color; }, roi);
+    };
+
+    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(), put_pixel);
+}
+
+void BrushTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
+{
+    auto color =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+
+    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            *new_image, x, y, [&color](int, int) { return color; }, roi);
+    };
+
+    // draw_CatmullRom(m_p0.x(), m_p0.y(), m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(),
+    // pixel.x(), pixel.y(), put_pixel1, 0.5f);
+    draw_quadratic(from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
+                   put_pixel, 4, include_start);
+    // auto a = (m_p1 + prev_pixel) / 2;
+    // auto b = prev_pixel;
+    // auto c = (prev_pixel + pixel) / 2;
+    // draw_quad_Bezier(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), put_pixel);
+}
+
 bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 {
     spdlog::trace("modifier: {}", modifiers);
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
 
     Box2i roi = m_images_panel->current_image()->roi();
     if (roi.has_volume())
@@ -692,20 +738,10 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
     if (!down)
     {
         // draw a line for the last part of the stroke
-        if (m_p1.x() != std::numeric_limits<int>::lowest())
-        {
-            m_images_panel->current_image()->direct_modify(
-                [&pixel, &color, &roi, this](const HDRImagePtr &new_image)
-                {
-                    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-                    {
-                        m_brush->stamp_onto(
-                            *new_image, x, y, [&color](int, int) { return color; }, roi);
-                    };
-
-                    draw_line(m_p1.x(), m_p1.y(), pixel.x(), pixel.y(), put_pixel);
-                });
-        }
+        // if (m_p1.x() != std::numeric_limits<int>::lowest())
+        //     m_images_panel->current_image()->direct_modify([&pixel, &roi, modifiers, this](const HDRImagePtr
+        //     &new_image)
+        //                                                    { draw_line(m_p1, pixel, new_image, roi, modifiers); });
     }
     else if (down && modifiers & GLFW_MOD_SHIFT)
     {
@@ -713,19 +749,11 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
         if (m_clicked.x() != std::numeric_limits<int>::lowest())
         {
             m_images_panel->current_image()->start_modify(
-                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
-                                             const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                [&pixel, &roi, modifiers, this](const ConstHDRImagePtr &img,
+                                                const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                 {
                     auto new_image = make_shared<HDRImage>(*img);
-
-                    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-                    {
-                        m_brush->stamp_onto(
-                            *new_image, x, y, [&color](int, int) { return color; }, roi);
-                    };
-
-                    draw_line(m_clicked.x(), m_clicked.y(), pixel.x(), pixel.y(), put_pixel);
-
+                    draw_line(m_clicked, pixel, new_image, roi, modifiers);
                     return {new_image, make_shared<FullImageUndo>(*img)};
                 });
 
@@ -735,15 +763,11 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
     else if (down)
     {
         m_images_panel->current_image()->start_modify(
-            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
-                                         const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+            [&pixel, &roi, modifiers, this](const ConstHDRImagePtr &img,
+                                            const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(
-                    *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
-
+                start_stroke(pixel, new_image, roi, modifiers);
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });
     }
@@ -770,10 +794,8 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
     if (prev_pixel == pixel)
         return false;
 
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
     m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, &color, this](const HDRImagePtr &new_image)
+        [&pixel, &prev_pixel, modifiers, this](const HDRImagePtr &new_image)
         {
             Box2i roi = m_images_panel->current_image()->roi();
             if (roi.has_volume())
@@ -781,28 +803,11 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
             else
                 roi = new_image->box();
 
-            auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-            {
-                m_brush->stamp_onto(
-                    *new_image, x, y, [&color](int, int) { return color; }, roi);
-            };
-
-            if (m_smoothing)
-            {
-                if (m_p1.x() != std::numeric_limits<int>::lowest())
-                {
-                    // draw_CatmullRom(m_p0.x(), m_p0.y(), m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(),
-                    // pixel.x(), pixel.y(), put_pixel1, 0.5f);
-                    draw_quadratic(m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(), put_pixel,
-                                   4, m_p0.x() == std::numeric_limits<int>::lowest());
-                    // auto a = (m_p1 + prev_pixel) / 2;
-                    // auto b = prev_pixel;
-                    // auto c = (prev_pixel + pixel) / 2;
-                    // draw_quad_Bezier(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), put_pixel);
-                }
-            }
-            else
-                draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(), put_pixel);
+            if (!m_smoothing)
+                draw_line(prev_pixel, pixel, new_image, roi, modifiers);
+            else if (m_p1.x() != std::numeric_limits<int>::lowest())
+                draw_curve(m_p1, prev_pixel, pixel, new_image, roi, modifiers,
+                           m_p0.x() == std::numeric_limits<int>::lowest());
 
             m_p0 = m_p1;
             m_p1 = prev_pixel;
@@ -846,66 +851,35 @@ EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
     // empty
 }
 
-bool EraserTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
+void EraserTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                              int modifiers) const
 {
-    if (down)
-    {
-        m_screen->request_layout_update();
-        auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
-        auto pixel = Vector2i(round(coord.x()), round(coord.y()));
-        m_images_panel->current_image()->start_modify(
-            [&pixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-            {
-                auto new_image = make_shared<HDRImage>(*img);
+    auto plot_pixel = [new_image](int x, int y, float a)
+    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
 
-                Box2i roi = m_images_panel->current_image()->roi();
-                if (roi.has_volume())
-                    roi.intersect(m_images_panel->current_image()->box());
-                else
-                    roi = img->box();
-
-                HDRImage &new_image_ref = *new_image;
-
-                auto plot_pixel = [&new_image_ref](int x, int y, float a)
-                { new_image_ref(x, y).a = 0.f * a + new_image_ref(x, y).a * (1.0f - a); };
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
-
-                return {new_image, make_shared<FullImageUndo>(*img)};
-            });
-        m_screen->update_caption();
-        return true;
-    }
-    return false;
+    m_brush->set_step(0);
+    m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
 }
 
-bool EraserTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
+void EraserTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
+                           const Box2i &roi, int modifiers) const
 {
-    m_screen->request_layout_update();
-    auto coord      = m_image_view->image_coordinate_at(p - m_image_view->position());
-    auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
-    coord           = m_image_view->image_coordinate_at(p - rel - m_image_view->position());
-    auto prev_pixel = Vector2i(round(coord.x()), round(coord.y()));
-    m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, this](const HDRImagePtr &new_image)
-        {
-            Box2i roi = m_images_panel->current_image()->roi();
-            if (roi.has_volume())
-                roi.intersect(m_images_panel->current_image()->box());
-            else
-                roi = m_images_panel->current_image()->box();
+    auto plot_pixel = [new_image](int x, int y, float a)
+    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
 
-            HDRImage &new_image_ref = *new_image;
+    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(),
+                [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
+}
 
-            auto plot_pixel = [&new_image_ref](int x, int y, float a)
-            { new_image_ref(x, y).a = 0.f * a + new_image_ref(x, y).a * (1.0f - a); };
+void EraserTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
+                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
+{
+    auto plot_pixel = [new_image](int x, int y, float a)
+    { (*new_image)(x, y).a = 0.f * a + (*new_image)(x, y).a * (1.0f - a); };
 
-            draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(),
-                      [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
-        });
-    m_screen->update_caption();
-    return true;
+    ::draw_quadratic(
+        from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
+        [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); }, 4, include_start);
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -915,101 +889,103 @@ CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, 
     // empty
 }
 
+void CloneStampTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                                  int modifiers) const
+{
+    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
+    {
+        int src_x = dst_x + m_dpixel.x();
+        int src_y = dst_y + m_dpixel.y();
+
+        Color4 src_color(0.f);
+        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
+            src_color = (*new_image)(src_x, src_y);
+
+        float alpha                = a * src_color.a;
+        src_color.a                = 1.f;
+        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
+    };
+
+    m_brush->set_step(0);
+    m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
+}
+
+void CloneStampTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
+                               const Box2i &roi, int modifiers) const
+{
+    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
+    {
+        int src_x = dst_x + m_dpixel.x();
+        int src_y = dst_y + m_dpixel.y();
+
+        Color4 src_color(0.f);
+        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
+            src_color = (*new_image)(src_x, src_y);
+
+        float alpha                = a * src_color.a;
+        src_color.a                = 1.f;
+        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
+    };
+
+    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(),
+                [this, new_image, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
+}
+
+void CloneStampTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
+                                const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
+{
+    auto plot_pixel = [new_image, this](int dst_x, int dst_y, float a)
+    {
+        int src_x = dst_x + m_dpixel.x();
+        int src_y = dst_y + m_dpixel.y();
+
+        Color4 src_color(0.f);
+        if (src_x >= 0 && src_y >= 0 && src_x < new_image->width() && src_y < new_image->height())
+            src_color = (*new_image)(src_x, src_y);
+
+        float alpha                = a * src_color.a;
+        src_color.a                = 1.f;
+        (*new_image)(dst_x, dst_y) = src_color * alpha + (*new_image)(dst_x, dst_y) * (1.0f - alpha);
+    };
+
+    ::draw_quadratic(from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
+                     [this, new_image, &plot_pixel, &roi](int x, int y)
+                     { m_brush->stamp_onto(x, y, plot_pixel, roi); });
+}
+
 bool CloneStampTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (modifiers & GLFW_MOD_ALT)
     {
         m_has_src   = true;
         m_src_click = p;
-        return true;
     }
     else if (down)
     {
         m_has_dst   = true;
         m_dst_click = p;
-        m_screen->request_layout_update();
-        auto coord     = m_image_view->image_coordinate_at(p - m_image_view->position());
-        auto pixel     = Vector2i(round(coord.x()), round(coord.y()));
+
         auto coord_dst = m_image_view->image_coordinate_at(m_dst_click - m_image_view->position());
         auto pixel_dst = Vector2i(round(coord_dst.x()), round(coord_dst.y()));
         auto coord_src = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
-        auto dpixel    = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
-        m_images_panel->current_image()->start_modify(
-            [&pixel, &dpixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-            {
-                auto new_image = make_shared<HDRImage>(*img);
 
-                Box2i roi = m_images_panel->current_image()->roi();
-                if (roi.has_volume())
-                    roi.intersect(m_images_panel->current_image()->box());
-                else
-                    roi = img->box();
-
-                HDRImage &new_image_ref = *new_image;
-
-                auto src_color = [&new_image_ref, &dpixel](int dst_x, int dst_y)
-                {
-                    int x = dst_x + dpixel.x();
-                    int y = dst_y + dpixel.y();
-
-                    if (x >= 0 && y >= 0 && x < new_image_ref.width() && y < new_image_ref.height())
-                        return new_image_ref(x, y);
-                    else
-                        return Color4(0.f);
-                };
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(new_image_ref, pixel.x(), pixel.y(), src_color, roi);
-
-                return {new_image, make_shared<FullImageUndo>(*img)};
-            });
-        m_screen->update_caption();
-        return true;
+        m_dpixel = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
     }
     else
         m_has_dst = false;
-    return false;
+
+    return BrushTool::mouse_button(p, button, down, modifiers);
 }
 
 bool CloneStampTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    m_screen->request_layout_update();
-    auto coord      = m_image_view->image_coordinate_at(p - m_image_view->position());
-    auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
-    auto coord_dst  = m_image_view->image_coordinate_at(m_dst_click - m_image_view->position());
-    auto pixel_dst  = Vector2i(round(coord_dst.x()), round(coord_dst.y()));
-    auto coord_src  = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
-    auto dpixel     = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
-    coord           = m_image_view->image_coordinate_at(p - rel - m_image_view->position());
-    auto prev_pixel = Vector2i(round(coord.x()), round(coord.y()));
-    m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, &dpixel, this](const HDRImagePtr &new_image)
-        {
-            Box2i roi = m_images_panel->current_image()->roi();
-            if (roi.has_volume())
-                roi.intersect(m_images_panel->current_image()->box());
-            else
-                roi = m_images_panel->current_image()->box();
+    auto coord_dst = m_image_view->image_coordinate_at(m_dst_click - m_image_view->position());
+    auto pixel_dst = Vector2i(round(coord_dst.x()), round(coord_dst.y()));
+    auto coord_src = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
 
-            HDRImage &new_image_ref = *new_image;
+    m_dpixel = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
 
-            auto src_color = [&new_image_ref, &dpixel](int dst_x, int dst_y)
-            {
-                int x = dst_x + dpixel.x();
-                int y = dst_y + dpixel.y();
-
-                if (x >= 0 && y >= 0 && x < new_image_ref.width() && y < new_image_ref.height())
-                    return new_image_ref(x, y);
-                else
-                    return Color4(0.f);
-            };
-
-            draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(),
-                      [this, &new_image_ref, &src_color, &roi](int x, int y)
-                      { m_brush->stamp_onto(new_image_ref, x, y, src_color, roi); });
-        });
-    m_screen->update_caption();
-    return true;
+    return BrushTool::mouse_drag(p, rel, button, modifiers);
 }
 
 void CloneStampTool::draw(NVGcontext *ctx) const
@@ -1379,8 +1355,8 @@ bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifi
                     (*new_image)(x, y) = c * (1.0f - alpha) + (*new_image)(x, y) * alpha;
                 };
 
-                draw_line(m_start_pixel.x(), m_start_pixel.y(), m_end_pixel.x(), m_end_pixel.y(), (float)m_width,
-                          put_pixel);
+                ::draw_line(m_start_pixel.x(), m_start_pixel.y(), m_end_pixel.x(), m_end_pixel.y(), (float)m_width,
+                            put_pixel);
 
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });

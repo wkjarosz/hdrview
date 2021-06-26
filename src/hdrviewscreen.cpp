@@ -422,33 +422,33 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     {
         // create default options bar
-        auto default_tool = m_tools[Tool::Tool_None]->create_options_bar(m_top_panel);
+        auto default_tool = m_tools[Tool_None]->create_options_bar(m_top_panel);
 
         // marquee tool uses the default options bar
-        m_tools[Tool::Tool_Rectangular_Marquee]->set_options_bar(default_tool);
+        m_tools[Tool_Rectangular_Marquee]->set_options_bar(default_tool);
 
         // brush tool uses its own options bar
-        m_tools[Tool::Tool_Brush]->create_options_bar(m_top_panel);
+        m_tools[Tool_Brush]->create_options_bar(m_top_panel);
 
         // brush tool uses its own options bar
-        m_tools[Tool::Tool_Eraser]->create_options_bar(m_top_panel);
+        m_tools[Tool_Eraser]->create_options_bar(m_top_panel);
 
         // clone stamp uses its own options bar
-        m_tools[Tool::Tool_Clone_Stamp]->create_options_bar(m_top_panel);
+        m_tools[Tool_Clone_Stamp]->create_options_bar(m_top_panel);
 
         // eyedropper uses its own options bar
-        m_tools[Tool::Tool_Eyedropper]->create_options_bar(m_top_panel);
+        m_tools[Tool_Eyedropper]->create_options_bar(m_top_panel);
 
         // ruler uses the default options bar
-        m_tools[Tool::Tool_Ruler]->set_options_bar(default_tool);
+        m_tools[Tool_Ruler]->set_options_bar(default_tool);
 
         // line tool uses the default options bar
-        m_tools[Tool::Tool_Line]->create_options_bar(m_top_panel);
+        m_tools[Tool_Line]->create_options_bar(m_top_panel);
     }
 
     // set the active tool
-    set_tool((Tool::ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool::Tool_None),
-                                     (int)Tool::Tool_None, (int)Tool::Tool_Num_Tools - 1));
+    set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
+                               (int)Tool_None, (int)Tool_Num_Tools - 1));
 
     resize_tool_panel(m_settings.value("geometry", json::object()).value("tool panel width", 33));
 
@@ -655,19 +655,19 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
         else
             pop_gui_refresh();
 
-        set_tool(Tool::Tool_Eyedropper);
+        set_tool(Tool_Eyedropper);
     }
     else
     {
         m_active_colorpicker = nullptr;
-        set_tool(Tool::Tool_None);
+        set_tool(Tool_None);
     }
 }
 
-void HDRViewScreen::set_tool(Tool::ETool t)
+void HDRViewScreen::set_tool(ETool t)
 {
     m_tool = t;
-    for (int i = 0; i < (int)Tool::Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
+    for (int i = 0; i < (int)Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
 
     m_tools[t]->set_active(true);
 }
@@ -1122,7 +1122,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     {
         spdlog::trace("ending eyedropper");
         m_active_colorpicker->end_eyedropper();
-        set_tool(Tool::Tool_None);
+        set_tool(Tool_None);
         return true;
     }
 
@@ -1378,7 +1378,7 @@ void HDRViewScreen::draw_contents()
         m_roi_info_label->set_caption(
             img->roi().has_volume() ? fmt::format("{: 4d}\n{: 4d}", img->roi().size().x(), img->roi().size().y()) : "");
 
-        auto   ruler      = dynamic_cast<Ruler *>(m_tools[Tool::Tool_Ruler]);
+        auto   ruler      = dynamic_cast<Ruler *>(m_tools[Tool_Ruler]);
         string angle_str  = isnan(ruler->angle()) ? "" : fmt::format("{:3.2f} °", ruler->angle());
         string length_str = isnan(ruler->distance()) ? "" : fmt::format("{:.1f} px", ruler->distance());
         m_ruler_info_label->set_caption(angle_str + "\n" + length_str);

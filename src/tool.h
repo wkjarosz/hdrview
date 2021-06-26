@@ -13,19 +13,6 @@
 class Tool
 {
 public:
-    enum ETool : uint32_t
-    {
-        Tool_None = 0,
-        Tool_Rectangular_Marquee,
-        Tool_Brush,
-        Tool_Eraser,
-        Tool_Clone_Stamp,
-        Tool_Eyedropper,
-        Tool_Ruler,
-        Tool_Line,
-        Tool_Num_Tools
-    };
-
     Tool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name, const std::string &tooltip,
          int icon, ETool tool);
 
@@ -100,6 +87,14 @@ public:
                                         int modifiers) override;
     virtual bool             keyboard(int key, int scancode, int action, int modifiers) override;
 
+    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                              int modifiers) const;
+    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const;
+    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
+                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                            int modifiers, bool include_start) const;
+
 protected:
     std::shared_ptr<Brush>    m_brush;
     nanogui::Slider *         m_size_slider;
@@ -128,9 +123,13 @@ public:
                const std::string &tooltip = "Makes pixels transparent.", int icon = FA_ERASER,
                ETool tool = Tool_Eraser);
 
-    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
-    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
-                            int modifiers) override;
+    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                              int modifiers) const override;
+    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const override;
+    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
+                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                            int modifiers, bool include_start) const override;
 
 protected:
 };
@@ -147,9 +146,18 @@ public:
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
 
+    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                              int modifiers) const override;
+    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const override;
+    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
+                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                            int modifiers, bool include_start) const override;
+
 protected:
     nanogui::Vector2i m_src_click;
     nanogui::Vector2i m_dst_click;
+    nanogui::Vector2i m_dpixel;
 
     bool m_has_src = false;
     bool m_has_dst = false;
