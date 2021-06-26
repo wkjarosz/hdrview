@@ -19,7 +19,7 @@ class AtomicFixed
 public:
     static const Fixed ScalingFactor = (1 << FractionBits);
 
-    static Fixed float2fixed(float b) { return std::round(b * ScalingFactor); }
+    static Fixed float2fixed(float b) { return (Fixed)std::round(b * ScalingFactor); }
 
     static float fixed2float(Fixed f) { return float(f) / ScalingFactor; }
 

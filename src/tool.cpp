@@ -424,12 +424,12 @@ void BrushTool::write_settings()
 {
     // create a json object to hold the tool's settings
     auto &settings        = this_tool_settings();
-    settings["size"]      = m_size_slider->value();
-    settings["hardness"]  = m_hardness_slider->value();
-    settings["flow"]      = m_flow_slider->value();
-    settings["angle"]     = m_angle_slider->value();
-    settings["roundness"] = m_roundness_slider->value();
-    settings["spacing"]   = m_spacing_slider->value();
+    settings["size"]      = m_brush->radius();
+    settings["hardness"]  = m_brush->hardness();
+    settings["flow"]      = m_brush->flow();
+    settings["angle"]     = m_brush->angle();
+    settings["roundness"] = m_brush->roundness();
+    settings["spacing"]   = m_brush->spacing();
     settings["smoothing"] = m_smoothing_checkbox->pushed();
 }
 
@@ -439,10 +439,10 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_brush->set_radius(settings.value("size", 15));
     m_brush->set_hardness(settings.value("hardness", 0.f));
-    m_brush->set_flow(settings.value("flow", 100) / 100.f);
-    m_brush->set_angle(settings.value("angle", 0));
-    m_brush->set_roundness(settings.value("roundness", 100));
-    m_brush->set_spacing(settings.value("spacing", 0));
+    m_brush->set_flow(settings.value("flow", 1.f));
+    m_brush->set_angle(settings.value("angle", 0.f));
+    m_brush->set_roundness(settings.value("roundness", 1.f));
+    m_brush->set_spacing(settings.value("spacing", 0.f));
 
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 0));
@@ -481,12 +481,13 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_options->add<Label>("Hard:");
     m_hardness_slider  = new Slider(m_options);
-    m_hardness_textbox = new IntBox<int>(m_options);
+    m_hardness_textbox = new FloatBox<float>(m_options);
 
+    m_hardness_textbox->number_format("%3.0f");
     m_hardness_textbox->set_editable(true);
     m_hardness_textbox->set_fixed_width(40);
-    m_hardness_textbox->set_min_value(0);
-    m_hardness_textbox->set_max_value(100);
+    m_hardness_textbox->set_min_value(0.f);
+    m_hardness_textbox->set_max_value(100.f);
     m_hardness_textbox->set_units("%");
     m_hardness_textbox->set_alignment(TextBox::Alignment::Right);
     m_hardness_textbox->set_callback(
@@ -496,7 +497,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_hardness_slider->set_value(v);
         });
     m_hardness_slider->set_fixed_width(75);
-    m_hardness_slider->set_range({0, 100});
+    m_hardness_slider->set_range({0.f, 100.f});
     m_hardness_slider->set_callback(
         [this](int v)
         {
@@ -504,20 +505,21 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_hardness_textbox->set_value(v);
         });
 
-    m_hardness_textbox->set_value(m_brush->hardness());
-    m_hardness_slider->set_value(m_brush->hardness());
+    m_hardness_textbox->set_value(m_brush->hardness() * 100.f);
+    m_hardness_slider->set_value(m_brush->hardness() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Flow:");
     m_flow_slider  = new Slider(m_options);
-    m_flow_textbox = new IntBox<int>(m_options);
+    m_flow_textbox = new FloatBox<float>(m_options);
 
+    m_flow_textbox->number_format("%3.0f");
     m_flow_textbox->set_editable(true);
     m_flow_textbox->set_fixed_width(40);
-    m_flow_textbox->set_min_value(1);
-    m_flow_textbox->set_max_value(100);
+    m_flow_textbox->set_min_value(0.5f);
+    m_flow_textbox->set_max_value(100.f);
     m_flow_textbox->set_units("%");
     m_flow_textbox->set_alignment(TextBox::Alignment::Right);
     m_flow_textbox->set_callback(
@@ -527,7 +529,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_flow_slider->set_value(v);
         });
     m_flow_slider->set_fixed_width(75);
-    m_flow_slider->set_range({1, 100});
+    m_flow_slider->set_range({0.5f, 100.f});
     m_flow_slider->set_callback(
         [this](int v)
         {
@@ -535,20 +537,21 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_flow_textbox->set_value(v);
         });
 
-    m_flow_textbox->set_value(int(m_brush->flow() * 100));
-    m_flow_slider->set_value(int(m_brush->flow() * 100));
+    m_flow_textbox->set_value(m_brush->flow() * 100.f);
+    m_flow_slider->set_value(m_brush->flow() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Angle:");
     m_angle_slider  = new Slider(m_options);
-    m_angle_textbox = new IntBox<int>(m_options);
+    m_angle_textbox = new FloatBox<float>(m_options);
 
+    m_angle_textbox->number_format("%3.0f");
     m_angle_textbox->set_editable(true);
     m_angle_textbox->set_fixed_width(35);
-    m_angle_textbox->set_min_value(0);
-    m_angle_textbox->set_max_value(180);
+    m_angle_textbox->set_min_value(0.f);
+    m_angle_textbox->set_max_value(180.f);
     m_angle_textbox->set_units("°");
     m_angle_textbox->set_alignment(TextBox::Alignment::Right);
     m_angle_textbox->set_callback(
@@ -558,7 +561,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_angle_slider->set_value(v);
         });
     m_angle_slider->set_fixed_width(75);
-    m_angle_slider->set_range({0, 180});
+    m_angle_slider->set_range({0.f, 180.f});
     m_angle_slider->set_callback(
         [this](int v)
         {
@@ -574,62 +577,64 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_options->add<Label>("Round:");
     m_roundness_slider  = new Slider(m_options);
-    m_roundness_textbox = new IntBox<int>(m_options);
+    m_roundness_textbox = new FloatBox<float>(m_options);
 
+    m_roundness_textbox->number_format("%3.0f");
     m_roundness_textbox->set_editable(true);
     m_roundness_textbox->set_fixed_width(40);
-    m_roundness_textbox->set_min_value(1);
-    m_roundness_textbox->set_max_value(100);
+    m_roundness_textbox->set_min_value(0.5f);
+    m_roundness_textbox->set_max_value(100.f);
     m_roundness_textbox->set_units("%");
     m_roundness_textbox->set_alignment(TextBox::Alignment::Right);
     m_roundness_textbox->set_callback(
         [this](int v)
         {
-            m_brush->set_roundness(v);
+            m_brush->set_roundness(v / 100.f);
             m_roundness_slider->set_value(v);
         });
     m_roundness_slider->set_fixed_width(75);
-    m_roundness_slider->set_range({1, 100});
+    m_roundness_slider->set_range({0.5f, 100.f});
     m_roundness_slider->set_callback(
         [this](int v)
         {
-            m_brush->set_roundness(v);
+            m_brush->set_roundness(v / 100.f);
             m_roundness_textbox->set_value(v);
         });
 
-    m_roundness_textbox->set_value(m_brush->roundness());
-    m_roundness_slider->set_value(m_brush->roundness());
+    m_roundness_textbox->set_value(m_brush->roundness() * 100.f);
+    m_roundness_slider->set_value(m_brush->roundness() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Spacing:");
     m_spacing_slider  = new Slider(m_options);
-    m_spacing_textbox = new IntBox<int>(m_options);
+    m_spacing_textbox = new FloatBox<float>(m_options);
 
+    m_spacing_textbox->number_format("%3.0f");
     m_spacing_textbox->set_editable(true);
     m_spacing_textbox->set_fixed_width(40);
-    m_spacing_textbox->set_min_value(0);
-    m_spacing_textbox->set_max_value(100);
+    m_spacing_textbox->set_min_value(0.f);
+    m_spacing_textbox->set_max_value(100.f);
     m_spacing_textbox->set_units("%");
     m_spacing_textbox->set_alignment(TextBox::Alignment::Right);
     m_spacing_textbox->set_callback(
         [this](int v)
         {
-            m_brush->set_spacing(v);
+            m_brush->set_spacing(v / 100.f);
             m_spacing_slider->set_value(v);
         });
     m_spacing_slider->set_fixed_width(75);
-    m_spacing_slider->set_range({0, 100});
+    m_spacing_slider->set_range({0.f, 100.f});
     m_spacing_slider->set_callback(
         [this](int v)
         {
-            m_brush->set_spacing(v);
+            m_brush->set_spacing(v / 100.f);
             m_spacing_textbox->set_value(v);
         });
 
-    m_spacing_textbox->set_value(m_brush->spacing());
-    m_spacing_slider->set_value(m_brush->spacing());
+    m_spacing_textbox->set_value(m_brush->spacing() * 100.f);
+    m_spacing_slider->set_value(m_brush->spacing() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
@@ -816,7 +821,7 @@ void BrushTool::draw(NVGcontext *ctx) const
     nvgSave(ctx);
     nvgTranslate(ctx, center.x(), center.y());
     nvgRotate(ctx, 2 * M_PI * m_brush->angle() / 360.0f);
-    nvgScale(ctx, 1.f, m_brush->roundness() / 100.f);
+    nvgScale(ctx, 1.f, m_brush->roundness());
 
     nvgBeginPath(ctx);
     nvgCircle(ctx, 0, 0, m_brush->radius() * m_image_view->zoom());
@@ -1019,7 +1024,7 @@ void CloneStampTool::draw(NVGcontext *ctx) const
         nvgSave(ctx);
         nvgTranslate(ctx, center.x(), center.y());
         nvgRotate(ctx, 2 * M_PI * m_brush->angle() / 360.0f);
-        nvgScale(ctx, 1.f, m_brush->roundness() / 100.f);
+        nvgScale(ctx, 1.f, m_brush->roundness());
 
         nvgBeginPath(ctx);
         nvgCircle(ctx, 0, 0, m_brush->radius() * m_image_view->zoom());

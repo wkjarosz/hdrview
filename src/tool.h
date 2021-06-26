@@ -101,21 +101,21 @@ public:
     virtual bool             keyboard(int key, int scancode, int action, int modifiers) override;
 
 protected:
-    std::shared_ptr<Brush> m_brush;
-    nanogui::Slider *      m_size_slider;
-    nanogui::IntBox<int> * m_size_textbox;
-    nanogui::Slider *      m_hardness_slider;
-    nanogui::IntBox<int> * m_hardness_textbox;
-    nanogui::Slider *      m_flow_slider;
-    nanogui::IntBox<int> * m_flow_textbox;
-    nanogui::Slider *      m_angle_slider;
-    nanogui::IntBox<int> * m_angle_textbox;
-    nanogui::Slider *      m_roundness_slider;
-    nanogui::IntBox<int> * m_roundness_textbox;
-    nanogui::Slider *      m_spacing_slider;
-    nanogui::IntBox<int> * m_spacing_textbox;
-    nanogui::CheckBox *    m_smoothing_checkbox;
-    bool                   m_smoothing = true;
+    std::shared_ptr<Brush>    m_brush;
+    nanogui::Slider *         m_size_slider;
+    nanogui::IntBox<int> *    m_size_textbox;
+    nanogui::Slider *         m_hardness_slider;
+    nanogui::FloatBox<float> *m_hardness_textbox;
+    nanogui::Slider *         m_flow_slider;
+    nanogui::FloatBox<float> *m_flow_textbox;
+    nanogui::Slider *         m_angle_slider;
+    nanogui::FloatBox<float> *m_angle_textbox;
+    nanogui::Slider *         m_roundness_slider;
+    nanogui::FloatBox<float> *m_roundness_textbox;
+    nanogui::Slider *         m_spacing_slider;
+    nanogui::FloatBox<float> *m_spacing_textbox;
+    nanogui::CheckBox *       m_smoothing_checkbox;
+    bool                      m_smoothing = true;
 
     nanogui::Vector2i m_p0, m_p1;
     nanogui::Vector2i m_clicked;
