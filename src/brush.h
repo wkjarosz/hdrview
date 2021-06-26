@@ -32,7 +32,6 @@ public:
     void set_angle(float angle);
     void set_roundness(float roundness);
 
-    void stamp_onto(HDRImage &raster, int x, int y, const SrcColorFunc &src_color, const Box2i &roi = Box2i());
     void stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi = Box2i());
 
 private:

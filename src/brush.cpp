@@ -122,19 +122,11 @@ void Brush::stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2
     int j_start = std::clamp(y - size_y, roi.min.y(), roi.max.y());
     int j_end   = std::clamp(y + size_y + 1, roi.min.y(), roi.max.y());
 
-    for (int j = j_start; j < j_end; j++)
-        for (int i = i_start; i < i_end; i++) plot_pixel(i, j, m_flow * m_brush(i - c_offset_x, j - c_offset_y));
-}
-
-void Brush::stamp_onto(HDRImage &raster, int x, int y, const SrcColorFunc &src_color, const Box2i &roi)
-{
-    auto plot_pixel = [&raster, &src_color](int i, int j, float a)
-    {
-        auto   c4 = src_color(i, j);
-        Color4 c3(c4.r, c4.g, c4.b, 1.f);
-        float  alpha = a * c4.a;
-        raster(i, j) = c3 * alpha + raster(i, j) * (1.0f - alpha);
-    };
-
-    return stamp_onto(x, y, plot_pixel, roi);
+    // for (int j = j_start; j < j_end; j++)
+    parallel_for(j_start, j_end,
+                 [this, &plot_pixel, i_start, i_end, c_offset_x, c_offset_y](int j)
+                 {
+                     for (int i = i_start; i < i_end; i++)
+                         plot_pixel(i, j, m_flow * m_brush(i - c_offset_x, j - c_offset_y));
+                 });
 }
