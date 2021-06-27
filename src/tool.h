@@ -22,13 +22,13 @@ public:
     const nlohmann::json this_tool_settings() const;
     virtual void         write_settings();
 
-    void set_options_bar(nanogui::Widget *options) { m_options = options; }
-
+    void                         set_options_bar(nanogui::Widget *options) { m_options = options; }
     virtual nanogui::Widget *    create_options_bar(nanogui::Widget *parent) { return m_options; }
     virtual nanogui::ToolButton *create_toolbutton(nanogui::Widget *parent);
-    virtual void                 set_active(bool b);
-    virtual void                 draw(NVGcontext *ctx) const;
-    virtual bool                 mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
+
+    virtual void set_active(bool b);
+    virtual void draw(NVGcontext *ctx) const;
+    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers);
     virtual bool keyboard(int key, int scancode, int action, int modifiers);
 
@@ -98,6 +98,8 @@ public:
     virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const;
 
 protected:
+    void draw_brush(NVGcontext *ctx, const nanogui::Vector2i &center) const;
+
     std::shared_ptr<Brush>    m_brush;
     nanogui::Slider *         m_size_slider;
     nanogui::IntBox<int> *    m_size_textbox;
@@ -142,15 +144,18 @@ public:
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
 
+    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+
     virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
 protected:
-    nanogui::Vector2i m_src_click;
-    nanogui::Vector2i m_dst_click;
+    nanogui::Vector2i m_src_pixel;
+    nanogui::Vector2i m_dst_pixel;
     nanogui::Vector2i m_dpixel;
 
-    bool m_has_src = false;
-    bool m_has_dst = false;
+    bool m_has_src       = false;
+    bool m_has_dst       = false;
+    bool m_modifier_down = false;
 };
 
 class Eyedropper : public Tool

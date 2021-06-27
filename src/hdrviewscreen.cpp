@@ -483,40 +483,53 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_image_view->set_drag_callback([this](const Vector2i &p, const Vector2i &rel, int button, int modifiers) -> bool
                                     { return m_tools[m_tool]->mouse_drag(p, rel, button, modifiers); });
 
-    m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
-
-    m_image_view->set_hover_callback(
-        [this](const Vector2i &pixel, const Color4 &color32, const Color4 &color8)
+    m_image_view->set_motion_callback(
+        [this](const Vector2i &p, const Vector2i &rel, int button, int modifiers) -> bool
         {
-            if (pixel.x() >= 0)
+            if (auto xpuimg = m_images_panel->current_image())
             {
-                m_status_label->set_caption(fmt::format(
-                    "({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
-                    pixel.x(), pixel.y(), color32[0], color32[1], color32[2], color32[3], (int)round(color8[0]),
-                    (int)round(color8[1]), (int)round(color8[2]), (int)round(color8[3])));
+                Vector2i        pixel(m_image_view->pixel_at_position((p - m_image_view->position())));
+                const HDRImage &image = xpuimg->image();
 
-                m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
-                                                              color32[1], color32[2], color32[3]));
+                if (image.contains(pixel.x(), pixel.y()))
+                {
+                    Color4 color32 = image(pixel.x(), pixel.y());
+                    Color4 color8  = (color32 * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
 
-                m_color8_info_label->set_caption(fmt::format("{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}", (int)round(color8[0]),
-                                                             (int)round(color8[1]), (int)round(color8[2]),
-                                                             (int)round(color8[3])));
+                    m_status_label->set_caption(fmt::format(
+                        "({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
+                        pixel.x(), pixel.y(), color32[0], color32[1], color32[2], color32[3], (int)round(color8[0]),
+                        (int)round(color8[1]), (int)round(color8[2]), (int)round(color8[3])));
 
-                m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+                    m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
+                                                                  color32[1], color32[2], color32[3]));
 
-                if (m_active_colorpicker)
-                    m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
+                    m_color8_info_label->set_caption(fmt::format("{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
+                                                                 (int)round(color8[0]), (int)round(color8[1]),
+                                                                 (int)round(color8[2]), (int)round(color8[3])));
+
+                    m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+
+                    if (m_active_colorpicker)
+                        m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
+
+                    m_status_bar->perform_layout(m_nvg_context);
+
+                    return true;
+                }
             }
-            else
-            {
-                m_status_label->set_caption("");
-                m_color32_info_label->set_caption("");
-                m_color8_info_label->set_caption("");
-                m_pixel_info_label->set_caption("");
-            }
+
+            m_status_label->set_caption("");
+            m_color32_info_label->set_caption("");
+            m_color8_info_label->set_caption("");
+            m_pixel_info_label->set_caption("");
 
             m_status_bar->perform_layout(m_nvg_context);
+
+            return true;
         });
+
+    m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
 
     m_image_view->set_changed_callback(
         [this]()
@@ -946,10 +959,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
 
-    if (action == GLFW_RELEASE)
-        return false;
-
-    if (m_focus_path.size() > 1)
+    if (action == GLFW_PRESS && m_focus_path.size() > 1)
     {
         if (auto dialog = dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]))
         {
@@ -966,7 +976,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
     }
 
-    if (key == GLFW_KEY_ESCAPE)
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
     {
         auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?",
                                        "Yes", "No", true);
@@ -983,6 +993,9 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     if (m_images_panel->keyboard_event(key, scancode, action, modifiers))
         return true;
+
+    if (action == GLFW_RELEASE)
+        return false;
 
     switch (key)
     {

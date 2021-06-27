@@ -70,7 +70,7 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     m_drag_callback(
         [this](const Vector2i &p, const Vector2i &rel, int, int)
         {
-            set_image_coordinate_at(p + rel, image_coordinate_at(p));
+            set_pixel_at_position(p + rel, pixel_at_position(p));
             return false;
         }),
     m_changed_callback(VoidCallback())
@@ -175,27 +175,27 @@ void HDRImageView::set_reference_image(XPUImagePtr ref)
 
 Vector2f HDRImageView::center_offset(ConstXPUImagePtr img) const { return (size_f() - scaled_image_size_f(img)) / 2; }
 
-Vector2f HDRImageView::image_coordinate_at(const Vector2f &position) const
+Vector2f HDRImageView::pixel_at_position(const Vector2f &position) const
 {
     auto image_pos = position - (m_offset + center_offset(m_current_image));
     return image_pos / m_zoom;
 }
 
-Vector2f HDRImageView::position_for_coordinate(const Vector2f &imageCoordinate) const
+Vector2f HDRImageView::position_at_pixel(const Vector2f &pixel) const
 {
-    return m_zoom * imageCoordinate + (m_offset + center_offset(m_current_image));
+    return m_zoom * pixel + (m_offset + center_offset(m_current_image));
 }
 
-Vector2f HDRImageView::screen_position_for_coordinate(const Vector2f &imageCoordinate) const
+Vector2f HDRImageView::screen_position_at_pixel(const Vector2f &pixel) const
 {
-    return position_for_coordinate(imageCoordinate) + position_f();
+    return position_at_pixel(pixel) + position_f();
 }
 
-void HDRImageView::set_image_coordinate_at(const Vector2f &position, const Vector2f &imageCoordinate)
+void HDRImageView::set_pixel_at_position(const Vector2f &position, const Vector2f &pixel)
 {
     // Calculate where the new offset must be in order to satisfy the image position equation.
     // Round the floating point values to balance out the floating point to integer conversions.
-    m_offset = position - (imageCoordinate * m_zoom);
+    m_offset = position - (pixel * m_zoom);
 
     // Clamp offset so that the image remains near the screen.
     m_offset = max(min(m_offset, size_f()), -scaled_image_size_f(m_current_image));
@@ -229,13 +229,13 @@ void HDRImageView::set_zoom_level(float level)
     m_zoom_callback(m_zoom);
 }
 
-void HDRImageView::zoom_by(float amount, const Vector2f &focusPosition)
+void HDRImageView::zoom_by(float amount, const Vector2f &focus_pos)
 {
-    auto  focusedCoordinate = image_coordinate_at(focusPosition);
-    float scaleFactor       = std::pow(m_zoom_sensitivity, amount);
-    m_zoom                  = ::clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level            = log(m_zoom) / log(m_zoom_sensitivity);
-    set_image_coordinate_at(focusPosition, focusedCoordinate);
+    auto  focused_pixel = pixel_at_position(focus_pos);
+    float scaleFactor   = std::pow(m_zoom_sensitivity, amount);
+    m_zoom              = ::clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
+    m_zoom_level        = log(m_zoom) / log(m_zoom_sensitivity);
+    set_pixel_at_position(focus_pos, focused_pixel);
 
     m_zoom_callback(m_zoom);
 }
@@ -243,15 +243,15 @@ void HDRImageView::zoom_by(float amount, const Vector2f &focusPosition)
 void HDRImageView::zoom_in()
 {
     // keep position at center of window fixed while zooming
-    auto centerPosition   = Vector2f(size_f() / 2.f);
-    auto centerCoordinate = image_coordinate_at(centerPosition);
+    auto center_pos   = Vector2f(size_f() / 2.f);
+    auto center_pixel = pixel_at_position(center_pos);
 
     // determine next higher power of 2 zoom level
-    float levelForPow2Sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
-    float newScale                = std::pow(2.f, levelForPow2Sensitivity);
-    m_zoom                        = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level                  = log(m_zoom) / log(m_zoom_sensitivity);
-    set_image_coordinate_at(centerPosition, centerCoordinate);
+    float level_for_sensitivity = std::ceil(log(m_zoom) / log(2.f) + 0.5f);
+    float new_scale             = std::pow(2.f, level_for_sensitivity);
+    m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    m_zoom_level                = log(m_zoom) / log(m_zoom_sensitivity);
+    set_pixel_at_position(center_pos, center_pixel);
 
     m_zoom_callback(m_zoom);
 }
@@ -259,49 +259,39 @@ void HDRImageView::zoom_in()
 void HDRImageView::zoom_out()
 {
     // keep position at center of window fixed while zooming
-    auto centerPosition   = Vector2f(size_f() / 2.f);
-    auto centerCoordinate = image_coordinate_at(centerPosition);
+    auto center_pos   = Vector2f(size_f() / 2.f);
+    auto center_pixel = pixel_at_position(center_pos);
 
     // determine next lower power of 2 zoom level
-    float levelForPow2Sensitivity = floor(log(m_zoom) / log(2.f) - 0.5f);
-    float newScale                = std::pow(2.f, levelForPow2Sensitivity);
-    m_zoom                        = ::clamp(newScale, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level                  = log(m_zoom) / log(m_zoom_sensitivity);
-    set_image_coordinate_at(centerPosition, centerCoordinate);
+    float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
+    float new_scale             = std::pow(2.f, level_for_sensitivity);
+    m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    m_zoom_level                = log(m_zoom) / log(m_zoom_sensitivity);
+    set_pixel_at_position(center_pos, center_pixel);
 
     m_zoom_callback(m_zoom);
 }
 
 bool HDRImageView::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-    spdlog::trace("image view button pos {}; position: {}; mouse pos: {}", p, m_pos, screen()->mouse_pos());
     if (!m_enabled || !m_current_image)
         return false;
 
     if (m_mouse_callback)
-        m_mouse_callback(p, button, down, modifiers);
+        return m_mouse_callback(p, button, down, modifiers);
 
     return false;
 }
 
-bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int /*button*/, int /*modifiers*/)
+bool HDRImageView::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    if (m_current_image && m_hover_callback)
-    {
-        Vector2i        pixel(image_coordinate_at((p - position())));
-        const HDRImage &image = m_current_image->image();
+    // if (!m_enabled || !m_current_image)
+    //     return false;
 
-        if (image.contains(pixel.x(), pixel.y()))
-        {
-            Color4 color32 = image(pixel.x(), pixel.y());
-            Color4 color8  = (color32 * pow(2.f, exposure()) * 255).min(255.f).max(0.f);
-            m_hover_callback(pixel, color32, color8);
-        }
-        else
-            m_hover_callback(Vector2i(-1), Color4(), Color4());
-    }
-    else if (m_hover_callback)
-        m_hover_callback(Vector2i(-1), Color4(), Color4());
+    spdlog::trace("image_view motion: {}; {}; {}", p, modifiers & GLFW_MOD_ALT, modifiers);
+
+    if (m_motion_callback)
+        return m_motion_callback(p, rel, button, modifiers);
 
     return false;
 }
@@ -326,7 +316,7 @@ bool HDRImageView::scroll_event(const Vector2i &p, const Vector2f &rel)
     if (lState == GLFW_PRESS || rState == GLFW_PRESS)
     {
         // panning
-        set_image_coordinate_at(Vector2f(p) + rel * 4.f, image_coordinate_at(p));
+        set_pixel_at_position(Vector2f(p) + rel * 4.f, pixel_at_position(p));
         return true;
     }
     else // if (screen()->modifiers() == 0)
@@ -461,7 +451,7 @@ void HDRImageView::draw_pixel_grid(NVGcontext *ctx) const
 
     if (alpha > 0.0f)
     {
-        Vector2f xy0  = screen_position_for_coordinate(Vector2f(0.0f));
+        Vector2f xy0  = screen_position_at_pixel(Vector2f(0.0f));
         int      minJ = max(0, int(-xy0.y() / m_zoom));
         int      maxJ = min(m_current_image->size().y(), int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int      minI = max(0, int(-xy0.x() / m_zoom));
@@ -472,8 +462,8 @@ void HDRImageView::draw_pixel_grid(NVGcontext *ctx) const
         // draw vertical lines
         for (int i = minI; i <= maxI; ++i)
         {
-            Vector2f sxy0 = screen_position_for_coordinate(Vector2f(i, minJ));
-            Vector2f sxy1 = screen_position_for_coordinate(Vector2f(i, maxJ));
+            Vector2f sxy0 = screen_position_at_pixel(Vector2f(i, minJ));
+            Vector2f sxy1 = screen_position_at_pixel(Vector2f(i, maxJ));
             nvgMoveTo(ctx, sxy0.x(), sxy0.y());
             nvgLineTo(ctx, sxy1.x(), sxy1.y());
         }
@@ -481,8 +471,8 @@ void HDRImageView::draw_pixel_grid(NVGcontext *ctx) const
         // draw horizontal lines
         for (int j = minJ; j <= maxJ; ++j)
         {
-            Vector2f sxy0 = screen_position_for_coordinate(Vector2f(minI, j));
-            Vector2f sxy1 = screen_position_for_coordinate(Vector2f(maxI, j));
+            Vector2f sxy0 = screen_position_at_pixel(Vector2f(minI, j));
+            Vector2f sxy1 = screen_position_at_pixel(Vector2f(maxI, j));
             nvgMoveTo(ctx, sxy0.x(), sxy0.y());
             nvgLineTo(ctx, sxy1.x(), sxy1.y());
         }
@@ -528,7 +518,7 @@ void HDRImageView::draw_pixel_info(NVGcontext *ctx) const
         nvgSave(ctx);
         nvgIntersectScissor(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y());
 
-        Vector2f xy0  = screen_position_for_coordinate(Vector2f(0.0f));
+        Vector2f xy0  = screen_position_at_pixel(Vector2f(0.0f));
         int      minJ = max(0, int(-xy0.y() / m_zoom));
         int      maxJ = min(m_current_image->size().y() - 1, int(ceil((screen()->size().y() - xy0.y()) / m_zoom)));
         int      minI = max(0, int(-xy0.x() / m_zoom));
@@ -548,7 +538,7 @@ void HDRImageView::draw_pixel_info(NVGcontext *ctx) const
             {
                 m_pixel_callback(Vector2i(i, j), text, bsize);
 
-                auto pos = screen_position_for_coordinate(Vector2f(i + 0.5f, j + 0.5f));
+                auto pos = screen_position_at_pixel(Vector2f(i + 0.5f, j + 0.5f));
 
                 for (int ch = 0; ch < 4; ++ch)
                 {
@@ -586,8 +576,8 @@ void HDRImageView::draw_ROI(NVGcontext *ctx) const
     nvgStrokePaint(ctx, paint);
 
     nvgBeginPath(ctx);
-    Vector2i tl          = screen_position_for_coordinate(m_current_image->roi().min);
-    Vector2i br          = screen_position_for_coordinate(m_current_image->roi().max);
+    Vector2i tl          = screen_position_at_pixel(m_current_image->roi().min);
+    Vector2i br          = screen_position_at_pixel(m_current_image->roi().max);
     Vector2i border_size = br - tl;
     nvgRect(ctx, tl.x(), tl.y(), border_size.x(), border_size.y());
     nvgStrokeWidth(ctx, 1.0f);
