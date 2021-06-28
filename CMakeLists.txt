@@ -164,8 +164,6 @@ add_executable(HDRView
   src/dialog.cpp
   src/dialog.h
   src/dithermatrix256.h
-  src/drawline.cpp
-  src/drawline.h
   src/dropdown.cpp
   src/dropdown.h
   src/editimagepanel.cpp
@@ -212,6 +210,8 @@ add_executable(HDRView
   src/progress.cpp
   src/progress.h
   src/range.h
+  src/rasterdraw.cpp
+  src/rasterdraw.h
   src/timer.h
   src/tool.cpp
   src/tool.h

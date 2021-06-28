@@ -91,13 +91,18 @@ public:
                               int modifiers) const;
     virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const;
-    virtual void draw_curve(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &through_pixel,
-                            const nanogui::Vector2i &to_pixel, const HDRImagePtr &new_image, const Box2i &roi,
-                            int modifiers, bool include_start) const;
-
+    /// Draw a curve connecting the three points \ref a, \ref b, \ref c (draws an ellipse)
+    virtual void draw_curve(const nanogui::Vector2i &a, const nanogui::Vector2i &b, const nanogui::Vector2i &c,
+                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const;
+    /// Draw a curve interpolating points \ref b and \ref c using \ref a and \ref d to define the curve (draws an Yuksel
+    /// C^2 curve)
+    virtual void draw_curve(const nanogui::Vector2i &a, const nanogui::Vector2i &b, const nanogui::Vector2i &c,
+                            const nanogui::Vector2i &d, const HDRImagePtr &new_image, const Box2i &roi, int modifiers,
+                            bool include_start, bool include_end) const;
     virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const;
 
 protected:
+    bool is_valid(const nanogui::Vector2i &p) const;
     void draw_brush(NVGcontext *ctx, const nanogui::Vector2i &center) const;
 
     std::shared_ptr<Brush>    m_brush;
@@ -116,7 +121,7 @@ protected:
     nanogui::CheckBox *       m_smoothing_checkbox;
     bool                      m_smoothing = true;
 
-    nanogui::Vector2i m_p0, m_p1;
+    nanogui::Vector2i m_p0, m_p1, m_p2, m_p3;
     nanogui::Vector2i m_clicked;
 };
 

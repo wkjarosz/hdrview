@@ -1004,6 +1004,11 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         ask_close_image(m_images_panel->current_image_index());
         return true;
 
+    case 'S':
+        spdlog::trace("KEY 'S' pressed");
+        save_image();
+        return true;
+
     case 'N':
         spdlog::trace("KEY `N` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)

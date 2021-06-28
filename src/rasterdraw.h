@@ -31,3 +31,16 @@ void draw_quadratic(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, const 
                     bool include_start = false, bool include_end = false);
 
 void draw_quad_Bezier(int x0, int y0, int x1, int y1, int x2, int y2, const PlotPixelFunc &plot);
+
+enum class YukselType
+{
+    Circular = 0,
+    Elliptical,
+    Hybrid
+};
+
+void draw_Yuksel_ellipse(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, const PlotPixelFunc &plot);
+
+void draw_Yuksel_curve(int p0x, int p0y, int p1x, int p1y, int p2x, int p2y, int p3x, int p3y,
+                       const PlotPixelFunc &plot, YukselType type, bool include_start = false,
+                       bool include_end = false);

@@ -6,11 +6,11 @@
 
 #include "tool.h"
 #include "brush.h"
-#include "drawline.h"
 #include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "imagelistpanel.h"
+#include "rasterdraw.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
 #include <nanogui/toolbutton.h>
@@ -155,71 +155,82 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
 {
     auto img = m_images_panel->current_image();
 
-    switch (key)
+    if (action == GLFW_RELEASE)
+        return false;
+
+    // handle the no-modifier shortcuts first
+    if (modifiers == 0)
     {
-    case ' ':
-        spdlog::trace("KEY ` ` pressed");
-        m_screen->set_tool(Tool_None);
-        return true;
-
-    case 'M':
-        spdlog::trace("KEY `M` pressed");
-        m_screen->set_tool(Tool_Rectangular_Marquee);
-        return true;
-
-    case 'S':
-        spdlog::trace("KEY `S` pressed");
-        m_screen->set_tool(Tool_Clone_Stamp);
-        return true;
-
-    case 'B':
-        spdlog::trace("KEY `B` pressed");
-        m_screen->set_tool(Tool_Brush);
-        return true;
-
-    case 'U':
-        spdlog::trace("KEY `U` pressed");
-        m_screen->set_tool(Tool_Line);
-        return true;
-
-    case 'I':
-        spdlog::trace("KEY `I` pressed");
-        m_screen->set_tool(Tool_Eyedropper);
-        return true;
-
-    case 'A':
-        spdlog::trace("Key `A` pressed");
-        if (img && modifiers & SYSTEM_COMMAND_MOD)
+        switch (key)
         {
-            img->roi() = img->box();
+        case ' ':
+            spdlog::trace("KEY ` ` pressed");
+            m_screen->set_tool(Tool_None);
+            return true;
+
+        case 'M':
+            spdlog::trace("KEY `M` pressed");
+            m_screen->set_tool(Tool_Rectangular_Marquee);
+            return true;
+
+        case 'S':
+            spdlog::trace("KEY `S` pressed");
+            m_screen->set_tool(Tool_Clone_Stamp);
+            return true;
+
+        case 'B':
+            spdlog::trace("KEY `B` pressed");
+            m_screen->set_tool(Tool_Brush);
+            return true;
+
+        case 'U':
+            spdlog::trace("KEY `U` pressed");
+            m_screen->set_tool(Tool_Line);
+            return true;
+
+        case 'I':
+            spdlog::trace("KEY `I` pressed");
+            m_screen->set_tool(Tool_Eyedropper);
             return true;
         }
-        break;
-
-    case 'D':
-        spdlog::trace("Key `D` pressed");
-        if (img && modifiers & SYSTEM_COMMAND_MOD)
+    }
+    else
+    {
+        switch (key)
         {
-            img->roi() = Box2i();
+        case 'A':
+            spdlog::trace("Key `A` pressed");
+            if (img && modifiers & SYSTEM_COMMAND_MOD)
+            {
+                img->roi() = img->box();
+                return true;
+            }
+            break;
+        case 'D':
+            spdlog::trace("Key `D` pressed");
+            if (img && modifiers & SYSTEM_COMMAND_MOD)
+            {
+                img->roi() = Box2i();
+                return true;
+            }
+            break;
+
+        case 'G':
+            spdlog::trace("KEY `G` pressed");
+            if (modifiers & GLFW_MOD_SHIFT)
+                m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
+            else
+                m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
+            return true;
+
+        case 'E':
+            spdlog::trace("KEY `E` pressed");
+            if (modifiers & GLFW_MOD_SHIFT)
+                m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
+            else
+                m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
             return true;
         }
-        break;
-
-    case 'G':
-        spdlog::trace("KEY `G` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-            m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-        else
-            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
-        return true;
-
-    case 'E':
-        spdlog::trace("KEY `E` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-            m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-        else
-            m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-        return true;
     }
 
     return false;
@@ -415,6 +426,7 @@ BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListP
                      const string &tooltip, int icon, ETool tool) :
     Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
     m_brush(make_shared<Brush>(80)), m_p0(std::numeric_limits<int>::lowest()), m_p1(std::numeric_limits<int>::lowest()),
+    m_p2(std::numeric_limits<int>::lowest()), m_p3(std::numeric_limits<int>::lowest()),
     m_clicked(std::numeric_limits<int>::lowest())
 {
     // empty
@@ -432,6 +444,8 @@ void BrushTool::write_settings()
     settings["spacing"]   = m_brush->spacing();
     settings["smoothing"] = m_smoothing_checkbox->checked();
 }
+
+bool BrushTool::is_valid(const Vector2i &p) const { return p.x() != std::numeric_limits<int>::lowest(); }
 
 Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 {
@@ -705,8 +719,9 @@ void BrushTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, 
     ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(), splat);
 }
 
-void BrushTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_pixel, const Vector2i &to_pixel,
-                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start) const
+void BrushTool::draw_curve(const Vector2i &a, const Vector2i &b, const Vector2i &c, const Vector2i &d,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start,
+                           bool include_end) const
 {
     auto splat = [this, new_image, modifiers, &roi](int x, int y)
     {
@@ -715,14 +730,21 @@ void BrushTool::draw_curve(const Vector2i &from_pixel, const Vector2i &through_p
             roi);
     };
 
-    // draw_CatmullRom(m_p0.x(), m_p0.y(), m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(),
-    // pixel.x(), pixel.y(), put_pixel1, 0.5f);
-    draw_quadratic(from_pixel.x(), from_pixel.y(), through_pixel.x(), through_pixel.y(), to_pixel.x(), to_pixel.y(),
-                   splat, 4, include_start);
-    // auto a = (m_p1 + prev_pixel) / 2;
-    // auto b = prev_pixel;
-    // auto c = (prev_pixel + pixel) / 2;
-    // draw_quad_Bezier(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), put_pixel);
+    ::draw_Yuksel_curve(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), d.x(), d.y(), splat, YukselType::Hybrid,
+                        include_start, include_end);
+}
+
+void BrushTool::draw_curve(const Vector2i &a, const Vector2i &b, const Vector2i &c, const HDRImagePtr &new_image,
+                           const Box2i &roi, int modifiers) const
+{
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
+    };
+
+    ::draw_Yuksel_ellipse(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), splat);
 }
 
 bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -740,16 +762,33 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
 
     if (!down)
     {
-        // draw a line for the last part of the stroke
-        // if (m_p1.x() != std::numeric_limits<int>::lowest())
-        //     m_images_panel->current_image()->direct_modify([&pixel, &roi, modifiers, this](const HDRImagePtr
-        //     &new_image)
-        //                                                    { draw_line(m_p1, pixel, new_image, roi, modifiers); });
+        // draw the last part of the stroke
+        if (!m_smoothing)
+        {
+            // just a line if we aren't smoothing
+            m_images_panel->current_image()->direct_modify([&pixel, &roi, modifiers, this](const HDRImagePtr &new_image)
+                                                           { draw_line(m_p3, pixel, new_image, roi, modifiers); });
+        }
+        else
+        {
+            // if we have at least 3 past points (plus the current one) to connect, then finish the C^2 curve
+            if (is_valid(m_p1))
+                m_images_panel->current_image()->direct_modify(
+                    [this, &roi, &pixel, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p1, m_p2, m_p3, pixel, new_image, roi, modifiers, false, true); });
+            else if (is_valid(m_p2))
+            {
+                // if we have 2 past points (plus the current one), then draw an ellipse connecting the points
+                m_images_panel->current_image()->direct_modify(
+                    [this, &roi, &pixel, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p2, m_p3, pixel, new_image, roi, modifiers); });
+            }
+        }
     }
     else if (down && modifiers & GLFW_MOD_SHIFT)
     {
         // draw a straight line from the previously clicked point
-        if (m_clicked.x() != std::numeric_limits<int>::lowest())
+        if (is_valid(m_clicked))
         {
             m_images_panel->current_image()->start_modify(
                 [&pixel, &roi, modifiers, this](const ConstHDRImagePtr &img,
@@ -782,12 +821,22 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
 
     m_p0 = std::numeric_limits<int>::lowest();
     m_p1 = std::numeric_limits<int>::lowest();
+    m_p2 = std::numeric_limits<int>::lowest();
+    m_p3 = m_clicked;
 
     return true;
 }
 
 bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
+    // // reduce number of mouse positions (useful for debugging the smoothing)
+    if (m_smoothing)
+    {
+        static int skip = 0;
+        if (skip++ % 2 != 0)
+            return false;
+    }
+
     m_screen->request_layout_update();
     auto coord      = m_image_view->pixel_at_position(p - m_image_view->position());
     auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
@@ -797,8 +846,16 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
     if (prev_pixel == pixel)
         return false;
 
+    bool include_start = is_valid(m_p1) && !is_valid(m_p0);
+
+    // shift mouse location history
+    m_p0 = m_p1;
+    m_p1 = m_p2;
+    m_p2 = m_p3;
+    m_p3 = pixel;
+
     m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, modifiers, this](const HDRImagePtr &new_image)
+        [modifiers, this, include_start](const HDRImagePtr &new_image)
         {
             Box2i roi = m_images_panel->current_image()->roi();
             if (roi.has_volume())
@@ -807,13 +864,9 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
                 roi = new_image->box();
 
             if (!m_smoothing)
-                draw_line(prev_pixel, pixel, new_image, roi, modifiers);
-            else if (m_p1.x() != std::numeric_limits<int>::lowest())
-                draw_curve(m_p1, prev_pixel, pixel, new_image, roi, modifiers,
-                           m_p0.x() == std::numeric_limits<int>::lowest());
-
-            m_p0 = m_p1;
-            m_p1 = prev_pixel;
+                draw_line(m_p2, m_p3, new_image, roi, modifiers);
+            else if (is_valid(m_p0))
+                draw_curve(m_p0, m_p1, m_p2, m_p3, new_image, roi, modifiers, include_start, false);
         });
     m_screen->update_caption();
     return true;
