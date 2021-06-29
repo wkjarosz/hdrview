@@ -953,20 +953,18 @@ void HDRViewScreen::show_help_window()
     section_name = "Interface";
     w->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
     w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
-    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panel");
+    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
     w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
 
     m_images_panel->add_shortcuts(w);
     m_image_view->add_shortcuts(w);
 
-    w->add_column();
     for (auto t : m_tools) t->add_shortcuts(w);
 
     w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
 
     w->center();
-    w->set_position(Vector2i(w->position().x(), 50));
 
     auto close_button = new Button{w->button_panel(), "", FA_TIMES};
     close_button->set_callback(
@@ -982,14 +980,22 @@ void HDRViewScreen::show_help_window()
     request_layout_update();
 }
 
+Dialog *HDRViewScreen::active_dialog() const
+{
+    if (m_focus_path.size() > 1)
+        return dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]);
+
+    return nullptr;
+}
+
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
 
-    if (action == GLFW_PRESS && m_focus_path.size() > 1)
+    if (action == GLFW_PRESS)
     {
-        if (auto dialog = dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]))
+        if (auto dialog = active_dialog())
         {
             spdlog::trace("Modal dialog: {}", dialog->title());
 
@@ -1252,7 +1258,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
     m_image_view->set_cursor(Cursor::Arrow);
     m_tool_panel->set_cursor(Cursor::Arrow);
 
-    if (!m_active_colorpicker)
+    if (!m_active_colorpicker && !active_dialog())
     {
         if (m_dragging_side_panel || at_side_panel_edge(p))
         {

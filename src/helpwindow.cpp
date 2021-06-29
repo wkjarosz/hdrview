@@ -15,10 +15,16 @@
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
+#include <nanogui/tabwidget.h>
 #include <nanogui/window.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
+
+namespace
+{
+constexpr int fwidth = 450;
+}
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -36,37 +42,97 @@ const string HelpWindow::ALT     = "Alt";
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
-    set_layout(new GroupLayout());
+    set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 0));
 
-    new Label(this, "About", "sans-bold", 18);
+    auto add_text = [](Widget *current, string text, string font = "sans", int fontSize = 18)
+    {
+        auto row = new Widget{current};
+        row->set_layout(new BoxLayout{Orientation::Vertical, Alignment::Middle, 0, 10});
+        auto l = new Label{row, text, font, fontSize};
+        return l;
+    };
+    auto add_spacer = [](Widget *current, int space)
+    {
+        auto row = new Widget{current};
+        row->set_height(space);
+    };
+    auto add_library = [](Widget *current, string name, string desc)
+    {
+        auto row = new Widget(current);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 3, 20));
+        auto left_column = new Widget(row);
+        left_column->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Maximum));
+        left_column->set_fixed_width(135);
 
-    auto copyright_widget = new Widget(this);
-    copyright_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+        new Label(left_column, name, "sans-bold", 14);
+        new Label(row, desc, "sans", 14);
+    };
 
-    string about = fmt::format("HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
-                               "(built on {} from git branch {} {} using {} backend)\n\n"
-                               "HDRView is a simple research-oriented tool for examining, "
-                               "comparing, manipulating, and converting high-dynamic range images.\n\n"
-                               "HDRView is freely available under a 3-clause BSD license.\n\n",
-                               hdrview_git_version(), hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(),
-                               HDRVIEW_BACKEND);
-    (new Label(copyright_widget, about))->set_fixed_width(715);
+    add_text(this, "HDRView", "sans-bold", 46);
+    add_text(this, fmt::format("version {}", hdrview_git_version()), "sans-bold", 26);
+    add_spacer(this, 5);
+    add_text(this,
+             fmt::format("This executable was built on {} from git branch {} {} and uses the {} backend.",
+                         hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(), HDRVIEW_BACKEND),
+             "sans", 12);
 
-    new Label(this, "Keybindings", "sans-bold", 18);
+    add_spacer(this, 15);
 
-    m_key_bindings = new Well(this);
-    m_key_bindings->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
+    add_text(this,
+             "HDRView is a simple research-oriented tool for examining, "
+             "comparing, manipulating, and converting high-dynamic range images.\n\n",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
 
-    add_column();
+    auto tab_widget = new TabWidget(this);
+    tab_widget->set_tabs_draggable(true);
+    // adding a callback seems to be required for the tabwidget to actually update the visibility
+    tab_widget->set_callback([](int) { return; });
+
+    Widget *tab;
+
+    tab = new Well(tab_widget);
+    tab->set_fixed_height(300);
+    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+    tab_widget->append_tab("Keybindings", tab);
+
+    auto side_scroll_panel = new VScrollPanel(tab);
+    side_scroll_panel->set_fixed_height(300);
+    m_key_bindings = new Widget(side_scroll_panel);
+    m_key_bindings->set_layout(new GroupLayout(10, 6));
+
+    tab = new Well(tab_widget);
+    tab->set_fixed_height(300);
+    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+    tab_widget->append_tab("Credits", tab);
+    side_scroll_panel = new VScrollPanel(tab);
+    side_scroll_panel->set_fixed_height(300);
+    auto credits = new Widget(side_scroll_panel);
+    credits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 20, 4));
+
+    add_text(credits,
+             "HDRView is developed by Wojciech Jarosz and is freely available under a 3-clause BSD license.\n\n"
+             "It additionally makes use of the following techniques and external libraries:\n\n",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
+
+    add_library(credits, "NanoGUI", "Widget library for OpenGL/Metal");
+    add_library(credits, "NanoVG", "Vector graphics in OpenGL/Metal");
+    add_library(credits, "GLFW", "Multi-platform OpenGL/windowing library on the desktop");
+    add_library(credits, "OpenEXR", "High Dynamic-Range (HDR) image file format");
+    add_library(credits, "stb_image/write/resize", "Single-Header libraries for loading/writing/resizing images");
+    add_library(credits, "docopt", "For creating command-line interfaces from help messages");
+    add_library(credits, "spdlog", "Fast C++ logging library");
+    add_library(credits, "fmt", "A modern formatting library");
+    add_library(credits, "PlatformFolders", "Cross-platform library to find special directories");
+    add_library(credits, "filesystem", "Lightweight path manipulation library");
+    add_library(credits, "tinydir", "Lightweight and portable aC directory and file reader");
+    add_library(credits, "tinydngloader", "Header-only tiny DNG/TIFF loader in C++");
+    add_library(credits, "json", "JSON for Modern C++");
+    add_library(credits, "alphanum", "Natural alpha-numeric sorting");
+    add_library(credits, "Yuksel splines", "Cem Yuksel's hybrid C^2 splines for smooth mouse strokes");
 
     center();
-}
-
-void HelpWindow::add_column()
-{
-    auto w = new Widget(m_key_bindings);
-    w->set_layout(new GroupLayout(0, 0));
-    w->set_fixed_width(350);
 }
 
 bool HelpWindow::add_section(const std::string &desc)
@@ -74,10 +140,10 @@ bool HelpWindow::add_section(const std::string &desc)
     if (m_sections.count(desc))
         return false;
 
-    auto column = m_key_bindings->child_at(m_key_bindings->child_count() - 1);
-    new Label(column, desc, "sans-bold", 16);
-    auto w = new Widget(column);
+    new Label(m_key_bindings, desc, "sans-bold", 16);
+    auto w = new Widget(m_key_bindings);
     w->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+    w->set_fixed_width(fwidth);
     m_sections[desc] = w;
     return true;
 }
@@ -91,7 +157,7 @@ void HelpWindow::add_shortcut(const string &section, const string &keys, const s
 
     auto row = new Widget(w);
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-    (new Label(row, desc, "sans", 14))->set_fixed_width(185);
+    (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
     new Label(row, keys, "sans-bold", 14);
 };
 

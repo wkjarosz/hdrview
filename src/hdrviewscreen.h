@@ -66,14 +66,15 @@ public:
     void update_caption();
 
 private:
-    void draw_widgets();
-    void bring_to_focus() const;
-    void show_help_window();
-    void update_layout();
-    bool at_side_panel_edge(const Vector2i &p);
-    bool at_tool_panel_edge(const Vector2i &p);
-    void resize_side_panel(int w);
-    void resize_tool_panel(int w);
+    void    draw_widgets();
+    void    bring_to_focus() const;
+    void    show_help_window();
+    void    update_layout();
+    bool    at_side_panel_edge(const Vector2i &p);
+    bool    at_tool_panel_edge(const Vector2i &p);
+    void    resize_side_panel(int w);
+    void    resize_tool_panel(int w);
+    Dialog *active_dialog() const;
 
     Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView *  m_image_view;

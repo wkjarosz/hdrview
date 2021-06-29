@@ -20,7 +20,7 @@ class HelpWindow : public Dialog
 public:
     HelpWindow(nanogui::Widget *parent);
 
-    void add_column();
+    // void add_column();
     bool add_section(const std::string &name);
     void add_shortcut(const std::string &section, const std::string &keys, const std::string &desc);
 
@@ -28,7 +28,7 @@ public:
     static const std::string ALT;
 
 private:
-    Well *                          m_key_bindings;
+    Widget *                        m_key_bindings;
     std::map<std::string, Widget *> m_sections;
 };
 
