@@ -121,8 +121,7 @@ protected:
     nanogui::CheckBox *       m_smoothing_checkbox;
     bool                      m_smoothing = true;
 
-    nanogui::Vector2i m_p0, m_p1, m_p2, m_p3;
-    nanogui::Vector2i m_clicked;
+    nanogui::Vector2i m_p0, m_p1, m_p2, m_p3; ///< mouse position history. m_p0: oldest; m_p3: most recent
 };
 
 class EraserTool : public BrushTool

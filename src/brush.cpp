@@ -13,8 +13,8 @@
 using namespace nanogui;
 
 Brush::Brush(int radius, float hardness, float flow) :
-    m_size(-1), m_flow(flow), m_hardness(hardness), m_angle(0.f), m_roundness(1.f), m_spacing(0.f), m_spacing_pixels(0),
-    m_step(0), m_last_x(-1), m_last_y(-1)
+    m_size(-1), m_flow(flow), m_hardness(hardness), m_angle(0.f), m_roundness(1.f), m_spacing(0.f), m_step(0),
+    m_last_x(-1), m_last_y(-1)
 {
     set_radius(radius);
 }
@@ -30,11 +30,7 @@ void Brush::set_radius(int radius)
     }
 }
 
-void Brush::set_spacing(float spacing)
-{
-    m_spacing        = std::clamp(spacing, 0.f, 1.f);
-    m_spacing_pixels = std::max(1, int(spacing * std::min(m_brush.width(), m_brush.height())));
-}
+void Brush::set_spacing(float spacing) { m_spacing = std::clamp(spacing, 0.f, 1.f); }
 
 void Brush::set_hardness(float hardness)
 {
@@ -82,7 +78,8 @@ void Brush::make_brush()
         {
             Vector2f uv((x - m_size) * cos_theta + (y - m_size) * sin_theta,
                         b * ((y - m_size) * cos_theta - (x - m_size) * sin_theta));
-            new_brush(x, y) = 1.0f - pow(smoothStep(start, end, norm(uv)), 0.8f);
+            // new_brush(x, y) = 1.0f - pow(smoothStep(start, end, norm(uv)), 0.8f);
+            new_brush(x, y) = sqr(cosf(M_PI_2 * std::clamp(lerpFactor(start, end, norm(uv)), 0.f, 1.f)));
             if (new_brush(x, y) > 0.00001f)
             {
                 min_x = std::min(min_x, x);
@@ -101,12 +98,12 @@ void Brush::make_brush()
     set_spacing(m_spacing);
 }
 
-void Brush::stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi)
+void Brush::stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi) const
 {
     if (!(m_step++ == 0) && m_spacing)
     {
         int distance2 = sqr(x - m_last_x) + sqr(y - m_last_y);
-        if (distance2 < m_spacing_pixels * m_spacing_pixels)
+        if (distance2 < sqr(m_spacing * (2 * m_size + 1) * m_roundness))
             return;
     }
 

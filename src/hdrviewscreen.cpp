@@ -999,15 +999,14 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     switch (key)
     {
-    case GLFW_KEY_BACKSPACE:
-        spdlog::trace("KEY BACKSPACE pressed");
-        ask_close_image(m_images_panel->current_image_index());
-        return true;
-
     case 'S':
         spdlog::trace("KEY 'S' pressed");
-        save_image();
-        return true;
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            save_image();
+            return true;
+        }
+        break;
 
     case 'N':
         spdlog::trace("KEY `N` pressed");
@@ -1016,7 +1015,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             new_image();
             return true;
         }
-        return false;
+        break;
 
     case 'W':
         spdlog::trace("KEY `W` pressed");
@@ -1028,7 +1027,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
                 ask_close_image(m_images_panel->current_image_index());
             return true;
         }
-        return false;
+        break;
 
     case 'O':
         spdlog::trace("KEY `O` pressed");
@@ -1037,7 +1036,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             load_image();
             return true;
         }
-        return false;
+        break;
 
     case 'C':
         spdlog::trace("Key `C` pressed");

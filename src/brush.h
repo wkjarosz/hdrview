@@ -32,19 +32,18 @@ public:
     void set_angle(float angle);
     void set_roundness(float roundness);
 
-    void stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi = Box2i());
+    void stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi = Box2i()) const;
 
 private:
     void make_brush();
 
     Array2D<float> m_brush;
-    int            m_size;           ///< in pixels
-    float          m_flow;           ///< between 0 and 1
-    float          m_hardness;       ///< between 0 and 1
-    float          m_angle;          ///< in degrees
-    float          m_roundness;      ///< between 0 and 1
-    float          m_spacing;        ///< between 0 and 1
-    int            m_spacing_pixels; ///< in pixels
-    int            m_step;           ///< how many steps since the last stamp?
-    int            m_last_x, m_last_y;
+    int            m_size;      ///< in pixels
+    float          m_flow;      ///< between 0 and 1
+    float          m_hardness;  ///< between 0 and 1
+    float          m_angle;     ///< in degrees
+    float          m_roundness; ///< between 0 and 1
+    float          m_spacing;   ///< between 0 and 1
+    mutable int    m_step;      ///< how many steps since the last stamp?
+    mutable int    m_last_x, m_last_y;
 };

@@ -426,8 +426,7 @@ BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListP
                      const string &tooltip, int icon, ETool tool) :
     Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
     m_brush(make_shared<Brush>(80)), m_p0(std::numeric_limits<int>::lowest()), m_p1(std::numeric_limits<int>::lowest()),
-    m_p2(std::numeric_limits<int>::lowest()), m_p3(std::numeric_limits<int>::lowest()),
-    m_clicked(std::numeric_limits<int>::lowest())
+    m_p2(std::numeric_limits<int>::lowest()), m_p3(std::numeric_limits<int>::lowest())
 {
     // empty
 }
@@ -663,27 +662,104 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
 bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
 {
-    switch (key)
-    {
-    case '[':
-    {
-        spdlog::trace("Key `[` pressed");
-        int dr = std::min(-1, (int)ceil(m_brush->radius() / 1.1 - m_brush->radius()));
-        int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
-        m_brush->set_radius(r);
-        m_size_textbox->set_value(m_brush->radius());
-        m_size_slider->set_value(m_brush->radius());
-        return true;
-    }
+    if (action == GLFW_RELEASE)
+        return false;
 
-    case ']':
-        spdlog::trace("Key `]` pressed");
-        int dr = std::max(1, (int)ceil(m_brush->radius() * 1.1 - m_brush->radius()));
-        int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
-        m_brush->set_radius(r);
-        m_size_textbox->set_value(m_brush->radius());
-        m_size_slider->set_value(m_brush->radius());
-        return true;
+    // handle the no-modifier or shift-modified shortcuts
+    if (modifiers == 0 || modifiers == GLFW_MOD_SHIFT)
+    {
+        switch (key)
+        {
+        case '[':
+        {
+            spdlog::trace("Key `[` pressed");
+            int dr = std::min(-1, (int)ceil(m_brush->radius() / 1.1 - m_brush->radius()));
+            int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
+            m_brush->set_radius(r);
+            m_size_textbox->set_value(m_brush->radius());
+            m_size_slider->set_value(m_brush->radius());
+            return true;
+        }
+
+        case ']':
+        {
+            spdlog::trace("Key `]` pressed");
+            int dr = std::max(1, (int)ceil(m_brush->radius() * 1.1 - m_brush->radius()));
+            int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
+            m_brush->set_radius(r);
+            m_size_textbox->set_value(m_brush->radius());
+            m_size_slider->set_value(m_brush->radius());
+            return true;
+        }
+
+        case 'A':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `A` pressed");
+                m_brush->set_angle(mod(m_brush->angle() + 5.f, 180.f));
+                m_angle_textbox->set_value(m_brush->angle());
+                m_angle_slider->set_value(m_brush->angle());
+            }
+            else
+            {
+                spdlog::trace("Key `a` pressed");
+                m_brush->set_angle(mod(m_brush->angle() - 5.f, 180.f));
+                m_angle_textbox->set_value(m_brush->angle());
+                m_angle_slider->set_value(m_brush->angle());
+            }
+            return true;
+
+        case 'R':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `R` pressed");
+                m_brush->set_roundness(m_brush->roundness() + 0.05f);
+                m_roundness_textbox->set_value(m_brush->roundness() * 100);
+                m_roundness_slider->set_value(m_brush->roundness() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `r` pressed");
+                m_brush->set_roundness(m_brush->roundness() - 0.05f);
+                m_roundness_textbox->set_value(m_brush->roundness() * 100);
+                m_roundness_slider->set_value(m_brush->roundness() * 100);
+            }
+            return true;
+
+        case 'F':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `F` pressed");
+                m_brush->set_flow(m_brush->flow() + 0.05f);
+                m_flow_textbox->set_value(m_brush->flow() * 100);
+                m_flow_slider->set_value(m_brush->flow() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `f` pressed");
+                m_brush->set_flow(m_brush->flow() - 0.05f);
+                m_flow_textbox->set_value(m_brush->flow() * 100);
+                m_flow_slider->set_value(m_brush->flow() * 100);
+            }
+            return true;
+
+        case 'H':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `H` pressed");
+                m_brush->set_hardness(m_brush->hardness() + 0.05f);
+                m_hardness_textbox->set_value(m_brush->hardness() * 100);
+                m_hardness_slider->set_value(m_brush->hardness() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `h` pressed");
+                m_brush->set_hardness(m_brush->hardness() - 0.05f);
+                m_hardness_textbox->set_value(m_brush->hardness() * 100);
+                m_hardness_slider->set_value(m_brush->hardness() * 100);
+            }
+            return true;
+        }
     }
 
     return Tool::keyboard(key, scancode, action, modifiers);
@@ -758,7 +834,12 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
         roi = m_images_panel->current_image()->box();
 
     auto coord = m_image_view->pixel_at_position(p - m_image_view->position());
-    auto pixel = Vector2i(round(coord.x()), round(coord.y()));
+
+    // shift mouse location history
+    m_p0 = m_p1;
+    m_p1 = m_p2;
+    m_p2 = m_p3;
+    m_p3 = Vector2i(round(coord.x()), round(coord.y()));
 
     if (!down)
     {
@@ -766,63 +847,60 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
         if (!m_smoothing)
         {
             // just a line if we aren't smoothing
-            m_images_panel->current_image()->direct_modify([&pixel, &roi, modifiers, this](const HDRImagePtr &new_image)
-                                                           { draw_line(m_p3, pixel, new_image, roi, modifiers); });
+            m_images_panel->current_image()->direct_modify([this, &roi, modifiers](const HDRImagePtr &new_image)
+                                                           { draw_line(m_p2, m_p3, new_image, roi, modifiers); });
         }
         else
         {
-            // if we have at least 3 past points (plus the current one) to connect, then finish the C^2 curve
-            if (is_valid(m_p1))
+            // if we have 4 points to connect, then finish the C^2 curve
+            if (is_valid(m_p0))
                 m_images_panel->current_image()->direct_modify(
-                    [this, &roi, &pixel, modifiers](const HDRImagePtr &new_image)
-                    { draw_curve(m_p1, m_p2, m_p3, pixel, new_image, roi, modifiers, false, true); });
+                    [this, &roi, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p0, m_p1, m_p2, m_p3, new_image, roi, modifiers, false, true); });
+            else if (is_valid(m_p1))
+            {
+                // if we have 3 points to connect, then draw an ellipse connecting the points
+                m_images_panel->current_image()->direct_modify(
+                    [this, &roi, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p1, m_p2, m_p3, new_image, roi, modifiers); });
+            }
             else if (is_valid(m_p2))
             {
-                // if we have 2 past points (plus the current one), then draw an ellipse connecting the points
-                m_images_panel->current_image()->direct_modify(
-                    [this, &roi, &pixel, modifiers](const HDRImagePtr &new_image)
-                    { draw_curve(m_p2, m_p3, pixel, new_image, roi, modifiers); });
+                // if we have 2 points to connect, then draw an ellipse connecting the points
+                m_images_panel->current_image()->direct_modify([this, &roi, modifiers](const HDRImagePtr &new_image)
+                                                               { draw_line(m_p2, m_p3, new_image, roi, modifiers); });
             }
         }
     }
     else if (down && modifiers & GLFW_MOD_SHIFT)
     {
         // draw a straight line from the previously clicked point
-        if (is_valid(m_clicked))
+        if (is_valid(m_p2))
         {
             m_images_panel->current_image()->start_modify(
-                [&pixel, &roi, modifiers, this](const ConstHDRImagePtr &img,
-                                                const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                [this, &roi, modifiers](const ConstHDRImagePtr &img,
+                                        const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                 {
                     auto new_image = make_shared<HDRImage>(*img);
-                    draw_line(m_clicked, pixel, new_image, roi, modifiers);
+                    draw_line(m_p2, m_p3, new_image, roi, modifiers);
                     return {new_image, make_shared<FullImageUndo>(*img)};
                 });
-
-            m_screen->update_caption();
         }
     }
     else if (down)
     {
         m_images_panel->current_image()->start_modify(
-            [&pixel, &roi, modifiers, this](const ConstHDRImagePtr &img,
-                                            const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+            [this, &roi, modifiers](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
-                start_stroke(pixel, new_image, roi, modifiers);
+                start_stroke(m_p3, new_image, roi, modifiers);
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });
     }
 
+    m_p0 = m_p1 = m_p2 = std::numeric_limits<int>::lowest();
     m_screen->request_layout_update();
     m_screen->update_caption();
-
-    m_clicked = pixel;
-
-    m_p0 = std::numeric_limits<int>::lowest();
-    m_p1 = std::numeric_limits<int>::lowest();
-    m_p2 = std::numeric_limits<int>::lowest();
-    m_p3 = m_clicked;
 
     return true;
 }
@@ -855,7 +933,7 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
     m_p3 = pixel;
 
     m_images_panel->current_image()->direct_modify(
-        [modifiers, this, include_start](const HDRImagePtr &new_image)
+        [this, modifiers, include_start](const HDRImagePtr &new_image)
         {
             Box2i roi = m_images_panel->current_image()->roi();
             if (roi.has_volume())
@@ -868,6 +946,7 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
             else if (is_valid(m_p0))
                 draw_curve(m_p0, m_p1, m_p2, m_p3, new_image, roi, modifiers, include_start, false);
         });
+
     m_screen->update_caption();
     return true;
 }
@@ -1276,6 +1355,9 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 
 bool LineTool::keyboard(int key, int scancode, int action, int modifiers)
 {
+    if (action == GLFW_RELEASE)
+        return false;
+
     switch (key)
     {
     case '[':
