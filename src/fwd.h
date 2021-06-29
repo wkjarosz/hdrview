@@ -93,6 +93,7 @@ using Box2i = Box<nanogui::Vector2i>;
 enum EColorSpace : int
 {
     LinearSRGB_CS = 0,
+    LinearSGray_CS,
     LinearAdobeRGB_CS,
     CIEXYZ_CS,
     CIELab_CS,

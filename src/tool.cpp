@@ -215,6 +215,16 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
             spdlog::trace("KEY `I` pressed");
             m_screen->set_tool(Tool_Eyedropper);
             return true;
+
+        case 'G':
+            spdlog::trace("KEY `G` pressed");
+            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
+            return true;
+
+        case 'E':
+            spdlog::trace("KEY `E` pressed");
+            m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
+            return true;
         }
     }
     else
@@ -241,18 +251,20 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
         case 'G':
             spdlog::trace("KEY `G` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
+            {
                 m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-            else
-                m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
-            return true;
+                return true;
+            }
+            break;
 
         case 'E':
             spdlog::trace("KEY `E` pressed");
             if (modifiers & GLFW_MOD_SHIFT)
+            {
                 m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-            else
-                m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-            return true;
+                return true;
+            }
+            break;
         }
     }
 

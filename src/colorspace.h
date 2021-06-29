@@ -50,6 +50,8 @@ Color4 LinearToAdobeRGB(const Color4 &c);
 // to and from XYZ
 void XYZToLinearSRGB(float *R, float *G, float *B, float X, float Y, float z);
 void LinearSRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
+void XYZToLinearSGray(float *R, float *G, float *B, float X, float Y, float z);
+void LinearSGrayToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
 void XYZToLinearAdobeRGB(float *R, float *G, float *B, float X, float Y, float z);
 void LinearAdobeRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
 void XYZToLab(float *L, float *a, float *b, float X, float Y, float Z);

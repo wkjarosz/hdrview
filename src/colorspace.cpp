@@ -94,6 +94,14 @@ void LinearSRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B)
     *Z = 0.019334f * R + 0.119193f * G + 0.950227f * B;
 }
 
+void XYZToLinearSGray(float *R, float *G, float *B, float X, float Y, float Z)
+{
+    XYZToLinearSRGB(R, G, B, X, Y, Z);
+    *R = *G = *B = (*R + *G + *B) / 3.f;
+}
+
+void LinearSGrayToXYZ(float *X, float *Y, float *Z, float R, float G, float B) { LinearSRGBToXYZ(X, Y, Z, R, G, B); }
+
 void XYZToLinearAdobeRGB(float *R, float *G, float *B, float X, float Y, float Z)
 {
     *R = X * 2.04159f + Y * -0.56501f + Z * -0.34473f;
@@ -540,6 +548,7 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpac
     switch (src)
     {
     case LinearSRGB_CS: LinearSRGBToXYZ(&X, &Y, &Z, A, B, C); break;
+    case LinearSGray_CS: LinearSGrayToXYZ(&X, &Y, &Z, A, B, C); break;
     case LinearAdobeRGB_CS: LinearAdobeRGBToXYZ(&X, &Y, &Z, A, B, C); break;
     case CIELab_CS:
         unnormalizeLab(&A, &B, &C);
@@ -562,6 +571,7 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpac
     switch (dst)
     {
     case LinearSRGB_CS: XYZToLinearSRGB(a, b, c, X, Y, Z); break;
+    case LinearSGray_CS: XYZToLinearSGray(a, b, c, X, Y, Z); break;
     case LinearAdobeRGB_CS: XYZToLinearAdobeRGB(a, b, c, X, Y, Z); break;
     case CIELab_CS:
         XYZToLab(a, b, c, X, Y, Z);
@@ -597,7 +607,8 @@ Color4 convertColorSpace(const Color4 &c, EColorSpace dst, EColorSpace src)
 
 const vector<string> &colorSpaceNames()
 {
-    static const vector<string> names = {"Linear sRGB", "Linear Adobe RGB", "CIE XYZ", "CIE L*a*b*",
-                                         "CIE L*u*v*",  "CIE xyY",          "HSL",     "HSV"};
+    static const vector<string> names = {"Linear sRGB", "Linear sGray", "Linear Adobe RGB",
+                                         "CIE XYZ",     "CIE L*a*b*",   "CIE L*u*v*",
+                                         "CIE xyY",     "HSL",          "HSV"};
     return names;
 }
