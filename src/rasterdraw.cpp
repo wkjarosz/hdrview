@@ -95,12 +95,10 @@ void get_circle(Circle &circle, const Vector2f &point_j, const Vector2f &point_i
             det = 0.001;
     }
 
-    auto s = vcross(mid2 - mid1, dir2) / det;
-    // auto s      = (dir2.y() * (mid2.x() - mid1.x()) + dir2.x() * (mid1.y() - mid2.y())) / det;
+    auto s      = vcross(mid2 - mid1, dir2) / det;
     auto center = mid1 + s * dir1;
     auto axis1  = point_i - center;
     auto axis2  = Vector2f(-axis1.y(), axis1.x());
-    auto len2   = squared_norm(axis1);
     auto toPt2  = point_k - center;
     auto limit2 = atan2f(dot(axis2, toPt2), dot(axis1, toPt2));
     auto toPt1  = point_j - center;
