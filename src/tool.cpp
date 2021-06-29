@@ -9,6 +9,7 @@
 #include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
+#include "helpwindow.h"
 #include "imagelistpanel.h"
 #include "rasterdraw.h"
 #include <hdrview_resources.h>
@@ -149,6 +150,28 @@ bool Tool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int mo
 {
     m_image_view->set_pixel_at_position(p + rel, m_image_view->pixel_at_position(p));
     return false;
+}
+
+void Tool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Tools";
+    if (!w->add_section(section_name))
+        return;
+
+    w->add_shortcut(section_name, "Space", "Hand tool");
+    w->add_shortcut(section_name, "M", "Rectangular marquee tool");
+    w->add_shortcut(section_name, "S", "Clone stamp tool");
+    w->add_shortcut(section_name, "B", "Brush tool");
+    w->add_shortcut(section_name, "U", "Line tool");
+    w->add_shortcut(section_name, "I", "Eyedropper tool");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+A", "Select entire image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+D", "Deselect");
+
+    section_name = "Display/Tonemapping Options";
+    w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
+    w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
+    // w->add_shortcut(section_name, "R", "Reset tonemapping");
+    // w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
 }
 
 bool Tool::keyboard(int key, int scancode, int action, int modifiers)
@@ -660,6 +683,19 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     return m_options;
 }
 
+void BrushTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Brush tools";
+    if (!w->add_section(section_name))
+        return;
+
+    w->add_shortcut(section_name, "[ / ]", "Decrease/Increase brush radius");
+    w->add_shortcut(section_name, "H / Shift+H", "Decrease/Increase brush hardness");
+    w->add_shortcut(section_name, "F / Shift+F", "Decrease/Increase brush flow rate");
+    w->add_shortcut(section_name, "R / Shift+R", "Decrease/Increase brush roundness");
+    w->add_shortcut(section_name, "A / Shift+A", "Decrease/Increase brush angle");
+}
+
 bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
 {
     if (action == GLFW_RELEASE)
@@ -1040,6 +1076,13 @@ bool CloneStampTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int butt
     return BrushTool::mouse_drag(p, rel, button, modifiers);
 }
 
+void CloneStampTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = m_name;
+    w->add_shortcut(section_name, HelpWindow::ALT + "+Click", "Select source location");
+    w->add_shortcut(section_name, " ", "All brush tool shortcuts");
+}
+
 bool CloneStampTool::keyboard(int key, int scancode, int action, int modifiers)
 {
     m_modifier_down = (modifiers & GLFW_MOD_ALT) && !(action == GLFW_RELEASE);
@@ -1351,6 +1394,12 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
     m_width_slider->set_value(m_width);
 
     return m_options;
+}
+
+void LineTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = m_name;
+    w->add_shortcut(section_name, "[ / ]", "Decreasing/Increase line width");
 }
 
 bool LineTool::keyboard(int key, int scancode, int action, int modifiers)

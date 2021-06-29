@@ -23,28 +23,20 @@ using namespace std;
 NAMESPACE_BEGIN(nanogui)
 
 #ifdef __APPLE__
-string HelpWindow::COMMAND = "Cmd";
+const string HelpWindow::COMMAND = "Cmd";
 #else
-string HelpWindow::COMMAND = "Ctrl";
+const string HelpWindow::COMMAND = "Ctrl";
 #endif
 
 #ifdef __APPLE__
-string HelpWindow::ALT = "Opt";
+const string HelpWindow::ALT = "Opt";
 #else
-string HelpWindow::ALT     = "Alt";
+const string HelpWindow::ALT     = "Alt";
 #endif
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
     set_layout(new GroupLayout());
-
-    auto add_row = [](Widget *current, string keys, string desc)
-    {
-        auto row = new Widget(current);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-        (new Label(row, desc, "sans", 14))->set_fixed_width(185);
-        new Label(row, keys, "sans-bold", 14);
-    };
 
     new Label(this, "About", "sans-bold", 18);
 
@@ -62,79 +54,45 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 
     new Label(this, "Keybindings", "sans-bold", 18);
 
-    auto key_bindings_widget = new Well(this);
-    key_bindings_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
+    m_key_bindings = new Well(this);
+    m_key_bindings->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
 
-    auto new_column = [key_bindings_widget]()
-    {
-        auto w = new Widget(key_bindings_widget);
-        w->set_layout(new GroupLayout(0));
-        w->set_fixed_width(350);
-        return w;
-    };
-
-    auto column = new_column();
-
-    new Label(column, "Images and Layer List", "sans-bold", 16);
-    auto image_loading = new Widget(column);
-    image_loading->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(image_loading, COMMAND + "+O", "Open Image");
-    add_row(image_loading, COMMAND + "+S", "Save Image");
-    add_row(image_loading, COMMAND + "+W or Delete", "Close Image");
-    add_row(image_loading, COMMAND + "+Shift+W", "Close All Images");
-    add_row(image_loading, "Left Click", "Select Image");
-    add_row(image_loading, "Shift+Left Click", "Select/Deselect Reference Image");
-    add_row(image_loading, "1…9", "Select the N-th Image");
-    add_row(image_loading, "Down / Up", "Select Previous/Next Image");
-    add_row(image_loading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
-    add_row(image_loading, ALT + "+Tab", "Jump Back To Previously Selected Image");
-    add_row(image_loading, COMMAND + "+F", "Find Image");
-
-    new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
-    auto image_selection = new Widget(column);
-    image_selection->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(image_selection, "E / Shift+E", "Decrease/Increase Exposure");
-    add_row(image_selection, "G / Shift+G", "Decrease/Increase Gamma");
-    add_row(image_selection, "R", "Reset tonemapping");
-    add_row(image_selection, "N", "Normalize Image to [0,1]");
-    add_row(image_selection, COMMAND + "+1…7", "Cycle through Color Channels");
-    add_row(image_selection, "Shift+1…8", "Cycle through Blend Modes");
-
-    column = new_column();
-
-    new Label(column, "Image Edits", "sans-bold", 16);
-    auto edits = new Widget(column);
-    edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
-    add_row(edits, COMMAND + "+C / " + COMMAND + "+V", "Copy/Paste");
-
-    new Label(column, "Panning/Zooming/Selecting", "sans-bold", 16);
-    auto panning_zooming = new Widget(column);
-    panning_zooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(panning_zooming, "Space", "Switch mouse to pan/zoom mode");
-    add_row(panning_zooming, "Left Click+Drag / Shift+Scroll", "Pan image");
-    add_row(panning_zooming, "Scroll", "Zoom In and Out Continuously");
-    add_row(panning_zooming, "- / +", "Zoom In and Out by Powers of 2");
-    add_row(panning_zooming, COMMAND + "+0", "Fit Image to Screen");
-    add_row(panning_zooming, "M", "Switch mouse to selection mode");
-    add_row(panning_zooming, COMMAND + "+A", "Select entire image");
-    add_row(panning_zooming, COMMAND + "+D", "Deselect");
-
-    new Label(column, "Interface", "sans-bold", 16);
-    auto interface = new Widget(column);
-    interface->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(interface, "H", "Show/Hide Help (this Window)");
-    add_row(interface, "T", "Show/Hide the Top Toolbar");
-    add_row(interface, "Tab", "Show/Hide the Side Panel");
-    add_row(interface, "Shift+Tab", "Show/Hide All Panels");
-    add_row(interface, COMMAND + "+Q or Esc", "Quit");
+    add_column();
 
     center();
 }
+
+void HelpWindow::add_column()
+{
+    auto w = new Widget(m_key_bindings);
+    w->set_layout(new GroupLayout(0, 0));
+    w->set_fixed_width(350);
+}
+
+bool HelpWindow::add_section(const std::string &desc)
+{
+    if (m_sections.count(desc))
+        return false;
+
+    auto column = m_key_bindings->child_at(m_key_bindings->child_count() - 1);
+    new Label(column, desc, "sans-bold", 16);
+    auto w = new Widget(column);
+    w->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+    m_sections[desc] = w;
+    return true;
+}
+
+void HelpWindow::add_shortcut(const string &section, const string &keys, const string &desc)
+{
+    if (m_sections.count(section) == 0)
+        add_section(section);
+
+    auto w = m_sections[section];
+
+    auto row = new Widget(w);
+    row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+    (new Label(row, desc, "sans", 14))->set_fixed_width(185);
+    new Label(row, keys, "sans-bold", 14);
+};
 
 NAMESPACE_END(nanogui)

@@ -38,6 +38,8 @@ public:
 
     void write_settings(nlohmann::json &j) const;
 
+    void add_shortcuts(HelpWindow *w);
+
     // Widget implementation
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;

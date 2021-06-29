@@ -15,6 +15,7 @@
 #include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
+#include "helpwindow.h"
 #include "imagebutton.h"
 #include "multigraph.h"
 #include "timer.h"
@@ -516,6 +517,23 @@ bool ImageListPanel::send_image_backward()
         return false;
 
     return true;
+}
+
+void ImageListPanel::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Images list";
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+F", "Find image");
+    w->add_shortcut(section_name, "Left Click", "Select image");
+    w->add_shortcut(section_name, "Shift+Left Click", "Select/Deselect reference image");
+    w->add_shortcut(section_name, "1…9", "Select the n-th image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+1…7", "Cycle through color channels");
+    w->add_shortcut(section_name, "Shift+1…8", "Cycle through blend modes");
+    w->add_shortcut(section_name, "Down / Up", "Select previous/next image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Down / " + HelpWindow::COMMAND + "+Up",
+                    "Multiselect previous/next image");
+    w->add_shortcut(section_name, HelpWindow::ALT + "+Down / " + HelpWindow::ALT + "+Up",
+                    "Send image forward/backward");
+    w->add_shortcut(section_name, HelpWindow::ALT + "+Tab", "Select previously selected image");
 }
 
 bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)

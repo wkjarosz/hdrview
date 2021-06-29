@@ -31,6 +31,7 @@ public:
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers);
     virtual bool keyboard(int key, int scancode, int action, int modifiers);
+    virtual void add_shortcuts(nanogui::HelpWindow *w);
 
 protected:
     void draw_crosshairs(NVGcontext *ctx, const nanogui::Vector2i &p) const;
@@ -86,6 +87,7 @@ public:
     virtual bool             mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                                         int modifiers) override;
     virtual bool             keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void             add_shortcuts(nanogui::HelpWindow *w) override;
 
     virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
                               int modifiers) const;
@@ -147,8 +149,8 @@ public:
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
-
     virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void add_shortcuts(nanogui::HelpWindow *w) override;
 
     virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
@@ -209,10 +211,11 @@ public:
     virtual void             write_settings() override;
     virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
 
-    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
+    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void add_shortcuts(nanogui::HelpWindow *w) override;
 
     virtual void draw(NVGcontext *ctx) const override;
 

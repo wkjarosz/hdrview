@@ -34,6 +34,8 @@ public:
 
     ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageView *imgViewer);
 
+    void add_shortcuts(HelpWindow *w);
+
     void draw(NVGcontext *ctx) override;
 
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;

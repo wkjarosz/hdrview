@@ -768,25 +768,6 @@ void HDRViewScreen::ask_close_all_images()
         m_images_panel->close_all_images();
 }
 
-void HDRViewScreen::show_help_window()
-{
-    auto w = new HelpWindow(this);
-    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
-
-    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
-    close_button->set_callback(
-        [w]()
-        {
-            if (w->callback())
-                w->callback()(0);
-            w->dispose();
-        });
-
-    m_help_button->set_pushed(true);
-
-    request_layout_update();
-}
-
 bool HDRViewScreen::load_image()
 {
     vector<string> files = file_dialog({{"exr", "OpenEXR image"},
@@ -954,6 +935,53 @@ void HDRViewScreen::save_image()
     }
 }
 
+void HDRViewScreen::show_help_window()
+{
+    auto w = new HelpWindow(this);
+
+    auto section_name = "Files";
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+O", "Open image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+N", "New image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C / " + HelpWindow::COMMAND + "+V", "Copy/Paste");
+    w->add_shortcut(section_name, "D", "Default foreground/background colors");
+    w->add_shortcut(section_name, "X", "Swap foreground/background colors");
+
+    section_name = "Interface";
+    w->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
+    w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
+    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panel");
+    w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
+
+    m_images_panel->add_shortcuts(w);
+    m_image_view->add_shortcuts(w);
+
+    w->add_column();
+    for (auto t : m_tools) t->add_shortcuts(w);
+
+    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+
+    w->center();
+    w->set_position(Vector2i(w->position().x(), 50));
+
+    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    close_button->set_callback(
+        [w]()
+        {
+            if (w->callback())
+                w->callback()(0);
+            w->dispose();
+        });
+
+    m_help_button->set_pushed(true);
+
+    request_layout_update();
+}
+
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
     if (Screen::keyboard_event(key, scancode, action, modifiers))
@@ -999,11 +1027,11 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     switch (key)
     {
-    case 'S':
-        spdlog::trace("KEY 'S' pressed");
+    case 'O':
+        spdlog::trace("KEY `O` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)
         {
-            save_image();
+            load_image();
             return true;
         }
         break;
@@ -1017,6 +1045,15 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
         break;
 
+    case 'S':
+        spdlog::trace("KEY 'S' pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            save_image();
+            return true;
+        }
+        break;
+
     case 'W':
         spdlog::trace("KEY `W` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)
@@ -1025,15 +1062,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
                 ask_close_all_images();
             else
                 ask_close_image(m_images_panel->current_image_index());
-            return true;
-        }
-        break;
-
-    case 'O':
-        spdlog::trace("KEY `O` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            load_image();
             return true;
         }
         break;
