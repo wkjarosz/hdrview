@@ -36,7 +36,7 @@ void EditImagePanel::copy()
             roi = img->box();
         m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
 
-        m_clipboard->copy_subimage(img->image(), roi, 0, 0);
+        m_clipboard->copy_paste(img->image(), roi, 0, 0);
     }
 }
 
@@ -55,8 +55,30 @@ void EditImagePanel::paste()
         [this, roi](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
         {
             auto result = make_shared<HDRImage>(*img);
-            result->copy_subimage(*m_clipboard, Box2i(), roi.min.x(), roi.min.y());
-            m_images_panel->current_image()->roi() = Box2i();
+            result->copy_paste(*m_clipboard, Box2i(), roi.min.x(), roi.min.y());
+            // m_images_panel->current_image()->roi() = Box2i();
+            return {result, nullptr};
+        });
+}
+
+void EditImagePanel::seamless_paste()
+{
+    auto img = m_images_panel->current_image();
+
+    if (!img)
+        return;
+
+    auto roi = img->roi();
+    if (!roi.has_volume())
+        roi = img->box();
+
+    m_images_panel->async_modify_current(
+        [this, roi](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                    AtomicProgress &progress) -> ImageCommandResult
+        {
+            auto result = make_shared<HDRImage>(*img);
+            result->seamless_copy_paste(progress, *m_clipboard, Box2i(), roi.min.x(), roi.min.y());
+            // m_images_panel->current_image()->roi() = Box2i();
             return {result, nullptr};
         });
 }
@@ -91,6 +113,12 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
 
     m_filter_btns.push_back(new Button(button_row, "Paste", FA_PASTE));
     m_filter_btns.back()->set_callback([this]() { paste(); });
+
+    button_row = new Widget(this);
+    button_row->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, spacing));
+
+    m_filter_btns.push_back(new Button(button_row, "Seamless paste", FA_PASTE));
+    m_filter_btns.back()->set_callback([this]() { seamless_paste(); });
 
     new Label(this, "Pixel/domain transformations", "sans-bold");
 
@@ -176,7 +204,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
                     if (!roi.has_volume())
                         roi = img->box();
                     HDRImage result(roi.size().x(), roi.size().y());
-                    result.copy_subimage(*img, roi, 0, 0);
+                    result.copy_paste(*img, roi, 0, 0);
                     xpuimg->roi() = Box2i();
                     return {make_shared<HDRImage>(result), nullptr};
                 });

@@ -25,9 +25,9 @@
  * @param[in] B  	Second component of the source color
  * @param[in] C  	Third component of the source color
  */
-void   convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
-Color3 convertColorSpace(const Color3 &c, EColorSpace dst, EColorSpace src);
-Color4 convertColorSpace(const Color4 &c, EColorSpace dst, EColorSpace src);
+void   convert_colorspace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
+Color3 convert_colorspace(const Color3 &c, EColorSpace dst, EColorSpace src);
+Color4 convert_colorspace(const Color4 &c, EColorSpace dst, EColorSpace src);
 
 // to/from linear to sRGB and AdobeRGB
 float  SRGBToLinear(float a);

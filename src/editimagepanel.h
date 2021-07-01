@@ -19,6 +19,7 @@ public:
 
     void copy();
     void paste();
+    void seamless_paste();
 
     void draw(NVGcontext *ctx) override;
 

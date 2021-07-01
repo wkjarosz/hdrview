@@ -372,6 +372,11 @@ public:
     {                                                                                                                  \
         return Color3(std::FUNC(c[0], e), std::FUNC(c[1], e), std::FUNC(c[2], e));                                     \
     }                                                                                                                  \
+    template <typename T>                                                                                              \
+    inline Color3 FUNC(T e, const Color3 &c)                                                                           \
+    {                                                                                                                  \
+        return Color3(std::FUNC(e, c[0]), std::FUNC(e, c[1]), std::FUNC(e, c[2]));                                     \
+    }                                                                                                                  \
     inline Color4 FUNC(const Color4 &c, const Color4 &e)                                                               \
     {                                                                                                                  \
         return Color4(std::FUNC(c[0], e[0]), std::FUNC(c[1], e[1]), std::FUNC(c[2], e[2]), std::FUNC(c[3], e[3]));     \
@@ -380,6 +385,11 @@ public:
     inline Color4 FUNC(const Color4 &c, T e)                                                                           \
     {                                                                                                                  \
         return Color4(std::FUNC(c[0], e), std::FUNC(c[1], e), std::FUNC(c[2], e), std::FUNC(c[3], e));                 \
+    }                                                                                                                  \
+    template <typename T>                                                                                              \
+    inline Color4 FUNC(T e, const Color4 &c)                                                                           \
+    {                                                                                                                  \
+        return Color4(std::FUNC(e, c[0]), std::FUNC(e, c[1]), std::FUNC(e, c[2]), std::FUNC(e, c[3]));                 \
     }
 
 //

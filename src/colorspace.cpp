@@ -541,7 +541,7 @@ void HSVToXYZ(float *X, float *Y, float *Z, float H, float S, float V)
     LinearSRGBToXYZ(X, Y, Z, R, G, B);
 }
 
-void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C)
+void convert_colorspace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C)
 {
     // always convert between the color spaces by way of XYZ to reduce the combinations
     float X, Y, Z;
@@ -591,17 +591,17 @@ void convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpac
     }
 }
 
-Color3 convertColorSpace(const Color3 &c, EColorSpace dst, EColorSpace src)
+Color3 convert_colorspace(const Color3 &c, EColorSpace dst, EColorSpace src)
 {
     Color3 ret;
-    convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
     return ret;
 }
 
-Color4 convertColorSpace(const Color4 &c, EColorSpace dst, EColorSpace src)
+Color4 convert_colorspace(const Color4 &c, EColorSpace dst, EColorSpace src)
 {
     Color4 ret = c;
-    convertColorSpace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
     return ret;
 }
 

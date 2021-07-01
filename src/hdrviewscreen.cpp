@@ -648,6 +648,8 @@ void HDRViewScreen::write_settings()
 
         m_tools.front()->all_tool_settings()["active tool"] = m_tool;
 
+        m_settings["verbosity"] = spdlog::get_level();
+
         stream << std::setw(4) << m_settings << std::endl;
         stream.close();
     }
@@ -884,7 +886,7 @@ void HDRViewScreen::duplicate_image()
         if (!roi.has_volume())
             roi = img->box();
         clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
-        clipboard->copy_subimage(img->image(), roi, 0, 0);
+        clipboard->copy_paste(img->image(), roi, 0, 0);
     }
     else
         clipboard = make_shared<HDRImage>(m_images_panel->current_image()->image());
@@ -1083,7 +1085,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     case 'V':
         spdlog::trace("Key `V` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
+        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
+        {
+            m_edit_panel->seamless_paste();
+            return true;
+        }
+        else if (modifiers & SYSTEM_COMMAND_MOD)
         {
             m_edit_panel->paste();
             return true;

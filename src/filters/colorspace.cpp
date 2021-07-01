@@ -50,9 +50,10 @@ Button *create_colorspace_btn(Widget *parent, HDRViewScreen *screen, ImageListPa
                     images_panel->async_modify_selected(
                         [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                         {
-                            return {make_shared<HDRImage>(img->apply_function(
-                                        [](const Color4 &c) { return convertColorSpace(c, dst, src); }, xpuimg->roi())),
-                                    nullptr};
+                            return {
+                                make_shared<HDRImage>(img->apply_function(
+                                    [](const Color4 &c) { return convert_colorspace(c, dst, src); }, xpuimg->roi())),
+                                nullptr};
                         });
                 });
 

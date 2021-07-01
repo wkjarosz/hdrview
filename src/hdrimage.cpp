@@ -13,7 +13,12 @@
 #include <ctype.h>    // for tolower
 #include <exception>  // for exception
 #include <functional> // for pointer_to_unary_function, function
+#include <limits>
+
 #include <spdlog/spdlog.h>
+
+#include <spdlog/fmt/ostr.h>
+
 #include <stdexcept> // for runtime_error, out_of_range
 #include <stdlib.h>  // for abs
 #include <string>    // for allocator, operator==, basic_string
@@ -45,7 +50,45 @@ inline void clip_roi(Box2i &roi, const HDRImage &img)
         roi = img.box();
 }
 
+void zero_boundary(HDRImage &img)
+{
+    // top & bottom
+    for (int i = 0; i < img.width(); ++i)
+    {
+        img(i, 0)                = 0.0f;
+        img(i, img.height() - 1) = 0.0f;
+    }
+
+    // left & right
+    for (int i = 0; i < img.height(); ++i)
+    {
+        img(0, i)               = 0.0f;
+        img(img.width() - 1, i) = 0.0f;
+    }
+}
+void copy_boundary(HDRImage &img, const HDRImage &src)
+{
+    // top & bottom
+    for (int i = 0; i < img.width(); ++i)
+    {
+        img(i, 0)                = src(i, 0);
+        img(i, img.height() - 1) = src(i, img.height() - 1);
+    }
+
+    // left & right
+    for (int i = 0; i < img.height(); ++i)
+    {
+        img(0, i)               = src(0, i);
+        img(img.width() - 1, i) = src(img.width() - 1, i);
+    }
+}
+
 } // namespace
+
+HDRImage::HDRImage(const HDRImage &img, const Box2i &roi) : Base(roi.size().x(), roi.size().y())
+{
+    copy_paste(img, roi);
+}
 
 // makes a copy of the image, applies func for each pixel in roi of the copy, and returns the result
 HDRImage HDRImage::apply_function(function<Color4(const Color4 &)> func, Box2i roi) const
@@ -121,25 +164,85 @@ HDRImage &HDRImage::apply_function(const HDRImage &other, function<Color4(const 
     return *this;
 }
 
-Color4 HDRImage::reduce(function<Color4(const Color4 &, const Color4 &)> func, Box2i roi) const
+Color4 HDRImage::reduce(function<Color4(const Color4 &, const Color4 &)> func, const Color4 &initial, Box2i roi) const
 {
     clip_roi(roi, *this);
 
-    Color4 result = (*this)(roi.min.x(), roi.min.y());
-
+    Color4 result = initial;
     for (int y = roi.min.y(); y < roi.max.y(); ++y)
-    // parallel_for(roi.min.y(), roi.max.y(), [this,&func,&roi,&result](int y)
     {
         for (int x = roi.min.x(); x < roi.max.x(); ++x)
             if (x != roi.min.x() && y != roi.min.y())
                 result = func(result, (*this)(x, y));
     }
-    // );
 
     return result;
 }
 
-void HDRImage::copy_subimage(const HDRImage &src, Box2i roi, int dst_x, int dst_y)
+HDRImage HDRImage::squared(Box2i roi) const
+{
+    HDRImage result(*this);
+    return result.apply_function([](const Color4 &c) { return c * c; }, roi);
+}
+
+HDRImage &HDRImage::square(Box2i roi)
+{
+    return apply_function([](const Color4 &c) { return c * c; }, roi);
+}
+
+HDRImage &HDRImage::abs(Box2i roi)
+{
+    return apply_function([](const Color4 &c) { return ::abs(c); }, roi);
+}
+
+Color4 HDRImage::sum(Box2i roi) const
+{
+    return reduce([](const Color4 &a, const Color4 &b) { return a + b; }, Color4(0.f), roi);
+}
+
+Color4 HDRImage::mean(Box2i roi) const { return sum(roi) / (roi.has_volume() ? roi.volume() : size()); }
+
+Color4 HDRImage::min(Box2i roi) const
+{
+    return reduce([](const Color4 &a, const Color4 &b) { return ::min(a, b); },
+                  Color4(std::numeric_limits<float>::infinity()), roi);
+}
+
+Color4 HDRImage::max_neg(Box2i roi) const
+{
+    return reduce([](const Color4 &a, const Color4 &b) { return ::min(a, b); }, Color4(0.f), roi);
+}
+
+Color4 HDRImage::max(Box2i roi) const
+{
+    return reduce([](const Color4 &a, const Color4 &b) { return ::max(a, b); },
+                  Color4(-std::numeric_limits<float>::infinity()), roi);
+}
+
+HDRImage HDRImage::log10ed(const Box2i &roi) const
+{
+    // Taking a linear image im, transform to log10 scale.
+    return apply_function([](const Color4 &c) { return log10(c); }, roi);
+}
+
+HDRImage HDRImage::exp10ed(const Box2i &roi) const
+{
+    // take an image in log10 domain and transform it back to linear domain.
+    return apply_function([](const Color4 &c) { return pow(10.f, c); }, roi);
+}
+
+// // min non-zero pixel value of image
+// float HDRImage::min_nonzero(const Box2i & roi) const
+// {
+//     return reduce(
+//         [](const Color4 &a, const Color4 &b) {
+//             return {b.r > 0 ? min(a.r, b.r), b.g > 0 ? min(a.g, b.g), b.b > 0 ? min(a.b, b.b),
+//                     b.a > 0 ? min(a.a, b.a) };
+//         },
+//         Color4(std::numeric_limits<float>::infinity()), roi);
+// }
+
+void HDRImage::copy_paste(const HDRImage &src, Box2i roi, int dst_x, int dst_y)
 {
     // ensure valid ROI
     if (roi.has_volume())
@@ -163,6 +266,126 @@ void HDRImage::copy_subimage(const HDRImage &src, Box2i roi, int dst_x, int dst_
                      for (int x = roi.min.x(); x < roi.max.x(); ++x)
                          (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y()) = src(x, y);
                  });
+}
+
+void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src, Box2i padded_src_roi, int dst_x,
+                                   int dst_y, bool log_domain)
+{
+    constexpr int max_iters = 500;
+
+    progress.set_num_steps(max_iters + 2);
+
+    // ensure valid ROI
+    if (padded_src_roi.has_volume())
+        padded_src_roi.intersect(src.box());
+    else
+        padded_src_roi = src.box();
+
+    if (!padded_src_roi.has_volume())
+        return;
+
+    spdlog::trace("padded_src_roi: {}", padded_src_roi);
+
+    // clip roi to valid region in this image starting at dst_x and dst_y
+    auto old_min = padded_src_roi.min;
+    padded_src_roi.move_min_to({dst_x, dst_y});
+    auto padded_dst_roi = padded_src_roi; // save this as the destination roi
+    padded_src_roi.intersect(box());
+    padded_src_roi.move_min_to(old_min);
+
+    auto padded_fg = HDRImage(src, padded_src_roi);
+    auto padded_bg = HDRImage(*this, padded_dst_roi);
+
+    Color4 fg_offset, bg_offset;
+    if (log_domain)
+    {
+        // // first offset to remove zeros and negative values
+        // fg_offset = padded_fg.max_neg() - 1e-6f;
+        // padded_fg -= fg_offset;
+        // bg_offset = padded_bg.max_neg() - 1e-6f;
+        // padded_bg -= bg_offset;
+
+        // // transform to the log domain
+        // padded_fg = padded_fg.log10ed();
+        // padded_bg = padded_bg.log10ed();
+
+        padded_fg.apply_function([](const Color4 &c)
+                                 { return convert_colorspace(c, EColorSpace::CIELab_CS, EColorSpace::LinearSRGB_CS); });
+        padded_bg.apply_function([](const Color4 &c)
+                                 { return convert_colorspace(c, EColorSpace::CIELab_CS, EColorSpace::LinearSRGB_CS); });
+    }
+
+    float avg_color = (0.5f * padded_fg.mean() + 0.5f * padded_bg.mean()).average();
+
+    auto padded_fg_roi = padded_fg.box();
+    auto working_roi   = padded_fg_roi.expanded(-1);
+
+    HDRImage ti = padded_bg;
+    // ti.apply_function([&](const Color4 &c) { return Color4(0.f, 0.f, 0.f, 1.f); }, working_roi);
+    ti.copy_paste(padded_fg, working_roi, 1, 1);
+    ti.set_alpha(1.f);
+
+    auto b = padded_fg.laplacian_filtered(AtomicProgress(progress, 1.f / (max_iters + 2)), HDRImage::EDGE,
+                                          HDRImage::EDGE, working_roi);
+    b.set_alpha(1.f);
+
+    auto Ati = ti.laplacian_filtered(AtomicProgress(progress, 1.f / (max_iters + 2)), HDRImage::EDGE, HDRImage::EDGE,
+                                     working_roi);
+    Ati.set_alpha(1.f);
+
+    auto di = b - Ati;
+    di.set_alpha(1.f);
+    zero_boundary(di);
+
+    auto ri = di;
+
+    HDRImage ATdi(padded_fg);
+
+    for (int iter = 1; iter < max_iters; ++iter)
+    {
+        auto riTri = ri.squared(working_roi).sum(working_roi);
+
+        ATdi = di.laplacian_filtered(AtomicProgress(progress, 1.f / (max_iters + 2)), HDRImage::EDGE, HDRImage::EDGE,
+                                     working_roi);
+        ATdi.set_alpha(1.f);
+
+        auto diTATdi = (di * ATdi).sum(working_roi);
+
+        auto alpha = riTri / diTATdi;
+
+        ti += alpha * di;
+        copy_boundary(ti, padded_bg);
+        ti.set_alpha(1.f);
+
+        // if we've done at least 50 iterations and the squared difference is less than .1% of the average intensity
+        if (iter > 50 && fabs(alpha).average() * di.mean().average() < avg_color * 0.1f)
+            break;
+
+        auto r2 = ri - alpha * ATdi;
+
+        auto beta = r2.squared(working_roi).sum(working_roi) / riTri;
+
+        di = r2 + beta * di;
+        ri = r2;
+
+        ri.set_alpha(1.f);
+        zero_boundary(ri);
+
+        di.set_alpha(1.f);
+        zero_boundary(di);
+    }
+
+    if (log_domain)
+    {
+        // ti = ti.exp10ed() + fg_offset;
+
+        ti.apply_function([](const Color4 &c)
+                          { return convert_colorspace(c, EColorSpace::LinearSRGB_CS, EColorSpace::CIELab_CS); });
+    }
+
+    copy_paste(ti, working_roi, dst_x + 1, dst_y + 1);
+
+    apply_function([&](const Color4 &c) { return Color4(c.r, c.g, c.b, 1.f); }, padded_dst_roi);
 }
 
 const vector<string> &HDRImage::border_mode_names()
@@ -298,6 +521,62 @@ HDRImage HDRImage::resampled(int w, int h, AtomicProgress progress,
     return result;
 }
 
+void HDRImage::swap_rows(int a, int b)
+{
+    for (int x = 0; x < width(); x++) std::swap(pixel(x, a), pixel(x, b));
+}
+
+void HDRImage::swap_columns(int a, int b)
+{
+    for (int y = 0; y < height(); y++) std::swap(pixel(a, y), pixel(b, y));
+}
+
+HDRImage HDRImage::flipped_vertical() const
+{
+    HDRImage flipped = *this;
+    int      top     = height() - 1;
+    int      bottom  = 0;
+    while (top > bottom)
+    {
+        flipped.swap_rows(top, bottom);
+        top--;
+        bottom++;
+    }
+    return flipped;
+}
+
+HDRImage HDRImage::flipped_horizontal() const
+{
+    HDRImage flipped = *this;
+    int      right   = width() - 1;
+    int      left    = 0;
+    while (right > left)
+    {
+        flipped.swap_columns(right, left);
+        right--;
+        left++;
+    }
+    return flipped;
+}
+
+HDRImage HDRImage::rotated_90_cw() const
+{
+    HDRImage rotated(height(), width());
+    for (int y = 0; y < height(); y++)
+        for (int x = 0; x < width(); x++) rotated(y, x) = (*this)(x, y);
+
+    return rotated.flipped_horizontal();
+}
+
+HDRImage HDRImage::rotated_90_ccw() const
+{
+    HDRImage rotated(height(), width());
+    for (int y = 0; y < height(); y++)
+        for (int x = 0; x < width(); x++) rotated(y, x) = (*this)(x, y);
+
+    return rotated.flipped_vertical();
+}
+
 HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, BorderMode mX, BorderMode mY,
                              Box2i roi) const
 {
@@ -344,6 +623,42 @@ HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, Bo
                      ++progress;
                  });
     spdlog::trace("Convolution took: {} seconds.", (timer.elapsed() / 1000.f));
+
+    return result;
+}
+
+HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
+{
+    HDRImage result = *this;
+
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return result;
+
+    Timer timer;
+    progress.set_num_steps(roi.size().x());
+    // for every pixel in the image
+    parallel_for(roi.min.x(), roi.max.x(),
+                 [this, &roi, &progress, mX, mY, &result](int x)
+                 {
+                     for (int y = roi.min.y(); y < roi.max.y(); y++)
+                     {
+                         result(x, y) =
+                             pixel(x - 1, y, mX, mY) + pixel(x + 1, y, mX, mY) + pixel(x, y - 1, mX, mY) +
+                             pixel(x, y + 1, mX, mY) +
+                             // pixel(x - 1, y - 1, mX, mY) +
+                             // pixel(x + 1, y + 1, mX, mY) + pixel(x + 1, y - 1, mX, mY) + pixel(x - 1, y + 1, mX, mY)
+                             -4 * pixel(x, y, mX, mY);
+                         result(x, y).a = pixel(x, y, mX, mY).a;
+                     }
+                     ++progress;
+                 });
+    spdlog::trace("Laplacian filter took: {} seconds.", (timer.elapsed() / 1000.f));
 
     return result;
 }
@@ -586,7 +901,7 @@ HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY, AtomicProgr
 
     // copy just the roi
     HDRImage im2 = *this;
-    im2.copy_subimage(im, roi, roi.min.x(), roi.min.y());
+    im2.copy_paste(im, roi, roi.min.x(), roi.min.y());
 
     spdlog::trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed() / 1000.f));
     return im2;
@@ -724,7 +1039,7 @@ HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const
 
     nanogui::Vector2i bs(std::min(oldW, newW), std::min(oldH, newH));
 
-    img.copy_subimage(*this, Box2i(tlSrc, tlSrc + bs), tlDst.x(), tlDst.y());
+    img.copy_paste(*this, Box2i(tlSrc, tlSrc + bs), tlDst.x(), tlDst.y());
     return img;
 }
 
@@ -786,19 +1101,19 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return apply_function(
                 [slope, midpoint](const Color4 &c)
                 {
-                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
-                    return convertColorSpace(Color4(brightnessContrastL(lab.r, slope, midpoint), lab.g, lab.b, c.a),
-                                             LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
+                    return convert_colorspace(Color4(brightnessContrastL(lab.r, slope, midpoint), lab.g, lab.b, c.a),
+                                              LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
         else if (channel == CIE_CHROMATICITY)
             return apply_function(
                 [slope, midpoint](const Color4 &c)
                 {
-                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
-                    return convertColorSpace(Color4(lab.r, brightnessContrastL(lab.g, slope, midpoint),
-                                                    brightnessContrastL(lab.b, slope, midpoint), c.a),
-                                             LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
+                    return convert_colorspace(Color4(lab.r, brightnessContrastL(lab.g, slope, midpoint),
+                                                     brightnessContrastL(lab.b, slope, midpoint), c.a),
+                                              LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
         else
@@ -820,19 +1135,19 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return apply_function(
                 [aB, slope](const Color4 &c)
                 {
-                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
-                    return convertColorSpace(Color4(brightnessContrastNL(lab.r, slope, aB), lab.g, lab.b, c.a),
-                                             LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
+                    return convert_colorspace(Color4(brightnessContrastNL(lab.r, slope, aB), lab.g, lab.b, c.a),
+                                              LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
         else if (channel == CIE_CHROMATICITY)
             return apply_function(
                 [aB, slope](const Color4 &c)
                 {
-                    Color4 lab = convertColorSpace(c, CIELab_CS, LinearSRGB_CS);
-                    return convertColorSpace(Color4(lab.r, brightnessContrastNL(lab.g, slope, aB),
-                                                    brightnessContrastNL(lab.b, slope, aB), c.a),
-                                             LinearSRGB_CS, CIELab_CS);
+                    Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
+                    return convert_colorspace(Color4(lab.r, brightnessContrastNL(lab.g, slope, aB),
+                                                     brightnessContrastNL(lab.b, slope, aB), c.a),
+                                              LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
         else
