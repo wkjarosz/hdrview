@@ -33,6 +33,13 @@ vec3 RGBToLuminance(vec3 rgb)
     return vec3(dot(RGB2Y, rgb));
 }
 
+// returns the monochrome version of a linear rgb color
+vec3 RGBToGray(vec3 rgb)
+{
+    const vec3 RGB2Y = vec3(1./3.);
+    return vec3(dot(RGB2Y, rgb));
+}
+
 // Converts a color from linear RGB to XYZ space
 vec3 RGBToXYZ(vec3 rgb)
 {

@@ -422,33 +422,33 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     {
         // create default options bar
-        auto default_tool = m_tools[Tool::Tool_None]->create_options_bar(m_top_panel);
+        auto default_tool = m_tools[Tool_None]->create_options_bar(m_top_panel);
 
         // marquee tool uses the default options bar
-        m_tools[Tool::Tool_Rectangular_Marquee]->set_options_bar(default_tool);
+        m_tools[Tool_Rectangular_Marquee]->set_options_bar(default_tool);
 
         // brush tool uses its own options bar
-        m_tools[Tool::Tool_Brush]->create_options_bar(m_top_panel);
+        m_tools[Tool_Brush]->create_options_bar(m_top_panel);
 
         // brush tool uses its own options bar
-        m_tools[Tool::Tool_Eraser]->create_options_bar(m_top_panel);
+        m_tools[Tool_Eraser]->create_options_bar(m_top_panel);
 
         // clone stamp uses its own options bar
-        m_tools[Tool::Tool_Clone_Stamp]->create_options_bar(m_top_panel);
+        m_tools[Tool_Clone_Stamp]->create_options_bar(m_top_panel);
 
         // eyedropper uses its own options bar
-        m_tools[Tool::Tool_Eyedropper]->create_options_bar(m_top_panel);
+        m_tools[Tool_Eyedropper]->create_options_bar(m_top_panel);
 
         // ruler uses the default options bar
-        m_tools[Tool::Tool_Ruler]->set_options_bar(default_tool);
+        m_tools[Tool_Ruler]->set_options_bar(default_tool);
 
         // line tool uses the default options bar
-        m_tools[Tool::Tool_Line]->create_options_bar(m_top_panel);
+        m_tools[Tool_Line]->create_options_bar(m_top_panel);
     }
 
     // set the active tool
-    set_tool((Tool::ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool::Tool_None),
-                                     (int)Tool::Tool_None, (int)Tool::Tool_Num_Tools - 1));
+    set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
+                               (int)Tool_None, (int)Tool_Num_Tools - 1));
 
     resize_tool_panel(m_settings.value("geometry", json::object()).value("tool panel width", 33));
 
@@ -483,40 +483,53 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_image_view->set_drag_callback([this](const Vector2i &p, const Vector2i &rel, int button, int modifiers) -> bool
                                     { return m_tools[m_tool]->mouse_drag(p, rel, button, modifiers); });
 
-    m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
-
-    m_image_view->set_hover_callback(
-        [this](const Vector2i &pixel, const Color4 &color32, const Color4 &color8)
+    m_image_view->set_motion_callback(
+        [this](const Vector2i &p, const Vector2i &rel, int button, int modifiers) -> bool
         {
-            if (pixel.x() >= 0)
+            if (auto xpuimg = m_images_panel->current_image())
             {
-                m_status_label->set_caption(fmt::format(
-                    "({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
-                    pixel.x(), pixel.y(), color32[0], color32[1], color32[2], color32[3], (int)round(color8[0]),
-                    (int)round(color8[1]), (int)round(color8[2]), (int)round(color8[3])));
+                Vector2i        pixel(m_image_view->pixel_at_position((p - m_image_view->position())));
+                const HDRImage &image = xpuimg->image();
 
-                m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
-                                                              color32[1], color32[2], color32[3]));
+                if (image.contains(pixel.x(), pixel.y()))
+                {
+                    Color4 color32 = image(pixel.x(), pixel.y());
+                    Color4 color8  = (color32 * pow(2.f, m_image_view->exposure()) * 255).min(255.f).max(0.f);
 
-                m_color8_info_label->set_caption(fmt::format("{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}", (int)round(color8[0]),
-                                                             (int)round(color8[1]), (int)round(color8[2]),
-                                                             (int)round(color8[3])));
+                    m_status_label->set_caption(fmt::format(
+                        "({: 4d},{: 4d}) = ({: 6.3f}, {: 6.3f}, {: 6.3f}, {: 6.3f}) / ({: 3d}, {: 3d}, {: 3d}, {: 3d})",
+                        pixel.x(), pixel.y(), color32[0], color32[1], color32[2], color32[3], (int)round(color8[0]),
+                        (int)round(color8[1]), (int)round(color8[2]), (int)round(color8[3])));
 
-                m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+                    m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
+                                                                  color32[1], color32[2], color32[3]));
 
-                if (m_active_colorpicker)
-                    m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
+                    m_color8_info_label->set_caption(fmt::format("{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
+                                                                 (int)round(color8[0]), (int)round(color8[1]),
+                                                                 (int)round(color8[2]), (int)round(color8[3])));
+
+                    m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+
+                    if (m_active_colorpicker)
+                        m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
+
+                    m_status_bar->perform_layout(m_nvg_context);
+
+                    return true;
+                }
             }
-            else
-            {
-                m_status_label->set_caption("");
-                m_color32_info_label->set_caption("");
-                m_color8_info_label->set_caption("");
-                m_pixel_info_label->set_caption("");
-            }
+
+            m_status_label->set_caption("");
+            m_color32_info_label->set_caption("");
+            m_color8_info_label->set_caption("");
+            m_pixel_info_label->set_caption("");
 
             m_status_bar->perform_layout(m_nvg_context);
+
+            return true;
         });
+
+    m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
 
     m_image_view->set_changed_callback(
         [this]()
@@ -635,6 +648,8 @@ void HDRViewScreen::write_settings()
 
         m_tools.front()->all_tool_settings()["active tool"] = m_tool;
 
+        m_settings["verbosity"] = spdlog::get_level();
+
         stream << std::setw(4) << m_settings << std::endl;
         stream.close();
     }
@@ -655,19 +670,19 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
         else
             pop_gui_refresh();
 
-        set_tool(Tool::Tool_Eyedropper);
+        set_tool(Tool_Eyedropper);
     }
     else
     {
         m_active_colorpicker = nullptr;
-        set_tool(Tool::Tool_None);
+        set_tool(Tool_None);
     }
 }
 
-void HDRViewScreen::set_tool(Tool::ETool t)
+void HDRViewScreen::set_tool(ETool t)
 {
     m_tool = t;
-    for (int i = 0; i < (int)Tool::Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
+    for (int i = 0; i < (int)Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
 
     m_tools[t]->set_active(true);
 }
@@ -753,25 +768,6 @@ void HDRViewScreen::ask_close_all_images()
     }
     else
         m_images_panel->close_all_images();
-}
-
-void HDRViewScreen::show_help_window()
-{
-    auto w = new HelpWindow(this);
-    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
-
-    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
-    close_button->set_callback(
-        [w]()
-        {
-            if (w->callback())
-                w->callback()(0);
-            w->dispose();
-        });
-
-    m_help_button->set_pushed(true);
-
-    request_layout_update();
 }
 
 bool HDRViewScreen::load_image()
@@ -890,7 +886,7 @@ void HDRViewScreen::duplicate_image()
         if (!roi.has_volume())
             roi = img->box();
         clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
-        clipboard->copy_subimage(img->image(), roi, 0, 0);
+        clipboard->copy_paste(img->image(), roi, 0, 0);
     }
     else
         clipboard = make_shared<HDRImage>(m_images_panel->current_image()->image());
@@ -941,17 +937,69 @@ void HDRViewScreen::save_image()
     }
 }
 
+void HDRViewScreen::show_help_window()
+{
+    auto w = new HelpWindow(this);
+
+    auto section_name = "Files";
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+O", "Open image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+N", "New image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
+                    "Paste/Seamless paste");
+    w->add_shortcut(section_name, "D", "Default foreground/background colors");
+    w->add_shortcut(section_name, "X", "Swap foreground/background colors");
+
+    section_name = "Interface";
+    w->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
+    w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
+    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
+    w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
+
+    m_images_panel->add_shortcuts(w);
+    m_image_view->add_shortcuts(w);
+
+    for (auto t : m_tools) t->add_shortcuts(w);
+
+    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+
+    w->center();
+
+    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    close_button->set_callback(
+        [w]()
+        {
+            if (w->callback())
+                w->callback()(0);
+            w->dispose();
+        });
+
+    m_help_button->set_pushed(true);
+
+    request_layout_update();
+}
+
+Dialog *HDRViewScreen::active_dialog() const
+{
+    if (m_focus_path.size() > 1)
+        return dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]);
+
+    return nullptr;
+}
+
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
 
-    if (action == GLFW_RELEASE)
-        return false;
-
-    if (m_focus_path.size() > 1)
+    if (action == GLFW_PRESS)
     {
-        if (auto dialog = dynamic_cast<Dialog *>(m_focus_path[m_focus_path.size() - 2]))
+        if (auto dialog = active_dialog())
         {
             spdlog::trace("Modal dialog: {}", dialog->title());
 
@@ -966,7 +1014,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
     }
 
-    if (key == GLFW_KEY_ESCAPE)
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
     {
         auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?",
                                        "Yes", "No", true);
@@ -984,12 +1032,19 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (m_images_panel->keyboard_event(key, scancode, action, modifiers))
         return true;
 
+    if (action == GLFW_RELEASE)
+        return false;
+
     switch (key)
     {
-    case GLFW_KEY_BACKSPACE:
-        spdlog::trace("KEY BACKSPACE pressed");
-        ask_close_image(m_images_panel->current_image_index());
-        return true;
+    case 'O':
+        spdlog::trace("KEY `O` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            load_image();
+            return true;
+        }
+        break;
 
     case 'N':
         spdlog::trace("KEY `N` pressed");
@@ -998,7 +1053,16 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             new_image();
             return true;
         }
-        return false;
+        break;
+
+    case 'S':
+        spdlog::trace("KEY 'S' pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            save_image();
+            return true;
+        }
+        break;
 
     case 'W':
         spdlog::trace("KEY `W` pressed");
@@ -1008,33 +1072,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
                 ask_close_all_images();
             else
                 ask_close_image(m_images_panel->current_image_index());
-            return true;
-        }
-        return false;
-
-    case 'O':
-        spdlog::trace("KEY `O` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            load_image();
-            return true;
-        }
-        return false;
-
-    case 'C':
-        spdlog::trace("Key `C` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->copy();
-            return true;
-        }
-        break;
-
-    case 'V':
-        spdlog::trace("Key `V` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->paste();
             return true;
         }
         break;
@@ -1047,8 +1084,34 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     case 'X':
         spdlog::trace("Key `X` pressed");
-        m_color_btns->swap_colors();
+        if (modifiers & SYSTEM_COMMAND_MOD)
+            m_edit_panel->cut();
+        else
+            m_color_btns->swap_colors();
         return true;
+
+    case 'C':
+        spdlog::trace("Key `C` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            m_edit_panel->copy();
+            return true;
+        }
+        break;
+
+    case 'V':
+        spdlog::trace("Key `V` pressed");
+        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
+        {
+            m_edit_panel->seamless_paste();
+            return true;
+        }
+        else if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            m_edit_panel->paste();
+            return true;
+        }
+        break;
 
     case 'T':
         spdlog::trace("KEY `T` pressed");
@@ -1122,7 +1185,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     {
         spdlog::trace("ending eyedropper");
         m_active_colorpicker->end_eyedropper();
-        set_tool(Tool::Tool_None);
+        set_tool(Tool_None);
         return true;
     }
 
@@ -1207,7 +1270,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
     m_image_view->set_cursor(Cursor::Arrow);
     m_tool_panel->set_cursor(Cursor::Arrow);
 
-    if (!m_active_colorpicker)
+    if (!m_active_colorpicker && !active_dialog())
     {
         if (m_dragging_side_panel || at_side_panel_edge(p))
         {
@@ -1378,7 +1441,7 @@ void HDRViewScreen::draw_contents()
         m_roi_info_label->set_caption(
             img->roi().has_volume() ? fmt::format("{: 4d}\n{: 4d}", img->roi().size().x(), img->roi().size().y()) : "");
 
-        auto   ruler      = dynamic_cast<Ruler *>(m_tools[Tool::Tool_Ruler]);
+        auto   ruler      = dynamic_cast<Ruler *>(m_tools[Tool_Ruler]);
         string angle_str  = isnan(ruler->angle()) ? "" : fmt::format("{:3.2f} °", ruler->angle());
         string length_str = isnan(ruler->distance()) ? "" : fmt::format("{:.1f} px", ruler->distance());
         m_ruler_info_label->set_caption(angle_str + "\n" + length_str);

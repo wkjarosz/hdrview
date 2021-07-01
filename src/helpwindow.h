@@ -10,9 +10,8 @@
 #pragma once
 
 #include "common.h"
-
 #include "dialog.h"
-
+#include <map>
 #include <string>
 
 NAMESPACE_BEGIN(nanogui)
@@ -21,8 +20,16 @@ class HelpWindow : public Dialog
 public:
     HelpWindow(nanogui::Widget *parent);
 
-    static std::string COMMAND;
-    static std::string ALT;
+    // void add_column();
+    bool add_section(const std::string &name);
+    void add_shortcut(const std::string &section, const std::string &keys, const std::string &desc);
+
+    static const std::string COMMAND;
+    static const std::string ALT;
+
+private:
+    Widget *                        m_key_bindings;
+    std::map<std::string, Widget *> m_sections;
 };
 
 NAMESPACE_END(nanogui)

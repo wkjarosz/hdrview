@@ -17,8 +17,10 @@ class EditImagePanel : public Well
 public:
     EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel, HDRImageView *image_view);
 
+    void cut();
     void copy();
     void paste();
+    void seamless_paste();
 
     void draw(NVGcontext *ctx) override;
 

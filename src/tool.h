@@ -13,19 +13,6 @@
 class Tool
 {
 public:
-    enum ETool : uint32_t
-    {
-        Tool_None = 0,
-        Tool_Rectangular_Marquee,
-        Tool_Brush,
-        Tool_Eraser,
-        Tool_Clone_Stamp,
-        Tool_Eyedropper,
-        Tool_Ruler,
-        Tool_Line,
-        Tool_Num_Tools
-    };
-
     Tool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name, const std::string &tooltip,
          int icon, ETool tool);
 
@@ -35,15 +22,16 @@ public:
     const nlohmann::json this_tool_settings() const;
     virtual void         write_settings();
 
-    void set_options_bar(nanogui::Widget *options) { m_options = options; }
-
+    void                         set_options_bar(nanogui::Widget *options) { m_options = options; }
     virtual nanogui::Widget *    create_options_bar(nanogui::Widget *parent) { return m_options; }
     virtual nanogui::ToolButton *create_toolbutton(nanogui::Widget *parent);
-    virtual void                 set_active(bool b);
-    virtual void                 draw(NVGcontext *ctx) const;
-    virtual bool                 mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
+
+    virtual void set_active(bool b);
+    virtual void draw(NVGcontext *ctx) const;
+    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers);
     virtual bool keyboard(int key, int scancode, int action, int modifiers);
+    virtual void add_shortcuts(nanogui::HelpWindow *w);
 
 protected:
     void draw_crosshairs(NVGcontext *ctx, const nanogui::Vector2i &p) const;
@@ -99,26 +87,43 @@ public:
     virtual bool             mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                                         int modifiers) override;
     virtual bool             keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void             add_shortcuts(nanogui::HelpWindow *w) override;
+
+    virtual void start_stroke(const nanogui::Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi,
+                              int modifiers) const;
+    virtual void draw_line(const nanogui::Vector2i &from_pixel, const nanogui::Vector2i &to_pixel,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const;
+    /// Draw a curve connecting the three points \ref a, \ref b, \ref c (draws an ellipse)
+    virtual void draw_curve(const nanogui::Vector2i &a, const nanogui::Vector2i &b, const nanogui::Vector2i &c,
+                            const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const;
+    /// Draw a curve interpolating points \ref b and \ref c using \ref a and \ref d to define the curve (draws an Yuksel
+    /// C^2 curve)
+    virtual void draw_curve(const nanogui::Vector2i &a, const nanogui::Vector2i &b, const nanogui::Vector2i &c,
+                            const nanogui::Vector2i &d, const HDRImagePtr &new_image, const Box2i &roi, int modifiers,
+                            bool include_start, bool include_end) const;
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const;
 
 protected:
-    std::shared_ptr<Brush> m_brush;
-    nanogui::Slider *      m_size_slider;
-    nanogui::IntBox<int> * m_size_textbox;
-    nanogui::Slider *      m_hardness_slider;
-    nanogui::IntBox<int> * m_hardness_textbox;
-    nanogui::Slider *      m_flow_slider;
-    nanogui::IntBox<int> * m_flow_textbox;
-    nanogui::Slider *      m_angle_slider;
-    nanogui::IntBox<int> * m_angle_textbox;
-    nanogui::Slider *      m_roundness_slider;
-    nanogui::IntBox<int> * m_roundness_textbox;
-    nanogui::Slider *      m_spacing_slider;
-    nanogui::IntBox<int> * m_spacing_textbox;
-    nanogui::CheckBox *    m_smoothing_checkbox;
-    bool                   m_smoothing = true;
+    bool is_valid(const nanogui::Vector2i &p) const;
+    void draw_brush(NVGcontext *ctx, const nanogui::Vector2i &center) const;
 
-    nanogui::Vector2i m_p0, m_p1;
-    nanogui::Vector2i m_clicked;
+    std::shared_ptr<Brush>    m_brush;
+    nanogui::Slider *         m_size_slider;
+    nanogui::IntBox<int> *    m_size_textbox;
+    nanogui::Slider *         m_hardness_slider;
+    nanogui::FloatBox<float> *m_hardness_textbox;
+    nanogui::Slider *         m_flow_slider;
+    nanogui::FloatBox<float> *m_flow_textbox;
+    nanogui::Slider *         m_angle_slider;
+    nanogui::FloatBox<float> *m_angle_textbox;
+    nanogui::Slider *         m_roundness_slider;
+    nanogui::FloatBox<float> *m_roundness_textbox;
+    nanogui::Slider *         m_spacing_slider;
+    nanogui::FloatBox<float> *m_spacing_textbox;
+    nanogui::CheckBox *       m_smoothing_checkbox;
+    bool                      m_smoothing = true;
+
+    nanogui::Vector2i m_p0, m_p1, m_p2, m_p3; ///< mouse position history. m_p0: oldest; m_p3: most recent
 };
 
 class EraserTool : public BrushTool
@@ -128,9 +133,7 @@ public:
                const std::string &tooltip = "Makes pixels transparent.", int icon = FA_ERASER,
                ETool tool = Tool_Eraser);
 
-    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
-    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
-                            int modifiers) override;
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
 protected:
 };
@@ -146,13 +149,19 @@ public:
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
+    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void add_shortcuts(nanogui::HelpWindow *w) override;
+
+    virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
 protected:
-    nanogui::Vector2i m_src_click;
-    nanogui::Vector2i m_dst_click;
+    nanogui::Vector2i m_src_pixel;
+    nanogui::Vector2i m_dst_pixel;
+    nanogui::Vector2i m_dpixel;
 
-    bool m_has_src = false;
-    bool m_has_dst = false;
+    bool m_has_src       = false;
+    bool m_has_dst       = false;
+    bool m_modifier_down = false;
 };
 
 class Eyedropper : public Tool
@@ -202,10 +211,11 @@ public:
     virtual void             write_settings() override;
     virtual nanogui::Widget *create_options_bar(nanogui::Widget *parent) override;
 
-    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
                             int modifiers) override;
+    virtual bool keyboard(int key, int scancode, int action, int modifiers) override;
+    virtual void add_shortcuts(nanogui::HelpWindow *w) override;
 
     virtual void draw(NVGcontext *ctx) const override;
 

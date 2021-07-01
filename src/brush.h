@@ -16,38 +16,34 @@ public:
 
     Brush(int radius = 15, float hardness = 0.0f, float flow = 1.0f);
 
-    int   step() { return m_step; }
-    int   spacing() const { return m_spacing; }
+    int   step() const { return m_step; }
     int   radius() const { return m_size + 1; }
+    float spacing() const { return m_spacing; }
     float flow() const { return m_flow; }
     float hardness() const { return m_hardness; }
-    int   angle() const { return m_angle; }
-    int   roundness() const { return m_roundness; }
+    float angle() const { return m_angle; }
+    float roundness() const { return m_roundness; }
 
     void set_step(int);
-    void set_spacing(int);
+    void set_spacing(float);
     void set_radius(int);
-    void set_flow(float);
+    void set_flow(float flow) { m_flow = std::clamp(flow, 0.f, 1.f); }
     void set_hardness(float s);
-    void set_angle(int angle);
-    void set_roundness(int roundness);
+    void set_angle(float angle);
+    void set_roundness(float roundness);
 
-    void set_parameters(int radius, float hardness, int angle, int roundness, float flow, int spacing);
-
-    void stamp_onto(HDRImage &raster, int x, int y, const SrcColorFunc &src_color, const Box2i &roi = Box2i());
-    void stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi = Box2i());
+    void stamp_onto(int x, int y, const PlotPixelFunc &plot_pixel, const Box2i &roi = Box2i()) const;
 
 private:
     void make_brush();
 
     Array2D<float> m_brush;
-    int            m_size;
-    float          m_flow;
-    float          m_hardness;
-    int            m_angle;
-    int            m_roundness;
-    int            m_spacing;
-    int            m_spacing_pixels;
-    int            m_step;
-    int            m_last_x, m_last_y;
+    int            m_size;      ///< in pixels
+    float          m_flow;      ///< between 0 and 1
+    float          m_hardness;  ///< between 0 and 1
+    float          m_angle;     ///< in degrees
+    float          m_roundness; ///< between 0 and 1
+    float          m_spacing;   ///< between 0 and 1
+    mutable int    m_step;      ///< how many steps since the last stamp?
+    mutable int    m_last_x, m_last_y;
 };

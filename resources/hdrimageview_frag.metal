@@ -12,12 +12,13 @@ using namespace metal;
 #define CHANNEL_BLUE 3
 #define CHANNEL_ALPHA 4
 #define CHANNEL_LUMINANCE 5
-#define CHANNEL_CIE_L 6
-#define CHANNEL_CIE_a 7
-#define CHANNEL_CIE_b 8
-#define CHANNEL_CIE_CHROMATICITY 9
-#define CHANNEL_FALSE_COLOR 10
-#define CHANNEL_POSITIVE_NEGATIVE 11
+#define CHANNEL_GRAY 6
+#define CHANNEL_CIE_L 7
+#define CHANNEL_CIE_a 8
+#define CHANNEL_CIE_b 9
+#define CHANNEL_CIE_CHROMATICITY 10
+#define CHANNEL_FALSE_COLOR 11
+#define CHANNEL_POSITIVE_NEGATIVE 12
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -75,6 +76,7 @@ float3 choose_channel(float4 rgba, int channel)
         case CHANNEL_BLUE:              return rgba.bbb;
         case CHANNEL_ALPHA:             return rgba.aaa;
         case CHANNEL_LUMINANCE:         return RGBToLuminance(rgb);
+        case CHANNEL_GRAY:              return RGBToGray(rgb);
         case CHANNEL_CIE_L:             return RGBToLab(rgb).xxx;
         case CHANNEL_CIE_a:             return RGBToLab(rgb).yyy;
         case CHANNEL_CIE_b:             return RGBToLab(rgb).zzz;

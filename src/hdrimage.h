@@ -28,6 +28,7 @@ public:
     //-----------------------------------------------------------------------
     HDRImage(void) : Base() {}
     HDRImage(int w, int h, const Color4 &c = Color4(0.f)) : Base(w, h, c) {}
+    HDRImage(const HDRImage &img, const Box2i &roi);
     //@}
 
     bool  contains(int x, int y) const { return x >= 0 && y >= 0 && x < (int)width() && y < (int)height(); }
@@ -77,31 +78,21 @@ public:
     // this useful for something like a += b
     HDRImage &apply_function(const HDRImage &other, std::function<Color4(const Color4 &, const Color4 &)> func,
                              Box2i roi = Box2i());
-    HDRImage &square()
-    {
-        return apply_function([](const Color4 &c) { return c * c; });
-    }
-    HDRImage &abs()
-    {
-        return apply_function([](const Color4 &c) { return ::abs(c); });
-    }
-
-    Color4 reduce(std::function<Color4(const Color4 &, const Color4 &)> func, Box2i roi = Box2i()) const;
-    Color4 sum() const
-    {
-        return reduce([](const Color4 &a, const Color4 &b) { return a + b; });
-    }
-    Color4 mean() const { return sum() / size(); }
-    Color4 min() const
-    {
-        return reduce([](const Color4 &a, const Color4 &b) { return ::min(a, b); });
-    }
-    Color4 max() const
-    {
-        return reduce([](const Color4 &a, const Color4 &b) { return ::max(a, b); });
-    }
-
-    void copy_subimage(const HDRImage &src, Box2i src_roi, int dst_x, int dst_y);
+    HDRImage  squared(Box2i roi = Box2i()) const;
+    HDRImage &square(Box2i roi = Box2i());
+    HDRImage &abs(Box2i roi = Box2i());
+    Color4    reduce(std::function<Color4(const Color4 &, const Color4 &)> func, const Color4 &initial,
+                     Box2i roi = Box2i()) const;
+    Color4    sum(Box2i roi = Box2i()) const;
+    Color4    mean(Box2i roi = Box2i()) const;
+    Color4    min(Box2i roi = Box2i()) const;
+    Color4    max_neg(Box2i roi = Box2i()) const;
+    Color4    max(Box2i roi = Box2i()) const;
+    HDRImage  log10ed(const Box2i &roi = Box2i()) const;
+    HDRImage  exp10ed(const Box2i &roi = Box2i()) const;
+    void      copy_paste(const HDRImage &src, Box2i src_roi, int dst_x = 0, int dst_y = 0, bool raw_copy = false);
+    void seamless_copy_paste(AtomicProgress progress, const HDRImage &src, Box2i src_roi, int dst_x = 0, int dst_y = 0,
+                             bool log_domain = false);
 
     //-----------------------------------------------------------------------
     //@{ \name Component-wise arithmetic and assignment.
@@ -267,56 +258,12 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Transformations.
     //-----------------------------------------------------------------------
-    void swap_rows(int a, int b)
-    {
-        for (int x = 0; x < width(); x++) std::swap(pixel(x, a), pixel(x, b));
-    }
-    void swap_columns(int a, int b)
-    {
-        for (int y = 0; y < height(); y++) std::swap(pixel(a, y), pixel(b, y));
-    }
-    HDRImage flipped_vertical() const
-    {
-        HDRImage flipped = *this;
-        int      top     = height() - 1;
-        int      bottom  = 0;
-        while (top > bottom)
-        {
-            flipped.swap_rows(top, bottom);
-            top--;
-            bottom++;
-        }
-        return flipped;
-    }
-    HDRImage flipped_horizontal() const
-    {
-        HDRImage flipped = *this;
-        int      right   = width() - 1;
-        int      left    = 0;
-        while (right > left)
-        {
-            flipped.swap_columns(right, left);
-            right--;
-            left++;
-        }
-        return flipped;
-    }
-    HDRImage rotated_90_cw() const
-    {
-        HDRImage rotated(height(), width());
-        for (int y = 0; y < height(); y++)
-            for (int x = 0; x < width(); x++) rotated(y, x) = (*this)(x, y);
-
-        return rotated.flipped_horizontal();
-    }
-    HDRImage rotated_90_ccw() const
-    {
-        HDRImage rotated(height(), width());
-        for (int y = 0; y < height(); y++)
-            for (int x = 0; x < width(); x++) rotated(y, x) = (*this)(x, y);
-
-        return rotated.flipped_vertical();
-    }
+    void     swap_rows(int a, int b);
+    void     swap_columns(int a, int b);
+    HDRImage flipped_vertical() const;
+    HDRImage flipped_horizontal() const;
+    HDRImage rotated_90_cw() const;
+    HDRImage rotated_90_ccw() const;
     //@}
 
     //-----------------------------------------------------------------------
@@ -324,6 +271,8 @@ public:
     //-----------------------------------------------------------------------
     HDRImage inverted(Box2i roi = Box2i()) const;
     HDRImage brightness_contrast(float brightness, float contrast, bool linear, EChannel c, Box2i roi = Box2i()) const;
+    HDRImage laplacian_filtered(AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE,
+                                Box2i roi = Box2i()) const;
     HDRImage convolved(const Array2Df &kernel, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE,
                        Box2i roi = Box2i()) const;
     HDRImage gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress progress, BorderMode mX = EDGE,

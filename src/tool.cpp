@@ -6,11 +6,12 @@
 
 #include "tool.h"
 #include "brush.h"
-#include "drawline.h"
 #include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
+#include "helpwindow.h"
 #include "imagelistpanel.h"
+#include "rasterdraw.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
 #include <nanogui/toolbutton.h>
@@ -131,8 +132,8 @@ void Tool::draw(NVGcontext *ctx) const
     nvgStrokePaint(ctx, paint);
 
     nvgBeginPath(ctx);
-    Vector2i tl          = m_image_view->position_for_coordinate(img->roi().min);
-    Vector2i br          = m_image_view->position_for_coordinate(img->roi().max);
+    Vector2i tl          = m_image_view->position_at_pixel(img->roi().min);
+    Vector2i br          = m_image_view->position_at_pixel(img->roi().max);
     Vector2i border_size = br - tl;
     nvgRect(ctx, tl.x(), tl.y(), border_size.x(), border_size.y());
     nvgStrokeWidth(ctx, 1.0f);
@@ -147,79 +148,124 @@ bool Tool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 
 bool Tool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    m_image_view->set_image_coordinate_at(p + rel, m_image_view->image_coordinate_at(p));
+    m_image_view->set_pixel_at_position(p + rel, m_image_view->pixel_at_position(p));
     return false;
+}
+
+void Tool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Tools";
+    if (!w->add_section(section_name))
+        return;
+
+    w->add_shortcut(section_name, "Space", "Hand tool");
+    w->add_shortcut(section_name, "M", "Rectangular marquee tool");
+    w->add_shortcut(section_name, "S", "Clone stamp tool");
+    w->add_shortcut(section_name, "B", "Brush tool");
+    w->add_shortcut(section_name, "U", "Line tool");
+    w->add_shortcut(section_name, "I", "Eyedropper tool");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+A", "Select entire image");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+D", "Deselect");
+
+    section_name = "Display/Tonemapping Options";
+    w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
+    w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
+    // w->add_shortcut(section_name, "R", "Reset tonemapping");
+    // w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
 }
 
 bool Tool::keyboard(int key, int scancode, int action, int modifiers)
 {
     auto img = m_images_panel->current_image();
 
-    switch (key)
+    if (action == GLFW_RELEASE)
+        return false;
+
+    // handle the no-modifier shortcuts first
+    if (modifiers == 0)
     {
-    case ' ':
-        spdlog::trace("KEY ` ` pressed");
-        m_screen->set_tool(Tool_None);
-        return true;
-
-    case 'M':
-        spdlog::trace("KEY `M` pressed");
-        m_screen->set_tool(Tool_Rectangular_Marquee);
-        return true;
-
-    case 'S':
-        spdlog::trace("KEY `S` pressed");
-        m_screen->set_tool(Tool_Clone_Stamp);
-        return true;
-
-    case 'B':
-        spdlog::trace("KEY `B` pressed");
-        m_screen->set_tool(Tool_Brush);
-        return true;
-
-    case 'U':
-        spdlog::trace("KEY `U` pressed");
-        m_screen->set_tool(Tool_Line);
-        return true;
-
-    case 'I':
-        spdlog::trace("KEY `I` pressed");
-        m_screen->set_tool(Tool_Eyedropper);
-        return true;
-
-    case 'A':
-        spdlog::trace("Key `A` pressed");
-        if (img && modifiers & SYSTEM_COMMAND_MOD)
+        switch (key)
         {
-            img->roi() = img->box();
+        case ' ':
+            spdlog::trace("KEY ` ` pressed");
+            m_screen->set_tool(Tool_None);
             return true;
-        }
-        break;
 
-    case 'D':
-        spdlog::trace("Key `D` pressed");
-        if (img && modifiers & SYSTEM_COMMAND_MOD)
-        {
-            img->roi() = Box2i();
+        case 'M':
+            spdlog::trace("KEY `M` pressed");
+            m_screen->set_tool(Tool_Rectangular_Marquee);
             return true;
-        }
-        break;
 
-    case 'G':
-        spdlog::trace("KEY `G` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-            m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-        else
+        case 'S':
+            spdlog::trace("KEY `S` pressed");
+            m_screen->set_tool(Tool_Clone_Stamp);
+            return true;
+
+        case 'B':
+            spdlog::trace("KEY `B` pressed");
+            m_screen->set_tool(Tool_Brush);
+            return true;
+
+        case 'U':
+            spdlog::trace("KEY `U` pressed");
+            m_screen->set_tool(Tool_Line);
+            return true;
+
+        case 'I':
+            spdlog::trace("KEY `I` pressed");
+            m_screen->set_tool(Tool_Eyedropper);
+            return true;
+
+        case 'G':
+            spdlog::trace("KEY `G` pressed");
             m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
-        return true;
+            return true;
 
-    case 'E':
-        spdlog::trace("KEY `E` pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-            m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-        else
+        case 'E':
+            spdlog::trace("KEY `E` pressed");
             m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-        return true;
+            return true;
+        }
+    }
+    else
+    {
+        switch (key)
+        {
+        case 'A':
+            spdlog::trace("Key `A` pressed");
+            if (img && modifiers & SYSTEM_COMMAND_MOD)
+            {
+                img->roi() = img->box();
+                return true;
+            }
+            break;
+        case 'D':
+            spdlog::trace("Key `D` pressed");
+            if (img && modifiers & SYSTEM_COMMAND_MOD)
+            {
+                img->roi() = Box2i();
+                return true;
+            }
+            break;
+
+        case 'G':
+            spdlog::trace("KEY `G` pressed");
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
+                return true;
+            }
+            break;
+
+        case 'E':
+            spdlog::trace("KEY `E` pressed");
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
+                return true;
+            }
+            break;
+        }
     }
 
     return false;
@@ -385,7 +431,7 @@ bool RectangularMarquee::mouse_button(const Vector2i &p, int button, bool down, 
     auto img = m_images_panel->current_image();
     if (down)
     {
-        auto ic       = m_image_view->image_coordinate_at(p - m_image_view->position());
+        auto ic       = m_image_view->pixel_at_position(p - m_image_view->position());
         m_roi_clicked = Vector2i(round(ic.x()), round(ic.y()));
         img->roi()    = Box2i(img->box().clamp(m_roi_clicked));
     }
@@ -399,7 +445,7 @@ bool RectangularMarquee::mouse_button(const Vector2i &p, int button, bool down, 
 
 bool RectangularMarquee::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    auto     ic = m_image_view->image_coordinate_at(p - m_image_view->position());
+    auto     ic = m_image_view->pixel_at_position(p - m_image_view->position());
     Vector2i drag_pixel(round(ic.x()), round(ic.y()));
 
     auto   img = m_images_panel->current_image();
@@ -415,7 +461,7 @@ BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListP
                      const string &tooltip, int icon, ETool tool) :
     Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
     m_brush(make_shared<Brush>(80)), m_p0(std::numeric_limits<int>::lowest()), m_p1(std::numeric_limits<int>::lowest()),
-    m_clicked(std::numeric_limits<int>::lowest())
+    m_p2(std::numeric_limits<int>::lowest()), m_p3(std::numeric_limits<int>::lowest())
 {
     // empty
 }
@@ -424,14 +470,16 @@ void BrushTool::write_settings()
 {
     // create a json object to hold the tool's settings
     auto &settings        = this_tool_settings();
-    settings["size"]      = m_size_slider->value();
-    settings["hardness"]  = m_hardness_slider->value();
-    settings["flow"]      = m_flow_slider->value();
-    settings["angle"]     = m_angle_slider->value();
-    settings["roundness"] = m_roundness_slider->value();
-    settings["spacing"]   = m_spacing_slider->value();
-    settings["smoothing"] = m_smoothing_checkbox->pushed();
+    settings["size"]      = m_brush->radius();
+    settings["hardness"]  = m_brush->hardness();
+    settings["flow"]      = m_brush->flow();
+    settings["angle"]     = m_brush->angle();
+    settings["roundness"] = m_brush->roundness();
+    settings["spacing"]   = m_brush->spacing();
+    settings["smoothing"] = m_smoothing_checkbox->checked();
 }
+
+bool BrushTool::is_valid(const Vector2i &p) const { return p.x() != std::numeric_limits<int>::lowest(); }
 
 Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 {
@@ -439,10 +487,10 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_brush->set_radius(settings.value("size", 15));
     m_brush->set_hardness(settings.value("hardness", 0.f));
-    m_brush->set_flow(settings.value("flow", 100) / 100.f);
-    m_brush->set_angle(settings.value("angle", 0));
-    m_brush->set_roundness(settings.value("roundness", 100));
-    m_brush->set_spacing(settings.value("spacing", 0));
+    m_brush->set_flow(settings.value("flow", 1.f));
+    m_brush->set_angle(settings.value("angle", 0.f));
+    m_brush->set_roundness(settings.value("roundness", 1.f));
+    m_brush->set_spacing(settings.value("spacing", 0.f));
 
     m_options = new Widget(parent);
     m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 0));
@@ -481,12 +529,13 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_options->add<Label>("Hard:");
     m_hardness_slider  = new Slider(m_options);
-    m_hardness_textbox = new IntBox<int>(m_options);
+    m_hardness_textbox = new FloatBox<float>(m_options);
 
+    m_hardness_textbox->number_format("%3.0f");
     m_hardness_textbox->set_editable(true);
     m_hardness_textbox->set_fixed_width(40);
-    m_hardness_textbox->set_min_value(0);
-    m_hardness_textbox->set_max_value(100);
+    m_hardness_textbox->set_min_value(0.f);
+    m_hardness_textbox->set_max_value(100.f);
     m_hardness_textbox->set_units("%");
     m_hardness_textbox->set_alignment(TextBox::Alignment::Right);
     m_hardness_textbox->set_callback(
@@ -496,7 +545,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_hardness_slider->set_value(v);
         });
     m_hardness_slider->set_fixed_width(75);
-    m_hardness_slider->set_range({0, 100});
+    m_hardness_slider->set_range({0.f, 100.f});
     m_hardness_slider->set_callback(
         [this](int v)
         {
@@ -504,20 +553,21 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_hardness_textbox->set_value(v);
         });
 
-    m_hardness_textbox->set_value(m_brush->hardness());
-    m_hardness_slider->set_value(m_brush->hardness());
+    m_hardness_textbox->set_value(m_brush->hardness() * 100.f);
+    m_hardness_slider->set_value(m_brush->hardness() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Flow:");
     m_flow_slider  = new Slider(m_options);
-    m_flow_textbox = new IntBox<int>(m_options);
+    m_flow_textbox = new FloatBox<float>(m_options);
 
+    m_flow_textbox->number_format("%3.0f");
     m_flow_textbox->set_editable(true);
     m_flow_textbox->set_fixed_width(40);
-    m_flow_textbox->set_min_value(1);
-    m_flow_textbox->set_max_value(100);
+    m_flow_textbox->set_min_value(0.5f);
+    m_flow_textbox->set_max_value(100.f);
     m_flow_textbox->set_units("%");
     m_flow_textbox->set_alignment(TextBox::Alignment::Right);
     m_flow_textbox->set_callback(
@@ -527,7 +577,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_flow_slider->set_value(v);
         });
     m_flow_slider->set_fixed_width(75);
-    m_flow_slider->set_range({1, 100});
+    m_flow_slider->set_range({0.5f, 100.f});
     m_flow_slider->set_callback(
         [this](int v)
         {
@@ -535,20 +585,21 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_flow_textbox->set_value(v);
         });
 
-    m_flow_textbox->set_value(int(m_brush->flow() * 100));
-    m_flow_slider->set_value(int(m_brush->flow() * 100));
+    m_flow_textbox->set_value(m_brush->flow() * 100.f);
+    m_flow_slider->set_value(m_brush->flow() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Angle:");
     m_angle_slider  = new Slider(m_options);
-    m_angle_textbox = new IntBox<int>(m_options);
+    m_angle_textbox = new FloatBox<float>(m_options);
 
+    m_angle_textbox->number_format("%3.0f");
     m_angle_textbox->set_editable(true);
     m_angle_textbox->set_fixed_width(35);
-    m_angle_textbox->set_min_value(0);
-    m_angle_textbox->set_max_value(180);
+    m_angle_textbox->set_min_value(0.f);
+    m_angle_textbox->set_max_value(180.f);
     m_angle_textbox->set_units("°");
     m_angle_textbox->set_alignment(TextBox::Alignment::Right);
     m_angle_textbox->set_callback(
@@ -558,7 +609,7 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
             m_angle_slider->set_value(v);
         });
     m_angle_slider->set_fixed_width(75);
-    m_angle_slider->set_range({0, 180});
+    m_angle_slider->set_range({0.f, 180.f});
     m_angle_slider->set_callback(
         [this](int v)
         {
@@ -574,106 +625,260 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
 
     m_options->add<Label>("Round:");
     m_roundness_slider  = new Slider(m_options);
-    m_roundness_textbox = new IntBox<int>(m_options);
+    m_roundness_textbox = new FloatBox<float>(m_options);
 
+    m_roundness_textbox->number_format("%3.0f");
     m_roundness_textbox->set_editable(true);
     m_roundness_textbox->set_fixed_width(40);
-    m_roundness_textbox->set_min_value(1);
-    m_roundness_textbox->set_max_value(100);
+    m_roundness_textbox->set_min_value(0.5f);
+    m_roundness_textbox->set_max_value(100.f);
     m_roundness_textbox->set_units("%");
     m_roundness_textbox->set_alignment(TextBox::Alignment::Right);
     m_roundness_textbox->set_callback(
         [this](int v)
         {
-            m_brush->set_roundness(v);
+            m_brush->set_roundness(v / 100.f);
             m_roundness_slider->set_value(v);
         });
     m_roundness_slider->set_fixed_width(75);
-    m_roundness_slider->set_range({1, 100});
+    m_roundness_slider->set_range({0.5f, 100.f});
     m_roundness_slider->set_callback(
         [this](int v)
         {
-            m_brush->set_roundness(v);
+            m_brush->set_roundness(v / 100.f);
             m_roundness_textbox->set_value(v);
         });
 
-    m_roundness_textbox->set_value(m_brush->roundness());
-    m_roundness_slider->set_value(m_brush->roundness());
+    m_roundness_textbox->set_value(m_brush->roundness() * 100.f);
+    m_roundness_slider->set_value(m_brush->roundness() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_options->add<Label>("Spacing:");
     m_spacing_slider  = new Slider(m_options);
-    m_spacing_textbox = new IntBox<int>(m_options);
+    m_spacing_textbox = new FloatBox<float>(m_options);
 
+    m_spacing_textbox->number_format("%3.0f");
     m_spacing_textbox->set_editable(true);
     m_spacing_textbox->set_fixed_width(40);
-    m_spacing_textbox->set_min_value(0);
-    m_spacing_textbox->set_max_value(100);
+    m_spacing_textbox->set_min_value(0.f);
+    m_spacing_textbox->set_max_value(100.f);
     m_spacing_textbox->set_units("%");
     m_spacing_textbox->set_alignment(TextBox::Alignment::Right);
     m_spacing_textbox->set_callback(
         [this](int v)
         {
-            m_brush->set_spacing(v);
+            m_brush->set_spacing(v / 100.f);
             m_spacing_slider->set_value(v);
         });
     m_spacing_slider->set_fixed_width(75);
-    m_spacing_slider->set_range({0, 100});
+    m_spacing_slider->set_range({0.f, 100.f});
     m_spacing_slider->set_callback(
         [this](int v)
         {
-            m_brush->set_spacing(v);
+            m_brush->set_spacing(v / 100.f);
             m_spacing_textbox->set_value(v);
         });
 
-    m_spacing_textbox->set_value(m_brush->spacing());
-    m_spacing_slider->set_value(m_brush->spacing());
+    m_spacing_textbox->set_value(m_brush->spacing() * 100.f);
+    m_spacing_slider->set_value(m_brush->spacing() * 100.f);
 
     // spacer
     m_options->add<Widget>()->set_fixed_width(5);
 
     m_smoothing_checkbox = new CheckBox(m_options, "Smoothing");
-    m_smoothing_checkbox->set_checked(settings.value("smoothing", true));
     m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
+    m_smoothing = settings.value("smoothing", true);
+    m_smoothing_checkbox->set_checked(m_smoothing);
 
     return m_options;
 }
 
+void BrushTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Brush tools";
+    if (!w->add_section(section_name))
+        return;
+
+    w->add_shortcut(section_name, "[ / ]", "Decrease/Increase brush radius");
+    w->add_shortcut(section_name, "H / Shift+H", "Decrease/Increase brush hardness");
+    w->add_shortcut(section_name, "F / Shift+F", "Decrease/Increase brush flow rate");
+    w->add_shortcut(section_name, "R / Shift+R", "Decrease/Increase brush roundness");
+    w->add_shortcut(section_name, "A / Shift+A", "Decrease/Increase brush angle");
+}
+
 bool BrushTool::keyboard(int key, int scancode, int action, int modifiers)
 {
-    switch (key)
-    {
-    case '[':
-    {
-        spdlog::trace("Key `[` pressed");
-        int dr = std::min(-1, (int)ceil(m_brush->radius() / 1.1 - m_brush->radius()));
-        int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
-        m_brush->set_radius(r);
-        m_size_textbox->set_value(m_brush->radius());
-        m_size_slider->set_value(m_brush->radius());
-        return true;
-    }
+    if (action == GLFW_RELEASE)
+        return false;
 
-    case ']':
-        spdlog::trace("Key `]` pressed");
-        int dr = std::max(1, (int)ceil(m_brush->radius() * 1.1 - m_brush->radius()));
-        int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
-        m_brush->set_radius(r);
-        m_size_textbox->set_value(m_brush->radius());
-        m_size_slider->set_value(m_brush->radius());
-        return true;
+    // handle the no-modifier or shift-modified shortcuts
+    if (modifiers == 0 || modifiers == GLFW_MOD_SHIFT)
+    {
+        switch (key)
+        {
+        case '[':
+        {
+            spdlog::trace("Key `[` pressed");
+            int dr = std::min(-1, (int)ceil(m_brush->radius() / 1.1 - m_brush->radius()));
+            int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
+            m_brush->set_radius(r);
+            m_size_textbox->set_value(m_brush->radius());
+            m_size_slider->set_value(m_brush->radius());
+            return true;
+        }
+
+        case ']':
+        {
+            spdlog::trace("Key `]` pressed");
+            int dr = std::max(1, (int)ceil(m_brush->radius() * 1.1 - m_brush->radius()));
+            int r  = std::clamp(m_brush->radius() + dr, 1, (int)m_size_slider->range().second);
+            m_brush->set_radius(r);
+            m_size_textbox->set_value(m_brush->radius());
+            m_size_slider->set_value(m_brush->radius());
+            return true;
+        }
+
+        case 'A':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `A` pressed");
+                m_brush->set_angle(mod(m_brush->angle() + 5.f, 180.f));
+                m_angle_textbox->set_value(m_brush->angle());
+                m_angle_slider->set_value(m_brush->angle());
+            }
+            else
+            {
+                spdlog::trace("Key `a` pressed");
+                m_brush->set_angle(mod(m_brush->angle() - 5.f, 180.f));
+                m_angle_textbox->set_value(m_brush->angle());
+                m_angle_slider->set_value(m_brush->angle());
+            }
+            return true;
+
+        case 'R':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `R` pressed");
+                m_brush->set_roundness(m_brush->roundness() + 0.05f);
+                m_roundness_textbox->set_value(m_brush->roundness() * 100);
+                m_roundness_slider->set_value(m_brush->roundness() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `r` pressed");
+                m_brush->set_roundness(m_brush->roundness() - 0.05f);
+                m_roundness_textbox->set_value(m_brush->roundness() * 100);
+                m_roundness_slider->set_value(m_brush->roundness() * 100);
+            }
+            return true;
+
+        case 'F':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `F` pressed");
+                m_brush->set_flow(m_brush->flow() + 0.05f);
+                m_flow_textbox->set_value(m_brush->flow() * 100);
+                m_flow_slider->set_value(m_brush->flow() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `f` pressed");
+                m_brush->set_flow(m_brush->flow() - 0.05f);
+                m_flow_textbox->set_value(m_brush->flow() * 100);
+                m_flow_slider->set_value(m_brush->flow() * 100);
+            }
+            return true;
+
+        case 'H':
+            if (modifiers & GLFW_MOD_SHIFT)
+            {
+                spdlog::trace("Key `H` pressed");
+                m_brush->set_hardness(m_brush->hardness() + 0.05f);
+                m_hardness_textbox->set_value(m_brush->hardness() * 100);
+                m_hardness_slider->set_value(m_brush->hardness() * 100);
+            }
+            else
+            {
+                spdlog::trace("Key `h` pressed");
+                m_brush->set_hardness(m_brush->hardness() - 0.05f);
+                m_hardness_textbox->set_value(m_brush->hardness() * 100);
+                m_hardness_slider->set_value(m_brush->hardness() * 100);
+            }
+            return true;
+        }
     }
 
     return Tool::keyboard(key, scancode, action, modifiers);
 }
 
+void BrushTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
+{
+    Color4 fg =
+        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+    fg.a *= a;
+    Color4 bg = (*img)(x, y);
+
+    // Duff and Porter's over operator for unassociated alpha
+    float  a_over = fg.a + bg.a * (1.f - fg.a);
+    Color4 c_over = (fg * fg.a + bg * bg.a * (1.f - fg.a)) / (a_over == 0.f ? 1.f : a_over);
+    c_over.a      = a_over;
+    (*img)(x, y)  = c_over;
+}
+
+void BrushTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const
+{
+    m_brush->set_step(0);
+    m_brush->stamp_onto(
+        pixel.x(), pixel.y(),
+        [this, new_image, modifiers](int x, int y, float a) { plot_pixel(new_image, x, y, a, modifiers); }, roi);
+}
+
+void BrushTool::draw_line(const Vector2i &from_pixel, const Vector2i &to_pixel, const HDRImagePtr &new_image,
+                          const Box2i &roi, int modifiers) const
+{
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
+    };
+
+    ::draw_line(from_pixel.x(), from_pixel.y(), to_pixel.x(), to_pixel.y(), splat);
+}
+
+void BrushTool::draw_curve(const Vector2i &a, const Vector2i &b, const Vector2i &c, const Vector2i &d,
+                           const HDRImagePtr &new_image, const Box2i &roi, int modifiers, bool include_start,
+                           bool include_end) const
+{
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
+    };
+
+    ::draw_Yuksel_curve(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), d.x(), d.y(), splat, YukselType::Hybrid,
+                        include_start, include_end);
+}
+
+void BrushTool::draw_curve(const Vector2i &a, const Vector2i &b, const Vector2i &c, const HDRImagePtr &new_image,
+                           const Box2i &roi, int modifiers) const
+{
+    auto splat = [this, new_image, modifiers, &roi](int x, int y)
+    {
+        m_brush->stamp_onto(
+            x, y, [this, new_image, modifiers](int i, int j, float a) { plot_pixel(new_image, i, j, a, modifiers); },
+            roi);
+    };
+
+    ::draw_Yuksel_ellipse(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), splat);
+}
+
 bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 {
     spdlog::trace("modifier: {}", modifiers);
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
 
     Box2i roi = m_images_panel->current_image()->roi();
     if (roi.has_volume())
@@ -681,94 +886,107 @@ bool BrushTool::mouse_button(const Vector2i &p, int button, bool down, int modif
     else
         roi = m_images_panel->current_image()->box();
 
-    auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
-    auto pixel = Vector2i(round(coord.x()), round(coord.y()));
+    auto coord = m_image_view->pixel_at_position(p - m_image_view->position());
+
+    // shift mouse location history
+    m_p0 = m_p1;
+    m_p1 = m_p2;
+    m_p2 = m_p3;
+    m_p3 = Vector2i(round(coord.x()), round(coord.y()));
 
     if (!down)
     {
-        // draw a line for the last part of the stroke
-        if (m_p1.x() != std::numeric_limits<int>::lowest())
+        // draw the last part of the stroke
+        if (!m_smoothing)
         {
-            m_images_panel->current_image()->direct_modify(
-                [&pixel, &color, &roi, this](const HDRImagePtr &new_image)
-                {
-                    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-                    {
-                        m_brush->stamp_onto(
-                            *new_image, x, y, [&color](int, int) { return color; }, roi);
-                    };
-
-                    draw_line(m_p1.x(), m_p1.y(), pixel.x(), pixel.y(), put_pixel);
-                });
+            // just a line if we aren't smoothing
+            m_images_panel->current_image()->direct_modify([this, &roi, modifiers](const HDRImagePtr &new_image)
+                                                           { draw_line(m_p2, m_p3, new_image, roi, modifiers); });
+        }
+        else
+        {
+            // if we have 4 points to connect, then finish the C^2 curve
+            if (is_valid(m_p0))
+                m_images_panel->current_image()->direct_modify(
+                    [this, &roi, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p0, m_p1, m_p2, m_p3, new_image, roi, modifiers, false, true); });
+            else if (is_valid(m_p1))
+            {
+                // if we have 3 points to connect, then draw an ellipse connecting the points
+                m_images_panel->current_image()->direct_modify(
+                    [this, &roi, modifiers](const HDRImagePtr &new_image)
+                    { draw_curve(m_p1, m_p2, m_p3, new_image, roi, modifiers); });
+            }
+            else if (is_valid(m_p2))
+            {
+                // if we have 2 points to connect, then draw an ellipse connecting the points
+                m_images_panel->current_image()->direct_modify([this, &roi, modifiers](const HDRImagePtr &new_image)
+                                                               { draw_line(m_p2, m_p3, new_image, roi, modifiers); });
+            }
         }
     }
     else if (down && modifiers & GLFW_MOD_SHIFT)
     {
         // draw a straight line from the previously clicked point
-        if (m_clicked.x() != std::numeric_limits<int>::lowest())
+        if (is_valid(m_p2))
         {
             m_images_panel->current_image()->start_modify(
-                [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
-                                             const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                [this, &roi, modifiers](const ConstHDRImagePtr &img,
+                                        const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                 {
                     auto new_image = make_shared<HDRImage>(*img);
-
-                    auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-                    {
-                        m_brush->stamp_onto(
-                            *new_image, x, y, [&color](int, int) { return color; }, roi);
-                    };
-
-                    draw_line(m_clicked.x(), m_clicked.y(), pixel.x(), pixel.y(), put_pixel);
-
+                    draw_line(m_p2, m_p3, new_image, roi, modifiers);
                     return {new_image, make_shared<FullImageUndo>(*img)};
                 });
-
-            m_screen->update_caption();
         }
     }
     else if (down)
     {
         m_images_panel->current_image()->start_modify(
-            [&pixel, &color, &roi, this](const ConstHDRImagePtr &img,
-                                         const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+            [this, &roi, modifiers](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto new_image = make_shared<HDRImage>(*img);
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(
-                    *new_image, pixel.x(), pixel.y(), [&color](int, int) { return color; }, roi);
-
+                start_stroke(m_p3, new_image, roi, modifiers);
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });
     }
 
+    m_p0 = m_p1 = m_p2 = std::numeric_limits<int>::lowest();
     m_screen->request_layout_update();
     m_screen->update_caption();
-
-    m_clicked = pixel;
-
-    m_p0 = std::numeric_limits<int>::lowest();
-    m_p1 = std::numeric_limits<int>::lowest();
 
     return true;
 }
 
 bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
+    // // reduce number of mouse positions (useful for debugging the smoothing)
+    if (m_smoothing)
+    {
+        static int skip = 0;
+        if (skip++ % 2 != 0)
+            return false;
+    }
+
     m_screen->request_layout_update();
-    auto coord      = m_image_view->image_coordinate_at(p - m_image_view->position());
+    auto coord      = m_image_view->pixel_at_position(p - m_image_view->position());
     auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
-    auto prev_coord = m_image_view->image_coordinate_at(p - rel - m_image_view->position());
+    auto prev_coord = m_image_view->pixel_at_position(p - rel - m_image_view->position());
     auto prev_pixel = Vector2i(round(prev_coord.x()), round(prev_coord.y()));
 
     if (prev_pixel == pixel)
         return false;
 
-    auto color =
-        modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
+    bool include_start = is_valid(m_p1) && !is_valid(m_p0);
+
+    // shift mouse location history
+    m_p0 = m_p1;
+    m_p1 = m_p2;
+    m_p2 = m_p3;
+    m_p3 = pixel;
+
     m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, &color, this](const HDRImagePtr &new_image)
+        [this, modifiers, include_start](const HDRImagePtr &new_image)
         {
             Box2i roi = m_images_panel->current_image()->roi();
             if (roi.has_volume())
@@ -776,32 +994,12 @@ bool BrushTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, i
             else
                 roi = new_image->box();
 
-            auto put_pixel = [this, new_image, &color, &roi](int x, int y)
-            {
-                m_brush->stamp_onto(
-                    *new_image, x, y, [&color](int, int) { return color; }, roi);
-            };
-
-            if (m_smoothing)
-            {
-                if (m_p1.x() != std::numeric_limits<int>::lowest())
-                {
-                    // draw_CatmullRom(m_p0.x(), m_p0.y(), m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(),
-                    // pixel.x(), pixel.y(), put_pixel1, 0.5f);
-                    draw_quadratic(m_p1.x(), m_p1.y(), prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(), put_pixel,
-                                   4, m_p0.x() == std::numeric_limits<int>::lowest());
-                    // auto a = (m_p1 + prev_pixel) / 2;
-                    // auto b = prev_pixel;
-                    // auto c = (prev_pixel + pixel) / 2;
-                    // draw_quad_Bezier(a.x(), a.y(), b.x(), b.y(), c.x(), c.y(), put_pixel);
-                }
-            }
-            else
-                draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(), put_pixel);
-
-            m_p0 = m_p1;
-            m_p1 = prev_pixel;
+            if (!m_smoothing)
+                draw_line(m_p2, m_p3, new_image, roi, modifiers);
+            else if (is_valid(m_p0))
+                draw_curve(m_p0, m_p1, m_p2, m_p3, new_image, roi, modifiers, include_start, false);
         });
+
     m_screen->update_caption();
     return true;
 }
@@ -811,12 +1009,17 @@ void BrushTool::draw(NVGcontext *ctx) const
     if (!m_images_panel->current_image())
         return;
 
-    auto center = m_screen->mouse_pos() - m_image_view->absolute_position();
+    draw_brush(ctx, m_screen->mouse_pos() - m_image_view->absolute_position());
 
+    Tool::draw(ctx);
+}
+
+void BrushTool::draw_brush(NVGcontext *ctx, const Vector2i &center) const
+{
     nvgSave(ctx);
     nvgTranslate(ctx, center.x(), center.y());
     nvgRotate(ctx, 2 * M_PI * m_brush->angle() / 360.0f);
-    nvgScale(ctx, 1.f, m_brush->roundness() / 100.f);
+    nvgScale(ctx, 1.f, m_brush->roundness());
 
     nvgBeginPath(ctx);
     nvgCircle(ctx, 0, 0, m_brush->radius() * m_image_view->zoom());
@@ -830,8 +1033,6 @@ void BrushTool::draw(NVGcontext *ctx) const
     nvgStroke(ctx);
 
     nvgRestore(ctx);
-
-    Tool::draw(ctx);
 }
 
 EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -841,66 +1042,10 @@ EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
     // empty
 }
 
-bool EraserTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
+void EraserTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
 {
-    if (down)
-    {
-        m_screen->request_layout_update();
-        auto coord = m_image_view->image_coordinate_at(p - m_image_view->position());
-        auto pixel = Vector2i(round(coord.x()), round(coord.y()));
-        m_images_panel->current_image()->start_modify(
-            [&pixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-            {
-                auto new_image = make_shared<HDRImage>(*img);
-
-                Box2i roi = m_images_panel->current_image()->roi();
-                if (roi.has_volume())
-                    roi.intersect(m_images_panel->current_image()->box());
-                else
-                    roi = img->box();
-
-                HDRImage &new_image_ref = *new_image;
-
-                auto plot_pixel = [&new_image_ref](int x, int y, float a)
-                { new_image_ref(x, y).a = 0.f * a + new_image_ref(x, y).a * (1.0f - a); };
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(pixel.x(), pixel.y(), plot_pixel, roi);
-
-                return {new_image, make_shared<FullImageUndo>(*img)};
-            });
-        m_screen->update_caption();
-        return true;
-    }
-    return false;
-}
-
-bool EraserTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
-{
-    m_screen->request_layout_update();
-    auto coord      = m_image_view->image_coordinate_at(p - m_image_view->position());
-    auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
-    coord           = m_image_view->image_coordinate_at(p - rel - m_image_view->position());
-    auto prev_pixel = Vector2i(round(coord.x()), round(coord.y()));
-    m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, this](const HDRImagePtr &new_image)
-        {
-            Box2i roi = m_images_panel->current_image()->roi();
-            if (roi.has_volume())
-                roi.intersect(m_images_panel->current_image()->box());
-            else
-                roi = m_images_panel->current_image()->box();
-
-            HDRImage &new_image_ref = *new_image;
-
-            auto plot_pixel = [&new_image_ref](int x, int y, float a)
-            { new_image_ref(x, y).a = 0.f * a + new_image_ref(x, y).a * (1.0f - a); };
-
-            draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(),
-                      [this, &plot_pixel, &roi](int x, int y) { m_brush->stamp_onto(x, y, plot_pixel, roi); });
-        });
-    m_screen->update_caption();
-    return true;
+    float c        = modifiers & GLFW_MOD_ALT ? 1.f : 0.f;
+    (*img)(x, y).a = c * a + (*img)(x, y).a * (1.0f - a);
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -910,101 +1055,56 @@ CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, 
     // empty
 }
 
+void CloneStampTool::plot_pixel(const HDRImagePtr &img, int dst_x, int dst_y, float a, int modifiers) const
+{
+    int src_x = dst_x + m_dpixel.x();
+    int src_y = dst_y + m_dpixel.y();
+
+    Color4 src_color(0.f);
+    if (src_x >= 0 && src_y >= 0 && src_x < img->width() && src_y < img->height())
+        src_color = (*img)(src_x, src_y);
+
+    float alpha          = a * src_color.a;
+    src_color.a          = 1.f;
+    (*img)(dst_x, dst_y) = src_color * alpha + (*img)(dst_x, dst_y) * (1.0f - alpha);
+}
+
 bool CloneStampTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (modifiers & GLFW_MOD_ALT)
     {
         m_has_src   = true;
-        m_src_click = p;
-        return true;
+        m_src_pixel = m_image_view->pixel_at_position(p - m_image_view->position());
     }
     else if (down)
     {
         m_has_dst   = true;
-        m_dst_click = p;
-        m_screen->request_layout_update();
-        auto coord     = m_image_view->image_coordinate_at(p - m_image_view->position());
-        auto pixel     = Vector2i(round(coord.x()), round(coord.y()));
-        auto coord_dst = m_image_view->image_coordinate_at(m_dst_click - m_image_view->position());
-        auto pixel_dst = Vector2i(round(coord_dst.x()), round(coord_dst.y()));
-        auto coord_src = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
-        auto dpixel    = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
-        m_images_panel->current_image()->start_modify(
-            [&pixel, &dpixel, this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-            {
-                auto new_image = make_shared<HDRImage>(*img);
-
-                Box2i roi = m_images_panel->current_image()->roi();
-                if (roi.has_volume())
-                    roi.intersect(m_images_panel->current_image()->box());
-                else
-                    roi = img->box();
-
-                HDRImage &new_image_ref = *new_image;
-
-                auto src_color = [&new_image_ref, &dpixel](int dst_x, int dst_y)
-                {
-                    int x = dst_x + dpixel.x();
-                    int y = dst_y + dpixel.y();
-
-                    if (x >= 0 && y >= 0 && x < new_image_ref.width() && y < new_image_ref.height())
-                        return new_image_ref(x, y);
-                    else
-                        return Color4(0.f);
-                };
-
-                m_brush->set_step(0);
-                m_brush->stamp_onto(new_image_ref, pixel.x(), pixel.y(), src_color, roi);
-
-                return {new_image, make_shared<FullImageUndo>(*img)};
-            });
-        m_screen->update_caption();
-        return true;
+        m_dst_pixel = m_image_view->pixel_at_position(p - m_image_view->position());
+        m_dpixel    = m_src_pixel - m_dst_pixel;
     }
     else
         m_has_dst = false;
-    return false;
+
+    return BrushTool::mouse_button(p, button, down, modifiers);
 }
 
 bool CloneStampTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    m_screen->request_layout_update();
-    auto coord      = m_image_view->image_coordinate_at(p - m_image_view->position());
-    auto pixel      = Vector2i(round(coord.x()), round(coord.y()));
-    auto coord_dst  = m_image_view->image_coordinate_at(m_dst_click - m_image_view->position());
-    auto pixel_dst  = Vector2i(round(coord_dst.x()), round(coord_dst.y()));
-    auto coord_src  = m_image_view->image_coordinate_at(m_src_click - m_image_view->position());
-    auto dpixel     = Vector2i(round(coord_src.x()), round(coord_src.y())) - pixel_dst;
-    coord           = m_image_view->image_coordinate_at(p - rel - m_image_view->position());
-    auto prev_pixel = Vector2i(round(coord.x()), round(coord.y()));
-    m_images_panel->current_image()->direct_modify(
-        [&pixel, &prev_pixel, &dpixel, this](const HDRImagePtr &new_image)
-        {
-            Box2i roi = m_images_panel->current_image()->roi();
-            if (roi.has_volume())
-                roi.intersect(m_images_panel->current_image()->box());
-            else
-                roi = m_images_panel->current_image()->box();
+    m_dpixel = m_src_pixel - m_dst_pixel;
+    return BrushTool::mouse_drag(p, rel, button, modifiers);
+}
 
-            HDRImage &new_image_ref = *new_image;
+void CloneStampTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = m_name;
+    w->add_shortcut(section_name, HelpWindow::ALT + "+Click", "Select source location");
+    w->add_shortcut(section_name, " ", "All brush tool shortcuts");
+}
 
-            auto src_color = [&new_image_ref, &dpixel](int dst_x, int dst_y)
-            {
-                int x = dst_x + dpixel.x();
-                int y = dst_y + dpixel.y();
-
-                if (x >= 0 && y >= 0 && x < new_image_ref.width() && y < new_image_ref.height())
-                    return new_image_ref(x, y);
-                else
-                    return Color4(0.f);
-            };
-
-            draw_line(prev_pixel.x(), prev_pixel.y(), pixel.x(), pixel.y(),
-                      [this, &new_image_ref, &src_color, &roi](int x, int y)
-                      { m_brush->stamp_onto(new_image_ref, x, y, src_color, roi); });
-        });
-    m_screen->update_caption();
-    return true;
+bool CloneStampTool::keyboard(int key, int scancode, int action, int modifiers)
+{
+    m_modifier_down = (modifiers & GLFW_MOD_ALT) && !(action == GLFW_RELEASE);
+    return BrushTool::keyboard(key, scancode, action, modifiers);
 }
 
 void CloneStampTool::draw(NVGcontext *ctx) const
@@ -1012,31 +1112,29 @@ void CloneStampTool::draw(NVGcontext *ctx) const
     if (!m_images_panel->current_image())
         return;
 
-    if (m_has_dst && m_has_src)
+    Vector2i cur_pixel = m_image_view->pixel_at_position(m_screen->mouse_pos() - m_image_view->position());
+
+    if (m_has_src && !m_has_dst)
     {
-        auto center = m_screen->mouse_pos() - m_image_view->absolute_position() - m_dst_click + m_src_click;
-
-        nvgSave(ctx);
-        nvgTranslate(ctx, center.x(), center.y());
-        nvgRotate(ctx, 2 * M_PI * m_brush->angle() / 360.0f);
-        nvgScale(ctx, 1.f, m_brush->roundness() / 100.f);
-
-        nvgBeginPath(ctx);
-        nvgCircle(ctx, 0, 0, m_brush->radius() * m_image_view->zoom());
-
-        nvgStrokeColor(ctx, Color(0, 255));
-        nvgStrokeWidth(ctx, 2.f);
-        nvgStroke(ctx);
-
-        nvgStrokeColor(ctx, Color(255, 255));
-        nvgStrokeWidth(ctx, 1.f);
-        nvgStroke(ctx);
-        nvgRestore(ctx);
-
+        // draw brush with crosshairs at the source clicked point
+        auto center = m_image_view->position_at_pixel(Vector2f(m_src_pixel) + 0.5f);
+        draw_brush(ctx, center);
         draw_crosshairs(ctx, center);
     }
-    else
-        BrushTool::draw(ctx);
+    else if (m_has_dst && m_has_src)
+    {
+        // draw brush with crosshairs at the source clicked point, offset by current drag amount
+        auto center = m_image_view->position_at_pixel(Vector2f(cur_pixel - m_dst_pixel + m_src_pixel) + 0.5f);
+        draw_brush(ctx, center);
+        draw_crosshairs(ctx, center);
+    }
+
+    // draw brush and crosshairs centered at current mouse position
+    draw_brush(ctx, m_image_view->position_at_pixel(Vector2f(cur_pixel) + 0.5f));
+    if (m_modifier_down)
+        draw_crosshairs(ctx, m_image_view->position_at_pixel(Vector2f(cur_pixel) + 0.5f));
+
+    Tool::draw(ctx);
 }
 
 Eyedropper::Eyedropper(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -1087,7 +1185,7 @@ bool Eyedropper::mouse_button(const Vector2i &p, int button, bool down, int modi
         for (int dx = -m_size; dx <= m_size; ++dx)
             for (int dy = -m_size; dy <= m_size; ++dy)
             {
-                Vector2i pixel(m_image_view->image_coordinate_at((p - m_image_view->position())));
+                Vector2i pixel(m_image_view->pixel_at_position((p - m_image_view->position())));
                 pixel += Vector2i(dx, dy);
                 if (image.contains(pixel.x(), pixel.y()))
                 {
@@ -1122,7 +1220,7 @@ void Eyedropper::draw(NVGcontext *ctx) const
 
     auto center = m_screen->mouse_pos() - m_image_view->absolute_position();
 
-    Vector2i        center_pixel(m_image_view->image_coordinate_at((center)));
+    Vector2i        center_pixel(m_image_view->pixel_at_position((center)));
     const HDRImage &image = img->image();
 
     if (image.contains(center.x(), center.y()))
@@ -1205,13 +1303,13 @@ bool Ruler::mouse_button(const Vector2i &p, int button, bool down, int modifiers
 
     if (down)
     {
-        m_start_pixel   = m_image_view->image_coordinate_at(p - m_image_view->position());
+        m_start_pixel   = m_image_view->pixel_at_position(p - m_image_view->position());
         m_end_pixel.x() = std::numeric_limits<int>::lowest();
         return true;
     }
     else if (is_valid(m_start_pixel))
     {
-        m_end_pixel = m_image_view->image_coordinate_at(p - m_image_view->position());
+        m_end_pixel = m_image_view->pixel_at_position(p - m_image_view->position());
         if (modifiers & GLFW_MOD_SHIFT)
         {
             auto to           = m_end_pixel - m_start_pixel;
@@ -1235,10 +1333,10 @@ void Ruler::draw(NVGcontext *ctx) const
     if (!img)
         return;
 
-    Vector2i start_pos(m_image_view->position_for_coordinate(Vector2f(m_start_pixel) + 0.5f));
+    Vector2i start_pos(m_image_view->position_at_pixel(Vector2f(m_start_pixel) + 0.5f));
     if (is_valid(m_end_pixel))
     {
-        Vector2i end_pos(m_image_view->position_for_coordinate(Vector2f(m_end_pixel) + 0.5f));
+        Vector2i end_pos(m_image_view->position_at_pixel(Vector2f(m_end_pixel) + 0.5f));
         nvgBeginPath(ctx);
         nvgMoveTo(ctx, start_pos.x(), start_pos.y());
         nvgLineTo(ctx, end_pos.x(), end_pos.y());
@@ -1316,8 +1414,17 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
     return m_options;
 }
 
+void LineTool::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = m_name;
+    w->add_shortcut(section_name, "[ / ]", "Decreasing/Increase line width");
+}
+
 bool LineTool::keyboard(int key, int scancode, int action, int modifiers)
 {
+    if (action == GLFW_RELEASE)
+        return false;
+
     switch (key)
     {
     case '[':
@@ -1374,8 +1481,8 @@ bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifi
                     (*new_image)(x, y) = c * (1.0f - alpha) + (*new_image)(x, y) * alpha;
                 };
 
-                draw_line(m_start_pixel.x(), m_start_pixel.y(), m_end_pixel.x(), m_end_pixel.y(), (float)m_width,
-                          put_pixel);
+                ::draw_line(m_start_pixel.x(), m_start_pixel.y(), m_end_pixel.x(), m_end_pixel.y(), (float)m_width,
+                            put_pixel);
 
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });
@@ -1403,14 +1510,14 @@ void LineTool::draw(NVGcontext *ctx) const
         if (!img)
             return;
 
-        Vector2i start_pos(m_image_view->position_for_coordinate(Vector2f(m_start_pixel) + 0.5f));
+        Vector2i start_pos(m_image_view->position_at_pixel(Vector2f(m_start_pixel) + 0.5f));
         if (is_valid(m_end_pixel))
         {
             auto color = m_screen->foreground()->exposed_color();
 
             // draw a rectangle for the line (just drawing an nvgLine only works up to a max stroke width)
             nvgSave(ctx);
-            Vector2i end_pos(m_image_view->position_for_coordinate(Vector2f(m_end_pixel) + 0.5f));
+            Vector2i end_pos(m_image_view->position_at_pixel(Vector2f(m_end_pixel) + 0.5f));
             Vector2f to = end_pos - start_pos;
             Vector2f u  = normalize(to);
             Vector2f v(u.y(), -u.x());

@@ -98,6 +98,9 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
 
 bool Dropdown::scroll_event(const Vector2i &p, const Vector2f &rel)
 {
+    if (!enabled())
+        return false;
+
     float speed = 0.1f;
     set_pushed(false);
     m_popup->set_visible(false);

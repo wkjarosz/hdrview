@@ -15,126 +15,151 @@
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
+#include <nanogui/tabwidget.h>
 #include <nanogui/window.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
 
+namespace
+{
+constexpr int fwidth = 450;
+}
+
 NAMESPACE_BEGIN(nanogui)
 
 #ifdef __APPLE__
-string HelpWindow::COMMAND = "Cmd";
+const string HelpWindow::COMMAND = "Cmd";
 #else
-string HelpWindow::COMMAND = "Ctrl";
+const string HelpWindow::COMMAND = "Ctrl";
 #endif
 
 #ifdef __APPLE__
-string HelpWindow::ALT = "Opt";
+const string HelpWindow::ALT = "Opt";
 #else
-string HelpWindow::ALT     = "Alt";
+const string HelpWindow::ALT     = "Alt";
 #endif
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
-    set_layout(new GroupLayout());
+    set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 0));
 
-    auto add_row = [](Widget *current, string keys, string desc)
+    auto add_text = [](Widget *current, string text, string font = "sans", int fontSize = 18)
+    {
+        auto row = new Widget{current};
+        row->set_layout(new BoxLayout{Orientation::Vertical, Alignment::Middle, 0, 10});
+        auto l = new Label{row, text, font, fontSize};
+        return l;
+    };
+    auto add_spacer = [](Widget *current, int space)
+    {
+        auto row = new Widget{current};
+        row->set_height(space);
+    };
+    auto add_library = [](Widget *current, string name, string desc)
     {
         auto row = new Widget(current);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
-        (new Label(row, desc, "sans", 14))->set_fixed_width(185);
-        new Label(row, keys, "sans-bold", 14);
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 3, 20));
+        auto left_column = new Widget(row);
+        left_column->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Maximum));
+        left_column->set_fixed_width(135);
+
+        new Label(left_column, name, "sans-bold", 14);
+        new Label(row, desc, "sans", 14);
     };
 
-    new Label(this, "About", "sans-bold", 18);
+    add_text(this, "HDRView", "sans-bold", 46);
+    add_text(this, fmt::format("version {}", hdrview_git_version()), "sans-bold", 26);
+    add_spacer(this, 5);
+    add_text(this,
+             fmt::format("This executable was built on {} from git branch {} {} and uses the {} backend.",
+                         hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(), HDRVIEW_BACKEND),
+             "sans", 12);
 
-    auto copyright_widget = new Widget(this);
-    copyright_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+    add_spacer(this, 15);
 
-    string about = fmt::format("HDRView {}. Copyright (c) Wojciech Jarosz\n\n"
-                               "(built on {} from git branch {} {} using {} backend)\n\n"
-                               "HDRView is a simple research-oriented tool for examining, "
-                               "comparing, manipulating, and converting high-dynamic range images.\n\n"
-                               "HDRView is freely available under a 3-clause BSD license.\n\n",
-                               hdrview_git_version(), hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(),
-                               HDRVIEW_BACKEND);
-    (new Label(copyright_widget, about))->set_fixed_width(715);
+    add_text(this,
+             "HDRView is a simple research-oriented tool for examining, "
+             "comparing, manipulating, and converting high-dynamic range images.\n\n",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
 
-    new Label(this, "Keybindings", "sans-bold", 18);
+    auto tab_widget = new TabWidget(this);
+    tab_widget->set_tabs_draggable(true);
+    // adding a callback seems to be required for the tabwidget to actually update the visibility
+    tab_widget->set_callback([](int) { return; });
 
-    auto key_bindings_widget = new Well(this);
-    key_bindings_widget->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 10, 0));
+    Widget *tab;
 
-    auto new_column = [key_bindings_widget]()
-    {
-        auto w = new Widget(key_bindings_widget);
-        w->set_layout(new GroupLayout(0));
-        w->set_fixed_width(350);
-        return w;
-    };
+    tab = new Widget(tab_widget);
+    tab->set_fixed_height(300);
+    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+    tab_widget->append_tab("Keybindings", tab);
 
-    auto column = new_column();
+    auto side_scroll_panel = new VScrollPanel(tab);
+    side_scroll_panel->set_fixed_height(300);
+    m_key_bindings = new Widget(side_scroll_panel);
+    m_key_bindings->set_layout(new GroupLayout(20, 6));
 
-    new Label(column, "Images and Layer List", "sans-bold", 16);
-    auto image_loading = new Widget(column);
-    image_loading->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+    tab = new Widget(tab_widget);
+    tab->set_fixed_height(300);
+    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+    tab_widget->append_tab("Credits", tab);
+    side_scroll_panel = new VScrollPanel(tab);
+    side_scroll_panel->set_fixed_height(300);
+    auto credits = new Widget(side_scroll_panel);
+    credits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 20, 4));
 
-    add_row(image_loading, COMMAND + "+O", "Open Image");
-    add_row(image_loading, COMMAND + "+S", "Save Image");
-    add_row(image_loading, COMMAND + "+W or Delete", "Close Image");
-    add_row(image_loading, COMMAND + "+Shift+W", "Close All Images");
-    add_row(image_loading, "Left Click", "Select Image");
-    add_row(image_loading, "Shift+Left Click", "Select/Deselect Reference Image");
-    add_row(image_loading, "1…9", "Select the N-th Image");
-    add_row(image_loading, "Down / Up", "Select Previous/Next Image");
-    add_row(image_loading, COMMAND + "+Down / " + COMMAND + "+Up", "Send Image Forward/Backward");
-    add_row(image_loading, ALT + "+Tab", "Jump Back To Previously Selected Image");
-    add_row(image_loading, COMMAND + "+F", "Find Image");
+    add_text(credits,
+             "HDRView is developed by Wojciech Jarosz and is freely available under a 3-clause BSD license.\n\n"
+             "It additionally makes use of the following techniques and external libraries:\n\n",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
 
-    new Label(column, "Display/Tonemapping Options", "sans-bold", 16);
-    auto image_selection = new Widget(column);
-    image_selection->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(image_selection, "E / Shift+E", "Decrease/Increase Exposure");
-    add_row(image_selection, "G / Shift+G", "Decrease/Increase Gamma");
-    add_row(image_selection, "R", "Reset tonemapping");
-    add_row(image_selection, "N", "Normalize Image to [0,1]");
-    add_row(image_selection, COMMAND + "+1…7", "Cycle through Color Channels");
-    add_row(image_selection, "Shift+1…8", "Cycle through Blend Modes");
-
-    column = new_column();
-
-    new Label(column, "Image Edits", "sans-bold", 16);
-    auto edits = new Widget(column);
-    edits->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(edits, COMMAND + "+Z / " + COMMAND + "+Shift+Z", "Undo/Redo");
-    add_row(edits, COMMAND + "+C / " + COMMAND + "+V", "Copy/Paste");
-
-    new Label(column, "Panning/Zooming/Selecting", "sans-bold", 16);
-    auto panning_zooming = new Widget(column);
-    panning_zooming->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(panning_zooming, "Space", "Switch mouse to pan/zoom mode");
-    add_row(panning_zooming, "Left Click+Drag / Shift+Scroll", "Pan image");
-    add_row(panning_zooming, "Scroll", "Zoom In and Out Continuously");
-    add_row(panning_zooming, "- / +", "Zoom In and Out by Powers of 2");
-    add_row(panning_zooming, COMMAND + "+0", "Fit Image to Screen");
-    add_row(panning_zooming, "M", "Switch mouse to selection mode");
-    add_row(panning_zooming, COMMAND + "+A", "Select entire image");
-    add_row(panning_zooming, COMMAND + "+D", "Deselect");
-
-    new Label(column, "Interface", "sans-bold", 16);
-    auto interface = new Widget(column);
-    interface->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
-
-    add_row(interface, "H", "Show/Hide Help (this Window)");
-    add_row(interface, "T", "Show/Hide the Top Toolbar");
-    add_row(interface, "Tab", "Show/Hide the Side Panel");
-    add_row(interface, "Shift+Tab", "Show/Hide All Panels");
-    add_row(interface, COMMAND + "+Q or Esc", "Quit");
+    add_library(credits, "NanoGUI", "Widget library for OpenGL/Metal");
+    add_library(credits, "NanoVG", "Vector graphics in OpenGL/Metal");
+    add_library(credits, "GLFW", "Multi-platform OpenGL/windowing library on the desktop");
+    add_library(credits, "OpenEXR", "High Dynamic-Range (HDR) image file format");
+    add_library(credits, "stb_image/write/resize", "Single-Header libraries for loading/writing/resizing images");
+    add_library(credits, "docopt", "For creating command-line interfaces from help messages");
+    add_library(credits, "spdlog", "Fast C++ logging library");
+    add_library(credits, "fmt", "A modern formatting library");
+    add_library(credits, "PlatformFolders", "Cross-platform library to find special directories");
+    add_library(credits, "filesystem", "Lightweight path manipulation library");
+    add_library(credits, "tinydir", "Lightweight and portable aC directory and file reader");
+    add_library(credits, "tinydngloader", "Header-only tiny DNG/TIFF loader in C++");
+    add_library(credits, "json", "JSON for Modern C++");
+    add_library(credits, "alphanum", "Natural alpha-numeric sorting");
+    add_library(credits, "Yuksel splines", "Cem Yuksel's hybrid C^2 splines for smooth mouse strokes");
+    add_library(credits, "tev", "Some code is adapted from Thomas Müller's tev");
 
     center();
 }
+
+bool HelpWindow::add_section(const std::string &desc)
+{
+    if (m_sections.count(desc))
+        return false;
+
+    new Label(m_key_bindings, desc, "sans-bold", 16);
+    auto w = new Widget(m_key_bindings);
+    w->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
+    w->set_fixed_width(fwidth);
+    m_sections[desc] = w;
+    return true;
+}
+
+void HelpWindow::add_shortcut(const string &section, const string &keys, const string &desc)
+{
+    if (m_sections.count(section) == 0)
+        add_section(section);
+
+    auto w = m_sections[section];
+
+    auto row = new Widget(w);
+    row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+    (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
+    new Label(row, keys, "sans-bold", 14);
+};
 
 NAMESPACE_END(nanogui)

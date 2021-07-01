@@ -242,7 +242,6 @@ void PopupMenu::Item::draw(NVGcontext *ctx)
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     nvgFontSize(ctx, font_size);
     nvgFontFace(ctx, "sans-bold");
-    float tw = nvgTextBounds(ctx, 0, 0, m_caption.c_str(), nullptr, nullptr);
 
     Vector2f center = Vector2f(m_pos) + Vector2f(m_size) * 0.5f;
     Vector2f text_pos(6, center.y() - 1);

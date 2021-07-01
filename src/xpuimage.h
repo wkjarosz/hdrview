@@ -16,7 +16,6 @@
 #include <iosfwd>     // for string
 #include <memory>
 #include <nanogui/texture.h>
-#include <type_traits> // for swap
 #include <utility>
 #include <vector> // for vector, allocator
 

@@ -171,7 +171,7 @@ void HDRImage::load_dng(const string &filename)
     //               end_x-start_x,
     //               end_y-start_y).eval();
     HDRImage copy(end_x - start_x, end_y - start_y);
-    copy.copy_subimage(*this, Box2i(Vector2i(start_x, start_y), Vector2i(end_x, end_y)), 0, 0);
+    copy.copy_paste(*this, Box2i(Vector2i(start_x, start_y), Vector2i(end_x, end_y)), 0, 0);
     *this = copy;
 
     enum Orientations

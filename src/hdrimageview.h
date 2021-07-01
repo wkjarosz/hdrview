@@ -22,21 +22,23 @@ using namespace nanogui;
 class HDRImageView : public Canvas
 {
 public:
-    using TextureRef    = ref<Texture>;
-    using PixelCallback = std::function<void(const Vector2i &, char **, size_t)>;
-    using HoverCallback = std::function<void(const Vector2i &, const Color4 &, const Color4 &)>;
-    using MouseCallback = std::function<bool(const Vector2i &p, int button, bool down, int modifiers)>;
-    using DragCallback  = std::function<bool(const Vector2i &p, const Vector2i &rel, int button, int modifiers)>;
-    using FloatCallback = std::function<void(float)>;
-    using BoolCallback  = std::function<void(bool)>;
-    using VoidCallback  = std::function<void(void)>;
-    using ROICallback   = std::function<void(const Box2i &)>;
-    using DrawCallback  = std::function<void(NVGcontext *ctx)>;
+    using TextureRef     = ref<Texture>;
+    using PixelCallback  = std::function<void(const Vector2i &, char **, size_t)>;
+    using MouseCallback  = std::function<bool(const Vector2i &p, int button, bool down, int modifiers)>;
+    using DragCallback   = std::function<bool(const Vector2i &p, const Vector2i &rel, int button, int modifiers)>;
+    using MotionCallback = DragCallback;
+    using FloatCallback  = std::function<void(float)>;
+    using BoolCallback   = std::function<void(bool)>;
+    using VoidCallback   = std::function<void(void)>;
+    using ROICallback    = std::function<void(const Box2i &)>;
+    using DrawCallback   = std::function<void(NVGcontext *ctx)>;
 
     /// Initialize the widget
     HDRImageView(Widget *parent, const nlohmann::json &settings = nlohmann::json::object());
 
     void write_settings(nlohmann::json &j) const;
+
+    void add_shortcuts(HelpWindow *w);
 
     // Widget implementation
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
@@ -67,21 +69,21 @@ public:
 
     // Image transformation functions.
 
-    /// Calculates the image coordinates of the given pixel position on the widget.
-    Vector2f image_coordinate_at(const Vector2f &position) const;
+    /// Calculates the image pixel coordinates of the given position on the widget.
+    Vector2f pixel_at_position(const Vector2f &position) const;
 
-    /// Calculates the position inside the widget for the given image coordinate.
-    Vector2f position_for_coordinate(const Vector2f &imageCoordinate) const;
+    /// Calculates the position inside the widget for the given image pixel coordinate.
+    Vector2f position_at_pixel(const Vector2f &pixel) const;
 
-    /// Calculates the position inside the widget for the given image coordinate.
-    Vector2f screen_position_for_coordinate(const Vector2f &imageCoordinate) const;
+    /// Calculates the position inside the screen for the given image pixel coordinate.
+    Vector2f screen_position_at_pixel(const Vector2f &pixel) const;
 
     /**
-     * Modifies the internal state of the image viewer widget so that the pixel at the provided
-     * position on the widget has the specified image coordinate. Also clamps the values of offset
+     * Modifies the internal state of the image viewer widget so that the provided
+     * position on the widget has the specified image pixel coordinate. Also clamps the values of offset
      * to the sides of the widget.
      */
-    void set_image_coordinate_at(const Vector2f &position, const Vector2f &imageCoordinate);
+    void set_pixel_at_position(const Vector2f &position, const Vector2f &pixel);
 
     /// Centers the image without affecting the scaling factor.
     void center();
@@ -91,8 +93,8 @@ public:
 
     /**
      * Changes the scale factor by the provided amount modified by the zoom sensitivity member variable.
-     * The scaling occurs such that the image coordinate under the focused position remains in
-     * the same position before and after the scaling.
+     * The scaling occurs such that the image pixel coordinate under the focused position remains in
+     * the same screen position before and after the scaling.
      */
     void zoom_by(float amount, const Vector2f &focusPosition);
 
@@ -173,10 +175,6 @@ public:
     PixelCallback pixel_callback() const { return m_pixel_callback; }
     void          set_pixel_callback(const PixelCallback &cb) { m_pixel_callback = cb; }
 
-    /// Callback executed when the mouse hovers over pixels
-    HoverCallback hover_callback() const { return m_hover_callback; }
-    void          set_hover_callback(const HoverCallback &cb) { m_hover_callback = cb; }
-
     /// Callback executed on mouse clicks
     MouseCallback mouse_callback() const { return m_mouse_callback; }
     void          set_mouse_callback(const MouseCallback &cb) { m_mouse_callback = cb; }
@@ -184,6 +182,10 @@ public:
     /// Callback executed on mouse clicks
     DragCallback drag_callback() const { return m_drag_callback; }
     void         set_drag_callback(const DragCallback &cb) { m_drag_callback = cb; }
+
+    /// Callback executed when the mouse moves over the widget
+    MotionCallback motion_callback() const { return m_motion_callback; }
+    void           set_motion_callback(const MotionCallback &cb) { m_motion_callback = cb; }
 
     /// Callback executed when we change which image is displayed
     VoidCallback changed_callback() const { return m_changed_callback; }
@@ -237,16 +239,16 @@ protected:
     float m_pixel_info_threshold = -1;
 
     // various callback functions
-    FloatCallback m_exposure_callback;
-    FloatCallback m_gamma_callback;
-    BoolCallback  m_sRGB_callback;
-    FloatCallback m_zoom_callback;
-    PixelCallback m_pixel_callback;
-    HoverCallback m_hover_callback;
-    MouseCallback m_mouse_callback;
-    DragCallback  m_drag_callback;
-    VoidCallback  m_changed_callback;
-    DrawCallback  m_draw_callback;
+    FloatCallback  m_exposure_callback;
+    FloatCallback  m_gamma_callback;
+    BoolCallback   m_sRGB_callback;
+    FloatCallback  m_zoom_callback;
+    PixelCallback  m_pixel_callback;
+    MouseCallback  m_mouse_callback;
+    DragCallback   m_drag_callback;
+    MotionCallback m_motion_callback;
+    VoidCallback   m_changed_callback;
+    DrawCallback   m_draw_callback;
 
     Vector2i m_clicked;
 };

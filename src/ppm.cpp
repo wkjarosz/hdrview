@@ -38,12 +38,13 @@ bool is_ppm_image(const char *filename)
         if (!infile)
             throw std::runtime_error("cannot open file.");
 
-        if ((fgets(buffer, 256, infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
+        if ((fgets(buffer, sizeof(buffer), infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
             throw std::runtime_error("image is not a binary PPM file.");
 
         // skip comments
         do {
-            fgets(buffer, sizeof(buffer), infile);
+            if (fgets(buffer, sizeof(buffer), infile) == nullptr)
+                throw std::runtime_error("image is not a valid PPM file: read error while parsing comment line.");
         } while (buffer[0] == '#');
 
         // read image size
@@ -54,7 +55,8 @@ bool is_ppm_image(const char *filename)
 
         // skip comments
         do {
-            fgets(buffer, sizeof(buffer), infile);
+            if (fgets(buffer, sizeof(buffer), infile) == nullptr)
+                throw std::runtime_error("image is not a valid PPM file: read error while parsing comment line.");
         } while (buffer[0] == '#');
 
         // read maximum pixel value (usually 255)
@@ -94,14 +96,15 @@ float *load_ppm_image(const char *filename, int *width, int *height, int *numCha
         if (!infile)
             throw std::runtime_error("cannot open file.");
 
-        if ((fgets(buffer, 256, infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
+        if ((fgets(buffer, sizeof(buffer), infile) == nullptr) || (buffer[0] != 'P') || (buffer[1] != '6'))
             throw std::runtime_error("image is not a binary PPM file.");
 
         *numChannels = 3;
 
         // skip comments
         do {
-            fgets(buffer, sizeof(buffer), infile);
+            if (fgets(buffer, sizeof(buffer), infile) == nullptr)
+                throw std::runtime_error("image is not a valid PPM file: read error while parsing comment line.");
         } while (buffer[0] == '#');
 
         // read image size
@@ -111,7 +114,8 @@ float *load_ppm_image(const char *filename, int *width, int *height, int *numCha
 
         // skip comments
         do {
-            fgets(buffer, sizeof(buffer), infile);
+            if (fgets(buffer, sizeof(buffer), infile) == nullptr)
+                throw std::runtime_error("image is not a valid PPM file: read error while parsing comment line.");
         } while (buffer[0] == '#');
 
         // read maximum pixel value (usually 255)

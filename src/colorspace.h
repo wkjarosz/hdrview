@@ -14,7 +14,7 @@
  * @brief		Generic color space conversion
  *
  * Converts from a source color space \a src to a destination color space \a dst,
- * each specified using the \a EColorSpace enumeriation
+ * each specified using the \a EColorSpace enumeration
  *
  * @param[in] dst 	Destination color space
  * @param[out] a 	First component of the destination color
@@ -25,9 +25,9 @@
  * @param[in] B  	Second component of the source color
  * @param[in] C  	Third component of the source color
  */
-void   convertColorSpace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
-Color3 convertColorSpace(const Color3 &c, EColorSpace dst, EColorSpace src);
-Color4 convertColorSpace(const Color4 &c, EColorSpace dst, EColorSpace src);
+void   convert_colorspace(EColorSpace dst, float *a, float *b, float *c, EColorSpace src, float A, float B, float C);
+Color3 convert_colorspace(const Color3 &c, EColorSpace dst, EColorSpace src);
+Color4 convert_colorspace(const Color4 &c, EColorSpace dst, EColorSpace src);
 
 // to/from linear to sRGB and AdobeRGB
 float  SRGBToLinear(float a);
@@ -50,6 +50,8 @@ Color4 LinearToAdobeRGB(const Color4 &c);
 // to and from XYZ
 void XYZToLinearSRGB(float *R, float *G, float *B, float X, float Y, float z);
 void LinearSRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
+void XYZToLinearSGray(float *R, float *G, float *B, float X, float Y, float z);
+void LinearSGrayToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
 void XYZToLinearAdobeRGB(float *R, float *G, float *B, float X, float Y, float z);
 void LinearAdobeRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
 void XYZToLab(float *L, float *a, float *b, float X, float Y, float Z);

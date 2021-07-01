@@ -154,7 +154,7 @@ int main(int argc, char **argv)
     float gamma, exposure, relativeWidth = 100.f, relativeHeight = 100.f, noiseMean = 0, noiseVar = 0;
     bool dither = true, sRGB = true, dryRun = true, fixNaNs = false, resize = false, remap = false, relativeSize = true,
          saveFiles = false, makeNoise = false, invert = false;
-    HDRImage::BorderMode border_mode_x, border_mode_y;
+    HDRImage::BorderMode border_mode_x = HDRImage::BLACK, border_mode_y = HDRImage::BLACK;
     Color3               nanColor(0.0f, 0.0f, 0.0f);
     // by default use a no-op passthrough warp function
     function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };

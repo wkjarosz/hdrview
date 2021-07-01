@@ -9,7 +9,6 @@
 #include "fwd.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
-#include "tool.h"
 #include <nanogui/nanogui.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>
@@ -39,8 +38,8 @@ public:
     bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
-    Tool::ETool tool() const { return m_tool; }
-    void        set_tool(Tool::ETool t);
+    ETool tool() const { return m_tool; }
+    void  set_tool(ETool t);
 
     const HDRColorPicker *active_colorpicker() const { return m_active_colorpicker; }
     void                  set_active_colorpicker(HDRColorPicker *cp);
@@ -67,14 +66,15 @@ public:
     void update_caption();
 
 private:
-    void draw_widgets();
-    void bring_to_focus() const;
-    void show_help_window();
-    void update_layout();
-    bool at_side_panel_edge(const Vector2i &p);
-    bool at_tool_panel_edge(const Vector2i &p);
-    void resize_side_panel(int w);
-    void resize_tool_panel(int w);
+    void    draw_widgets();
+    void    bring_to_focus() const;
+    void    show_help_window();
+    void    update_layout();
+    bool    at_side_panel_edge(const Vector2i &p);
+    bool    at_tool_panel_edge(const Vector2i &p);
+    void    resize_side_panel(int w);
+    void    resize_tool_panel(int w);
+    Dialog *active_dialog() const;
 
     Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView *  m_image_view;
@@ -108,7 +108,7 @@ private:
         BOTTOM_PANEL = 1 << 2,
     } m_animation_goal = EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL);
 
-    Tool::ETool         m_tool = Tool::Tool_None;
+    ETool               m_tool = Tool_None;
     std::vector<Tool *> m_tools;
     HDRColorPicker *    m_active_colorpicker = nullptr;
 

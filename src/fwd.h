@@ -27,11 +27,29 @@ class EditImagePanel;
 class ImageListPanel;
 class Timer;
 
-class Brush;
 class Tool;
+class Brush;
 class RectangularMarquee;
 class HandTool;
 class BrushTool;
+class EraserTool;
+class CloneStampTool;
+class Eyedropper;
+class Ruler;
+class LineTool;
+
+enum ETool : uint32_t
+{
+    Tool_None = 0,
+    Tool_Rectangular_Marquee,
+    Tool_Brush,
+    Tool_Eraser,
+    Tool_Clone_Stamp,
+    Tool_Eyedropper,
+    Tool_Ruler,
+    Tool_Line,
+    Tool_Num_Tools
+};
 
 template <typename T>
 class Range;
@@ -75,6 +93,7 @@ using Box2i = Box<nanogui::Vector2i>;
 enum EColorSpace : int
 {
     LinearSRGB_CS = 0,
+    LinearSGray_CS,
     LinearAdobeRGB_CS,
     CIEXYZ_CS,
     CIELab_CS,
@@ -92,6 +111,7 @@ enum EChannel : int
     BLUE,
     ALPHA,
     LUMINANCE,
+    GRAY,
     CIE_L,
     CIE_a,
     CIE_b,

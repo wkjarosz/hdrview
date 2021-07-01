@@ -5,14 +5,18 @@
 //
 
 #include "common.h"
+#include "filesystem/path.h"
 #include "hdrviewscreen.h"
 #include <cstdlib>
 #include <docopt.h>
+#include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
+using json = nlohmann::json;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
@@ -37,7 +41,7 @@ Options:
   -v T, --verbose=T        Set verbosity threshold with lower values meaning
                            more verbose and higher values removing low-priority
                            messages.
-                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6) [default: 0].
+                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6).
                            All messages with severity >= T are displayed, where
                            the severities are:
                                 trace    = 0
@@ -47,11 +51,35 @@ Options:
                                 err      = 4
                                 critical = 5
                                 off      = 6
+                           The default is 2 (info).
   -h, --help               Display this message.
   --version                Show the version.
 )";
 
 HDRViewScreen *g_screen = nullptr;
+
+json read_settings()
+{
+    try
+    {
+        string directory = config_directory();
+        ::filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
+        spdlog::info("Reading configuration from file {}", filename);
+
+        std::ifstream stream(filename);
+        if (!stream.good())
+            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
+
+        json settings;
+        stream >> settings;
+        return settings;
+    }
+    catch (const exception &e)
+    {
+        return json::object();
+    }
+}
 
 void write_settings()
 {
@@ -65,9 +93,11 @@ int main(int argc, char **argv)
 {
     vector<string>             arg_vector = {argv + 1, argv + argc};
     map<string, docopt::value> docargs;
-    int                        verbosity = 0;
-    float                      gamma     = 2.2f, exposure;
-    bool                       dither = true, sRGB = true;
+    constexpr int              default_verbosity = spdlog::level::info;
+    int                        verbosity         = default_verbosity;
+
+    float gamma  = 2.2f, exposure;
+    bool  dither = true, sRGB = true;
 
     vector<string> inFiles;
 
@@ -94,16 +124,20 @@ int main(int argc, char **argv)
                                  true,            // show help if requested
                                  version_string); // version string
 
-        verbosity = docargs["--verbose"].asLong();
-
         // Console logger with color
         spdlog::set_pattern("%^[%l]%$ %v");
-        spdlog::set_level(spdlog::level::level_enum(2));
+        spdlog::set_level(spdlog::level::level_enum(default_verbosity));
+
+        auto settings = read_settings();
+        if (docargs["--verbose"])
+            verbosity = docargs["--verbose"].asLong();
+        else
+            verbosity = settings.value("verbosity", default_verbosity);
 
         if (verbosity < spdlog::level::trace || verbosity > spdlog::level::off)
         {
-            spdlog::error("Invalid verbosity threshold. Setting to default \"2\"");
-            verbosity = 2;
+            verbosity = default_verbosity;
+            spdlog::error("Invalid verbosity threshold. Setting to default \"{}\"", verbosity);
         }
 
         spdlog::set_level(spdlog::level::level_enum(verbosity));
