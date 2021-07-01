@@ -648,12 +648,10 @@ HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mX, Bo
                  {
                      for (int y = roi.min.y(); y < roi.max.y(); y++)
                      {
-                         result(x, y) =
-                             pixel(x - 1, y, mX, mY) + pixel(x + 1, y, mX, mY) + pixel(x, y - 1, mX, mY) +
-                             pixel(x, y + 1, mX, mY) +
-                             // pixel(x - 1, y - 1, mX, mY) +
-                             // pixel(x + 1, y + 1, mX, mY) + pixel(x + 1, y - 1, mX, mY) + pixel(x - 1, y + 1, mX, mY)
-                             -4 * pixel(x, y, mX, mY);
+                         result(x, y) = pixel(x - 1, y, mX, mY) + pixel(x + 1, y, mX, mY) + pixel(x, y - 1, mX, mY) +
+                                        pixel(x, y + 1, mX, mY) + pixel(x - 1, y - 1, mX, mY) +
+                                        pixel(x + 1, y + 1, mX, mY) + pixel(x + 1, y - 1, mX, mY) +
+                                        pixel(x - 1, y + 1, mX, mY) - 8 * pixel(x, y, mX, mY);
                          result(x, y).a = pixel(x, y, mX, mY).a;
                      }
                      ++progress;

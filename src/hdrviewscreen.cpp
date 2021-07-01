@@ -948,7 +948,9 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C / " + HelpWindow::COMMAND + "+V", "Copy/Paste");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
+                    "Paste/Seamless paste");
     w->add_shortcut(section_name, "D", "Default foreground/background colors");
     w->add_shortcut(section_name, "X", "Swap foreground/background colors");
 
