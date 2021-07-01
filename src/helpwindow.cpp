@@ -91,7 +91,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 
     Widget *tab;
 
-    tab = new Well(tab_widget);
+    tab = new Widget(tab_widget);
     tab->set_fixed_height(300);
     tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
     tab_widget->append_tab("Keybindings", tab);
@@ -99,9 +99,9 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     auto side_scroll_panel = new VScrollPanel(tab);
     side_scroll_panel->set_fixed_height(300);
     m_key_bindings = new Widget(side_scroll_panel);
-    m_key_bindings->set_layout(new GroupLayout(10, 6));
+    m_key_bindings->set_layout(new GroupLayout(20, 6));
 
-    tab = new Well(tab_widget);
+    tab = new Widget(tab_widget);
     tab->set_fixed_height(300);
     tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
     tab_widget->append_tab("Credits", tab);
@@ -131,6 +131,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_library(credits, "json", "JSON for Modern C++");
     add_library(credits, "alphanum", "Natural alpha-numeric sorting");
     add_library(credits, "Yuksel splines", "Cem Yuksel's hybrid C^2 splines for smooth mouse strokes");
+    add_library(credits, "tev", "Some code is adapted from Thomas Müller's tev");
 
     center();
 }
