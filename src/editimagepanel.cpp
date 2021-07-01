@@ -129,14 +129,17 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     button_row = new Widget(this);
     button_row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
 
+    m_filter_btns.push_back(new Button(button_row, "Cut", FA_CUT));
+    m_filter_btns.back()->set_callback([this]() { cut(); });
+
     m_filter_btns.push_back(new Button(button_row, "Copy", FA_COPY));
     m_filter_btns.back()->set_callback([this]() { copy(); });
 
+    button_row = new Widget(this);
+    button_row->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, spacing));
+
     m_filter_btns.push_back(new Button(button_row, "Paste", FA_PASTE));
     m_filter_btns.back()->set_callback([this]() { paste(); });
-
-    button_row = new Widget(this);
-    button_row->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, spacing));
 
     m_filter_btns.push_back(new Button(button_row, "Seamless paste", FA_PASTE));
     m_filter_btns.back()->set_callback([this]() { seamless_paste(); });
