@@ -1076,6 +1076,20 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
         break;
 
+    case 'D':
+        spdlog::trace("Key `D` pressed");
+        m_color_btns->foreground()->set_color(Color(0, 255));
+        m_color_btns->background()->set_color(Color(255, 255));
+        return true;
+
+    case 'X':
+        spdlog::trace("Key `X` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+            m_edit_panel->cut();
+        else
+            m_color_btns->swap_colors();
+        return true;
+
     case 'C':
         spdlog::trace("Key `C` pressed");
         if (modifiers & SYSTEM_COMMAND_MOD)
@@ -1098,17 +1112,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
         }
         break;
-
-    case 'D':
-        spdlog::trace("Key `D` pressed");
-        m_color_btns->foreground()->set_color(Color(0, 255));
-        m_color_btns->background()->set_color(Color(255, 255));
-        return true;
-
-    case 'X':
-        spdlog::trace("Key `X` pressed");
-        m_color_btns->swap_colors();
-        return true;
 
     case 'T':
         spdlog::trace("KEY `T` pressed");

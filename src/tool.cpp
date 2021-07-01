@@ -1039,7 +1039,8 @@ EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
 
 void EraserTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
 {
-    (*img)(x, y).a = 0.f * a + (*img)(x, y).a * (1.0f - a);
+    float c        = modifiers & GLFW_MOD_ALT ? 1.f : 0.f;
+    (*img)(x, y).a = c * a + (*img)(x, y).a * (1.0f - a);
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,

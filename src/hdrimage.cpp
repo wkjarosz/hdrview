@@ -50,44 +50,11 @@ inline void clip_roi(Box2i &roi, const HDRImage &img)
         roi = img.box();
 }
 
-void zero_boundary(HDRImage &img)
-{
-    // top & bottom
-    for (int i = 0; i < img.width(); ++i)
-    {
-        img(i, 0)                = 0.0f;
-        img(i, img.height() - 1) = 0.0f;
-    }
-
-    // left & right
-    for (int i = 0; i < img.height(); ++i)
-    {
-        img(0, i)               = 0.0f;
-        img(img.width() - 1, i) = 0.0f;
-    }
-}
-void copy_boundary(HDRImage &img, const HDRImage &src)
-{
-    // top & bottom
-    for (int i = 0; i < img.width(); ++i)
-    {
-        img(i, 0)                = src(i, 0);
-        img(i, img.height() - 1) = src(i, img.height() - 1);
-    }
-
-    // left & right
-    for (int i = 0; i < img.height(); ++i)
-    {
-        img(0, i)               = src(0, i);
-        img(img.width() - 1, i) = src(img.width() - 1, i);
-    }
-}
-
 } // namespace
 
 HDRImage::HDRImage(const HDRImage &img, const Box2i &roi) : Base(roi.size().x(), roi.size().y())
 {
-    copy_paste(img, roi);
+    copy_paste(img, roi, 0, 0, true);
 }
 
 // makes a copy of the image, applies func for each pixel in roi of the copy, and returns the result
@@ -231,18 +198,7 @@ HDRImage HDRImage::exp10ed(const Box2i &roi) const
     return apply_function([](const Color4 &c) { return pow(10.f, c); }, roi);
 }
 
-// // min non-zero pixel value of image
-// float HDRImage::min_nonzero(const Box2i & roi) const
-// {
-//     return reduce(
-//         [](const Color4 &a, const Color4 &b) {
-//             return {b.r > 0 ? min(a.r, b.r), b.g > 0 ? min(a.g, b.g), b.b > 0 ? min(a.b, b.b),
-//                     b.a > 0 ? min(a.a, b.a) };
-//         },
-//         Color4(std::numeric_limits<float>::infinity()), roi);
-// }
-
-void HDRImage::copy_paste(const HDRImage &src, Box2i roi, int dst_x, int dst_y)
+void HDRImage::copy_paste(const HDRImage &src, Box2i roi, int dst_x, int dst_y, bool raw_copy)
 {
     // ensure valid ROI
     if (roi.has_volume())
@@ -260,18 +216,32 @@ void HDRImage::copy_paste(const HDRImage &src, Box2i roi, int dst_x, int dst_y)
     roi.move_min_to(old_min);
 
     // for every pixel in the image
-    parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &src, &roi, dst_x, dst_y](int y)
-                 {
-                     for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                         (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y()) = src(x, y);
-                 });
+    if (raw_copy)
+        parallel_for(roi.min.y(), roi.max.y(),
+                     [this, &src, &roi, dst_x, dst_y](int y)
+                     {
+                         for (int x = roi.min.x(); x < roi.max.x(); ++x)
+                             (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y()) = src(x, y);
+                     });
+    else
+        parallel_for(roi.min.y(), roi.max.y(),
+                     [this, &src, &roi, dst_x, dst_y](int y)
+                     {
+                         for (int x = roi.min.x(); x < roi.max.x(); ++x)
+                         {
+                             Color4 &p         = (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y());
+                             float   alpha_src = src(x, y).a;
+                             float   alpha_bg  = p.a;
+                             p                 = src(x, y) * alpha_src + p * (1.f - alpha_src);
+                             p.a               = alpha_src + alpha_bg * (1.f - alpha_src);
+                         }
+                     });
 }
 
 void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src, Box2i padded_src_roi, int dst_x,
                                    int dst_y, bool log_domain)
 {
-    constexpr int max_iters = 500;
+    constexpr int max_iters = 300;
 
     progress.set_num_steps(max_iters + 2);
 
@@ -296,33 +266,79 @@ void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src,
     auto padded_fg = HDRImage(src, padded_src_roi);
     auto padded_bg = HDRImage(*this, padded_dst_roi);
 
+    // src.save(fmt::format("cg-{:03d}-src.exr", 0), 1.f, 2.2f, true, true);
+    // padded_fg.save(fmt::format("cg-{:03d}-fg.exr", 0), 1.f, 2.2f, true, true);
+
     Color4 fg_offset, bg_offset;
     if (log_domain)
     {
-        // // first offset to remove zeros and negative values
-        // fg_offset = padded_fg.max_neg() - 1e-6f;
-        // padded_fg -= fg_offset;
-        // bg_offset = padded_bg.max_neg() - 1e-6f;
-        // padded_bg -= bg_offset;
+        // first offset to remove zeros and negative values
+        fg_offset = padded_fg.max_neg() - 1e-6f;
+        padded_fg -= fg_offset;
+        bg_offset = padded_bg.max_neg() - 1e-6f;
+        padded_bg -= bg_offset;
 
-        // // transform to the log domain
-        // padded_fg = padded_fg.log10ed();
-        // padded_bg = padded_bg.log10ed();
-
-        padded_fg.apply_function([](const Color4 &c)
-                                 { return convert_colorspace(c, EColorSpace::CIELab_CS, EColorSpace::LinearSRGB_CS); });
-        padded_bg.apply_function([](const Color4 &c)
-                                 { return convert_colorspace(c, EColorSpace::CIELab_CS, EColorSpace::LinearSRGB_CS); });
+        // transform to the log domain
+        padded_fg = padded_fg.log10ed();
+        padded_bg = padded_bg.log10ed();
+    }
+    else
+    {
+        padded_fg.apply_function([](const Color4 &c) { return convert_colorspace(c, CIELab_CS, LinearSRGB_CS); });
+        padded_bg.apply_function([](const Color4 &c) { return convert_colorspace(c, CIELab_CS, LinearSRGB_CS); });
     }
 
-    float avg_color = (0.5f * padded_fg.mean() + 0.5f * padded_bg.mean()).average();
+    // float avg_color = (0.5f * padded_fg.mean() + 0.5f * padded_bg.mean()).average();
 
     auto padded_fg_roi = padded_fg.box();
     auto working_roi   = padded_fg_roi.expanded(-1);
 
+    // zero out the mask at the boundary
+    {
+        // top & bottom
+        parallel_for(0, padded_fg.width(),
+                     [&padded_fg](int i) { padded_fg(i, 0).a = padded_fg(i, padded_fg.height() - 1).a = 0.f; });
+
+        // left & right
+        parallel_for(0, padded_fg.height(),
+                     [&padded_fg](int i) { padded_fg(0, i).a = padded_fg(padded_fg.width() - 1, i).a = 0.f; });
+    }
+
+    //
+    // Use conjugate gradients to solve the Poisson system
+    //
+
+    auto multiply_by_mask = [](HDRImage &img, const HDRImage &mask)
+    {
+        img.apply_function(mask,
+                           [](const Color4 &c, const Color4 &m)
+                           {
+                               auto ret = c * (m.a <= 1e-5f ? 0.f : 1.f);
+                               ret.a    = c.a;
+                               return ret;
+                           });
+    };
+
+    auto copy_outside_mask = [](HDRImage &to, const HDRImage &from, const HDRImage &mask)
+    {
+        parallel_for(0, to.size(),
+                     [&to, &from, &mask](int i) { to(i) = to(i) * mask(i).a + from(i) * (1.f - mask(i).a); });
+    };
+
+    auto copy_outside_hard_mask = [](HDRImage &to, const HDRImage &from, const HDRImage &mask)
+    {
+        parallel_for(0, to.size(),
+                     [&to, &from, &mask](int i)
+                     {
+                         float a = mask(i).a <= 1e-5f ? 0.f : 1.f;
+                         to(i)   = to(i) * a + from(i) * (1.f - a);
+                     });
+    };
+
     HDRImage ti = padded_bg;
-    // ti.apply_function([&](const Color4 &c) { return Color4(0.f, 0.f, 0.f, 1.f); }, working_roi);
-    ti.copy_paste(padded_fg, working_roi, 1, 1);
+    ti.apply_function([&](const Color4 &c) { return Color4(0.f, 0.f, 0.f, 1.f); }, working_roi);
+    // ti.copy_paste(padded_fg, working_roi, 1, 1);
+    copy_outside_hard_mask(ti, padded_bg, padded_fg);
     ti.set_alpha(1.f);
 
     auto b = padded_fg.laplacian_filtered(AtomicProgress(progress, 1.f / (max_iters + 2)), HDRImage::EDGE,
@@ -331,15 +347,20 @@ void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src,
 
     auto Ati = ti.laplacian_filtered(AtomicProgress(progress, 1.f / (max_iters + 2)), HDRImage::EDGE, HDRImage::EDGE,
                                      working_roi);
-    Ati.set_alpha(1.f);
+    // Ati.set_alpha(1.f);
 
     auto di = b - Ati;
     di.set_alpha(1.f);
-    zero_boundary(di);
+    // zero_boundary(di);
+    multiply_by_mask(di, padded_fg);
 
     auto ri = di;
 
     HDRImage ATdi(padded_fg);
+
+    // padded_bg.save(fmt::format("cg-{:03d}-bg.exr", 0), 1.f, 2.2f, true, true);
+    // ti.save(fmt::format("cg-{:03d}-ti.exr", 0), 1.f, 2.2f, true, true);
+    // b.save(fmt::format("cg-{:03d}-b.exr", 0), 1.f, 2.2f, true, true);
 
     for (int iter = 1; iter < max_iters; ++iter)
     {
@@ -354,12 +375,18 @@ void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src,
         auto alpha = riTri / diTATdi;
 
         ti += alpha * di;
-        copy_boundary(ti, padded_bg);
+        copy_outside_hard_mask(ti, padded_bg, padded_fg);
+        // copy_boundary(ti, padded_bg);
         ti.set_alpha(1.f);
 
+        // ti.save(fmt::format("cg-ti-{:03d}.exr", iter), 1.f, 2.2f, true, true);
+        // ri.save(fmt::format("cg-ri-{:03d}.exr", iter), 1.f, 2.2f, true, true);
+        // di.save(fmt::format("cg-di-{:03d}.exr", iter), 1.f, 2.2f, true, true);
+        // ATdi.save(fmt::format("cg-Ati-{:03d}.exr", iter), 1.f, 2.2f, true, true);
+
         // if we've done at least 50 iterations and the squared difference is less than .1% of the average intensity
-        if (iter > 50 && fabs(alpha).average() * di.mean().average() < avg_color * 0.1f)
-            break;
+        // if (iter > 50 && fabs(alpha).average() * di.mean().average() < avg_color * 0.1f)
+        //     break;
 
         auto r2 = ri - alpha * ATdi;
 
@@ -369,19 +396,21 @@ void HDRImage::seamless_copy_paste(AtomicProgress progress, const HDRImage &src,
         ri = r2;
 
         ri.set_alpha(1.f);
-        zero_boundary(ri);
+        // zero_boundary(ri);
+        multiply_by_mask(ri, padded_fg);
 
         di.set_alpha(1.f);
-        zero_boundary(di);
+        // zero_boundary(di);
+        multiply_by_mask(di, padded_fg);
     }
+
+    ti.set_alpha(1.f);
+    copy_outside_mask(ti, padded_bg, padded_fg);
 
     if (log_domain)
-    {
-        // ti = ti.exp10ed() + fg_offset;
-
-        ti.apply_function([](const Color4 &c)
-                          { return convert_colorspace(c, EColorSpace::LinearSRGB_CS, EColorSpace::CIELab_CS); });
-    }
+        ti = ti.exp10ed() + fg_offset;
+    else
+        ti.apply_function([](const Color4 &c) { return convert_colorspace(c, LinearSRGB_CS, CIELab_CS); });
 
     copy_paste(ti, working_roi, dst_x + 1, dst_y + 1);
 

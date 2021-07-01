@@ -25,19 +25,40 @@
 
 using namespace std;
 
+void EditImagePanel::cut()
+{
+    auto img = m_images_panel->current_image();
+    if (!img)
+        return;
+
+    auto roi = img->roi();
+    if (!roi.has_volume())
+        roi = img->box();
+
+    m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+    m_clipboard->copy_paste(img->image(), roi, 0, 0, true);
+
+    m_images_panel->async_modify_current(
+        [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+        {
+            return {make_shared<HDRImage>(
+                        img->apply_function([](const Color4 &c) { return Color4(c.r, c.g, c.b, 0.f); }, xpuimg->roi())),
+                    nullptr};
+        });
+}
+
 void EditImagePanel::copy()
 {
     auto img = m_images_panel->current_image();
+    if (!img)
+        return;
 
-    if (img)
-    {
-        auto roi = img->roi();
-        if (!roi.has_volume())
-            roi = img->box();
-        m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+    auto roi = img->roi();
+    if (!roi.has_volume())
+        roi = img->box();
 
-        m_clipboard->copy_paste(img->image(), roi, 0, 0);
-    }
+    m_clipboard = make_shared<HDRImage>(roi.size().x(), roi.size().y());
+    m_clipboard->copy_paste(img->image(), roi, 0, 0, true);
 }
 
 void EditImagePanel::paste()

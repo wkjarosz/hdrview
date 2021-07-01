@@ -90,9 +90,9 @@ public:
     Color4    max(Box2i roi = Box2i()) const;
     HDRImage  log10ed(const Box2i &roi = Box2i()) const;
     HDRImage  exp10ed(const Box2i &roi = Box2i()) const;
-    void      copy_paste(const HDRImage &src, Box2i src_roi, int dst_x = 0, int dst_y = 0);
+    void      copy_paste(const HDRImage &src, Box2i src_roi, int dst_x = 0, int dst_y = 0, bool raw_copy = false);
     void seamless_copy_paste(AtomicProgress progress, const HDRImage &src, Box2i src_roi, int dst_x = 0, int dst_y = 0,
-                             bool log_domain = true);
+                             bool log_domain = false);
 
     //-----------------------------------------------------------------------
     //@{ \name Component-wise arithmetic and assignment.
