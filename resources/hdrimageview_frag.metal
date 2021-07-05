@@ -151,7 +151,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value, channel) * gain, gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.a));
+    float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.a));
     return float4(blended, 1.0);
 }
 
