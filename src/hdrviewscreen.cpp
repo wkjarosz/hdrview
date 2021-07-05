@@ -947,10 +947,6 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
-                    "Paste/Seamless paste");
     w->add_shortcut(section_name, "D", "Default foreground/background colors");
     w->add_shortcut(section_name, "X", "Swap foreground/background colors");
 
@@ -961,6 +957,7 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
 
+    m_edit_panel->add_shortcuts(w);
     m_images_panel->add_shortcuts(w);
     m_image_view->add_shortcuts(w);
 
@@ -1032,6 +1029,9 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (m_images_panel->keyboard_event(key, scancode, action, modifiers))
         return true;
 
+    if (m_edit_panel->keyboard_event(key, scancode, action, modifiers))
+        return true;
+
     if (action == GLFW_RELEASE)
         return false;
 
@@ -1084,43 +1084,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     case 'X':
         spdlog::trace("Key `X` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-            m_edit_panel->cut();
-        else
-            m_color_btns->swap_colors();
+        m_color_btns->swap_colors();
         return true;
-
-    case 'C':
-        spdlog::trace("Key `C` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->copy();
-            return true;
-        }
-        break;
-
-    case 'V':
-        spdlog::trace("Key `V` pressed");
-        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
-        {
-            m_edit_panel->seamless_paste();
-            return true;
-        }
-        else if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->paste();
-            return true;
-        }
-        break;
-
-    case GLFW_KEY_BACKSPACE:
-        spdlog::trace("Key BACKSPACE pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->fill();
-            return true;
-        }
-        break;
 
     case 'T':
         spdlog::trace("KEY `T` pressed");

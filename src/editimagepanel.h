@@ -21,8 +21,12 @@ public:
     void copy();
     void paste();
     void seamless_paste();
-    void fill();
+    void fill(const Color &c);
+    void rotate(bool clockwise);
 
+    void add_shortcuts(HelpWindow *w);
+
+    bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     void draw(NVGcontext *ctx) override;
 
 private:
