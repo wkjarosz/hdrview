@@ -107,7 +107,7 @@ float *load_pfm_image(const char *filename, int *width, int *height, int *numCha
         float scale;
         numInputsRead = fscanf(f, "%f", &scale);
         if (numInputsRead != 1)
-            throw runtime_error("load_pfm_image: Invalid file endianness. Big-Endian files not supported");
+            throw runtime_error("load_pfm_image: Invalid file endianness. Big-Endian files not currently supported");
 
         bool bigEndian = scale > 0.0f;
 

@@ -61,25 +61,27 @@ using namespace std;
 namespace
 {
 
-void copyPixelsFromArray(HDRImage &img, float *data, int w, int h, int n, bool convertToLinear)
+void copy_pixels_from_array(HDRImage &img, float *data, int w, int h, int n, bool linearize)
 {
-    if (n != 3 && n != 4)
-        throw runtime_error("Only 3- and 4-channel images are supported.");
+    if (n < 0 || n > 4)
+        throw runtime_error("Only images with up to 4 channels are currently supported.");
 
     // for every pixel in the image
     parallel_for(0, h,
-                 [&img, w, n, data, convertToLinear](int y)
+                 [&img, w, n, data, linearize](int y)
                  {
                      for (int x = 0; x < w; ++x)
                      {
-                         Color4 c(data[n * (x + y * w) + 0], data[n * (x + y * w) + 1], data[n * (x + y * w) + 2],
-                                  (n == 3) ? 1.f : data[4 * (x + y * w) + 3]);
-                         img(x, y) = convertToLinear ? SRGBToLinear(c) : c;
+                         Color4 c(0.f, 1.f);
+                         for (int ic = 0; ic < n; ++ic) c[ic] = data[n * (x + y * w) + ic];
+                         if (n == 1)
+                             c[1] = c[2] = c[0];
+                         img(x, y) = linearize ? SRGBToLinear(c) : c;
                      }
                  });
 }
 
-bool isSTBImage(const string &filename)
+bool is_stb_image(const string &filename)
 {
     FILE *f = stbi__fopen(filename.c_str(), "rb");
     if (!f)
@@ -111,7 +113,7 @@ bool HDRImage::load(const string &filename)
     int n, w, h;
 
     // try stb library first
-    if (isSTBImage(filename))
+    if (is_stb_image(filename))
     {
         // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
         // we'll do our own srgb correction
@@ -122,9 +124,9 @@ bool HDRImage::load(const string &filename)
         if (float_data)
         {
             resize(w, h);
-            bool  convertToLinear = !stbi_is_hdr(filename.c_str());
+            bool  linearize = !stbi_is_hdr(filename.c_str());
             Timer timer;
-            copyPixelsFromArray(*this, float_data, w, h, 4, convertToLinear);
+            copy_pixels_from_array(*this, float_data, w, h, 4, linearize);
             spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
             stbi_image_free(float_data);
@@ -145,20 +147,14 @@ bool HDRImage::load(const string &filename)
 
             if ((float_data = load_pfm_image(filename.c_str(), &w, &h, &n)))
             {
-                if (n == 3)
-                {
-                    resize(w, h);
+                resize(w, h);
 
-                    Timer timer;
-                    // convert 3-channel pfm data to 4-channel internal representation
-                    copyPixelsFromArray(*this, float_data, w, h, 3, false);
-                    spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+                Timer timer;
+                // convert pfm data to 4-channel internal representation
+                copy_pixels_from_array(*this, float_data, w, h, n, false);
+                spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
-                    delete[] float_data;
-                    return true;
-                }
-                else
-                    throw runtime_error("Only 3-channel PFMs are currently supported.");
+                delete[] float_data;
                 return true;
             }
             else

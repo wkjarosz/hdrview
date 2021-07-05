@@ -136,7 +136,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               constant int &channel,
                               constant float &gain,
                               constant float &gamma,
-                              constant uint &sRGB)
+                              constant bool &sRGB)
 {
     float dark_gray = 0.1;
     float light_gray = 0.2;
