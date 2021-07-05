@@ -567,17 +567,19 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_gui_refresh_thread = std::thread(
         [this]()
         {
-            std::chrono::microseconds idle_quantum = std::chrono::microseconds(1000 * 1000 / 20);
-            std::chrono::microseconds anim_quantum = std::chrono::microseconds(1000 * 1000 / 120);
+            static int                refresh_count = 0;
+            std::chrono::microseconds idle_quantum  = std::chrono::microseconds(1000 * 1000 / 20);
+            std::chrono::microseconds anim_quantum  = std::chrono::microseconds(1000 * 1000 / 120);
             while (true)
             {
                 if (m_join_requested)
                     return;
                 bool anim = this->should_refresh_gui();
                 std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
+                this->m_redraw = false;
                 this->redraw();
                 if (anim)
-                    spdlog::trace("refreshing gui");
+                    spdlog::trace("refreshing gui for animation {}", refresh_count++);
             }
         });
 }
@@ -1278,6 +1280,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 void HDRViewScreen::update_layout()
 {
+    spdlog::trace("update_layout; {}", m_animation_running);
     int header_height   = m_top_panel->fixed_height();
     int sidepanel_width = m_side_panel->fixed_width();
     int toolpanel_width = m_tool_panel->fixed_width();
@@ -1381,6 +1384,7 @@ void HDRViewScreen::update_layout()
 
 void HDRViewScreen::draw_all()
 {
+    spdlog::trace("draw; m_animation_running: {}; {}", m_animation_running, m_redraw);
     if (m_redraw)
     {
         m_redraw = false;
