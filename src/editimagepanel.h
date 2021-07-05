@@ -21,6 +21,7 @@ public:
     void copy();
     void paste();
     void seamless_paste();
+    void fill();
 
     void draw(NVGcontext *ctx) override;
 

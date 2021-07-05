@@ -337,6 +337,14 @@ public:
         for (int i = 0; i < 4; ++i) res[i] = (*this)[i] > 0.0f ? powf((*this)[i], exp[i]) : 0.0f;
         return res;
     }
+    /// Duff & Porter's over operator for unassociated (not premultiplied) alpha
+    Color4 over(const Color4 &bg) const
+    {
+        float  a_over = a + bg.a * (1.f - a);
+        Color4 c_over = (*this * a + bg * bg.a * (1.f - a)) / (a_over == 0.f ? 1.f : a_over);
+        c_over.a      = a_over;
+        return c_over;
+    }
 
     friend std::ostream &operator<<(std::ostream &out, const Color4 &c)
     {

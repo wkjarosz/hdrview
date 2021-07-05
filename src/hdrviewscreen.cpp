@@ -1113,6 +1113,15 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
         break;
 
+    case GLFW_KEY_BACKSPACE:
+        spdlog::trace("Key BACKSPACE pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            m_edit_panel->fill();
+            return true;
+        }
+        break;
+
     case 'T':
         spdlog::trace("KEY `T` pressed");
         m_gui_animation_start = glfwGetTime();

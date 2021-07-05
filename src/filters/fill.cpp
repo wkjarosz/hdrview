@@ -47,7 +47,7 @@ Button *create_fill_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *i
             layout->set_col_alignment({Alignment::Maximum, Alignment::Fill, Alignment::Fill, Alignment::Minimum});
             row->set_layout(layout);
 
-            string                         names[] = {"Red :", "Green : ", "Blue :", "Alpha :"};
+            string                         names[] = {"Red :", "Green :", "Blue :", "Alpha :"};
             std::vector<ColorSlider *>     sliders;
             std::vector<FloatBox<float> *> float_boxes;
             for (int i = 0; i < 4; ++i)

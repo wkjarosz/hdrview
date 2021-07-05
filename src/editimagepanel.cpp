@@ -11,17 +11,18 @@
 #include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
 #include "fwd.h"             // for ConstHDRImagePtr, ConstXPUImagePtr, HDR...
 #include "hdrimage.h"        // for HDRImage
-#include "imagelistpanel.h"  // for ImageListPanel
-#include <commandhistory.h>  // for ImageCommandResult, LambdaUndo
-#include <memory>            // for shared_ptr, make_shared
-#include <nanogui/button.h>  // for Button
-#include <nanogui/icons.h>   // for FA_ADJUST, FA_ARROWS_ALT_H, FA_ARROWS_A...
-#include <nanogui/label.h>   // for Label
-#include <nanogui/layout.h>  // for AdvancedGridLayout, AdvancedGridLayout:...
-#include <nanogui/vector.h>  // for Array, Color
-#include <nanogui/widget.h>  // for Widget
-#include <utility>           // for pair
-#include <well.h>            // for Well
+#include "hdrviewscreen.h"
+#include "imagelistpanel.h" // for ImageListPanel
+#include <commandhistory.h> // for ImageCommandResult, LambdaUndo
+#include <memory>           // for shared_ptr, make_shared
+#include <nanogui/button.h> // for Button
+#include <nanogui/icons.h>  // for FA_ADJUST, FA_ARROWS_ALT_H, FA_ARROWS_A...
+#include <nanogui/label.h>  // for Label
+#include <nanogui/layout.h> // for AdvancedGridLayout, AdvancedGridLayout:...
+#include <nanogui/vector.h> // for Array, Color
+#include <nanogui/widget.h> // for Widget
+#include <utility>          // for pair
+#include <well.h>           // for Well
 
 using namespace std;
 
@@ -101,6 +102,18 @@ void EditImagePanel::seamless_paste()
             result->seamless_copy_paste(progress, *m_clipboard, Box2i(), roi.min.x(), roi.min.y());
             // m_images_panel->current_image()->roi() = Box2i();
             return {result, nullptr};
+        });
+}
+
+void EditImagePanel::fill()
+{
+    m_images_panel->async_modify_selected(
+        [this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+        {
+            Color  nfg = m_screen->background()->color();
+            Color4 fg(nfg.r(), nfg.g(), nfg.b(), nfg.a());
+            return {make_shared<HDRImage>(img->apply_function([&fg](const Color4 &c) { return fg; }, xpuimg->roi())),
+                    nullptr};
         });
 }
 
@@ -286,7 +299,22 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
 
     //
     agrid->append_row(0);
-    m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
+    // m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
+    m_filter_btns.push_back(new Button(button_row, "Flatten", FA_CHESS_BOARD));
+    m_filter_btns.back()->set_fixed_height(21);
+    m_filter_btns.back()->set_callback(
+        [this]()
+        {
+            m_images_panel->async_modify_selected(
+                [this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                {
+                    Color  nbg = m_screen->background()->color();
+                    Color4 bg(nbg.r(), nbg.g(), nbg.b(), nbg.a());
+                    return {make_shared<HDRImage>(
+                                img->apply_function([&bg](const Color4 &c) { return c.over(bg); }, xpuimg->roi())),
+                            nullptr};
+                });
+        });
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count() - 1));
     m_filter_btns.push_back(create_fill_btn(button_row, m_screen, m_images_panel));
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count() - 1));

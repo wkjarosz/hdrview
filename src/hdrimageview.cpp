@@ -119,9 +119,11 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
         // create an empty texture so that nanogui's shader doesn't print errors
         // before we've selected a reference image
         // FIXME: at some point, find a more elegant solution for this.
-        m_null_image = new Texture(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, Vector2i(1, 1),
+        m_null_image   = new Texture(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, Vector2i(1, 1),
                                    Texture::InterpolationMode::Nearest, Texture::InterpolationMode::Nearest,
                                    Texture::WrapMode::Repeat);
+        float null_tex = 1.f;
+        m_null_image->upload((const uint8_t *)&null_tex);
         m_image_shader->set_texture("secondary_texture", m_null_image);
     }
     catch (const std::exception &e)
