@@ -45,14 +45,14 @@ On Linux and macOS, compiling should be as simple as
 
 On Windows, a few extra steps are needed.
 
-Since MSVC's regex implementation is buggy, you first need to have the Boost regex library installed. You can find binary installers for Windows on the [Boost website](http://www.boost.org/). You need at least Boost version 1.53. Once installed, you can run:
+Since MSVC's regex implementation is buggy, you first need to have the Boost regex library installed. You can find binary installers for Windows on the [Boost website](http://www.boost.org/). Click the "More Downloads..." link and make sure to download the "Prebuilt windows binaries". You need at least Boost version 1.53. Once installed, you can run:
 
     git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd hdrview
     mkdir build
     cd build
     cmake ../
-        -G"Visual Studio 15 2017 Win64" 
+        -G"Visual Studio 15 2017 Win64"
         -DBOOST_ROOT="C:\where_you_installed_boost"
         -DUSE_BOOST_REGEX=true
 

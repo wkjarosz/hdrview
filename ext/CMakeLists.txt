@@ -36,7 +36,7 @@ endif()
 
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  
+
   if("cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
     message(STATUS "Using C++17 standard")
     set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use")
@@ -49,8 +49,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU"
   else()
     message(FATAL_ERROR "Unsupported compiler -- HDRView requires at least C++11!")
   endif()
-  
-  
+
+
   # Prefer libc++ in conjunction with Clang
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     CHECK_CXX_COMPILER_FLAG("-stdlib=libc++" HAS_LIBCPP)
@@ -108,24 +108,27 @@ endif()
 # Build ZLIB on Windows (needed for OpenEXR)
 #============================================================================
 if (WIN32)
-  # Build zlib (only on Windows)
-  set(ZLIB_BUILD_STATIC_LIBS ON CACHE BOOL " " FORCE)
-  set(ZLIB_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
-  add_subdirectory(zlib)
+  set(ZLIB_EXT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/zlib)
+  set(ZLIB_EXT_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/zlib)
+  set(ZLIB_EXT_CONFIG Release)
 
+  include(ExternalProject)
+  externalproject_add(zlibstatic
+    SOURCE_DIR        ${ZLIB_EXT_SOURCE_DIR}
+    BINARY_DIR        ${ZLIB_EXT_BINARY_DIR}
+    CMAKE_ARGS        -DZLIB_BUILD_STATIC_LIBS=TRUE -DZLIB_BUILD_SHARED_LIBS=FALSE
+    BUILD_COMMAND     ${CMAKE_COMMAND} -E echo "Starting zlib build"
+    COMMAND           ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
+    COMMAND           ${CMAKE_COMMAND} -E echo "zlib build complete"
+    INSTALL_COMMAND   ""
+  )
 
-  set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib;${CMAKE_CURRENT_BINARY_DIR}/zlib" CACHE PATH " " FORCE)
-  set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/Release/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-
-  # set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib" CACHE PATH " " FORCE)
-  # if (CMAKE_GENERATOR STREQUAL "Ninja")
-  #   set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-  # else()
-  #   set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/zlib/$<CONFIG>/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-  # endif()
+  set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
+  set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
-  include_directories(${ZLIB_INCLUDE_DIR} "${CMAKE_CURRENT_BINARY_DIR}/zlib")
+
+  include_directories(${ZLIB_INCLUDE_DIR})
 endif()
 
 
@@ -195,11 +198,7 @@ set (OPENEXR_INCLUDE_DIRS
   ${CMAKE_CURRENT_BINARY_DIR}/openexr/OpenEXR/config
 )
 
-if (WIN32)
-  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half zlibstatic)
-else ()
-  set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
-endif ()
+set (OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 
 set(GLFW_INCLUDE_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/nanogui/ext/glfw/include)

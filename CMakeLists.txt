@@ -227,6 +227,9 @@ if (APPLE)
     # HDRVIEW is unlikely to switch away from openGL anytime soon
     set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DGL_SILENCE_DEPRECATION)
 endif()
+if (WIN32)
+    set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
+endif()
 
 add_definitions(${HDRVIEW_DEFINITIONS} ${NANOGUI_EXTRA_DEFS})
 
@@ -291,8 +294,8 @@ add_executable(hdrbatch
 # add_dependencies(hdrbatch version_info)
 
 add_executable(force-random-dither
-    src/forced-random-dither.cpp)          
-    
+    src/forced-random-dither.cpp)
+
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 

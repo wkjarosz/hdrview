@@ -4,8 +4,6 @@
 // be found in the LICENSE.txt file.
 //
 
-#define NOMINMAX
-
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
 #include "common.h"

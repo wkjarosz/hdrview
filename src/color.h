@@ -9,6 +9,7 @@
 #include <cmath>
 #include <iostream>
 #include <nanogui/vector.h>
+#include <algorithm>
 // #include "fwd.h"
 
 class Color3
