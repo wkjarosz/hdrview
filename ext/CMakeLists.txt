@@ -177,6 +177,12 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 # Build docopt.cpp
 #============================================================================
 add_subdirectory(docopt EXCLUDE_FROM_ALL)
+if (WIN32)
+	add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
+	set(Boost_USE_STATIC_LIBS ON)
+	set(Boost_USE_STATIC_RUNTIME ON)
+    find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
 
@@ -252,7 +258,7 @@ set(CompilerFlags
       OPENEXR_INCLUDE_DIRS OPENEXR_LIBS
       GLFW_INCLUDE_DIR GLEW_INCLUDE_DIR
       NANOVG_INCLUDE_DIR NANOGUI_EXTRA_INCS NANOGUI_EXTRA_DEFS
-	    NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR NANOGUI_BACKEND
+	  NANOGUI_EXTRA_LIBS NANOGUI_INCLUDE_DIR NANOGUI_BACKEND
       DOCOPT_INCLUDE_DIR
       TINYDNG_INCLUDE_DIR
       TINYDIR_INCLUDE_DIR
@@ -261,6 +267,8 @@ set(CompilerFlags
       SPDLOG_INCLUDE_DIR
       JSON_INCLUDE_DIR
       PLATFORMFOLDERS_INCLUDE_DIR
+      Boost_INCLUDE_DIRS Boost_LIBRARIES Boost_REGEX_LIBRARY
+      
 )
 foreach(CompilerFlag ${CompilerFlags})
   set(${CompilerFlag} "${${CompilerFlag}}" PARENT_SCOPE)
