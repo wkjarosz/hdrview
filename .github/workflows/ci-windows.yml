@@ -31,11 +31,29 @@ jobs:
 
       - name: Setup MSBuild.exe
         uses: microsoft/setup-msbuild@v1.0.2
+        
+      - name: Install boost
+        uses: MarkusJx/install-boost@v1.0.1
+        id: install-boost
+        with:
+          # REQUIRED: Specify the required boost version
+          # A list of supported versions can be found here: 
+          # https://github.com/actions/boost-versions/blob/main/versions-manifest.json
+          boost_version: 1.73.0
+          # OPTIONAL: Specify a toolset on windows
+          # toolset: msvc14.2
+          # OPTIONAL: Specify a custon install location
+          # boost_install_dir: C:\boost_directory
+
+          # NOTE: If a boost version matching all requirements cannot be found,
+          # this build step will fail
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBOOST_ROOT=${{ steps.install-boost.outputs.BOOST_ROOT }} -DUSE_BOOST_REGEX=true
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBOOST_ROOT=${{ steps.install-boost.outputs.BOOST_ROOT }} -DUSE_BOOST_REGEX=true
+        env:
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
 
       - name: Build
         # Build your program with the given configuration
