@@ -181,10 +181,13 @@ if (WIN32)
 	add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
 	set(Boost_USE_STATIC_LIBS ON)
 	set(Boost_USE_STATIC_RUNTIME ON)
-    find_package(Boost 1.53 REQUIRED COMPONENTS regex)
-    message(STATUS "Found Boost_LIBRARIES: ${Boost_LIBRARIES}")
-    message(STATUS "Found Boost_REGEX_LIBRARY: ${Boost_REGEX_LIBRARY}")
-    message(STATUS "Found Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+	find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+	message(STATUS "Found Boost_LIBRARIES: ${Boost_LIBRARIES}")
+	message(STATUS "Found Boost_REGEX_LIBRARY: ${Boost_REGEX_LIBRARY}")
+	message(STATUS "Found Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+	message(STATUS "Found Boost::regex: ${Boost::regex}")
+	set(Boost_LIBS Boost::regex PARENT_SCOPE)
+	message(STATUS "Found Boost::regex2: ${Boost_LIBS}")
 endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
@@ -270,7 +273,8 @@ set(CompilerFlags
       SPDLOG_INCLUDE_DIR
       JSON_INCLUDE_DIR
       PLATFORMFOLDERS_INCLUDE_DIR
-      Boost_INCLUDE_DIRS Boost_LIBRARIES Boost_REGEX_LIBRARY
+		Boost_INCLUDE_DIRS
+		# Boost_LIBRARIES Boost_REGEX_LIBRARY
       
 )
 foreach(CompilerFlag ${CompilerFlags})
