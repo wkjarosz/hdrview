@@ -59,9 +59,10 @@ jobs:
         # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
 
-      - name: Checking that hdrbatch runs
+      - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
+          ${{github.workspace}}/build/hdrbatch --help
+          ${{github.workspace}}/build/HDRView.app/Contents/MacOS/HDRView --help
 
       # - name: Build
       #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
