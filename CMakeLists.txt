@@ -36,6 +36,16 @@ include_directories(
   ${CMAKE_SOURCE_DIR}/src
 )
 
+if (WIN32)
+	set(Boost_USE_STATIC_LIBS ON)
+	set(Boost_USE_STATIC_RUNTIME ON)
+    find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+    message(STATUS "Found Boost_LIBRARIES: ${Boost_LIBRARIES}")
+    message(STATUS "Found Boost_REGEX_LIBRARY: ${Boost_REGEX_LIBRARY}")
+    message(STATUS "Found Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
+endif()
+
+
 # Resource file (icons etc.)
 set(EXTRA_SOURCE "")
 if (APPLE)
