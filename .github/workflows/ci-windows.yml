@@ -41,7 +41,7 @@ jobs:
           # https://github.com/actions/boost-versions/blob/main/versions-manifest.json
           boost_version: 1.73.0
           # OPTIONAL: Specify a toolset on windows
-          # toolset: msvc14.2
+          toolset: msvc14.2
           # OPTIONAL: Specify a custon install location
           # boost_install_dir: C:\boost_directory
 
