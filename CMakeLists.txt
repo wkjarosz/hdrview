@@ -5,25 +5,21 @@ set(HDRVIEW_VERSION "1.2.0")
 
 # cmake_policy(SET CMP0074 NEW)
 
-# set(USE_SANITIZER "Address") set(CMAKE_MODULE_PATH
-# "${CMAKE_SOURCE_DIR}/ext/cmake" ${CMAKE_MODULE_PATH}) include(sanitizers)
+# set(USE_SANITIZER "Address") set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/ext/cmake" ${CMAKE_MODULE_PATH})
+# include(sanitizers)
 
-# Set ourselves as the startup project in visual studio. Not available until
-# cmake 3.6, but doesn't break older versions.
+# Set ourselves as the startup project in visual studio. Not available until cmake 3.6, but doesn't break older
+# versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
-set(USE_IWYU
-    OFF
-    CACHE BOOL "INCLUDE WHAT YOU USE")
+set(USE_IWYU OFF CACHE BOOL "INCLUDE WHAT YOU USE")
 
 # add_subdirectory(ext ext_build)
 
 include(CheckCXXCompilerFlag)
 
 # prevent glfw from changing the directory on macOS bundles
-set(GLFW_USE_CHDIR
-    OFF
-    CACHE BOOL "Prevent glfwInit from chdir to Contents/Resources" FORCE)
+set(GLFW_USE_CHDIR OFF CACHE BOOL "Prevent glfwInit from chdir to Contents/Resources" FORCE)
 
 # ============================================================================
 # Check if we have all the submodules checked out
@@ -41,11 +37,8 @@ endif()
 # ============================================================================
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to 'Release' as none was specified.")
-  set(CMAKE_BUILD_TYPE
-      Release
-      CACHE STRING "Choose the type of build." FORCE)
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
-                                               "MinSizeRel" "RelWithDebInfo")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 string(TOUPPER "${CMAKE_BUILD_TYPE}" U_CMAKE_BUILD_TYPE)
 
@@ -61,25 +54,17 @@ if(APPLE)
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-
   if("cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
     message(STATUS "Using C++17 standard")
-    set(CMAKE_CXX_STANDARD
-        17
-        CACHE STRING "The C++ standard to use")
+    set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use")
   elseif("cxx_std_14" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
     message(STATUS "Using C++14 standard")
-    set(CMAKE_CXX_STANDARD
-        14
-        CACHE STRING "The C++ standard to use")
+    set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ standard to use")
   elseif("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
     message(STATUS "Using C++11 standard")
-    set(CMAKE_CXX_STANDARD
-        11
-        CACHE STRING "The C++ standard to use")
+    set(CMAKE_CXX_STANDARD 11 CACHE STRING "The C++ standard to use")
   else()
-    message(
-      FATAL_ERROR "Unsupported compiler -- HDRView requires at least C++11!")
+    message(FATAL_ERROR "Unsupported compiler -- HDRView requires at least C++11!")
   endif()
 
   # Prefer libc++ in conjunction with Clang
@@ -88,8 +73,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     if(HAS_LIBCPP)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
       set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-      set(CMAKE_SHARED_LINKER_FLAGS
-          "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
+      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
       message(STATUS "HDRView: using libc++.")
     else()
       message(
@@ -99,8 +83,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     endif()
   endif()
 
-  # Enable link time optimization and set the default symbol visibility to
-  # hidden (very important to obtain small binaries)
+  # Enable link time optimization and set the default symbol visibility to hidden (very important to obtain small
+  # binaries)
   if(NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
     # Default symbol visibility
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
@@ -155,23 +139,18 @@ if(WIN32)
   set(ZLIB_EXT_CONFIG Release)
 
   include(ExternalProject)
-  ExternalProject_Add(
+  externalproject_add(
     zlibstatic
     SOURCE_DIR ${ZLIB_EXT_SOURCE_DIR}
     BINARY_DIR ${ZLIB_EXT_BINARY_DIR}
     CMAKE_ARGS -DZLIB_BUILD_STATIC_LIBS=TRUE -DZLIB_BUILD_SHARED_LIBS=FALSE
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting zlib build"
-    COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config
-            ${ZLIB_EXT_CONFIG}
+    COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
     COMMAND ${CMAKE_COMMAND} -E echo "zlib build complete"
     INSTALL_COMMAND "")
 
-  set(ZLIB_INCLUDE_DIR
-      "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}"
-      CACHE PATH " " FORCE)
-  set(ZLIB_LIBRARY
-      "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib"
-      CACHE FILEPATH " " FORCE)
+  set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
+  set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
 
   set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
 
@@ -183,30 +162,14 @@ endif()
 # ============================================================================
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
-set(ILMBASE_NAMESPACE_VERSIONING
-    OFF
-    CACHE BOOL " " FORCE)
-set(OPENEXR_NAMESPACE_VERSIONING
-    OFF
-    CACHE BOOL " " FORCE)
-set(OPENEXR_BUILD_SHARED_LIBS
-    OFF
-    CACHE BOOL " " FORCE)
-set(ILMBASE_BUILD_SHARED_LIBS
-    OFF
-    CACHE BOOL " " FORCE)
-set(PYILMBASE_ENABLE
-    OFF
-    CACHE BOOL " " FORCE)
-set(OPENEXR_BUILD_UTILS
-    OFF
-    CACHE BOOL " " FORCE)
-set(INSTALL_OPENEXR_EXAMPLES
-    OFF
-    CACHE BOOL " " FORCE)
-set(BUILD_TESTING
-    OFF
-    CACHE BOOL " " FORCE)
+set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
+set(OPENEXR_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+set(PYILMBASE_ENABLE OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_UTILS OFF CACHE BOOL " " FORCE)
+set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL " " FORCE)
+set(BUILD_TESTING OFF CACHE BOOL " " FORCE)
 
 add_subdirectory(ext/openexr)
 
@@ -227,21 +190,14 @@ endif()
 # ============================================================================
 # Build NanoGUI
 # ============================================================================
-# Use OpenGL backend for UI. In the future, this can be removed to use Metal on
-# MacOS
+# Use OpenGL backend for UI. In the future, this can be removed to use Metal on MacOS
 if(APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
 endif()
 # set(NANOGUI_BACKEND "OpenGL" CACHE BOOL " " FORCE)
-set(NANOGUI_BUILD_EXAMPLES
-    OFF
-    CACHE BOOL " ")
-set(NANOGUI_BUILD_SHARED
-    OFF
-    CACHE BOOL " " FORCE)
-set(NANOGUI_BUILD_PYTHON
-    OFF
-    CACHE BOOL " " FORCE)
+set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " ")
+set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
+set(NANOGUI_BUILD_PYTHON OFF CACHE BOOL " " FORCE)
 add_subdirectory(ext/nanogui)
 set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
@@ -251,7 +207,8 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 add_subdirectory(ext/docopt EXCLUDE_FROM_ALL)
 if(WIN32)
   add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
-  # set(Boost_USE_STATIC_LIBS ON) set(Boost_USE_STATIC_RUNTIME ON)
+  set(Boost_USE_STATIC_LIBS ON)
+  set(Boost_USE_STATIC_RUNTIME ON)
   find_package(Boost 1.53 REQUIRED COMPONENTS regex)
 endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
@@ -262,16 +219,12 @@ set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 add_subdirectory(ext/PlatformFolders)
 
 # ============================================================================
-# Define variables for the include directories for the various dependencies and
-# export them to the parent scope
+# Define variables for the include directories for the various dependencies and export them to the parent scope
 # ============================================================================
 set(OPENEXR_INCLUDE_DIRS
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex
-    ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
-    ${CMAKE_BINARY_DIR}/ext/openexr/IlmBase/config
-    ${CMAKE_BINARY_DIR}/ext/openexr/OpenEXR/config)
+    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
+    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
+    ${CMAKE_BINARY_DIR}/ext/openexr/IlmBase/config ${CMAKE_BINARY_DIR}/ext/openexr/OpenEXR/config)
 
 set(OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 
@@ -284,8 +237,7 @@ if(MSVC)
   else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
   endif()
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES
-                                                "GNU")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-unused-parameter")
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(CMAKE_CXX_FLAGS
@@ -354,12 +306,8 @@ foreach(fname_in IN LISTS resources)
   if(NANOGUI_BACKEND STREQUAL "Metal" AND fname_in MATCHES "\\.metal")
     get_filename_component(fname_out ${fname_in} NAME)
     set(fname_out "${CMAKE_CURRENT_BINARY_DIR}/resources/${fname_out}lib")
-    add_custom_command(
-      OUTPUT ${fname_out}
-      DEPENDS ${fname_in}
-      COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3 "${fname_in}" -o
-              "${fname_out}"
-      VERBATIM)
+    add_custom_command(OUTPUT ${fname_out} DEPENDS ${fname_in} COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3
+                                                                       "${fname_in}" -o "${fname_out}" VERBATIM)
   else()
     set(fname_out "${fname_in}")
   endif()
@@ -370,15 +318,12 @@ file(GLOB patterns "${CMAKE_SOURCE_DIR}/resources/patterns/*.png")
 list(APPEND resources_processed ${patterns})
 
 # Concatenate resource files into a comma separated string
-string(REGEX REPLACE "([^\\]|^);" "\\1," resources_string
-                     "${resources_processed}")
+string(REGEX REPLACE "([^\\]|^);" "\\1," resources_string "${resources_processed}")
 string(REGEX REPLACE "[\\](.)" "\\1" resources_string "${resources_string}")
 
 # Create command line for running bin2c cmake script
-set(bin2c_cmdline
-    -DOUTPUT_C=hdrview_resources.cpp -DOUTPUT_H=hdrview_resources.h
-    "-DINPUT_FILES=${resources_string}" -P
-    "${CMAKE_SOURCE_DIR}/resources/bin2c.cmake")
+set(bin2c_cmdline -DOUTPUT_C=hdrview_resources.cpp -DOUTPUT_H=hdrview_resources.h "-DINPUT_FILES=${resources_string}"
+                  -P "${CMAKE_SOURCE_DIR}/resources/bin2c.cmake")
 
 # Run bin2c on resource files
 add_custom_command(
@@ -391,19 +336,15 @@ add_custom_command(
 # Needed to generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# Add a custom command that produces hdrview_version.cpp, plus a dummy output
-# that's not actually produced, in order to force version.cmake to always be
-# re-run before the build
+# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
+# force version.cmake to always be re-run before the build
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp
-  # ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp # ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
   COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
   COMMENT "Generating timestamp and git version info")
 
-# add_custom_target(version_info COMMAND ${CMAKE_COMMAND} -P
-# ${CMAKE_SOURCE_DIR}/resources/version.cmake ADD_DEPENDENCIES
-# ${CMAKE_SOURCE_DIR}/resources/version.cmake COMMENT "Generating timestamp and
-# git version info")
+# add_custom_target(version_info COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
+# ADD_DEPENDENCIES ${CMAKE_SOURCE_DIR}/resources/version.cmake COMMENT "Generating timestamp and git version info")
 
 add_executable(
   HDRView
@@ -504,10 +445,6 @@ add_executable(
 # add_dependencies(HDRView version_info)
 
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
-if(APPLE)
-  # HDRVIEW is unlikely to switch away from openGL anytime soon
-  set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DGL_SILENCE_DEPRECATION)
-endif()
 if(WIN32)
   set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
 endif()
@@ -521,44 +458,28 @@ if(APPLE)
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
   set_target_properties(
-    HDRView
-    PROPERTIES
-      MACOSX_BUNDLE_INFO_STRING
-      "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}."
-  )
+    HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING
+                       "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
   string(TIMESTAMP YEAR "%Y")
   set_target_properties(
-    HDRView
-    PROPERTIES
-      MACOSX_BUNDLE_COPYRIGHT
-      "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license."
-  )
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER
-                                           "com.im.HDRView")
+    HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT
+                       "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION
-                                           ${HDRVIEW_VERSION})
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING
-                                           ${HDRVIEW_VERSION})
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING
-                                           ${HDRVIEW_VERSION})
-  set_target_properties(
-    HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST
-                       ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION})
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION})
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST
+                                           ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
   set_target_properties(HDRView PROPERTIES RESOURCE resources/icon.icns)
-  set_source_files_properties(resources/icon.icns
-                              PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 elseif(NOT WIN32)
-  # Insulate from a few types of ABI changes by statically linking against
-  # libgcc and libstdc++
+  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
   set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
 endif()
 
 if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
-  add_custom_command(
-    TARGET HDRView
-    POST_BUILD
-    COMMAND strip $<TARGET_FILE:HDRView>)
+  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
 endif()
 
 add_executable(
@@ -596,11 +517,9 @@ add_executable(
 
 add_executable(force-random-dither src/forced-random-dither.cpp)
 
-# set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET
-# hidden)
+# set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s
-                      ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
+target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
 target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
@@ -615,62 +534,28 @@ if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   if(iwyu_path)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
     set(CMAKE_C_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-    set_property(TARGET HDRView hdrbatch force-random-dither
-                 PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
+    set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
   endif()
 endif()
 
 if(APPLE)
-  install(
-    TARGETS HDRView
-    BUNDLE DESTINATION "/Applications"
-    RESOURCE DESTINATION "/Applications")
+  install(TARGETS HDRView BUNDLE DESTINATION "/Applications" RESOURCE DESTINATION "/Applications")
   install(SCRIPT resources/osx-post-install.cmake)
 elseif(WIN32)
   install(TARGETS HDRView RUNTIME DESTINATION "bin")
 else()
   install(TARGETS HDRView RUNTIME DESTINATION "bin")
   install(FILES resources/hdrview.desktop DESTINATION "/usr/share/applications")
-  install(
-    FILES resources/icon-512.png
-    DESTINATION "/usr/share/icons/hicolor/1024x1024/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-512.png
-    DESTINATION "/usr/share/icons/hicolor/512x512/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-256.png
-    DESTINATION "/usr/share/icons/hicolor/256x256/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-128.png
-    DESTINATION "/usr/share/icons/hicolor/128x128/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-96.png
-    DESTINATION "/usr/share/icons/hicolor/96x96/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-64.png
-    DESTINATION "/usr/share/icons/hicolor/64x64/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-48.png
-    DESTINATION "/usr/share/icons/hicolor/48x48/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-32.png
-    DESTINATION "/usr/share/icons/hicolor/32x32/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-24.png
-    DESTINATION "/usr/share/icons/hicolor/24x24/apps"
-    RENAME hdrview.png)
-  install(
-    FILES resources/icon-16.png
-    DESTINATION "/usr/share/icons/hicolor/16x16/apps"
-    RENAME hdrview.png)
+  install(FILES resources/icon-512.png DESTINATION "/usr/share/icons/hicolor/1024x1024/apps" RENAME hdrview.png)
+  install(FILES resources/icon-512.png DESTINATION "/usr/share/icons/hicolor/512x512/apps" RENAME hdrview.png)
+  install(FILES resources/icon-256.png DESTINATION "/usr/share/icons/hicolor/256x256/apps" RENAME hdrview.png)
+  install(FILES resources/icon-128.png DESTINATION "/usr/share/icons/hicolor/128x128/apps" RENAME hdrview.png)
+  install(FILES resources/icon-96.png DESTINATION "/usr/share/icons/hicolor/96x96/apps" RENAME hdrview.png)
+  install(FILES resources/icon-64.png DESTINATION "/usr/share/icons/hicolor/64x64/apps" RENAME hdrview.png)
+  install(FILES resources/icon-48.png DESTINATION "/usr/share/icons/hicolor/48x48/apps" RENAME hdrview.png)
+  install(FILES resources/icon-32.png DESTINATION "/usr/share/icons/hicolor/32x32/apps" RENAME hdrview.png)
+  install(FILES resources/icon-24.png DESTINATION "/usr/share/icons/hicolor/24x24/apps" RENAME hdrview.png)
+  install(FILES resources/icon-16.png DESTINATION "/usr/share/icons/hicolor/16x16/apps" RENAME hdrview.png)
 endif()
 
 # Force colored output for the ninja generator
