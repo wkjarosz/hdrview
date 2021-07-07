@@ -17,13 +17,13 @@ using namespace std;
 namespace
 {
 
-float reinterpret_as_host_endian(float f, bool bigEndian)
+float reinterpret_as_host_endian(float f, bool big_endian)
 {
     static_assert(sizeof(float) == sizeof(unsigned int), "Sizes must match");
 
     const auto *uchar = (const unsigned char *)&f;
     uint32_t    i;
-    if (bigEndian)
+    if (big_endian)
         i = (uchar[3] << 0) | (uchar[2] << 8) | (uchar[1] << 16) | (uchar[0] << 24);
     else
         i = (uchar[0] << 0) | (uchar[1] << 8) | (uchar[2] << 16) | (uchar[3] << 24);
@@ -37,8 +37,8 @@ float reinterpret_as_host_endian(float f, bool bigEndian)
 
 bool is_pfm_image(const char *filename) noexcept
 {
-    FILE *f             = nullptr;
-    int   numInputsRead = 0;
+    FILE *f               = nullptr;
+    int   num_inputs_read = 0;
 
     try
     {
@@ -48,21 +48,21 @@ bool is_pfm_image(const char *filename) noexcept
             throw runtime_error("load_pfm_image: Error opening");
 
         char buffer[1024];
-        numInputsRead = fscanf(f, "%2s\n", buffer);
-        if (numInputsRead != 1)
+        num_inputs_read = fscanf(f, "%2s\n", buffer);
+        if (num_inputs_read != 1)
             throw runtime_error("load_pfm_image: Could not read number of channels in header");
 
         if (!(strcmp(buffer, "Pf") == 0 || strcmp(buffer, "PF") == 0))
             throw runtime_error("load_pfm_image: Cannot deduce number of channels from header");
 
         int width, height;
-        numInputsRead = fscanf(f, "%d%d", &width, &height);
-        if (numInputsRead != 2 || width <= 0 || height <= 0)
+        num_inputs_read = fscanf(f, "%d%d", &width, &height);
+        if (num_inputs_read != 2 || width <= 0 || height <= 0)
             throw runtime_error("load_pfm_image: Invalid image width or height");
 
         float scale;
-        numInputsRead = fscanf(f, "%f", &scale);
-        if (numInputsRead != 1)
+        num_inputs_read = fscanf(f, "%f", &scale);
+        if (num_inputs_read != 1)
             throw runtime_error("load_pfm_image: Invalid file endianness. Big-Endian files not supported");
 
         fclose(f);
@@ -75,11 +75,11 @@ bool is_pfm_image(const char *filename) noexcept
     }
 }
 
-float *load_pfm_image(const char *filename, int *width, int *height, int *numChannels)
+float *load_pfm_image(const char *filename, int *width, int *height, int *num_channels)
 {
-    float *data          = nullptr;
-    FILE * f             = nullptr;
-    int    numInputsRead = 0;
+    float *data            = nullptr;
+    FILE * f               = nullptr;
+    int    num_inputs_read = 0;
 
     try
     {
@@ -89,40 +89,40 @@ float *load_pfm_image(const char *filename, int *width, int *height, int *numCha
             throw runtime_error("load_pfm_image: Error opening");
 
         char buffer[1024];
-        numInputsRead = fscanf(f, "%2s\n", buffer);
-        if (numInputsRead != 1)
+        num_inputs_read = fscanf(f, "%2s\n", buffer);
+        if (num_inputs_read != 1)
             throw runtime_error("load_pfm_image: Could not read number of channels in header");
 
         if (strcmp(buffer, "Pf") == 0)
-            *numChannels = 1;
+            *num_channels = 1;
         else if (strcmp(buffer, "PF") == 0)
-            *numChannels = 3;
+            *num_channels = 3;
         else
             throw runtime_error("load_pfm_image: Cannot deduce number of channels from header");
 
-        numInputsRead = fscanf(f, "%d%d", width, height);
-        if (numInputsRead != 2 || *width <= 0 || *height <= 0)
+        num_inputs_read = fscanf(f, "%d%d", width, height);
+        if (num_inputs_read != 2 || *width <= 0 || *height <= 0)
             throw runtime_error("load_pfm_image: Invalid image width or height");
 
         float scale;
-        numInputsRead = fscanf(f, "%f", &scale);
-        if (numInputsRead != 1)
-            throw runtime_error("load_pfm_image: Invalid file endianness. Big-Endian files not supported");
+        num_inputs_read = fscanf(f, "%f", &scale);
+        if (num_inputs_read != 1)
+            throw runtime_error("load_pfm_image: Invalid file endianness. Big-Endian files not currently supported");
 
-        bool bigEndian = scale > 0.0f;
+        bool big_endian = scale > 0.0f;
 
         data = new float[(*width) * (*height) * 3];
 
         if (fread(data, 1, 1, f) != 1)
             throw runtime_error("load_pfm_image: Unknown error");
 
-        size_t numFloats = static_cast<size_t>((*width) * (*height) * (*numChannels));
-        if (fread(data, sizeof(float), numFloats, f) != numFloats)
+        size_t num_floats = static_cast<size_t>((*width) * (*height) * (*num_channels));
+        if (fread(data, sizeof(float), num_floats, f) != num_floats)
             throw runtime_error("load_pfm_image: Could not read all pixel data");
 
         // multiply data by scale factor
         scale = fabsf(scale);
-        for (size_t i = 0; i < numFloats; ++i) data[i] = scale * reinterpret_as_host_endian(data[i], bigEndian);
+        for (size_t i = 0; i < num_floats; ++i) data[i] = scale * reinterpret_as_host_endian(data[i], big_endian);
 
         fclose(f);
         return data;
@@ -135,7 +135,7 @@ float *load_pfm_image(const char *filename, int *width, int *height, int *numCha
     }
 }
 
-bool write_pfm_image(const char *filename, int width, int height, int numChannels, const float *data)
+bool write_pfm_image(const char *filename, int width, int height, int num_channels, const float *data)
 {
     FILE *f = fopen(filename, "wb");
 
@@ -145,32 +145,32 @@ bool write_pfm_image(const char *filename, int width, int height, int numChannel
         return false;
     }
 
-    fprintf(f, numChannels == 1 ? "Pf\n" : "PF\n");
+    fprintf(f, num_channels == 1 ? "Pf\n" : "PF\n");
     fprintf(f, "%d %d\n", width, height);
 
     // determine system endianness
-    bool littleEndian = false;
+    bool little_endian = false;
     {
         int n = 1;
         // little endian if true
         if (*(char *)&n == 1)
-            littleEndian = true;
+            little_endian = true;
     }
 
-    fprintf(f, littleEndian ? "-1.0000000\n" : "1.0000000\n");
+    fprintf(f, little_endian ? "-1.0000000\n" : "1.0000000\n");
 
-    if (numChannels == 3 || numChannels == 1)
+    if (num_channels == 3 || num_channels == 1)
     {
-        fwrite(&data[0], width * height * sizeof(float) * numChannels, 1, f);
+        fwrite(&data[0], width * height * sizeof(float) * num_channels, 1, f);
     }
-    else if (numChannels == 4)
+    else if (num_channels == 4)
     {
         for (int i = 0; i < width * height * 4; i += 4) fwrite(&data[i], sizeof(float) * 3, 1, f);
     }
     else
     {
         fclose(f);
-        cerr << "write_pfm_image: Unsupported number of channels " << numChannels << " when writing file '" << filename
+        cerr << "write_pfm_image: Unsupported number of channels " << num_channels << " when writing file '" << filename
              << "'" << endl;
         return false;
     }

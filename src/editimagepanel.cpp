@@ -11,17 +11,22 @@
 #include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
 #include "fwd.h"             // for ConstHDRImagePtr, ConstXPUImagePtr, HDR...
 #include "hdrimage.h"        // for HDRImage
-#include "imagelistpanel.h"  // for ImageListPanel
-#include <commandhistory.h>  // for ImageCommandResult, LambdaUndo
-#include <memory>            // for shared_ptr, make_shared
-#include <nanogui/button.h>  // for Button
-#include <nanogui/icons.h>   // for FA_ADJUST, FA_ARROWS_ALT_H, FA_ARROWS_A...
-#include <nanogui/label.h>   // for Label
-#include <nanogui/layout.h>  // for AdvancedGridLayout, AdvancedGridLayout:...
-#include <nanogui/vector.h>  // for Array, Color
-#include <nanogui/widget.h>  // for Widget
-#include <utility>           // for pair
-#include <well.h>            // for Well
+#include "hdrviewscreen.h"
+#include "helpwindow.h"
+#include "imagelistpanel.h" // for ImageListPanel
+#include <commandhistory.h> // for ImageCommandResult, LambdaUndo
+#include <memory>           // for shared_ptr, make_shared
+#include <nanogui/button.h> // for Button
+#include <nanogui/icons.h>  // for FA_ADJUST, FA_ARROWS_ALT_H, FA_ARROWS_A...
+#include <nanogui/label.h>  // for Label
+#include <nanogui/layout.h> // for AdvancedGridLayout, AdvancedGridLayout:...
+#include <nanogui/opengl.h>
+#include <nanogui/vector.h> // for Array, Color
+#include <nanogui/widget.h> // for Widget
+#include <utility>          // for pair
+#include <well.h>           // for Well
+
+#include <spdlog/fmt/ostr.h>
 
 using namespace std;
 
@@ -104,6 +109,105 @@ void EditImagePanel::seamless_paste()
         });
 }
 
+void EditImagePanel::fill(const Color &nfg)
+{
+    spdlog::trace("Filling with: {}", nfg);
+    m_images_panel->async_modify_selected(
+        [nfg](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+        {
+            Color4 fg(nfg.r(), nfg.g(), nfg.b(), nfg.a());
+            return {make_shared<HDRImage>(img->apply_function([&fg](const Color4 &c) { return fg; }, xpuimg->roi())),
+                    nullptr};
+        });
+}
+
+void EditImagePanel::rotate(bool clockwise)
+{
+    m_images_panel->async_modify_selected(
+        [clockwise](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+        {
+            return {make_shared<HDRImage>(clockwise ? img->rotated_90_cw() : img->rotated_90_ccw()),
+                    make_shared<LambdaUndo>([clockwise](HDRImagePtr &img2)
+                                            { *img2 = clockwise ? img2->rotated_90_ccw() : img2->rotated_90_cw(); },
+                                            [clockwise](HDRImagePtr &img2)
+                                            { *img2 = clockwise ? img2->rotated_90_cw() : img2->rotated_90_ccw(); })};
+        });
+}
+
+void EditImagePanel::add_shortcuts(HelpWindow *w)
+{
+    auto section_name = "Edit";
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
+                    "Paste/Seamless paste");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+[ / " + HelpWindow::COMMAND + "+]",
+                    "Rotate counter-/clockwise");
+    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Delete", "Fill with background color");
+}
+
+bool EditImagePanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)
+{
+    if (action == GLFW_RELEASE)
+        return false;
+
+    switch (key)
+    {
+    case 'X':
+        spdlog::trace("Key `X` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            cut();
+            return true;
+        }
+        break;
+
+    case 'C':
+        spdlog::trace("Key `C` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            copy();
+            return true;
+        }
+        break;
+
+    case 'V':
+        spdlog::trace("Key `V` pressed");
+        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
+        {
+            seamless_paste();
+            return true;
+        }
+        else if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            paste();
+            return true;
+        }
+        break;
+
+    case '[':
+    case ']':
+        spdlog::trace("Key `[` or `]` pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            rotate(key == ']');
+            return true;
+        }
+        break;
+
+    case GLFW_KEY_BACKSPACE:
+        spdlog::trace("Key BACKSPACE pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            fill(m_screen->background()->color());
+            return true;
+        }
+        break;
+    }
+
+    return false;
+}
+
 EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel,
                                HDRImageView *image_view) :
     Well(parent, 1, Color(150, 32), Color(0, 50)),
@@ -166,17 +270,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     // rotate cw
     m_filter_btns.push_back(new Button(grid, "Rotate CW", FA_REDO));
     m_filter_btns.back()->set_fixed_height(21);
-    m_filter_btns.back()->set_callback(
-        [this]()
-        {
-            m_images_panel->async_modify_selected(
-                [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-                {
-                    return {make_shared<HDRImage>(img->rotated_90_cw()),
-                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->rotated_90_ccw(); },
-                                                    [](HDRImagePtr &img2) { *img2 = img2->rotated_90_cw(); })};
-                });
-        });
+    m_filter_btns.back()->set_callback([this]() { rotate(true); });
 
     // flip v
     m_filter_btns.push_back(new Button(grid, "Flip V", FA_ARROWS_ALT_V));
@@ -195,17 +289,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     // rotate ccw
     m_filter_btns.push_back(new Button(grid, "Rotate CCW", FA_UNDO));
     m_filter_btns.back()->set_fixed_height(21);
-    m_filter_btns.back()->set_callback(
-        [this]()
-        {
-            m_images_panel->async_modify_selected(
-                [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-                {
-                    return {make_shared<HDRImage>(img->rotated_90_ccw()),
-                            make_shared<LambdaUndo>([](HDRImagePtr &img2) { *img2 = img2->rotated_90_cw(); },
-                                                    [](HDRImagePtr &img2) { *img2 = img2->rotated_90_ccw(); })};
-                });
-        });
+    m_filter_btns.back()->set_callback([this]() { rotate(false); });
 
     // shift
     m_filter_btns.push_back(create_shift_btn(grid, m_screen, m_images_panel));
@@ -286,7 +370,22 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
 
     //
     agrid->append_row(0);
-    m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
+    // m_filter_btns.push_back(create_flatten_btn(button_row, m_screen, m_images_panel));
+    m_filter_btns.push_back(new Button(button_row, "Flatten", FA_CHESS_BOARD));
+    m_filter_btns.back()->set_fixed_height(21);
+    m_filter_btns.back()->set_callback(
+        [this]()
+        {
+            m_images_panel->async_modify_selected(
+                [this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                {
+                    Color  nbg = m_screen->background()->color();
+                    Color4 bg(nbg.r(), nbg.g(), nbg.b(), nbg.a());
+                    return {make_shared<HDRImage>(
+                                img->apply_function([&bg](const Color4 &c) { return c.over(bg); }, xpuimg->roi())),
+                            nullptr};
+                });
+        });
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count() - 1));
     m_filter_btns.push_back(create_fill_btn(button_row, m_screen, m_images_panel));
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count() - 1));

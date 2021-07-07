@@ -1,4 +1,7 @@
-// fitting polynomials to matplotlib colormaps
+// Original copyright info from https://www.shadertoy.com/view/3lBXR3:
+//
+// update of https://www.shadertoy.com/view/WlfXRN to add Google's 
+// turbo colormap
 //
 // License CC0 (public domain) 
 //   https://creativecommons.org/share-your-work/public-domain/cc0/
@@ -13,6 +16,12 @@
 //
 // data fitted from https://github.com/BIDS/colormap/blob/master/colormaps.py
 // (which is licensed CC0)
+//
+// improved version adds turbo colormap from 
+// https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
+// and https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
+//
+// see also maeln's shader at https://www.shadertoy.com/view/3t2XzV demonstrating turbo
 
 precision highp float;
 

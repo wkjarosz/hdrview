@@ -820,11 +820,7 @@ void BrushTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int mo
     fg.a *= a;
     Color4 bg = (*img)(x, y);
 
-    // Duff and Porter's over operator for unassociated alpha
-    float  a_over = fg.a + bg.a * (1.f - fg.a);
-    Color4 c_over = (fg * fg.a + bg * bg.a * (1.f - fg.a)) / (a_over == 0.f ? 1.f : a_over);
-    c_over.a      = a_over;
-    (*img)(x, y)  = c_over;
+    (*img)(x, y) = fg.over(bg);
 }
 
 void BrushTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const

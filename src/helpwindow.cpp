@@ -132,6 +132,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_library(credits, "alphanum", "Natural alpha-numeric sorting");
     add_library(credits, "Yuksel splines", "Cem Yuksel's hybrid C^2 splines for smooth mouse strokes");
     add_library(credits, "tev", "Some code is adapted from Thomas Müller's tev");
+    add_library(credits, "colormaps", "Matt Zucker's degree 6 polynomial colormaps");
 
     center();
 }

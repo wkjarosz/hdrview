@@ -4,8 +4,6 @@
 // be found in the LICENSE.txt file.
 //
 
-#define NOMINMAX
-
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
 #include "common.h"
@@ -567,17 +565,19 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     m_gui_refresh_thread = std::thread(
         [this]()
         {
-            std::chrono::microseconds idle_quantum = std::chrono::microseconds(1000 * 1000 / 20);
-            std::chrono::microseconds anim_quantum = std::chrono::microseconds(1000 * 1000 / 120);
+            static int                refresh_count = 0;
+            std::chrono::microseconds idle_quantum  = std::chrono::microseconds(1000 * 1000 / 20);
+            std::chrono::microseconds anim_quantum  = std::chrono::microseconds(1000 * 1000 / 120);
             while (true)
             {
                 if (m_join_requested)
                     return;
                 bool anim = this->should_refresh_gui();
                 std::this_thread::sleep_for(anim ? anim_quantum : idle_quantum);
+                this->m_redraw = false;
                 this->redraw();
                 if (anim)
-                    spdlog::trace("refreshing gui");
+                    spdlog::trace("refreshing gui for animation {}", refresh_count++);
             }
         });
 }
@@ -947,10 +947,6 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
-                    "Paste/Seamless paste");
     w->add_shortcut(section_name, "D", "Default foreground/background colors");
     w->add_shortcut(section_name, "X", "Swap foreground/background colors");
 
@@ -961,6 +957,7 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
     w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
 
+    m_edit_panel->add_shortcuts(w);
     m_images_panel->add_shortcuts(w);
     m_image_view->add_shortcuts(w);
 
@@ -1032,6 +1029,9 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (m_images_panel->keyboard_event(key, scancode, action, modifiers))
         return true;
 
+    if (m_edit_panel->keyboard_event(key, scancode, action, modifiers))
+        return true;
+
     if (action == GLFW_RELEASE)
         return false;
 
@@ -1084,34 +1084,8 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
     case 'X':
         spdlog::trace("Key `X` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-            m_edit_panel->cut();
-        else
-            m_color_btns->swap_colors();
+        m_color_btns->swap_colors();
         return true;
-
-    case 'C':
-        spdlog::trace("Key `C` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->copy();
-            return true;
-        }
-        break;
-
-    case 'V':
-        spdlog::trace("Key `V` pressed");
-        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
-        {
-            m_edit_panel->seamless_paste();
-            return true;
-        }
-        else if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            m_edit_panel->paste();
-            return true;
-        }
-        break;
 
     case 'T':
         spdlog::trace("KEY `T` pressed");
@@ -1304,6 +1278,7 @@ bool HDRViewScreen::mouse_motion_event(const nanogui::Vector2i &p, const nanogui
 
 void HDRViewScreen::update_layout()
 {
+    spdlog::trace("update_layout; {}", m_animation_running);
     int header_height   = m_top_panel->fixed_height();
     int sidepanel_width = m_side_panel->fixed_width();
     int toolpanel_width = m_tool_panel->fixed_width();
@@ -1407,6 +1382,7 @@ void HDRViewScreen::update_layout()
 
 void HDRViewScreen::draw_all()
 {
+    spdlog::trace("draw; m_animation_running: {}; {}", m_animation_running, m_redraw);
     if (m_redraw)
     {
         m_redraw = false;
