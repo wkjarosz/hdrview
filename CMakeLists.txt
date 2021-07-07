@@ -249,15 +249,12 @@ set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 # Build docopt.cpp
 # ============================================================================
 add_subdirectory(ext/docopt EXCLUDE_FROM_ALL)
-if(WIN32)
-  add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_USE_STATIC_RUNTIME ON)
-  find_package(Boost 1.53 REQUIRED COMPONENTS regex)
-  message(STATUS "Found Boost_LIBRARIES: ${Boost_LIBRARIES}")
-  message(STATUS "Found Boost_REGEX_LIBRARY: ${Boost_REGEX_LIBRARY}")
-  message(STATUS "Found Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}")
-endif()
+# if(WIN32) add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
+# set(Boost_USE_STATIC_LIBS ON) set(Boost_USE_STATIC_RUNTIME ON)
+# find_package(Boost 1.53 REQUIRED COMPONENTS regex) message(STATUS "Found
+# Boost_LIBRARIES: ${Boost_LIBRARIES}") message(STATUS "Found
+# Boost_REGEX_LIBRARY: ${Boost_REGEX_LIBRARY}") message(STATUS "Found
+# Boost_INCLUDE_DIRS: ${Boost_INCLUDE_DIRS}") endif()
 set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
 # ============================================================================
@@ -608,10 +605,8 @@ target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s
 target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
-if(WIN32)
-  target_link_libraries(HDRView Boost::regex)
-  target_link_libraries(hdrbatch Boost::regex)
-endif()
+# if(WIN32) target_link_libraries(HDRView Boost::regex)
+# target_link_libraries(hdrbatch Boost::regex) endif()
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   find_program(iwyu_path NAMES include-what-you-use iwyu)
