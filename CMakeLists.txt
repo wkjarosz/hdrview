@@ -12,8 +12,6 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
 set(USE_IWYU OFF CACHE BOOL "INCLUDE WHAT YOU USE")
 
-# add_subdirectory(ext ext_build)
-
 include(CheckCXXCompilerFlag)
 
 # prevent glfw from changing the directory on macOS bundles
@@ -158,7 +156,7 @@ endif()
 # ============================================================================
 # Build OpenEXR
 # ============================================================================
-set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+cmake_policy(SET CMP0077 NEW)
 
 set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
 set(OPENEXR_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
@@ -179,7 +177,7 @@ set_property(
          Imath
          IlmImf
          IlmImfUtil
-  PROPERTY FOLDER "ext/OpenEXR")
+  PROPERTY FOLDER "dependencies")
 
 if(WIN32)
   add_dependencies(IlmImf zlibstatic)
@@ -188,14 +186,15 @@ endif()
 # ============================================================================
 # Build NanoGUI
 # ============================================================================
-# Use OpenGL backend for UI. In the future, this can be removed to use Metal on MacOS
-if(APPLE)
+# When using OpenGL backend for UI, disable GL deprecation warnings.
+if(APPLE AND NANOGUI_BACKEND STREQUAL "OpenGL")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
 endif()
-# set(NANOGUI_BACKEND "OpenGL" CACHE BOOL " " FORCE)
+
 set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " ")
 set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
 set(NANOGUI_BUILD_PYTHON OFF CACHE BOOL " " FORCE)
+
 add_subdirectory(ext/nanogui)
 set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
@@ -216,9 +215,6 @@ set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 # ============================================================================
 add_subdirectory(ext/PlatformFolders)
 
-# ============================================================================
-# Define variables for the include directories for the various dependencies and export them to the parent scope
-# ============================================================================
 set(OPENEXR_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
     ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
