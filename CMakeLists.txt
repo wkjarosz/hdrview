@@ -3,8 +3,8 @@ project(hdrview)
 
 set(HDRVIEW_VERSION "1.2.0")
 
-# set(USE_SANITIZER "Address") set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/ext/cmake" ${CMAKE_MODULE_PATH})
-# include(sanitizers)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/resources" ${CMAKE_MODULE_PATH})
+include(sanitizers)
 
 # Set ourselves as the startup project in visual studio. Not available until cmake 3.6, but doesn't break older
 # versions.
@@ -276,16 +276,12 @@ endif()
 
 if(NANOGUI_BACKEND STREQUAL "OpenGL")
   set(RESOURCE_GLOB "resources/*.gl")
-  message(STATUS "Using OpenGL backend.")
 elseif(NANOGUI_BACKEND STREQUAL "GLES 2")
   set(RESOURCE_GLOB "resources/*.gles")
-  message(STATUS "Using GLES 2 backend.")
 elseif(NANOGUI_BACKEND STREQUAL "GLES 3")
   set(RESOURCE_GLOB "resources/*.gles")
-  message(STATUS "Using GLES 3 backend.")
 elseif(NANOGUI_BACKEND STREQUAL "Metal")
   set(RESOURCE_GLOB "resources/*.metal")
-  message(STATUS "Using Metal backend.")
 endif()
 
 # Run simple cmake converter to put shader files into the data segment
