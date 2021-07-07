@@ -70,6 +70,7 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: HDRView.exe
+          name: HDRView
           path: |
             ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe
