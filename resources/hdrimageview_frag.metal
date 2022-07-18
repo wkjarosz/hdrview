@@ -136,7 +136,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               constant int &channel,
                               constant float &gain,
                               constant float &gamma,
-                              constant bool &sRGB)
+                              constant bool &sRGB,
+                              constant bool &LDR)
 {
     float dark_gray = 0.1;
     float light_gray = 0.2;
@@ -152,6 +153,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     }
 
     float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.a));
+    blended = clamp(blended, LDR ? 0.0f : -64.0f, LDR ? 1.0f : 64.0f);
     return float4(blended, 1.0);
 }
 

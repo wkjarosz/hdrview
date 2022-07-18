@@ -4,9 +4,17 @@
 // be found in the LICENSE.txt file.
 //
 
+
 #include "common.h"
 #include "filesystem/path.h"
 #include "hdrviewscreen.h"
+
+#ifdef __APPLE__
+#define GLFW_EXPOSE_NATIVE_COCOA
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#endif
+
 #include <cstdlib>
 #include <docopt.h>
 #include <fstream>
@@ -17,6 +25,9 @@
 
 using namespace std;
 using json = nlohmann::json;
+
+
+static HDRViewScreen * g_screen = nullptr;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
@@ -55,8 +66,6 @@ Options:
   -h, --help               Display this message.
   --version                Show the version.
 )";
-
-HDRViewScreen *g_screen = nullptr;
 
 json read_settings()
 {
@@ -168,7 +177,8 @@ int main(int argc, char **argv)
         // list of filenames
         inFiles = docargs["FILE"].asStringList();
 
-        spdlog::info("Launching GUI.");
+        auto [capability10bit, capabilityEdr] = nanogui::test_10bit_edr_support();
+        spdlog::info("Launching GUI with {} bit color and {} display support.", capability10bit ? 10 : 8, capabilityEdr ? "HDR" : "LDR");
         nanogui::init();
 
 #if defined(__APPLE__)
@@ -176,10 +186,36 @@ int main(int argc, char **argv)
             nanogui::chdir_to_bundle_parent();
 #endif
 
+
         {
-            nanogui::ref<HDRViewScreen> app(g_screen = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles));
-            app->draw_all();
-            app->set_visible(true);
+#ifdef __APPLE__
+            // This code adapted from tev:
+            // On macOS, the mechanism for opening an application passes filenames
+            // through the NS api rather than CLI arguments, which means we need
+            // special handling of these through GLFW.
+            // There are two components to this special handling:
+
+            // 1. The filenames that were passed to this application when it was opened.
+            if (inFiles.empty()) {
+                // If we didn't get any command line arguments for files to open,
+                // then, on macOS, they might have been supplied through the NS api.
+                const char* const* openedFiles = glfwGetOpenedFilenames();
+                if (openedFiles) {
+                    for (auto p = openedFiles; *p; ++p) {
+                        inFiles.push_back(string(*p));
+                    }
+                }
+            }
+
+            // 2. a callback for when the same application is opened additional
+            //    times with more files.
+            glfwSetOpenedFilenamesCallback([](const char* imageFile) {
+                g_screen->drop_event({string(imageFile)});
+            });
+#endif
+            g_screen = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
+            g_screen->draw_all();
+            g_screen->set_visible(true);
             nanogui::mainloop(-1.f);
             write_settings();
         }

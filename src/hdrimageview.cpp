@@ -87,6 +87,7 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     m_exposure             = j.value("exposure", 0.0f);
     m_gamma                = j.value("gamma", 2.2f);
     m_sRGB                 = j.value("sRGB", true);
+    m_LDR          = j.value("LDR", false);
     m_dither               = j.value("dithering", true);
     m_draw_grid            = j.value("grid", true);
     m_grid_threshold       = j.value("grid threshold", 10);
@@ -140,6 +141,7 @@ void HDRImageView::write_settings(json &settings) const
     settings["image view"]["exposure"]             = exposure();
     settings["image view"]["gamma"]                = gamma();
     settings["image view"]["sRGB"]                 = sRGB();
+    settings["image view"]["LDR"]                  = LDR();
     settings["image view"]["dithering"]            = dithering_on();
     settings["image view"]["grid"]                 = draw_grid_on();
     settings["image view"]["grid threshold"]       = grid_threshold();
@@ -607,6 +609,7 @@ void HDRImageView::draw_contents()
         m_image_shader->set_uniform("gain", (float)powf(2.0f, m_exposure));
         m_image_shader->set_uniform("gamma", m_gamma);
         m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
+        m_image_shader->set_uniform("LDR", (bool)m_LDR);
         m_image_shader->set_uniform("do_dither", (bool)m_dither);
 
         Vector2f curr_pos, curr_scale;

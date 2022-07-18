@@ -34,7 +34,7 @@ using std::vector;
 using json = nlohmann::json;
 
 HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView")
+    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, true)
 {
     read_settings();
 

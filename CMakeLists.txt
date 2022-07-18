@@ -127,6 +127,22 @@ if(MSVC)
 endif()
 
 # ============================================================================
+# Build NanoGUI
+# ============================================================================
+# When using OpenGL backend for UI, disable GL deprecation warnings.
+if(APPLE AND NANOGUI_BACKEND STREQUAL "OpenGL")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
+endif()
+
+set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " ")
+set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
+set(NANOGUI_BUILD_PYTHON OFF CACHE BOOL " " FORCE)
+set(NANOGUI_INSTALL OFF CACHE BOOL " " FORCE)
+
+add_subdirectory(ext/nanogui)
+set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
+
+# ============================================================================
 # Build ZLIB on Windows (needed for OpenEXR)
 # ============================================================================
 if(WIN32)
@@ -158,14 +174,14 @@ endif()
 # ============================================================================
 cmake_policy(SET CMP0077 NEW)
 
+set(PYILMBASE_ENABLE OFF CACHE BOOL " " FORCE)
+set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
+set(OPENEXR_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
 set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
 set(OPENEXR_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
-set(OPENEXR_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
-set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
-set(PYILMBASE_ENABLE OFF CACHE BOOL " " FORCE)
 set(OPENEXR_BUILD_UTILS OFF CACHE BOOL " " FORCE)
-set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL " " FORCE)
-set(BUILD_TESTING OFF CACHE BOOL " " FORCE)
+# set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL " " FORCE)
+# set(BUILD_TESTING OFF CACHE BOOL " " FORCE)
 
 add_subdirectory(ext/openexr)
 
@@ -182,21 +198,6 @@ set_property(
 if(WIN32)
   add_dependencies(IlmImf zlibstatic)
 endif()
-
-# ============================================================================
-# Build NanoGUI
-# ============================================================================
-# When using OpenGL backend for UI, disable GL deprecation warnings.
-if(APPLE AND NANOGUI_BACKEND STREQUAL "OpenGL")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
-endif()
-
-set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " ")
-set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
-set(NANOGUI_BUILD_PYTHON OFF CACHE BOOL " " FORCE)
-
-add_subdirectory(ext/nanogui)
-set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
 
 # ============================================================================
 # Build docopt.cpp
@@ -216,9 +217,12 @@ set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 add_subdirectory(ext/PlatformFolders)
 
 set(OPENEXR_INCLUDE_DIRS
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
-    ${CMAKE_BINARY_DIR}/ext/openexr/IlmBase/config ${CMAKE_BINARY_DIR}/ext/openexr/OpenEXR/config)
+    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath
+    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex
+    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
+    ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
+    ${CMAKE_BINARY_DIR}/ext/openexr/IlmBase/config
+    ${CMAKE_BINARY_DIR}/ext/openexr/OpenEXR/config)
 
 set(OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 
@@ -447,16 +451,16 @@ if(APPLE)
   # Build an application bundle on OSX
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
   set_target_properties(
     HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING
                        "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
   string(TIMESTAMP YEAR "%Y")
   set_target_properties(
     HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT
-                       "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
+                       "Copyright 2023, Wojciech Jarosz. Freely available under the BSD license.")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST
@@ -509,8 +513,8 @@ add_executable(force-random-dither src/forced-random-dither.cpp)
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
-target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
+target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
+target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt sago::platform_folders)
 target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
 
 if(WIN32)

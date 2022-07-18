@@ -142,6 +142,9 @@ public:
         m_sRGB_callback(b);
     }
 
+    void set_LDR(bool value)    { m_LDR = value; }
+    bool LDR() const            { return m_LDR; }
+
     bool dithering_on() const { return m_dither; }
     void set_dithering(bool b) { m_dither = b; }
 
@@ -222,7 +225,7 @@ protected:
     TextureRef  m_dither_tex;
 
     float m_exposure = 0.f, m_gamma = 2.2f;
-    bool  m_sRGB = true, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
+    bool  m_sRGB = true, m_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
 
     // Image display parameters.
     float      m_zoom;                                  ///< The scale/zoom of the image
