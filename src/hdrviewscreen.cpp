@@ -9,7 +9,7 @@
 #include "common.h"
 #include "dialog.h"
 #include "editimagepanel.h"
-#include "filesystem/path.h"
+#include <filesystem/path.h>
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
@@ -502,11 +502,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                     m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
                                                                   color32[1], color32[2], color32[3]));
 
-                    m_color8_info_label->set_caption(fmt::format("{: 3d}\n{: 3d}\n{: 3d}\n{: 3d}",
+                    m_color8_info_label->set_caption(fmt::format("{: >3d}\n{: >3d}\n{: >3d}\n{: >3d}",
                                                                  (int)round(color8[0]), (int)round(color8[1]),
                                                                  (int)round(color8[2]), (int)round(color8[3])));
 
-                    m_pixel_info_label->set_caption(fmt::format("{: 4d}\n{: 4d}", pixel.x(), pixel.y()));
+                    m_pixel_info_label->set_caption(fmt::format("{: >4d}\n{: >4d}", pixel.x(), pixel.y()));
 
                     if (m_active_colorpicker)
                         m_active_colorpicker->set_color(Color(color32[0], color32[1], color32[2], color32[3]));
@@ -1408,7 +1408,7 @@ void HDRViewScreen::draw_contents()
         if (!img->is_null() && img->histograms() && img->histograms()->ready() && img->histograms()->get())
         {
             auto lazyHist = img->histograms();
-            m_stats_label->set_caption(fmt::format("{:.3f}\n{:.3f}\n{:.3f}", lazyHist->get()->minimum,
+            m_stats_label->set_caption(fmt::format("{:3.3g}\n{:3.3g}\n{:3.3g}", lazyHist->get()->minimum,
                                                    lazyHist->get()->average, lazyHist->get()->maximum));
         }
         else

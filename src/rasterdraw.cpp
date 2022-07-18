@@ -7,6 +7,7 @@
 #include "rasterdraw.h"
 #include "common.h"
 #include <cmath>
+#include <array>
 #include <nanogui/vector.h>
 
 #include <spdlog/spdlog.h>
