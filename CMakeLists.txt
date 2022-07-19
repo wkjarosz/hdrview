@@ -211,13 +211,18 @@ if(openexr_ADDED)
     )
 
     if(zlib_ADDED)
+      
+      set(ZLIB_INCLUDE_DIRS
+        ${zlib_BINARY_DIR}
+        ${zlib_SOURCE_DIR})
+
       set_target_properties(zlib::zlib PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES
         "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
         INTERFACE_LINK_LIBRARIES
         "zlibstatic"
       )
-      message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR}")
+      message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR} ${ZLIB_INCLUDE_DIRS}")
       add_dependencies(IlmImf zlibstatic)
     endif()
   endif()
@@ -288,6 +293,7 @@ endif()
 include_directories(
   SYSTEM
   ${NANOGUI_INCLUDE_DIRS}
+  ${ZLIB_INCLUDE_DIRS}
   ${CMAKE_SOURCE_DIR}/ext/alphanum
   ${CMAKE_SOURCE_DIR}/src)
 
