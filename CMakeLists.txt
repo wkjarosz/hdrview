@@ -186,6 +186,7 @@ endif()
 # ============================================================================
 # Build ZLIB on Windows (needed for OpenEXR)
 # ============================================================================
+set(ZLIB_LIBRARY "")
 if(WIN32)
   include(FetchContent)
   FetchContent_Declare(
@@ -198,6 +199,7 @@ if(WIN32)
   FetchContent_MakeAvailable(zlibstatic)
 
   set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
+  set(ZLIB_LIBRARIES zlibstatic)
   
   message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
   include_directories(${ZLIB_INCLUDE_DIR})
@@ -285,7 +287,7 @@ if(openexr_ADDED)
     INTERFACE_INCLUDE_DIRECTORIES
     "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
     INTERFACE_LINK_LIBRARIES
-    "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
+    "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
     )
 endif()
 
