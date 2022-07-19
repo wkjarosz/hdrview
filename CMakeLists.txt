@@ -190,9 +190,9 @@ if(WIN32)
     set(ZLIB_LIBRARIES zlibstatic)
   endif()
   
-  message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
-  message("adding zlib target: ${ZLIB_LIBRARIES}")
-  include_directories(${ZLIB_INCLUDE_DIR})
+  # message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
+  # message("adding zlib target: ${ZLIB_LIBRARIES}")
+  # include_directories(${ZLIB_INCLUDE_DIR})
 endif()
 
 CPMAddPackage(
@@ -211,6 +211,9 @@ CPMAddPackage(
 )
 if(openexr_ADDED)
   if(WIN32)
+    message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
+    message("adding zlib target: ${ZLIB_LIBRARIES}")
+    target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
     add_dependencies(IlmImf ${ZLIB_LIBRARIES})
   endif()
 
