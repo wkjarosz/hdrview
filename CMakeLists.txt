@@ -119,29 +119,17 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-# CPMAddPackage(
-#   NAME filesystem
-#   GITHUB_REPOSITORY wkjarosz/filesystem
-#   GIT_TAG 5e0eb2a6160201de38d076c085641742ee86a8f6
-#   DOWNLOAD_ONLY YES
-# )
 CPMAddPackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
-if(filesystem_ADDED)
-  add_library(filesystem INTERFACE IMPORTED)
-  target_include_directories(filesystem INTERFACE "${filesystem_SOURCE_DIR}")
-endif()
+add_library(filesystem INTERFACE IMPORTED)
+target_include_directories(filesystem INTERFACE "${filesystem_SOURCE_DIR}")
 
 CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
-if(stb_ADDED)
-  add_library(stb INTERFACE IMPORTED)
-  target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
-endif()
+add_library(stb INTERFACE IMPORTED)
+target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 
 CPMAddPackage("gh:cxong/tinydir#9f866c1ec09e62aa4df50d7209556ed705a4dd90")
-if(tinydir_ADDED)
-  add_library(tinydir INTERFACE IMPORTED)
-  target_include_directories(tinydir INTERFACE "${tinydir_SOURCE_DIR}")
-endif()
+add_library(tinydir INTERFACE IMPORTED)
+target_include_directories(tinydir INTERFACE "${tinydir_SOURCE_DIR}")
 
 CPMAddPackage(
   NAME nlohmann_json
@@ -150,36 +138,23 @@ CPMAddPackage(
   URL_HASH SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
   OPTIONS "JSON_MultipleHeaders ON"
 )
-if(nlohmann_json_ADDED)
-  add_library(nlohmann_json INTERFACE IMPORTED)
-  target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
-endif()
+add_library(nlohmann_json INTERFACE IMPORTED)
+target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
 
 CPMAddPackage("gh:syoyo/tinydng#96eea08c8ff4b18cae2f10028acc1dcda76873a6")
-if(tinydng_ADDED)
-  add_library(tinydng INTERFACE IMPORTED)
-  target_include_directories(tinydng INTERFACE "${tinydng_SOURCE_DIR}")
-endif()
+add_library(tinydng INTERFACE IMPORTED)
+target_include_directories(tinydng INTERFACE "${tinydng_SOURCE_DIR}")
 
 CPMAddPackage(
   NAME platform_folders
   GITHUB_REPOSITORY sago007/PlatformFolders
   GIT_TAG 4.2.0
 )
-if(platform_folders_ADDED)
-  target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
-endif()
+target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
 
-# CPMAddPackage(
-#   NAME docopt
-#   GITHUB_REPOSITORY docopt/docopt.cpp
-#   GIT_TAG 400e6dd8e59196c914dcc2c56caf7dae7efa5eb3
-# )
 CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
-if(docopt_ADDED)
-  if(WIN32)
-    target_link_libraries(docopt INTERFACE Boost::regex)
-  endif()
+if(WIN32)
+  target_link_libraries(docopt INTERFACE Boost::regex)
 endif()
 
 
@@ -197,42 +172,37 @@ CPMAddPackage(
     "INSTALL_OPENEXR_EXAMPLES OFF"
     "BUILD_TESTING OFF"
 )
-if(openexr_ADDED)
-  if(WIN32)
-    CPMAddPackage(
-      NAME zlib
-      GITHUB_REPOSITORY mitsuba-renderer/zlib
-      GIT_TAG 080a732c47e86444034c1f99355368d35c1e458a
-      OPTIONS
-        "ZLIB_BUILD_STATIC_LIBS ON"
-        "ZLIB_BUILD_SHARED_LIBS OFF"
-        "SKIP_INSTALL_ALL ON"
-    )
-
-    if(zlib_ADDED)
-      add_library(zlib::zlib INTERFACE IMPORTED)
-      set_target_properties(zlib::zlib PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES
-        "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
-        INTERFACE_LINK_LIBRARIES
-        "zlibstatic"
-      )
-      message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR}")
-      add_dependencies(IlmImf zlib::zlib)
-    endif()
-  endif()
-
-  add_library(openexr::openexr INTERFACE IMPORTED)
-  # target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
-  # target_link_libraries(openexr::openexr INTERFACE "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
-
-  set_target_properties(openexr::openexr PROPERTIES
+add_library(zlib::zlib INTERFACE IMPORTED)
+if(WIN32)
+  CPMAddPackage(
+    NAME zlib
+    GITHUB_REPOSITORY mitsuba-renderer/zlib
+    GIT_TAG 080a732c47e86444034c1f99355368d35c1e458a
+    OPTIONS
+      "ZLIB_BUILD_STATIC_LIBS ON"
+      "ZLIB_BUILD_SHARED_LIBS OFF"
+      "SKIP_INSTALL_ALL ON"
+  )
+  set_target_properties(zlib::zlib PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES
-    "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
+    "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
     INTERFACE_LINK_LIBRARIES
-    "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
-    )
+    "zlibstatic"
+  )
+  message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR}")
+  add_dependencies(IlmImf zlibstatic)
 endif()
+
+add_library(openexr::openexr INTERFACE IMPORTED)
+# target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
+# target_link_libraries(openexr::openexr INTERFACE "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
+
+set_target_properties(openexr::openexr PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES
+  "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
+  INTERFACE_LINK_LIBRARIES
+  "zlib::zlib;OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
+  )
 
 CPMAddPackage("gh:gabime/spdlog@1.9.2")
 
@@ -247,25 +217,23 @@ CPMAddPackage(
     "NANOGUI_BUILD_PYTHON OFF"
     "NANOGUI_INSTALL OFF"
 )
-if(nanogui_ADDED)
-  set(NANOGUI_INCLUDE_DIRS
-    ${nanogui_SOURCE_DIR}/ext/glfw/include
-    ${nanogui_SOURCE_DIR}/ext/nanovg/src
-    ${nanogui_SOURCE_DIR}/include
-    ${NANOGUI_EXTRA_INCS})
-  add_library(nanogui::nanogui INTERFACE IMPORTED)
+set(NANOGUI_INCLUDE_DIRS
+  ${nanogui_SOURCE_DIR}/ext/glfw/include
+  ${nanogui_SOURCE_DIR}/ext/nanovg/src
+  ${nanogui_SOURCE_DIR}/include
+  ${NANOGUI_EXTRA_INCS})
+add_library(nanogui::nanogui INTERFACE IMPORTED)
 
-  # target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
-  target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
-  # target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
+# target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
+target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
+# target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
 
-  # set_target_properties(nanogui::nanogui PROPERTIES
-  #   INTERFACE_INCLUDE_DIRECTORIES
-  #   "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}"
-  #   INTERFACE_LINK_LIBRARIES "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
-  #   INTERFACE_COMPILE_DEFINITIONS "${NANOGUI_BACKEND_DEFS}"
-  #   )
-endif()
+# set_target_properties(nanogui::nanogui PROPERTIES
+#   INTERFACE_INCLUDE_DIRECTORIES
+#   "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}"
+#   INTERFACE_LINK_LIBRARIES "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
+#   INTERFACE_COMPILE_DEFINITIONS "${NANOGUI_BACKEND_DEFS}"
+#   )
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
