@@ -183,19 +183,6 @@ if(docopt_ADDED)
 endif()
 
 
-if(WIN32)
-  CPMAddPackage("gh:mitsuba-renderer/zlib#080a732c47e86444034c1f99355368d35c1e458a")
-  if(zlib_ADDED)
-    add_library(zlib::zlib INTERFACE IMPORTED)
-    set_target_properties(zlib::zlib PROPERTIES
-      INTERFACE_INCLUDE_DIRECTORIES
-      "${zlib_BINARY_DIR}/zlib"
-      INTERFACE_LINK_LIBRARIES
-      "zlibstatic"
-    )
-  endif()
-endif()
-
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY mitsuba-renderer/openexr
@@ -210,8 +197,30 @@ CPMAddPackage(
     "INSTALL_OPENEXR_EXAMPLES OFF"
     "BUILD_TESTING OFF"
 )
-# CPMAddPackage("gh:mitsuba-renderer/openexr#dbabb6f9500ee628c1faba21bb8add2649cc32a6")
 if(openexr_ADDED)
+  if(WIN32)
+    CPMAddPackage(
+      NAME zlib
+      GITHUB_REPOSITORY mitsuba-renderer/zlib
+      GIT_TAG 080a732c47e86444034c1f99355368d35c1e458a
+      OPTIONS
+        "ZLIB_BUILD_STATIC_LIBS ON"
+        "ZLIB_BUILD_SHARED_LIBS OFF"
+        "SKIP_INSTALL_ALL ON"
+    )
+
+    if(zlib_ADDED)
+      add_library(zlib::zlib INTERFACE IMPORTED)
+      set_target_properties(zlib::zlib PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES
+        "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
+        INTERFACE_LINK_LIBRARIES
+        "zlibstatic"
+      )
+      message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR}")
+      add_dependencies(OpenEXR::IlmImf zlib::zlib)
+    endif()
+  endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)
   # target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
