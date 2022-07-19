@@ -187,32 +187,46 @@ endif()
 # Build ZLIB on Windows (needed for OpenEXR)
 # ============================================================================
 if(WIN32)
-  set(ZLIB_EXT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/zlib)
-  set(ZLIB_EXT_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/zlib)
-  set(ZLIB_EXT_CONFIG Release)
-
-  include(ExternalProject)
-  ExternalProject_Add(
+  include(FetchContent)
+  FetchContent_Declare(
     zlibstatic
     GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
     GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
-    SOURCE_DIR ${ZLIB_EXT_SOURCE_DIR}
-    BINARY_DIR ${ZLIB_EXT_BINARY_DIR}
-    CMAKE_ARGS
-      -DZLIB_BUILD_STATIC_LIBS=TRUE
-      -DZLIB_BUILD_SHARED_LIBS=FALSE
-    BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting zlib build"
-    COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
-    COMMAND ${CMAKE_COMMAND} -E echo "zlib build complete"
-    INSTALL_COMMAND "")
+  )
+  set(ZLIB_BUILD_STATIC_LIBS TRUE)
+  set(ZLIB_BUILD_SHARED_LIBS FALSE)
+  FetchContent_MakeAvailable(zlibstatic)
 
-  set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
-  set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-
-  # set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
-
+  set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
+  
   message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
   include_directories(${ZLIB_INCLUDE_DIR})
+ 
+  # set(ZLIB_EXT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/zlib)
+  # set(ZLIB_EXT_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/zlib)
+  # set(ZLIB_EXT_CONFIG Release)
+  # include(ExternalProject)
+  # ExternalProject_Add(
+  #   zlibstatic
+  #   GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
+  #   GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
+  #   SOURCE_DIR ${ZLIB_EXT_SOURCE_DIR}
+  #   BINARY_DIR ${ZLIB_EXT_BINARY_DIR}
+  #   CMAKE_ARGS
+  #     -DZLIB_BUILD_STATIC_LIBS=TRUE
+  #     -DZLIB_BUILD_SHARED_LIBS=FALSE
+  #   BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting zlib build"
+  #   COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
+  #   COMMAND ${CMAKE_COMMAND} -E echo "zlib build complete"
+  #   INSTALL_COMMAND "")
+
+  # set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
+  # set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+
+  # # set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
+
+  # message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
+  # include_directories(${ZLIB_INCLUDE_DIR})
 endif()
 
 
@@ -231,7 +245,7 @@ CPMAddPackage(
     "BUILD_TESTING OFF"
 )
 if(openexr_ADDED)
-  add_library(zlib::zlib INTERFACE IMPORTED)
+  # add_library(zlib::zlib INTERFACE IMPORTED)
   if(WIN32)
     # CPMAddPackage(
     #   NAME zlib
@@ -271,7 +285,7 @@ if(openexr_ADDED)
     INTERFACE_INCLUDE_DIRECTORIES
     "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
     INTERFACE_LINK_LIBRARIES
-    "zlib::zlib;OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
+    "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
     )
 endif()
 
@@ -329,7 +343,6 @@ endif()
 include_directories(
   SYSTEM
   ${NANOGUI_INCLUDE_DIRS}
-  ${ZLIB_INCLUDE_DIRS}
   ${CMAKE_SOURCE_DIR}/ext/alphanum
   ${CMAKE_SOURCE_DIR}/src)
 
