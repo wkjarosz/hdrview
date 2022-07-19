@@ -176,6 +176,11 @@ endif()
 #   GIT_TAG 400e6dd8e59196c914dcc2c56caf7dae7efa5eb3
 # )
 CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
+if(docopt_ADDED)
+  if(WIN32)
+    target_link_libraries(docopt INTERFACE Boost::regex)
+  endif()
+endif()
 
 
 CPMAddPackage(
@@ -511,11 +516,6 @@ add_executable(force-random-dither src/forced-random-dither.cpp)
 target_link_libraries(HDRView PRIVATE stb openexr::openexr nanogui::nanogui docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog)
 target_link_libraries(hdrbatch PRIVATE stb openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog)
 target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog)
-
-if(WIN32)
-  target_link_libraries(HDRView Boost::regex)
-  target_link_libraries(hdrbatch Boost::regex)
-endif()
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   find_program(iwyu_path NAMES include-what-you-use iwyu)
