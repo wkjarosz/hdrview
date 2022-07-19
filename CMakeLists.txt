@@ -167,6 +167,12 @@ endif()
 CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
 if(docopt_ADDED)
   if(WIN32)
+    CPMAddPackage(
+      NAME Boost
+      VERSION 1.73.0
+      GITHUB_REPOSITORY "boostorg/boost"
+      GIT_TAG "boost-1.73.0"
+    )
     target_link_libraries(docopt INTERFACE Boost::regex)
   endif()
 endif()
