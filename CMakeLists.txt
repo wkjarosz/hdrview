@@ -178,29 +178,6 @@ if(docopt_ADDED)
 endif()
 
 
-# ============================================================================
-# Build ZLIB on Windows (needed for OpenEXR)
-# ============================================================================
-set(ZLIB_LIBRARIES "")
-if(WIN32)
-  CPMAddPackage(
-    NAME zlibstatic
-    GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
-    GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
-    OPTIONS
-      "ZLIB_BUILD_STATIC_LIBS TRUE"
-      "ZLIB_BUILD_SHARED_LIBS FALSE"
-  )
-  if(zlibstatic_ADDED)
-    set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
-    set(ZLIB_LIBRARIES zlibstatic)
-  endif()
-  
-  # message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
-  # message("adding zlib target: ${ZLIB_LIBRARIES}")
-  # include_directories(${ZLIB_INCLUDE_DIR})
-endif()
-
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY mitsuba-renderer/openexr
@@ -216,11 +193,25 @@ CPMAddPackage(
     "BUILD_TESTING OFF"
 )
 if(openexr_ADDED)
+  set(ZLIB_LIBRARIES "")
   if(WIN32)
-    message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
-    message("adding zlib target: ${ZLIB_LIBRARIES}")
-    target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
-    add_dependencies(IlmImf ${ZLIB_LIBRARIES})
+    CPMAddPackage(
+      NAME zlibstatic
+      GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
+      GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
+      OPTIONS
+        "ZLIB_BUILD_STATIC_LIBS TRUE"
+        "ZLIB_BUILD_SHARED_LIBS FALSE"
+    )
+    if(zlibstatic_ADDED)
+      set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
+      set(ZLIB_LIBRARIES zlibstatic)
+
+      message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
+      message("adding zlib target: ${ZLIB_LIBRARIES}")
+      target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
+      add_dependencies(IlmImf ${ZLIB_LIBRARIES})
+    endif()
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)

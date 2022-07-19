@@ -59,11 +59,11 @@ jobs:
         # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
 
-      # - name: Checking that HDRView and hdrbatch run
-      #   run: |
-      #     ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
-      #     ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
-      #     ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
+          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
 
       # - name: Build
       #   run: msbuild /v:m /p:Configuration=Release hdrview.sln
