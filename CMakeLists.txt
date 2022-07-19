@@ -119,12 +119,6 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-# CPMAddPackage(
-#   NAME filesystem
-#   GITHUB_REPOSITORY wkjarosz/filesystem
-#   GIT_TAG 5e0eb2a6160201de38d076c085641742ee86a8f6
-#   DOWNLOAD_ONLY YES
-# )
 CPMAddPackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
 if(filesystem_ADDED)
   add_library(filesystem INTERFACE IMPORTED)
@@ -170,11 +164,6 @@ if(platform_folders_ADDED)
   target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
 endif()
 
-# CPMAddPackage(
-#   NAME docopt
-#   GITHUB_REPOSITORY docopt/docopt.cpp
-#   GIT_TAG 400e6dd8e59196c914dcc2c56caf7dae7efa5eb3
-# )
 CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
 if(docopt_ADDED)
   if(WIN32)
@@ -188,16 +177,6 @@ endif()
 # ============================================================================
 set(ZLIB_LIBRARIES "")
 if(WIN32)
-  # include(FetchContent)
-  # FetchContent_Declare(
-  #   zlibstatic
-  #   GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
-  #   GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
-  # )
-  # set(ZLIB_BUILD_STATIC_LIBS TRUE CACHE BOOL "Only build the static version of zlib")
-  # set(ZLIB_BUILD_SHARED_LIBS FALSE CACHE BOOL "Only build the static version of zlib")
-  # FetchContent_MakeAvailable(zlibstatic)
-
   CPMAddPackage(
     NAME zlibstatic
     GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
@@ -216,7 +195,6 @@ if(WIN32)
   include_directories(${ZLIB_INCLUDE_DIR})
 endif()
 
-
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY mitsuba-renderer/openexr
@@ -232,23 +210,20 @@ CPMAddPackage(
     "BUILD_TESTING OFF"
 )
 if(openexr_ADDED)
-  # add_library(zlib::zlib INTERFACE IMPORTED)
   if(WIN32)
-    message("ZLIB include ${ZLIB_INCLUDE_DIR}")
-    message("ZLIB target ${ZLIB_LIBRARIES}")
     add_dependencies(IlmImf ${ZLIB_LIBRARIES})
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)
-  # target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
-  # target_link_libraries(openexr::openexr INTERFACE "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
+  target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
+  target_link_libraries(openexr::openexr INTERFACE "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
 
-  set_target_properties(openexr::openexr PROPERTIES
-    INTERFACE_INCLUDE_DIRECTORIES
-    "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
-    INTERFACE_LINK_LIBRARIES
-    "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
-    )
+  # set_target_properties(openexr::openexr PROPERTIES
+  #   INTERFACE_INCLUDE_DIRECTORIES
+  #   "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
+  #   INTERFACE_LINK_LIBRARIES
+  #   "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
+  #   )
 endif()
 
 CPMAddPackage("gh:gabime/spdlog@1.9.2")
@@ -265,16 +240,10 @@ CPMAddPackage(
     "NANOGUI_INSTALL OFF"
 )
 if(nanogui_ADDED)
-  set(NANOGUI_INCLUDE_DIRS
-    ${nanogui_SOURCE_DIR}/ext/glfw/include
-    ${nanogui_SOURCE_DIR}/ext/nanovg/src
-    ${nanogui_SOURCE_DIR}/include
-    ${NANOGUI_EXTRA_INCS})
   add_library(nanogui::nanogui INTERFACE IMPORTED)
-
-  # target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
+  target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
   target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
-  # target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
+  target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
 
   # set_target_properties(nanogui::nanogui PROPERTIES
   #   INTERFACE_INCLUDE_DIRECTORIES
@@ -303,8 +272,6 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
 endif()
 
 include_directories(
-  SYSTEM
-  ${NANOGUI_INCLUDE_DIRS}
   ${CMAKE_SOURCE_DIR}/ext/alphanum
   ${CMAKE_SOURCE_DIR}/src)
 
@@ -553,8 +520,8 @@ add_executable(force-random-dither src/forced-random-dither.cpp)
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView PRIVATE stb openexr::openexr nanogui::nanogui docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
-target_link_libraries(hdrbatch PRIVATE stb openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
