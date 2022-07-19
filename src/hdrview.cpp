@@ -6,6 +6,7 @@
 
 
 #include "common.h"
+#include <CLI/CLI.hpp>
 #include <filesystem/path.h>
 #include "hdrviewscreen.h"
 
@@ -16,7 +17,6 @@
 #endif
 
 #include <cstdlib>
-#include <docopt.h>
 #include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -31,41 +31,6 @@ static HDRViewScreen * g_screen = nullptr;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
-
-static const char USAGE[] =
-    R"(HDRView. Copyright (c) Wojciech Jarosz.
-
-HDRView is a simple research-oriented tool for examining,
-comparing, and converting high-dynamic range images. HDRView
-is freely available under a 3-clause BSD license.
-
-Usage:
-  hdrview [options FILE...]
-  hdrview -h | --help | --version
-
-Options:
-  -e E, --exposure=E       Desired power of 2 EV or exposure value
-                           (gain = 2^exposure) [default: 0].
-  -g G, --gamma=G          Desired gamma value for exposure+gamma tonemapping.
-                           An sRGB curve is used if gamma is not specified.
-  -d, --no-dither          Disable dithering.
-  -v T, --verbose=T        Set verbosity threshold with lower values meaning
-                           more verbose and higher values removing low-priority
-                           messages.
-                           T : (0 | 1 | 2 | 3 | 4 | 5 | 6).
-                           All messages with severity >= T are displayed, where
-                           the severities are:
-                                trace    = 0
-                                debug    = 1
-                                info     = 2
-                                warn     = 3
-                                err      = 4
-                                critical = 5
-                                off      = 6
-                           The default is 2 (info).
-  -h, --help               Display this message.
-  --version                Show the version.
-)";
 
 json read_settings()
 {
@@ -100,12 +65,11 @@ void write_settings()
 
 int main(int argc, char **argv)
 {
-    vector<string>             arg_vector = {argv + 1, argv + argc};
-    map<string, docopt::value> docargs;
+    // vector<string>             arg_vector = {argv + 1, argv + argc};
     constexpr int              default_verbosity = spdlog::level::info;
     int                        verbosity         = default_verbosity;
 
-    float gamma  = 2.2f, exposure;
+    float gamma  = 2.2f, exposure = 0.0f;
     bool  dither = true, sRGB = true;
 
     vector<string> inFiles;
@@ -113,79 +77,95 @@ int main(int argc, char **argv)
     try
     {
 
-#if defined(__APPLE__)
-        bool launched_from_finder = false;
-        // check whether -psn is set, and remove it from the arguments
-        for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
-        {
-            if (strncmp("-psn", i->c_str(), 4) == 0)
-            {
-                launched_from_finder = true;
-                arg_vector.erase(i);
-                break;
-            }
-        }
-#endif
+// #if defined(__APPLE__)
+//         bool launched_from_finder = false;
+//         // check whether -psn is set, and remove it from the arguments
+//         for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
+//         {
+//             if (strncmp("-psn", i->c_str(), 4) == 0)
+//             {
+//                 launched_from_finder = true;
+//                 arg_vector.erase(i);
+//                 break;
+//             }
+//         }
+// #endif
+
         string version_string = fmt::format("HDRView {}. (built on {} from git {}-{}-{} using {} backend)",
                                             HDRVIEW_VERSION, hdrview_timestamp(), hdrview_git_branch(),
                                             hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
-        docargs               = docopt::docopt(USAGE, arg_vector,
-                                 true,            // show help if requested
-                                 version_string); // version string
+
+        CLI::App app{
+"HDRView is a simple research-oriented tool for examining,"
+"comparing, and converting high-dynamic range images. HDRView"
+"is freely available under a 3-clause BSD license.",
+"HDRView"};
+
+        app.set_version_flag("--version", version_string, "Show the version");
+        app.add_option("-e,--exposure", exposure,
+                    fmt::format("Desired power of 2 EV or exposure value (gain = 2^exposure)."))
+            ->check(CLI::Number);
+        app.add_option("-g,--gamma", gamma,
+                    fmt::format("Desired gamma value for exposure+gamma tonemapping. An sRGB curve is used if gamma is not specified."))
+            ->check(CLI::Number);
+        app.add_option("-v,--verbosity", verbosity,
+                       R"(Set verbosity threshold T with lower values meaning more verbose
+and higher values removing low-priority messages. All messages with
+severity >= T are displayed, where the severities are:
+    trace    = 0
+    debug    = 1
+    info     = 2
+    warn     = 3
+    err      = 4
+    critical = 5
+    off      = 6
+The default is 2 (info).)")
+            ->check(CLI::Range(0, 6));
+        app.add_flag("-d, --no-dither", dither, "Disable dithering.");
+        app.add_option(
+            "IMAGES", inFiles,
+            "The images files to load.")
+            ->check(CLI::ExistingPath);
 
         // Console logger with color
         spdlog::set_pattern("%^[%l]%$ %v");
         spdlog::set_level(spdlog::level::level_enum(default_verbosity));
+     
+        CLI11_PARSE(app, argc, argv);
 
         auto settings = read_settings();
-        if (docargs["--verbose"])
-            verbosity = docargs["--verbose"].asLong();
-        else
+        if (!app.count("--verbosity"))
             verbosity = settings.value("verbosity", default_verbosity);
-
-        if (verbosity < spdlog::level::trace || verbosity > spdlog::level::off)
-        {
-            verbosity = default_verbosity;
-            spdlog::error("Invalid verbosity threshold. Setting to default \"{}\"", verbosity);
-        }
 
         spdlog::set_level(spdlog::level::level_enum(verbosity));
 
         spdlog::info("Welcome to HDRView!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
-
-        spdlog::debug("Running with the following commands/arguments/options:");
-        for (auto const &arg : docargs) spdlog::debug("{:<13}: {}", arg.first, arg.second);
-
-        // exposure
-        exposure = strtof(docargs["--exposure"].asString().c_str(), (char **)NULL);
         spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
 
         // gamma or sRGB
-        if (docargs["--gamma"])
+        if (app.count("--gamma"))
         {
             sRGB  = false;
-            gamma = max(0.1f, strtof(docargs["--gamma"].asString().c_str(), (char **)NULL));
             spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
         else
             spdlog::info("Using sRGB response curve.");
 
-        // dithering
-        dither = !docargs["--no-dither"].asBool();
-
-        // list of filenames
-        inFiles = docargs["FILE"].asStringList();
+        settings["image view"]["exposure"]  = exposure;
+        settings["image view"]["gamma"]     = gamma;
+        settings["image view"]["sRGB"]      = sRGB;
+        settings["image view"]["dithering"] = dither;
+        write_settings();
 
         auto [capability10bit, capabilityEdr] = nanogui::test_10bit_edr_support();
         spdlog::info("Launching GUI with {} bit color and {} display support.", capability10bit ? 10 : 8, capabilityEdr ? "HDR" : "LDR");
         nanogui::init();
 
-#if defined(__APPLE__)
-        if (launched_from_finder)
-            nanogui::chdir_to_bundle_parent();
-#endif
-
+// #if defined(__APPLE__)
+//         if (launched_from_finder)
+//             nanogui::chdir_to_bundle_parent();
+// #endif
 
         {
 #ifdef __APPLE__
@@ -230,8 +210,8 @@ int main(int argc, char **argv)
     catch (const std::exception &e)
     {
         spdlog::critical("Error: {}", e.what());
-        fprintf(stderr, "%s", USAGE);
-        return -1;
+        // fprintf(stderr, "%s", USAGE);
+        exit(EXIT_FAILURE);
     }
 
     return EXIT_SUCCESS;

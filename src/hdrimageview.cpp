@@ -87,7 +87,7 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     m_exposure             = j.value("exposure", 0.0f);
     m_gamma                = j.value("gamma", 2.2f);
     m_sRGB                 = j.value("sRGB", true);
-    m_LDR          = j.value("LDR", false);
+    m_LDR                  = j.value("LDR", false);
     m_dither               = j.value("dithering", true);
     m_draw_grid            = j.value("grid", true);
     m_grid_threshold       = j.value("grid threshold", 10);

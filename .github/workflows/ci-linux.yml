@@ -33,7 +33,6 @@ jobs:
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/hdrbatch --help
           ${{github.workspace}}/build/HDRView --help
 
       - name: Archive build artifacts

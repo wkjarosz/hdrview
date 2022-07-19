@@ -164,17 +164,28 @@ if(platform_folders_ADDED)
   target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
-if(docopt_ADDED)
-  if(WIN32)
-    CPMAddPackage(
-      NAME Boost
-      VERSION 1.73.0
-      GITHUB_REPOSITORY "boostorg/boost"
-      GIT_TAG "boost-1.73.0"
-    )
-    target_link_libraries(docopt INTERFACE Boost::regex)
-  endif()
+# CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
+# if(docopt_ADDED)
+#   if(WIN32)
+#     CPMAddPackage(
+#       NAME Boost
+#       VERSION 1.73.0
+#       GITHUB_REPOSITORY "boostorg/boost"
+#       GIT_TAG "boost-1.73.0"
+#     )
+#     target_link_libraries(docopt INTERFACE Boost::regex)
+#   endif()
+# endif()
+
+
+CPMAddPackage(
+  NAME cli11
+  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
+  DOWNLOAD_ONLY YES
+)
+if(cli11_ADDED)
+  add_library(cli11 INTERFACE IMPORTED)
+  target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
 endif()
 
 
@@ -207,8 +218,7 @@ if(openexr_ADDED)
       set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
       set(ZLIB_LIBRARIES zlibstatic)
 
-      message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
-      message("adding zlib target: ${ZLIB_LIBRARIES}")
+      message(STATUS "Adding zlib includes and target: ${ZLIB_INCLUDE_DIR} ${ZLIB_LIBRARIES}")
       target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
       add_dependencies(IlmImf ${ZLIB_LIBRARIES})
     endif()
@@ -483,36 +493,36 @@ if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
   add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
 endif()
 
-add_executable(
-  hdrbatch
-  hdrview_version.cpp
-  src/color.h
-  src/colorspace.cpp
-  src/colorspace.h
-  src/common.cpp
-  src/common.h
-  src/envmap.cpp
-  src/envmap.h
-  src/dithermatrix256.h
-  src/fwd.h
-  src/hdrimage.cpp
-  src/hdrimage.h
-  src/hdrimagedngio.cpp
-  src/hdrimageio.cpp
-  src/hdrimageraw.cpp
-  src/hdrimageraw.h
-  src/hdrbatch.cpp
-  src/json.h
-  src/parallelfor.cpp
-  src/parallelfor.h
-  src/pfm.cpp
-  src/pfm.h
-  src/ppm.cpp
-  src/ppm.h
-  src/progress.cpp
-  src/progress.h
-  src/range.h
-  src/timer.h)
+# add_executable(
+#   hdrbatch
+#   hdrview_version.cpp
+#   src/color.h
+#   src/colorspace.cpp
+#   src/colorspace.h
+#   src/common.cpp
+#   src/common.h
+#   src/envmap.cpp
+#   src/envmap.h
+#   src/dithermatrix256.h
+#   src/fwd.h
+#   src/hdrimage.cpp
+#   src/hdrimage.h
+#   src/hdrimagedngio.cpp
+#   src/hdrimageio.cpp
+#   src/hdrimageraw.cpp
+#   src/hdrimageraw.h
+#   src/hdrbatch.cpp
+#   src/json.h
+#   src/parallelfor.cpp
+#   src/parallelfor.h
+#   src/pfm.cpp
+#   src/pfm.h
+#   src/ppm.cpp
+#   src/ppm.h
+#   src/progress.cpp
+#   src/progress.h
+#   src/range.h
+#   src/timer.h)
 
 # add_dependencies(hdrbatch version_info)
 
@@ -520,8 +530,8 @@ add_executable(force-random-dither src/forced-random-dither.cpp)
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
-target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+# target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
@@ -530,7 +540,7 @@ if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   if(iwyu_path)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
     set(CMAKE_C_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-    set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
+    set_property(TARGET HDRView force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
   endif()
 endif()
 
@@ -566,4 +576,4 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
 endif()
 
 target_compile_features(HDRView PRIVATE cxx_std_17)
-target_compile_features(hdrbatch PRIVATE cxx_std_17)
+# target_compile_features(hdrbatch PRIVATE cxx_std_17)

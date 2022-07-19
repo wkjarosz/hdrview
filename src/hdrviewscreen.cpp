@@ -547,6 +547,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             }
         });
 
+    m_image_view->set_exposure(exposure);
+    m_image_view->set_gamma(gamma);
+    m_image_view->set_sRGB(sRGB);
+    m_image_view->set_dithering(dither);
+
     drop_event(args);
 
     set_size(m_settings.value("geometry", json::object()).value("size", Vector2i(800, 600)));
