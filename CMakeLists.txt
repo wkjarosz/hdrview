@@ -183,6 +183,19 @@ if(docopt_ADDED)
 endif()
 
 
+if(WIN32)
+  CPMAddPackage("gh:mitsuba-renderer/zlib#080a732c47e86444034c1f99355368d35c1e458a")
+  if(zlib_ADDED)
+    add_library(zlib::zlib INTERFACE IMPORTED)
+    set_target_properties(zlib::zlib PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES
+      "${zlib_BINARY_DIR}/zlib"
+      INTERFACE_LINK_LIBRARIES
+      "zlibstatic"
+    )
+  endif()
+endif()
+
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY mitsuba-renderer/openexr
@@ -199,6 +212,7 @@ CPMAddPackage(
 )
 # CPMAddPackage("gh:mitsuba-renderer/openexr#dbabb6f9500ee628c1faba21bb8add2649cc32a6")
 if(openexr_ADDED)
+
   add_library(openexr::openexr INTERFACE IMPORTED)
   # target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
   # target_link_libraries(openexr::openexr INTERFACE "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
