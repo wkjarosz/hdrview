@@ -211,7 +211,7 @@ if(openexr_ADDED)
     )
 endif()
 
-CPMAddPackage("gh:gabime/spdlog@1.8.2")
+CPMAddPackage("gh:gabime/spdlog@1.9.2")
 
 
 CPMAddPackage(
@@ -513,9 +513,9 @@ add_executable(force-random-dither src/forced-random-dither.cpp)
 
 # set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
 
-target_link_libraries(HDRView PRIVATE stb openexr::openexr nanogui::nanogui docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog)
-target_link_libraries(hdrbatch PRIVATE stb openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog)
-target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog)
+target_link_libraries(HDRView PRIVATE stb openexr::openexr nanogui::nanogui docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(hdrbatch PRIVATE stb openexr::openexr docopt platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   find_program(iwyu_path NAMES include-what-you-use iwyu)
