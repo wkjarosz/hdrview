@@ -183,6 +183,39 @@ if(docopt_ADDED)
 endif()
 
 
+# ============================================================================
+# Build ZLIB on Windows (needed for OpenEXR)
+# ============================================================================
+if(WIN32)
+  set(ZLIB_EXT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/zlib)
+  set(ZLIB_EXT_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/zlib)
+  set(ZLIB_EXT_CONFIG Release)
+
+  include(ExternalProject)
+  ExternalProject_Add(
+    zlibstatic
+    GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
+    GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
+    SOURCE_DIR ${ZLIB_EXT_SOURCE_DIR}
+    BINARY_DIR ${ZLIB_EXT_BINARY_DIR}
+    CMAKE_ARGS
+      -DZLIB_BUILD_STATIC_LIBS=TRUE
+      -DZLIB_BUILD_SHARED_LIBS=FALSE
+    BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting zlib build"
+    COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
+    COMMAND ${CMAKE_COMMAND} -E echo "zlib build complete"
+    INSTALL_COMMAND "")
+
+  set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
+  set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
+
+  # set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
+
+  message("adding zlib include dirs: ${ZLIB_INCLUDE_DIR}")
+  include_directories(${ZLIB_INCLUDE_DIR})
+endif()
+
+
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY mitsuba-renderer/openexr
@@ -200,31 +233,34 @@ CPMAddPackage(
 if(openexr_ADDED)
   add_library(zlib::zlib INTERFACE IMPORTED)
   if(WIN32)
-    CPMAddPackage(
-      NAME zlib
-      GITHUB_REPOSITORY mitsuba-renderer/zlib
-      GIT_TAG 080a732c47e86444034c1f99355368d35c1e458a
-      OPTIONS
-        "ZLIB_BUILD_STATIC_LIBS ON"
-        "ZLIB_BUILD_SHARED_LIBS OFF"
-        "SKIP_INSTALL_ALL ON"
-    )
+    # CPMAddPackage(
+    #   NAME zlib
+    #   GITHUB_REPOSITORY mitsuba-renderer/zlib
+    #   GIT_TAG 080a732c47e86444034c1f99355368d35c1e458a
+    #   OPTIONS
+    #     "ZLIB_BUILD_STATIC_LIBS ON"
+    #     "ZLIB_BUILD_SHARED_LIBS OFF"
+    #     "SKIP_INSTALL_ALL ON"
+    # )
 
-    if(zlib_ADDED)
+    # if(zlib_ADDED)
       
-      set(ZLIB_INCLUDE_DIRS
-        ${zlib_BINARY_DIR}
-        ${zlib_SOURCE_DIR})
+    #   set(ZLIB_INCLUDE_DIRS
+    #     ${zlib_BINARY_DIR}
+    #     ${zlib_SOURCE_DIR})
 
-      set_target_properties(zlib::zlib PROPERTIES
-        INTERFACE_INCLUDE_DIRECTORIES
-        "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
-        INTERFACE_LINK_LIBRARIES
-        "zlibstatic"
-      )
-      message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR} ${ZLIB_INCLUDE_DIRS}")
-      add_dependencies(IlmImf zlibstatic)
-    endif()
+    #   set_target_properties(zlib::zlib PROPERTIES
+    #     INTERFACE_INCLUDE_DIRECTORIES
+    #     "${zlib_BINARY_DIR};${zlib_SOURCE_DIR}"
+    #     INTERFACE_LINK_LIBRARIES
+    #     "zlibstatic"
+    #   )
+    #   message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR} ${ZLIB_INCLUDE_DIRS}")
+    #   add_dependencies(IlmImf zlibstatic)
+    # endif()
+
+    message("ZLIB ${ZLIB_INCLUDE_DIR}")
+    add_dependencies(IlmImf zlibstatic)
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)

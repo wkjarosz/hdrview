@@ -57,7 +57,7 @@ jobs:
 
       - name: Build
         # Build your program with the given configuration
-        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
 
       - name: Checking that HDRView and hdrbatch run
         run: |
