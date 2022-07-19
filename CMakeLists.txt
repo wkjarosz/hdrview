@@ -218,7 +218,7 @@ if(openexr_ADDED)
         "zlibstatic"
       )
       message("ZLIB ${zlib_BINARY_DIR};${zlib_SOURCE_DIR}")
-      add_dependencies(OpenEXR::IlmImf zlib::zlib)
+      add_dependencies(IlmImf zlib::zlib)
     endif()
   endif()
 
