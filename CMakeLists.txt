@@ -193,8 +193,8 @@ if(WIN32)
     GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
     GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
   )
-  set(ZLIB_BUILD_STATIC_LIBS TRUE)
-  set(ZLIB_BUILD_SHARED_LIBS FALSE)
+  set(ZLIB_BUILD_STATIC_LIBS TRUE CACHE BOOL "Only build the static version of zlib")
+  set(ZLIB_BUILD_SHARED_LIBS FALSE CACHE BOOL "Only build the static version of zlib")
   FetchContent_MakeAvailable(zlibstatic)
 
   set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
