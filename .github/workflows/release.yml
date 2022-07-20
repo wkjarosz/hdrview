@@ -23,9 +23,9 @@ jobs:
 
       - name: Configure CMake (Metal backend)
         run: |
-          MACOSX_DEPLOYMENT_TARGET=10.14
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
+          MACOSX_DEPLOYMENT_TARGET=10.15
+          cmake -B ${{github.workspace}}/build-metal -DHDRVIEW_DEPLOY=1 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build-metal -DHDRVIEW_DEPLOY=1 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build (Metal backend)
         run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
@@ -42,7 +42,7 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build-metal/HDRView-Metal.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -62,9 +62,9 @@ jobs:
 
       - name: Configure CMake (OpenGL backend)
         run: |
-          MACOSX_DEPLOYMENT_TARGET=10.14
-          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
-          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
+          MACOSX_DEPLOYMENT_TARGET=10.15
+          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build (OpenGL backend)
         run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
@@ -81,7 +81,7 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
 
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -110,28 +110,10 @@ jobs:
       - name: Setup MSBuild.exe
         uses: microsoft/setup-msbuild@v1.0.2
 
-      - name: Install boost
-        uses: MarkusJx/install-boost@v1.0.1
-        id: install-boost
-        with:
-          # REQUIRED: Specify the required boost version
-          # A list of supported versions can be found here:
-          # https://github.com/actions/boost-versions/blob/main/versions-manifest.json
-          boost_version: 1.73.0
-          # OPTIONAL: Specify a toolset on windows
-          toolset: msvc14.2
-          # OPTIONAL: Specify a custon install location
-          # boost_install_dir: C:\boost_directory
-
-          # NOTE: If a boost version matching all requirements cannot be found,
-          # this build step will fail
-
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBOOST_ROOT=${{ steps.install-boost.outputs.BOOST_ROOT }} -DUSE_BOOST_REGEX=true 
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DBOOST_ROOT=${{ steps.install-boost.outputs.BOOST_ROOT }} -DUSE_BOOST_REGEX=true
-        # env:
-        #   BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
       - name: Build
         # Build your program with the given configuration
