@@ -121,7 +121,7 @@ severity >= T are displayed, where the severities are:
     off      = 6
 The default is 2 (info).)")
             ->check(CLI::Range(0, 6));
-        app.add_flag("-d, --no-dither", dither, "Disable dithering.");
+        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering.");
         app.add_option(
             "IMAGES", inFiles,
             "The images files to load.")
@@ -151,6 +151,9 @@ The default is 2 (info).)")
         }
         else
             spdlog::info("Using sRGB response curve.");
+
+        // dithering
+        spdlog::info("{}", (dither) ? "Dithering" : "Not dithering");
 
         settings["image view"]["exposure"]  = exposure;
         settings["image view"]["gamma"]     = gamma;
