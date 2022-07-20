@@ -10,7 +10,7 @@ Develop branch:
 [![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
 [![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
-HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
+HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic editing and tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
 ## Example screenshots
 HDRView supports loading several images and provides exposure and gamma/sRGB tone mapping control with high-quality dithering of HDR images.
@@ -24,7 +24,7 @@ HDRView supports high-quality dithering (both when viewing and when saving to an
 
 ## Obtaining HDRView
 
-If you are running a recent version of macOS, you can download the pre-built binary installer DMG from the [releases page](https://bitbucket.org/wkjarosz/hdrview/downloads). For other platforms, you will need to build HDRView from source for now.
+If you are running a recent version of macOS or Windows, you can download the pre-built binary installer DMG or zip file from the [releases page](https://github.com/wkjarosz/hdrview/releases). For Linux, you will need to build HDRView from source for now.
 
 ## Compiling
 
@@ -43,9 +43,7 @@ On Linux and macOS, compiling should be as simple as
 
 ### Windows
 
-On Windows, a few extra steps are needed.
-
-Since MSVC's regex implementation is buggy, you first need to have the Boost regex library installed. You can find binary installers for Windows on the [Boost website](http://www.boost.org/). Click the "More Downloads..." link and make sure to download the "Prebuilt windows binaries". You need at least Boost version 1.53. Once installed, you can run:
+On Windows, you can run:
 
     git clone --recursive https://bitbucket.org/wkjarosz/hdrview.git
     cd hdrview
@@ -53,10 +51,8 @@ Since MSVC's regex implementation is buggy, you first need to have the Boost reg
     cd build
     cmake ../
         -G"Visual Studio 15 2017 Win64"
-        -DBOOST_ROOT="C:\where_you_installed_boost"
-        -DUSE_BOOST_REGEX=true
 
-You can also do this through ``cmake-gui`` if you prefer. Click ``Add Entry`` and define ``BOOST_ROOT`` to the directory where you installed Boost (by default something like ``C:\local\boost_1_65_0``). Run ``Configure`` and select your version of Visual C++ and 64bit. After configure finishes, search for ``USE_BOOST_REGEX`` and check it. Run ``Configure`` again, and then click ``Generate``.
+You can also do this through ``cmake-gui`` if you prefer. Run ``Configure`` and select your version of Visual C++ and 64bit. Then click ``Generate``.
 
 Open the generated file ``HDRView.sln`` and proceed building as usual from within Visual Studio.
 
@@ -79,12 +75,12 @@ Copyright (c) Wojciech Jarosz
 
 3-clause BSD. For details, see the ``LICENSE.txt`` file.
 
-HDRView depends on the following libraries (which are included explicitly or as git submodules):
+HDRView depends on the following libraries:
 
 * Wenzel Jakob's [NanoGUI](https://github.com/mitsuba-renderer/nanogui) library, which is licensed under a BSD-style license.
 * ILM's [OpenEXR](http://www.openexr.com) library, which is licensed under a modified BSD license.
 * Some [stb](https://github.com/nothings/stb) libraries, developed by Sean Barrett and released into the public domain.
 * The [tinydir](https://github.com/cxong/tinydir/) library, which is licensed under a simplified BSD.
-* The [docopt.cpp](https://github.com/docopt/docopt.cpp) library, which is dual-licensed under MIT and Boost licenses.
+* The [cli11](https://github.com/CLIUtils/CLI11) library, which is licensed under a 3-Clause BSD license.
 * Gabi Melman's [spdlog](https://github.com/gabime/spdlog) library, which is licensed under the MIT license.
 * syoyo's [tinydngloader](https://github.com/syoyo/tinydngloader) library, which is licensed under the MIT license.
