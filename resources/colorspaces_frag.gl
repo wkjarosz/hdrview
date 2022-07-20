@@ -8,7 +8,9 @@
 
 float linearToS(float a)
 {
-    return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0/2.4) - 0.055;
+    float old_sign = sign(a);
+    a = abs(a);
+    return a < 0.0031308 ? old_sign * 12.92 * a : old_sign * 1.055 * pow(a, 1.0 / 2.4) - 0.055;
 }
 
 vec3 linearToSRGB(vec3 color)
@@ -18,7 +20,9 @@ vec3 linearToSRGB(vec3 color)
 
 float sToLinear(float a)
 {
-    return a < 0.04045 ? (1.0 / 12.92) * a : pow((a + 0.055) * (1.0 / 1.055), 2.4);
+    float old_sign = sign(a);
+    a = abs(a);
+    return a < 0.04045 ? old_sign * (1.0 / 12.92) * a : old_sign * pow((a + 0.055) * (1.0 / 1.055), 2.4);
 }
 
 vec3 sRGBToLinear(vec3 color)

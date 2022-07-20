@@ -15,6 +15,7 @@
 #include <functional> // for function
 #include <nanogui/vector.h>
 #include <string> // for string
+#include <set>    // for set
 #include <vector> // for vector
 
 //! Floating point image
@@ -341,6 +342,31 @@ public:
      * @return          True if writing was successful
      */
     bool save(const std::string &filename, float gain, float gamma, bool sRGB, bool dither) const;
+
+
+    /// Set of supported formats for image loading
+    static std::set<std::string> loadable_formats()
+    {
+        return {"dng",
+                "jpg",
+                "jpeg"
+                "png",
+                "bmp",
+                "psd",
+                "tga",
+                "gif",
+                "hdr",
+                "pic",
+                "ppm",
+                "pgm",
+                "exr"};
+    }
+
+    /// Set of supported formats for image saving
+    static std::set<std::string> savable_formats()
+    {
+        return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "tga"};
+    }
 };
 
 HDRImagePtr load_image(const std::string &filename);

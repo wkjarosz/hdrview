@@ -41,6 +41,7 @@ uniform int channel;
 uniform float gain;
 uniform float gamma;
 uniform bool sRGB;
+uniform bool LDR;
 
 out vec4 frag_color;
 
@@ -146,4 +147,5 @@ void main() {
 
     frag_color.a = 1.0;
     frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(value * gain))), value.a);
+    frag_color.rgb = clamp(frag_color.rgb, LDR ? 0.0 : -64.0, LDR ? 1.0 : 64.0);
 }

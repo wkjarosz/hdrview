@@ -4,11 +4,21 @@
 #define range_Lab   (max_Lab - min_Lab)
 #define Lab_d65_wts float3(.95047, 1.000, 1.08883)
 
-float linearToS(float a) { return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0 / 2.4) - 0.055; }
+float linearToS(float a)
+{
+    float old_sign = sign(a);
+    a = abs(a);
+    return a < 0.0031308f ? old_sign * 12.92f * a : old_sign * 1.055f * pow(a, 1.0f / 2.4f) - 0.055f;
+}
 
 float3 linearToSRGB(float3 color) { return float3(linearToS(color.r), linearToS(color.g), linearToS(color.b)); }
 
-float sToLinear(float a) { return a < 0.04045 ? (1.0 / 12.92) * a : pow((a + 0.055) * (1.0 / 1.055), 2.4); }
+float sToLinear(float a)
+{
+    float old_sign = sign(a);
+    a = abs(a);
+    return a < 0.04045f ? old_sign * (1.0f / 12.92f) * a : old_sign * pow((a + 0.055f) * (1.0f / 1.055f), 2.4f);
+}
 
 float3 sRGBToLinear(float3 color) { return float3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b)); }
 

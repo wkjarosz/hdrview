@@ -22,6 +22,8 @@
 #include <stdexcept> // for runtime_error, out_of_range
 #include <string>    // for allocator, operator==, basic_string
 #include <vector>    // for vector
+#include <thread>
+
 
 // these pragmas ignore warnings about unused static functions
 #if defined(__clang__)

@@ -8,6 +8,7 @@
 #include "box.h"
 #include "colorslider.h"
 #include "xpuimage.h"
+#include <array>
 #include <hdrview_resources.h>
 #include <iostream>
 #include <nanogui/colorwheel.h>

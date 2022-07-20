@@ -1,32 +1,40 @@
-cmake_minimum_required(VERSION 3.3)
-project(hdrview)
+cmake_minimum_required(VERSION 3.13)
 
-set(HDRVIEW_VERSION "1.2.0")
+project(
+  hdrview
+  DESCRIPTION "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
+  LANGUAGES C CXX
+)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/resources" ${CMAKE_MODULE_PATH})
+# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
+# force version.cmake to always be re-run before the build
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
+  COMMENT "Generating timestamp and git version info")
+
+set(HDRVIEW_VERSION "${GIT_TAG}")
+
+if (NOT HDRVIEW_DEPLOY)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION}dev")
+endif()
+
+if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
+elseif (CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
+endif()
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
 include(sanitizers)
 
-# Set ourselves as the startup project in visual studio. Not available until cmake 3.6, but doesn't break older
-# versions.
+# Set ourselves as the startup project in visual studio.
+# Not available until cmake 3.6, but doesn't break older versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
 set(USE_IWYU OFF CACHE BOOL "INCLUDE WHAT YOU USE")
 
 include(CheckCXXCompilerFlag)
-
-# prevent glfw from changing the directory on macOS bundles
-set(GLFW_USE_CHDIR OFF CACHE BOOL "Prevent glfwInit from chdir to Contents/Resources" FORCE)
-
-# ============================================================================
-# Check if we have all the submodules checked out
-# ============================================================================
-if(NOT IS_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/nanogui/ext/glfw")
-  message(
-    FATAL_ERROR
-      "The HDRView dependency repositories (NanoGUI, GLFW, etc.) are missing! "
-      "You probably did not clone the project with --recursive. It is possible to recover "
-      "by calling \"git submodule update --init --recursive\"")
-endif()
 
 # ============================================================================
 # Set a default build configuration (Release)
@@ -127,100 +135,126 @@ if(MSVC)
 endif()
 
 # ============================================================================
-# Build ZLIB on Windows (needed for OpenEXR)
+# Add dependencies via CPM (cmake/tools.cmake includes cmake/CPM.cmake)
+#
+# see https://github.com/TheLartians/CPM.cmake for more info
 # ============================================================================
-if(WIN32)
-  set(ZLIB_EXT_SOURCE_DIR ${CMAKE_SOURCE_DIR}/ext/zlib)
-  set(ZLIB_EXT_BINARY_DIR ${CMAKE_BINARY_DIR}/ext/zlib)
-  set(ZLIB_EXT_CONFIG Release)
+include(cmake/CPM.cmake)
 
-  include(ExternalProject)
-  externalproject_add(
-    zlibstatic
-    SOURCE_DIR ${ZLIB_EXT_SOURCE_DIR}
-    BINARY_DIR ${ZLIB_EXT_BINARY_DIR}
-    CMAKE_ARGS -DZLIB_BUILD_STATIC_LIBS=TRUE -DZLIB_BUILD_SHARED_LIBS=FALSE
-    BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting zlib build"
-    COMMAND ${CMAKE_COMMAND} --build ${ZLIB_EXT_BINARY_DIR} --config ${ZLIB_EXT_CONFIG}
-    COMMAND ${CMAKE_COMMAND} -E echo "zlib build complete"
-    INSTALL_COMMAND "")
-
-  set(ZLIB_INCLUDE_DIR "${ZLIB_EXT_SOURCE_DIR};${ZLIB_EXT_BINARY_DIR}" CACHE PATH " " FORCE)
-  set(ZLIB_LIBRARY "${ZLIB_EXT_BINARY_DIR}/${ZLIB_EXT_CONFIG}/zlibstatic.lib" CACHE FILEPATH " " FORCE)
-
-  set_property(TARGET zlibstatic PROPERTY FOLDER "dependencies")
-
-  include_directories(${ZLIB_INCLUDE_DIR})
+CPMAddPackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
+if(filesystem_ADDED)
+  add_library(filesystem INTERFACE IMPORTED)
+  target_include_directories(filesystem INTERFACE "${filesystem_SOURCE_DIR}")
 endif()
 
-# ============================================================================
-# Build OpenEXR
-# ============================================================================
-cmake_policy(SET CMP0077 NEW)
-
-set(ILMBASE_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
-set(OPENEXR_NAMESPACE_VERSIONING OFF CACHE BOOL " " FORCE)
-set(OPENEXR_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
-set(ILMBASE_BUILD_SHARED_LIBS OFF CACHE BOOL " " FORCE)
-set(PYILMBASE_ENABLE OFF CACHE BOOL " " FORCE)
-set(OPENEXR_BUILD_UTILS OFF CACHE BOOL " " FORCE)
-set(INSTALL_OPENEXR_EXAMPLES OFF CACHE BOOL " " FORCE)
-set(BUILD_TESTING OFF CACHE BOOL " " FORCE)
-
-add_subdirectory(ext/openexr)
-
-set_property(
-  TARGET IexMath
-         IlmThread
-         Half
-         Iex
-         Imath
-         IlmImf
-         IlmImfUtil
-  PROPERTY FOLDER "dependencies")
-
-if(WIN32)
-  add_dependencies(IlmImf zlibstatic)
+CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+if(stb_ADDED)
+  add_library(stb INTERFACE IMPORTED)
+  target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
-# ============================================================================
-# Build NanoGUI
-# ============================================================================
-# When using OpenGL backend for UI, disable GL deprecation warnings.
-if(APPLE AND NANOGUI_BACKEND STREQUAL "OpenGL")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGL_SILENCE_DEPRECATION=1")
+CPMAddPackage("gh:cxong/tinydir#9f866c1ec09e62aa4df50d7209556ed705a4dd90")
+if(tinydir_ADDED)
+  add_library(tinydir INTERFACE IMPORTED)
+  target_include_directories(tinydir INTERFACE "${tinydir_SOURCE_DIR}")
 endif()
 
-set(NANOGUI_BUILD_EXAMPLES OFF CACHE BOOL " ")
-set(NANOGUI_BUILD_SHARED OFF CACHE BOOL " " FORCE)
-set(NANOGUI_BUILD_PYTHON OFF CACHE BOOL " " FORCE)
-
-add_subdirectory(ext/nanogui)
-set_property(TARGET glfw glfw_objects nanogui PROPERTY FOLDER "dependencies")
-
-# ============================================================================
-# Build docopt.cpp
-# ============================================================================
-add_subdirectory(ext/docopt EXCLUDE_FROM_ALL)
-if(WIN32)
-  add_definitions("-DDOCTOPT_USE_BOOST_REGEX")
-  set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_USE_STATIC_RUNTIME ON)
-  find_package(Boost 1.53 REQUIRED COMPONENTS regex)
+CPMAddPackage(
+  NAME nlohmann_json
+  VERSION 3.9.1 # the git repo is incredibly large, so we download the archived include directory
+  URL https://github.com/nlohmann/json/releases/download/v3.9.1/include.zip
+  URL_HASH SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
+  OPTIONS "JSON_MultipleHeaders ON"
+)
+if(nlohmann_json_ADDED)
+  add_library(nlohmann_json INTERFACE IMPORTED)
+  target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
 endif()
-set_property(TARGET docopt PROPERTY FOLDER "dependencies")
 
-# ============================================================================
-# Build PlatformFolders
-# ============================================================================
-add_subdirectory(ext/PlatformFolders)
+CPMAddPackage("gh:syoyo/tinydng#96eea08c8ff4b18cae2f10028acc1dcda76873a6")
+if(tinydng_ADDED)
+  add_library(tinydng INTERFACE IMPORTED)
+  target_include_directories(tinydng INTERFACE "${tinydng_SOURCE_DIR}")
+endif()
 
-set(OPENEXR_INCLUDE_DIRS
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Imath ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Half
-    ${CMAKE_SOURCE_DIR}/ext/openexr/IlmBase/Iex ${CMAKE_SOURCE_DIR}/ext/openexr/OpenEXR/IlmImf
-    ${CMAKE_BINARY_DIR}/ext/openexr/IlmBase/config ${CMAKE_BINARY_DIR}/ext/openexr/OpenEXR/config)
+CPMAddPackage(
+  NAME platform_folders
+  GITHUB_REPOSITORY sago007/PlatformFolders
+  GIT_TAG 4.2.0
+)
+if(platform_folders_ADDED)
+  target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
+endif()
 
-set(OPENEXR_LIBS OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
+CPMAddPackage(
+  NAME cli11
+  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
+  DOWNLOAD_ONLY YES
+)
+if(cli11_ADDED)
+  add_library(cli11 INTERFACE IMPORTED)
+  target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
+endif()
+
+CPMAddPackage("gh:gabime/spdlog@1.9.2")
+
+
+CPMAddPackage(
+  NAME openexr
+  GITHUB_REPOSITORY mitsuba-renderer/openexr
+  GIT_TAG dbabb6f9500ee628c1faba21bb8add2649cc32a6
+  OPTIONS
+    "PYILMBASE_ENABLE OFF"
+    "ILMBASE_BUILD_SHARED_LIBS OFF"
+    "OPENEXR_BUILD_SHARED_LIBS OFF"
+    "ILMBASE_NAMESPACE_VERSIONING OFF"
+    "OPENEXR_NAMESPACE_VERSIONING OFF"
+    "OPENEXR_BUILD_UTILS OFF"
+    "INSTALL_OPENEXR_EXAMPLES OFF"
+    "BUILD_TESTING OFF"
+)
+if(openexr_ADDED)
+  set(ZLIB_LIBRARIES "")
+  if(WIN32)
+    CPMAddPackage(
+      NAME zlibstatic
+      GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
+      GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
+      OPTIONS
+        "ZLIB_BUILD_STATIC_LIBS TRUE"
+        "ZLIB_BUILD_SHARED_LIBS FALSE"
+    )
+    if(zlibstatic_ADDED)
+      set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
+      set(ZLIB_LIBRARIES zlibstatic)
+
+      message(STATUS "Adding zlib includes and target: ${ZLIB_INCLUDE_DIR} ${ZLIB_LIBRARIES}")
+      target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
+      add_dependencies(IlmImf ${ZLIB_LIBRARIES})
+    endif()
+  endif()
+
+  add_library(openexr::openexr INTERFACE IMPORTED)
+  target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
+  target_link_libraries(openexr::openexr INTERFACE "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
+endif()
+
+CPMAddPackage(
+  NAME nanogui
+  GITHUB_REPOSITORY Tom94/nanogui-1
+  GIT_TAG 5ca2cf89756b5b545d530de02b2d88be2eee7a87
+  OPTIONS
+    "NANOGUI_BUILD_EXAMPLES OFF"
+    "NANOGUI_BUILD_SHARED OFF"
+    "NANOGUI_BUILD_PYTHON OFF"
+    "NANOGUI_INSTALL OFF"
+)
+if(nanogui_ADDED)
+  add_library(nanogui::nanogui INTERFACE IMPORTED)
+  target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
+  target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
+  target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
+endif()
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -241,29 +275,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
 endif()
 
 include_directories(
-  SYSTEM
-  ${OPENEXR_INCLUDE_DIRS}
-  SYSTEM
-  ${CMAKE_SOURCE_DIR}/ext/nanogui/ext/glfw/include
-  SYSTEM
-  ${CMAKE_SOURCE_DIR}/ext/nanogui/ext/glew/include
-  SYSTEM
-  ${CMAKE_SOURCE_DIR}/ext/nanogui/ext/nanovg/src
-  SYSTEM
-  ${CMAKE_SOURCE_DIR}/ext/nanogui/include
-  SYSTEM
-  ${NANOGUI_EXTRA_INCS}
-  SYSTEM
-  ${CMAKE_SOURCE_DIR}/ext/tinydir
-  ${CMAKE_SOURCE_DIR}/ext/docopt
-  # ${Boost_INCLUDE_DIRS}
-  ${CMAKE_SOURCE_DIR}/ext/spdlog/include
-  ${CMAKE_SOURCE_DIR}/ext/stb
-  ${CMAKE_SOURCE_DIR}/ext/tinydngloader
   ${CMAKE_SOURCE_DIR}/ext/alphanum
-  ${CMAKE_SOURCE_DIR}/ext/json
-  ${CMAKE_SOURCE_DIR}/ext/PlatformFolders
-  ${CMAKE_SOURCE_DIR}/ext/filesystem
   ${CMAKE_SOURCE_DIR}/src)
 
 # Resource file (icons etc.)
@@ -326,16 +338,6 @@ add_custom_command(
 # Needed to generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
-# force version.cmake to always be re-run before the build
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp # ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
-  COMMENT "Generating timestamp and git version info")
-
-# add_custom_target(version_info COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
-# ADD_DEPENDENCIES ${CMAKE_SOURCE_DIR}/resources/version.cmake COMMENT "Generating timestamp and git version info")
-
 add_executable(
   HDRView
   hdrview_version.cpp
@@ -364,6 +366,7 @@ add_executable(
   src/box.h
   src/brush.cpp
   src/brush.h
+  src/cliformatter.h
   src/color.h
   src/colorslider.cpp
   src/colorslider.h
@@ -432,14 +435,12 @@ add_executable(
   src/well.h
   ${EXTRA_SOURCE})
 
-# add_dependencies(HDRView version_info)
-
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if(WIN32)
   set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
 endif()
 
-add_definitions(${HDRVIEW_DEFINITIONS} ${NANOGUI_EXTRA_DEFS})
+add_definitions(${HDRVIEW_DEFINITIONS})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
@@ -447,6 +448,7 @@ if(APPLE)
   # Build an application bundle on OSX
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
   set_target_properties(
     HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING
                        "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
@@ -454,9 +456,8 @@ if(APPLE)
   set_target_properties(
     HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT
                        "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
+  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION})
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST
@@ -475,6 +476,7 @@ endif()
 add_executable(
   hdrbatch
   hdrview_version.cpp
+  src/cliformatter.h
   src/color.h
   src/colorspace.cpp
   src/colorspace.h
@@ -503,20 +505,12 @@ add_executable(
   src/range.h
   src/timer.h)
 
-# add_dependencies(hdrbatch version_info)
+add_executable(force-random-dither
+  src/forced-random-dither.cpp)
 
-add_executable(force-random-dither src/forced-random-dither.cpp)
-
-# set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
-
-target_link_libraries(HDRView ${OPENEXR_LIBS} nanogui docopt_s ${NANOGUI_EXTRA_LIBS} sago::platform_folders)
-target_link_libraries(hdrbatch ${OPENEXR_LIBS} docopt_s sago::platform_folders)
-target_link_libraries(force-random-dither nanogui ${NANOGUI_EXTRA_LIBS})
-
-if(WIN32)
-  target_link_libraries(HDRView Boost::regex)
-  target_link_libraries(hdrbatch Boost::regex)
-endif()
+target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   find_program(iwyu_path NAMES include-what-you-use iwyu)

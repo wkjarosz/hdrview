@@ -23,17 +23,17 @@ jobs:
 
       - name: Configure CMake (Metal backend)
         run: |
-          MACOSX_DEPLOYMENT_TARGET=10.14
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal
+          MACOSX_DEPLOYMENT_TARGET=10.15
+          cmake -B ${{github.workspace}}/build-metal -DHDRVIEW_DEPLOY=1 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build-metal -DHDRVIEW_DEPLOY=1 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build (Metal backend)
         run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build-metal/hdrbatch --help
           ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build-metal/hdrbatch --help
 
       - name: Installing create-dmg
         run: brew install create-dmg
@@ -42,7 +42,7 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build-metal/HDRView-Metal.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2
@@ -62,17 +62,17 @@ jobs:
 
       - name: Configure CMake (OpenGL backend)
         run: |
-          MACOSX_DEPLOYMENT_TARGET=10.14
-          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
-          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL
+          MACOSX_DEPLOYMENT_TARGET=10.15
+          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build (OpenGL backend)
         run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build-opengl/hdrbatch --help
           ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build-opengl/hdrbatch --help
 
       - name: Installing create-dmg
         run: brew install create-dmg
@@ -81,7 +81,7 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Mojave Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v2

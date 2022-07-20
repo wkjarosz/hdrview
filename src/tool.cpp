@@ -306,6 +306,7 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
             m_images_panel->request_histogram_update(true);
         });
     normalize_button->set_tooltip("Normalize exposure.");
+    
     auto reset_button = new Button(m_options, "", FA_SYNC);
     reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
     reset_button->set_icon_extra_scale(1.15f);
@@ -408,13 +409,21 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
 
     sRGB_checkbox->set_checked(sRGB);
     sRGB_checkbox->callback()(sRGB);
+    sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-    (new CheckBox(m_options, "Dither", [&](bool v) { m_image_view->set_dithering(v); }))
+    (new CheckBox(m_options, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
         ->set_checked(m_image_view->dithering_on());
-    (new CheckBox(m_options, "Grid", [&](bool v) { m_image_view->set_draw_grid(v); }))
+    (new CheckBox(m_options, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
-    (new CheckBox(m_options, "RGB values", [&](bool v) { m_image_view->set_draw_pixel_info(v); }))
+    (new CheckBox(m_options, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
         ->set_checked(m_image_view->draw_pixel_info_on());
+    
+    if (m_image_view->screen()->has_float_buffer())
+    {
+        auto LDR_checkbox = new CheckBox(m_options, "LDR", [this](bool v) {m_image_view->set_LDR(v);});
+        LDR_checkbox->set_checked(m_image_view->LDR());
+        LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
+    }
 
     return m_options;
 }
