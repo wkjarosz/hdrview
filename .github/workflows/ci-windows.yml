@@ -52,3 +52,4 @@ jobs:
           name: HDRView
           path: |
             ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe
