@@ -30,8 +30,8 @@ endif()
 
 # also get a timestamp of the build
 STRING(TIMESTAMP TIMEZ "%Y-%m-%d %H:%M")
-message("Git info: revision: ${GIT_REV}; tag: ${GIT_TAG}; branch: ${GIT_BRANCH}")
-message("Timestamp: ${TIMEZ}")
+message(STATUS "Git info: revision: ${GIT_REV}; tag: ${GIT_TAG}; branch: ${GIT_BRANCH}")
+message(STATUS "Timestamp: ${TIMEZ}")
 
 set(VERSION
 "const char* GIT_REV=\"${GIT_REV}${GIT_DIFF}\";
@@ -49,5 +49,5 @@ if (NOT "${VERSION}" STREQUAL "${VERSION_}")
     # message("Old VERSION file:\n${VERSION_}\nDoesn't match new version file:\n${VERSION}\n\tRegenerating...")
     file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp "${VERSION}")
     file(READ ${CMAKE_CURRENT_SOURCE_DIR}/hdrview_version.cpp MYVAR)
-    message("Wrote out hdrview_version.cpp with contents:\n${MYVAR}")
+    message(STATUS "Wrote out hdrview_version.cpp with contents:\n${MYVAR}")
 endif()

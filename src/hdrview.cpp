@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
+#include "cliformatter.h"
 
 using namespace std;
 using json = nlohmann::json;
@@ -96,22 +97,38 @@ int main(int argc, char **argv)
                                             hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
 
         CLI::App app{
-"HDRView is a simple research-oriented tool for examining,"
-"comparing, and converting high-dynamic range images. HDRView"
-"is freely available under a 3-clause BSD license.",
+R"(HDRView is a simple research-oriented tool for examining,
+comparing, and converting high-dynamic range images. HDRView
+is freely available under a 3-clause BSD license.
+)",
 "HDRView"};
 
-        app.set_version_flag("--version", version_string, "Show the version");
+        app.formatter(std::make_shared<ColorFormatter>());
+        app.get_formatter()->column_width(20);
+        app.get_formatter()->label("OPTIONS", fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
+
         app.add_option("-e,--exposure", exposure,
-                    fmt::format("Desired power of 2 EV or exposure value (gain = 2^exposure)."))
-            ->check(CLI::Number);
+R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
+[default: 0].)")
+            ->capture_default_str()
+            ->group("Tone mapping and display")
+            ;
+                
         app.add_option("-g,--gamma", gamma,
-                    fmt::format("Desired gamma value for exposure+gamma tonemapping. An sRGB curve is used if gamma is not specified."))
-            ->check(CLI::Number);
+R"(Desired gamma value for exposure+gamma tonemapping. An
+sRGB curve is used if gamma is not specified.)")
+            ->group("Tone mapping and display")
+            ;
+
+        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering when converting to LDR\n[default: on].")
+            ->group("Tone mapping and display")
+            ;
+
         app.add_option("-v,--verbosity", verbosity,
-                       R"(Set verbosity threshold T with lower values meaning more verbose
-and higher values removing low-priority messages. All messages with
-severity >= T are displayed, where the severities are:
+R"(Set verbosity threshold T with lower values meaning more
+verbose and higher values removing low-priority messages.
+All messages with severity >= T are displayed, where the
+severities are:
     trace    = 0
     debug    = 1
     info     = 2
@@ -120,12 +137,25 @@ severity >= T are displayed, where the severities are:
     critical = 5
     off      = 6
 The default is 2 (info).)")
-            ->check(CLI::Range(0, 6));
-        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering.");
+            ->check(CLI::Range(0, 6))
+            ->option_text("INT in [0-6]")
+            ->group("Misc")
+            ;
+
+        app.set_version_flag("--version", version_string, "Show the version and exit.")
+            ->group("Misc")
+            ;
+
+        app.set_help_flag("-h, --help", "Print this help message and exit.")
+            ->group("Misc")
+            ;
+        
+
         app.add_option(
             "IMAGES", inFiles,
             "The images files to load.")
-            ->check(CLI::ExistingPath);
+            ->check(CLI::ExistingPath)
+            ->option_text("PATH(existing) ...");
 
         // Console logger with color
         spdlog::set_pattern("%^[%l]%$ %v");

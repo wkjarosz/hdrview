@@ -8,14 +8,11 @@
 #include "envmap.h"   // for XYZToAngularMap, XYZToCubeMap
 #include "hdrimage.h" // for HDRImage
 #include <ctype.h>    // for tolower
-#include <CLI/CLI.hpp>
 #include <iostream>   // for string
 #include <nanogui/vector.h>
 #include <random> // for normal_distribution, mt19937
 #include <spdlog/spdlog.h>
-#include <spdlog/fmt/bundled/ranges.h>
-#include <spdlog/fmt/bundled/color.h>
-
+#include "cliformatter.h"
 #include <spdlog/fmt/ostr.h>
 
 using namespace std;
@@ -29,40 +26,64 @@ std::mt19937 g_rand(53);
 
 int main(int argc, char **argv)
 {
-    string ext = "", avgFilename = "", varFilename = "", basename = "", errorType = "", referenceFile = "", resize_text;
+    set<string> env_format_names(
+        {
+            "angularmap",
+            "mirrorball",
+            "latlong",
+            "cylindrical",
+            "cubemap"
+        });
+    map<string, EEnvMappingUVMode> env_formats(
+        {
+            {"angularmap", ANGULAR_MAP},
+            {"mirrorball", MIRROR_BALL},
+            {"latlong", LAT_LONG},
+            {"cylindrical", CYLINDRICAL},
+            {"cubemap", CUBE_MAP}
+        });
+    set<string> lookup_mode_names(
+        {
+            "nearest",
+            "bilinear",
+            "bicubic"
+        });
+    map<string, HDRImage::Sampler> lookup_modes(
+        {
+            {"nearest", HDRImage::NEAREST},
+            {"bilinear", HDRImage::BILINEAR},
+            {"bicubic", HDRImage::BICUBIC}
+        });
+    set<string> border_mode_names(
+        {
+            "black", "mirror", "edge", "repeat"
+        });
+    map<string,HDRImage::BorderMode> border_modes(
+        {
+            {"black", HDRImage::BLACK},
+            {"mirror", HDRImage::MIRROR},
+            {"edge", HDRImage::EDGE},
+            {"repeat", HDRImage::REPEAT}
+        });
+
+    string ext = "", avg_file = "", var_file = "", basename = "", error_type = "", reference_file = "", resize_text;
     tuple<string,float,float> filter_args;
     tuple<string,string,int,string> remap_args{"angularmap","angularmap",1,"bilinear"};
     tuple<string,string> border_mode_args{"black","black"};
     tuple<float,float> noise_args{0,0};
     tuple<float,float,float> nan_args{0,0,0};
-    int   verbosity = 0, absoluteWidth, absoluteHeight;
-    float gamma, exposure = 0.0f, relativeWidth = 1.f, relativeHeight = 1.f;
-    bool dither = true, sRGB = true, dryRun = false, fixNaNs = false, resize = false, remap = false, relativeSize = true,
-         saveFiles = false, makeNoise = false, invert = false;
-    Color3               nanColor(0.0f, 0.0f, 0.0f);
+    int   verbosity = 0, abs_width, abs_height;
+    float gamma, exposure = 0.0f, rel_width = 1.f, rel_height = 1.f;
+    bool dither = true, sRGB = true, dry_run = false, fix_NaNs = false, resize = false, remap = false, rel_size = true,
+         save_files = false, make_noise = false, invert = false;
+    Color3               nan_color(0.0f, 0.0f, 0.0f);
     // by default use a no-op passthrough warp function
     function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
     // no filter by default
     function<HDRImage(const HDRImage &)> filter;
 
-    vector<string>             inFiles;
-    normal_distribution<float> normalDist(0, 0);
-
-    class ColorFormatter : public CLI::Formatter {
-    public:
-        std::string make_option_name(const CLI::Option * opt, bool b) const override
-        {
-            return fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "{}", CLI::Formatter::make_option_name(opt, b));
-        }
-        std::string make_option_opts(const CLI::Option * opt) const override
-        {
-            return fmt::format(fg(fmt::color::light_sea_green), "{}", CLI::Formatter::make_option_opts(opt));
-        }
-        std::string make_option_desc(const CLI::Option * opt) const override
-        {
-            return fmt::format(fg(fmt::color::dim_gray), "{}", CLI::Formatter::make_option_desc(opt));
-        }
-    };
+    vector<string>             in_files;
+    normal_distribution<float> gaussian(0, 0);
 
     try
     {
@@ -77,30 +98,32 @@ available under a 3-clause BSD license.
 
         app.formatter(std::make_shared<ColorFormatter>());
         app.get_formatter()->column_width(20);
+        app.get_formatter()->label("OPTIONS", fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
 
         app.add_option("-e,--exposure", exposure,
-            "Desired power of 2 EV or exposure value (gain = 2^exposure) [default: 0].")
+R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
+[default: 0].)")
             ->capture_default_str()
             ->group("Tone mapping and display")
             ;
         
         app.add_option("-g,--gamma", gamma,
-            "Desired gamma value for exposure+gamma tonemapping. An sRGB curve is used if gamma is not specified.")
+R"(Desired gamma value for exposure+gamma tonemapping. An
+sRGB curve is used if gamma is not specified.)")
             ->group("Tone mapping and display")
             ;
 
-        app.add_option("-n, --nan", nan_args,
-            "Replace all NaNs and INFs with (R,G,B).")
+        app.add_option("-n, --nan", nan_args, "Replace all NaNs and INFs with (R,G,B).")
             ->type_size(3)
             ->option_text("FLOAT FLOAT FLOAT")
             ->group("Tone mapping and display")
             ;
         
-        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering when converting to LDR.")
+        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering when converting to LDR\n[default: on].")
             ->group("Tone mapping and display")
             ;
         
-        app.add_flag("-s, --save", saveFiles, "Save the processed images. Specify output filename\nusing --out and/or --format.")
+        app.add_flag("-s, --save", save_files, "Save the processed images. Specify output filename\nusing --out and/or --format.")
             ->group("Saving and converting")
             ;
         
@@ -168,76 +191,32 @@ original height.)")
             ->group("Editing")
             ;
 
-        set<string> env_format_names(
-            {
-                "angularmap",
-                "mirrorball",
-                "latlong",
-                "cylindrical",
-                "cubemap"
-            });
-        map<string, EEnvMappingUVMode> env_formats(
-            {
-                {"angularmap", ANGULAR_MAP},
-                {"mirrorball", MIRROR_BALL},
-                {"latlong", LAT_LONG},
-                {"cylindrical", CYLINDRICAL},
-                {"cubemap", CUBE_MAP}
-            });
-        set<string> lookup_mode_names(
-            {
-                "nearest",
-                "bilinear",
-                "bicubic"
-            });
-        map<string, HDRImage::Sampler> lookup_modes(
-            {
-                {"nearest", HDRImage::NEAREST},
-                {"bilinear", HDRImage::BILINEAR},
-                {"bicubic", HDRImage::BICUBIC}
-            });
-
         // FIXME: the two optional arguments don't default to the correct values if not specified
+        // For now we just require all arguments
         app.add_option("--remap", remap_args,
 R"(Remap the input image from one environment map format
 to another.
 
 The first two arguments are the input and output
-environment map formats respectively and must be one
-of:
+environment map formats respectively and must be one of:
   M : (latlong | angularmap | mirrorball | cubemap).
 Specifying the same format twice results in no change. 
 
-The optional 3rd argument S specifies S^2 super-
-sampling, where the default is S=1: one centered
-sample per pixel.
+The 3rd argument S specifies S^2 super-sampling,
+where the default is S=1: one centered sample per pixel.
 
-The optional 4th argument L specifies the sampling
-lookup mode and must be one of:
+The 4th argument L specifies the sampling lookup mode
+and must be one of:
   L : (nearest | bilinear | bicubic).
 Combine with --resize to specify output file dimensions.)")
-            ->type_size(2,4)
             ->check(CLI::Validator(CLI::IsMember(env_format_names)).application_index(0))
             ->check(CLI::Validator(CLI::IsMember(env_format_names)).application_index(1))
-            ->transform(CLI::PositiveNumber.application_index(2))
+            ->check(CLI::Validator(CLI::PositiveNumber).application_index(2))
             ->check(CLI::Validator(CLI::IsMember(lookup_mode_names)).application_index(3))
-            ->option_text("M M [S] [L]")
-            ->each([](const std::string & s) {spdlog::info("Got option {}", s);})
+            ->option_text("M M S L")
             ->group("Editing")
             ;
 
-    set<string> border_mode_names(
-        {
-            "black", "mirror", "edge", "repeat"
-        }
-    );
-    map<string,HDRImage::BorderMode> border_modes(
-        {
-            {"black", HDRImage::BLACK},
-            {"mirror", HDRImage::MIRROR},
-            {"edge", HDRImage::EDGE},
-            {"repeat", HDRImage::REPEAT}
-        });
         app.add_option("--border-mode", border_mode_args,
 R"(Specifies what x- and y-modes to use when accessing pixels
 outside the bounds of the image. Each must be one of:
@@ -249,13 +228,13 @@ outside the bounds of the image. Each must be one of:
             ;
 
         app.add_option("--random-noise", noise_args,
-R"(Generate random Gaussian noise with mean MEAN and
-variance VAR.)")
+R"(Replace pixel values with random Gaussian noise with mean
+MEAN and variance VAR.)")
             ->option_text("MEAN VAR")
             ->group("Editing")
             ;
 
-        app.add_option("--error", errorType,
+        app.add_option("--error", error_type,
 R"(Compute the error or difference between the images
 and a reference image (specified with --reference).
 The type error type can be one of:
@@ -267,21 +246,21 @@ image sequence number).)")
             ->group("Calculating statistics")
             ;
 
-        app.add_option("--reference", referenceFile,
+        app.add_option("--reference", reference_file,
             "Specify the reference image for error computation.")
             ->check(CLI::ExistingFile)
             ->option_text("FILE")
             ->group("Calculating statistics")
             ;
 
-        app.add_option("-a, --average", avgFilename,
+        app.add_option("-a, --average", avg_file,
 R"(Average all loaded images and save to FILE
 (all images must have the same dimensions).)")
             ->option_text("FILE")
             ->group("Calculating statistics")
             ;
 
-        app.add_option("--variance", varFilename,
+        app.add_option("--variance", var_file,
 R"(Compute an unbiased reference-less sample variance
 of FILEs and save to FILE. This uses the FILEs
 themselves to compute the mean, and uses the (n-1)
@@ -291,9 +270,10 @@ Bessel correction factor.)")
             ;
         
         app.add_option("-v,--verbosity", verbosity,
-R"(Set verbosity threshold T with lower values meaning more verbose
-and higher values removing low-priority messages. All messages with
-severity >= T are displayed, where the severities are:
+R"(Set verbosity threshold T with lower values meaning more
+verbose and higher values removing low-priority messages.
+All messages with severity >= T are displayed, where the
+severities are:
     trace    = 0
     debug    = 1
     info     = 2
@@ -307,21 +287,21 @@ The default is 2 (info).)")
             ->group("Misc")
             ;
 
-        app.set_version_flag("--version", "HDRBatch " HDRVIEW_VERSION, "Show the version")
+        app.set_version_flag("--version", "hdrbatch " HDRVIEW_VERSION, "Show the version and exit.")
             ->group("Misc")
             ;
         app.set_help_flag("-h, --help", "Print this help message and exit.")
             ->group("Misc")
             ;
 
-        app.add_flag("--dry-run", dryRun,
+        app.add_flag("--dry-run", dry_run,
 R"(Don't actually save any files, just report what would
 be done.)")
             ->group("Misc")
             ;
 
         app.add_option(
-            "FILES", inFiles,
+            "FILES", in_files,
             "The images files to load.")
             ->check(CLI::ExistingPath)
             ->required()
@@ -335,13 +315,10 @@ be done.)")
         spdlog::set_level(spdlog::level::level_enum(verbosity));
         spdlog::flush_on(spdlog::level::level_enum(verbosity));
 
-        spdlog::info("Welcome to HDRView!");
+        spdlog::info("Welcome to hdrbatch!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
-
-        // exposure
         spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
 
-        // gamma or sRGB
         if (app.count("--gamma"))
         {
             sRGB  = false;
@@ -362,9 +339,9 @@ be done.)")
         if (app.count("--out"))
             spdlog::info("Setting base filename to \"{}\".", basename);
         if (app.count("--average"))
-            spdlog::info("Saving average image to \"{}\".", avgFilename);
+            spdlog::info("Saving average image to \"{}\".", avg_file);
         if (app.count("--variance"))
-            spdlog::info("Saving variance image to \"{}\".", varFilename);
+            spdlog::info("Saving variance image to \"{}\".", var_file);
 
         if (app.count("--filter"))
         {
@@ -398,24 +375,24 @@ be done.)")
             if (!app.count("--reference"))
                 throw invalid_argument("Need to specify a reference file for error computation.");
 
-            spdlog::info("Computing {} error using {} as reference.", errorType, referenceFile);
+            spdlog::info("Computing {} error using {} as reference.", error_type, reference_file);
         }
 
         if (app.count("--resize"))
         {
-            if (sscanf(resize_text.c_str(), "%dx%d", &absoluteWidth, &absoluteHeight) == 2)
-                relativeSize = false;
-            else if (sscanf(resize_text.c_str(), "%fx%f", &relativeWidth, &relativeHeight) == 2)
-                relativeSize = true;
+            if (sscanf(resize_text.c_str(), "%dx%d", &abs_width, &abs_height) == 2)
+                rel_size = false;
+            else if (sscanf(resize_text.c_str(), "%fx%f", &rel_width, &rel_height) == 2)
+                rel_size = true;
             else
                 throw invalid_argument(
                     fmt::format("Cannot parse --resize parameters:\t{}", resize_text));
 
             resize = true;
-            if (relativeSize)
-                spdlog::info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", relativeWidth*100, relativeHeight*100);
+            if (rel_size)
+                spdlog::info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", rel_width*100, rel_height*100);
             else
-                spdlog::info("Resizing images to an absolute size of {:d} x {:d}.", absoluteWidth, absoluteHeight);
+                spdlog::info("Resizing images to an absolute size of {:d} x {:d}.", abs_width, abs_height);
         }
 
         if (app.count("--remap"))
@@ -423,37 +400,35 @@ be done.)")
             remap = true;
 
             if (get<0>(remap_args) != get<1>(remap_args))
-            {
                 warp = [&env_formats, remap_args](const Vector2f &uv) { return convertEnvMappingUV(env_formats[get<1>(remap_args)], env_formats[get<0>(remap_args)], uv); };
-            }
 
             spdlog::info("Remapping from {} to {} using {} interpolation with {:d}x{:d} samples.", get<0>(remap_args), get<1>(remap_args), get<3>(remap_args), get<2>(remap_args), get<2>(remap_args));
         }
 
         if (app.count("--random-noise"))
         {
-            makeNoise = true;
-            normalDist = normal_distribution<float>(get<0>(noise_args), sqrt(get<1>(noise_args)));
+            make_noise = true;
+            gaussian = normal_distribution<float>(get<0>(noise_args), sqrt(get<1>(noise_args)));
             spdlog::info("Replacing images with random-noise({:f},{:f}).", get<0>(noise_args), get<1>(noise_args));
         }
 
         if (app.count("--nan"))
         {
             spdlog::info("Replacing NaNs and Infinities with ({}).", fmt::join(nan_args, ", "));
-            fixNaNs = true;
-            nanColor = Color3(get<0>(nan_args), get<1>(nan_args), get<2>(nan_args));
+            fix_NaNs = true;
+            nan_color = Color3(get<0>(nan_args), get<1>(nan_args), get<2>(nan_args));
         }
 
-        if (dryRun)
+        if (dry_run)
             spdlog::info("Only testing. Will not write files.");
 
         // now actually do stuff
         HDRImage reference_image;
-        if (!referenceFile.empty())
+        if (!reference_file.empty())
         {
-            spdlog::info("Reading reference image \"{}\"...", referenceFile);
-            if (!reference_image.load(referenceFile))
-                throw invalid_argument(fmt::format("Cannot read image \"{}\".", referenceFile));
+            spdlog::info("Reading reference image \"{}\"...", reference_file);
+            if (!reference_image.load(reference_file))
+                throw invalid_argument(fmt::format("Cannot read image \"{}\".", reference_file));
             spdlog::info("Reference image size: {:d}x{:d}", reference_image.width(), reference_image.height());
         }
 
@@ -461,13 +436,13 @@ be done.)")
         HDRImage varImg;
         int      varN = 0;
 
-        for (size_t i = 0; i < inFiles.size(); ++i)
+        for (size_t i = 0; i < in_files.size(); ++i)
         {
             HDRImage image;
-            spdlog::info("Reading image \"{}\"...", inFiles[i]);
-            if (!image.load(inFiles[i]))
+            spdlog::info("Reading image \"{}\"...", in_files[i]);
+            if (!image.load(in_files[i]))
             {
-                spdlog::error("Cannot read image \"{}\". Skipping...\n", inFiles[i]);
+                spdlog::error("Cannot read image \"{}\". Skipping...\n", in_files[i]);
                 continue;
             }
             spdlog::info("Image size: {:d}x{:d}", image.width(), image.height());
@@ -480,11 +455,11 @@ be done.)")
                 varImg = avgImg = image.apply_function([](const Color4 &c) { return Color4(0, 0, 0, 0); });
             }
 
-            if (fixNaNs || !dryRun)
-                image = image.apply_function([nanColor](const Color4 &c)
-                                             { return isfinite(c.sum()) ? c : Color4(nanColor, c[3]); });
+            if (fix_NaNs || !dry_run)
+                image = image.apply_function([nan_color](const Color4 &c)
+                                             { return isfinite(c.sum()) ? c : Color4(nan_color, c[3]); });
 
-            if (!avgFilename.empty() || !varFilename.empty())
+            if (!avg_file.empty() || !var_file.empty())
             {
                 if (avgImg.width() != image.width() || avgImg.height() != image.height())
                     throw invalid_argument("Images do not have the same size.");
@@ -500,18 +475,18 @@ be done.)")
             {
                 spdlog::info("Filtering image with {}({:f},{:f})...", get<0>(filter_args), get<1>(filter_args), get<2>(filter_args));
 
-                if (!dryRun)
+                if (!dry_run)
                     image = filter(image);
             }
 
             if (resize || remap)
             {
-                int w = (int)round(relativeWidth * image.width());
-                int h = (int)round(relativeHeight * image.height());
-                if (!relativeSize)
+                int w = (int)round(rel_width * image.width());
+                int h = (int)round(rel_height * image.height());
+                if (!rel_size)
                 {
-                    w = absoluteWidth;
-                    h = absoluteHeight;
+                    w = abs_width;
+                    h = abs_height;
                 }
 
                 if (!remap)
@@ -527,16 +502,16 @@ be done.)")
                 }
             }
 
-            if (makeNoise)
+            if (make_noise)
             {
                 for (int y = 0; y < image.height(); ++y)
                     for (int x = 0; x < image.width(); ++x)
                     {
-                        image(x, y) = Color4(normalDist(g_rand), normalDist(g_rand), normalDist(g_rand), 1.0f);
+                        image(x, y) = Color4(gaussian(g_rand), gaussian(g_rand), gaussian(g_rand), 1.0f);
                     }
             }
 
-            if (!errorType.empty())
+            if (!error_type.empty())
             {
                 if (image.width() != reference_image.width() || image.height() != reference_image.height())
                 {
@@ -544,11 +519,11 @@ be done.)")
                     continue;
                 }
 
-                if (errorType == "squared")
+                if (error_type == "squared")
                     image = (image - reference_image).square();
-                else if (errorType == "absolute")
+                else if (error_type == "absolute")
                     image = (image - reference_image).abs();
-                else // if (errorType == "relative-squared")
+                else // if (error_type == "relative-squared")
                     image = (image - reference_image).square() /
                             (reference_image.square() + Color4(1e-3f, 1e-3f, 1e-3f, 1e-3f));
 
@@ -557,8 +532,8 @@ be done.)")
 
                 image.set_alpha(1.0f);
 
-                spdlog::info(fmt::format("Mean {} error: {}.", errorType, meanError));
-                spdlog::info(fmt::format("Max {} error: {}.", errorType, maxError));
+                spdlog::info(fmt::format("Mean {} error: {}.", error_type, meanError));
+                spdlog::info(fmt::format("Max {} error: {}.", error_type, maxError));
             }
 
             if (invert)
@@ -566,43 +541,43 @@ be done.)")
                 image = Color4(1.0f, 1.0f, 1.0f, 2.0f) - image;
             }
 
-            if (saveFiles)
+            if (save_files)
             {
-                string thisExt      = ext.size() ? ext : get_extension(inFiles[i]);
-                string thisBasename = basename.size() ? basename : get_basename(inFiles[i]);
+                string thisExt      = ext.size() ? ext : get_extension(in_files[i]);
+                string thisBasename = basename.size() ? basename : get_basename(in_files[i]);
                 string filename;
-                string extra = (errorType.empty()) ? "" : fmt::format("-{}-error", errorType);
-                if (inFiles.size() == 1 || !basename.size())
+                string extra = (error_type.empty()) ? "" : fmt::format("-{}-error", error_type);
+                if (in_files.size() == 1 || !basename.size())
                     filename = fmt::format("{}{}.{}", thisBasename, extra, thisExt);
                 else
                     filename = fmt::format("{}{}{:03d}.{}", thisBasename, extra, i, thisExt);
 
                 spdlog::info("Writing image to \"{}\"...", filename);
 
-                if (!dryRun)
+                if (!dry_run)
                     image.save(filename, powf(2.0f, exposure), gamma, sRGB, dither);
             }
         }
 
-        if (!avgFilename.empty())
+        if (!avg_file.empty())
         {
-            spdlog::info("Writing average image to \"{}\"...", avgFilename);
+            spdlog::info("Writing average image to \"{}\"...", avg_file);
 
-            if (!dryRun)
-                avgImg.save(avgFilename, powf(2.0f, exposure), gamma, sRGB, dither);
+            if (!dry_run)
+                avgImg.save(avg_file, powf(2.0f, exposure), gamma, sRGB, dither);
         }
 
-        if (!varFilename.empty())
+        if (!var_file.empty())
         {
             varImg /= Color4(varN - 1, varN - 1, varN - 1, varN - 1);
 
             // set alpha channel to 1
             varImg = varImg.apply_function([](const Color4 &c) { return Color4(c.r, c.g, c.b, 1); });
 
-            spdlog::info("Writing variance image to \"{}\"...", varFilename);
+            spdlog::info("Writing variance image to \"{}\"...", var_file);
 
-            if (!dryRun)
-                varImg.save(varFilename, powf(2.0f, exposure), gamma, sRGB, dither);
+            if (!dry_run)
+                varImg.save(var_file, powf(2.0f, exposure), gamma, sRGB, dither);
         }
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)

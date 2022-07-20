@@ -1,7 +1,29 @@
-cmake_minimum_required(VERSION 3.3)
-project(hdrview)
+cmake_minimum_required(VERSION 3.13)
 
-set(HDRVIEW_VERSION "1.2.0")
+project(
+  hdrview
+  DESCRIPTION "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
+  LANGUAGES C CXX
+)
+
+# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
+# force version.cmake to always be re-run before the build
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
+  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
+  COMMENT "Generating timestamp and git version info")
+
+set(HDRVIEW_VERSION "${GIT_TAG}")
+
+if (NOT HDRVIEW_DEPLOY)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION}dev")
+endif()
+
+if (CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
+elseif (CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
 include(sanitizers)
@@ -164,20 +186,6 @@ if(platform_folders_ADDED)
   target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
 endif()
 
-# CPMAddPackage("gh:docopt/docopt.cpp#400e6dd8e59196c914dcc2c56caf7dae7efa5eb3")
-# if(docopt_ADDED)
-#   if(WIN32)
-#     CPMAddPackage(
-#       NAME Boost
-#       VERSION 1.73.0
-#       GITHUB_REPOSITORY "boostorg/boost"
-#       GIT_TAG "boost-1.73.0"
-#     )
-#     target_link_libraries(docopt INTERFACE Boost::regex)
-#   endif()
-# endif()
-
-
 CPMAddPackage(
   NAME cli11
   URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
@@ -187,6 +195,8 @@ if(cli11_ADDED)
   add_library(cli11 INTERFACE IMPORTED)
   target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
 endif()
+
+CPMAddPackage("gh:gabime/spdlog@1.9.2")
 
 
 CPMAddPackage(
@@ -227,17 +237,7 @@ if(openexr_ADDED)
   add_library(openexr::openexr INTERFACE IMPORTED)
   target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
   target_link_libraries(openexr::openexr INTERFACE "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
-
-  # set_target_properties(openexr::openexr PROPERTIES
-  #   INTERFACE_INCLUDE_DIRECTORIES
-  #   "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config"
-  #   INTERFACE_LINK_LIBRARIES
-  #   "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
-  #   )
 endif()
-
-CPMAddPackage("gh:gabime/spdlog@1.9.2")
-
 
 CPMAddPackage(
   NAME nanogui
@@ -254,13 +254,6 @@ if(nanogui_ADDED)
   target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
   target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
   target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
-
-  # set_target_properties(nanogui::nanogui PROPERTIES
-  #   INTERFACE_INCLUDE_DIRECTORIES
-  #   "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}"
-  #   INTERFACE_LINK_LIBRARIES "OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half"
-  #   INTERFACE_COMPILE_DEFINITIONS "${NANOGUI_BACKEND_DEFS}"
-  #   )
 endif()
 
 # ============================================================================
@@ -345,16 +338,6 @@ add_custom_command(
 # Needed to generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
-# force version.cmake to always be re-run before the build
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp # ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
-  COMMENT "Generating timestamp and git version info")
-
-# add_custom_target(version_info COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
-# ADD_DEPENDENCIES ${CMAKE_SOURCE_DIR}/resources/version.cmake COMMENT "Generating timestamp and git version info")
-
 add_executable(
   HDRView
   hdrview_version.cpp
@@ -383,6 +366,7 @@ add_executable(
   src/box.h
   src/brush.cpp
   src/brush.h
+  src/cliformatter.h
   src/color.h
   src/colorslider.cpp
   src/colorslider.h
@@ -451,16 +435,12 @@ add_executable(
   src/well.h
   ${EXTRA_SOURCE})
 
-# add_dependencies(HDRView version_info)
-
 set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if(WIN32)
   set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
 endif()
 
 add_definitions(${HDRVIEW_DEFINITIONS})
-# add_definitions(${HDRVIEW_DEFINITIONS} ${NANOGUI_EXTRA_DEFS})
-
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
 
@@ -475,7 +455,7 @@ if(APPLE)
   string(TIMESTAMP YEAR "%Y")
   set_target_properties(
     HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT
-                       "Copyright 2023, Wojciech Jarosz. Freely available under the BSD license.")
+                       "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
   set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION})
@@ -496,6 +476,7 @@ endif()
 add_executable(
   hdrbatch
   hdrview_version.cpp
+  src/cliformatter.h
   src/color.h
   src/colorspace.cpp
   src/colorspace.h
@@ -524,11 +505,8 @@ add_executable(
   src/range.h
   src/timer.h)
 
-# add_dependencies(hdrbatch version_info)
-
-add_executable(force-random-dither src/forced-random-dither.cpp)
-
-# set_target_properties(force-random-dither PROPERTIES CXX_VISIBILITY_PRESET hidden)
+add_executable(force-random-dither
+  src/forced-random-dither.cpp)
 
 target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
 target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
@@ -540,7 +518,7 @@ if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   if(iwyu_path)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
     set(CMAKE_C_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-    set_property(TARGET HDRView force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
+    set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
   endif()
 endif()
 

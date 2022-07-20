@@ -121,7 +121,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_library(credits, "GLFW", "Multi-platform OpenGL/windowing library on the desktop");
     add_library(credits, "OpenEXR", "High Dynamic-Range (HDR) image file format");
     add_library(credits, "stb_image/write/resize", "Single-Header libraries for loading/writing/resizing images");
-    add_library(credits, "docopt", "For creating command-line interfaces from help messages");
+    add_library(credits, "CLI11", "Command line parser for C++11");
     add_library(credits, "spdlog", "Fast C++ logging library");
     add_library(credits, "fmt", "A modern formatting library");
     add_library(credits, "PlatformFolders", "Cross-platform library to find special directories");
