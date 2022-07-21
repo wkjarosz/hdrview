@@ -339,8 +339,14 @@ add_custom_command(
   COMMENT "Running bin2c" PRE_BUILD
   VERBATIM)
 
-# Needed to generated files
+# Needed to access generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+if(WIN32)
+  set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
+endif()
+
+add_definitions(${HDRVIEW_DEFINITIONS})
 
 add_executable(
   HDRView
@@ -438,42 +444,7 @@ add_executable(
   src/well.h
   ${EXTRA_SOURCE})
 
-if(WIN32)
-  set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
-endif()
-
-add_definitions(${HDRVIEW_DEFINITIONS})
-
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
-
-if(APPLE)
-  # Build an application bundle on OSX
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE TRUE)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "HDRView")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION})
-  set_target_properties(
-    HDRView PROPERTIES MACOSX_BUNDLE_INFO_STRING
-                       "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}.")
-  string(TIMESTAMP YEAR "%Y")
-  set_target_properties(
-    HDRView PROPERTIES MACOSX_BUNDLE_COPYRIGHT
-                       "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license.")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView")
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_ICON_FILE icon.icns)
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION})
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION})
-  set_target_properties(HDRView PROPERTIES MACOSX_BUNDLE_INFO_PLIST
-                                           ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in)
-  set_target_properties(HDRView PROPERTIES RESOURCE resources/icon.icns)
-  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-elseif(NOT WIN32)
-  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
-  set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
-endif()
-
-if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
-  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
-endif()
 
 add_executable(
   hdrbatch
@@ -524,10 +495,48 @@ if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
 endif()
 
 if(APPLE)
+  string(TIMESTAMP YEAR "%Y")
+  # Build an application bundle on OSX
+  set_target_properties(HDRView PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "HDRView"
+    MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION}
+    MACOSX_BUNDLE_INFO_STRING "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}."
+    MACOSX_BUNDLE_COPYRIGHT "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license."
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView"
+    MACOSX_BUNDLE_ICON_FILE icon.icns
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION}
+    MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION}
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in
+    RESOURCE resources/icon.icns)
+  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+
+  # build HDRView first so we can build the hdrbatch executable directly into the HDRView bundle on macOS
+  add_dependencies(hdrbatch HDRView)
+
+  # put the hdrbatch executable into the HDRView bundle
+  add_custom_command(TARGET hdrbatch POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
+    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:hdrbatch> ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
+    COMMENT "Adding hdrbatch into HDRView bundle")
+  # set_target_properties(hdrbatch PROPERTIES
+  #   RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/)
+elseif(NOT WIN32)
+  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
+  set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
+  set_target_properties(hdrbatch PROPERTIES LINK_FLAGS "-static-libgcc")
+endif()
+
+if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
+  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
+endif()
+
+if(APPLE)
   install(TARGETS HDRView BUNDLE DESTINATION "/Applications" RESOURCE DESTINATION "/Applications")
   install(SCRIPT resources/osx-post-install.cmake)
 elseif(WIN32)
   install(TARGETS HDRView RUNTIME DESTINATION "bin")
+  install(TARGETS hdrbatch RUNTIME DESTINATION "bin")
 else()
   install(TARGETS HDRView RUNTIME DESTINATION "bin")
   install(FILES resources/hdrview.desktop DESTINATION "/usr/share/applications")
