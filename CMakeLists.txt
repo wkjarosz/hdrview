@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
 
-include(MunkeiVersionFromGit)
+include(VersionFromGit)
 
 STRING(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
 message(STATUS "Saving build timestamp: ${BUILD_TIME}")
@@ -19,7 +19,7 @@ project(
   LANGUAGES C CXX
 )
 
-set(HDRVIEW_VERSION "${VERSION}")
+set(HDRVIEW_VERSION "${GIT_DESCRIBE}")
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")

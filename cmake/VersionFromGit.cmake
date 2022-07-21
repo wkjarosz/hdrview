@@ -146,7 +146,7 @@ function( version_from_git )
   # Log the results
   if( ARG_LOG )
     message( STATUS
-      "[MunkeiVersionFromGit] Version: ${version}
+    "Version: ${version}
      Git tag:     [${git_tag}]
      Git hash:    [${git_hash}]
      Decorated:   [${git_describe}]
