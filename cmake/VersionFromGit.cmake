@@ -47,7 +47,7 @@ function( version_from_git )
     # Find Git or bail out
     find_package( Git )
     if( NOT GIT_FOUND )
-      message( FATAL_ERROR "[MunkeiVersionFromGit] Git not found" )
+      message( FATAL_ERROR "[VersionFromGit] Git not found" )
     endif( NOT GIT_FOUND )
   endif()
 
@@ -63,7 +63,7 @@ function( version_from_git )
     )
   if( NOT git_result EQUAL 0 )
     message( FATAL_ERROR
-      "[MunkeiVersionFromGit] Failed to execute Git: ${git_error}"
+      "[VersionFromGit] Failed to execute Git: ${git_error}"
       )
   endif()
 
@@ -79,7 +79,7 @@ function( version_from_git )
     )
   if( NOT git_result EQUAL 0 )
     message( FATAL_ERROR
-      "[MunkeiVersionFromGit] Failed to execute Git: ${git_error}"
+      "[VersionFromGit] Failed to execute Git: ${git_error}"
       )
   endif()
 
@@ -91,7 +91,7 @@ function( version_from_git )
     set( metadata      "${CMAKE_MATCH_5}" )
   else()
     message( FATAL_ERROR
-      "[MunkeiVersionFromGit] Git tag isn't valid semantic version: [${git_tag}]"
+      "[VersionFromGit] Git tag isn't valid semantic version: [${git_tag}]"
       )
   endif()
 
