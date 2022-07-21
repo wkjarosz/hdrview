@@ -13,7 +13,7 @@ call %DevCmd%
 echo Building 64-bit hdrview...
 mkdir %BuildDir64%
 cd %BuildDir64%
-cmake -DHDRVIEW_DEPLOY=1 -G "Visual Studio 15 2017 Win64" ..\..
+cmake -G "Visual Studio 15 2017 Win64" ..\..
 msbuild %MSBuildOptions% hdrview.sln
 move "Release\HDRView.exe" "..\..\HDRView.exe"
 cd ..
@@ -22,7 +22,7 @@ rmdir /S /Q %BuildDir64%
 echo Building 32-bit hdrview...
 mkdir %BuildDir32%
 cd %BuildDir32%
-cmake -DHDRVIEW_DEPLOY=1 -G "Visual Studio 15 2017" ..\..
+cmake -G "Visual Studio 15 2017" ..\..
 msbuild %MSBuildOptions% hdrview.sln
 move "Release\HDRView.exe" "..\..\HDRView-32bit.exe"
 cd ..
