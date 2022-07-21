@@ -318,8 +318,11 @@ enum EDirection
 #define HDRVIEW_BACKEND      "Metal"
 #endif
 
-const char *hdrview_git_version();
-const char *hdrview_git_revision();
-const char *hdrview_git_branch();
-const char *hdrview_timestamp();
+int hdrview_version_major();
+int hdrview_version_minor();
+int hdrview_version_patch();
+std::string hdrview_version();
+std::string hdrview_git_hash();
+std::string hdrview_git_describe();
+std::string hdrview_build_timestamp();
 std::string config_directory();

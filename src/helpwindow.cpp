@@ -69,11 +69,11 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     };
 
     add_text(this, "HDRView", "sans-bold", 46);
-    add_text(this, fmt::format("version {}", hdrview_git_version()), "sans-bold", 26);
+    add_text(this, fmt::format("version {}", hdrview_version()), "sans-bold", 26);
     add_spacer(this, 5);
     add_text(this,
-             fmt::format("This executable was built on {} from git branch {} {} and uses the {} backend.",
-                         hdrview_timestamp(), hdrview_git_branch(), hdrview_git_revision(), HDRVIEW_BACKEND),
+             fmt::format("Built using the {} backend on {}.",
+                         HDRVIEW_BACKEND, hdrview_build_timestamp()),
              "sans", 12);
 
     add_spacer(this, 15);

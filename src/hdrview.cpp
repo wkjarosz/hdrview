@@ -92,9 +92,8 @@ int main(int argc, char **argv)
 //         }
 // #endif
 
-        string version_string = fmt::format("HDRView {}. (built on {} from git {}-{}-{} using {} backend)",
-                                            HDRVIEW_VERSION, hdrview_timestamp(), hdrview_git_branch(),
-                                            hdrview_git_version(), hdrview_git_revision(), HDRVIEW_BACKEND);
+        string version_string = fmt::format("HDRView {}. (built using {} backend on {})",
+                                            hdrview_version(), HDRVIEW_BACKEND, hdrview_build_timestamp());
 
         CLI::App app{
 R"(HDRView is a simple research-oriented tool for examining,
