@@ -1,23 +1,25 @@
 cmake_minimum_required(VERSION 3.13)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
+
+include(VersionFromGit)
+
+STRING(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
+message(STATUS "Saving build timestamp: ${BUILD_TIME}")
+
+version_from_git(
+  LOG       ON
+  TIMESTAMP "%Y-%m-%d-%H:%M:%S"
+)
+
 project(
   hdrview
   DESCRIPTION "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
+  VERSION ${VERSION}
   LANGUAGES C CXX
 )
 
-# Add a custom command that produces hdrview_version.cpp, plus a dummy output that's not actually produced, in order to
-# force version.cmake to always be re-run before the build
-add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/hdrview_version.cpp ${CMAKE_CURRENT_BINARY_DIR}/_hdrview_version.cpp
-  COMMAND ${CMAKE_COMMAND} -P ${CMAKE_SOURCE_DIR}/resources/version.cmake
-  COMMENT "Generating timestamp and git version info")
-
-set(HDRVIEW_VERSION "${GIT_TAG}")
-
-if (NOT HDRVIEW_DEPLOY)
-    set(HDRVIEW_VERSION "${HDRVIEW_VERSION}dev")
-endif()
+set(HDRVIEW_VERSION "${GIT_DESCRIBE}")
 
 if (CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
@@ -25,7 +27,9 @@ elseif (CMAKE_SIZEOF_VOID_P EQUAL 4)
     set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
 endif()
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/common.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/common.cpp @ONLY)
+
+
 include(sanitizers)
 
 # Set ourselves as the startup project in visual studio.
@@ -340,7 +344,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 add_executable(
   HDRView
-  hdrview_version.cpp
   hdrview_resources.cpp
   src/filters/bilateral.cpp
   src/filters/box_blur.cpp
@@ -375,7 +378,7 @@ add_executable(
   src/colorwheel.cpp
   src/colorwheel.h
   src/commandhistory.h
-  src/common.cpp
+  common.cpp
   src/common.h
   src/dialog.cpp
   src/dialog.h
@@ -435,7 +438,6 @@ add_executable(
   src/well.h
   ${EXTRA_SOURCE})
 
-set(HDRVIEW_DEFINITIONS -DHDRVIEW_VERSION="${HDRVIEW_VERSION}")
 if(WIN32)
   set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
 endif()
@@ -475,12 +477,11 @@ endif()
 
 add_executable(
   hdrbatch
-  hdrview_version.cpp
   src/cliformatter.h
   src/color.h
   src/colorspace.cpp
   src/colorspace.h
-  src/common.cpp
+  common.cpp
   src/common.h
   src/envmap.cpp
   src/envmap.h

@@ -287,7 +287,7 @@ The default is 2 (info).)")
             ->group("Misc")
             ;
 
-        app.set_version_flag("--version", "hdrbatch " HDRVIEW_VERSION, "Show the version and exit.")
+        app.set_version_flag("--version", "hdrbatch " + hdrview_version(), "Show the version and exit.")
             ->group("Misc")
             ;
         app.set_help_flag("-h, --help", "Print this help message and exit.")
