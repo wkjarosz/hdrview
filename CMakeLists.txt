@@ -216,6 +216,7 @@ CPMAddPackage(
     "OPENEXR_BUILD_UTILS OFF"
     "INSTALL_OPENEXR_EXAMPLES OFF"
     "BUILD_TESTING OFF"
+  EXCLUDE_FROM_ALL
 )
 if(openexr_ADDED)
   set(ZLIB_LIBRARIES "")
@@ -227,6 +228,7 @@ if(openexr_ADDED)
       OPTIONS
         "ZLIB_BUILD_STATIC_LIBS TRUE"
         "ZLIB_BUILD_SHARED_LIBS FALSE"
+      EXCLUDE_FROM_ALL
     )
     if(zlibstatic_ADDED)
       set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
@@ -252,6 +254,7 @@ CPMAddPackage(
     "NANOGUI_BUILD_SHARED OFF"
     "NANOGUI_BUILD_PYTHON OFF"
     "NANOGUI_INSTALL OFF"
+  EXCLUDE_FROM_ALL
 )
 if(nanogui_ADDED)
   add_library(nanogui::nanogui INTERFACE IMPORTED)
@@ -532,8 +535,8 @@ if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
 endif()
 
 if(APPLE)
-  install(TARGETS HDRView BUNDLE DESTINATION "/Applications" RESOURCE DESTINATION "/Applications")
-  install(SCRIPT resources/osx-post-install.cmake)
+  install(TARGETS HDRView BUNDLE DESTINATION "/Applications")
+  install(SCRIPT cmake/osx-post-install.cmake)
 elseif(WIN32)
   install(TARGETS HDRView RUNTIME DESTINATION "bin")
   install(TARGETS hdrbatch RUNTIME DESTINATION "bin")

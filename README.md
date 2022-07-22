@@ -12,6 +12,8 @@ Develop branch:
 
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic editing and tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
+HDRView can display true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
+
 ## Example screenshots
 HDRView supports loading several images and provides exposure and gamma/sRGB tone mapping control with high-quality dithering of HDR images.
 ![Screenshot](resources/screenshot1.png "Screenshot1")
