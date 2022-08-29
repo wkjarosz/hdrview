@@ -28,8 +28,9 @@ Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const
     case MIRROR_BALL: xyz = mirrorBallToXYZ(srcUV); break;
     case LAT_LONG: xyz = latLongToXYZ(srcUV); break;
     case CYLINDRICAL: xyz = cylindricalToXYZ(srcUV); break;
-    case CUBE_MAP:
-    default: xyz = cubeMapToXYZ(srcUV); break;
+    case CUBE_MAP: xyz = cubeMapToXYZ(srcUV); break;
+    case EQUAL_AREA:
+    default: xyz = equalAreaToXYZ(srcUV); break;
     }
 
     switch (dst)
@@ -38,8 +39,9 @@ Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const
     case MIRROR_BALL: uv = XYZToMirrorBall(xyz); break;
     case LAT_LONG: uv = XYZToLatLong(xyz); break;
     case CYLINDRICAL: uv = XYZToCylindrical(xyz); break;
-    case CUBE_MAP:
-    default: uv = XYZToCubeMap(xyz); break;
+    case CUBE_MAP: uv = XYZToCubeMap(xyz); break;
+    case EQUAL_AREA:
+    default: uv = XYZToEqualArea(xyz); break;
     }
 
     return uv;
@@ -47,7 +49,8 @@ Vector2f convertEnvMappingUV(EEnvMappingUVMode dst, EEnvMappingUVMode src, const
 
 const vector<string> &envMappingNames()
 {
-    static const vector<string> names = {"Angular map", "Mirror ball", "Longitude-latitude", "Cylindrical", "Cube map"};
+    static const vector<string> names = {"Angular map", "Mirror ball", "Longitude-latitude",
+                                         "Cylindrical", "Cube map",    "Equal Area"};
     return names;
 }
 
@@ -59,8 +62,9 @@ UV2XYZFn *envMapUVToXYZ(EEnvMappingUVMode mode)
     case MIRROR_BALL: return mirrorBallToXYZ;
     case LAT_LONG: return latLongToXYZ;
     case CYLINDRICAL: return cylindricalToXYZ;
-    case CUBE_MAP:
-    default: return cubeMapToXYZ;
+    case CUBE_MAP: return cubeMapToXYZ;
+    case EQUAL_AREA:
+    default: return equalAreaToXYZ;
     }
 }
 
@@ -72,8 +76,9 @@ XYZ2UVFn *XYZToEnvMapUV(EEnvMappingUVMode mode)
     case MIRROR_BALL: return XYZToMirrorBall;
     case LAT_LONG: return XYZToLatLong;
     case CYLINDRICAL: return XYZToCylindrical;
-    case CUBE_MAP:
-    default: return XYZToCubeMap;
+    case CUBE_MAP: return XYZToCubeMap;
+    case EQUAL_AREA:
+    default: return XYZToEqualArea;
     }
 }
 
@@ -274,4 +279,102 @@ Vector2f XYZToCubeMap(const Vector3f &xyz)
     }
 
     return Vector2f(U, V);
+}
+
+//
+// The following functions are adapted from PBRTv4, which is itself via the source code from:
+//      Clarberg: Fast Equal-Area Mapping of the (Hemi)Sphere using SIMD
+//
+Vector3f equalAreaToXYZ(const Vector2f &p)
+{
+    // Transform _p_ to $[-1,1]^2$ and compute absolute values
+    float u = 2 * p.x() - 1, v = 2 * p.y() - 1;
+    float up = std::abs(u), vp = std::abs(v);
+
+    // Compute radius _r_ as signed distance from diagonal
+    float signedDistance = 1 - (up + vp);
+    float d              = std::abs(signedDistance);
+    float r              = 1 - d;
+
+    // Compute angle $\phi$ for square to sphere mapping
+    float phi = (r == 0 ? 1 : (vp - up) / r + 1) * M_PI / 4;
+
+    // Find $z$ coordinate for spherical direction
+    float z = std::copysign(1 - sqr(r), signedDistance);
+
+    // Compute $\cos \phi$ and $\sin \phi$ for original quadrant and return vector
+    float cosPhi = std::copysign(std::cos(phi), u);
+    float sinPhi = std::copysign(std::sin(phi), v);
+    return Vector3f(cosPhi * r * std::sqrt(std::max(0.f, 2 - sqr(r))), z,
+                    -sinPhi * r * std::sqrt(std::max(0.f, 2 - sqr(r))));
+}
+
+template <typename T>
+inline T FMA(T a, T b, T c)
+{
+    return a * b + c;
+}
+
+template <typename Float, typename C>
+inline constexpr Float EvaluatePolynomial(Float t, C c)
+{
+    return c;
+}
+
+template <typename Float, typename C, typename... Args>
+inline constexpr Float EvaluatePolynomial(Float t, C c, Args... cRemaining)
+{
+    return FMA(t, EvaluatePolynomial(t, cRemaining...), c);
+}
+
+Vector2f XYZToEqualArea(const Vector3f &d_)
+{
+    Vector3f d(d_);
+    // 90 degree rotation compared to code in PBRT
+    d[2] *= -1.f;
+    std::swap(d[1], d[2]);
+
+    float x = std::abs(d.x()), y = std::abs(d.y()), z = std::abs(d.z());
+
+    // Compute the radius r
+    float r = std::sqrt(std::max(0.f, 1 - z)); // r = sqrt(1-|z|)
+
+    // Compute the argument to atan (detect a=0 to avoid div-by-zero)
+    float a = std::max(x, y), b = std::min(x, y);
+    b = a == 0 ? 0 : b / a;
+
+    // Polynomial approximation of atan(x)*2/pi, x=b
+    // Coefficients for 6th degree minimax approximation of atan(x)*2/pi,
+    // x=[0,1].
+    const float t1  = 0.406758566246788489601959989e-5;
+    const float t2  = 0.636226545274016134946890922156;
+    const float t3  = 0.61572017898280213493197203466e-2;
+    const float t4  = -0.247333733281268944196501420480;
+    const float t5  = 0.881770664775316294736387951347e-1;
+    const float t6  = 0.419038818029165735901852432784e-1;
+    const float t7  = -0.251390972343483509333252996350e-1;
+    float       phi = EvaluatePolynomial(b, t1, t2, t3, t4, t5, t6, t7);
+
+    // Extend phi if the input is in the range 45-90 degrees (u<v)
+    if (x < y)
+        phi = 1 - phi;
+
+    // Find (u,v) based on (r,phi)
+    float v = phi * r;
+    float u = r - v;
+
+    if (d.z() < 0)
+    {
+        // southern hemisphere -> mirror u,v
+        std::swap(u, v);
+        u = 1 - u;
+        v = 1 - v;
+    }
+
+    // Move (u,v) to the correct quadrant based on the signs of (x,y)
+    u = std::copysign(u, d.x());
+    v = std::copysign(v, d.y());
+
+    // Transform (u,v) from [-1,1] to [0,1]
+    return Vector2f(0.5f * (u + 1), 0.5f * (v + 1));
 }

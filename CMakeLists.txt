@@ -241,8 +241,17 @@ if(openexr_ADDED)
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)
-  target_include_directories(openexr::openexr SYSTEM INTERFACE "${openexr_SOURCE_DIR}/IlmBase/Imath;${openexr_SOURCE_DIR}/IlmBase/Iex;${openexr_SOURCE_DIR}/IlmBase/Half;${openexr_SOURCE_DIR}/OpenEXR/IlmImf;${openexr_BINARY_DIR}/IlmBase/config;${openexr_BINARY_DIR}/OpenEXR/config")
-  target_link_libraries(openexr::openexr INTERFACE "${ZLIB_LIBRARIES};OpenEXR::IlmImf;IlmBase::Imath;IlmBase::Half")
+  target_include_directories(openexr::openexr SYSTEM INTERFACE
+    ${openexr_SOURCE_DIR}/IlmBase/Imath
+    ${openexr_SOURCE_DIR}/IlmBase/Iex
+    ${openexr_SOURCE_DIR}/IlmBase/Half
+    ${openexr_SOURCE_DIR}/OpenEXR/IlmImf
+    ${openexr_BINARY_DIR}/IlmBase/config
+    ${openexr_BINARY_DIR}/OpenEXR/config)
+  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES}
+    OpenEXR::IlmImf
+    IlmBase::Imath
+    IlmBase::Half)
 endif()
 
 CPMAddPackage(

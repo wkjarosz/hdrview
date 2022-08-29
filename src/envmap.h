@@ -20,7 +20,8 @@ enum EEnvMappingUVMode : int
     MIRROR_BALL,
     LAT_LONG,
     CYLINDRICAL,
-    CUBE_MAP
+    CUBE_MAP,
+    EQUAL_AREA
 };
 
 /*!
@@ -45,6 +46,7 @@ nanogui::Vector3f mirrorBallToXYZ(const nanogui::Vector2f &uv);
 nanogui::Vector3f latLongToXYZ(const nanogui::Vector2f &uv);
 nanogui::Vector3f cylindricalToXYZ(const nanogui::Vector2f &uv);
 nanogui::Vector3f cubeMapToXYZ(const nanogui::Vector2f &uv);
+nanogui::Vector3f equalAreaToXYZ(const nanogui::Vector2f &uv);
 
 UV2XYZFn *envMapUVToXYZ(EEnvMappingUVMode mode);
 
@@ -55,5 +57,6 @@ nanogui::Vector2f XYZToMirrorBall(const nanogui::Vector3f &xyz);
 nanogui::Vector2f XYZToLatLong(const nanogui::Vector3f &xyz);
 nanogui::Vector2f XYZToCylindrical(const nanogui::Vector3f &xyz);
 nanogui::Vector2f XYZToCubeMap(const nanogui::Vector3f &xyz);
+nanogui::Vector2f XYZToEqualArea(const nanogui::Vector3f &xyz);
 
 XYZ2UVFn *XYZToEnvMapUV(EEnvMappingUVMode mode);
