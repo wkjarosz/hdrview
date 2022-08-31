@@ -391,22 +391,7 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(2, agrid->row_count() - 1));
 
     agrid->append_row(spacing); // spacing
-    m_filter_btns.push_back(new Button(button_row, "Zap gremlins", FA_SKULL_CROSSBONES));
-    m_filter_btns.back()->set_tooltip("Replace NaN and Inf pixel values with foreground color.");
-    m_filter_btns.back()->set_fixed_height(21);
-    m_filter_btns.back()->set_callback(
-        [this]()
-        {
-            m_images_panel->async_modify_selected(
-                [this](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-                {
-                    Color  nfg = m_screen->foreground()->color();
-                    Color4 fg(nfg.r(), nfg.g(), nfg.b(), nfg.a());
-                    return {make_shared<HDRImage>(
-                                img->apply_function([&fg](const Color4 &c) { return is_valid_color(c) ? c : fg; }, xpuimg->roi())),
-                            nullptr};
-                });
-        });
+    m_filter_btns.push_back(create_zap_gremlins_btn(button_row, m_screen, m_images_panel));
     agrid->append_row(0);
     agrid->set_anchor(m_filter_btns.back(), AdvancedGridLayout::Anchor(0, agrid->row_count() - 1, 3, 1));
 

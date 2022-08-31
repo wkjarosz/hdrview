@@ -267,7 +267,7 @@ CPMAddPackage(
 )
 if(nanogui_ADDED)
   add_library(nanogui::nanogui INTERFACE IMPORTED)
-  target_include_directories(nanogui::nanogui SYSTEM INTERFACE "${nanogui_SOURCE_DIR}/ext/glfw/include;${nanogui_SOURCE_DIR}/ext/nanovg/src;${nanogui_SOURCE_DIR}/include;${NANOGUI_EXTRA_INCS}")
+  target_include_directories(nanogui::nanogui SYSTEM INTERFACE ${nanogui_SOURCE_DIR}/ext/glfw/include ${nanogui_SOURCE_DIR}/ext/nanovg/src ${nanogui_SOURCE_DIR}/include ${NANOGUI_EXTRA_INCS})
   target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
   target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
 endif()
@@ -383,6 +383,7 @@ add_executable(
   src/filters/resize.cpp
   src/filters/shift.cpp
   src/filters/unsharp_mask.cpp
+  src/filters/zap_gremlins.cpp
   src/async.h
   src/box.h
   src/brush.cpp
