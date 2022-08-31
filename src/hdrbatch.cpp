@@ -430,12 +430,11 @@ be done.)")
             }
             spdlog::info("Image size: {:d}x{:d}", image.width(), image.height());
 
-            varN += 1;
             // initialize variables for average and variance
-            if (varN == 1)
+            if (varN == 0)
             {
-                // set images to zeros
-                varImg = avgImg = image.apply_function([](const Color4 &c) { return Color4(0, 0, 0, 0); });
+                // we now know the resolution of the image, initialize the average and variance images to zero
+                varImg = avgImg = HDRImage(image.width(), image.height(), Color4(0.f));
             }
 
             if (fix_NaNs || !dry_run)
@@ -448,6 +447,8 @@ be done.)")
                     throw invalid_argument("Images do not have the same size.");
 
                 // incremental average and variance computation
+                // see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+                varN += 1;
                 auto delta = image - avgImg;
                 avgImg += delta / Color4(varN, varN, varN, varN);
                 auto delta2 = image - avgImg;
