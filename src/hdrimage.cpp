@@ -1187,6 +1187,48 @@ HDRImage HDRImage::inverted(Box2i roi) const
     return apply_function([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); }, roi);
 }
 
+HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mode, Box2i roi) const
+{
+    HDRImage normal_map = *this;
+
+    // ensure valid ROI
+    if (roi.has_volume())
+        roi.intersect(box());
+    else
+        roi = box();
+
+    if (!roi.has_volume())
+        return normal_map;
+
+    auto dx = 1.f / width(), dy = 1.f / height();
+
+    Timer timer;
+    progress.set_num_steps(roi.size().y());
+    // for every pixel in the image
+    parallel_for(roi.min.y(), roi.max.y(),
+                 [this, &roi, &normal_map, &progress, scale, dx, dy, mode](int j)
+                 {
+                     for (int i = roi.min.x(); i < roi.max.x(); ++i)
+                     {
+                         auto i1 = i + 1, j1 = j + 1;
+                         auto p00 = pixel(i, j, mode, mode), p10 = pixel(i1, j, mode, mode),
+                              p01 = pixel(i, j1, mode, mode);
+
+                         auto              g00 = (p00.r + p00.g + p00.b) / 3;
+                         auto              g01 = (p01.r + p01.g + p01.b) / 3;
+                         auto              g10 = (p10.r + p10.g + p10.b) / 3;
+                         nanogui::Vector3f normal{scale * (g10 - g00) / dx, scale * (g01 - g00) / dy, 1.0f};
+                         normal           = normalize(normal) * 0.5f + 0.5f;
+                         normal_map(i, j) = Color4{normal.x(), normal.y(), normal.z(), 1};
+                     }
+
+                     ++progress;
+                 });
+    spdlog::trace("bump_to_normal_map filter took: {} seconds.", (timer.elapsed() / 1000.f));
+
+    return normal_map;
+}
+
 // local functions
 namespace
 {
