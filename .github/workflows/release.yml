@@ -100,7 +100,7 @@ jobs:
           submodules: recursive
 
       - name: Fetch newer Windows SDK
-        uses: fbactions/setup-winsdk@v1.3
+        uses: fbactions/setup-winsdk@v1.3.0
         with:
           winsdk-build-version: 19041
 
