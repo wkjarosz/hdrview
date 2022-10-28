@@ -4,36 +4,32 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "${CMAKE
 
 include(VersionFromGit)
 
-STRING(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
+string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
 message(STATUS "Saving build timestamp: ${BUILD_TIME}")
 
-version_from_git(
-  LOG       ON
-  TIMESTAMP "%Y-%m-%d-%H:%M:%S"
-)
+version_from_git(LOG ON TIMESTAMP "%Y-%m-%d-%H:%M:%S")
 
 project(
   hdrview
-  DESCRIPTION "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
+  DESCRIPTION
+    "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
   VERSION ${VERSION}
-  LANGUAGES C CXX
-)
+  LANGUAGES C CXX)
 
 set(HDRVIEW_VERSION "${GIT_DESCRIBE}")
 
-if (CMAKE_SIZEOF_VOID_P EQUAL 8)
-    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
-elseif (CMAKE_SIZEOF_VOID_P EQUAL 4)
-    set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+  set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
 endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/common.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/common.cpp @ONLY)
 
-
 include(sanitizers)
 
-# Set ourselves as the startup project in visual studio.
-# Not available until cmake 3.6, but doesn't break older versions.
+# Set ourselves as the startup project in visual studio. Not available until cmake 3.6, but doesn't break older
+# versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
 set(USE_IWYU OFF CACHE BOOL "INCLUDE WHAT YOU USE")
@@ -145,91 +141,90 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-CPMAddPackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
+cpmaddpackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
 if(filesystem_ADDED)
   add_library(filesystem INTERFACE IMPORTED)
   target_include_directories(filesystem INTERFACE "${filesystem_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+cpmaddpackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
 if(stb_ADDED)
   add_library(stb INTERFACE IMPORTED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:cxong/tinydir#9f866c1ec09e62aa4df50d7209556ed705a4dd90")
+cpmaddpackage("gh:cxong/tinydir#9f866c1ec09e62aa4df50d7209556ed705a4dd90")
 if(tinydir_ADDED)
   add_library(tinydir INTERFACE IMPORTED)
   target_include_directories(tinydir INTERFACE "${tinydir_SOURCE_DIR}")
 endif()
 
-CPMAddPackage(
-  NAME nlohmann_json
-  VERSION 3.9.1 # the git repo is incredibly large, so we download the archived include directory
-  URL https://github.com/nlohmann/json/releases/download/v3.9.1/include.zip
-  URL_HASH SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
-  OPTIONS "JSON_MultipleHeaders ON"
-)
+cpmaddpackage(
+  NAME
+  nlohmann_json
+  VERSION
+  3.9.1 # the git repo is incredibly large, so we download the archived include directory
+  URL
+  https://github.com/nlohmann/json/releases/download/v3.9.1/include.zip
+  URL_HASH
+  SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
+  OPTIONS
+  "JSON_MultipleHeaders ON")
 if(nlohmann_json_ADDED)
   add_library(nlohmann_json INTERFACE IMPORTED)
   target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
 endif()
 
-CPMAddPackage("gh:syoyo/tinydng#96eea08c8ff4b18cae2f10028acc1dcda76873a6")
+cpmaddpackage("gh:syoyo/tinydng#96eea08c8ff4b18cae2f10028acc1dcda76873a6")
 if(tinydng_ADDED)
   add_library(tinydng INTERFACE IMPORTED)
   target_include_directories(tinydng INTERFACE "${tinydng_SOURCE_DIR}")
 endif()
 
-CPMAddPackage(
-  NAME platform_folders
-  GITHUB_REPOSITORY sago007/PlatformFolders
-  GIT_TAG 4.2.0
-)
+cpmaddpackage(NAME platform_folders GITHUB_REPOSITORY sago007/PlatformFolders GIT_TAG 4.2.0)
 if(platform_folders_ADDED)
   target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
 endif()
 
-CPMAddPackage(
-  NAME cli11
-  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
-  DOWNLOAD_ONLY YES
-)
+cpmaddpackage(NAME cli11 URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip DOWNLOAD_ONLY YES)
 if(cli11_ADDED)
   add_library(cli11 INTERFACE IMPORTED)
   target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
 endif()
 
-CPMAddPackage("gh:gabime/spdlog@1.9.2")
+cpmaddpackage("gh:gabime/spdlog@1.9.2")
 
-
-CPMAddPackage(
-  NAME openexr
-  GITHUB_REPOSITORY mitsuba-renderer/openexr
-  GIT_TAG dbabb6f9500ee628c1faba21bb8add2649cc32a6
+cpmaddpackage(
+  NAME
+  openexr
+  GITHUB_REPOSITORY
+  mitsuba-renderer/openexr
+  GIT_TAG
+  dbabb6f9500ee628c1faba21bb8add2649cc32a6
   OPTIONS
-    "PYILMBASE_ENABLE OFF"
-    "ILMBASE_BUILD_SHARED_LIBS OFF"
-    "OPENEXR_BUILD_SHARED_LIBS OFF"
-    "ILMBASE_NAMESPACE_VERSIONING OFF"
-    "OPENEXR_NAMESPACE_VERSIONING OFF"
-    "OPENEXR_BUILD_UTILS OFF"
-    "INSTALL_OPENEXR_EXAMPLES OFF"
-    "BUILD_TESTING OFF"
-  EXCLUDE_FROM_ALL
-)
+  "PYILMBASE_ENABLE OFF"
+  "ILMBASE_BUILD_SHARED_LIBS OFF"
+  "OPENEXR_BUILD_SHARED_LIBS OFF"
+  "ILMBASE_NAMESPACE_VERSIONING OFF"
+  "OPENEXR_NAMESPACE_VERSIONING OFF"
+  "OPENEXR_BUILD_UTILS OFF"
+  "INSTALL_OPENEXR_EXAMPLES OFF"
+  "BUILD_TESTING OFF"
+  EXCLUDE_FROM_ALL)
 if(openexr_ADDED)
   set(ZLIB_LIBRARIES "")
   if(WIN32)
-    CPMAddPackage(
-      NAME zlibstatic
-      GIT_REPOSITORY    https://github.com/mitsuba-renderer/zlib.git
-      GIT_TAG           080a732c47e86444034c1f99355368d35c1e458a
+    cpmaddpackage(
+      NAME
+      zlibstatic
+      GIT_REPOSITORY
+      https://github.com/mitsuba-renderer/zlib.git
+      GIT_TAG
+      080a732c47e86444034c1f99355368d35c1e458a
       OPTIONS
-        "ZLIB_BUILD_STATIC_LIBS TRUE"
-        "ZLIB_BUILD_SHARED_LIBS FALSE"
-      EXCLUDE_FROM_ALL
-    )
+      "ZLIB_BUILD_STATIC_LIBS TRUE"
+      "ZLIB_BUILD_SHARED_LIBS FALSE"
+      EXCLUDE_FROM_ALL)
     if(zlibstatic_ADDED)
       set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
       set(ZLIB_LIBRARIES zlibstatic)
@@ -241,33 +236,32 @@ if(openexr_ADDED)
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)
-  target_include_directories(openexr::openexr SYSTEM INTERFACE
-    ${openexr_SOURCE_DIR}/IlmBase/Imath
-    ${openexr_SOURCE_DIR}/IlmBase/Iex
-    ${openexr_SOURCE_DIR}/IlmBase/Half
-    ${openexr_SOURCE_DIR}/OpenEXR/IlmImf
-    ${openexr_BINARY_DIR}/IlmBase/config
-    ${openexr_BINARY_DIR}/OpenEXR/config)
-  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES}
-    OpenEXR::IlmImf
-    IlmBase::Imath
-    IlmBase::Half)
+  target_include_directories(
+    openexr::openexr SYSTEM
+    INTERFACE ${openexr_SOURCE_DIR}/IlmBase/Imath ${openexr_SOURCE_DIR}/IlmBase/Iex ${openexr_SOURCE_DIR}/IlmBase/Half
+              ${openexr_SOURCE_DIR}/OpenEXR/IlmImf ${openexr_BINARY_DIR}/IlmBase/config
+              ${openexr_BINARY_DIR}/OpenEXR/config)
+  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES} OpenEXR::IlmImf IlmBase::Imath IlmBase::Half)
 endif()
 
-CPMAddPackage(
-  NAME nanogui
-  GITHUB_REPOSITORY Tom94/nanogui-1
-  GIT_TAG 5ca2cf89756b5b545d530de02b2d88be2eee7a87
+cpmaddpackage(
+  NAME
+  nanogui
+  GITHUB_REPOSITORY
+  Tom94/nanogui-1
+  GIT_TAG
+  cf8baf7c2a02a0e8443379a6b80f6709139f84a0
   OPTIONS
-    "NANOGUI_BUILD_EXAMPLES OFF"
-    "NANOGUI_BUILD_SHARED OFF"
-    "NANOGUI_BUILD_PYTHON OFF"
-    "NANOGUI_INSTALL OFF"
-  EXCLUDE_FROM_ALL
-)
+  "NANOGUI_BUILD_EXAMPLES OFF"
+  "NANOGUI_BUILD_SHARED OFF"
+  "NANOGUI_BUILD_PYTHON OFF"
+  "NANOGUI_INSTALL OFF"
+  EXCLUDE_FROM_ALL)
 if(nanogui_ADDED)
   add_library(nanogui::nanogui INTERFACE IMPORTED)
-  target_include_directories(nanogui::nanogui SYSTEM INTERFACE ${nanogui_SOURCE_DIR}/ext/glfw/include ${nanogui_SOURCE_DIR}/ext/nanovg/src ${nanogui_SOURCE_DIR}/include ${NANOGUI_EXTRA_INCS})
+  target_include_directories(
+    nanogui::nanogui SYSTEM INTERFACE ${nanogui_SOURCE_DIR}/ext/glfw/include ${nanogui_SOURCE_DIR}/ext/nanovg/src
+                                      ${nanogui_SOURCE_DIR}/include ${NANOGUI_EXTRA_INCS})
   target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
   target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
 endif()
@@ -290,9 +284,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
   endif()
 endif()
 
-include_directories(
-  ${CMAKE_SOURCE_DIR}/ext/alphanum
-  ${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_SOURCE_DIR}/ext/alphanum ${CMAKE_SOURCE_DIR}/src)
 
 # Resource file (icons etc.)
 set(EXTRA_SOURCE "")
@@ -490,12 +482,41 @@ add_executable(
   src/range.h
   src/timer.h)
 
-add_executable(force-random-dither
-  src/forced-random-dither.cpp)
+add_executable(force-random-dither src/forced-random-dither.cpp)
 
-target_link_libraries(HDRView PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
-target_link_libraries(hdrbatch PRIVATE stb nanogui::nanogui openexr::openexr cli11 platform_folders filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
-target_link_libraries(force-random-dither PRIVATE stb nanogui::nanogui filesystem tinydir nlohmann_json tinydng spdlog::spdlog)
+target_link_libraries(
+  HDRView
+  PRIVATE stb
+          nanogui::nanogui
+          openexr::openexr
+          cli11
+          platform_folders
+          filesystem
+          tinydir
+          nlohmann_json
+          tinydng
+          spdlog::spdlog)
+target_link_libraries(
+  hdrbatch
+  PRIVATE stb
+          nanogui::nanogui
+          openexr::openexr
+          cli11
+          platform_folders
+          filesystem
+          tinydir
+          nlohmann_json
+          tinydng
+          spdlog::spdlog)
+target_link_libraries(
+  force-random-dither
+  PRIVATE stb
+          nanogui::nanogui
+          filesystem
+          tinydir
+          nlohmann_json
+          tinydng
+          spdlog::spdlog)
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
   find_program(iwyu_path NAMES include-what-you-use iwyu)
@@ -510,30 +531,34 @@ endif()
 if(APPLE)
   string(TIMESTAMP YEAR "%Y")
   # Build an application bundle on OSX
-  set_target_properties(HDRView PROPERTIES
-    MACOSX_BUNDLE TRUE
-    MACOSX_BUNDLE_BUNDLE_NAME "HDRView"
-    MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION}
-    MACOSX_BUNDLE_INFO_STRING "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}."
-    MACOSX_BUNDLE_COPYRIGHT "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license."
-    MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView"
-    MACOSX_BUNDLE_ICON_FILE icon.icns
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION}
-    MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION}
-    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in
-    RESOURCE resources/icon.icns)
+  set_target_properties(
+    HDRView
+    PROPERTIES MACOSX_BUNDLE TRUE
+               MACOSX_BUNDLE_BUNDLE_NAME "HDRView"
+               MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION}
+               MACOSX_BUNDLE_INFO_STRING
+               "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}."
+               MACOSX_BUNDLE_COPYRIGHT "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license."
+               MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView"
+               MACOSX_BUNDLE_ICON_FILE icon.icns
+               MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION}
+               MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION}
+               MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in
+               RESOURCE resources/icon.icns)
   set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 
   # build HDRView first so we can build the hdrbatch executable directly into the HDRView bundle on macOS
   add_dependencies(hdrbatch HDRView)
 
   # put the hdrbatch executable into the HDRView bundle
-  add_custom_command(TARGET hdrbatch POST_BUILD
+  add_custom_command(
+    TARGET hdrbatch
+    POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:hdrbatch> ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
     COMMENT "Adding hdrbatch into HDRView bundle")
-  # set_target_properties(hdrbatch PROPERTIES
-  #   RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/)
+  # set_target_properties(hdrbatch PROPERTIES RUNTIME_OUTPUT_DIRECTORY
+  # ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/)
 elseif(NOT WIN32)
   # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
   set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")

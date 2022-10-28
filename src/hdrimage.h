@@ -325,8 +325,9 @@ public:
     HDRImage bilateral_filtered(float sigma_range /* = 0.1f*/, float sigma_domain /* = 1.0f*/, AtomicProgress progress,
                                 BorderMode mX = EDGE, BorderMode mY = EDGE, float truncateDomain = 6.0f,
                                 Box2i roi = Box2i()) const;
-    HDRImage bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mode = EDGE,
+    HDRImage bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE,
                                 Box2i roi = Box2i()) const;
+    HDRImage irradiance_envmap(AtomicProgress progress) const;
     //@}
 
     bool load(const std::string &filename);

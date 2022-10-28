@@ -7,6 +7,7 @@
 #include "hdrimage.h"
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
+#include "envmap.h"
 #include "timer.h"
 #include <algorithm>  // for nth_element, transform
 #include <cmath>      // for floor, pow, exp, ceil, round, sqrt
@@ -39,8 +40,10 @@ namespace
 const Color4 g_blackPixel(0, 0, 0, 0);
 
 // create a vector containing the normalized values of a 1D Gaussian filter
-Array2Df horizontal_gaussian_kernel(float sigma, float truncate);
-int      wrap_coord(int p, int maxP, HDRImage::BorderMode m);
+Array2Df       horizontal_gaussian_kernel(float sigma, float truncate);
+int            wrap_coord(int p, int maxP, HDRImage::BorderMode m);
+void           update_coeffs(vector<Color4> *coeffs, const Color4 &hdr, float d_omega, const nanogui::Vector3f &xyz);
+vector<Color4> diffuse_convolve(const Array2D<Color4> &buffer);
 
 inline void clip_roi(Box2i &roi, const HDRImage &img)
 {
@@ -1187,7 +1190,8 @@ HDRImage HDRImage::inverted(Box2i roi) const
     return apply_function([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); }, roi);
 }
 
-HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mode, Box2i roi) const
+HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mX, BorderMode mY,
+                                      Box2i roi) const
 {
     HDRImage normal_map = *this;
 
@@ -1206,13 +1210,12 @@ HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, Bord
     progress.set_num_steps(roi.size().y());
     // for every pixel in the image
     parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &roi, &normal_map, &progress, scale, dx, dy, mode](int j)
+                 [this, &roi, &normal_map, &progress, scale, dx, dy, mX, mY](int j)
                  {
                      for (int i = roi.min.x(); i < roi.max.x(); ++i)
                      {
                          auto i1 = i + 1, j1 = j + 1;
-                         auto p00 = pixel(i, j, mode, mode), p10 = pixel(i1, j, mode, mode),
-                              p01 = pixel(i, j1, mode, mode);
+                         auto p00 = pixel(i, j, mX, mY), p10 = pixel(i1, j, mX, mY), p01 = pixel(i, j1, mX, mY);
 
                          auto              g00 = (p00.r + p00.g + p00.b) / 3;
                          auto              g01 = (p01.r + p01.g + p01.b) / 3;
@@ -1227,6 +1230,43 @@ HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, Bord
     spdlog::trace("bump_to_normal_map filter took: {} seconds.", (timer.elapsed() / 1000.f));
 
     return normal_map;
+}
+
+HDRImage HDRImage::irradiance_envmap(AtomicProgress progress) const
+{
+    static constexpr float c1 = 0.429043f, c2 = 0.511664f, c3 = 0.743125f, c4 = 0.886227f, c5 = 0.247708f;
+
+    HDRImage convolved = *this;
+    auto     coeffs    = diffuse_convolve(*this);
+
+    int w = width();
+    int h = height();
+
+    progress.set_num_steps(h);
+    parallel_for(0, h,
+                 [&convolved, &progress, &w, &h, &coeffs](int j)
+                 {
+                     for (int i = 0; i < w; i++)
+                     {
+                         // We now find the cartesian components for pixel (i,j)
+                         auto xyz = angularMapToXYZ(nanogui::Vector2f((i + 0.5f) / w, (j + 0.5f) / h));
+
+                         for (int k = 0; k < 3; k++)
+                         {
+                             convolved(i, j)[k] =
+                                 (c1 * coeffs[8][k] * (xyz.x() * xyz.x() - xyz.y() * xyz.y()) +
+                                  c3 * coeffs[6][k] * xyz.z() * xyz.z() + c4 * coeffs[0][k] - c5 * coeffs[6][k] +
+                                  2 * c1 *
+                                      (coeffs[4][k] * xyz.x() * xyz.y() + coeffs[7][k] * xyz.x() * xyz.z() +
+                                       coeffs[5][k] * xyz.y() * xyz.z()) +
+                                  2 * c2 * (coeffs[3][k] * xyz.x() + coeffs[1][k] * xyz.y() + coeffs[2][k] * xyz.z())) /
+                                 M_PI;
+                         }
+                     }
+
+                     ++progress;
+                 });
+    return convolved;
 }
 
 // local functions
@@ -1273,6 +1313,106 @@ int wrap_coord(int p, int maxP, HDRImage::BorderMode m)
     case HDRImage::BLACK:
     default: return -1;
     }
+}
+
+void update_coeffs(vector<Color4> *coeffs, const Color4 &hdr, float d_omega, const nanogui::Vector3f &xyz)
+{
+    //
+    // Update the coefficients (i.e. compute the next term in the
+    // integral) based on the lighting value hdr[3], the differential
+    // solid angle d_omega and cartesian components of surface normal x,y,z
+    //
+    // Inputs:  hdr = L(x,y,z) [note that x^2+y^2+z^2 = 1]
+    // i.e. the illumination at position (x,y,z)
+    //
+    // d_omega = The solid angle at the pixel corresponding to
+    // (x,y,z).  For and angular map this is sinc(theta)
+    //
+    // x,y,z  = Cartesian components of surface normal
+    //
+
+    for (int col = 0; col < 3; col++)
+    {
+        // A different constant for each coefficient
+        float c;
+
+        // L_{00}.  Note that Y_{00} = 0.282095
+        c = 0.282095f;
+        (*coeffs)[0][col] += hdr[col] * c * d_omega;
+
+        // L_{1m}. -1 <= m <= 1.  The linear terms
+        c = 0.488603f;
+        (*coeffs)[1][col] += hdr[col] * (c * xyz.y()) * d_omega;
+        (*coeffs)[2][col] += hdr[col] * (c * xyz.z()) * d_omega;
+        (*coeffs)[3][col] += hdr[col] * (c * xyz.x()) * d_omega;
+
+        // The Quadratic terms, L_{2m} -2 <= m <= 2
+
+        // First, L_{2-2}, L_{2-1}, L_{21} corresponding to xy,yz,xz
+        c = 1.092548f;
+        (*coeffs)[4][col] += hdr[col] * (c * xyz.x() * xyz.y()) * d_omega;
+        (*coeffs)[5][col] += hdr[col] * (c * xyz.y() * xyz.z()) * d_omega;
+        (*coeffs)[7][col] += hdr[col] * (c * xyz.x() * xyz.z()) * d_omega;
+
+        // L_{20}.  Note that Y_{20} = 0.315392 (3z^2 - 1)
+        c = 0.315392f;
+        (*coeffs)[6][col] += hdr[col] * (c * (3 * xyz.z() * xyz.z() - 1)) * d_omega;
+
+        // L_{22}.  Note that Y_{22} = 0.546274 (x^2 - y^2)
+        c = 0.546274f;
+        (*coeffs)[8][col] += hdr[col] * (c * (xyz.x() * xyz.x() - xyz.y() * xyz.y())) * d_omega;
+    }
+}
+
+vector<Color4> diffuse_convolve(const Array2D<Color4> &buffer)
+{
+    //
+    // The main integration routine. Calls update_coeffs to
+    // actually increment the integral.
+    // This assumes angular map format.
+    //
+
+    auto sinc = [](float x)
+    {
+        if (std::fabs(x) < 1.0e-4f)
+            return 1.f;
+        else
+            return (std::sin(x) / x);
+    };
+
+    vector<Color4> coeffs(9, Color4{0.f});
+    int            w       = buffer.width();
+    int            h       = buffer.height();
+    float          d_pixel = (2 * M_PI / w) * (2 * M_PI / h);
+    for (int i = 0; i < w; i++)
+    {
+        for (int j = 0; j < h; j++)
+        {
+            // We now find the cartesian components for the point (i,j)
+            auto  uv = nanogui::Vector2f((i + 0.5f) / w, (j + 0.5f) / h);
+            auto  xy = 2 * uv - nanogui::Vector2f(1.f);
+            float r  = norm(xy);
+
+            // Consider only circle with r<1
+            if (r <= 1.0f)
+            {
+                auto xyz = angularMapToXYZ(uv);
+
+                //
+                // Computation of the solid angle.  This follows from some
+                // elementary calculus converting sin(theta) d theta d phi into
+                // coordinates in terms of r.  This calculation should be redone
+                // if the form of the input changes
+                //
+                float theta   = M_PI * r; // theta parameter of (i,j)
+                float d_omega = d_pixel * sinc(theta);
+
+                // Update Integration
+                update_coeffs(&coeffs, buffer(i, j), d_omega, xyz);
+            }
+        }
+    }
+    return coeffs;
 }
 
 } // namespace

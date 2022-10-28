@@ -31,6 +31,7 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
 
     static string name = "Remap...";
     auto          b    = new Button(parent, name, FA_GLOBE_AMERICAS);
+    b->set_tooltip("Convert between various common environment map projections.");
     b->set_fixed_height(21);
     b->set_callback(
         [&, screen, images_panel]()

@@ -433,6 +433,36 @@ EditImagePanel::EditImagePanel(Widget *parent, HDRViewScreen *screen, ImageListP
     m_filter_btns.push_back(create_bilateral_filter_btn(button_row, m_screen, m_images_panel));
     m_filter_btns.push_back(create_unsharp_mask_filter_btn(button_row, m_screen, m_images_panel));
     m_filter_btns.push_back(create_median_filter_btn(button_row, m_screen, m_images_panel));
+    m_filter_btns.push_back(new Button(button_row, "Bump to Normal map", FA_ARROWS_ALT_H));
+    m_filter_btns.back()->set_callback(
+        [&]()
+        {
+            m_images_panel->async_modify_selected(
+                [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                   AtomicProgress &progress) -> ImageCommandResult
+                {
+                    return {make_shared<HDRImage>(
+                                img->bump_to_normal_map(1.f, progress, HDRImage::EDGE, HDRImage::EDGE, xpuimg->roi())),
+                            nullptr};
+                });
+        });
+    m_filter_btns.back()->set_fixed_height(21);
+    m_filter_btns.back()->set_tooltip("Convert a bump map to a tangent-space normal map by computing the finite "
+                                      "difference derivative along x and y.");
+    // m_filter_btns.push_back(create_irradiance_envmap_btn(button_row, m_screen, m_images_panel));
+    m_filter_btns.push_back(new Button(button_row, "Irradiance envmap", FA_GLOBE_AMERICAS));
+    m_filter_btns.back()->set_callback(
+        [&]()
+        {
+            images_panel->async_modify_selected(
+                [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                    AtomicProgress &progress) -> ImageCommandResult {
+                    return {make_shared<HDRImage>(img->irradiance_envmap(progress)), nullptr};
+                });
+        });
+    m_filter_btns.back()->set_fixed_height(21);
+    m_filter_btns.back()->set_tooltip("Perform a diffuse convolution to convert an environment map into an irradiance "
+                                      "environment map. Image must be in angular map format.");
 }
 
 void EditImagePanel::draw(NVGcontext *ctx)
