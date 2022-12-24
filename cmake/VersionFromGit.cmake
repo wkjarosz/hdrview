@@ -53,7 +53,7 @@ function( version_from_git )
 
   # Git describe
   execute_process(
-    COMMAND           "${GIT_EXECUTABLE}" describe --tags
+    COMMAND           "${GIT_EXECUTABLE}" describe --tags --dirty
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE   git_result
     OUTPUT_VARIABLE   git_describe

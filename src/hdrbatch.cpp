@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "cliformatter.h"
 #include "common.h"   // for get_basename, get_extension
 #include "envmap.h"   // for XYZToAngularMap, XYZToCubeMap
 #include "hdrimage.h" // for HDRImage
@@ -11,9 +12,8 @@
 #include <iostream>   // for string
 #include <nanogui/vector.h>
 #include <random> // for normal_distribution, mt19937
-#include <spdlog/spdlog.h>
-#include "cliformatter.h"
 #include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
 
 using namespace std;
 using nanogui::Vector2f;
@@ -26,57 +26,34 @@ std::mt19937 g_rand(53);
 
 int main(int argc, char **argv)
 {
-    set<string> env_format_names(
-        {
-            "angularmap",
-            "mirrorball",
-            "latlong",
-            "cylindrical",
-            "cubemap"
-        });
-    map<string, EEnvMappingUVMode> env_formats(
-        {
-            {"angularmap", ANGULAR_MAP},
-            {"mirrorball", MIRROR_BALL},
-            {"latlong", LAT_LONG},
-            {"cylindrical", CYLINDRICAL},
-            {"cubemap", CUBE_MAP}
-        });
-    set<string> lookup_mode_names(
-        {
-            "nearest",
-            "bilinear",
-            "bicubic"
-        });
+    set<string> filter_names({"gaussian", "box", "fast-gaussian", "median", "bilateral", "unsharp"});
+    set<string> env_format_names({"angularmap", "mirrorball", "latlong", "cylindrical", "cubemap", "equalarea"});
+    map<string, EEnvMappingUVMode> env_formats({{"angularmap", ANGULAR_MAP},
+                                                {"mirrorball", MIRROR_BALL},
+                                                {"latlong", LAT_LONG},
+                                                {"cylindrical", CYLINDRICAL},
+                                                {"cubemap", CUBE_MAP},
+                                                {"equalarea", EQUAL_AREA}});
+    set<string>                    lookup_mode_names({"nearest", "bilinear", "bicubic"});
     map<string, HDRImage::Sampler> lookup_modes(
-        {
-            {"nearest", HDRImage::NEAREST},
-            {"bilinear", HDRImage::BILINEAR},
-            {"bicubic", HDRImage::BICUBIC}
-        });
-    set<string> border_mode_names(
-        {
-            "black", "mirror", "edge", "repeat"
-        });
-    map<string,HDRImage::BorderMode> border_modes(
-        {
-            {"black", HDRImage::BLACK},
-            {"mirror", HDRImage::MIRROR},
-            {"edge", HDRImage::EDGE},
-            {"repeat", HDRImage::REPEAT}
-        });
-
+        {{"nearest", HDRImage::NEAREST}, {"bilinear", HDRImage::BILINEAR}, {"bicubic", HDRImage::BICUBIC}});
+    set<string>                       border_mode_names({"black", "mirror", "edge", "repeat"});
+    map<string, HDRImage::BorderMode> border_modes({{"black", HDRImage::BLACK},
+                                                    {"mirror", HDRImage::MIRROR},
+                                                    {"edge", HDRImage::EDGE},
+                                                    {"repeat", HDRImage::REPEAT}});
+    set<string>                       error_names({"squared", "absolute", "relative-squared"});
     string ext = "", avg_file = "", var_file = "", basename = "", error_type = "", reference_file = "", resize_text;
-    tuple<string,float,float> filter_args;
-    tuple<string,string,int,string> remap_args{"angularmap","angularmap",1,"bilinear"};
-    tuple<string,string> border_mode_args{"black","black"};
-    tuple<float,float> noise_args{0,0};
-    tuple<float,float,float> nan_args{0,0,0};
-    int   verbosity = 0, abs_width, abs_height;
-    float gamma, exposure = 0.0f, rel_width = 1.f, rel_height = 1.f;
+    tuple<string, float, float>        filter_args;
+    tuple<string, string, int, string> remap_args{"angularmap", "angularmap", 1, "bilinear"};
+    tuple<string, string>              border_mode_args{"black", "black"};
+    tuple<float, float>                noise_args{0, 0};
+    tuple<float, float, float>         nan_args{0, 0, 0};
+    int                                verbosity = 0, abs_width, abs_height;
+    float                              gamma, exposure = 0.0f, rel_width = 1.f, rel_height = 1.f;
     bool dither = true, sRGB = true, dry_run = false, fix_NaNs = false, resize = false, remap = false, rel_size = true,
          save_files = false, make_noise = false, invert = false;
-    Color3               nan_color(0.0f, 0.0f, 0.0f);
+    Color3 nan_color(0.0f, 0.0f, 0.0f);
     // by default use a no-op passthrough warp function
     function<Vector2f(const Vector2f &)> warp = [](const Vector2f &uv) { return uv; };
     // no filter by default
@@ -88,47 +65,45 @@ int main(int argc, char **argv)
     try
     {
         CLI::App app{
-R"(HDRBatch. Copyright (c) Wojciech Jarosz.
+            R"(HDRBatch. Copyright (c) Wojciech Jarosz.
 
 HDRBatch is a simple research-oriented tool for batch
 processing high-dynamic range images. HDRBatch is freely
 available under a 3-clause BSD license.
 )",
-"hdrbatch"};
+            "hdrbatch"};
 
         app.formatter(std::make_shared<ColorFormatter>());
         app.get_formatter()->column_width(20);
-        app.get_formatter()->label("OPTIONS", fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
+        app.get_formatter()->label("OPTIONS",
+                                   fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
 
         app.add_option("-e,--exposure", exposure,
-R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
+                       R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
 [default: 0].)")
             ->capture_default_str()
-            ->group("Tone mapping and display")
-            ;
-        
+            ->group("Tone mapping and display");
+
         app.add_option("-g,--gamma", gamma,
-R"(Desired gamma value for exposure+gamma tonemapping. An
+                       R"(Desired gamma value for exposure+gamma tonemapping. An
 sRGB curve is used if gamma is not specified.)")
-            ->group("Tone mapping and display")
-            ;
+            ->group("Tone mapping and display");
 
         app.add_option("-n, --nan", nan_args, "Replace all NaNs and INFs with (R,G,B).")
             ->type_size(3)
             ->option_text("FLOAT FLOAT FLOAT")
-            ->group("Tone mapping and display")
-            ;
-        
-        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering when converting to LDR\n[default: on].")
-            ->group("Tone mapping and display")
-            ;
-        
-        app.add_flag("-s, --save", save_files, "Save the processed images. Specify output filename\nusing --out and/or --format.")
-            ->group("Saving and converting")
-            ;
-        
+            ->group("Tone mapping and display");
+
+        app.add_flag("--dither,--no-dither{false}", dither,
+                     "Enable/disable dithering when converting to LDR\n[default: on].")
+            ->group("Tone mapping and display");
+
+        app.add_flag("-s, --save", save_files,
+                     "Save the processed images. Specify output filename\nusing --out and/or --format.")
+            ->group("Saving and converting");
+
         app.add_option("-o,--out", basename,
-R"(Save image(s) using specified BASE output filename.
+                       R"(Save image(s) using specified BASE output filename.
 If multiple images are processed, an image sequence
 is created by concatenating: BASE, image
 number, and output format extension. For example:
@@ -142,40 +117,36 @@ may be overwritten!). For example:
     hdrbatch -f png fileA.exr fileB.exr
 would output 'fileA.png' and 'fileB.png'.)")
             ->option_text("BASE")
-            ->group("Saving and converting")
-            ;
+            ->group("Saving and converting");
 
-        app.add_option("-f,--format", ext, fmt::format(
-R"(Specify output file format EXTension, which is one of
+        app.add_option("-f,--format", ext,
+                       fmt::format(
+                           R"(Specify output file format EXTension, which is one of
  EXT : ({}).
 If no format is given, each image is saved in its
 original format (if supported).)",
-            fmt::join(HDRImage::savable_formats(), " | ")))
+                           fmt::join(HDRImage::savable_formats(), " | ")))
             ->check(CLI::IsMember(HDRImage::savable_formats()))
             ->option_text("EXT")
-            ->group("Saving and converting")
-            ;
-        
-        app.add_flag("-i, --invert", invert, "Invert the image (compute 1-image).")
-            ->group("Editing")
-            ;
-        
+            ->group("Saving and converting");
+
+        app.add_flag("-i, --invert", invert, "Invert the image (compute 1-image).")->group("Editing");
+
         app.add_option("--filter", filter_args,
-R"(Process image(s) using filter TYPE, which must be
+                       fmt::format(R"(Process image(s) using filter TYPE, which must be
 one of:
- TYPE : (gaussian | box | fast-gaussian | unsharp |
-         bilateral | median),
+ TYPE : ({}),
 with two filter-specific arguments following.
 
 For example: '--filter fast-gaussian 10 10' would
-filter using a 10x10 fast Gaussian approximation.)")
-            ->check(CLI::Validator(CLI::IsMember({"gaussian", "box", "fast-gaussian", "median", "bilateral", "unsharp"})).application_index(0))
+filter using a 10x10 fast Gaussian approximation.)",
+                                   fmt::join(filter_names, " | ")))
+            ->check(CLI::Validator(CLI::IsMember(filter_names)).application_index(0))
             ->option_text("TYPE FLOAT FLOAT")
-            ->group("Editing")
-            ;
-        
+            ->group("Editing");
+
         app.add_option("-r,--resize", resize_text,
-R"(Resize the image to the size specified by SIZE_SPEC.
+                       R"(Resize the image to the size specified by SIZE_SPEC.
 This currently uses a box filter for resampling, but
 you can combine with a Gaussian blur to obtain
 smoother downsampled results. The blur is applied
@@ -188,18 +159,17 @@ pattern '%fx%f' e.g. '.5x.25' would make the
 image half its original width and a quarter its
 original height.)")
             ->option_text("SIZE_SPEC")
-            ->group("Editing")
-            ;
+            ->group("Editing");
 
         // FIXME: the two optional arguments don't default to the correct values if not specified
         // For now we just require all arguments
         app.add_option("--remap", remap_args,
-R"(Remap the input image from one environment map format
+                       fmt::format(R"(Remap the input image from one environment map format
 to another.
 
 The first two arguments are the input and output
 environment map formats respectively and must be one of:
-  M : (latlong | angularmap | mirrorball | cubemap).
+  M : ({}).
 Specifying the same format twice results in no change. 
 
 The 3rd argument S specifies S^2 super-sampling,
@@ -207,70 +177,65 @@ where the default is S=1: one centered sample per pixel.
 
 The 4th argument L specifies the sampling lookup mode
 and must be one of:
-  L : (nearest | bilinear | bicubic).
-Combine with --resize to specify output file dimensions.)")
+  L : ({}).
+Combine with --resize to specify output file dimensions.)",
+                                   fmt::join(env_format_names, " | "), fmt::join(lookup_mode_names, " | ")))
             ->check(CLI::Validator(CLI::IsMember(env_format_names)).application_index(0))
             ->check(CLI::Validator(CLI::IsMember(env_format_names)).application_index(1))
             ->check(CLI::Validator(CLI::PositiveNumber).application_index(2))
             ->check(CLI::Validator(CLI::IsMember(lookup_mode_names)).application_index(3))
             ->option_text("M M S L")
-            ->group("Editing")
-            ;
+            ->group("Editing");
 
         app.add_option("--border-mode", border_mode_args,
-R"(Specifies what x- and y-modes to use when accessing pixels
+                       fmt::format(R"(Specifies what x- and y-modes to use when accessing pixels
 outside the bounds of the image. Each must be one of:
-  MODE : (black | mirror | edge | repeat)
-[default: edge edge])")
+  MODE : ({})
+[default: edge edge])",
+                                   fmt::join(border_mode_names, " | ")))
             ->check(CLI::Validator(CLI::IsMember(border_mode_names)))
             ->option_text("MODE MODE")
-            ->group("Editing")
-            ;
+            ->group("Editing");
 
         app.add_option("--random-noise", noise_args,
-R"(Replace pixel values with random Gaussian noise with mean
+                       R"(Replace pixel values with random Gaussian noise with mean
 MEAN and variance VAR.)")
             ->option_text("MEAN VAR")
-            ->group("Editing")
-            ;
+            ->group("Editing");
 
         app.add_option("--error", error_type,
-R"(Compute the error or difference between the images
+                       fmt::format(R"(Compute the error or difference between the images
 and a reference image (specified with --reference).
 The type error type can be one of:
- TYPE : (squared | absolute | relative-squared).
+ TYPE : ({}).
 The type name is appended to the saved filename (before
-image sequence number).)")
-            ->check(CLI::Validator(CLI::IsMember({"squared", "absolute", "relative-squared"})))
+image sequence number).)",
+                                   fmt::join(error_names, " | ")))
+            ->check(CLI::Validator(CLI::IsMember(error_names)))
             ->option_text("TYPE")
-            ->group("Calculating statistics")
-            ;
+            ->group("Calculating statistics");
 
-        app.add_option("--reference", reference_file,
-            "Specify the reference image for error computation.")
+        app.add_option("--reference", reference_file, "Specify the reference image for error computation.")
             ->check(CLI::ExistingFile)
             ->option_text("FILE")
-            ->group("Calculating statistics")
-            ;
+            ->group("Calculating statistics");
 
         app.add_option("-a, --average", avg_file,
-R"(Average all loaded images and save to FILE
+                       R"(Average all loaded images and save to FILE
 (all images must have the same dimensions).)")
             ->option_text("FILE")
-            ->group("Calculating statistics")
-            ;
+            ->group("Calculating statistics");
 
         app.add_option("--variance", var_file,
-R"(Compute an unbiased reference-less sample variance
+                       R"(Compute an unbiased reference-less sample variance
 of FILEs and save to FILE. This uses the FILEs
 themselves to compute the mean, and uses the (n-1)
 Bessel correction factor.)")
             ->option_text("FILE")
-            ->group("Calculating statistics")
-            ;
-        
+            ->group("Calculating statistics");
+
         app.add_option("-v,--verbosity", verbosity,
-R"(Set verbosity threshold T with lower values meaning more
+                       R"(Set verbosity threshold T with lower values meaning more
 verbose and higher values removing low-priority messages.
 All messages with severity >= T are displayed, where the
 severities are:
@@ -284,29 +249,20 @@ severities are:
 The default is 2 (info).)")
             ->check(CLI::Range(0, 6))
             ->option_text("INT in [0-6]")
-            ->group("Misc")
-            ;
+            ->group("Misc");
 
-        app.set_version_flag("--version", "hdrbatch " + hdrview_version(), "Show the version and exit.")
-            ->group("Misc")
-            ;
-        app.set_help_flag("-h, --help", "Print this help message and exit.")
-            ->group("Misc")
-            ;
+        app.set_version_flag("--version", "hdrbatch " + hdrview_version(), "Show the version and exit.")->group("Misc");
+        app.set_help_flag("-h, --help", "Print this help message and exit.")->group("Misc");
 
         app.add_flag("--dry-run", dry_run,
-R"(Don't actually save any files, just report what would
+                     R"(Don't actually save any files, just report what would
 be done.)")
-            ->group("Misc")
-            ;
+            ->group("Misc");
 
-        app.add_option(
-            "FILES", in_files,
-            "The images files to load.")
+        app.add_option("FILES", in_files, "The images files to load.")
             ->check(CLI::ExistingPath)
             ->required()
             ->option_text("PATH(existing) ...");
-
 
         CLI11_PARSE(app, argc, argv);
 
@@ -321,7 +277,7 @@ be done.)")
 
         if (app.count("--gamma"))
         {
-            sRGB  = false;
+            sRGB = false;
             spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
         else
@@ -348,26 +304,51 @@ be done.)")
             AtomicProgress progress;
             if (get<0>(filter_args) == "gaussian")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.gaussian_blurred(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.gaussian_blurred(get<1>(filter_args), get<2>(filter_args), progress,
+                                              border_modes[get<0>(border_mode_args)],
+                                              border_modes[get<1>(border_mode_args)]);
+                };
             else if (get<0>(filter_args) == "box")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.box_blurred(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.box_blurred(get<1>(filter_args), get<2>(filter_args), progress,
+                                         border_modes[get<0>(border_mode_args)],
+                                         border_modes[get<1>(border_mode_args)]);
+                };
             else if (get<0>(filter_args) == "fast-gaussian")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.fast_gaussian_blurred(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.fast_gaussian_blurred(get<1>(filter_args), get<2>(filter_args), progress,
+                                                   border_modes[get<0>(border_mode_args)],
+                                                   border_modes[get<1>(border_mode_args)]);
+                };
             else if (get<0>(filter_args) == "median")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.median_filtered(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.median_filtered(get<1>(filter_args), get<2>(filter_args), progress,
+                                             border_modes[get<0>(border_mode_args)],
+                                             border_modes[get<1>(border_mode_args)]);
+                };
             else if (get<0>(filter_args) == "bilateral")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.bilateral_filtered(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.bilateral_filtered(get<1>(filter_args), get<2>(filter_args), progress,
+                                                border_modes[get<0>(border_mode_args)],
+                                                border_modes[get<1>(border_mode_args)]);
+                };
             else if (get<0>(filter_args) == "unsharp")
                 filter = [&border_modes, filter_args, progress, border_mode_args](const HDRImage &i)
-                { return i.unsharp_masked(get<1>(filter_args), get<2>(filter_args), progress, border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]); };
+                {
+                    return i.unsharp_masked(get<1>(filter_args), get<2>(filter_args), progress,
+                                            border_modes[get<0>(border_mode_args)],
+                                            border_modes[get<1>(border_mode_args)]);
+                };
             else
                 throw invalid_argument(fmt::format("Unrecognized filter type: \"{}\".", get<0>(filter_args)));
 
-            spdlog::info("Filtering using {}({:f},{:f}).", get<0>(filter_args), get<1>(filter_args), get<2>(filter_args));
+            spdlog::info("Filtering using {}({:f},{:f}).", get<0>(filter_args), get<1>(filter_args),
+                         get<2>(filter_args));
         }
 
         if (app.count("--error"))
@@ -385,12 +366,12 @@ be done.)")
             else if (sscanf(resize_text.c_str(), "%fx%f", &rel_width, &rel_height) == 2)
                 rel_size = true;
             else
-                throw invalid_argument(
-                    fmt::format("Cannot parse --resize parameters:\t{}", resize_text));
+                throw invalid_argument(fmt::format("Cannot parse --resize parameters:\t{}", resize_text));
 
             resize = true;
             if (rel_size)
-                spdlog::info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", rel_width*100, rel_height*100);
+                spdlog::info("Resizing images to a relative size of {:.1f}% x {:.1f}%.", rel_width * 100,
+                             rel_height * 100);
             else
                 spdlog::info("Resizing images to an absolute size of {:d} x {:d}.", abs_width, abs_height);
         }
@@ -400,22 +381,24 @@ be done.)")
             remap = true;
 
             if (get<0>(remap_args) != get<1>(remap_args))
-                warp = [&env_formats, remap_args](const Vector2f &uv) { return convertEnvMappingUV(env_formats[get<1>(remap_args)], env_formats[get<0>(remap_args)], uv); };
+                warp = [&env_formats, remap_args](const Vector2f &uv)
+                { return convertEnvMappingUV(env_formats[get<1>(remap_args)], env_formats[get<0>(remap_args)], uv); };
 
-            spdlog::info("Remapping from {} to {} using {} interpolation with {:d}x{:d} samples.", get<0>(remap_args), get<1>(remap_args), get<3>(remap_args), get<2>(remap_args), get<2>(remap_args));
+            spdlog::info("Remapping from {} to {} using {} interpolation with {:d}x{:d} samples.", get<0>(remap_args),
+                         get<1>(remap_args), get<3>(remap_args), get<2>(remap_args), get<2>(remap_args));
         }
 
         if (app.count("--random-noise"))
         {
             make_noise = true;
-            gaussian = normal_distribution<float>(get<0>(noise_args), sqrt(get<1>(noise_args)));
+            gaussian   = normal_distribution<float>(get<0>(noise_args), sqrt(get<1>(noise_args)));
             spdlog::info("Replacing images with random-noise({:f},{:f}).", get<0>(noise_args), get<1>(noise_args));
         }
 
         if (app.count("--nan"))
         {
             spdlog::info("Replacing NaNs and Infinities with ({}).", fmt::join(nan_args, ", "));
-            fix_NaNs = true;
+            fix_NaNs  = true;
             nan_color = Color3(get<0>(nan_args), get<1>(nan_args), get<2>(nan_args));
         }
 
@@ -447,12 +430,11 @@ be done.)")
             }
             spdlog::info("Image size: {:d}x{:d}", image.width(), image.height());
 
-            varN += 1;
             // initialize variables for average and variance
-            if (varN == 1)
+            if (varN == 0)
             {
-                // set images to zeros
-                varImg = avgImg = image.apply_function([](const Color4 &c) { return Color4(0, 0, 0, 0); });
+                // we now know the resolution of the image, initialize the average and variance images to zero
+                varImg = avgImg = HDRImage(image.width(), image.height(), Color4(0.f));
             }
 
             if (fix_NaNs || !dry_run)
@@ -465,6 +447,8 @@ be done.)")
                     throw invalid_argument("Images do not have the same size.");
 
                 // incremental average and variance computation
+                // see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Welford's_online_algorithm
+                varN += 1;
                 auto delta = image - avgImg;
                 avgImg += delta / Color4(varN, varN, varN, varN);
                 auto delta2 = image - avgImg;
@@ -473,7 +457,8 @@ be done.)")
 
             if (filter)
             {
-                spdlog::info("Filtering image with {}({:f},{:f})...", get<0>(filter_args), get<1>(filter_args), get<2>(filter_args));
+                spdlog::info("Filtering image with {}({:f},{:f})...", get<0>(filter_args), get<1>(filter_args),
+                             get<2>(filter_args));
 
                 if (!dry_run)
                     image = filter(image);
@@ -498,7 +483,9 @@ be done.)")
                 {
                     spdlog::info("Remapping image to {:d}x{:d}...", w, h);
                     AtomicProgress progress;
-                    image = image.resampled(w, h, progress, warp, get<2>(remap_args), lookup_modes[get<3>(remap_args)], border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]);
+                    image =
+                        image.resampled(w, h, progress, warp, get<2>(remap_args), lookup_modes[get<3>(remap_args)],
+                                        border_modes[get<0>(border_mode_args)], border_modes[get<1>(border_mode_args)]);
                 }
             }
 

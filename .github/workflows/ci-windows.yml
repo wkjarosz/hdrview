@@ -22,15 +22,15 @@ jobs:
           submodules: recursive
 
       - name: Fetch newer Windows SDK
-        uses: fbactions/setup-winsdk@v1
+        uses: fbactions/setup-winsdk@v1.3.0
         with:
           winsdk-build-version: 19041
 
       - name: Get WSL
-        uses: Vampire/setup-wsl@v1
+        uses: Vampire/setup-wsl@v1.3.2
 
       - name: Setup MSBuild.exe
-        uses: microsoft/setup-msbuild@v1.0.2
+        uses: microsoft/setup-msbuild@v1.1
 
       - name: Configure CMake
         run: |
@@ -47,7 +47,7 @@ jobs:
           ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: HDRView
           path: |

@@ -14,8 +14,8 @@
 #include <ImathMatrix.h>
 #include <functional> // for function
 #include <nanogui/vector.h>
-#include <string> // for string
 #include <set>    // for set
+#include <string> // for string
 #include <vector> // for vector
 
 //! Floating point image
@@ -63,8 +63,8 @@ public:
         MIRROR
     };
     static const std::vector<std::string> &border_mode_names();
-    Color4 &                               pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE);
-    const Color4 &                         pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
+    Color4                                &pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE);
+    const Color4                          &pixel(int x, int y, BorderMode mX = EDGE, BorderMode mY = EDGE) const;
     //@}
 
     // makes a copy of the image, applies func for each pixel in roi of the copy, and returns the result
@@ -325,6 +325,9 @@ public:
     HDRImage bilateral_filtered(float sigma_range /* = 0.1f*/, float sigma_domain /* = 1.0f*/, AtomicProgress progress,
                                 BorderMode mX = EDGE, BorderMode mY = EDGE, float truncateDomain = 6.0f,
                                 Box2i roi = Box2i()) const;
+    HDRImage bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mX = EDGE, BorderMode mY = EDGE,
+                                Box2i roi = Box2i()) const;
+    HDRImage irradiance_envmap(AtomicProgress progress) const;
     //@}
 
     bool load(const std::string &filename);
@@ -342,7 +345,6 @@ public:
      * @return          True if writing was successful
      */
     bool save(const std::string &filename, float gain, float gamma, bool sRGB, bool dither) const;
-
 
     /// Set of supported formats for image loading
     static std::set<std::string> loadable_formats()
@@ -363,10 +365,7 @@ public:
     }
 
     /// Set of supported formats for image saving
-    static std::set<std::string> savable_formats()
-    {
-        return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "tga"};
-    }
+    static std::set<std::string> savable_formats() { return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "tga"}; }
 };
 
 HDRImagePtr load_image(const std::string &filename);

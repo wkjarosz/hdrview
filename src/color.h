@@ -435,3 +435,27 @@ COLOR_FUNCTION_WRAPPER2(fmin)
 COLOR_FUNCTION_WRAPPER2(fmax)
 COLOR_FUNCTION_WRAPPER2(min)
 COLOR_FUNCTION_WRAPPER2(max)
+
+/// Check if the color vector contains a NaN/Inf/negative value
+inline bool is_valid_color(const Color3 &c)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        float value = c[i];
+        if (value < 0 || !std::isfinite(value))
+            return false;
+    }
+    return true;
+}
+
+/// Check if the color vector contains a NaN/Inf/negative value
+inline bool is_valid_color(const Color4 &c)
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        float value = c[i];
+        if (value < 0 || !std::isfinite(value))
+            return false;
+    }
+    return true;
+}

@@ -37,7 +37,7 @@ jobs:
           ${{github.workspace}}/build/hdrbatch --help
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: linux-build-artifacts
           path: |

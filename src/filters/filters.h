@@ -14,7 +14,7 @@
 
 template <typename T>
 nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &label, T &variable,
-                                const std::vector<std::string> &      names,
+                                const std::vector<std::string>       &names,
                                 const std::function<void(const T &)> &cb = std::function<void(const T &)>())
 {
     auto spacer = new nanogui::Widget(gui->window());
@@ -41,7 +41,7 @@ nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &lab
 std::function<void(float)> create_floatbox_and_slider(nanogui::FormHelper *gui, std::string name, float &variable,
                                                       float mn, float mx, float step, std::function<void(void)> cb,
                                                       std::string help = "");
-nanogui::Widget *          create_anchor_widget(nanogui::Widget *window, HDRImage::CanvasAnchor &anchor, int bw);
+nanogui::Widget           *create_anchor_widget(nanogui::Widget *window, HDRImage::CanvasAnchor &anchor, int bw);
 nanogui::Button *create_colorspace_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
 nanogui::Button *create_exposure_gamma_btn(nanogui::Widget *parent, HDRViewScreen *screen,
                                            ImageListPanel *images_panel);
@@ -66,3 +66,4 @@ nanogui::Button *create_free_xform_btn(nanogui::Widget *parent, HDRViewScreen *s
 nanogui::Button *create_flatten_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
 nanogui::Button *create_fill_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
 nanogui::Button *create_channel_mixer_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
+nanogui::Button *create_zap_gremlins_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);

@@ -27,10 +27,11 @@ Button *create_remap_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *
     static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
     static int                  samples = 1;
 
-    static float autoAspects[] = {1.f, 1.f, 2.f, 2.f, 0.75f};
+    static float autoAspects[] = {1.f, 1.f, 2.f, 2.f, 0.75f, 1.f};
 
     static string name = "Remap...";
     auto          b    = new Button(parent, name, FA_GLOBE_AMERICAS);
+    b->set_tooltip("Convert between various common environment map projections.");
     b->set_fixed_height(21);
     b->set_callback(
         [&, screen, images_panel]()
