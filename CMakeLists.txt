@@ -139,6 +139,7 @@ endif()
 #
 # see https://github.com/TheLartians/CPM.cmake for more info
 # ============================================================================
+cmake_policy(SET CMP0135 NEW)
 include(cmake/CPM.cmake)
 
 cpmaddpackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
