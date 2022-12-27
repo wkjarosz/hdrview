@@ -52,8 +52,8 @@ jobs:
       # - name: Create Build Environment
       #   run: cmake -E make_directory ${{github.workspace}}/build
       - name: Configure CMake
-        shell: bash
-        working-directory: ${{github.workspace}}
+        # shell: bash
+        # working-directory: ${{github.workspace}}
         if: runner.os != 'Windows'
         run: |
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
