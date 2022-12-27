@@ -31,6 +31,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install dependencies
+        run: choco install ninja
+
       # - name: Fetch newer Windows SDK
       #   uses: fbactions/setup-winsdk@v1.3.0
       #   with:
@@ -44,14 +47,14 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+          cmake -B -G Ninja ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
+          ${{github.workspace}}/build/HDRView.exe --help
         # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
 
       - name: Archive build artifacts
@@ -59,5 +62,5 @@ jobs:
         with:
           name: HDRView
           path: |
-            ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe
-            ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe
+            ${{github.workspace}}/build/HDRView.exe
+            ${{github.workspace}}/build/hdrbatch.exe
