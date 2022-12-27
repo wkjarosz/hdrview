@@ -23,13 +23,13 @@ jobs:
           - { name: "macOS", os: macos-latest }
 
     steps:
+      - name: Install Ninja
+        shell: bash
+        run: brew install ninja
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      # on linux and mac use the ninja generator
-      - name: Install Ninja generator
-        uses: seanmiddleditch/gha-setup-ninja@master
 
       - uses: actions/cache@v3
         with:

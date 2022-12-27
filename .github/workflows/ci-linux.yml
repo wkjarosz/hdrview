@@ -23,16 +23,11 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build
 
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      # on linux and mac use the ninja generator
-      - name: Install Ninja generator
-        if: runner.os != 'Windows'
-        uses: seanmiddleditch/gha-setup-ninja@v3
 
       - uses: actions/cache@v3
         with:
