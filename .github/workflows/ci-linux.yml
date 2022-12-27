@@ -32,7 +32,7 @@ jobs:
       # on linux and mac use the ninja generator
       - name: Install Ninja generator
         if: runner.os != 'Windows'
-        uses: seanmiddleditch/gha-setup-ninja@master
+        uses: seanmiddleditch/gha-setup-ninja@v3
 
       - uses: actions/cache@v3
         with:
