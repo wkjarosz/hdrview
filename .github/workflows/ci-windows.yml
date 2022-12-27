@@ -24,12 +24,10 @@ jobs:
           fetch-depth: 0
 
       - name: Configure CMake
-        shell: bash
         run: |
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        shell: bash
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView and hdrbatch run
