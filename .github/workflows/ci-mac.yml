@@ -20,19 +20,32 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.config.name }} - ${{ matrix.backend }} (${{ matrix.buildtype }})
+    name: ${{ matrix.config.name }} (${{ matrix.buildtype }})
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
         buildtype: [Release, Debug]
-        backend: [OpenGL, Metal]
         config:
-          - { name: "macOS", os: macos-latest }
+          - {
+              name: "macOS - Metal",
+              os: macos-latest,
+              backend: Metal,
+              suffix: "-metal",
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=${{ matrix.config.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+            }
+          - {
+              name: "macOS - OpenGL",
+              os: macos-latest,
+              backend: OpenGL,
+              suffix: "-opengl",
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=${{ matrix.config.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+            }
+          - { name: "Ubuntu", os: ubuntu-latest, suffix: "", cmake_options: "" }
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg
+        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
 
       - uses: actions/checkout@v3
         with:
@@ -50,28 +63,40 @@ jobs:
         with:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
 
+      - name: Create Build Environment
+        run: cmake -E make_directory ${{github.workspace}}/build${{ matrix.config.suffix }}
+
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build-${{ matrix.backend }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=${{ matrix.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build${{ matrix.config.suffix }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache {{ $matrix.config.cmake_options }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build-${{ matrix.backend }} --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build${{ matrix.config.suffix }} --parallel 4 --config ${{ matrix.buildtype }}
 
-      - name: Checking that HDRView and hdrbatch run
+      - name: Checking that HDRView and hdrbatch run (macOS)
+        if: runner.os == 'macOS'
         run: |
-          ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app/Contents/MacOS/HDRView --help
-          ${{github.workspace}}/build-${{ matrix.backend }}/hdrbatch --help
+          ${{ runner.os == 'macOS' && '${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView.app/Contents/MacOS/HDRView --help' || '${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView --help' }}
+          ${{github.workspace}}/build${{ matrix.config.suffix }}/hdrbatch --help
 
       - name: Creating dmg
+        if: runner.os == 'macOS'
         run: |
-          RESULT="${{github.workspace}}/build-${{ matrix.backend }}/HDRView-${{ matrix.backend }}.dmg"
+          RESULT="${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView.app
 
-      - name: Archive dmg
+      - name: Archive dmg (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
-          name: HDRView (${{ matrix.backend }}).dmg
+          name: HDRView (${{ matrix.config.config.backend }}).dmg
           path: |
-            ${{github.workspace}}/build-${{ matrix.backend }}/HDRView-${{ matrix.backend }}.dmg
+            ${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts${{ matrix.config.suffix }}-${{ matrix.buildtype }}
+          path: |
+            ${{github.workspace}}/build${{ matrix.config.suffix }}
