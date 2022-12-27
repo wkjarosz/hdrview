@@ -17,9 +17,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - name: Configure CMake (Metal backend)
         run: |
@@ -55,9 +55,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - name: Configure CMake (OpenGL backend)
         run: |
@@ -93,9 +93,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
-          submodules: recursive
+          fetch-depth: 0
 
       - name: Fetch newer Windows SDK
         uses: fbactions/setup-winsdk@v1.3.0
@@ -113,7 +113,6 @@ jobs:
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
       - name: Build
-        # Build your program with the given configuration
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
 
       - name: Checking that HDRView and hdrbatch run
