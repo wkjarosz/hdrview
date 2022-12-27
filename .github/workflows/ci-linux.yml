@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        buildtype: [Release, Debug],
+        buildtype: [Release, Debug]
         config:
           - {
               name: "Ubuntu Latest - GCC",
