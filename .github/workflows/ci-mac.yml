@@ -2,9 +2,17 @@ name: macOS build
 
 on:
   push:
-    branches: [master, develop]
-  pull_request:
-    branches: [master, develop]
+    branches:
+      - "*"
+    pull_request:
+      - "*"
+    paths:
+      # This action only runs on push when C++ files are changed
+      - "**.cpp"
+      - "**.h"
+      - "**.cmake"
+      - "**Lists.txt"
+      - "*-mac.yml"
   workflow_dispatch:
 
 env:
@@ -23,9 +31,9 @@ jobs:
           - { name: "macOS", os: macos-latest }
 
     steps:
-      - name: Install Ninja
+      - name: Install dependencies
         shell: bash
-        run: brew install ninja
+        run: brew install ninja create-dmg
 
       - uses: actions/checkout@v3
         with:
@@ -55,16 +63,14 @@ jobs:
           ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app/Contents/MacOS/HDRView --help
           ${{github.workspace}}/build-${{ matrix.backend }}/hdrbatch --help
 
-      - name: Installing create-dmg
-        run: brew install create-dmg
-
       - name: Creating dmg
         run: |
           RESULT="${{github.workspace}}/build-${{ matrix.backend }}/HDRView-${{ matrix.backend }}.dmg"
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app
 
-      - name: Archive build artifacts
+      - name: Archive dmg
+        if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
           name: HDRView (${{ matrix.backend }}).dmg

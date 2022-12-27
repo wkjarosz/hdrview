@@ -2,9 +2,17 @@ name: Linux build
 
 on:
   push:
-    branches: [master, develop]
-  pull_request:
-    branches: [master, develop]
+    branches:
+      - "*"
+    pull_request:
+      - "*"
+    paths:
+      # This action only runs on push when C++ files are changed
+      - "**.cpp"
+      - "**.h"
+      - "**.cmake"
+      - "**Lists.txt"
+      - "*-linux.yml"
   workflow_dispatch:
 
 env:
