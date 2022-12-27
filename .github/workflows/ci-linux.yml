@@ -8,71 +8,36 @@ on:
   workflow_dispatch:
 
 env:
-  CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
 
 jobs:
-  build:
-    name: ${{ matrix.config.name }} (${{ matrix.buildtype }})
-    runs-on: ${{ matrix.config.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        buildtype: [Release, Debug]
-        config:
-          - {
-              name: "Ubuntu Latest - GCC",
-              os: ubuntu-latest,
-              cc: "gcc",
-              cxx: "g++",
-              ext: "",
-            }
+  build_linux:
+    name: Build on linux systems
+    runs-on: ubuntu-latest
 
     steps:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev
-
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v1
         with:
           submodules: recursive
 
-      # # on linux and mac use the ninja generator
-      # - name: Install Ninja generator
-      #   if: runner.os != 'Windows'
-      #   uses: seanmiddleditch/gha-setup-ninja@master
-      # - uses: actions/cache@v2
-      #   with:
-      #     path: "**/cpm_modules"
-      #     key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
-      # # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
-      # - name: ccache
-      #   if: runner.os != 'Windows'
-      #   uses: hendrikmuhs/ccache-action@v1
-      #   with:
-      #     key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
-      # - name: Create Build Environment
-      #   run: cmake -E make_directory ${{github.workspace}}/build
       - name: Configure CMake
-        # shell: bash
-        # working-directory: ${{github.workspace}}
-        if: runner.os != 'Windows'
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
-        # -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        shell: bash
-        working-directory: ${{github.workspace}}
-        if: runner.os != 'Windows'
-        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{env.BUILD_TYPE}}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView --help
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch --help
+          ${{github.workspace}}/build/HDRView --help
+          ${{github.workspace}}/build/hdrbatch --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: linux-build-artifacts
           path: |
-            ${{github.workspace}}/build/${{ matrix.buildtype }}
+            ${{github.workspace}}/build
