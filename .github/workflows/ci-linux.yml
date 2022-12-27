@@ -62,6 +62,6 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: linux-build-artifacts
+          name: linux-build-artifacts-${{ matrix.buildtype }}
           path: |
             ${{github.workspace}}/build/${{ matrix.buildtype }}
