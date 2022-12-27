@@ -199,19 +199,27 @@ cpmaddpackage("gh:gabime/spdlog@1.9.2")
 
 cpmaddpackage(
   NAME
-  openexr
-  GITHUB_REPOSITORY
-  mitsuba-renderer/openexr
-  GIT_TAG
-  dbabb6f9500ee628c1faba21bb8add2649cc32a6
+  Imath
+  VERSION
+  3.1.6 # the git repo is incredibly large, so we download the archived include directory
+  URL
+  https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
   OPTIONS
-  "PYILMBASE_ENABLE OFF"
-  "ILMBASE_BUILD_SHARED_LIBS OFF"
-  "OPENEXR_BUILD_SHARED_LIBS OFF"
-  "ILMBASE_NAMESPACE_VERSIONING OFF"
-  "OPENEXR_NAMESPACE_VERSIONING OFF"
-  "OPENEXR_BUILD_UTILS OFF"
-  "INSTALL_OPENEXR_EXAMPLES OFF"
+  "BUILD_SHARED_LIBS OFF"
+  "BUILD_TESTING OFF"
+  EXCLUDE_FROM_ALL)
+
+cpmaddpackage(
+  NAME
+  openexr
+  VERSION
+  3.1.5 # the git repo is incredibly large, so we download the archived include directory
+  URL
+  https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.1.5.zip
+  OPTIONS
+  "OPENEXR_BUILD_TOOLS OFF"
+  "BUILD_SHARED_LIBS OFF"
+  "OPENEXR_INSTALL_EXAMPLES OFF"
   "BUILD_TESTING OFF"
   EXCLUDE_FROM_ALL)
 if(openexr_ADDED)
@@ -239,14 +247,7 @@ if(openexr_ADDED)
   endif()
 
   add_library(openexr::openexr INTERFACE IMPORTED)
-  target_include_directories(
-    openexr::openexr SYSTEM
-    INTERFACE ${openexr_SOURCE_DIR}/IlmBase/Imath ${openexr_SOURCE_DIR}/IlmBase/Iex ${openexr_SOURCE_DIR}/IlmBase/Half
-              ${openexr_SOURCE_DIR}/OpenEXR/IlmImf ${openexr_BINARY_DIR}/IlmBase/config
-              ${openexr_BINARY_DIR}/OpenEXR/config)
-
-  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES} OpenEXR::IlmImf IlmBase::Imath IlmBase::Half
-                                                   IlmBase::Iex IlmBase::IlmThread)
+  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES} OpenEXR::OpenEXR Imath::Imath)
 endif()
 
 cpmaddpackage(
