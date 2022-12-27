@@ -19,7 +19,11 @@ jobs:
       matrix:
         buildtype: [Release, Debug]
         config:
-          - { name: macOS - ${{ matrix.config.backend }}, os: macos-latest, backend: [OpenGL, Metal] }
+          - {
+              name: "macOS - ${{ matrix.config.backend }}",
+              os: macos-latest,
+              backend: [OpenGL, Metal],
+            }
 
     steps:
       - name: Install Ninja
