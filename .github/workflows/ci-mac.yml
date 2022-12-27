@@ -18,12 +18,9 @@ jobs:
       fail-fast: false
       matrix:
         buildtype: [Release, Debug]
+        backend: [OpenGL, Metal]
         config:
-          - {
-              name: "macOS - ${{ backend }}",
-              os: macos-latest,
-              backend: [OpenGL, Metal],
-            }
+          - { name: "macOS - ${{ matrix.backend }}", os: macos-latest }
 
     steps:
       - name: Install Ninja
@@ -48,28 +45,28 @@ jobs:
       - name: Configure CMake
         run: |
           MACOSX_DEPLOYMENT_TARGET=10.15
-          cmake -B ${{github.workspace}}/build-${{ matrix.config.backend }} -G Ninja -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DNANOGUI_BACKEND=${{ matrix.config.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+          cmake -B ${{github.workspace}}/build-${{ matrix.backend }} -G Ninja -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DNANOGUI_BACKEND=${{ matrix.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build-${{ matrix.config.backend }} --parallel --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build-${{ matrix.backend }} --parallel --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build-${{ matrix.config.backend }}/HDRView.app/Contents/MacOS/HDRView --help
-          ${{github.workspace}}/build-${{ matrix.config.backend }}/hdrbatch --help
+          ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build-${{ matrix.backend }}/hdrbatch --help
 
       - name: Installing create-dmg
         run: brew install create-dmg
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build-${{ matrix.config.backend }}/HDRView-${{ matrix.config.backend }}.dmg"
+          RESULT="${{github.workspace}}/build-${{ matrix.backend }}/HDRView-${{ matrix.backend }}.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-${{ matrix.config.backend }}/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-${{ matrix.backend }}/HDRView.app
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: HDRView (${{ matrix.config.backend }}).dmg
+          name: HDRView (${{ matrix.backend }}).dmg
           path: |
-            ${{github.workspace}}/build-${{ matrix.config.backend }}/HDRView-${{ matrix.config.backend }}.dmg
+            ${{github.workspace}}/build-${{ matrix.backend }}/HDRView-${{ matrix.backend }}.dmg
