@@ -140,6 +140,7 @@ endif()
 # see https://github.com/TheLartians/CPM.cmake for more info
 # ============================================================================
 if(POLICY CMP0135)
+  message(STATUS "Setting download policy")
   cmake_policy(SET CMP0135 NEW)
 endif()
 include(cmake/CPM.cmake)
