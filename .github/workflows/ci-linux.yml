@@ -56,14 +56,14 @@ jobs:
         working-directory: ${{github.workspace}}
         if: runner.os != 'Windows'
         run: |
-          cmake -B ${{github.workspace}}/build/${{ matrix.buildtype }} -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
         # -D CMAKE_C_COMPILER_LAUNCHER=ccache -D CMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         shell: bash
         working-directory: ${{github.workspace}}
         if: runner.os != 'Windows'
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.buildtype }} --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
