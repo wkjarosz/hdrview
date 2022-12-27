@@ -20,10 +20,10 @@ jobs:
         buildtype: [Release, Debug]
         backend: [OpenGL, Metal]
         config:
-          - { name: "Build on macOS", os: macos-latest }
+          - { name: "macOS", os: macos-latest }
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
 
       # on linux and mac use the ninja generator
       - name: Install Ninja generator
