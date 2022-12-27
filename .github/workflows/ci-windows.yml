@@ -23,16 +23,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch newer Windows SDK
-        uses: fbactions/setup-winsdk@v1.3.0
-        with:
-          winsdk-build-version: 19041
+      # - name: Fetch newer Windows SDK
+      #   uses: fbactions/setup-winsdk@v1.3.0
+      #   with:
+      #     winsdk-build-version: 19041
 
-      - name: Get WSL
-        uses: Vampire/setup-wsl@v1.3.2
+      # - name: Get WSL
+      #   uses: Vampire/setup-wsl@v1.3.2
 
-      - name: Setup MSBuild.exe
-        uses: microsoft/setup-msbuild@v1.1
+      # - name: Setup MSBuild.exe
+      #   uses: microsoft/setup-msbuild@v1.1
 
       - name: Configure CMake
         run: |
