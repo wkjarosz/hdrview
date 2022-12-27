@@ -25,25 +25,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        buildtype: [Release, Debug]
         config:
           - {
               name: "macOS - Metal",
               os: macos-latest,
               suffix: "-metal",
               cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+              exe: "",
             }
           - {
               name: "macOS - OpenGL",
               os: macos-latest,
               suffix: "-opengl",
               cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+              exe: "",
             }
-          - { name: "Ubuntu", os: ubuntu-latest, suffix: "", cmake_options: "" }
+          - {
+              name: "Ubuntu",
+              os: ubuntu-latest,
+              suffix: "",
+              cmake_options: "",
+              exe: "",
+            }
+          - {
+              name: "Windows",
+              os: windows-latest,
+              suffix: "",
+              cmake_options: "",
+              exe: ".exe",
+            }
+        buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
-        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
+        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || runner.os == 'Windows' && 'choco install ninja' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
 
       - uses: actions/checkout@v3
         with:
@@ -56,7 +71,7 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        if: runner.os != 'Windows'
+        # if: runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
@@ -72,12 +87,11 @@ jobs:
         run: cmake --build ${{github.workspace}}/build${{ matrix.config.suffix }} --parallel 4 --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView and hdrbatch run (macOS)
-        if: runner.os == 'macOS'
         run: |
-          ${{ runner.os == 'macOS' && '${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView.app/Contents/MacOS/HDRView --help' || '${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView --help' }}
-          ${{github.workspace}}/build${{ matrix.config.suffix }}/hdrbatch --help
+          ${{github.workspace}}${{ runner.os == 'macOS' && '/build'${{ matrix.config.suffix }}'/HDRView.app/Contents/MacOS/HDRView' || '/build'${{ matrix.config.suffix }}'/HDRView' }}${{ matrix.config.exe }} --help
+          ${{github.workspace}}/build${{ matrix.config.suffix }}/hdrbatch${{ matrix.config.exe }} --help
 
-      - name: Creating dmg
+      - name: Creating dmg (macOS)
         if: runner.os == 'macOS'
         run: |
           RESULT="${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg"
