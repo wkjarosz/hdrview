@@ -222,20 +222,6 @@ cpmaddpackage(
   "OPENEXR_INSTALL_EXAMPLES OFF"
   "BUILD_TESTING OFF"
   EXCLUDE_FROM_ALL)
-if(openexr_ADDED)
-  set(ZLIB_LIBRARIES "")
-  # if(WIN32) cpmaddpackage( NAME zlibstatic GIT_REPOSITORY https://github.com/mitsuba-renderer/zlib.git GIT_TAG
-  # 080a732c47e86444034c1f99355368d35c1e458a OPTIONS "ZLIB_BUILD_STATIC_LIBS TRUE" "ZLIB_BUILD_SHARED_LIBS FALSE"
-  # EXCLUDE_FROM_ALL) if(zlibstatic_ADDED) set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
-  # set(ZLIB_LIBRARIES zlibstatic)
-
-  # message(STATUS "Adding zlib includes and target: ${ZLIB_INCLUDE_DIR} ${ZLIB_LIBRARIES}")
-  # target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR}) add_dependencies(IlmImf ${ZLIB_LIBRARIES}) endif()
-  # endif()
-
-  add_library(openexr::openexr INTERFACE IMPORTED)
-  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES} OpenEXR::OpenEXR Imath::Imath)
-endif()
 
 cpmaddpackage(
   NAME
@@ -481,7 +467,8 @@ target_link_libraries(
   HDRView
   PRIVATE stb
           nanogui::nanogui
-          openexr::openexr
+          OpenEXR::OpenEXR
+          Imath::Imath
           cli11
           platform_folders
           filesystem
@@ -493,7 +480,8 @@ target_link_libraries(
   hdrbatch
   PRIVATE stb
           nanogui::nanogui
-          openexr::openexr
+          OpenEXR::OpenEXR
+          Imath::Imath
           cli11
           platform_folders
           filesystem
