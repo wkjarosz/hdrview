@@ -12,7 +12,7 @@ on:
       - "**.h"
       - "**.cmake"
       - "**Lists.txt"
-      - "*-windows.yml"
+      - "**-windows.yml"
   workflow_dispatch:
 
 jobs:
