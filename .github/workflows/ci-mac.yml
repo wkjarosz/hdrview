@@ -30,16 +30,14 @@ jobs:
           - {
               name: "macOS - Metal",
               os: macos-latest,
-              backend: Metal,
               suffix: "-metal",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=${{ matrix.config.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
             }
           - {
               name: "macOS - OpenGL",
               os: macos-latest,
-              backend: OpenGL,
               suffix: "-opengl",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=${{ matrix.config.backend }} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
             }
           - { name: "Ubuntu", os: ubuntu-latest, suffix: "", cmake_options: "" }
 
@@ -90,7 +88,7 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
-          name: HDRView (${{ matrix.config.config.backend }}).dmg
+          name: HDRView${{ matrix.config.suffix }}.dmg
           path: |
             ${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg
 
