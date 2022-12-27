@@ -7,8 +7,8 @@ on:
     branches: [master, develop]
   workflow_dispatch:
 
-# env:
-#   CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
+env:
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
 
 jobs:
   build:
@@ -29,21 +29,38 @@ jobs:
         with:
           submodules: recursive
 
+      # # on linux and mac use the ninja generator
+      # - name: Install Ninja generator
+      #   if: runner.os != 'Windows'
+      #   uses: seanmiddleditch/gha-setup-ninja@master
+      # - uses: actions/cache@v2
+      #   with:
+      #     path: "**/cpm_modules"
+      #     key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+      # # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
+      # - name: ccache
+      #   if: runner.os != 'Windows'
+      #   uses: hendrikmuhs/ccache-action@v1
+      #   with:
+      #     key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+      # - name: Create Build Environment
+      #   run: cmake -E make_directory ${{github.workspace}}/build
+
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
+          cmake -B ${{github.workspace}}/build/${{ matrix.buildtype }} -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build/${{ matrix.buildtype }} --parallel 4 --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/HDRView --help
-          ${{github.workspace}}/build/hdrbatch --help
+          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView --help
+          ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: linux-build-artifacts
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/${{ matrix.buildtype }}
