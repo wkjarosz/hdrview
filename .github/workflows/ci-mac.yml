@@ -20,7 +20,7 @@ jobs:
         buildtype: [Release, Debug]
         config:
           - {
-              name: "macOS - ${{ matrix.config.backend }}",
+              name: "macOS - ${{ backend }}",
               os: macos-latest,
               backend: [OpenGL, Metal],
             }
