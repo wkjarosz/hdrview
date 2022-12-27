@@ -12,15 +12,15 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.name }} - ${{ matrix.backend }} (${{ matrix.buildtype }})
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.config.name }} - ${{ matrix.backend }} (${{ matrix.buildtype }})
+    runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
-        name: "Build on macOS"
-        os: macos-latest
         buildtype: [Release, Debug]
         backend: [OpenGL, Metal]
+        config:
+          - { name: "Build on macOS", os: macos-latest }
 
     steps:
       - uses: actions/checkout@v1
@@ -38,7 +38,7 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1
         with:
-          key: ${{ matrix.os }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
 
       - name: Configure CMake
         run: |
