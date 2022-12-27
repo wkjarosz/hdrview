@@ -95,8 +95,8 @@ jobs:
       - name: Checking that HDRView and hdrbatch run (Windows)
         if: runner.os == 'Windows'
         run: |
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
-        # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
+          ${{github.workspace}}/build/HDRView.exe --help
+        # ${{github.workspace}}/build/hdrbatch.exe --help
 
       - name: Creating dmg (macOS)
         if: runner.os == 'macOS'
