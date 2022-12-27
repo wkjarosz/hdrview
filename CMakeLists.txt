@@ -209,10 +209,10 @@ cpmaddpackage(
 cpmaddpackage(
   NAME
   openexr
-  VERSION
-  3.1.5 # the git repo is incredibly large, so we download the archived include directory
-  URL
-  https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.1.5.zip
+  GITHUB_REPOSITORY
+  AcademySoftwareFoundation/openexr
+  GIT_TAG
+  71bffa3d7d89e46a37108732f5e63d554c10e018
   OPTIONS
   "OPENEXR_BUILD_TOOLS OFF"
   "BUILD_SHARED_LIBS OFF"

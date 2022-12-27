@@ -26,13 +26,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev
 
       - uses: actions/checkout@v1
-        with:
-          submodules: recursive
 
       # on linux and mac use the ninja generator
       - name: Install Ninja generator
         if: runner.os != 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@master
+
       - uses: actions/cache@v2
         with:
           path: "**/cpm_modules"
