@@ -52,10 +52,10 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
-      # - name: Checking that HDRView and hdrbatch run
-      #   run: |
-      #     ${{github.workspace}}/HDRView.exe --help
-      #   # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
+      - name: Checking that HDRView and hdrbatch run
+        run: |
+          ${{github.workspace}}/build/hdrbatch.exe --help
+        # ${{github.workspace}}/build/HDRView.exe --help
 
       # - name: Archive build artifacts
       #   uses: actions/upload-artifact@v3
