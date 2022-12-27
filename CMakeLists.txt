@@ -139,10 +139,6 @@ endif()
 #
 # see https://github.com/TheLartians/CPM.cmake for more info
 # ============================================================================
-if(POLICY CMP0135)
-  message(STATUS "Setting download policy")
-  cmake_policy(SET CMP0135 NEW)
-endif()
 include(cmake/CPM.cmake)
 
 cpmaddpackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
@@ -173,7 +169,8 @@ cpmaddpackage(
   URL_HASH
   SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
   OPTIONS
-  "JSON_MultipleHeaders ON")
+  "JSON_MultipleHeaders ON"
+  "DOWNLOAD_EXTRACT_TIMESTAMP YES")
 if(nlohmann_json_ADDED)
   add_library(nlohmann_json INTERFACE IMPORTED)
   target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
@@ -208,7 +205,9 @@ cpmaddpackage(
   OPTIONS
   "BUILD_SHARED_LIBS OFF"
   "BUILD_TESTING OFF"
-  EXCLUDE_FROM_ALL)
+  "DOWNLOAD_EXTRACT_TIMESTAMP YES"
+  "EXCLUDE_FROM_ALL YES"
+  YES)
 
 cpmaddpackage(
   NAME
@@ -222,7 +221,8 @@ cpmaddpackage(
   "BUILD_SHARED_LIBS OFF"
   "OPENEXR_INSTALL_EXAMPLES OFF"
   "BUILD_TESTING OFF"
-  EXCLUDE_FROM_ALL)
+  "DOWNLOAD_EXTRACT_TIMESTAMP YES"
+  "EXCLUDE_FROM_ALL YES")
 
 cpmaddpackage(
   NAME
@@ -236,7 +236,7 @@ cpmaddpackage(
   "NANOGUI_BUILD_SHARED OFF"
   "NANOGUI_BUILD_PYTHON OFF"
   "NANOGUI_INSTALL OFF"
-  EXCLUDE_FROM_ALL)
+  "EXCLUDE_FROM_ALL YES")
 if(nanogui_ADDED)
   add_library(nanogui::nanogui INTERFACE IMPORTED)
   target_include_directories(
