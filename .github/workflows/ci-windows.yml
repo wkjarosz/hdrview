@@ -31,7 +31,6 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView and hdrbatch run
-        shell: bash
         run: |
           ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
           ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
