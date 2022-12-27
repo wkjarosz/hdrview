@@ -77,38 +77,45 @@ jobs:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
 
       - name: Create Build Environment
-        run: cmake -E make_directory ${{github.workspace}}/build${{ matrix.config.suffix }}
+        run: cmake -E make_directory ${{github.workspace}}/build
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build${{ matrix.config.suffix }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.cmake_options }}
+          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.cmake_options }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build${{ matrix.config.suffix }} --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{ matrix.buildtype }}
 
-      - name: Checking that HDRView and hdrbatch run (macOS)
+      - name: Checking that HDRView and hdrbatch run
+        if: runner.os != 'Windows'
         run: |
-          ${{github.workspace}}/build${{ matrix.config.suffix }}${{ runner.os == 'macOS' && '/HDRView.app/Contents/MacOS/HDRView' || '/HDRView' }}${{ matrix.config.exe }} --help
-          ${{github.workspace}}/build${{ matrix.config.suffix }}/hdrbatch${{ matrix.config.exe }} --help
+          ${{github.workspace}}/build/${{ runner.os == 'macOS' && 'HDRView.app/Contents/MacOS/HDRView' || 'HDRView' }}${{ matrix.config.exe }} --help
+          ${{github.workspace}}/build/hdrbatch${{ matrix.config.exe }} --help
+
+      - name: Checking that HDRView and hdrbatch run (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
+        # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
 
       - name: Creating dmg (macOS)
         if: runner.os == 'macOS'
         run: |
-          RESULT="${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg"
+          RESULT="${{github.workspace}}/build/HDRView${{ matrix.config.suffix }}.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
 
       - name: Archive dmg (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
-          name: HDRView${{ matrix.config.suffix }}.dmg
+          name: HDRView${{ matrix.config.suffix }}-${{ matrix.buildtype }}.dmg
           path: |
-            ${{github.workspace}}/build${{ matrix.config.suffix }}/HDRView${{ matrix.config.suffix }}.dmg
+            ${{github.workspace}}/build/HDRView${{ matrix.config.suffix }}.dmg
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: build-artifacts${{ matrix.config.suffix }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ runner.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build${{ matrix.config.suffix }}
+            ${{github.workspace}}/build
