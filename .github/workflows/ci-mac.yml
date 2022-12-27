@@ -23,7 +23,7 @@ jobs:
           - { name: "macOS", os: macos-latest }
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
 
       # on linux and mac use the ninja generator
       - name: Install Ninja generator

@@ -19,7 +19,7 @@ jobs:
           - { name: "Windows", os: windows-latest }
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
 
       - name: Fetch newer Windows SDK
         uses: fbactions/setup-winsdk@v1.3.0
