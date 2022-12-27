@@ -170,7 +170,9 @@ cpmaddpackage(
   SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
   OPTIONS
   "JSON_MultipleHeaders ON"
-  "DOWNLOAD_EXTRACT_TIMESTAMP YES")
+  "DOWNLOAD_EXTRACT_TIMESTAMP YES"
+  DOWNLOAD_EXTRACT_TIMESTAMP
+  YES)
 if(nlohmann_json_ADDED)
   add_library(nlohmann_json INTERFACE IMPORTED)
   target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
@@ -207,6 +209,7 @@ cpmaddpackage(
   "BUILD_TESTING OFF"
   "DOWNLOAD_EXTRACT_TIMESTAMP YES"
   "EXCLUDE_FROM_ALL YES"
+  DOWNLOAD_EXTRACT_TIMESTAMP
   YES)
 
 cpmaddpackage(
@@ -222,7 +225,9 @@ cpmaddpackage(
   "OPENEXR_INSTALL_EXAMPLES OFF"
   "BUILD_TESTING OFF"
   "DOWNLOAD_EXTRACT_TIMESTAMP YES"
-  "EXCLUDE_FROM_ALL YES")
+  "EXCLUDE_FROM_ALL YES"
+  DOWNLOAD_EXTRACT_TIMESTAMP
+  YES)
 
 cpmaddpackage(
   NAME
