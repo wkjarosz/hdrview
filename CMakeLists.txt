@@ -139,9 +139,6 @@ endif()
 #
 # see https://github.com/TheLartians/CPM.cmake for more info
 # ============================================================================
-if(POLICY CMP0135)
-  cmake_policy(SET CMP0135 NEW)
-endif()
 include(cmake/CPM.cmake)
 
 cpmaddpackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
@@ -199,55 +196,29 @@ cpmaddpackage("gh:gabime/spdlog@1.9.2")
 
 cpmaddpackage(
   NAME
-  openexr
-  GITHUB_REPOSITORY
-  mitsuba-renderer/openexr
-  GIT_TAG
-  dbabb6f9500ee628c1faba21bb8add2649cc32a6
+  Imath
+  VERSION
+  3.1.6 # the git repo is incredibly large, so we download the archived include directory
+  URL
+  https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
   OPTIONS
-  "PYILMBASE_ENABLE OFF"
-  "ILMBASE_BUILD_SHARED_LIBS OFF"
-  "OPENEXR_BUILD_SHARED_LIBS OFF"
-  "ILMBASE_NAMESPACE_VERSIONING OFF"
-  "OPENEXR_NAMESPACE_VERSIONING OFF"
-  "OPENEXR_BUILD_UTILS OFF"
-  "INSTALL_OPENEXR_EXAMPLES OFF"
+  "BUILD_SHARED_LIBS OFF"
   "BUILD_TESTING OFF"
-  EXCLUDE_FROM_ALL)
-if(openexr_ADDED)
-  set(ZLIB_LIBRARIES "")
-  if(WIN32)
-    cpmaddpackage(
-      NAME
-      zlibstatic
-      GIT_REPOSITORY
-      https://github.com/mitsuba-renderer/zlib.git
-      GIT_TAG
-      080a732c47e86444034c1f99355368d35c1e458a
-      OPTIONS
-      "ZLIB_BUILD_STATIC_LIBS TRUE"
-      "ZLIB_BUILD_SHARED_LIBS FALSE"
-      EXCLUDE_FROM_ALL)
-    if(zlibstatic_ADDED)
-      set(ZLIB_INCLUDE_DIR ${zlibstatic_SOURCE_DIR} ${zlibstatic_BINARY_DIR})
-      set(ZLIB_LIBRARIES zlibstatic)
+  "EXCLUDE_FROM_ALL YES")
 
-      message(STATUS "Adding zlib includes and target: ${ZLIB_INCLUDE_DIR} ${ZLIB_LIBRARIES}")
-      target_include_directories(IlmImf PRIVATE ${ZLIB_INCLUDE_DIR})
-      add_dependencies(IlmImf ${ZLIB_LIBRARIES})
-    endif()
-  endif()
-
-  add_library(openexr::openexr INTERFACE IMPORTED)
-  target_include_directories(
-    openexr::openexr SYSTEM
-    INTERFACE ${openexr_SOURCE_DIR}/IlmBase/Imath ${openexr_SOURCE_DIR}/IlmBase/Iex ${openexr_SOURCE_DIR}/IlmBase/Half
-              ${openexr_SOURCE_DIR}/OpenEXR/IlmImf ${openexr_BINARY_DIR}/IlmBase/config
-              ${openexr_BINARY_DIR}/OpenEXR/config)
-
-  target_link_libraries(openexr::openexr INTERFACE ${ZLIB_LIBRARIES} OpenEXR::IlmImf IlmBase::Imath IlmBase::Half
-                                                   IlmBase::Iex IlmBase::IlmThread)
-endif()
+cpmaddpackage(
+  NAME
+  openexr
+  VERSION
+  3.1.5 # the git repo is incredibly large, so we download the archived include directory
+  URL
+  https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.1.5.zip
+  OPTIONS
+  "OPENEXR_BUILD_TOOLS OFF"
+  "BUILD_SHARED_LIBS OFF"
+  "OPENEXR_INSTALL_EXAMPLES OFF"
+  "BUILD_TESTING OFF"
+  "EXCLUDE_FROM_ALL YES")
 
 cpmaddpackage(
   NAME
@@ -261,7 +232,7 @@ cpmaddpackage(
   "NANOGUI_BUILD_SHARED OFF"
   "NANOGUI_BUILD_PYTHON OFF"
   "NANOGUI_INSTALL OFF"
-  EXCLUDE_FROM_ALL)
+  "EXCLUDE_FROM_ALL YES")
 if(nanogui_ADDED)
   add_library(nanogui::nanogui INTERFACE IMPORTED)
   target_include_directories(
@@ -493,7 +464,8 @@ target_link_libraries(
   HDRView
   PRIVATE stb
           nanogui::nanogui
-          openexr::openexr
+          OpenEXR::OpenEXR
+          Imath::Imath
           cli11
           platform_folders
           filesystem
@@ -505,7 +477,8 @@ target_link_libraries(
   hdrbatch
   PRIVATE stb
           nanogui::nanogui
-          openexr::openexr
+          OpenEXR::OpenEXR
+          Imath::Imath
           cli11
           platform_folders
           filesystem
