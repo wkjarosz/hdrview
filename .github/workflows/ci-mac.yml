@@ -88,7 +88,7 @@ jobs:
 
       - name: Checking that HDRView and hdrbatch run (macOS)
         run: |
-          ${{github.workspace}}${{ runner.os == 'macOS' && '/build'${{ matrix.config.suffix }}'/HDRView.app/Contents/MacOS/HDRView' || '/build'${{ matrix.config.suffix }}'/HDRView' }}${{ matrix.config.exe }} --help
+          ${{github.workspace}}/build${{ matrix.config.suffix }}${{ runner.os == 'macOS' && '/HDRView.app/Contents/MacOS/HDRView' || '/HDRView' }}${{ matrix.config.exe }} --help
           ${{github.workspace}}/build${{ matrix.config.suffix }}/hdrbatch${{ matrix.config.exe }} --help
 
       - name: Creating dmg (macOS)
