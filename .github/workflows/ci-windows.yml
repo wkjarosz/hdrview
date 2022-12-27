@@ -54,7 +54,7 @@ jobs:
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
+          ${{github.workspace}}/HDRView.exe --help
         # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
 
       - name: Archive build artifacts
