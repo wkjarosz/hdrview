@@ -27,38 +27,46 @@ jobs:
       matrix:
         config:
           - {
-              name: "macOS - Metal",
-              os: macos-latest,
+              name: "macOS 11 - Metal",
+              os: macos-11,
               suffix: "-metal",
               cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-              exe: "",
             }
           - {
-              name: "macOS - OpenGL",
-              os: macos-latest,
+              name: "macOS 12 - Metal",
+              os: macos-12,
+              suffix: "-metal",
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
+            }
+          - {
+              name: "macOS 11 - OpenGL",
+              os: macos-11,
               suffix: "-opengl",
               cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-              exe: "",
             }
           - {
-              name: "Ubuntu",
-              os: ubuntu-latest,
-              suffix: "",
-              cmake_options: "",
-              exe: "",
+              name: "macOS 12 - OpenGL",
+              os: macos-12,
+              suffix: "-opengl",
+              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
             }
           - {
-              name: "Windows",
-              os: windows-latest,
+              name: "Ubuntu 22.04",
+              os: ubuntu-22.04,
               suffix: "",
               cmake_options: "",
-              exe: ".exe",
+            }
+          - {
+              name: "Ubuntu 20.04",
+              os: ubuntu-20.04,
+              suffix: "",
+              cmake_options: "",
             }
         buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
-        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || runner.os == 'Windows' && 'choco install ninja' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
+        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
 
       - uses: actions/checkout@v3
         with:
@@ -71,7 +79,6 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        # if: runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
@@ -89,14 +96,8 @@ jobs:
       - name: Checking that HDRView and hdrbatch run
         if: runner.os != 'Windows'
         run: |
-          ${{github.workspace}}/build/${{ runner.os == 'macOS' && 'HDRView.app/Contents/MacOS/HDRView' || 'HDRView' }}${{ matrix.config.exe }} --help
-          ${{github.workspace}}/build/hdrbatch${{ matrix.config.exe }} --help
-
-      - name: Checking that HDRView and hdrbatch run (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          ${{github.workspace}}/build/HDRView.exe --help
-        # ${{github.workspace}}/build/hdrbatch.exe --help
+          ${{github.workspace}}/build/${{ runner.os == 'macOS' && 'HDRView.app/Contents/MacOS/HDRView' || 'HDRView' }} --help
+          ${{github.workspace}}/build/hdrbatch --help
 
       - name: Creating dmg (macOS)
         if: runner.os == 'macOS'
@@ -116,6 +117,6 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: build-artifacts-${{ runner.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}
           path: |
             ${{github.workspace}}/build
