@@ -10,6 +10,7 @@ on:
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
 
 jobs:
   build_macos_metal:
@@ -17,14 +18,25 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Install dependencies
+        run: brew install ninja create-dmg
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - uses: actions/cache@v3
+        with:
+          path: "**/cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+
       - name: Configure CMake (Metal backend)
-        run: |
-          MACOSX_DEPLOYMENT_TARGET=10.15
-          cmake -B ${{github.workspace}}/build-metal -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+        run: cmake -B ${{github.workspace}}/build-metal -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DNANOGUI_BACKEND=Metal
 
       - name: Build (Metal backend)
         run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
@@ -33,9 +45,6 @@ jobs:
         run: |
           ${{github.workspace}}/build-metal/hdrbatch --help
           ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
-
-      - name: Installing create-dmg
-        run: brew install create-dmg
 
       - name: Creating dmg
         run: |
@@ -55,14 +64,25 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Install dependencies
+        run: brew install ninja create-dmg
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - uses: actions/cache@v3
+        with:
+          path: "**/cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+
       - name: Configure CMake (OpenGL backend)
-        run: |
-          MACOSX_DEPLOYMENT_TARGET=10.15
-          cmake -B ${{github.workspace}}/build-opengl -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+        run: cmake -B ${{github.workspace}}/build-opengl -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DNANOGUI_BACKEND=OpenGL
 
       - name: Build (OpenGL backend)
         run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
@@ -71,9 +91,6 @@ jobs:
         run: |
           ${{github.workspace}}/build-opengl/hdrbatch --help
           ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
-
-      - name: Installing create-dmg
-        run: brew install create-dmg
 
       - name: Creating dmg
         run: |
@@ -109,8 +126,7 @@ jobs:
         uses: microsoft/setup-msbuild@v1.1
 
       - name: Configure CMake
-        run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
@@ -121,7 +137,7 @@ jobs:
           ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v0.1.13
         with:
           files: |
             ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe

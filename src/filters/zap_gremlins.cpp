@@ -57,9 +57,10 @@ Button *create_zap_gremlins_btn(Widget *parent, HDRViewScreen *screen, ImageList
                             {
                                 Color  nfg = screen->foreground()->color();
                                 Color4 fg(nfg.r(), nfg.g(), nfg.b(), nfg.a());
-                                return {make_shared<HDRImage>(
-                                            img->apply_function([fg](const Color4 &c) { return c; }, xpuimg->roi())),
-                                        nullptr};
+                                return {
+                                    make_shared<HDRImage>(img->apply_function(
+                                        [fg](const Color4 &c) { return is_valid_color(c) ? c : fg; }, xpuimg->roi())),
+                                    nullptr};
                             }
                             else
                             {
