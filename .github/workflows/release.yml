@@ -17,6 +17,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Install dependencies
+        run: brew install ninja create-dmg
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -31,9 +34,6 @@ jobs:
         run: |
           ${{github.workspace}}/build-metal/hdrbatch --help
           ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
-
-      - name: Installing create-dmg
-        run: brew install create-dmg
 
       - name: Creating dmg
         run: |
@@ -53,6 +53,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      - name: Install dependencies
+        run: brew install ninja create-dmg
+
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
@@ -67,9 +70,6 @@ jobs:
         run: |
           ${{github.workspace}}/build-opengl/hdrbatch --help
           ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
-
-      - name: Installing create-dmg
-        run: brew install create-dmg
 
       - name: Creating dmg
         run: |
