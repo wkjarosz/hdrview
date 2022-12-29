@@ -67,7 +67,7 @@ public:
     bool swap_images(int index1, int index2);
     bool send_image_backward();
     bool bring_image_forward();
-    void sort_images();
+    void sort_images(int m);
 
     // Loading, saving, closing, and rearranging the images in the image stack
     void new_image(HDRImagePtr img);
@@ -137,7 +137,7 @@ private:
     Button        *m_regex_btn     = nullptr;
     Button        *m_align_btn     = nullptr;
     bool           m_align_left    = false;
-    Button        *m_sort_btn      = nullptr;
+    Dropdown      *m_sort_mode     = nullptr;
     Button        *m_use_short_btn = nullptr;
     Widget        *m_image_list    = nullptr;
     Dropdown      *m_blend_modes   = nullptr;

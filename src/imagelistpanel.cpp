@@ -73,26 +73,29 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_col_stretch(0, 1.0f);
         agl->append_row(25);
 
-        auto make_image_button = [row](function<void()> callback, int icon = 0, string tooltip = "")
+        auto make_image_button = [row, agl](const AdvancedGridLayout::Anchor &anchor, function<void()> callback,
+                                            int icon = 0, string tooltip = "")
         {
             auto b = new Button(row, "", icon);
             b->set_icon_extra_scale(1.25f);
             b->set_fixed_size({25, 25});
             b->set_tooltip(tooltip);
             b->set_callback(callback);
+            agl->set_anchor(b, anchor);
             return b;
         };
 
-        auto b = make_image_button([this] { m_screen->load_image(); }, FA_FOLDER_OPEN,
-                                   fmt::format("Open ({}+O)", HelpWindow::COMMAND));
-        agl->set_anchor(b, {0, 0});
+        auto b = make_image_button(
+            AdvancedGridLayout::Anchor{0, 0}, [this] { m_screen->load_image(); }, FA_FOLDER_OPEN,
+            fmt::format("Open ({}+O)", HelpWindow::COMMAND));
         b->set_fixed_size({0, 0});
 
-        agl->set_anchor(make_image_button([this] { m_screen->new_image(); }, FA_FILE,
-                                          fmt::format("New ({}+N)", HelpWindow::COMMAND)),
-                        {2, 0});
+        make_image_button(
+            AdvancedGridLayout::Anchor{2, 0}, [this] { m_screen->new_image(); }, FA_FILE,
+            fmt::format("New ({}+N)", HelpWindow::COMMAND));
 
         m_reload_btn = make_image_button(
+            AdvancedGridLayout::Anchor{4, 0},
             [this]
             {
                 auto *glfwWindow = m_screen->glfw_window();
@@ -102,17 +105,18 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                     reload_image(current_image_index());
             },
             FA_REDO, fmt::format("Reload ({0}+R or F5); Reload All ({0}+Shift+R or Shift+F5)", HelpWindow::COMMAND));
-        agl->set_anchor(m_reload_btn, {4, 0});
 
-        m_clone_btn = make_image_button([this] { m_screen->duplicate_image(); }, FA_CLONE, "Duplicate current image.");
-        agl->set_anchor(m_clone_btn, {6, 0});
+        m_clone_btn = make_image_button(
+            AdvancedGridLayout::Anchor{6, 0}, [this] { m_screen->duplicate_image(); }, FA_CLONE,
+            "Duplicate current image.");
 
-        m_save_btn = make_image_button([this] { m_screen->save_image(); }, FA_SAVE,
-                                       fmt::format("Save ({}+S)", HelpWindow::COMMAND));
+        m_save_btn = make_image_button(
+            AdvancedGridLayout::Anchor{8, 0}, [this] { m_screen->save_image(); }, FA_SAVE,
+            fmt::format("Save ({}+S)", HelpWindow::COMMAND));
         m_save_btn->set_enabled(current_image() != nullptr);
-        agl->set_anchor(m_save_btn, {8, 0});
 
         m_close_btn = make_image_button(
+            AdvancedGridLayout::Anchor{10, 0},
             [this]
             {
                 auto *glfwWindow = m_screen->glfw_window();
@@ -122,7 +126,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                     m_screen->ask_close_image(current_image_index());
             },
             FA_TIMES_CIRCLE, fmt::format("Close ({0}+W); Close All ({0}+Shift+W)", HelpWindow::COMMAND));
-        agl->set_anchor(m_close_btn, {10, 0});
     }
 
     // channel and blend mode GUI elements
@@ -159,18 +162,13 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
     // filter/search of open images GUI elements
     {
         auto grid = new Widget(this);
-        auto agl  = new AdvancedGridLayout({0, 2, 0, 2, 0, 2, 0, 2, 0, 2, 0});
+        auto agl  = new AdvancedGridLayout({0, 2, 0, 2, 0}, {0});
         grid->set_layout(agl);
         agl->set_col_stretch(0, 1.0f);
 
-        agl->append_row(0);
-
-        m_filter        = new TextBox(grid, "");
-        m_erase_btn     = new Button(grid, "", FA_BACKSPACE);
-        m_regex_btn     = new Button(grid, ".*");
-        m_align_btn     = new Button(grid, "", FA_ALIGN_LEFT);
-        m_sort_btn      = new Button(grid, "", FA_SORT_ALPHA_DOWN);
-        m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
+        m_filter    = new TextBox(grid, "");
+        m_erase_btn = new Button(grid, "", FA_BACKSPACE);
+        m_regex_btn = new Button(grid, ".*");
 
         m_filter->set_editable(true);
         m_filter->set_alignment(TextBox::Alignment::Left);
@@ -179,29 +177,52 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_filter->set_placeholder("Find");
         m_filter->set_tooltip(
             "Filter open image list so that only images with a filename containing the search string will be visible.");
-
-        agl->set_anchor(m_filter,
-                        AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
+        agl->set_anchor(m_filter, AdvancedGridLayout::Anchor{0, 0});
 
         m_erase_btn->set_fixed_size({19, 19});
         m_erase_btn->set_tooltip("Clear the search string.");
         m_erase_btn->set_change_callback([this](bool b) { set_filter(""); });
-        agl->set_anchor(m_erase_btn,
-                        AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+        agl->set_anchor(m_erase_btn, AdvancedGridLayout::Anchor{2, 0});
 
         m_regex_btn->set_fixed_size({19, 19});
         m_regex_btn->set_tooltip("Treat search string as a regular expression.");
         m_regex_btn->set_flags(Button::ToggleButton);
         m_regex_btn->set_pushed(false);
         m_regex_btn->set_change_callback([this](bool b) { set_use_regex(b); });
-        agl->set_anchor(m_regex_btn,
-                        AdvancedGridLayout::Anchor(4, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+        agl->set_anchor(m_regex_btn, AdvancedGridLayout::Anchor{4, 0});
+    }
+
+    {
+        auto grid = new Widget(this);
+        auto agl  = new AdvancedGridLayout({0, 0, 2, 0, 2, 0}, {0});
+        grid->set_layout(agl);
+        agl->set_col_stretch(1, 1.0f);
+
+        agl->set_anchor(new Label(grid, "Sort: ", "sans", 14), AdvancedGridLayout::Anchor{0, 0});
+
+        m_sort_mode     = new Dropdown(grid, {" ", "alphabetic (inc)", "alphabetic (dec)", "size (inc)", "size (dec)"});
+        m_align_btn     = new Button(grid, "", FA_ALIGN_LEFT);
+        m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
+
+        m_sort_mode->set_fixed_height(19);
+        m_sort_mode->set_tooltip("Sort the image list. When image names are aligned right, alphabetic sorting sorts by "
+                                 "reversed filename (useful for sorting files with same extension together).");
+        m_sort_mode->set_callback([this](int m) { sort_images(m); });
+        agl->set_anchor(m_sort_mode, AdvancedGridLayout::Anchor{1, 0});
+
+        m_use_short_btn->set_fixed_size({19, 19});
+        m_use_short_btn->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
+        m_use_short_btn->set_flags(Button::ToggleButton);
+        m_use_short_btn->set_pushed(false);
+        m_use_short_btn->set_change_callback([this](bool b) { m_update_filter_requested = true; });
+        agl->set_anchor(m_use_short_btn, AdvancedGridLayout::Anchor{3, 0});
 
         m_align_btn->set_fixed_size({19, 19});
         m_align_btn->set_tooltip("Toggle aligning filenames left vs. right.");
         m_align_btn->set_callback(
             [this]()
             {
+                m_sort_mode->set_selected_index(0);
                 m_align_btn->set_icon(m_align_left ? FA_ALIGN_LEFT : FA_ALIGN_RIGHT);
                 m_align_left = !m_align_left;
 
@@ -215,40 +236,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                     btn->set_alignment(m_align_left ? ImageButton::Alignment::Left : ImageButton::Alignment::Right);
                 }
             });
-        agl->set_anchor(m_align_btn,
-                        AdvancedGridLayout::Anchor(6, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
-
-        m_sort_btn->set_fixed_size({19, 19});
-        m_sort_btn->set_tooltip("Sort the image list. Cycles through 4 sorting modes:\n\n"
-                                "Alphabetic increasing.\n"
-                                "Alphabetic decreasing.\n"
-                                "Image size decreasing.\n"
-                                "Image size increasing.\n\n"
-                                "When image names are aligned right, alphabetic sorting sorts by reversed filename "
-                                "(useful for sorting files with same extension together).");
-        m_sort_btn->set_callback(
-            [this]
-            {
-                sort_images();
-                if (m_sort_btn->icon() == FA_SORT_ALPHA_DOWN)
-                    m_sort_btn->set_icon(FA_SORT_ALPHA_DOWN_ALT);
-                else if (m_sort_btn->icon() == FA_SORT_ALPHA_DOWN_ALT)
-                    m_sort_btn->set_icon(FA_SORT_AMOUNT_DOWN);
-                else if (m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN)
-                    m_sort_btn->set_icon(FA_SORT_AMOUNT_DOWN_ALT);
-                else if (m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT)
-                    m_sort_btn->set_icon(FA_SORT_ALPHA_DOWN);
-            });
-        agl->set_anchor(m_sort_btn,
-                        AdvancedGridLayout::Anchor(8, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
-
-        m_use_short_btn->set_fixed_size({19, 19});
-        m_use_short_btn->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
-        m_use_short_btn->set_flags(Button::ToggleButton);
-        m_use_short_btn->set_pushed(false);
-        m_use_short_btn->set_change_callback([this](bool b) { m_update_filter_requested = true; });
-        agl->set_anchor(m_use_short_btn,
-                        AdvancedGridLayout::Anchor(10, agl->row_count() - 1, Alignment::Minimum, Alignment::Fill));
+        agl->set_anchor(m_align_btn, AdvancedGridLayout::Anchor{5, 0});
     }
 
     m_num_images_callback = [this](void)
@@ -256,6 +244,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_screen->update_caption();
         repopulate_image_list();
         set_reference_image_index(-1);
+        m_sort_mode->set_selected_index(0);
     };
 
     m_async_modify_done_callback = [this](int i)
@@ -352,18 +341,32 @@ void ImageListPanel::enable_disable_buttons()
 {
     bool has_image       = current_image() != nullptr;
     bool has_valid_image = has_image && !current_image()->is_null();
+    bool have_images     = num_images() > 0;
     m_reload_btn->set_enabled(has_valid_image);
     m_save_btn->set_enabled(has_valid_image);
     m_close_btn->set_enabled(has_image);
     m_clone_btn->set_enabled(has_image);
+    m_sort_mode->set_enabled(have_images);
+    m_blend_modes->set_enabled(have_images);
+    m_align_btn->set_enabled(have_images);
+    m_use_short_btn->set_enabled(have_images);
+    m_channels->set_enabled(have_images);
+    // m_filter->set_editable(have_images);
+    m_filter->set_enabled(have_images);
+    m_regex_btn->set_enabled(have_images);
+    // m_erase_btn->set_enabled(have_images);
 }
 
-void ImageListPanel::sort_images()
+void ImageListPanel::sort_images(int m)
 {
-    auto compare_filename = [&](int i, int j)
+    spdlog::info("sorting image list as: {}", m);
+    if (m == 0)
+        return;
+
+    auto compare_images = [&](int i, int j)
     {
-        bool decreasing = m_sort_btn->icon() == FA_SORT_ALPHA_DOWN_ALT || m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT;
-        bool by_size    = m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN || m_sort_btn->icon() == FA_SORT_AMOUNT_DOWN_ALT;
+        bool decreasing = m == 2 || m == 4;
+        bool by_size    = m == 3 || m == 4;
 
         if (by_size)
         {
@@ -371,9 +374,9 @@ void ImageListPanel::sort_images()
             int j_size = image(j)->width() * image(j)->height();
 
             if (decreasing)
-                return i_size > j_size;
+                return i_size >= j_size;
             else
-                return i_size < j_size;
+                return i_size <= j_size;
         }
         else
         {
@@ -403,7 +406,7 @@ void ImageListPanel::sort_images()
         int max_index_so_far = 0;
 
         for (int i = 0; i <= end; ++i)
-            if (compare_filename(i, max_index_so_far))
+            if (compare_images(i, max_index_so_far))
                 max_index_so_far = i;
 
         return max_index_so_far;
@@ -720,6 +723,7 @@ bool ImageListPanel::mouse_motion_event(const nanogui::Vector2i &p, const nanogu
 
             move_image_to(m_dragged_image_btn_id, i);
             m_dragged_image_btn_id = i;
+            m_sort_mode->set_selected_index(0);
         }
 
         dynamic_cast<ImageButton *>(buttons[m_dragged_image_btn_id])->set_position(p - m_dragging_start_pos);
