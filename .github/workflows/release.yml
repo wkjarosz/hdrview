@@ -121,7 +121,7 @@ jobs:
           ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v0.1.13
         with:
           files: |
             ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
