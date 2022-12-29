@@ -160,8 +160,8 @@ void Tool::add_shortcuts(HelpWindow *w)
     {
         w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
         w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
-        w->add_shortcut(section_name, "R", "Reset tonemapping");
-        w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
+        // w->add_shortcut(section_name, "R", "Reset tonemapping");
+        // w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
     }
 
     section_name = "Tools";
