@@ -9,7 +9,6 @@
 #include "common.h"
 #include "dialog.h"
 #include "editimagepanel.h"
-#include <filesystem/path.h>
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
@@ -17,6 +16,7 @@
 #include "popupmenu.h"
 #include "tool.h"
 #include "xpuimage.h"
+#include <filesystem/path.h>
 #include <fstream>
 #include <iostream>
 #include <nanogui/opengl.h>
@@ -944,41 +944,41 @@ void HDRViewScreen::save_image()
 
 void HDRViewScreen::show_help_window()
 {
-    auto w = new HelpWindow(this);
+    auto help = new HelpWindow(this);
 
     auto section_name = "Files";
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+O", "Open image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+N", "New image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
-    w->add_shortcut(section_name, "D", "Default foreground/background colors");
-    w->add_shortcut(section_name, "X", "Swap foreground/background colors");
+    help->add_shortcut(section_name, "{CMD}+O", "Open image");
+    help->add_shortcut(section_name, "{CMD}+N", "New image");
+    help->add_shortcut(section_name, "{CMD}+S", "Save image");
+    help->add_shortcut(section_name, "{CMD}+R or F5", "Reload image");
+    help->add_shortcut(section_name, "{CMD}+Shift+R or Shift+F5", "Reload all images");
+    help->add_shortcut(section_name, "{CMD}+W", "Close image");
+    help->add_shortcut(section_name, "{CMD}+Shift+W", "Close all images");
 
     section_name = "Interface";
-    w->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
-    w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
-    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
-    w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
+    help->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
+    help->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
+    help->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
+    help->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
+    help->add_shortcut(section_name, "{CMD}+Q or Esc", "Quit");
 
-    m_edit_panel->add_shortcuts(w);
-    m_images_panel->add_shortcuts(w);
-    m_image_view->add_shortcuts(w);
+    m_edit_panel->add_shortcuts(help);
+    m_images_panel->add_shortcuts(help);
+    m_image_view->add_shortcuts(help);
 
-    for (auto t : m_tools) t->add_shortcuts(w);
+    for (auto t : m_tools) t->add_shortcuts(help);
 
-    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+    help->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
 
-    w->center();
+    help->center();
 
-    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    auto close_button = new Button{help->button_panel(), "", FA_TIMES};
     close_button->set_callback(
-        [w]()
+        [help]()
         {
-            if (w->callback())
-                w->callback()(0);
-            w->dispose();
+            if (help->callback())
+                help->callback()(0);
+            help->dispose();
         });
 
     m_help_button->set_pushed(true);
@@ -1005,6 +1005,19 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         {
             spdlog::trace("Modal dialog: {}", dialog->title());
 
+            // if the help window is open, close it with the 'H' key
+            if (auto help = dynamic_cast<HelpWindow *>(dialog))
+            {
+                if (key == 'H')
+                {
+                    if (help->callback())
+                        help->callback()(0);
+                    dialog->dispose();
+                    return true;
+                }
+            }
+
+            // if any other dialog is open, confirm/cancel it with the enter/escape keys
             if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
             {
                 if (dialog->callback())
@@ -1068,6 +1081,26 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
         }
         break;
+
+    case 'R':
+        spdlog::trace("KEY 'R' pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            if (modifiers & GLFW_MOD_SHIFT)
+                m_images_panel->reload_all_images();
+            else
+                m_images_panel->reload_image(m_images_panel->current_image_index());
+            return true;
+        }
+        break;
+
+    case GLFW_KEY_F5:
+        spdlog::trace("KEY F5 pressed");
+        if (modifiers & GLFW_MOD_SHIFT)
+            m_images_panel->reload_all_images();
+        else
+            m_images_panel->reload_image(m_images_panel->current_image_index());
+        return true;
 
     case 'W':
         spdlog::trace("KEY `W` pressed");

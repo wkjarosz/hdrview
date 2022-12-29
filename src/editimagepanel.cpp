@@ -137,13 +137,11 @@ void EditImagePanel::rotate(bool clockwise)
 void EditImagePanel::add_shortcuts(HelpWindow *w)
 {
     auto section_name = "Edit";
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Z / " + HelpWindow::COMMAND + "+Shift+Z", "Undo/Redo");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+C", "Copy");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+V / " + HelpWindow::COMMAND + "+Shift+V",
-                    "Paste/Seamless paste");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+[ / " + HelpWindow::COMMAND + "+]",
-                    "Rotate counter-/clockwise");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Delete", "Fill with background color");
+    w->add_shortcut(section_name, "{CMD}+Z / {CMD}+Shift+Z", "Undo/Redo");
+    w->add_shortcut(section_name, "{CMD}+C", "Copy");
+    w->add_shortcut(section_name, "{CMD}+V / {CMD}+Shift+V", "Paste/Seamless paste");
+    w->add_shortcut(section_name, "{CMD}+[ / {CMD}+]", "Rotate counter-/clockwise");
+    w->add_shortcut(section_name, "{CMD}+Delete", "Fill with background color");
 }
 
 bool EditImagePanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)

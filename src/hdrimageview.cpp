@@ -121,8 +121,8 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
         // before we've selected a reference image
         // FIXME: at some point, find a more elegant solution for this.
         m_null_image   = new Texture(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, Vector2i(1, 1),
-                                   Texture::InterpolationMode::Nearest, Texture::InterpolationMode::Nearest,
-                                   Texture::WrapMode::Repeat);
+                                     Texture::InterpolationMode::Nearest, Texture::InterpolationMode::Nearest,
+                                     Texture::WrapMode::Repeat);
         float null_tex = 1.f;
         m_null_image->upload((const uint8_t *)&null_tex);
         m_image_shader->set_texture("secondary_texture", m_null_image);
@@ -344,7 +344,7 @@ void HDRImageView::add_shortcuts(HelpWindow *w)
     w->add_shortcut(section_name, "Left Click+Drag / Shift+Scroll", "Pan image");
     w->add_shortcut(section_name, "Scroll", "Zoom In and Out Continuously");
     w->add_shortcut(section_name, "- / +", "Zoom In and Out by Powers of 2");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+0", "Fit Image to Screen");
+    w->add_shortcut(section_name, "{CMD}+0", "Fit Image to Screen");
 }
 
 bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int modifiers)
@@ -380,7 +380,14 @@ bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int m
         }
         return false;
 
-    case GLFW_KEY_R: center(); return true;
+    case 'R':
+        if (!modifiers)
+        {
+            center();
+            return true;
+        }
+        else
+            return false;
     }
 
     return false;

@@ -2,54 +2,62 @@ name: Windows build
 
 on:
   push:
-    branches: [master, develop]
-  pull_request:
-    branches: [master, develop]
+    branches:
+      - "*"
+    pull_request:
+      - "*"
+    paths:
+      # This action only runs on push when C++ files are changed
+      - "**.cpp"
+      - "**.h"
+      - "**.cmake"
+      - "**Lists.txt"
+      - "**-windows.yml"
   workflow_dispatch:
-
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
 
 jobs:
   build_windows:
-    name: Build on Windows
-    runs-on: windows-latest
+    name: ${{ matrix.config.name }} (${{ matrix.buildtype }})
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        buildtype: [Release, Debug]
+        config:
+          - { name: "Windows", os: windows-latest }
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
         with:
-          submodules: recursive
+          fetch-depth: 0
 
-      - name: Fetch newer Windows SDK
-        uses: fbactions/setup-winsdk@v1.3.0
-        with:
-          winsdk-build-version: 19041
+      # - name: Fetch newer Windows SDK
+      #   uses: fbactions/setup-winsdk@v1.3.0
+      #   with:
+      #     winsdk-build-version: 19041
 
-      - name: Get WSL
-        uses: Vampire/setup-wsl@v1.3.2
+      # - name: Get WSL
+      #   uses: Vampire/setup-wsl@v1.3.2
 
-      - name: Setup MSBuild.exe
-        uses: microsoft/setup-msbuild@v1.1
+      # - name: Setup MSBuild.exe
+      #   uses: microsoft/setup-msbuild@v1.1
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        # Build your program with the given configuration
-        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView and hdrbatch run
         run: |
-          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
-          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
+          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe --help
+        # ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: HDRView
           path: |
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe
+            ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe
+            ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch.exe
