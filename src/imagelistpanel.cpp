@@ -66,39 +66,63 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_graph->add_plot(Color(0, 255, 0, 200));
         m_graph->add_plot(Color(0, 0, 255, 200));
 
-        row = new Widget(this);
-        row->set_layout(new GridLayout(Orientation::Horizontal, 5, Alignment::Fill, 0, 2));
+        const int pad = 2;
+        row           = new Widget(this);
+        auto agl      = new AdvancedGridLayout({0, pad, 0, pad, 0, pad, 0, pad, 0, pad, 0});
+        row->set_layout(agl);
+        agl->set_col_stretch(0, 1.0f);
+        agl->append_row(25);
 
-        auto b = new Button(row, "", FA_FOLDER_OPEN);
-        b->set_icon_extra_scale(1.25f);
-        b->set_fixed_height(25);
-        b->set_tooltip("Load an image.");
-        b->set_callback([this] { m_screen->load_image(); });
+        auto make_image_button = [row](function<void()> callback, int icon = 0, string tooltip = "")
+        {
+            auto b = new Button(row, "", icon);
+            b->set_icon_extra_scale(1.25f);
+            b->set_fixed_size({25, 25});
+            b->set_tooltip(tooltip);
+            b->set_callback(callback);
+            return b;
+        };
 
-        b = new Button(row, "", FA_FILE);
-        b->set_icon_extra_scale(1.25f);
-        b->set_fixed_height(25);
-        b->set_tooltip("Create a new image.");
-        b->set_callback([this] { m_screen->new_image(); });
+        auto b = make_image_button([this] { m_screen->load_image(); }, FA_FOLDER_OPEN,
+                                   fmt::format("Open ({}+O)", HelpWindow::COMMAND));
+        agl->set_anchor(b, {0, 0});
+        b->set_fixed_size({0, 0});
 
-        m_clone_btn = new Button(row, "", FA_CLONE);
-        m_clone_btn->set_icon_extra_scale(1.25f);
-        m_clone_btn->set_fixed_height(25);
-        m_clone_btn->set_tooltip("Duplicate current image.");
-        m_clone_btn->set_callback([this] { m_screen->duplicate_image(); });
+        agl->set_anchor(make_image_button([this] { m_screen->new_image(); }, FA_FILE,
+                                          fmt::format("New ({}+N)", HelpWindow::COMMAND)),
+                        {2, 0});
 
-        m_save_btn = new Button(row, "", FA_SAVE);
-        m_save_btn->set_icon_extra_scale(1.25f);
+        m_reload_btn = make_image_button(
+            [this]
+            {
+                auto *glfwWindow = m_screen->glfw_window();
+                if (glfwGetKey(glfwWindow, GLFW_KEY_LEFT_SHIFT) || glfwGetKey(glfwWindow, GLFW_KEY_RIGHT_SHIFT))
+                    reload_all_images();
+                else
+                    reload_image(current_image_index());
+            },
+            FA_REDO, fmt::format("Reload ({0}+R or F5); Reload All ({0}+Shift+R or Shift+F5)", HelpWindow::COMMAND));
+        agl->set_anchor(m_reload_btn, {4, 0});
+
+        m_clone_btn = make_image_button([this] { m_screen->duplicate_image(); }, FA_CLONE, "Duplicate current image.");
+        agl->set_anchor(m_clone_btn, {6, 0});
+
+        m_save_btn = make_image_button([this] { m_screen->save_image(); }, FA_SAVE,
+                                       fmt::format("Save ({}+S)", HelpWindow::COMMAND));
         m_save_btn->set_enabled(current_image() != nullptr);
-        m_save_btn->set_fixed_height(25);
-        m_save_btn->set_tooltip("Save the image to disk.");
-        m_save_btn->set_callback([this] { m_screen->save_image(); });
+        agl->set_anchor(m_save_btn, {8, 0});
 
-        m_close_btn = new Button(row, "", FA_TIMES_CIRCLE);
-        m_close_btn->set_icon_extra_scale(1.25f);
-        m_close_btn->set_fixed_height(25);
-        m_close_btn->set_tooltip("Close image");
-        m_close_btn->set_callback([this] { m_screen->ask_close_image(current_image_index()); });
+        m_close_btn = make_image_button(
+            [this]
+            {
+                auto *glfwWindow = m_screen->glfw_window();
+                if (glfwGetKey(glfwWindow, GLFW_KEY_LEFT_SHIFT) || glfwGetKey(glfwWindow, GLFW_KEY_RIGHT_SHIFT))
+                    m_screen->ask_close_all_images();
+                else
+                    m_screen->ask_close_image(current_image_index());
+            },
+            FA_TIMES_CIRCLE, fmt::format("Close ({0}+W); Close All ({0}+Shift+W)", HelpWindow::COMMAND));
+        agl->set_anchor(m_close_btn, {10, 0});
     }
 
     // channel and blend mode GUI elements
@@ -328,6 +352,7 @@ void ImageListPanel::enable_disable_buttons()
 {
     bool has_image       = current_image() != nullptr;
     bool has_valid_image = has_image && !current_image()->is_null();
+    m_reload_btn->set_enabled(has_valid_image);
     m_save_btn->set_enabled(has_valid_image);
     m_close_btn->set_enabled(has_image);
     m_clone_btn->set_enabled(has_image);
@@ -522,18 +547,17 @@ bool ImageListPanel::send_image_backward()
 void ImageListPanel::add_shortcuts(HelpWindow *w)
 {
     auto section_name = "Images list";
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+F", "Find image");
+    w->add_shortcut(section_name, fmt::format("{0}+F", HelpWindow::COMMAND), "Find image");
     w->add_shortcut(section_name, "Left Click", "Select image");
     w->add_shortcut(section_name, "Shift+Left Click", "Select/Deselect reference image");
     w->add_shortcut(section_name, "1…9", "Select the n-th image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+1…7", "Cycle through color channels");
+    w->add_shortcut(section_name, fmt::format("{0}+1…7", HelpWindow::COMMAND), "Cycle through color channels");
     w->add_shortcut(section_name, "Shift+1…8", "Cycle through blend modes");
     w->add_shortcut(section_name, "Down / Up", "Select previous/next image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Down / " + HelpWindow::COMMAND + "+Up",
+    w->add_shortcut(section_name, fmt::format("{0}+Down / {0}+Up", HelpWindow::COMMAND),
                     "Multiselect previous/next image");
-    w->add_shortcut(section_name, HelpWindow::ALT + "+Down / " + HelpWindow::ALT + "+Up",
-                    "Send image forward/backward");
-    w->add_shortcut(section_name, HelpWindow::ALT + "+Tab", "Select previously selected image");
+    w->add_shortcut(section_name, fmt::format("{0}+Down / {0}+Up", HelpWindow::ALT), "Send image forward/backward");
+    w->add_shortcut(section_name, fmt::format("{0}+Tab", HelpWindow::ALT), "Select previously selected image");
 }
 
 bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)
@@ -855,12 +879,9 @@ void ImageListPanel::run_requested_callbacks()
     }
 }
 
-shared_ptr<const XPUImage> ImageListPanel::image(int index) const
-{
-    return is_valid(index) ? m_images[index] : nullptr;
-}
+ConstXPUImagePtr ImageListPanel::image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
 
-shared_ptr<XPUImage> ImageListPanel::image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
+XPUImagePtr ImageListPanel::image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
 
 bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
 {
@@ -977,7 +998,7 @@ void ImageListPanel::new_image(HDRImagePtr img)
 {
     static int file_number = 1;
 
-    shared_ptr<XPUImage> image = make_shared<XPUImage>(true);
+    auto image = make_shared<XPUImage>(true);
     image->set_async_modify_done_callback(
         [this]()
         {
@@ -998,6 +1019,35 @@ void ImageListPanel::new_image(HDRImagePtr img)
 
     m_num_images_callback();
     set_current_image_index(int(m_images.size() - 1));
+}
+
+XPUImagePtr ImageListPanel::load_image(const string &filename)
+{
+    auto image = make_shared<XPUImage>();
+    image->set_async_modify_done_callback(
+        [this]()
+        {
+            m_screen->pop_gui_refresh();
+            m_image_async_modify_done_requested = true;
+        });
+    image->set_filename(filename);
+    m_screen->push_gui_refresh();
+    m_screen->request_layout_update();
+    image->async_modify(
+        [filename](const ConstHDRImagePtr &, const ConstXPUImagePtr &) -> ImageCommandResult
+        {
+            Timer timer;
+            spdlog::info("Trying to load image \"{}\"", filename);
+            HDRImagePtr ret = ::load_image(filename);
+            if (ret)
+                spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(),
+                             timer.elapsed() / 1000.f);
+            else
+                spdlog::info("Loading \"{}\" failed", filename);
+            return {ret, nullptr};
+        });
+    image->recompute_histograms(m_image_view->exposure());
+    return image;
 }
 
 void ImageListPanel::load_images(const vector<string> &filenames)
@@ -1061,37 +1111,56 @@ void ImageListPanel::load_images(const vector<string> &filenames)
     }
 
     // now start a bunch of asynchronous image loads
-    for (auto filename : all_filenames)
-    {
-        shared_ptr<XPUImage> image = make_shared<XPUImage>();
-        image->set_async_modify_done_callback(
-            [this]()
-            {
-                m_screen->pop_gui_refresh();
-                m_image_async_modify_done_requested = true;
-            });
-        image->set_filename(filename);
-        m_screen->push_gui_refresh();
-        m_screen->request_layout_update();
-        image->async_modify(
-            [filename](const ConstHDRImagePtr &, const ConstXPUImagePtr &) -> ImageCommandResult
-            {
-                Timer timer;
-                spdlog::info("Trying to load image \"{}\"", filename);
-                HDRImagePtr ret = load_image(filename);
-                if (ret)
-                    spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(),
-                                 timer.elapsed() / 1000.f);
-                else
-                    spdlog::info("Loading \"{}\" failed", filename);
-                return {ret, nullptr};
-            });
-        image->recompute_histograms(m_image_view->exposure());
-        m_images.emplace_back(image);
-    }
+    for (auto filename : all_filenames) m_images.emplace_back(load_image(filename));
 
     m_num_images_callback();
     set_current_image_index(int(m_images.size() - 1));
+}
+
+bool ImageListPanel::reload_image(int index, bool force)
+{
+    if (!is_valid(index))
+        return false;
+
+    if (force || !image(index)->is_modified())
+        m_images[index] = load_image(image(index)->filename());
+    else
+    {
+        auto dialog = new SimpleDialog(m_screen, SimpleDialog::Type::Warning, "Warning!",
+                                       "Image has unsaved modifications. Reload anyway?", "Yes", "Cancel", true);
+        dialog->set_callback(
+            [this, index](int cancel)
+            {
+                spdlog::trace("reloading image callback {} {} {}", cancel);
+                if (!cancel)
+                    m_images[index] = load_image(image(index)->filename());
+            });
+    }
+
+    return true;
+}
+
+void ImageListPanel::reload_all_images()
+{
+    bool any_modified = false;
+    for (auto img : m_images) any_modified |= img->is_modified();
+
+    if (any_modified)
+    {
+        auto dialog = new SimpleDialog(m_screen, SimpleDialog::Type::Warning, "Warning!",
+                                       "Some images have unsaved modifications. Reload all images anyway?", "Yes",
+                                       "Cancel", true);
+        dialog->set_callback(
+            [this](int cancel)
+            {
+                if (cancel)
+                    return;
+
+                for (size_t i = 0; i < m_images.size(); ++i) reload_image(i, true);
+            });
+    }
+    else
+        for (size_t i = 0; i < m_images.size(); ++i) reload_image(i, true);
 }
 
 bool ImageListPanel::save_image(const string &filename, float exposure, float gamma, bool sRGB, bool dither)
@@ -1315,7 +1384,7 @@ void ImageListPanel::update_filter()
     {
         vector<string> active_image_names;
         size_t         id      = 1;
-        auto &         buttons = m_image_list->children();
+        auto          &buttons = m_image_list->children();
         for (int i = 0; i < num_images(); ++i)
         {
             auto img = image(i);

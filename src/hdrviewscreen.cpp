@@ -9,7 +9,6 @@
 #include "common.h"
 #include "dialog.h"
 #include "editimagepanel.h"
-#include <filesystem/path.h>
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
@@ -17,6 +16,7 @@
 #include "popupmenu.h"
 #include "tool.h"
 #include "xpuimage.h"
+#include <filesystem/path.h>
 #include <fstream>
 #include <iostream>
 #include <nanogui/opengl.h>
@@ -947,11 +947,13 @@ void HDRViewScreen::show_help_window()
     auto w = new HelpWindow(this);
 
     auto section_name = "Files";
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+O", "Open image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+N", "New image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+S", "Save image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+W", "Close image");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Shift+W", "Close all images");
+    w->add_shortcut(section_name, fmt::format("{0}+O", HelpWindow::COMMAND), "Open image");
+    w->add_shortcut(section_name, fmt::format("{0}+N", HelpWindow::COMMAND), "New image");
+    w->add_shortcut(section_name, fmt::format("{0}+S", HelpWindow::COMMAND), "Save image");
+    w->add_shortcut(section_name, fmt::format("{0}+R or F5", HelpWindow::COMMAND), "Reload image");
+    w->add_shortcut(section_name, fmt::format("{0}+Shift+R or Shift+F5", HelpWindow::COMMAND), "Reload all images");
+    w->add_shortcut(section_name, fmt::format("{0}+W", HelpWindow::COMMAND), "Close image");
+    w->add_shortcut(section_name, fmt::format("{0}+Shift+W", HelpWindow::COMMAND), "Close all images");
     w->add_shortcut(section_name, "D", "Default foreground/background colors");
     w->add_shortcut(section_name, "X", "Swap foreground/background colors");
 
@@ -960,7 +962,7 @@ void HDRViewScreen::show_help_window()
     w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
     w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
     w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
-    w->add_shortcut(section_name, HelpWindow::COMMAND + "+Q or Esc", "Quit");
+    w->add_shortcut(section_name, fmt::format("{0}+Q or Esc", HelpWindow::COMMAND), "Quit");
 
     m_edit_panel->add_shortcuts(w);
     m_images_panel->add_shortcuts(w);
@@ -1068,6 +1070,26 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
             return true;
         }
         break;
+
+    case 'R':
+        spdlog::trace("KEY 'R' pressed");
+        if (modifiers & SYSTEM_COMMAND_MOD)
+        {
+            if (modifiers & GLFW_MOD_SHIFT)
+                m_images_panel->reload_all_images();
+            else
+                m_images_panel->reload_image(m_images_panel->current_image_index());
+            return true;
+        }
+        break;
+
+    case GLFW_KEY_F5:
+        spdlog::trace("KEY F5 pressed");
+        if (modifiers & GLFW_MOD_SHIFT)
+            m_images_panel->reload_all_images();
+        else
+            m_images_panel->reload_image(m_images_panel->current_image_index());
+        return true;
 
     case 'W':
         spdlog::trace("KEY `W` pressed");

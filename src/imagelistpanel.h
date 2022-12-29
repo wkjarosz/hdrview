@@ -72,6 +72,8 @@ public:
     // Loading, saving, closing, and rearranging the images in the image stack
     void new_image(HDRImagePtr img);
     void load_images(const std::vector<std::string> &filenames);
+    bool reload_image(int index, bool force = false);
+    void reload_all_images();
     bool save_image(const std::string &filename, float exposure = 0.f, float gamma = 2.2f, bool sRGB = true,
                     bool dither = true);
     bool close_image();
@@ -109,11 +111,12 @@ public:
     void        focus_filter();
 
 private:
-    void update_buttons(bool just_created = false);
-    void enable_disable_buttons();
-    void update_histogram();
-    void update_filter();
-    bool is_valid(int index) const { return index >= 0 && index < num_images(); }
+    void        update_buttons(bool just_created = false);
+    void        enable_disable_buttons();
+    void        update_histogram();
+    void        update_filter();
+    bool        is_valid(int index) const { return index >= 0 && index < num_images(); }
+    XPUImagePtr load_image(const std::string &filename);
 
     std::vector<XPUImagePtr> m_images;         ///< The loaded images
     int                      m_current   = -1; ///< The currently selected image
@@ -124,22 +127,23 @@ private:
     bool m_image_async_modify_done_requested = false;
 
     HDRViewScreen *m_screen        = nullptr;
-    HDRImageView * m_image_view    = nullptr;
-    Button *       m_save_btn      = nullptr;
-    Button *       m_clone_btn     = nullptr;
-    Button *       m_close_btn     = nullptr;
-    TextBox *      m_filter        = nullptr;
-    Button *       m_erase_btn     = nullptr;
-    Button *       m_regex_btn     = nullptr;
-    Button *       m_align_btn     = nullptr;
+    HDRImageView  *m_image_view    = nullptr;
+    Button        *m_reload_btn    = nullptr;
+    Button        *m_save_btn      = nullptr;
+    Button        *m_clone_btn     = nullptr;
+    Button        *m_close_btn     = nullptr;
+    TextBox       *m_filter        = nullptr;
+    Button        *m_erase_btn     = nullptr;
+    Button        *m_regex_btn     = nullptr;
+    Button        *m_align_btn     = nullptr;
     bool           m_align_left    = false;
-    Button *       m_sort_btn      = nullptr;
-    Button *       m_use_short_btn = nullptr;
-    Widget *       m_image_list    = nullptr;
-    Dropdown *     m_blend_modes   = nullptr;
-    Dropdown *     m_channels      = nullptr;
+    Button        *m_sort_btn      = nullptr;
+    Button        *m_use_short_btn = nullptr;
+    Widget        *m_image_list    = nullptr;
+    Dropdown      *m_blend_modes   = nullptr;
+    Dropdown      *m_channels      = nullptr;
 
-    Dropdown *  m_xaxis_scale = nullptr, *m_yaxis_scale = nullptr;
+    Dropdown   *m_xaxis_scale = nullptr, *m_yaxis_scale = nullptr;
     MultiGraph *m_graph                      = nullptr;
     bool        m_histogram_dirty            = false;
     bool        m_histogram_update_requested = false;
