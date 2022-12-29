@@ -87,12 +87,12 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         auto b = make_image_button(
             AdvancedGridLayout::Anchor{0, 0}, [this] { m_screen->load_image(); }, FA_FOLDER_OPEN,
-            fmt::format("Open ({}+O)", HelpWindow::COMMAND));
+            HelpWindow::key_string("Open ({CMD}+O)"));
         b->set_fixed_size({0, 0});
 
         make_image_button(
             AdvancedGridLayout::Anchor{2, 0}, [this] { m_screen->new_image(); }, FA_FILE,
-            fmt::format("New ({}+N)", HelpWindow::COMMAND));
+            HelpWindow::key_string("New ({CMD}+N)"));
 
         m_reload_btn = make_image_button(
             AdvancedGridLayout::Anchor{4, 0},
@@ -104,7 +104,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                 else
                     reload_image(current_image_index());
             },
-            FA_REDO, fmt::format("Reload ({0}+R or F5); Reload All ({0}+Shift+R or Shift+F5)", HelpWindow::COMMAND));
+            FA_REDO, HelpWindow::key_string("Reload ({CMD}+R or F5); Reload All ({CMD}+Shift+R or Shift+F5)"));
 
         m_clone_btn = make_image_button(
             AdvancedGridLayout::Anchor{6, 0}, [this] { m_screen->duplicate_image(); }, FA_CLONE,
@@ -112,7 +112,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_save_btn = make_image_button(
             AdvancedGridLayout::Anchor{8, 0}, [this] { m_screen->save_image(); }, FA_SAVE,
-            fmt::format("Save ({}+S)", HelpWindow::COMMAND));
+            HelpWindow::key_string("Save ({CMD}+S)"));
         m_save_btn->set_enabled(current_image() != nullptr);
 
         m_close_btn = make_image_button(
@@ -125,7 +125,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                 else
                     m_screen->ask_close_image(current_image_index());
             },
-            FA_TIMES_CIRCLE, fmt::format("Close ({0}+W); Close All ({0}+Shift+W)", HelpWindow::COMMAND));
+            FA_TIMES_CIRCLE, HelpWindow::key_string("Close ({CMD}+W); Close All ({CMD}+Shift+W)"));
     }
 
     // channel and blend mode GUI elements
@@ -550,17 +550,16 @@ bool ImageListPanel::send_image_backward()
 void ImageListPanel::add_shortcuts(HelpWindow *w)
 {
     auto section_name = "Images list";
-    w->add_shortcut(section_name, fmt::format("{0}+F", HelpWindow::COMMAND), "Find image");
+    w->add_shortcut(section_name, "{CMD}+F", "Find image");
     w->add_shortcut(section_name, "Left Click", "Select image");
     w->add_shortcut(section_name, "Shift+Left Click", "Select/Deselect reference image");
     w->add_shortcut(section_name, "1…9", "Select the n-th image");
-    w->add_shortcut(section_name, fmt::format("{0}+1…7", HelpWindow::COMMAND), "Cycle through color channels");
+    w->add_shortcut(section_name, "{CMD}+1…7", "Cycle through color channels");
     w->add_shortcut(section_name, "Shift+1…8", "Cycle through blend modes");
     w->add_shortcut(section_name, "Down / Up", "Select previous/next image");
-    w->add_shortcut(section_name, fmt::format("{0}+Down / {0}+Up", HelpWindow::COMMAND),
-                    "Multiselect previous/next image");
-    w->add_shortcut(section_name, fmt::format("{0}+Down / {0}+Up", HelpWindow::ALT), "Send image forward/backward");
-    w->add_shortcut(section_name, fmt::format("{0}+Tab", HelpWindow::ALT), "Select previously selected image");
+    w->add_shortcut(section_name, "{CMD}+Down / {CMD}+Up", "Multiselect previous/next image");
+    w->add_shortcut(section_name, "{ALT}+Down / {ALT}+Up", "Send image forward/backward");
+    w->add_shortcut(section_name, "{ALT}+Tab", "Select previously selected image");
 }
 
 bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)

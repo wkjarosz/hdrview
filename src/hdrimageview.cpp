@@ -344,7 +344,7 @@ void HDRImageView::add_shortcuts(HelpWindow *w)
     w->add_shortcut(section_name, "Left Click+Drag / Shift+Scroll", "Pan image");
     w->add_shortcut(section_name, "Scroll", "Zoom In and Out Continuously");
     w->add_shortcut(section_name, "- / +", "Zoom In and Out by Powers of 2");
-    w->add_shortcut(section_name, fmt::format("{0}+0", HelpWindow::COMMAND), "Fit Image to Screen");
+    w->add_shortcut(section_name, "{CMD}+0", "Fit Image to Screen");
 }
 
 bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int modifiers)

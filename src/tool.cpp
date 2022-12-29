@@ -154,24 +154,30 @@ bool Tool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int mo
 
 void Tool::add_shortcuts(HelpWindow *w)
 {
-    auto section_name = "Tools";
-    if (!w->add_section(section_name))
-        return;
+    string section_name = "Display/Tonemapping Options";
 
-    w->add_shortcut(section_name, "Space", "Hand tool");
-    w->add_shortcut(section_name, "M", "Rectangular marquee tool");
-    w->add_shortcut(section_name, "S", "Clone stamp tool");
-    w->add_shortcut(section_name, "B", "Brush tool");
-    w->add_shortcut(section_name, "U", "Line tool");
-    w->add_shortcut(section_name, "I", "Eyedropper tool");
-    w->add_shortcut(section_name, fmt::format("{0}+A", HelpWindow::COMMAND), "Select entire image");
-    w->add_shortcut(section_name, fmt::format("{0}+D", HelpWindow::COMMAND), "Deselect");
+    if (w->add_section(section_name))
+    {
+        w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
+        w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
+        w->add_shortcut(section_name, "R", "Reset tonemapping");
+        w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
+    }
 
-    section_name = "Display/Tonemapping Options";
-    w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
-    w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
-    // w->add_shortcut(section_name, "R", "Reset tonemapping");
-    // w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
+    section_name = "Tools";
+    if (w->add_section(section_name))
+    {
+        w->add_shortcut(section_name, "Space", "Hand tool");
+        w->add_shortcut(section_name, "M", "Rectangular marquee tool");
+        w->add_shortcut(section_name, "S", "Clone stamp tool");
+        w->add_shortcut(section_name, "B", "Brush tool");
+        w->add_shortcut(section_name, "U", "Line tool");
+        w->add_shortcut(section_name, "I", "Eyedropper tool");
+        w->add_shortcut(section_name, "{CMD}+A", "Select entire image");
+        w->add_shortcut(section_name, "{CMD}+D", "Deselect");
+        w->add_shortcut(section_name, "D", "Default foreground/background colors");
+        w->add_shortcut(section_name, "X", "Swap foreground/background colors");
+    }
 }
 
 bool Tool::keyboard(int key, int scancode, int action, int modifiers)
@@ -307,7 +313,7 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
         });
     normalize_button->set_tooltip("Normalize exposure.");
 
-    auto reset_button = new Button(m_options, "", FA_SYNC);
+    auto reset_button = new Button(m_options, "", FA_UNDO);
     reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
     reset_button->set_icon_extra_scale(1.15f);
     reset_button->set_callback(

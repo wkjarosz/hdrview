@@ -944,43 +944,41 @@ void HDRViewScreen::save_image()
 
 void HDRViewScreen::show_help_window()
 {
-    auto w = new HelpWindow(this);
+    auto help = new HelpWindow(this);
 
     auto section_name = "Files";
-    w->add_shortcut(section_name, fmt::format("{0}+O", HelpWindow::COMMAND), "Open image");
-    w->add_shortcut(section_name, fmt::format("{0}+N", HelpWindow::COMMAND), "New image");
-    w->add_shortcut(section_name, fmt::format("{0}+S", HelpWindow::COMMAND), "Save image");
-    w->add_shortcut(section_name, fmt::format("{0}+R or F5", HelpWindow::COMMAND), "Reload image");
-    w->add_shortcut(section_name, fmt::format("{0}+Shift+R or Shift+F5", HelpWindow::COMMAND), "Reload all images");
-    w->add_shortcut(section_name, fmt::format("{0}+W", HelpWindow::COMMAND), "Close image");
-    w->add_shortcut(section_name, fmt::format("{0}+Shift+W", HelpWindow::COMMAND), "Close all images");
-    w->add_shortcut(section_name, "D", "Default foreground/background colors");
-    w->add_shortcut(section_name, "X", "Swap foreground/background colors");
+    help->add_shortcut(section_name, "{CMD}+O", "Open image");
+    help->add_shortcut(section_name, "{CMD}+N", "New image");
+    help->add_shortcut(section_name, "{CMD}+S", "Save image");
+    help->add_shortcut(section_name, "{CMD}+R or F5", "Reload image");
+    help->add_shortcut(section_name, "{CMD}+Shift+R or Shift+F5", "Reload all images");
+    help->add_shortcut(section_name, "{CMD}+W", "Close image");
+    help->add_shortcut(section_name, "{CMD}+Shift+W", "Close all images");
 
     section_name = "Interface";
-    w->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
-    w->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
-    w->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
-    w->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
-    w->add_shortcut(section_name, fmt::format("{0}+Q or Esc", HelpWindow::COMMAND), "Quit");
+    help->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
+    help->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
+    help->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
+    help->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
+    help->add_shortcut(section_name, "{CMD}+Q or Esc", "Quit");
 
-    m_edit_panel->add_shortcuts(w);
-    m_images_panel->add_shortcuts(w);
-    m_image_view->add_shortcuts(w);
+    m_edit_panel->add_shortcuts(help);
+    m_images_panel->add_shortcuts(help);
+    m_image_view->add_shortcuts(help);
 
-    for (auto t : m_tools) t->add_shortcuts(w);
+    for (auto t : m_tools) t->add_shortcuts(help);
 
-    w->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
+    help->set_callback([this](int cancel) { m_help_button->set_pushed(false); });
 
-    w->center();
+    help->center();
 
-    auto close_button = new Button{w->button_panel(), "", FA_TIMES};
+    auto close_button = new Button{help->button_panel(), "", FA_TIMES};
     close_button->set_callback(
-        [w]()
+        [help]()
         {
-            if (w->callback())
-                w->callback()(0);
-            w->dispose();
+            if (help->callback())
+                help->callback()(0);
+            help->dispose();
         });
 
     m_help_button->set_pushed(true);

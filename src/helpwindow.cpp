@@ -29,16 +29,21 @@ constexpr int fwidth = 450;
 NAMESPACE_BEGIN(nanogui)
 
 #ifdef __APPLE__
-const string HelpWindow::COMMAND = "Cmd";
+const string HelpWindow::CMD = "Cmd";
 #else
-const string HelpWindow::COMMAND = "Ctrl";
+const string HelpWindow::CMD = "Ctrl";
 #endif
 
 #ifdef __APPLE__
 const string HelpWindow::ALT = "Opt";
 #else
-const string HelpWindow::ALT     = "Alt";
+const string HelpWindow::ALT = "Alt";
 #endif
+
+string HelpWindow::key_string(const string &text)
+{
+    return fmt::format(text, fmt::arg("CMD", HelpWindow::CMD), fmt::arg("ALT", HelpWindow::ALT));
+}
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
@@ -71,10 +76,8 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_text(this, "HDRView", "sans-bold", 46);
     add_text(this, fmt::format("version {}", hdrview_version()), "sans-bold", 26);
     add_spacer(this, 5);
-    add_text(this,
-             fmt::format("Built using the {} backend on {}.",
-                         HDRVIEW_BACKEND, hdrview_build_timestamp()),
-             "sans", 12);
+    add_text(this, fmt::format("Built using the {} backend on {}.", HDRVIEW_BACKEND, hdrview_build_timestamp()), "sans",
+             12);
 
     add_spacer(this, 15);
 
@@ -123,7 +126,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_library(credits, "stb_image/write/resize", "Single-Header libraries for loading/writing/resizing images");
     add_library(credits, "CLI11", "Command line parser for C++11");
     add_library(credits, "spdlog", "Fast C++ logging library");
-    add_library(credits, "fmt", "A modern formatting library");
+    add_library(credits, "{fmt}", "A modern formatting library");
     add_library(credits, "PlatformFolders", "Cross-platform library to find special directories");
     add_library(credits, "filesystem", "Lightweight path manipulation library");
     add_library(credits, "tinydir", "Lightweight and portable aC directory and file reader");
@@ -152,15 +155,14 @@ bool HelpWindow::add_section(const std::string &desc)
 
 void HelpWindow::add_shortcut(const string &section, const string &keys, const string &desc)
 {
-    if (m_sections.count(section) == 0)
-        add_section(section);
+    add_section(section);
 
     auto w = m_sections[section];
 
     auto row = new Widget(w);
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
     (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
-    new Label(row, keys, "sans-bold", 14);
+    new Label(row, key_string(keys), "sans-bold", 14);
 };
 
 NAMESPACE_END(nanogui)
