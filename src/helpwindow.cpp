@@ -163,6 +163,6 @@ void HelpWindow::add_shortcut(const string &section, const string &keys, const s
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
     (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
     new Label(row, key_string(keys), "sans-bold", 14);
-};
+}
 
 NAMESPACE_END(nanogui)

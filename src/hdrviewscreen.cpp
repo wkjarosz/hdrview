@@ -1005,6 +1005,19 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         {
             spdlog::trace("Modal dialog: {}", dialog->title());
 
+            // if the help window is open, close it with the 'H' key
+            if (auto help = dynamic_cast<HelpWindow *>(dialog))
+            {
+                if (key == 'H')
+                {
+                    if (help->callback())
+                        help->callback()(0);
+                    dialog->dispose();
+                    return true;
+                }
+            }
+
+            // if any other dialog is open, confirm/cancel it with the enter/escape keys
             if (key == GLFW_KEY_ESCAPE || key == GLFW_KEY_ENTER)
             {
                 if (dialog->callback())
