@@ -311,16 +311,16 @@ void PopupMenu::Item::draw(NVGcontext *ctx)
         float cw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
 
         if (m_caption != "")
-            cw += m_size.y() * 0.15f;
+            ch += m_size.y() * 0.15f;
 
         nvgFillColor(ctx, text_color);
         nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
         Vector2f check_pos(m_pos.x() + 6, center.y() - 1);
 
-        text_pos.x() = check_pos.x() + cw + 2;
+        text_pos.x() = check_pos.x() + ch + 2;
 
         if (m_pushed || m_icon)
-            nvgText(ctx, check_pos.x(), check_pos.y() + 1, icon.data(), nullptr);
+            nvgText(ctx, check_pos.x() + (ch - cw - 3) / 2, check_pos.y() + 1, icon.data(), nullptr);
     }
 
     nvgFontSize(ctx, font_size);

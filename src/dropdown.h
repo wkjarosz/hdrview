@@ -17,14 +17,12 @@ public:
     /// Create an empty combo box
     Dropdown(Widget *parent);
 
-    /// Create a new combo box with the given items
-    Dropdown(Widget *parent, const std::vector<std::string> &items);
-
     /**
-     * \brief Create a new combo box with the given items, providing both short and
-     * long descriptive labels for each item
+     * \brief Create a new combo box with the given items, providing long names and optionally short names and icons for
+     * each item
      */
-    Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<std::string> &items_short);
+    Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<std::string> &items_short = {},
+             const std::vector<int> &icons = {});
 
     /// The current index this Dropdown has selected.
     int selected_index() const { return m_selected_index; }
@@ -38,10 +36,9 @@ public:
     /// Sets the callback to execute for this Dropdown.
     void set_callback(const std::function<void(int)> &callback) { m_callback = callback; }
 
-    /// Sets the items for this Dropdown, providing both short and long descriptive lables for each item.
-    void set_items(const std::vector<std::string> &items, const std::vector<std::string> &items_short);
-    /// Sets the items for this Dropdown.
-    void set_items(const std::vector<std::string> &items) { set_items(items, items); }
+    /// Sets the items for this Dropdown, providing long names and optionally short names and icons for each item
+    void set_items(const std::vector<std::string> &items, const std::vector<std::string> &items_short = {},
+                   const std::vector<int> &icons = {});
     /// The items associated with this Dropdown.
     const std::vector<std::string> &items() const { return m_items; }
     /// The short descriptions associated with this Dropdown.

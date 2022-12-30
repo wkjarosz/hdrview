@@ -30,17 +30,18 @@ Dropdown::Dropdown(Widget *parent) : Button(parent), m_selected_index(0), m_sele
     m_popup->set_visible(false);
 }
 
-Dropdown::Dropdown(Widget *parent, const vector<string> &items) : Dropdown(parent) { set_items(items); }
-
-Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<string> &items_short) : Dropdown(parent)
+Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<string> &items_short,
+                   const vector<int> &icons) :
+    Dropdown(parent)
 {
-    set_items(items, items_short);
+    set_items(items, items_short, icons);
 }
 
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
-    int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-    return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    Button::preferred_size(ctx);
+    // int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
+    // return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
 }
 
 void Dropdown::set_selected_index(int idx)
@@ -48,32 +49,33 @@ void Dropdown::set_selected_index(int idx)
     if (m_items_short.empty())
         return;
 
-    dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_pushed(false);
-    dynamic_cast<PopupMenu::Item *>(m_popup->child_at(idx))->set_pushed(true);
+    ((Button *)m_popup->child_at(m_selected_index))->set_pushed(false);
+    ((Button *)m_popup->child_at(idx))->set_pushed(true);
 
     m_selected_index   = idx;
     m_selected_index_f = (float)m_selected_index;
     set_caption(m_items_short[m_selected_index]);
 }
 
-void Dropdown::set_items(const vector<string> &items, const vector<string> &items_short)
+void Dropdown::set_items(const vector<string> &items, const vector<string> &items_short, const vector<int> &icons)
 {
-    assert(items.size() == items_short.size());
     m_items       = items;
-    m_items_short = items_short;
+    m_items_short = (items.size() == items_short.size()) ? items_short : items;
 
     if (m_selected_index < 0 || m_selected_index >= (int)items.size())
     {
         m_selected_index   = 0;
         m_selected_index_f = (float)m_selected_index;
     }
+
     while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
 
-    int index = 0;
-    for (const auto &str : items)
+    for (int index = 0; index < (int)items.size(); ++index)
     {
-        auto button = m_popup->add_item(str);
+        auto button = m_popup->add_item(items[index]);
         button->set_flags(Button::RadioButton);
+        if (icons.size() == items.size())
+            button->set_icon(icons[index]);
         button->set_callback(
             [&, index, this]
             {
@@ -81,7 +83,6 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
                 if (m_callback)
                     m_callback(index);
             });
-        index++;
     }
     set_selected_index(m_selected_index);
 }
@@ -102,11 +103,10 @@ bool Dropdown::scroll_event(const Vector2i &p, const Vector2f &rel)
 
     set_caption(m_items_short[m_selected_index]);
 
-    if (prev_selected != m_selected_index)
+    if (!m_items_short.empty())
     {
-        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(prev_selected))->set_pushed(false);
-        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_pushed(true);
-        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->callback();
+        ((Button *)m_popup->child_at(prev_selected))->set_pushed(false);
+        ((Button *)m_popup->child_at(m_selected_index))->set_pushed(true);
     }
 
     if (m_callback)
@@ -121,7 +121,8 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         if (button == GLFW_MOUSE_BUTTON_1 && down && !m_focused)
             request_focus();
 
-        Vector2i offset(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
+        Vector2i offset(0, PopupMenu::menu_item_height);
+        // Vector2i offset(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
         Vector2i abs_pos = absolute_position() + offset;
 
         // prevent bottom of menu from getting clipped off screen
