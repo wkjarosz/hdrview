@@ -302,12 +302,12 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
     // create the right-click menus
     //
-    for (size_t i = 0; i < popup_menus.size(); ++i)
+    for (auto m : popup_menus)
     {
-        popup_menus[i]->add_item("Solo mode");
-        popup_menus[i]->add_item(""); // separator
-        popup_menus[i]->add_item("Expand all");
-        popup_menus[i]->add_item("Collapse all");
+        m->add_item("Solo mode")->set_flags(Button::ToggleButton);
+        m->add_item(""); // separator
+        m->add_item("Expand all")->set_icon(FA_ANGLE_DOUBLE_DOWN);
+        m->add_item("Collapse all")->set_icon(FA_ANGLE_DOUBLE_UP);
     }
 
     auto visible_panels =
@@ -315,16 +315,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     for (size_t i = 0; i < popup_menus.size(); ++i)
     {
         auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[i]->child_at(0));
-        item->set_checked(m_solo_mode);
-        item->set_callback(
-            [popup_menus, toggle_panel, i, this]
+        item->set_pushed(m_solo_mode);
+        item->set_change_callback(
+            [popup_menus, toggle_panel, i, this](bool b)
             {
-                m_solo_mode = !m_solo_mode;
+                m_solo_mode = b;
                 // update all "Solo mode" buttons and "Expand all" buttons
                 for (size_t j = 0; j < popup_menus.size(); ++j)
                 {
-                    if (auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0)))
-                        item->set_checked(m_solo_mode);
+                    auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0));
+                    item->set_pushed(m_solo_mode);
                     popup_menus[j]->child_at(2)->set_enabled(!m_solo_mode);
                 }
 

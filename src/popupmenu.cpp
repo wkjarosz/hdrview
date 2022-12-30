@@ -10,6 +10,7 @@
 #include <nanogui/icons.h>
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
+#include <nanogui/popupbutton.h>
 #include <nanogui/screen.h>
 #include <nanogui/theme.h>
 #include <nanogui/vscrollpanel.h>
@@ -50,14 +51,7 @@ PopupMenu::PopupMenu(Widget *parent, Window *parent_window) : Popup(parent, pare
 
 Button *PopupMenu::add_item(const std::string &name, int icon)
 {
-    if (name == "")
-    {
-        return add<Separator>();
-    }
-    else
-    {
-        return add<Item>(name, icon);
-    }
+    return (name == "") ? (Button *)add<Separator>() : (Button *)add<Item>(name, icon);
 }
 
 bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
@@ -183,6 +177,71 @@ Vector2i PopupMenu::Item::preferred_size(NVGcontext *ctx) const
     return Vector2i((int)(tw + iw) + 24, font_size + 10);
 }
 
+// bool PopupMenu::Item::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
+// {
+//     Widget::mouse_button_event(p, button, down, modifiers);
+//     /* Temporarily increase the reference count of the button in case the
+//        button causes the parent window to be destructed */
+//     ref<Button> self = this;
+
+//     if (m_enabled == 1 &&
+//         ((button == GLFW_MOUSE_BUTTON_1) || (button == GLFW_MOUSE_BUTTON_2 && (m_flags & MenuButton))))
+//     {
+//         bool pushed_backup = m_pushed;
+//         if (down)
+//         {
+//             if (m_flags & RadioButton || m_flags & PopupButton)
+//             {
+//                 if (m_button_group.empty() || m_flags & PopupButton)
+//                 {
+//                     for (auto widget : parent()->children())
+//                     {
+//                         Button *b = dynamic_cast<Button *>(widget);
+//                         if (b != this && b && (b->flags() & RadioButton) && b->pushed())
+//                         {
+//                             b->set_pushed(false);
+//                             if (b->change_callback())
+//                                 b->change_callback()(false);
+//                         }
+//                     }
+//                 }
+//                 if (m_flags & RadioButton && !m_button_group.empty())
+//                 {
+//                     for (auto b : m_button_group)
+//                     {
+//                         if (b != this && (b->flags() & RadioButton) && b->pushed())
+//                         {
+//                             b->set_pushed(false);
+//                             if (b->change_callback())
+//                                 b->change_callback()(false);
+//                         }
+//                     }
+//                 }
+//             }
+
+//             if (m_flags & PopupButton)
+//                 dynamic_cast<nanogui::PopupButton *>(this)->popup()->request_focus();
+
+//             if (m_flags & ToggleButton)
+//                 m_pushed = !m_pushed;
+//             else
+//                 m_pushed = true;
+//         }
+//         else if (m_pushed || (m_flags & MenuButton))
+//         {
+//             if (contains(p) && m_callback)
+//                 m_callback();
+//             if (m_flags & NormalButton)
+//                 m_pushed = false;
+//         }
+//         if (pushed_backup != m_pushed && m_change_callback)
+//             m_change_callback(m_pushed);
+
+//         return true;
+//     }
+//     return false;
+// }
+
 void PopupMenu::Item::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
@@ -190,12 +249,7 @@ void PopupMenu::Item::draw(NVGcontext *ctx)
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
-    if (m_pushed || (m_mouse_focus && (m_flags & MenuButton)))
-    {
-        grad_top = m_theme->m_button_gradient_top_pushed;
-        grad_bot = m_theme->m_button_gradient_bot_pushed;
-    }
-    else if (m_mouse_focus && m_enabled)
+    if (m_mouse_focus && m_enabled)
     {
         grad_top = m_theme->m_button_gradient_top_focused;
         grad_bot = m_theme->m_button_gradient_bot_focused;
@@ -250,11 +304,11 @@ void PopupMenu::Item::draw(NVGcontext *ctx)
         text_color = m_theme->m_disabled_text_color;
 
     {
-        auto  check = utf8(FA_CHECK);
-        float ch    = font_size * icon_scale();
+        auto  icon = m_icon && !m_pushed ? utf8(m_icon) : utf8(FA_CHECK);
+        float ch   = font_size * icon_scale();
         nvgFontSize(ctx, ch);
         nvgFontFace(ctx, "icons");
-        float cw = nvgTextBounds(ctx, 0, 0, check.data(), nullptr, nullptr);
+        float cw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
 
         if (m_caption != "")
             cw += m_size.y() * 0.15f;
@@ -265,73 +319,9 @@ void PopupMenu::Item::draw(NVGcontext *ctx)
 
         text_pos.x() = check_pos.x() + cw + 2;
 
-        if (m_checked)
-            nvgText(ctx, check_pos.x(), check_pos.y() + 1, check.data(), nullptr);
+        if (m_pushed || m_icon)
+            nvgText(ctx, check_pos.x(), check_pos.y() + 1, icon.data(), nullptr);
     }
-
-    // if (m_icon)
-    // {
-    //     auto icon = utf8(m_icon);
-
-    //     float iw, ih = font_size;
-    //     if (nvg_is_font_icon(m_icon))
-    //     {
-    //         ih *= icon_scale();
-    //         nvgFontSize(ctx, ih);
-    //         nvgFontFace(ctx, "icons");
-    //         iw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
-    //     }
-    //     else
-    //     {
-    //         int w, h;
-    //         ih *= 0.9f;
-    //         nvgImageSize(ctx, m_icon, &w, &h);
-    //         iw = w * ih / h;
-    //     }
-    //     if (m_caption != "")
-    //         iw += m_size.y() * 0.15f;
-    //     nvgFillColor(ctx, text_color);
-    //     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    //     Vector2f icon_pos = center;
-    //     icon_pos.y() -= 1;
-
-    //     icon_pos.x() = m_pos.x() + 8;
-    //     // text_pos.x() = icon_pos.x() + iw;
-
-    //     // if (m_icon_position == IconPosition::LeftCentered)
-    //     // {
-    //     //     icon_pos.x() -= (tw + iw) * 0.5f;
-    //     //     text_pos.x() += iw;
-    //     // }
-    //     // else if (m_icon_position == IconPosition::RightCentered)
-    //     // {
-    //     //     // text_pos.x() -= iw * 0.5f;
-    //     //     icon_pos.x() += tw * 0.5f;
-    //     // }
-    //     // else if (m_icon_position == IconPosition::Left)
-    //     // {
-    //     //     icon_pos.x() = m_pos.x() + 8;
-    //     //     text_pos.x() = icon_pos.x() + iw;
-    //     // }
-    //     // else if (m_icon_position == IconPosition::Right)
-    //     // {
-    //     //     icon_pos.x() = m_pos.x() + m_size.x() - iw - 8;
-    //     // }
-
-    //     if (nvg_is_font_icon(m_icon))
-    //     {
-    //         nvgText(ctx, icon_pos.x(), icon_pos.y() + 1, icon.data(), nullptr);
-    //     }
-    //     else
-    //     {
-    //         NVGpaint img_paint =
-    //             nvgImagePattern(ctx, icon_pos.x(), icon_pos.y() - ih / 2, iw, ih, 0, m_icon, m_enabled ? 0.5f :
-    //             0.25f);
-
-    //         nvgFillPaint(ctx, img_paint);
-    //         nvgFill(ctx);
-    //     }
-    // }
 
     nvgFontSize(ctx, font_size);
     nvgFontFace(ctx, "sans-bold");

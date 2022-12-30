@@ -40,29 +40,20 @@ Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<str
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-
-    // first turn off the checkmark to get consistent widths regardless of which item is selected
-    // for (auto it : m_popup->children())
-    //     if (auto i = dynamic_cast<PopupMenu::Item *>(it))
-    //         i->set_checked(false);
-    auto result = Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
-    // re-enabled checkmark
-    // dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_checked(true);
-    return result;
+    return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
 }
 
 void Dropdown::set_selected_index(int idx)
 {
     if (m_items_short.empty())
         return;
+
+    dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_pushed(false);
+    dynamic_cast<PopupMenu::Item *>(m_popup->child_at(idx))->set_pushed(true);
+
     m_selected_index   = idx;
     m_selected_index_f = (float)m_selected_index;
-    set_caption(m_items_short[idx]);
-
-    for (auto it : m_popup->children())
-        if (auto i = dynamic_cast<PopupMenu::Item *>(it))
-            i->set_checked(false);
-    dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_checked(true);
+    set_caption(m_items_short[m_selected_index]);
 }
 
 void Dropdown::set_items(const vector<string> &items, const vector<string> &items_short)
@@ -82,12 +73,11 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
     for (const auto &str : items)
     {
         auto button = m_popup->add_item(str);
-        // button->set_flags(Button::RadioButton);
+        button->set_flags(Button::RadioButton);
         button->set_callback(
             [&, index, this]
             {
                 set_selected_index(index);
-                m_popup->set_visible(false);
                 if (m_callback)
                     m_callback(index);
             });
@@ -105,9 +95,19 @@ bool Dropdown::scroll_event(const Vector2i &p, const Vector2f &rel)
     set_pushed(false);
     m_popup->set_visible(false);
 
+    auto prev_selected = m_selected_index;
+
     m_selected_index_f = std::clamp(m_selected_index_f + rel.y() * speed, 0.0f, items().size() - 1.f);
     m_selected_index   = std::clamp((int)round(m_selected_index_f), 0, (int)(items().size() - 1));
+
     set_caption(m_items_short[m_selected_index]);
+
+    if (prev_selected != m_selected_index)
+    {
+        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(prev_selected))->set_pushed(false);
+        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->set_pushed(true);
+        dynamic_cast<PopupMenu::Item *>(m_popup->child_at(m_selected_index))->callback();
+    }
 
     if (m_callback)
         m_callback(m_selected_index);

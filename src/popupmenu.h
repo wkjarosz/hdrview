@@ -38,12 +38,7 @@ public:
 
         virtual void     draw(NVGcontext *ctx) override;
         virtual Vector2i preferred_size(NVGcontext *ctx) const override;
-
-        virtual void set_checked(bool b) { m_checked = b; }
-        virtual bool checked() const { return m_checked; }
-
-    protected:
-        bool m_checked = false;
+        // virtual bool     mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
     };
 
     class Separator : public Button
