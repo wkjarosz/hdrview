@@ -39,7 +39,7 @@ Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<str
 
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
-    Button::preferred_size(ctx);
+    return Button::preferred_size(ctx);
     // int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     // return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
 }
