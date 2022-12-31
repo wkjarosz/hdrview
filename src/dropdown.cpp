@@ -11,55 +11,72 @@
 #include <nanogui/opengl.h>
 #include <nanogui/popup.h>
 #include <nanogui/screen.h>
-
-#include <spdlog/spdlog.h>
+#include <stdexcept> // for runtime_error
 
 #include <spdlog/fmt/ostr.h>
+#include <spdlog/spdlog.h>
 
+using std::runtime_error;
 using std::string;
 using std::vector;
 
 NAMESPACE_BEGIN(nanogui)
 
-Dropdown::Dropdown(Widget *parent) : MenuItem(parent), m_selected_index(0)
+Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
+    MenuItem(parent, caption), m_selected_index(0), m_mode(mode)
 {
     set_flags(Flags::ToggleButton);
 
     m_popup = new PopupMenu(screen(), window());
     m_popup->set_size(Vector2i(320, 250));
     m_popup->set_visible(false);
+
+    if (m_mode == Menu)
+        set_fixed_size(preferred_size(screen()->nvg_context()));
 }
 
-Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons) : Dropdown(parent)
+Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons, Mode mode,
+                   const string &caption) :
+    Dropdown(parent, mode, caption)
 {
     set_items(items, icons);
 }
 
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
-    // return Button::preferred_size(ctx);
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-    return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    if (m_mode == ComboBox)
+        return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    else if (m_mode == Menu)
+        return MenuItem::preferred_size(ctx) - Vector2i(5, 0);
+    else
+        return MenuItem::preferred_size(ctx);
+}
+
+MenuItem *Dropdown::item(int idx) const
+{
+    if (idx >= (int)m_popup->child_count())
+        throw runtime_error(fmt::format("Trying to access invalid index {} on a menu with only {} items.", idx,
+                                        (int)m_popup->child_count()));
+
+    return (MenuItem *)m_popup->child_at(idx);
 }
 
 void Dropdown::set_selected_index(int idx)
 {
-    if (m_popup->child_count() <= idx)
+    if (m_mode != ComboBox || m_popup->child_count() <= idx)
         return;
 
-    ((Button *)m_popup->child_at(m_selected_index))->set_pushed(false);
-    ((Button *)m_popup->child_at(idx))->set_pushed(true);
+    item(m_selected_index)->set_pushed(false);
+    item(idx)->set_pushed(true);
 
     m_selected_index = idx;
-    set_caption(m_items[m_selected_index]);
+    set_caption(item(m_selected_index)->caption());
 }
 
 void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
 {
-    m_items = items;
-
-    m_selected_index = std::clamp(m_selected_index, 0, (int)(items.size() - 1));
-
+    // remove all children
     while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
 
     for (int index = 0; index < (int)items.size(); ++index)
@@ -67,68 +84,69 @@ void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
         auto caption = items[index];
         auto icon    = icons.size() == items.size() ? icons[index] : 0;
         auto item    = m_popup->add<MenuItem>(caption, icon);
-        item->set_flags(Button::RadioButton);
+        item->set_flags(m_mode == ComboBox ? Button::RadioButton : Button::NormalButton);
         item->set_callback(
             [&, index, this]
             {
                 set_selected_index(index);
-                if (m_callback)
-                    m_callback(index);
+                if (m_selected_callback)
+                    m_selected_callback(index);
             });
     }
-    set_selected_index(m_selected_index);
+    set_selected_index(0);
+}
+
+Vector2i Dropdown::compute_position() const
+{
+    Vector2i offset;
+    if (m_mode == ComboBox)
+        offset = Vector2i(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
+    else if (m_mode == Menu)
+        offset = Vector2i(0, PopupMenu::menu_item_height);
+    else
+        offset = Vector2i(size().x(), -4);
+
+    Vector2i abs_pos = absolute_position() + offset;
+
+    // prevent bottom of menu from getting clipped off screen
+    abs_pos.y() += std::min(0, screen()->height() - (abs_pos.y() + m_popup->size().y() + 2));
+
+    // prevent top of menu from getting clipped off screen
+    if (abs_pos.y() <= 1)
+        abs_pos.y() = absolute_position().y() + size().y() - 2;
+
+    return abs_pos;
 }
 
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-    if (m_enabled)
+    auto ret = MenuItem::mouse_button_event(p, button, down, modifiers);
+    if (m_enabled && m_pushed)
     {
-        if (button == GLFW_MOUSE_BUTTON_1 && down && !m_focused)
+        if (!m_focused)
             request_focus();
 
-        // Vector2i offset(0, PopupMenu::menu_item_height);
-        Vector2i offset(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
-        Vector2i abs_pos = absolute_position() + offset;
+        m_popup->set_position(compute_position());
 
-        // prevent bottom of menu from getting clipped off screen
-        if (abs_pos.y() + m_popup->size().y() >= screen()->height())
-            abs_pos.y() = absolute_position().y() - m_popup->size().y() + 2;
+        // first turn focus off on all menu buttons
+        for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
 
-        // prevent top of menu from getting clipped off screen
-        if (abs_pos.y() <= 1)
-            abs_pos.y() = absolute_position().y() + size().y() - 2;
+        // now turn focus on to just the button under the cursor
+        if (auto w = m_popup->find_widget(screen()->mouse_pos() - m_popup->parent()->absolute_position()))
+            w->mouse_enter_event(p + absolute_position() - w->absolute_position(), true);
 
-        m_popup->set_position(abs_pos);
-
-        if (down)
-        {
-            if (m_popup->visible())
-            {
-                m_popup->set_visible(false);
-                return true;
-            }
-            else
-            {
-                // first turn focus off on all menu buttons
-                for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
-
-                // now turn focus on to just the button under the cursor
-                if (auto w = m_popup->find_widget(screen()->mouse_pos() - m_popup->parent()->absolute_position()))
-                    w->mouse_enter_event(p + absolute_position() - w->absolute_position(), true);
-
-                m_popup->set_visible(true);
-                m_popup->request_focus();
-            }
-        }
-        return true;
+        m_popup->set_visible(true);
+        m_popup->request_focus();
     }
-
-    return Widget::mouse_button_event(p, button, down, modifiers);
+    else
+        m_popup->set_visible(false);
+    return ret;
 }
 
 void Dropdown::draw(NVGcontext *ctx)
 {
-    set_pushed(m_popup->visible());
+    if (!m_popup->visible())
+        set_pushed(false);
 
     if (!m_enabled && m_pushed)
         m_pushed = false;
@@ -205,19 +223,22 @@ void Dropdown::draw(NVGcontext *ctx)
     nvgFillColor(ctx, text_color);
     nvgText(ctx, text_pos.x(), text_pos.y() + 1, m_caption.c_str(), nullptr);
 
-    auto icon = utf8(FA_SORT);
+    if (m_mode != Menu)
+    {
+        string icon = m_mode == ComboBox ? utf8(FA_SORT) : utf8(m_theme->m_popup_chevron_right_icon);
 
-    nvgFontSize(ctx, (m_font_size < 0 ? m_theme->m_button_font_size : m_font_size) * icon_scale());
-    nvgFontFace(ctx, "icons");
-    nvgFillColor(ctx, m_enabled ? text_color : NVGcolor(m_theme->m_disabled_text_color));
-    nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        nvgFontSize(ctx, (m_font_size < 0 ? m_theme->m_button_font_size : m_font_size) * icon_scale());
+        nvgFontFace(ctx, "icons");
+        nvgFillColor(ctx, m_enabled ? text_color : NVGcolor(m_theme->m_disabled_text_color));
+        nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
-    float    iw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
-    Vector2f icon_pos(0, m_pos.y() + m_size.y() * 0.5f);
+        float    iw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
+        Vector2f icon_pos(0, m_pos.y() + m_size.y() * 0.5f);
 
-    icon_pos[0] = m_pos.x() + m_size.x() - iw - 8;
+        icon_pos[0] = m_pos.x() + m_size.x() - iw - 8;
 
-    nvgText(ctx, icon_pos.x(), icon_pos.y(), icon.data(), nullptr);
+        nvgText(ctx, icon_pos.x(), icon_pos.y(), icon.data(), nullptr);
+    }
 }
 
 NAMESPACE_END(nanogui)

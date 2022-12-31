@@ -1174,7 +1174,7 @@ Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
 
     auto size = new Dropdown(m_options, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
     size->set_tooltip("The number of pixels sampled by the eyedropper.");
-    size->set_callback([this](int s) { m_size = s; });
+    size->set_selected_callback([this](int s) { m_size = s; });
     size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
     size->set_fixed_height(19);
 

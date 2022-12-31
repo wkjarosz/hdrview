@@ -128,7 +128,7 @@ Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageLis
 
             dropdown->set_enabled(!monochrome);
 
-            dropdown->set_callback(
+            dropdown->set_selected_callback(
                 [color_panels, screen](int i)
                 {
                     channel = (EChannel)i;
@@ -142,7 +142,7 @@ Button *create_channel_mixer_btn(Widget *parent, HDRViewScreen *screen, ImageLis
                     if (b)
                     {
                         dropdown->set_selected_index(3);
-                        dropdown->callback()(3);
+                        dropdown->selected_callback()(3);
                         dropdown->set_enabled(false);
                     }
                     else

@@ -54,8 +54,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_xaxis_scale->set_selected_index(1);
         m_yaxis_scale->set_selected_index(0);
-        m_xaxis_scale->set_callback([this](int) { update_histogram(); });
-        m_yaxis_scale->set_callback([this](int) { update_histogram(); });
+        m_xaxis_scale->set_selected_callback([this](int) { update_histogram(); });
+        m_yaxis_scale->set_selected_callback([this](int) { update_histogram(); });
     }
 
     // histogram and file buttons
@@ -141,7 +141,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_blend_modes = new Dropdown(grid, blend_mode_names());
         m_blend_modes->set_fixed_height(19);
-        m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
+        m_blend_modes->set_selected_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
         agl->set_anchor(m_blend_modes,
                         AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
@@ -154,7 +154,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_channels = new Dropdown(grid, channel_names());
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);
-        m_channels->set_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });
+        m_channels->set_selected_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });
         agl->set_anchor(m_channels,
                         AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
     }
@@ -207,7 +207,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_sort_mode->set_fixed_height(19);
         m_sort_mode->set_tooltip("Sort the image list. When image names are aligned right, alphabetic sorting sorts by "
                                  "reversed filename (useful for sorting files with same extension together).");
-        m_sort_mode->set_callback([this](int m) { sort_images(m); });
+        m_sort_mode->set_selected_callback([this](int m) { sort_images(m); });
         agl->set_anchor(m_sort_mode, AdvancedGridLayout::Anchor{1, 0});
 
         m_use_short_btn->set_fixed_size({19, 19});

@@ -5,6 +5,7 @@
 //
 
 #include "popupmenu.h"
+#include "dropdown.h"
 #include <cassert>
 #include <nanogui/button.h>
 #include <nanogui/icons.h>
@@ -157,7 +158,6 @@ PopupMenu::PopupMenu(Widget *parent, Window *parent_window) : Popup(parent, pare
     set_visible(false);
 
     auto flat_theme                             = new Theme(screen()->nvg_context());
-    flat_theme                                  = new Theme(screen()->nvg_context());
     flat_theme->m_standard_font_size            = 16;
     flat_theme->m_button_font_size              = 15;
     flat_theme->m_text_box_font_size            = 14;

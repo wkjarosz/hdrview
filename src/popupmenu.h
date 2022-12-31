@@ -18,7 +18,6 @@ public:
 
     virtual void     draw(NVGcontext *ctx) override;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
-    // virtual bool     mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 };
 
 class Separator : public MenuItem

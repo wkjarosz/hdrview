@@ -27,7 +27,7 @@ nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &lab
     dp->set_fixed_size({fs.x() != 0 ? fs.x() : gui->fixed_size().x(), fs.y() != 0 ? fs.y() : gui->fixed_size().y()});
     gui->add_widget(label, dp);
 
-    dp->set_callback(
+    dp->set_selected_callback(
         [&variable, cb](int i)
         {
             variable = (T)i;
