@@ -304,17 +304,17 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     //
     for (auto m : popup_menus)
     {
-        m->add_item("Solo mode")->set_flags(Button::ToggleButton);
-        m->add_item(""); // separator
-        m->add_item("Expand all")->set_icon(FA_ANGLE_DOUBLE_DOWN);
-        m->add_item("Collapse all")->set_icon(FA_ANGLE_DOUBLE_UP);
+        m->add<MenuItem>("Solo mode")->set_flags(Button::ToggleButton);
+        m->add<Separator>();
+        m->add<MenuItem>("Expand all", FA_ANGLE_DOUBLE_DOWN);
+        m->add<MenuItem>("Collapse all", FA_ANGLE_DOUBLE_UP);
     }
 
     auto visible_panels =
         m_settings.value("side panel", json::object()).value("visible panels", json::array()).get<std::vector<int>>();
     for (size_t i = 0; i < popup_menus.size(); ++i)
     {
-        auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[i]->child_at(0));
+        auto item = dynamic_cast<MenuItem *>(popup_menus[i]->child_at(0));
         item->set_pushed(m_solo_mode);
         item->set_change_callback(
             [popup_menus, toggle_panel, i, this](bool b)
@@ -323,7 +323,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 // update all "Solo mode" buttons and "Expand all" buttons
                 for (size_t j = 0; j < popup_menus.size(); ++j)
                 {
-                    auto item = dynamic_cast<PopupMenu::Item *>(popup_menus[j]->child_at(0));
+                    auto item = dynamic_cast<MenuItem *>(popup_menus[j]->child_at(0));
                     item->set_pushed(m_solo_mode);
                     popup_menus[j]->child_at(2)->set_enabled(!m_solo_mode);
                 }

@@ -11,7 +11,7 @@
 
 NAMESPACE_BEGIN(nanogui)
 
-class Dropdown : public Button
+class Dropdown : public MenuItem
 {
 public:
     /// Create an empty combo box
@@ -21,8 +21,7 @@ public:
      * \brief Create a new combo box with the given items, providing long names and optionally short names and icons for
      * each item
      */
-    Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<std::string> &items_short = {},
-             const std::vector<int> &icons = {});
+    Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<int> &icons = {});
 
     /// The current index this Dropdown has selected.
     int selected_index() const { return m_selected_index; }
@@ -36,20 +35,14 @@ public:
     /// Sets the callback to execute for this Dropdown.
     void set_callback(const std::function<void(int)> &callback) { m_callback = callback; }
 
-    /// Sets the items for this Dropdown, providing long names and optionally short names and icons for each item
-    void set_items(const std::vector<std::string> &items, const std::vector<std::string> &items_short = {},
-                   const std::vector<int> &icons = {});
+    /// Sets the items for this Dropdown, providing names and optionally icons for each item
+    void set_items(const std::vector<std::string> &items, const std::vector<int> &icons = {});
     /// The items associated with this Dropdown.
     const std::vector<std::string> &items() const { return m_items; }
-    /// The short descriptions associated with this Dropdown.
-    const std::vector<std::string> &items_short() const { return m_items_short; }
 
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 
     virtual void draw(NVGcontext *ctx) override;
-
-    /// Handles mouse scrolling events for this Dropdown.
-    virtual bool scroll_event(const Vector2i &p, const Vector2f &rel) override;
 
     virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
@@ -59,15 +52,11 @@ protected:
     /// The items associated with this Dropdown.
     std::vector<std::string> m_items;
 
-    /// The short descriptions of items associated with this Dropdown.
-    std::vector<std::string> m_items_short;
-
     /// The callback for this Dropdown.
     std::function<void(int)> m_callback;
 
     /// The current index this Dropdown has selected.
-    int   m_selected_index;
-    float m_selected_index_f;
+    int m_selected_index;
 };
 
 NAMESPACE_END(nanogui)

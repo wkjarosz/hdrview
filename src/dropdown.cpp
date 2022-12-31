@@ -21,7 +21,7 @@ using std::vector;
 
 NAMESPACE_BEGIN(nanogui)
 
-Dropdown::Dropdown(Widget *parent) : Button(parent), m_selected_index(0), m_selected_index_f(0.f)
+Dropdown::Dropdown(Widget *parent) : MenuItem(parent), m_selected_index(0)
 {
     set_flags(Flags::ToggleButton);
 
@@ -30,53 +30,45 @@ Dropdown::Dropdown(Widget *parent) : Button(parent), m_selected_index(0), m_sele
     m_popup->set_visible(false);
 }
 
-Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<string> &items_short,
-                   const vector<int> &icons) :
-    Dropdown(parent)
+Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons) : Dropdown(parent)
 {
-    set_items(items, items_short, icons);
+    set_items(items, icons);
 }
 
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
-    return Button::preferred_size(ctx);
-    // int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-    // return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    // return Button::preferred_size(ctx);
+    int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
+    return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
 }
 
 void Dropdown::set_selected_index(int idx)
 {
-    if (m_items_short.empty())
+    if (m_popup->child_count() <= idx)
         return;
 
     ((Button *)m_popup->child_at(m_selected_index))->set_pushed(false);
     ((Button *)m_popup->child_at(idx))->set_pushed(true);
 
-    m_selected_index   = idx;
-    m_selected_index_f = (float)m_selected_index;
-    set_caption(m_items_short[m_selected_index]);
+    m_selected_index = idx;
+    set_caption(m_items[m_selected_index]);
 }
 
-void Dropdown::set_items(const vector<string> &items, const vector<string> &items_short, const vector<int> &icons)
+void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
 {
-    m_items       = items;
-    m_items_short = (items.size() == items_short.size()) ? items_short : items;
+    m_items = items;
 
-    if (m_selected_index < 0 || m_selected_index >= (int)items.size())
-    {
-        m_selected_index   = 0;
-        m_selected_index_f = (float)m_selected_index;
-    }
+    m_selected_index = std::clamp(m_selected_index, 0, (int)(items.size() - 1));
 
     while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
 
     for (int index = 0; index < (int)items.size(); ++index)
     {
-        auto button = m_popup->add_item(items[index]);
-        button->set_flags(Button::RadioButton);
-        if (icons.size() == items.size())
-            button->set_icon(icons[index]);
-        button->set_callback(
+        auto caption = items[index];
+        auto icon    = icons.size() == items.size() ? icons[index] : 0;
+        auto item    = m_popup->add<MenuItem>(caption, icon);
+        item->set_flags(Button::RadioButton);
+        item->set_callback(
             [&, index, this]
             {
                 set_selected_index(index);
@@ -87,33 +79,6 @@ void Dropdown::set_items(const vector<string> &items, const vector<string> &item
     set_selected_index(m_selected_index);
 }
 
-bool Dropdown::scroll_event(const Vector2i &p, const Vector2f &rel)
-{
-    if (!enabled())
-        return false;
-
-    float speed = 0.1f;
-    set_pushed(false);
-    m_popup->set_visible(false);
-
-    auto prev_selected = m_selected_index;
-
-    m_selected_index_f = std::clamp(m_selected_index_f + rel.y() * speed, 0.0f, items().size() - 1.f);
-    m_selected_index   = std::clamp((int)round(m_selected_index_f), 0, (int)(items().size() - 1));
-
-    set_caption(m_items_short[m_selected_index]);
-
-    if (!m_items_short.empty())
-    {
-        ((Button *)m_popup->child_at(prev_selected))->set_pushed(false);
-        ((Button *)m_popup->child_at(m_selected_index))->set_pushed(true);
-    }
-
-    if (m_callback)
-        m_callback(m_selected_index);
-    return true;
-}
-
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (m_enabled)
@@ -121,8 +86,8 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         if (button == GLFW_MOUSE_BUTTON_1 && down && !m_focused)
             request_focus();
 
-        Vector2i offset(0, PopupMenu::menu_item_height);
-        // Vector2i offset(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
+        // Vector2i offset(0, PopupMenu::menu_item_height);
+        Vector2i offset(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
         Vector2i abs_pos = absolute_position() + offset;
 
         // prevent bottom of menu from getting clipped off screen
@@ -144,13 +109,15 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
             }
             else
             {
-                m_popup->set_visible(true);
                 // first turn focus off on all menu buttons
                 for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
 
                 // now turn focus on to just the button under the cursor
                 if (auto w = m_popup->find_widget(screen()->mouse_pos() - m_popup->parent()->absolute_position()))
                     w->mouse_enter_event(p + absolute_position() - w->absolute_position(), true);
+
+                m_popup->set_visible(true);
+                m_popup->request_focus();
             }
         }
         return true;
