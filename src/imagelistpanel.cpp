@@ -12,11 +12,11 @@
 
 #include "imagelistpanel.h"
 #include "colorslider.h"
-#include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
 #include "imagebutton.h"
+#include "menu.h"
 #include "multigraph.h"
 #include "timer.h"
 #include "well.h"

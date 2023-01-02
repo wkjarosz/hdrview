@@ -62,6 +62,7 @@ using XPUImagePtr      = std::shared_ptr<XPUImage>;
 NAMESPACE_BEGIN(nanogui)
 class Widget;
 class Button;
+class MenuBar;
 class Dropdown;
 class MenuItem;
 class Separator;

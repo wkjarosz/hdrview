@@ -82,9 +82,10 @@ private:
     void    toggle_top_panel(bool b);
     Dialog *active_dialog() const;
 
-    Window         *m_menubar, *m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
+    Window         *m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
     HDRImageView   *m_image_view;
     ImageListPanel *m_images_panel;
+    MenuBar        *m_menubar;
 
     MenuItem *m_show_side_panels, *m_show_top_panel, *m_show_all_panels;
 

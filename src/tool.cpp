@@ -6,12 +6,12 @@
 
 #include "tool.h"
 #include "brush.h"
-#include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
 #include "hscrollpanel.h"
 #include "imagelistpanel.h"
+#include "menu.h"
 #include "rasterdraw.h"
 #include "well.h"
 #include <hdrview_resources.h>

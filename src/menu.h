@@ -6,11 +6,54 @@
 
 #pragma once
 
-#include "popupmenu.h"
 #include <nanogui/button.h>
+#include <nanogui/popup.h>
 
 NAMESPACE_BEGIN(nanogui)
 
+class MenuItem : public Button
+{
+public:
+    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
+
+    void set_hotkey(int modifiers, int button);
+
+    virtual void     draw(NVGcontext *ctx) override;
+    Vector2i         preferred_text_size(NVGcontext *ctx) const;
+    virtual Vector2i preferred_size(NVGcontext *ctx) const override;
+
+protected:
+    int         m_button, m_modifiers;
+    std::string m_hotkey;
+};
+
+class Separator : public MenuItem
+{
+public:
+    Separator(Widget *parent);
+    virtual void draw(NVGcontext *ctx) override;
+};
+
+/// The actual popup window containing the menu
+class PopupMenu : public Popup
+{
+public:
+    /// Create a new popup parented to a screen (first argument) and a parent window (if applicable)
+    PopupMenu(Widget *parent, Window *parent_window = nullptr);
+
+    /// Invoke the associated layout generator to properly place child widgets, if any
+    virtual void perform_layout(NVGcontext *ctx) override { Widget::perform_layout(ctx); }
+
+    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+
+    /// Draw the popup window
+    virtual void draw(NVGcontext *ctx) override;
+
+    static constexpr int menu_item_height = 20;
+    static constexpr int seperator_height = 8;
+};
+
+/// A ComboBox or Menubar menu
 class Dropdown : public MenuItem
 {
 public:
@@ -70,6 +113,30 @@ protected:
     int m_selected_index;
 
     Mode m_mode = ComboBox;
+};
+
+/// A horizontal menu bar containing a row of Dropdown menu items and responsible for handling their hotkeys
+class MenuBar : public Window
+{
+public:
+    MenuBar(Widget *parent, const std::string &title = "Untitled");
+
+    Dropdown *add_menu(const std::string &name);
+
+    virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
+};
+
+/// Wrap another widget with a right-click popup menu
+class PopupWrapper : public Widget
+{
+public:
+    PopupWrapper(Widget *parent, PopupMenu *menu = nullptr);
+
+    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
+
+protected:
+    PopupMenu *m_right_click_menu;
+    bool       m_right_pushed = false;
 };
 
 NAMESPACE_END(nanogui)

@@ -8,13 +8,12 @@
 #include "commandhistory.h"
 #include "common.h"
 #include "dialog.h"
-#include "dropdown.h"
 #include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
 #include "imagelistpanel.h"
-#include "popupmenu.h"
+#include "menu.h"
 #include "tool.h"
 #include "xpuimage.h"
 #include <filesystem/path.h>
@@ -81,26 +80,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     flat_theme->m_button_gradient_top_pushed    = flat_theme->m_transparent;
     flat_theme->m_button_gradient_bot_pushed    = flat_theme->m_button_gradient_top_pushed;
 
-    auto menu_theme                           = new Theme(*flat_theme);
-    menu_theme->m_window_corner_radius        = 0;
-    menu_theme->m_window_fill_unfocused       = Color(25, 255);
-    menu_theme->m_window_fill_focused         = Color(27, 255);
-    menu_theme->m_drop_shadow                 = Color(0, 100);
-    menu_theme->m_button_gradient_top_focused = Color(77, 124, 233, 255);
-    menu_theme->m_button_gradient_bot_focused = menu_theme->m_button_gradient_top_focused;
-    menu_theme->m_button_gradient_top_pushed  = menu_theme->m_button_gradient_top_focused;
-    menu_theme->m_button_gradient_bot_pushed  = menu_theme->m_button_gradient_top_focused;
-    menu_theme->m_window_popup                = Color(38, 255);
-    menu_theme->m_text_color_shadow           = menu_theme->m_transparent;
-
     //
     // Construct the top-level widgets
     //
 
-    m_menubar = new Window(this, "");
-    m_menubar->set_theme(menu_theme);
-    m_menubar->set_position(nanogui::Vector2i(0, 0));
-    m_menubar->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 2, 0));
+    m_menubar = new MenuBar(this, "");
 
     m_top_panel = new Window(this, "");
     m_top_panel->set_theme(panel_theme);
@@ -269,8 +253,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     }
 
     {
-        auto menu = new Dropdown(m_menubar, Dropdown::Menu, "File");
-        menu->set_flags(Button::RadioButton);
+        auto menu = m_menubar->add_menu("File");
 
         auto add_item = [this, &menu](const std::string &name, int icon, const std::function<void(void)> &cb,
                                       int modifier = 0, int button = 0, bool edit = true)
@@ -309,8 +292,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item(
             "Quit...", FA_POWER_OFF, [this] { ask_to_quit(); }, 0, GLFW_KEY_ESCAPE, false);
 
-        menu = new Dropdown(m_menubar, Dropdown::Menu, "Edit");
-        menu->set_flags(Button::RadioButton);
+        menu = m_menubar->add_menu("Edit");
 
         add_item(
             "Undo", FA_REPLY, [this] { m_images_panel->undo(); }, SYSTEM_COMMAND_MOD, 'Z');
@@ -328,8 +310,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item(
             "Deselect", 0, [] {}, SYSTEM_COMMAND_MOD, 'D');
 
-        menu = new Dropdown(m_menubar, Dropdown::Menu, "Transform");
-        menu->set_flags(Button::RadioButton);
+        menu = m_menubar->add_menu("Transform");
 
         add_item("Flip H", FA_ARROWS_ALT_H, flip_callback(true, m_images_panel));
         add_item("Flip V", FA_ARROWS_ALT_V, flip_callback(false, m_images_panel));
@@ -342,8 +323,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Remap...", FA_GLOBE_AMERICAS, remap_callback(this, m_images_panel));
         add_item("Transform...", FA_CLONE, free_xform_callback(this, m_images_panel));
 
-        menu = new Dropdown(m_menubar, Dropdown::Menu, "Pixels");
-        menu->set_flags(Button::RadioButton);
+        menu = m_menubar->add_menu("Pixels");
 
         add_item("Fill...", FA_FILL, fill_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, GLFW_KEY_BACKSPACE);
         add_item("Invert", FA_IMAGE, invert_callback(m_images_panel));
@@ -357,8 +337,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Hue/saturation...", FA_PALETTE, hsl_callback(this, m_images_panel));
         add_item("Convert color space...", FA_PALETTE, colorspace_callback(this, m_images_panel));
 
-        menu = new Dropdown(m_menubar, Dropdown::Menu, "Filter");
-        menu->set_flags(Button::RadioButton);
+        menu = m_menubar->add_menu("Filter");
 
         add_item("Gaussian blur...", FA_TINT, gaussian_filter_callback(this, m_images_panel));
         add_item("Box blur...", FA_TINT, box_blur_callback(this, m_images_panel));
@@ -368,8 +347,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Bump to normal map", FA_ARROWS_ALT_H, bump_to_normal_map_callback(m_images_panel));
         add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
 
-        menu = new Dropdown(m_menubar, Dropdown::Menu, "View");
-        menu->set_flags(Button::RadioButton);
+        menu = m_menubar->add_menu("View");
 
         // FIXME: the check marks need to be kept in sync with keyboard action
         add_item(

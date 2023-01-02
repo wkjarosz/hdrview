@@ -4,9 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "dropdown.h"        // for Dropdown
 #include "fwd.h"             // for HDRViewScreen
 #include "hdrimage.h"        // for HDRImage, HDRImage::CanvasAnchor
+#include "menu.h"            // for Dropdown
 #include <functional>        // for function
 #include <iosfwd>            // for string
 #include <nanogui/nanogui.h> // for FormHelper, Vector2i, Widget, Window
