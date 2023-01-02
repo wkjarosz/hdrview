@@ -10,19 +10,20 @@
 #include "dialog.h"
 #include "hdrimage.h"
 #include "hdrviewscreen.h"
-#include "hslgradient.h"
 #include "imagelistpanel.h"
 #include "multigraph.h"
 #include "xpuimage.h"
-#include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
 
+namespace local
+{
 static const string name{"Exposure/Gamma..."};
 static float        exposure = 0.0f;
 static float        gamma    = 1.0f;
 static float        offset   = 0.0f;
+} // namespace local
 
 std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
@@ -31,7 +32,7 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(55, 20));
 
-        auto window = new Dialog(screen, name);
+        auto window = new Dialog(screen, local::name);
         gui->set_window(window);
 
         // graph
@@ -56,17 +57,17 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
         auto graphCb = [graph]()
         {
             auto lCurve = linspaced(257, 0.0f, 1.0f);
-            for (auto &&i : lCurve) i = pow(pow(2.0f, exposure) * i + offset, 1.0f / gamma);
+            for (auto &&i : lCurve) i = pow(pow(2.0f, local::exposure) * i + local::offset, 1.0f / local::gamma);
             graph->set_values(lCurve, 1);
         };
 
         graphCb();
 
-        create_floatbox_and_slider(gui, "Exposure:", exposure, -10.f, 10.f, 0.1f, graphCb);
+        create_floatbox_and_slider(gui, "Exposure:", local::exposure, -10.f, 10.f, 0.1f, graphCb);
 
-        create_floatbox_and_slider(gui, "Offset:", offset, -1.f, 1.f, 0.01f, graphCb);
+        create_floatbox_and_slider(gui, "Offset:", local::offset, -1.f, 1.f, 0.01f, graphCb);
 
-        create_floatbox_and_slider(gui, "Gamma:", gamma, 0.0001f, 10.f, 0.1f, graphCb);
+        create_floatbox_and_slider(gui, "Gamma:", local::gamma, 0.0001f, 10.f, 0.1f, graphCb);
 
         auto spacer = new Widget(window);
         spacer->set_fixed_height(15);
@@ -81,11 +82,13 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
                 images_panel->async_modify_selected(
                     [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
-                        spdlog::debug("{}; {}; {}", exposure, offset, gamma);
+                        spdlog::debug("{}; {}; {}", local::exposure, local::offset, local::gamma);
                         return {make_shared<HDRImage>(img->apply_function(
-                                    [](const Color4 &c) {
-                                        return (Color4(pow(2.0f, exposure), 1.f) * c + Color4(offset, 0.f))
-                                            .pow(Color4(1.0f / gamma, 1.f));
+                                    [](const Color4 &c)
+                                    {
+                                        return (Color4(pow(2.0f, local::exposure), 1.f) * c +
+                                                Color4(local::offset, 0.f))
+                                            .pow(Color4(1.0f / local::gamma, 1.f));
                                     },
                                     xpuimg->roi())),
                                 nullptr};

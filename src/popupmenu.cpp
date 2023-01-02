@@ -43,6 +43,9 @@ void MenuItem::set_hotkey(int modcode, int keycode)
     // printable characters
     if (32 <= keycode && keycode < 128)
         str += char(keycode);
+    // function keys
+    else if (GLFW_KEY_F1 <= keycode && keycode <= GLFW_KEY_F25)
+        str += fmt::format("F{}", keycode - GLFW_KEY_F1 + 1);
     else if (keycode == GLFW_KEY_BACKSPACE)
         str += "Backspace";
     else if (keycode == GLFW_KEY_DELETE)
