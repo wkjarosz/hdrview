@@ -25,10 +25,12 @@ public:
     HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
     virtual ~HDRViewScreen() override;
 
+    void ask_to_quit();
+
     void                  read_settings();
     void                  write_settings();
     const nlohmann::json &settings() const { return m_settings; }
-    nlohmann::json &      settings() { return m_settings; }
+    nlohmann::json       &settings() { return m_settings; }
 
     // overridden virtual functions from Screen
     void draw_contents() override;
@@ -45,13 +47,14 @@ public:
     void                  set_active_colorpicker(HDRColorPicker *cp);
 
     const HDRColorPicker *foreground() const { return m_color_btns->foreground(); }
-    HDRColorPicker *      foreground() { return m_color_btns->foreground(); }
+    HDRColorPicker       *foreground() { return m_color_btns->foreground(); }
     const HDRColorPicker *background() const { return m_color_btns->background(); }
-    HDRColorPicker *      background() { return m_color_btns->background(); }
+    HDRColorPicker       *background() { return m_color_btns->background(); }
 
     bool load_image();
     void new_image();
     void duplicate_image();
+    void save_image_as();
     void save_image();
     void ask_close_image(int index);
     void ask_close_all_images();
@@ -74,30 +77,34 @@ private:
     bool    at_tool_panel_edge(const Vector2i &p);
     void    resize_side_panel(int w);
     void    resize_tool_panel(int w);
+    void    toggle_all_panels(bool b);
+    void    toggle_side_panels(bool b);
+    void    toggle_top_panel(bool b);
     Dialog *active_dialog() const;
 
-    Window *        m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
-    HDRImageView *  m_image_view;
+    Window         *m_menubar, *m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
+    HDRImageView   *m_image_view;
     ImageListPanel *m_images_panel;
-    EditImagePanel *m_edit_panel;
 
-    Button *            m_help_button;
-    Button *            m_side_panel_button;
-    Label *             m_zoom_label;
-    Label *             m_status_label;
-    Label *             m_path_info_label;
-    Label *             m_res_info_label;
-    Label *             m_color32_info_label;
-    Label *             m_color8_info_label;
-    Label *             m_ruler_info_label;
-    Label *             m_pixel_info_label;
-    Label *             m_roi_info_label;
-    Label *             m_stats_label;
+    MenuItem *m_show_side_panels, *m_show_top_panel, *m_show_all_panels;
+
+    Label              *m_zoom_label;
+    Label              *m_status_label;
+    Label              *m_path_info_label;
+    Label              *m_res_info_label;
+    Label              *m_color32_info_label;
+    Label              *m_color8_info_label;
+    Label              *m_ruler_info_label;
+    Label              *m_pixel_info_label;
+    Label              *m_roi_info_label;
+    Label              *m_stats_label;
     DualHDRColorPicker *m_color_btns;
 
-    VScrollPanel *        m_side_scroll_panel;
-    Widget *              m_side_panel_contents;
-    std::vector<Button *> m_panel_btns;
+    VScrollPanel           *m_side_scroll_panel;
+    Widget                 *m_side_panel_contents;
+    std::vector<Button *>   m_panel_btns;
+    std::vector<MenuItem *> m_menu_items;
+    std::vector<MenuItem *> m_edit_items;
 
     double m_gui_animation_start;
     bool   m_animation_running = false;
@@ -110,7 +117,7 @@ private:
 
     ETool               m_tool = Tool_None;
     std::vector<Tool *> m_tools;
-    HDRColorPicker *    m_active_colorpicker = nullptr;
+    HDRColorPicker     *m_active_colorpicker = nullptr;
 
     bool m_dragging_side_panel = false;
     bool m_dragging_tool_panel = false;
@@ -124,4 +131,6 @@ private:
     nlohmann::json m_settings;
 
     Vector2i m_roi_clicked;
+
+    HDRImagePtr m_clipboard;
 };

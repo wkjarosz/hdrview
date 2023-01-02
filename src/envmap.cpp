@@ -211,7 +211,7 @@ Vector2f XYZToLatLong(const Vector3f &xyz)
     float phi   = std::acos(xyz[1]);
     float theta = std::atan2(xyz[2], xyz[0]);
 
-    return Vector2f(mod(lerpFactor<float>(1.5f * M_PI, -M_PI_2, theta), 1.0f), phi / M_PI);
+    return Vector2f(mod(lerp_factor<float>(1.5f * M_PI, -M_PI_2, theta), 1.0f), phi / M_PI);
 }
 
 Vector2f XYZToCylindrical(const Vector3f &xyz)
@@ -219,7 +219,7 @@ Vector2f XYZToCylindrical(const Vector3f &xyz)
     // U varies linearly with theta,
     // and V varies linearly with y=cosPhi
     float theta = std::atan2(xyz[2], xyz[0]);
-    return Vector2f(mod(lerpFactor<float>(1.5f * M_PI, -M_PI_2, theta), 1.0f), lerpFactor(1.f, -1.f, xyz[1]));
+    return Vector2f(mod(lerp_factor<float>(1.5f * M_PI, -M_PI_2, theta), 1.0f), lerp_factor(1.f, -1.f, xyz[1]));
 }
 
 Vector2f XYZToCubeMap(const Vector3f &xyz)

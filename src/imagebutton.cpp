@@ -168,8 +168,8 @@ void ImageButton::draw(NVGcontext *ctx)
     {
         int   left_edge = m_pos.x() + 2;
         float time      = glfwGetTime();
-        float anim1 = smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, smoothStep(0.0f, 1.0f, triangleWave(time / 4.f))));
-        float anim2 = smoothStep(0.0f, 1.0f, triangleWave(time / 4.f * 2.f));
+        float anim1 = smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, triangleWave(time / 4.f))));
+        float anim2 = smoothstep(0.0f, 1.0f, triangleWave(time / 4.f * 2.f));
 
         int bar_size = (int)std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
         int left     = (int)std::round(lerp((float)left_edge, float(m_size.x() - 2 - bar_size), anim1));

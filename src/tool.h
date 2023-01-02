@@ -16,17 +16,18 @@ public:
     Tool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name, const std::string &tooltip,
          int icon, ETool tool);
 
-    nlohmann::json &     all_tool_settings();
+    nlohmann::json      &all_tool_settings();
     const nlohmann::json all_tool_settings() const;
-    nlohmann::json &     this_tool_settings();
+    nlohmann::json      &this_tool_settings();
     const nlohmann::json this_tool_settings() const;
     virtual void         write_settings();
 
     void                         set_options_bar(nanogui::Widget *options) { m_options = options; }
-    virtual nanogui::Widget *    create_options_bar(nanogui::Widget *parent) { return m_options; }
+    virtual nanogui::Widget     *create_options_bar(nanogui::Widget *parent) { return m_options; }
     virtual nanogui::ToolButton *create_toolbutton(nanogui::Widget *parent);
 
-    virtual void set_active(bool b);
+    void         set_active(bool b);
+    void         update_width(int w);
     virtual void draw(NVGcontext *ctx) const;
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers);
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button, int modifiers);
@@ -41,11 +42,11 @@ protected:
     int         m_icon;
     ETool       m_tool;
 
-    HDRViewScreen *      m_screen;
-    HDRImageView *       m_image_view;
-    ImageListPanel *     m_images_panel;
+    HDRViewScreen       *m_screen;
+    HDRImageView        *m_image_view;
+    ImageListPanel      *m_images_panel;
     nanogui::ToolButton *m_button;
-    nanogui::Widget *    m_options;
+    nanogui::Widget     *m_options;
 };
 
 class HandTool : public Tool
@@ -108,19 +109,19 @@ protected:
     void draw_brush(NVGcontext *ctx, const nanogui::Vector2i &center) const;
 
     std::shared_ptr<Brush>    m_brush;
-    nanogui::Slider *         m_size_slider;
-    nanogui::IntBox<int> *    m_size_textbox;
-    nanogui::Slider *         m_hardness_slider;
+    nanogui::Slider          *m_size_slider;
+    nanogui::IntBox<int>     *m_size_textbox;
+    nanogui::Slider          *m_hardness_slider;
     nanogui::FloatBox<float> *m_hardness_textbox;
-    nanogui::Slider *         m_flow_slider;
+    nanogui::Slider          *m_flow_slider;
     nanogui::FloatBox<float> *m_flow_textbox;
-    nanogui::Slider *         m_angle_slider;
+    nanogui::Slider          *m_angle_slider;
     nanogui::FloatBox<float> *m_angle_textbox;
-    nanogui::Slider *         m_roundness_slider;
+    nanogui::Slider          *m_roundness_slider;
     nanogui::FloatBox<float> *m_roundness_textbox;
-    nanogui::Slider *         m_spacing_slider;
+    nanogui::Slider          *m_spacing_slider;
     nanogui::FloatBox<float> *m_spacing_textbox;
-    nanogui::CheckBox *       m_smoothing_checkbox;
+    nanogui::CheckBox        *m_smoothing_checkbox;
     bool                      m_smoothing = true;
 
     nanogui::Vector2i m_p0, m_p1, m_p2, m_p3; ///< mouse position history. m_p0: oldest; m_p3: most recent
@@ -221,7 +222,7 @@ public:
 
 protected:
     float                     m_width = 2.f;
-    nanogui::Slider *         m_width_slider;
+    nanogui::Slider          *m_width_slider;
     nanogui::FloatBox<float> *m_width_textbox;
     bool                      m_dragging = false;
 };

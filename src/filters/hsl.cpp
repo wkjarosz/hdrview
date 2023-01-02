@@ -19,83 +19,80 @@
 
 using namespace std;
 
-Button *create_hsl_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
+static const string name{"Hue/Saturation..."};
+static float        hue        = 0.0f;
+static float        saturation = 0.0f;
+static float        lightness  = 0.0f;
+
+std::function<void()> hsl_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    static string name       = "Hue/Saturation...";
-    static float  hue        = 0.0f;
-    static float  saturation = 0.0f;
-    static float  lightness  = 0.0f;
-    auto          b          = new Button(parent, name, FA_PALETTE);
-    b->set_fixed_height(21);
-    b->set_callback(
-        [&, screen, images_panel]()
+    return [&, screen, images_panel]()
+    {
+        FormHelper *gui = new FormHelper(screen);
+        gui->set_fixed_size(Vector2i(55, 20));
+
+        Widget *spacer = nullptr;
+
+        auto window = new Dialog(screen, name);
+        gui->set_window(window);
+
+        auto fixedRainbow   = new HSLGradient(window);
+        auto dynamicRainbow = new HSLGradient(window);
+        fixedRainbow->set_fixed_width(256);
+        dynamicRainbow->set_fixed_width(256);
+
+        auto cb = [dynamicRainbow]()
         {
-            FormHelper *gui = new FormHelper(screen);
-            gui->set_fixed_size(Vector2i(55, 20));
+            dynamicRainbow->set_hue_offset(hue);
+            dynamicRainbow->set_saturation((saturation + 100.f) / 200.f);
+            dynamicRainbow->set_lightness((lightness + 100.f) / 200.f);
+        };
 
-            Widget *spacer = nullptr;
+        create_floatbox_and_slider(gui, "Hue:", hue, -180.f, 180.f, 1.f, cb);
 
-            auto window = new Dialog(screen, name);
-            gui->set_window(window);
+        create_floatbox_and_slider(gui, "Saturation:", saturation, -100.f, 100.f, 1.f, cb);
 
-            auto fixedRainbow   = new HSLGradient(window);
-            auto dynamicRainbow = new HSLGradient(window);
-            fixedRainbow->set_fixed_width(256);
-            dynamicRainbow->set_fixed_width(256);
+        create_floatbox_and_slider(gui, "Lightness:", lightness, -100.f, 100.f, 1.f, cb);
 
-            auto cb = [dynamicRainbow]()
+        spacer = new Widget(window);
+        spacer->set_fixed_height(5);
+        gui->add_widget("", spacer);
+
+        gui->add_widget("", fixedRainbow);
+
+        spacer = new Widget(window);
+        spacer->set_fixed_height(5);
+        gui->add_widget("", spacer);
+
+        gui->add_widget("", dynamicRainbow);
+
+        spacer = new Widget(window);
+        spacer->set_fixed_height(15);
+        gui->add_widget("", spacer);
+
+        window->set_callback(
+            [&](int cancel)
             {
-                dynamicRainbow->set_hue_offset(hue);
-                dynamicRainbow->set_saturation((saturation + 100.f) / 200.f);
-                dynamicRainbow->set_lightness((lightness + 100.f) / 200.f);
-            };
+                if (cancel)
+                    return;
+                images_panel->async_modify_selected(
+                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    {
+                        return {make_shared<HDRImage>(img->apply_function(
+                                    [](Color4 c)
+                                    {
+                                        HSLAdjust(&c[0], &c[1], &c[2], hue, (saturation + 100.f) / 100.f,
+                                                  (lightness) / 100.f);
+                                        return c;
+                                    },
+                                    xpuimg->roi())),
+                                nullptr};
+                    });
+            });
 
-            create_floatbox_and_slider(gui, "Hue:", hue, -180.f, 180.f, 1.f, cb);
+        gui->add_widget("", window->add_buttons());
 
-            create_floatbox_and_slider(gui, "Saturation:", saturation, -100.f, 100.f, 1.f, cb);
-
-            create_floatbox_and_slider(gui, "Lightness:", lightness, -100.f, 100.f, 1.f, cb);
-
-            spacer = new Widget(window);
-            spacer->set_fixed_height(5);
-            gui->add_widget("", spacer);
-
-            gui->add_widget("", fixedRainbow);
-
-            spacer = new Widget(window);
-            spacer->set_fixed_height(5);
-            gui->add_widget("", spacer);
-
-            gui->add_widget("", dynamicRainbow);
-
-            spacer = new Widget(window);
-            spacer->set_fixed_height(15);
-            gui->add_widget("", spacer);
-
-            window->set_callback(
-                [&](int cancel)
-                {
-                    if (cancel)
-                        return;
-                    images_panel->async_modify_selected(
-                        [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->apply_function(
-                                        [](Color4 c)
-                                        {
-                                            HSLAdjust(&c[0], &c[1], &c[2], hue, (saturation + 100.f) / 100.f,
-                                                      (lightness) / 100.f);
-                                            return c;
-                                        },
-                                        xpuimg->roi())),
-                                    nullptr};
-                        });
-                });
-
-            gui->add_widget("", window->add_buttons());
-
-            window->center();
-            window->request_focus();
-        });
-    return b;
+        window->center();
+        window->request_focus();
+    };
 }

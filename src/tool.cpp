@@ -10,8 +10,10 @@
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
+#include "hscrollpanel.h"
 #include "imagelistpanel.h"
 #include "rasterdraw.h"
+#include "well.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
 #include <nanogui/toolbutton.h>
@@ -95,6 +97,15 @@ void Tool::set_active(bool b)
         m_options->set_visible(b);
         m_screen->request_layout_update();
     }
+    else
+        spdlog::error("Options widget for {} never created.", m_name);
+}
+
+void Tool::update_width(int w)
+{
+    spdlog::trace("update width");
+    if (m_options)
+        m_options->set_fixed_width(w);
     else
         spdlog::error("Options widget for {} never created.", m_name);
 }
@@ -290,13 +301,14 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
     float gamma    = m_image_view->gamma();
     float exposure = m_image_view->exposure();
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options    = new HScrollPanel(parent);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    new Label(m_options, "EV:");
-    auto exposure_slider  = new Slider(m_options);
-    auto exposure_textbox = new FloatBox<float>(m_options, exposure);
-    auto normalize_button = new Button(m_options, "", FA_MAGIC);
+    new Label(content, "EV:");
+    auto exposure_slider  = new Slider(content);
+    auto exposure_textbox = new FloatBox<float>(content, exposure);
+    auto normalize_button = new Button(content, "", FA_MAGIC);
     normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
     normalize_button->set_icon_extra_scale(1.15f);
     normalize_button->set_callback(
@@ -313,7 +325,7 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
         });
     normalize_button->set_tooltip("Normalize exposure.");
 
-    auto reset_button = new Button(m_options, "", FA_UNDO);
+    auto reset_button = new Button(content, "", FA_UNDO);
     reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
     reset_button->set_icon_extra_scale(1.15f);
     reset_button->set_callback(
@@ -326,10 +338,10 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
         });
     reset_button->set_tooltip("Reset tonemapping.");
 
-    auto sRGB_checkbox = new CheckBox(m_options, "sRGB");
-    auto gamma_label   = new Label(m_options, "Gamma:");
-    auto gamma_slider  = new Slider(m_options);
-    auto gamma_textbox = new FloatBox<float>(m_options);
+    auto sRGB_checkbox = new CheckBox(content, "sRGB");
+    auto gamma_label   = new Label(content, "Gamma:");
+    auto gamma_slider  = new Slider(content);
+    auto gamma_textbox = new FloatBox<float>(content);
 
     exposure_textbox->number_format("%1.2f");
     exposure_textbox->set_editable(true);
@@ -417,16 +429,16 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
     sRGB_checkbox->callback()(sRGB);
     sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-    (new CheckBox(m_options, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
+    (new CheckBox(content, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
         ->set_checked(m_image_view->dithering_on());
-    (new CheckBox(m_options, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
+    (new CheckBox(content, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
-    (new CheckBox(m_options, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
+    (new CheckBox(content, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
         ->set_checked(m_image_view->draw_pixel_info_on());
 
     if (m_image_view->screen()->has_float_buffer())
     {
-        auto LDR_checkbox = new CheckBox(m_options, "LDR", [this](bool v) { m_image_view->set_LDR(v); });
+        auto LDR_checkbox = new CheckBox(content, "LDR", [this](bool v) { m_image_view->set_LDR(v); });
         LDR_checkbox->set_checked(m_image_view->LDR());
         LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
     }
@@ -507,13 +519,14 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_brush->set_roundness(settings.value("roundness", 1.f));
     m_brush->set_spacing(settings.value("spacing", 0.f));
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 0));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 0));
 
-    m_options->add<Label>("Size:");
-    m_size_slider  = new Slider(m_options);
-    m_size_textbox = new IntBox<int>(m_options);
+    content->add<Label>("Size:");
+    m_size_slider  = new Slider(content);
+    m_size_textbox = new IntBox<int>(content);
 
     m_size_textbox->set_editable(true);
     m_size_textbox->set_fixed_width(45);
@@ -540,11 +553,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_size_slider->set_value(m_brush->radius());
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Hard:");
-    m_hardness_slider  = new Slider(m_options);
-    m_hardness_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Hard:");
+    m_hardness_slider  = new Slider(content);
+    m_hardness_textbox = new FloatBox<float>(content);
 
     m_hardness_textbox->number_format("%3.0f");
     m_hardness_textbox->set_editable(true);
@@ -572,11 +585,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_hardness_slider->set_value(m_brush->hardness() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Flow:");
-    m_flow_slider  = new Slider(m_options);
-    m_flow_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Flow:");
+    m_flow_slider  = new Slider(content);
+    m_flow_textbox = new FloatBox<float>(content);
 
     m_flow_textbox->number_format("%3.0f");
     m_flow_textbox->set_editable(true);
@@ -604,11 +617,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_flow_slider->set_value(m_brush->flow() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Angle:");
-    m_angle_slider  = new Slider(m_options);
-    m_angle_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Angle:");
+    m_angle_slider  = new Slider(content);
+    m_angle_textbox = new FloatBox<float>(content);
 
     m_angle_textbox->number_format("%3.0f");
     m_angle_textbox->set_editable(true);
@@ -636,11 +649,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_angle_slider->set_value(m_brush->angle());
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Round:");
-    m_roundness_slider  = new Slider(m_options);
-    m_roundness_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Round:");
+    m_roundness_slider  = new Slider(content);
+    m_roundness_textbox = new FloatBox<float>(content);
 
     m_roundness_textbox->number_format("%3.0f");
     m_roundness_textbox->set_editable(true);
@@ -668,11 +681,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_roundness_slider->set_value(m_brush->roundness() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Spacing:");
-    m_spacing_slider  = new Slider(m_options);
-    m_spacing_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Spacing:");
+    m_spacing_slider  = new Slider(content);
+    m_spacing_textbox = new FloatBox<float>(content);
 
     m_spacing_textbox->number_format("%3.0f");
     m_spacing_textbox->set_editable(true);
@@ -700,9 +713,9 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_spacing_slider->set_value(m_brush->spacing() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_smoothing_checkbox = new CheckBox(m_options, "Smoothing");
+    m_smoothing_checkbox = new CheckBox(content, "Smoothing");
     m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
     m_smoothing = settings.value("smoothing", true);
     m_smoothing_checkbox->set_checked(m_smoothing);
@@ -1166,13 +1179,14 @@ Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
 {
     auto &settings = this_tool_settings();
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    new Label(m_options, "Sample size:");
+    new Label(content, "Sample size:");
 
-    auto size = new Dropdown(m_options, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
+    auto size = new Dropdown(content, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
     size->set_tooltip("The number of pixels sampled by the eyedropper.");
     size->set_selected_callback([this](int s) { m_size = s; });
     size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
@@ -1388,13 +1402,14 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 
     m_width = std::clamp(settings.value("width", 2.f), 1.f, 100.f);
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    m_options->add<Label>("Width:");
-    m_width_slider  = new Slider(m_options);
-    m_width_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Width:");
+    m_width_slider  = new Slider(content);
+    m_width_textbox = new FloatBox<float>(content);
 
     m_width_textbox->number_format("%3.1f");
     m_width_textbox->set_editable(true);

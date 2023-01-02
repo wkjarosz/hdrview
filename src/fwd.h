@@ -23,7 +23,6 @@ class XPUImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageView;
-class EditImagePanel;
 class ImageListPanel;
 class Timer;
 
@@ -64,6 +63,8 @@ NAMESPACE_BEGIN(nanogui)
 class Widget;
 class Button;
 class Dropdown;
+class MenuItem;
+class Separator;
 class PopupMenu;
 class PopupWrapper;
 class CheckBox;

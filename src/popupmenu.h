@@ -16,8 +16,15 @@ class MenuItem : public Button
 public:
     MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
 
+    void set_hotkey(int modifiers, int button);
+
     virtual void     draw(NVGcontext *ctx) override;
+    Vector2i         preferred_text_size(NVGcontext *ctx) const;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
+
+protected:
+    int         m_button, m_modifiers;
+    std::string m_hotkey;
 };
 
 class Separator : public MenuItem

@@ -6,6 +6,7 @@
 
 #include "popupmenu.h"
 #include "dropdown.h"
+#include "helpwindow.h"
 #include <cassert>
 #include <nanogui/button.h>
 #include <nanogui/icons.h>
@@ -19,6 +20,8 @@
 
 #include <spdlog/fmt/ostr.h>
 
+using std::string;
+
 NAMESPACE_BEGIN(nanogui)
 
 MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon) : Button(parent, caption, button_icon)
@@ -27,7 +30,46 @@ MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon) 
     m_icon_position = IconPosition::Left;
 }
 
-Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
+void MenuItem::set_hotkey(int modcode, int keycode)
+{
+    string str;
+    if (modcode & SYSTEM_COMMAND_MOD)
+        str += "{CMD}+";
+    if (modcode & GLFW_MOD_ALT)
+        str += "{ALT}+";
+    if (modcode & GLFW_MOD_SHIFT)
+        str += "Shift+";
+
+    // printable characters
+    if (32 <= keycode && keycode < 128)
+        str += char(keycode);
+    else if (keycode == GLFW_KEY_BACKSPACE)
+        str += "Backspace";
+    else if (keycode == GLFW_KEY_DELETE)
+        str += "Delete";
+    else if (keycode == GLFW_KEY_UP)
+        str += "Up";
+    else if (keycode == GLFW_KEY_DOWN)
+        str += "Down";
+    else if (keycode == GLFW_KEY_LEFT)
+        str += "Left";
+    else if (keycode == GLFW_KEY_RIGHT)
+        str += "Right";
+    else if (keycode == GLFW_KEY_PAGE_UP)
+        str += "Page Up";
+    else if (keycode == GLFW_KEY_DOWN)
+        str += "Page Down";
+    else if (keycode == GLFW_KEY_TAB)
+        str += "Tab";
+    else if (keycode == GLFW_KEY_ESCAPE)
+        str += "Esc";
+    else if (keycode == GLFW_KEY_ENTER)
+        str += "Enter";
+
+    m_hotkey = HelpWindow::key_string(str);
+}
+
+Vector2i MenuItem::preferred_text_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     nvgFontSize(ctx, font_size);
@@ -41,6 +83,12 @@ Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
     iw = nvgTextBounds(ctx, 0, 0, utf8(m_icon).data(), nullptr, nullptr) + m_size.y() * 0.15f;
 
     return Vector2i((int)(tw + iw) + 24, font_size + 10);
+}
+
+Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
+{
+    float sw = m_hotkey.size() ? nvgTextBounds(ctx, 0, 0, m_hotkey.c_str(), nullptr, nullptr) + 10 : 0;
+    return preferred_text_size(ctx) + Vector2i(sw, 0);
 }
 
 void MenuItem::draw(NVGcontext *ctx)
@@ -104,25 +152,23 @@ void MenuItem::draw(NVGcontext *ctx)
     if (!m_enabled)
         text_color = m_theme->m_disabled_text_color;
 
-    {
-        auto  icon = m_icon && !m_pushed ? utf8(m_icon) : utf8(FA_CHECK);
-        float ch   = font_size * icon_scale();
-        nvgFontSize(ctx, ch);
-        nvgFontFace(ctx, "icons");
-        float cw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
+    auto  icon = m_icon && !m_pushed ? utf8(m_icon) : utf8(FA_CHECK);
+    float ch   = font_size * icon_scale();
+    nvgFontSize(ctx, ch);
+    nvgFontFace(ctx, "icons");
+    float cw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
 
-        if (m_caption != "")
-            ch += m_size.y() * 0.15f;
+    if (m_caption != "")
+        ch += m_size.y() * 0.15f;
 
-        nvgFillColor(ctx, text_color);
-        nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-        Vector2f check_pos(m_pos.x() + 6, center.y() - 1);
+    nvgFillColor(ctx, text_color);
+    nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+    Vector2f icon_pos(m_pos.x() + 6, center.y() - 1);
 
-        text_pos.x() = check_pos.x() + ch + 2;
+    text_pos.x() = icon_pos.x() + ch + 2;
 
-        if (m_pushed || m_icon)
-            nvgText(ctx, check_pos.x() + (ch - cw - 3) / 2, check_pos.y() + 1, icon.data(), nullptr);
-    }
+    if (m_pushed || m_icon)
+        nvgText(ctx, icon_pos.x() + (ch - cw - 3) / 2, icon_pos.y() + 1, icon.data(), nullptr);
 
     nvgFontSize(ctx, font_size);
     nvgFontFace(ctx, "sans-bold");
@@ -131,6 +177,18 @@ void MenuItem::draw(NVGcontext *ctx)
     nvgText(ctx, text_pos.x(), text_pos.y(), m_caption.c_str(), nullptr);
     nvgFillColor(ctx, text_color);
     nvgText(ctx, text_pos.x(), text_pos.y() + 1, m_caption.c_str(), nullptr);
+
+    if (!m_hotkey.size())
+        return;
+
+    // float    sw = nvgTextBounds(ctx, 0, 0, m_hotkey.c_str(), nullptr, nullptr);
+    Vector2f hotkey_pos(m_pos.x() + m_size.x() - 8, center.y() - 1);
+
+    nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+    nvgFillColor(ctx, m_theme->m_text_color_shadow);
+    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y(), m_hotkey.c_str(), nullptr);
+    nvgFillColor(ctx, m_theme->m_disabled_text_color);
+    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, m_hotkey.c_str(), nullptr);
 }
 
 Separator::Separator(Widget *parent) : MenuItem(parent, "")

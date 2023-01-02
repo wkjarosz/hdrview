@@ -372,8 +372,6 @@ add_executable(
   src/dithermatrix256.h
   src/dropdown.cpp
   src/dropdown.h
-  src/editimagepanel.cpp
-  src/editimagepanel.h
   src/envmap.cpp
   src/envmap.h
   src/filmictonecurve.cpp
@@ -394,6 +392,8 @@ add_executable(
   src/hdrviewscreen.h
   src/helpwindow.cpp
   src/helpwindow.h
+  src/hscrollpanel.cpp
+  src/hscrollpanel.h
   src/hslgradient.cpp
   src/hslgradient.h
   src/imagebutton.cpp

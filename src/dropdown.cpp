@@ -33,6 +33,8 @@ Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
 
     if (m_mode == Menu)
         set_fixed_size(preferred_size(screen()->nvg_context()));
+
+    set_fixed_height(PopupMenu::menu_item_height);
 }
 
 Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons, Mode mode,
@@ -46,7 +48,13 @@ Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     if (m_mode == ComboBox)
-        return Vector2i(m_popup->preferred_size(ctx).x(), font_size + 5);
+    {
+        int w = 0;
+        for (auto c : m_popup->children())
+            if (auto i = dynamic_cast<MenuItem *>(c))
+                w = std::max(w, i->preferred_text_size(ctx).x());
+        return Vector2i(w, font_size + 5);
+    }
     else if (m_mode == Menu)
         return MenuItem::preferred_size(ctx) - Vector2i(5, 0);
     else
@@ -102,7 +110,7 @@ Vector2i Dropdown::compute_position() const
     if (m_mode == ComboBox)
         offset = Vector2i(-3, -m_selected_index * PopupMenu::menu_item_height - 4);
     else if (m_mode == Menu)
-        offset = Vector2i(0, PopupMenu::menu_item_height);
+        offset = Vector2i(0, height() + 4);
     else
         offset = Vector2i(size().x(), -4);
 

@@ -74,8 +74,8 @@ public:
     void load_images(const std::vector<std::string> &filenames);
     bool reload_image(int index, bool force = false);
     void reload_all_images();
-    bool save_image(const std::string &filename, float exposure = 0.f, float gamma = 2.2f, bool sRGB = true,
-                    bool dither = true);
+    bool save_image_as(const std::string &filename, float exposure = 0.f, float gamma = 2.2f, bool sRGB = true,
+                       bool dither = true);
     bool close_image();
     void close_all_images();
 
@@ -84,6 +84,7 @@ public:
     void async_modify_current(const ConstImageCommandWithProgress &command);
     void async_modify_selected(const ConstImageCommand &command);
     void async_modify_selected(const ConstImageCommandWithProgress &command);
+
     void undo();
     void redo();
 
@@ -111,6 +112,7 @@ public:
     void        focus_filter();
 
 private:
+    void        trigger_modify_done();
     void        update_buttons(bool just_created = false);
     void        enable_disable_buttons();
     void        update_histogram();
@@ -128,10 +130,6 @@ private:
 
     HDRViewScreen *m_screen        = nullptr;
     HDRImageView  *m_image_view    = nullptr;
-    Button        *m_reload_btn    = nullptr;
-    Button        *m_save_btn      = nullptr;
-    Button        *m_clone_btn     = nullptr;
-    Button        *m_close_btn     = nullptr;
     TextBox       *m_filter        = nullptr;
     Button        *m_erase_btn     = nullptr;
     Button        *m_regex_btn     = nullptr;
@@ -156,6 +154,5 @@ private:
     nanogui::Vector2i m_dragging_start_pos;
 
     // various callback functions
-    IntCallback  m_async_modify_done_callback;
     VoidCallback m_num_images_callback;
 };
