@@ -621,6 +621,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         {
             m_tools[t]->create_menuitem(menu, tool_hotmods[t], tool_hotkeys[t]);
         }
+        menu->popup()->add<Separator>();
+        add_item(
+            "Swap FG/BG colors", 0, [this] { m_color_btns->swap_colors(); }, 0, 'X', false);
+        add_item(
+            "Default FG/BG colors", 0, [this] { m_color_btns->set_default_colors(); }, 0, 'D', false);
 
         menu = m_menubar->add_menu("View");
 
@@ -630,7 +635,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         m_show_top_panel->set_flags(Button::ToggleButton);
         m_show_top_panel->set_pushed(true);
         m_show_top_panel->set_change_callback([this](bool b) { toggle_top_panel(b); });
-
         add_item(
             "Show side panels", 0, [] {}, 0, GLFW_KEY_TAB, false);
         m_show_side_panels = m_menu_items.back();
