@@ -599,6 +599,11 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Bump to normal map", FA_ARROWS_ALT_H, bump_to_normal_map_callback(m_images_panel));
         add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
 
+        menu = m_menubar->add_menu("Tools");
+
+        auto tool_hotkeys = vector<int>{' ', 'M', 'B', 0, 'S', 'I', 0, 'U'};
+        for (int t = 0; t < (int)Tool_Num_Tools; ++t) { m_tools[t]->create_menuitem(menu, 0, tool_hotkeys[t]); }
+
         menu = m_menubar->add_menu("View");
 
         // FIXME: the check marks need to be kept in sync with keyboard action
@@ -643,14 +648,113 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
             "Increase gamma", 0, [] {}, GLFW_MOD_SHIFT, 'G', false);
         add_item(
             "Decrease gamma", 0, [] {}, 0, 'G', false);
+
         menu->popup()->add<Separator>();
         add_item(
             "Help", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
 
-        menu = m_menubar->add_menu("Tools");
+        // add menu items that are not visible in the mnu but still have keyboard shortcuts
+        {
+            menu = m_menubar->add_menu("Images list");
+            menu->set_visible(false);
 
-        auto tool_hotkeys = vector<int>{' ', 'M', 'B', 0, 'S', 'I', 0, 'U'};
-        for (int t = 0; t < (int)Tool_Num_Tools; ++t) { m_tools[t]->create_menuitem(menu, 0, tool_hotkeys[t]); }
+            menu->popup()->add<Separator>()->set_visible(false);
+            for (int i = 0; i < 9; ++i)
+            {
+                auto cb = [this, i]
+                {
+                    auto nth = m_images_panel->nth_visible_image_index(i);
+                    if (nth >= 0)
+                        m_images_panel->set_current_image_index(nth);
+                };
+                add_item(fmt::format("Select image {}", i + 1), 0, cb, 0, GLFW_KEY_1 + i);
+                m_menu_items.back()->set_visible(false);
+            }
+            menu->popup()->add<Separator>()->set_visible(false);
+            for (int i = 0; i < std::min((int)EChannel::NUM_CHANNELS, 9); ++i)
+            {
+                auto cb = [this, i]
+                {
+                    if (i < EChannel::NUM_CHANNELS)
+                        m_images_panel->set_channel(EChannel(i));
+                };
+                add_item(fmt::format("Select color channel {}", channel_names()[i]), 0, cb, SYSTEM_COMMAND_MOD,
+                         GLFW_KEY_1 + i);
+                m_menu_items.back()->set_visible(false);
+            }
+            menu->popup()->add<Separator>()->set_visible(false);
+            for (int i = 0; i < std::min((int)EBlendMode::NUM_BLEND_MODES, 9); ++i)
+            {
+                auto cb = [this, i]
+                {
+                    if (i < EBlendMode::NUM_BLEND_MODES)
+                        m_images_panel->set_blend_mode(EBlendMode(i));
+                };
+                add_item(fmt::format("Select blend mode {}", blend_mode_names()[i]), 0, cb, GLFW_MOD_SHIFT,
+                         GLFW_KEY_1 + i);
+                m_menu_items.back()->set_visible(false);
+            }
+            menu->popup()->add<Separator>()->set_visible(false);
+            add_item(
+                "Go to previous image", 0,
+                [p = m_images_panel]
+                { p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward)); },
+                0, GLFW_KEY_DOWN);
+            m_menu_items.back()->set_visible(false);
+            add_item(
+                "Go to next image", 0,
+                [p = m_images_panel]
+                { p->set_current_image_index(p->next_visible_image(p->current_image_index(), Forward)); },
+                0, GLFW_KEY_UP);
+            m_menu_items.back()->set_visible(false);
+            menu->popup()->add<Separator>()->set_visible(false);
+            add_item(
+                "Expand selection to previous image", 0,
+                [p = m_images_panel]
+                {
+                    p->select_image_index(p->next_visible_image(p->current_image_index(), Backward));
+                    p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward));
+                },
+                SYSTEM_COMMAND_MOD, GLFW_KEY_DOWN);
+            m_menu_items.back()->set_visible(false);
+            add_item(
+                "Expand selection to next image", 0,
+                [p = m_images_panel]
+                {
+                    p->select_image_index(p->next_visible_image(p->current_image_index(), Forward));
+                    p->set_current_image_index(p->next_visible_image(p->current_image_index(), Forward));
+                },
+                SYSTEM_COMMAND_MOD, GLFW_KEY_UP);
+            m_menu_items.back()->set_visible(false);
+            menu->popup()->add<Separator>()->set_visible(false);
+            add_item(
+                "Send image backward", 0,
+                [this]
+                {
+                    m_images_panel->send_image_backward();
+                    request_layout_update();
+                },
+                GLFW_MOD_ALT, GLFW_KEY_DOWN);
+            m_menu_items.back()->set_visible(false);
+            add_item(
+                "Bring image forward", 0,
+                [this]
+                {
+                    m_images_panel->bring_image_forward();
+                    request_layout_update();
+                },
+                GLFW_MOD_ALT, GLFW_KEY_UP);
+            m_menu_items.back()->set_visible(false);
+
+            menu->popup()->add<Separator>()->set_visible(false);
+            add_item(
+                "Go to previous image", 0, [this] { m_images_panel->swap_current_selected_with_previous(); },
+                GLFW_MOD_ALT, GLFW_KEY_TAB);
+            m_menu_items.back()->set_visible(false);
+            add_item(
+                "Find image", 0, [this] { m_images_panel->focus_filter(); }, SYSTEM_COMMAND_MOD, 'F');
+            m_menu_items.back()->set_visible(false);
+        }
     }
 
     // set the active tool
@@ -1110,27 +1214,12 @@ void HDRViewScreen::show_help_window()
 {
     auto help = new HelpWindow(this);
 
-    auto section_name = "Files";
-    help->add_shortcut(section_name, "{CMD}+O", "Open image");
-    help->add_shortcut(section_name, "{CMD}+N", "New image");
-    help->add_shortcut(section_name, "{CMD}+S", "Save image");
-    help->add_shortcut(section_name, "{CMD}+R or F5", "Reload image");
-    help->add_shortcut(section_name, "{CMD}+Shift+R or Shift+F5", "Reload all images");
-    help->add_shortcut(section_name, "{CMD}+W", "Close image");
-    help->add_shortcut(section_name, "{CMD}+Shift+W", "Close all images");
-
-    section_name = "Interface";
-    help->add_shortcut(section_name, "H", "Show/Hide Help (this Window)");
-    help->add_shortcut(section_name, "T", "Show/Hide the Top Toolbar");
-    help->add_shortcut(section_name, "Tab", "Show/Hide the Side Panels");
-    help->add_shortcut(section_name, "Shift+Tab", "Show/Hide All Panels");
-    help->add_shortcut(section_name, "{CMD}+Q or Esc", "Quit");
-
-    // m_edit_panel->add_shortcuts(help);
     m_images_panel->add_shortcuts(help);
     m_image_view->add_shortcuts(help);
 
     for (auto t : m_tools) t->add_shortcuts(help);
+
+    m_menubar->add_shortcuts(help);
 
     help->center();
 

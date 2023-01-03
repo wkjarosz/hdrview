@@ -634,6 +634,23 @@ bool MenuBar::process_hotkeys(int modifiers, int key)
     return false;
 }
 
+void MenuBar::add_shortcuts(HelpWindow *w)
+{
+    for (auto c : children())
+        if (auto menu = dynamic_cast<Dropdown *>(c))
+        {
+            for (auto c2 : menu->popup()->children())
+            {
+                if (auto sep = dynamic_cast<Separator *>(c2))
+                    if (!sep->visible())
+                        w->add_separator(menu->caption());
+                if (auto item = dynamic_cast<MenuItem *>(c2))
+                    if (item->shortcut_string().size() && !item->visible())
+                        w->add_shortcut(menu->caption(), item->shortcut_string(), item->caption());
+            }
+        }
+}
+
 PopupWrapper::PopupWrapper(Widget *parent, PopupMenu *menu) : Widget(parent), m_right_click_menu(menu)
 {
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));

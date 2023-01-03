@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "fwd.h"
 #include <nanogui/button.h>
 #include <nanogui/popup.h>
 
@@ -16,6 +17,7 @@ class MenuItem : public Button
 public:
     MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
 
+    std::string         shortcut_string() const { return m_hotkey; }
     std::pair<int, int> hotkey() const { return {m_modifiers, m_button}; }
     void                set_hotkey(int modifiers, int button);
 
@@ -125,6 +127,7 @@ public:
     Dropdown *add_menu(const std::string &name);
 
     bool process_hotkeys(int modifiers, int key);
+    void add_shortcuts(HelpWindow *w);
 
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 };

@@ -38,7 +38,6 @@ public:
 
     void draw(NVGcontext *ctx) override;
 
-    virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 
