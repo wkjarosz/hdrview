@@ -610,7 +610,7 @@ bool MenuBar::process_hotkeys(int modifiers, int key)
 
                     if (item->enabled() && key == hotkey && modifiers == hotmod)
                     {
-                        spdlog::trace("Handeling keyboard shortcut {}: {} > {}", item->shortcut_string(),
+                        spdlog::trace("Handling keyboard shortcut {}: {} > {}", item->shortcut_string(),
                                       menu->caption(), item->caption());
                         if (item->flags() & Button::NormalButton)
                         {
@@ -621,7 +621,6 @@ bool MenuBar::process_hotkeys(int modifiers, int key)
                         {
                             if (item->change_callback())
                             {
-                                spdlog::info("change callback: {}", item->pushed());
                                 item->set_pushed(!item->pushed());
                                 item->change_callback()(item->pushed());
                             }
