@@ -119,16 +119,16 @@ std::function<void()> fill_callback(HDRViewScreen *screen, ImageListPanel *image
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->apply_function(
-                                    [&](const Color4 &c)
+                                    [](const Color4 &c)
                                     {
                                         return Color4(enabled[0] ? value[0] : c[0], enabled[1] ? value[1] : c[1],
                                                       enabled[2] ? value[2] : c[2], enabled[3] ? value[3] : c[3]);

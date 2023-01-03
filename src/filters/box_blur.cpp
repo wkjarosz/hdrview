@@ -50,14 +50,14 @@ std::function<void()> box_blur_callback(HDRViewScreen *screen, ImageListPanel *i
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->box_blurred(width, height, progress, border_mode_x,
                                                                        border_mode_y, xpuimg->roi())),

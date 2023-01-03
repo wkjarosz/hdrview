@@ -45,8 +45,8 @@ nanogui::Widget           *create_anchor_widget(nanogui::Widget *window, HDRImag
 
 std::function<void()> cut_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
 std::function<void()> copy_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
-std::function<void()> paste_callback(HDRImagePtr clipboard, ImageListPanel *images_panel);
-std::function<void()> seamless_paste_callback(HDRImagePtr clipboard, ImageListPanel *images_panel);
+std::function<void()> paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
+std::function<void()> seamless_paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
 std::function<void()> rotate_callback(bool clockwise, ImageListPanel *images_panel);
 std::function<void()> flip_callback(bool horizontal, ImageListPanel *images_panel);
 std::function<void()> invert_callback(ImageListPanel *images_panel);

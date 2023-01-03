@@ -110,7 +110,7 @@ std::function<void()> canvas_size_callback(HDRViewScreen *screen, ImageListPanel
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&, popup](int cancel)
+            [images_panel, popup](int cancel)
             {
                 popup->set_visible(false);
 

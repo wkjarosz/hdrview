@@ -23,7 +23,6 @@ static bool         aspect = true;
 
 std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-
     return [&, screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
@@ -109,7 +108,7 @@ std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *ima
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;

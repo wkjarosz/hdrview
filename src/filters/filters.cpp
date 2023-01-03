@@ -207,9 +207,9 @@ std::function<void()> copy_callback(HDRImagePtr &clipboard, ImageListPanel *imag
     };
 }
 
-std::function<void()> paste_callback(HDRImagePtr clipboard, ImageListPanel *images_panel)
+std::function<void()> paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel)
 {
-    return [clipboard, images_panel]
+    return [&clipboard, images_panel]
     {
         auto img = images_panel->current_image();
 
@@ -221,7 +221,7 @@ std::function<void()> paste_callback(HDRImagePtr clipboard, ImageListPanel *imag
             roi = img->box();
 
         images_panel->async_modify_current(
-            [clipboard, roi](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+            [&clipboard, roi](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
                 auto result = make_shared<HDRImage>(*img);
                 result->copy_paste(*clipboard, Box2i(), roi.min.x(), roi.min.y());
@@ -230,9 +230,9 @@ std::function<void()> paste_callback(HDRImagePtr clipboard, ImageListPanel *imag
     };
 }
 
-std::function<void()> seamless_paste_callback(HDRImagePtr clipboard, ImageListPanel *images_panel)
+std::function<void()> seamless_paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel)
 {
-    return [clipboard, images_panel]
+    return [&clipboard, images_panel]
     {
         auto img = images_panel->current_image();
 
@@ -278,7 +278,7 @@ std::function<void()> flip_callback(bool horizontal, ImageListPanel *images_pane
         images_panel->async_modify_selected(
             [horizontal](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
             {
-                return {make_shared<HDRImage>(img->flipped_horizontal()),
+                return {make_shared<HDRImage>(horizontal ? img->flipped_horizontal() : img->flipped_vertical()),
                         make_shared<LambdaUndo>(
                             [horizontal](HDRImagePtr &img2)
                             { *img2 = horizontal ? img2->flipped_horizontal() : img2->flipped_vertical(); })};

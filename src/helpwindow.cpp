@@ -139,8 +139,8 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     m_key_bindings->set_layout(new GroupLayout(20, 6));
 
     add_text(m_key_bindings,
-             "Many items in the menu bar include keyboard shortcuts.\n\n"
-             "The following keyboard shortcuts (which are not in the menu bar) are also support:\n\n",
+             "Most keyboard shortcuts are listed alongside the items in the menu bar. Additionally, the following "
+             "keyboard shortcuts are defined, but not listed in the menu bar:\n\n",
              "sans", 16)
         ->set_fixed_width(fwidth);
 

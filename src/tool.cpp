@@ -197,13 +197,7 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     normalize_button->set_callback(
         [this]()
         {
-            auto img = m_images_panel->current_image();
-            if (!img)
-                return;
-            Color4 mC  = img->image().max();
-            float  mCf = std::max({mC[0], mC[1], mC[2]});
-            spdlog::debug("max value: {}", mCf);
-            m_image_view->set_exposure(log2(1.0f / mCf));
+            m_image_view->normalize_exposure();
             m_images_panel->request_histogram_update(true);
         });
     normalize_button->set_tooltip("Normalize exposure.");
@@ -214,9 +208,7 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     reset_button->set_callback(
         [this]()
         {
-            m_image_view->set_exposure(0.0f);
-            m_image_view->set_gamma(2.2f);
-            m_image_view->set_sRGB(true);
+            m_image_view->reset_tonemapping();
             m_images_panel->request_histogram_update(true);
         });
     reset_button->set_tooltip("Reset tonemapping.");

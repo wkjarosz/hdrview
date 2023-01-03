@@ -607,12 +607,11 @@ bool MenuBar::process_hotkeys(int modifiers, int key)
                 if (auto item = dynamic_cast<MenuItem *>(c2))
                 {
                     auto [hotmod, hotkey] = item->hotkey();
-                    // spdlog::info("{} > {}: {} + {}", menu->caption(), item->caption(), hotmod, hotkey);
 
-                    if (key == hotkey && modifiers == hotmod)
+                    if (item->enabled() && key == hotkey && modifiers == hotmod)
                     {
-                        spdlog::info("Would have processed: {} > {}: {} + {}", menu->caption(), item->caption(), hotmod,
-                                     hotkey);
+                        spdlog::trace("Handeling keyboard shortcut {}: {} > {}", item->shortcut_string(),
+                                      menu->caption(), item->caption());
                         if (item->flags() & Button::NormalButton)
                         {
                             if (item->callback())

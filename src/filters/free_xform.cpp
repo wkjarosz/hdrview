@@ -220,7 +220,7 @@ std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel 
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
