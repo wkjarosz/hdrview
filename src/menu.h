@@ -16,7 +16,8 @@ class MenuItem : public Button
 public:
     MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
 
-    void set_hotkey(int modifiers, int button);
+    std::pair<int, int> hotkey() const { return {m_modifiers, m_button}; }
+    void                set_hotkey(int modifiers, int button);
 
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
@@ -122,6 +123,8 @@ public:
     MenuBar(Widget *parent, const std::string &title = "Untitled");
 
     Dropdown *add_menu(const std::string &name);
+
+    bool process_hotkeys(int modifiers, int key);
 
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 };

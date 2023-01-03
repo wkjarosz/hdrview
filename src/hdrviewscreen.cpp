@@ -252,150 +252,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         panels.push_back(info_panel);
     }
 
-    {
-        auto menu = m_menubar->add_menu("File");
-
-        auto add_item = [this, &menu](const std::string &name, int icon, const std::function<void(void)> &cb,
-                                      int modifier = 0, int button = 0, bool edit = true)
-        {
-            auto i = menu->popup()->add<MenuItem>(name, icon);
-            i->set_hotkey(modifier, button);
-            i->set_callback(cb);
-            m_menu_items.push_back(i);
-            if (edit)
-                m_edit_items.push_back(i);
-        };
-
-        add_item(
-            "New...", FA_FILE, [this] { new_image(); }, SYSTEM_COMMAND_MOD, 'N', false);
-        add_item(
-            "Open...", FA_FOLDER_OPEN, [this] { load_image(); }, SYSTEM_COMMAND_MOD, 'O', false);
-        add_item(
-            "Reload", FA_REDO, [this] { m_images_panel->reload_image(m_images_panel->current_image_index()); },
-            SYSTEM_COMMAND_MOD, 'R');
-        add_item(
-            "Reload all", FA_REDO, [this] { m_images_panel->reload_all_images(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT,
-            'R');
-        menu->popup()->add<Separator>();
-        add_item("Duplicate image", FA_CLONE, [this] { duplicate_image(); });
-        add_item(
-            "Save", FA_SAVE, [this] { save_image(); }, SYSTEM_COMMAND_MOD, 'S');
-        add_item(
-            "Save as...", FA_SAVE, [this] { save_image_as(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'S');
-        menu->popup()->add<Separator>();
-        add_item(
-            "Close", FA_TIMES_CIRCLE, [this] { ask_close_image(m_images_panel->current_image_index()); },
-            SYSTEM_COMMAND_MOD, 'W');
-        add_item(
-            "Close all", FA_TIMES_CIRCLE, [this] { ask_close_all_images(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'W');
-        menu->popup()->add<Separator>();
-        add_item(
-            "Quit...", FA_POWER_OFF, [this] { ask_to_quit(); }, 0, GLFW_KEY_ESCAPE, false);
-
-        menu = m_menubar->add_menu("Edit");
-
-        add_item(
-            "Undo", FA_REPLY, [this] { m_images_panel->undo(); }, SYSTEM_COMMAND_MOD, 'Z');
-        add_item(
-            "Redo", FA_SHARE, [this] { m_images_panel->redo(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'Z');
-        menu->popup()->add<Separator>();
-        add_item("Cut", FA_CUT, cut_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'X');
-        add_item("Copy", FA_COPY, copy_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'C');
-        add_item("Paste", FA_PASTE, paste_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'V');
-        add_item("Seamless paste", FA_PASTE, seamless_paste_callback(m_clipboard, m_images_panel),
-                 SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'V');
-        // FIXME: once we automate processing of menu bar keyboard shortcuts, these callbacks will need to be defined
-        add_item(
-            "Select entire image", FA_EXPAND, [] {}, SYSTEM_COMMAND_MOD, 'A');
-        add_item(
-            "Deselect", 0, [] {}, SYSTEM_COMMAND_MOD, 'D');
-
-        menu = m_menubar->add_menu("Transform");
-
-        add_item("Flip H", FA_ARROWS_ALT_H, flip_callback(true, m_images_panel));
-        add_item("Flip V", FA_ARROWS_ALT_V, flip_callback(false, m_images_panel));
-        add_item("Rotate CW", FA_REDO, rotate_callback(true, m_images_panel), SYSTEM_COMMAND_MOD, '[');
-        add_item("Rotate CCW", FA_UNDO, rotate_callback(false, m_images_panel), SYSTEM_COMMAND_MOD, ']');
-        add_item("Crop to selection", FA_CROP, crop_callback(m_images_panel));
-        add_item("Shift...", FA_ARROWS_ALT, shift_callback(this, m_images_panel));
-        add_item("Canvas size...", FA_COMPRESS, canvas_size_callback(this, m_images_panel));
-        add_item("Resize...", FA_EXPAND, ::resize_callback(this, m_images_panel));
-        add_item("Remap...", FA_GLOBE_AMERICAS, remap_callback(this, m_images_panel));
-        add_item("Transform...", FA_CLONE, free_xform_callback(this, m_images_panel));
-
-        menu = m_menubar->add_menu("Pixels");
-
-        add_item("Fill...", FA_FILL, fill_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, GLFW_KEY_BACKSPACE);
-        add_item("Invert", FA_IMAGE, invert_callback(m_images_panel));
-        add_item("Clamp", FA_ADJUST, clamp_callback(m_images_panel));
-        add_item("Flatten", FA_CHESS_BOARD, flatten_callback(this, m_images_panel));
-        add_item("Zap gremlins...", FA_SKULL_CROSSBONES, zap_gremlins_callback(this, m_images_panel));
-        add_item("Channel mixer...", FA_BLENDER, channel_mixer_callback(this, m_images_panel));
-        add_item("Exposure/gamma...", FA_ADJUST, exposure_gamma_callback(this, m_images_panel));
-        add_item("Brightness/contrast...", FA_ADJUST, brightness_contrast_callback(this, m_images_panel));
-        add_item("Filmic tonemapping...", FA_ADJUST, filmic_tonemapping_callback(this, m_images_panel));
-        add_item("Hue/saturation...", FA_PALETTE, hsl_callback(this, m_images_panel));
-        add_item("Convert color space...", FA_PALETTE, colorspace_callback(this, m_images_panel));
-
-        menu = m_menubar->add_menu("Filter");
-
-        add_item("Gaussian blur...", FA_TINT, gaussian_filter_callback(this, m_images_panel));
-        add_item("Box blur...", FA_TINT, box_blur_callback(this, m_images_panel));
-        add_item("Bilateral filter...", FA_TINT, bilateral_filter_callback(this, m_images_panel));
-        add_item("Unsharp mask...", FA_TINT, unsharp_mask_filter_callback(this, m_images_panel));
-        add_item("Median filter...", FA_TINT, median_filter_callback(this, m_images_panel));
-        add_item("Bump to normal map", FA_ARROWS_ALT_H, bump_to_normal_map_callback(m_images_panel));
-        add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
-
-        menu = m_menubar->add_menu("View");
-
-        // FIXME: the check marks need to be kept in sync with keyboard action
-        add_item(
-            "Show top toolbar", 0, [] {}, 0, 'T', false);
-        m_show_top_panel = m_menu_items.back();
-        m_show_top_panel->set_flags(Button::ToggleButton);
-        m_show_top_panel->set_pushed(true);
-        m_show_top_panel->set_change_callback([this](bool b) { toggle_top_panel(b); });
-
-        add_item(
-            "Show side panels", 0, [] {}, 0, GLFW_KEY_TAB, false);
-        m_show_side_panels = m_menu_items.back();
-        m_show_side_panels->set_flags(Button::ToggleButton);
-        m_show_side_panels->set_pushed(true);
-        m_show_side_panels->set_change_callback([this](bool b) { toggle_side_panels(b); });
-        add_item(
-            "Show all panels", 0, [] {}, GLFW_MOD_SHIFT, GLFW_KEY_TAB, false);
-        m_show_all_panels = m_menu_items.back();
-        m_show_all_panels->set_flags(Button::ToggleButton);
-        m_show_all_panels->set_pushed(true);
-        m_show_all_panels->set_change_callback([this](bool b) { toggle_all_panels(b); });
-        menu->popup()->add<Separator>();
-        add_item(
-            "Zoom in", 0, [this] { m_image_view->zoom_in(); }, 0, '+');
-        add_item(
-            "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
-        add_item(
-            "Fit to screen", 0,
-            [this]
-            {
-                m_image_view->center();
-                m_image_view->fit();
-            },
-            SYSTEM_COMMAND_MOD, '0');
-        menu->popup()->add<Separator>();
-        add_item(
-            "Increase exposure", 0, [] {}, GLFW_MOD_SHIFT, 'E', false);
-        add_item(
-            "Decrease exposure", 0, [] {}, 0, 'E', false);
-        add_item(
-            "Increase gamma", 0, [] {}, GLFW_MOD_SHIFT, 'G', false);
-        add_item(
-            "Decrease gamma", 0, [] {}, 0, 'G', false);
-        menu->popup()->add<Separator>();
-        add_item(
-            "Help", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
-    }
-
     //
     // panel callbacks
     //
@@ -523,7 +379,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
     {
         // create default options bar
-        auto default_tool = m_tools[Tool_None]->create_options_bar(m_top_panel);
+        m_tools[Tool_None]->create_options_bar(m_top_panel);
+        auto default_tool = m_tools[Tool_None]->options_bar();
 
         // marquee tool uses the default options bar
         m_tools[Tool_Rectangular_Marquee]->set_options_bar(default_tool);
@@ -546,10 +403,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         // line tool uses the default options bar
         m_tools[Tool_Line]->create_options_bar(m_top_panel);
     }
-
-    // set the active tool
-    set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
-                               (int)Tool_None, (int)Tool_Num_Tools - 1));
 
     resize_tool_panel(m_settings.value("geometry", json::object()).value("tool panel width", 33));
 
@@ -649,6 +502,160 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_stats_label->set_caption("");
             }
         });
+
+    {
+        auto menu = m_menubar->add_menu("File");
+
+        auto add_item = [this, &menu](const std::string &name, int icon, const std::function<void(void)> &cb,
+                                      int modifier = 0, int button = 0, bool edit = true)
+        {
+            auto i = menu->popup()->add<MenuItem>(name, icon);
+            i->set_hotkey(modifier, button);
+            i->set_callback(cb);
+            m_menu_items.push_back(i);
+            if (edit)
+                m_edit_items.push_back(i);
+        };
+
+        add_item(
+            "New...", FA_FILE, [this] { new_image(); }, SYSTEM_COMMAND_MOD, 'N', false);
+        add_item(
+            "Open...", FA_FOLDER_OPEN, [this] { load_image(); }, SYSTEM_COMMAND_MOD, 'O', false);
+        add_item(
+            "Reload", FA_REDO, [this] { m_images_panel->reload_image(m_images_panel->current_image_index()); },
+            SYSTEM_COMMAND_MOD, 'R');
+        add_item(
+            "Reload all", FA_REDO, [this] { m_images_panel->reload_all_images(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT,
+            'R');
+        menu->popup()->add<Separator>();
+        add_item("Duplicate image", FA_CLONE, [this] { duplicate_image(); });
+        add_item(
+            "Save", FA_SAVE, [this] { save_image(); }, SYSTEM_COMMAND_MOD, 'S');
+        add_item(
+            "Save as...", FA_SAVE, [this] { save_image_as(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'S');
+        menu->popup()->add<Separator>();
+        add_item(
+            "Close", FA_TIMES_CIRCLE, [this] { ask_close_image(m_images_panel->current_image_index()); },
+            SYSTEM_COMMAND_MOD, 'W');
+        add_item(
+            "Close all", FA_TIMES_CIRCLE, [this] { ask_close_all_images(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'W');
+        menu->popup()->add<Separator>();
+        add_item(
+            "Quit...", FA_POWER_OFF, [this] { ask_to_quit(); }, 0, GLFW_KEY_ESCAPE, false);
+
+        menu = m_menubar->add_menu("Edit");
+
+        add_item(
+            "Undo", FA_REPLY, [this] { m_images_panel->undo(); }, SYSTEM_COMMAND_MOD, 'Z');
+        add_item(
+            "Redo", FA_SHARE, [this] { m_images_panel->redo(); }, SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'Z');
+        menu->popup()->add<Separator>();
+        add_item("Cut", FA_CUT, cut_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'X');
+        add_item("Copy", FA_COPY, copy_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'C');
+        add_item("Paste", FA_PASTE, paste_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'V');
+        add_item("Seamless paste", FA_PASTE, seamless_paste_callback(m_clipboard, m_images_panel),
+                 SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'V');
+        // FIXME: once we automate processing of menu bar keyboard shortcuts, these callbacks will need to be defined
+        add_item(
+            "Select entire image", FA_EXPAND, [] {}, SYSTEM_COMMAND_MOD, 'A');
+        add_item(
+            "Deselect", 0, [] {}, SYSTEM_COMMAND_MOD, 'D');
+
+        menu = m_menubar->add_menu("Transform");
+
+        add_item("Flip horizontally", FA_ARROWS_ALT_H, flip_callback(true, m_images_panel));
+        add_item("Flip vertically", FA_ARROWS_ALT_V, flip_callback(false, m_images_panel));
+        add_item("Rotate 90° clockwise", FA_REDO, rotate_callback(true, m_images_panel), SYSTEM_COMMAND_MOD, ']');
+        add_item("Rotate 90° counter clockwise", FA_UNDO, rotate_callback(false, m_images_panel), SYSTEM_COMMAND_MOD,
+                 '[');
+        add_item("Crop to selection", FA_CROP, crop_callback(m_images_panel));
+        add_item("Shift...", FA_ARROWS_ALT, shift_callback(this, m_images_panel));
+        add_item("Canvas size...", FA_COMPRESS, canvas_size_callback(this, m_images_panel));
+        add_item("Resize...", FA_EXPAND, ::resize_callback(this, m_images_panel));
+        add_item("Remap...", FA_GLOBE_AMERICAS, remap_callback(this, m_images_panel));
+        add_item("Transform...", FA_CLONE, free_xform_callback(this, m_images_panel));
+
+        menu = m_menubar->add_menu("Pixels");
+
+        add_item("Fill...", FA_FILL, fill_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, GLFW_KEY_BACKSPACE);
+        add_item("Invert", FA_IMAGE, invert_callback(m_images_panel));
+        add_item("Clamp", FA_ADJUST, clamp_callback(m_images_panel));
+        add_item("Flatten", FA_CHESS_BOARD, flatten_callback(this, m_images_panel));
+        add_item("Zap gremlins...", FA_SKULL_CROSSBONES, zap_gremlins_callback(this, m_images_panel));
+        add_item("Channel mixer...", FA_BLENDER, channel_mixer_callback(this, m_images_panel));
+        add_item("Exposure/gamma...", FA_ADJUST, exposure_gamma_callback(this, m_images_panel));
+        add_item("Brightness/contrast...", FA_ADJUST, brightness_contrast_callback(this, m_images_panel));
+        add_item("Filmic tonemapping...", FA_ADJUST, filmic_tonemapping_callback(this, m_images_panel));
+        add_item("Hue/saturation...", FA_PALETTE, hsl_callback(this, m_images_panel));
+        add_item("Convert color space...", FA_PALETTE, colorspace_callback(this, m_images_panel));
+
+        menu = m_menubar->add_menu("Filter");
+
+        add_item("Gaussian blur...", FA_TINT, gaussian_filter_callback(this, m_images_panel));
+        add_item("Box blur...", FA_TINT, box_blur_callback(this, m_images_panel));
+        add_item("Bilateral filter...", FA_TINT, bilateral_filter_callback(this, m_images_panel));
+        add_item("Unsharp mask...", FA_TINT, unsharp_mask_filter_callback(this, m_images_panel));
+        add_item("Median filter...", FA_TINT, median_filter_callback(this, m_images_panel));
+        add_item("Bump to normal map", FA_ARROWS_ALT_H, bump_to_normal_map_callback(m_images_panel));
+        add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
+
+        menu = m_menubar->add_menu("View");
+
+        // FIXME: the check marks need to be kept in sync with keyboard action
+        add_item(
+            "Show top toolbar", 0, [] {}, 0, 'T', false);
+        m_show_top_panel = m_menu_items.back();
+        m_show_top_panel->set_flags(Button::ToggleButton);
+        m_show_top_panel->set_pushed(true);
+        m_show_top_panel->set_change_callback([this](bool b) { toggle_top_panel(b); });
+
+        add_item(
+            "Show side panels", 0, [] {}, 0, GLFW_KEY_TAB, false);
+        m_show_side_panels = m_menu_items.back();
+        m_show_side_panels->set_flags(Button::ToggleButton);
+        m_show_side_panels->set_pushed(true);
+        m_show_side_panels->set_change_callback([this](bool b) { toggle_side_panels(b); });
+        add_item(
+            "Show all panels", 0, [] {}, GLFW_MOD_SHIFT, GLFW_KEY_TAB, false);
+        m_show_all_panels = m_menu_items.back();
+        m_show_all_panels->set_flags(Button::ToggleButton);
+        m_show_all_panels->set_pushed(true);
+        m_show_all_panels->set_change_callback([this](bool b) { toggle_all_panels(b); });
+        menu->popup()->add<Separator>();
+        add_item(
+            "Zoom in", 0, [this] { m_image_view->zoom_in(); }, 0, '+');
+        add_item(
+            "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
+        add_item(
+            "Fit to screen", 0,
+            [this]
+            {
+                m_image_view->center();
+                m_image_view->fit();
+            },
+            SYSTEM_COMMAND_MOD, '0');
+        menu->popup()->add<Separator>();
+        add_item(
+            "Increase exposure", 0, [] {}, GLFW_MOD_SHIFT, 'E', false);
+        add_item(
+            "Decrease exposure", 0, [] {}, 0, 'E', false);
+        add_item(
+            "Increase gamma", 0, [] {}, GLFW_MOD_SHIFT, 'G', false);
+        add_item(
+            "Decrease gamma", 0, [] {}, 0, 'G', false);
+        menu->popup()->add<Separator>();
+        add_item(
+            "Help", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
+
+        menu = m_menubar->add_menu("Tools");
+
+        auto tool_hotkeys = vector<int>{' ', 'M', 'B', 0, 'S', 'I', 0, 'U'};
+        for (int t = 0; t < (int)Tool_Num_Tools; ++t) { m_tools[t]->create_menuitem(menu, 0, tool_hotkeys[t]); }
+    }
+
+    // set the active tool
+    set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
+                               (int)Tool_None, (int)Tool_Num_Tools - 1));
 
     m_image_view->set_exposure(exposure);
     m_image_view->set_gamma(gamma);
@@ -800,10 +807,33 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
 
 void HDRViewScreen::set_tool(ETool t)
 {
-    m_tool = t;
-    for (int i = 0; i < (int)Tool_Num_Tools; ++i) m_tools[i]->set_active(false);
+    auto set_active = [this](int i, bool b)
+    {
+        auto tool = m_tools[i];
+        spdlog::trace("setting {} active: {}.", tool->name(), b);
+        if (tool->toolbutton())
+            tool->toolbutton()->set_pushed(b);
+        else
+            spdlog::error("Button for {} never created.", tool->name());
 
-    m_tools[t]->set_active(true);
+        if (tool->menuitem())
+            tool->menuitem()->set_pushed(b);
+        else
+            spdlog::error("Menu item for {} never created.", tool->name());
+
+        if (tool->options_bar())
+        {
+            tool->options_bar()->set_visible(b);
+            request_layout_update();
+        }
+        else
+            spdlog::error("Options widget for {} never created.", tool->name());
+    };
+
+    m_tool = t;
+    for (int i = 0; i < (int)Tool_Num_Tools; ++i) set_active(i, false);
+
+    set_active(t, true);
 }
 
 void HDRViewScreen::update_caption()
@@ -1191,12 +1221,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         }
     }
 
-    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
-    {
-        ask_to_quit();
-        return true;
-    }
-
     if (m_tools[m_tool]->keyboard(key, scancode, action, modifiers))
         return true;
 
@@ -1209,162 +1233,10 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (action == GLFW_RELEASE)
         return false;
 
-    switch (key)
-    {
-    case 'Z':
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                m_images_panel->redo();
-            else
-                m_images_panel->undo();
+    m_menubar->process_hotkeys(modifiers, key);
 
-            return true;
-        }
-        return false;
-    case 'X':
-        spdlog::trace("Key `X` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-            cut_callback(m_clipboard, m_images_panel)();
-        else
-            m_color_btns->swap_colors();
-        return true;
-        break;
-
-    case 'C':
-        spdlog::trace("Key `C` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            copy_callback(m_clipboard, m_images_panel)();
-            return true;
-        }
-        break;
-
-    case 'V':
-        spdlog::trace("Key `V` pressed");
-        if ((modifiers & SYSTEM_COMMAND_MOD) && (modifiers & GLFW_MOD_SHIFT))
-        {
-            seamless_paste_callback(m_clipboard, m_images_panel)();
-            return true;
-        }
-        else if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            paste_callback(m_clipboard, m_images_panel)();
-            return true;
-        }
-        break;
-
-    case '[':
-    case ']':
-        spdlog::trace("Key `[` or `]` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            rotate_callback(key == ']', m_images_panel)();
-            return true;
-        }
-        break;
-
-    case GLFW_KEY_BACKSPACE:
-        spdlog::trace("Key BACKSPACE pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            fill_callback(background()->color(), m_images_panel)();
-            return true;
-        }
-        break;
-
-    case 'O':
-        spdlog::trace("KEY `O` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            load_image();
-            return true;
-        }
-        break;
-
-    case 'N':
-        spdlog::trace("KEY `N` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            new_image();
-            return true;
-        }
-        break;
-
-    case 'S':
-        spdlog::trace("KEY 'S' pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            save_image_as();
-            return true;
-        }
-        break;
-
-    case 'R':
-        spdlog::trace("KEY 'R' pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                m_images_panel->reload_all_images();
-            else
-                m_images_panel->reload_image(m_images_panel->current_image_index());
-            return true;
-        }
-        break;
-
-    case GLFW_KEY_F5:
-        spdlog::trace("KEY F5 pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-            m_images_panel->reload_all_images();
-        else
-            m_images_panel->reload_image(m_images_panel->current_image_index());
-        return true;
-
-    case 'W':
-        spdlog::trace("KEY `W` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                ask_close_all_images();
-            else
-                ask_close_image(m_images_panel->current_image_index());
-            return true;
-        }
-        break;
-
-    case 'D':
-        spdlog::trace("Key `D` pressed");
-        m_color_btns->foreground()->set_color(Color(0, 255));
-        m_color_btns->background()->set_color(Color(255, 255));
-        return true;
-
-    case 'T':
-        spdlog::trace("KEY `T` pressed");
-        m_show_top_panel->set_pushed(!m_show_top_panel->pushed());
-        toggle_top_panel(m_show_top_panel->pushed());
-        return true;
-
-    case 'H':
-        spdlog::trace("KEY `H` pressed");
-        show_help_window();
-        return true;
-
-    case GLFW_KEY_TAB:
-        spdlog::trace("KEY TAB pressed");
-        if (modifiers & GLFW_MOD_SHIFT)
-        {
-            m_show_all_panels->set_pushed(!m_show_all_panels->pushed());
-            toggle_all_panels(m_show_all_panels->pushed());
-        }
-        else
-        {
-            m_show_side_panels->set_pushed(!m_show_side_panels->pushed());
-            toggle_side_panels(m_show_side_panels->pushed());
-        }
-
-        request_layout_update();
-        return true;
-    }
+    // FIXME:
+    // crashes: paste, fill,
 
     return false;
 }
@@ -1678,10 +1550,6 @@ void HDRViewScreen::draw_contents()
     }
 
     for (auto i : m_edit_items) i->set_enabled(can_modify);
-
-    // // FIXME: adapt this from editimagepanel::draw
-    // m_undo_btn->set_enabled(can_modify && img->has_undo());
-    // m_redo_btn->set_enabled(can_modify && img->has_redo());
 
     if (m_need_layout_update || m_animation_running)
     {

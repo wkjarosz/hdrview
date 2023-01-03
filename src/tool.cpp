@@ -72,33 +72,34 @@ void Tool::write_settings()
     // settings();
 }
 
-ToolButton *Tool::create_toolbutton(Widget *toolbar)
+void Tool::create_toolbutton(Widget *toolbar)
 {
+    if (m_button)
+        return;
+
     m_button = new ToolButton(toolbar, m_icon);
     m_button->set_fixed_size(Vector2i(0));
     m_button->set_flags(Button::Flags::RadioButton);
     m_button->set_callback([this] { m_screen->set_tool(m_tool); });
     m_button->set_tooltip(m_name + ": " + m_tooltip);
     m_button->set_icon_extra_scale(1.5f);
-
-    return m_button;
 }
 
-void Tool::set_active(bool b)
+void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
 {
-    spdlog::trace("setting {} active: {}.", m_name, b);
-    if (m_button)
-        m_button->set_pushed(b);
-    else
-        spdlog::error("Button for {} never created.", m_name);
+    if (m_menuitem)
+        return;
 
-    if (m_options)
-    {
-        m_options->set_visible(b);
-        m_screen->request_layout_update();
-    }
-    else
-        spdlog::error("Options widget for {} never created.", m_name);
+    m_menuitem = menu->popup()->add<MenuItem>(m_name);
+    m_menuitem->set_hotkey(modifier, button);
+    m_menuitem->set_flags(Button::RadioButton);
+    m_menuitem->set_change_callback(
+        [this](bool b)
+        {
+            spdlog::info("changing tool item {} with parent {}", (void *)m_menuitem, (void *)m_menuitem->parent());
+            m_screen->set_tool((ETool)m_tool);
+            return true;
+        });
 }
 
 void Tool::update_width(int w)
@@ -201,48 +202,48 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
     // handle the no-modifier shortcuts first
     if (modifiers == 0)
     {
-        switch (key)
-        {
-        case ' ':
-            spdlog::trace("KEY ` ` pressed");
-            m_screen->set_tool(Tool_None);
-            return true;
+        // switch (key)
+        // {
+        // case ' ':
+        //     spdlog::trace("KEY ` ` pressed");
+        //     m_screen->set_tool(Tool_None);
+        //     return true;
 
-        case 'M':
-            spdlog::trace("KEY `M` pressed");
-            m_screen->set_tool(Tool_Rectangular_Marquee);
-            return true;
+        // case 'M':
+        //     spdlog::trace("KEY `M` pressed");
+        //     m_screen->set_tool(Tool_Rectangular_Marquee);
+        //     return true;
 
-        case 'S':
-            spdlog::trace("KEY `S` pressed");
-            m_screen->set_tool(Tool_Clone_Stamp);
-            return true;
+        // case 'S':
+        //     spdlog::trace("KEY `S` pressed");
+        //     m_screen->set_tool(Tool_Clone_Stamp);
+        //     return true;
 
-        case 'B':
-            spdlog::trace("KEY `B` pressed");
-            m_screen->set_tool(Tool_Brush);
-            return true;
+        // case 'B':
+        //     spdlog::trace("KEY `B` pressed");
+        //     m_screen->set_tool(Tool_Brush);
+        //     return true;
 
-        case 'U':
-            spdlog::trace("KEY `U` pressed");
-            m_screen->set_tool(Tool_Line);
-            return true;
+        // case 'U':
+        //     spdlog::trace("KEY `U` pressed");
+        //     m_screen->set_tool(Tool_Line);
+        //     return true;
 
-        case 'I':
-            spdlog::trace("KEY `I` pressed");
-            m_screen->set_tool(Tool_Eyedropper);
-            return true;
+        // case 'I':
+        //     spdlog::trace("KEY `I` pressed");
+        //     m_screen->set_tool(Tool_Eyedropper);
+        //     return true;
 
-        case 'G':
-            spdlog::trace("KEY `G` pressed");
-            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
-            return true;
+        // case 'G':
+        //     spdlog::trace("KEY `G` pressed");
+        //     m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
+        //     return true;
 
-        case 'E':
-            spdlog::trace("KEY `E` pressed");
-            m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-            return true;
-        }
+        // case 'E':
+        //     spdlog::trace("KEY `E` pressed");
+        //     m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
+        //     return true;
+        // }
     }
     else
     {
@@ -265,23 +266,23 @@ bool Tool::keyboard(int key, int scancode, int action, int modifiers)
             }
             break;
 
-        case 'G':
-            spdlog::trace("KEY `G` pressed");
-            if (modifiers & GLFW_MOD_SHIFT)
-            {
-                m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-                return true;
-            }
-            break;
+            // case 'G':
+            //     spdlog::trace("KEY `G` pressed");
+            //     if (modifiers & GLFW_MOD_SHIFT)
+            //     {
+            //         m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
+            //         return true;
+            //     }
+            //     break;
 
-        case 'E':
-            spdlog::trace("KEY `E` pressed");
-            if (modifiers & GLFW_MOD_SHIFT)
-            {
-                m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-                return true;
-            }
-            break;
+            // case 'E':
+            //     spdlog::trace("KEY `E` pressed");
+            //     if (modifiers & GLFW_MOD_SHIFT)
+            //     {
+            //         m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
+            //         return true;
+            //     }
+            //     break;
         }
     }
 
@@ -295,8 +296,11 @@ HandTool::HandTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPan
     // empty
 }
 
-Widget *HandTool::create_options_bar(nanogui::Widget *parent)
+void HandTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     bool  sRGB     = m_image_view->sRGB();
     float gamma    = m_image_view->gamma();
     float exposure = m_image_view->exposure();
@@ -442,8 +446,6 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
         LDR_checkbox->set_checked(m_image_view->LDR());
         LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
     }
-
-    return m_options;
 }
 
 RectangularMarquee::RectangularMarquee(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -508,8 +510,11 @@ void BrushTool::write_settings()
 
 bool BrushTool::is_valid(const Vector2i &p) const { return p.x() != std::numeric_limits<int>::lowest(); }
 
-Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
+void BrushTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
     m_brush->set_radius(settings.value("size", 15));
@@ -719,8 +724,6 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
     m_smoothing = settings.value("smoothing", true);
     m_smoothing_checkbox->set_checked(m_smoothing);
-
-    return m_options;
 }
 
 void BrushTool::add_shortcuts(HelpWindow *w)
@@ -1175,8 +1178,11 @@ void Eyedropper::write_settings()
     settings["size"] = m_size;
 }
 
-Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
+void Eyedropper::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
     m_options = new HScrollPanel(parent);
@@ -1191,8 +1197,6 @@ Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
     size->set_selected_callback([this](int s) { m_size = s; });
     size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
     size->set_fixed_height(19);
-
-    return m_options;
 }
 
 bool Eyedropper::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -1396,8 +1400,11 @@ void LineTool::write_settings()
     settings["width"] = m_width_slider->value();
 }
 
-Widget *LineTool::create_options_bar(nanogui::Widget *parent)
+void LineTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
     m_width = std::clamp(settings.value("width", 2.f), 1.f, 100.f);
@@ -1436,8 +1443,6 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 
     m_width_textbox->set_value(m_width);
     m_width_slider->set_value(m_width);
-
-    return m_options;
 }
 
 void LineTool::add_shortcuts(HelpWindow *w)

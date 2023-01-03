@@ -34,6 +34,8 @@ MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon) 
 
 void MenuItem::set_hotkey(int modcode, int keycode)
 {
+    m_button    = keycode;
+    m_modifiers = modcode;
     string str;
     if (modcode & SYSTEM_COMMAND_MOD)
         str += "{CMD}+";
@@ -43,9 +45,11 @@ void MenuItem::set_hotkey(int modcode, int keycode)
         str += "Shift+";
 
     // printable characters
-    if (32 <= keycode && keycode < 128)
+    if (32 < keycode && keycode < 128)
         str += char(keycode);
     // function keys
+    else if (keycode == GLFW_KEY_SPACE)
+        str += "Space";
     else if (GLFW_KEY_F1 <= keycode && keycode <= GLFW_KEY_F25)
         str += fmt::format("F{}", keycode - GLFW_KEY_F1 + 1);
     else if (keycode == GLFW_KEY_BACKSPACE)
@@ -412,6 +416,8 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         if (!m_focused)
             request_focus();
 
+        m_popup->set_position(compute_position());
+
         // first turn focus off on all menu buttons
         for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
 
@@ -589,6 +595,43 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
     }
 
     return Window::mouse_motion_event(p, rel, button, modifiers);
+}
+
+bool MenuBar::process_hotkeys(int modifiers, int key)
+{
+    // spdlog::info("Hot keys:");
+    for (auto c : children())
+        if (auto menu = dynamic_cast<Dropdown *>(c))
+        {
+            for (auto c2 : menu->popup()->children())
+                if (auto item = dynamic_cast<MenuItem *>(c2))
+                {
+                    auto [hotmod, hotkey] = item->hotkey();
+                    // spdlog::info("{} > {}: {} + {}", menu->caption(), item->caption(), hotmod, hotkey);
+
+                    if (key == hotkey && modifiers == hotmod)
+                    {
+                        spdlog::info("Would have processed: {} > {}: {} + {}", menu->caption(), item->caption(), hotmod,
+                                     hotkey);
+                        if (item->flags() & Button::NormalButton)
+                        {
+                            if (item->callback())
+                                item->callback()();
+                        }
+                        else
+                        {
+                            if (item->change_callback())
+                            {
+                                spdlog::info("change callback: {}", item->pushed());
+                                item->set_pushed(!item->pushed());
+                                item->change_callback()(item->pushed());
+                            }
+                        }
+                        return true;
+                    }
+                }
+        }
+    return false;
 }
 
 PopupWrapper::PopupWrapper(Widget *parent, PopupMenu *menu) : Widget(parent), m_right_click_menu(menu)
