@@ -140,7 +140,7 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 
     add_text(m_key_bindings,
              "Most keyboard shortcuts are listed alongside the items in the menu bar. Additionally, the following "
-             "keyboard shortcuts are defined, but not listed in the menu bar:\n\n",
+             "keyboard shortcuts are defined for actions not listed in the menu bar:\n\n",
              "sans", 16)
         ->set_fixed_width(fwidth);
 

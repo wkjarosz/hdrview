@@ -310,13 +310,6 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
         ->set_checked(m_image_view->draw_grid_on());
     (new CheckBox(content, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
         ->set_checked(m_image_view->draw_pixel_info_on());
-
-    if (m_image_view->screen()->has_float_buffer())
-    {
-        auto LDR_checkbox = new CheckBox(content, "LDR", [this](bool v) { m_image_view->set_LDR(v); });
-        LDR_checkbox->set_checked(m_image_view->LDR());
-        LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
-    }
 }
 
 RectangularMarquee::RectangularMarquee(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,

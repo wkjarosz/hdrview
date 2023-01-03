@@ -166,23 +166,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         auto row = new Widget(info_panel);
         row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
 
-        new Label(row, "File:", "sans-bold");
-        m_path_info_label = new Label(row, "");
-        m_path_info_label->set_fixed_width(135);
-
-        row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
-        new Label(row, "Resolution:", "sans-bold");
-        m_res_info_label = new Label(row, "");
-        m_res_info_label->set_fixed_width(135);
-
-        // spacer
-        (new Widget(info_panel))->set_fixed_height(5);
-
-        row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
-
         auto tb = new ToolButton(row, FA_EYE_DROPPER);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
@@ -490,15 +473,10 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         {
             if (auto img = m_images_panel->current_image())
             {
-                m_path_info_label->set_caption(fmt::format("{}", img->filename()));
-                m_res_info_label->set_caption(fmt::format("{} × {}", img->width(), img->height()));
-
-                perform_layout();
+                // perform_layout();
             }
             else
             {
-                m_path_info_label->set_caption("");
-                m_res_info_label->set_caption("");
                 m_stats_label->set_caption("");
             }
         });
@@ -556,6 +534,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Paste", FA_PASTE, paste_callback(m_clipboard, m_images_panel), SYSTEM_COMMAND_MOD, 'V');
         add_item("Seamless paste", FA_PASTE, seamless_paste_callback(m_clipboard, m_images_panel),
                  SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'V');
+        menu->popup()->add<Separator>();
         add_item(
             "Select entire image", FA_EXPAND,
             [this]
@@ -580,13 +559,15 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Rotate 90° clockwise", FA_REDO, rotate_callback(true, m_images_panel), SYSTEM_COMMAND_MOD, ']');
         add_item("Rotate 90° counter clockwise", FA_UNDO, rotate_callback(false, m_images_panel), SYSTEM_COMMAND_MOD,
                  '[');
+        menu->popup()->add<Separator>();
         add_item("Crop to selection", FA_CROP, crop_callback(m_images_panel), GLFW_MOD_ALT, 'C');
         add_item("Image size...", FA_EXPAND, ::resize_callback(this, m_images_panel), GLFW_MOD_ALT | SYSTEM_COMMAND_MOD,
                  'I');
         add_item("Canvas size...", FA_COMPRESS, canvas_size_callback(this, m_images_panel),
                  GLFW_MOD_ALT | SYSTEM_COMMAND_MOD, 'C');
+        menu->popup()->add<Separator>();
         add_item("Shift...", FA_ARROWS_ALT, shift_callback(this, m_images_panel));
-        add_item("Remap...", FA_GLOBE_AMERICAS, remap_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, 'M');
+        add_item("Remap...", FA_GLOBE_AMERICAS, remap_callback(this, m_images_panel), GLFW_MOD_ALT, 'M');
         add_item("Transform...", FA_CLONE, free_xform_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, 'T');
 
         menu = m_menubar->add_menu("Pixels");
@@ -595,11 +576,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
         add_item("Invert", FA_IMAGE, invert_callback(m_images_panel), SYSTEM_COMMAND_MOD, 'I');
         add_item("Clamp", FA_ADJUST, clamp_callback(m_images_panel));
         add_item("Flatten", FA_CHESS_BOARD, flatten_callback(this, m_images_panel));
+        add_item("Flatten with bg color", FA_CHESS_BOARD, flatten_with_bg_callback(this, m_images_panel));
         add_item("Zap gremlins...", FA_SKULL_CROSSBONES, zap_gremlins_callback(this, m_images_panel));
-        add_item("Channel mixer...", FA_BLENDER, channel_mixer_callback(this, m_images_panel));
+        menu->popup()->add<Separator>();
         add_item("Exposure/gamma...", FA_ADJUST, exposure_gamma_callback(this, m_images_panel));
         add_item("Brightness/contrast...", FA_ADJUST, brightness_contrast_callback(this, m_images_panel));
         add_item("Filmic tonemapping...", FA_ADJUST, filmic_tonemapping_callback(this, m_images_panel));
+        menu->popup()->add<Separator>();
+        add_item("Channel mixer...", FA_BLENDER, channel_mixer_callback(this, m_images_panel));
         add_item("Hue/saturation...", FA_PALETTE, hsl_callback(this, m_images_panel));
         add_item("Convert color space...", FA_PALETTE, colorspace_callback(this, m_images_panel));
 
@@ -631,35 +615,66 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         add_item(
             "Show top toolbar", 0, [] {}, 0, 'T', false);
-        m_show_top_panel = m_menu_items.back();
-        m_show_top_panel->set_flags(Button::ToggleButton);
-        m_show_top_panel->set_pushed(true);
-        m_show_top_panel->set_change_callback([this](bool b) { toggle_top_panel(b); });
+        auto show_top_panel = m_menu_items.back();
+
         add_item(
             "Show side panels", 0, [] {}, 0, GLFW_KEY_TAB, false);
-        m_show_side_panels = m_menu_items.back();
-        m_show_side_panels->set_flags(Button::ToggleButton);
-        m_show_side_panels->set_pushed(true);
-        m_show_side_panels->set_change_callback([this](bool b) { toggle_side_panels(b); });
+        auto show_side_panels = m_menu_items.back();
+
         add_item(
             "Show all panels", 0, [] {}, GLFW_MOD_SHIFT, GLFW_KEY_TAB, false);
-        m_show_all_panels = m_menu_items.back();
-        m_show_all_panels->set_flags(Button::ToggleButton);
-        m_show_all_panels->set_pushed(true);
-        m_show_all_panels->set_change_callback([this](bool b) { toggle_all_panels(b); });
+        auto show_all_panels = m_menu_items.back();
+
+        show_top_panel->set_flags(Button::ToggleButton);
+        show_top_panel->set_pushed(true);
+        show_top_panel->set_change_callback(
+            [this, show_top_panel, show_side_panels, show_all_panels](bool b)
+            {
+                m_gui_animation_start = glfwGetTime();
+                push_gui_refresh();
+                m_animation_running = true;
+                m_animation_goal =
+                    b ? EAnimationGoal(m_animation_goal | TOP_PANEL) : EAnimationGoal(m_animation_goal & ~TOP_PANEL);
+                show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+                request_layout_update();
+            });
+        show_side_panels->set_flags(Button::ToggleButton);
+        show_side_panels->set_pushed(true);
+        show_side_panels->set_change_callback(
+            [this, show_top_panel, show_side_panels, show_all_panels](bool b)
+            {
+                m_gui_animation_start = glfwGetTime();
+                push_gui_refresh();
+                m_animation_running = true;
+                m_animation_goal    = b ? EAnimationGoal(m_animation_goal | SIDE_PANELS)
+                                        : EAnimationGoal(m_animation_goal & ~SIDE_PANELS);
+                show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+                request_layout_update();
+            });
+        show_all_panels->set_flags(Button::ToggleButton);
+        show_all_panels->set_pushed(true);
+        show_all_panels->set_change_callback(
+            [this, show_top_panel, show_side_panels](bool b)
+            {
+                m_gui_animation_start = glfwGetTime();
+                push_gui_refresh();
+                m_animation_running = true;
+                m_animation_goal    = b ? EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL) : EAnimationGoal(0);
+                show_side_panels->set_pushed(b);
+                show_top_panel->set_pushed(b);
+                request_layout_update();
+            });
         menu->popup()->add<Separator>();
         add_item(
             "Zoom in", 0, [this] { m_image_view->zoom_in(); }, 0, '+');
         add_item(
             "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
-        add_item(
-            "Fit to screen", 0,
-            [this]
-            {
-                m_image_view->center();
-                m_image_view->fit();
-            },
-            SYSTEM_COMMAND_MOD, '0');
+        add_item("Fit to screen", 0,
+                 [this]
+                 {
+                     m_image_view->center();
+                     m_image_view->fit();
+                 });
         menu->popup()->add<Separator>();
         add_item(
             "Increase exposure", 0, [this] { m_image_view->set_exposure(m_image_view->exposure() + 0.25f); },
@@ -675,6 +690,14 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_images_panel->request_histogram_update(true);
             },
             0, 'N', false);
+        menu->popup()->add<Separator>();
+        add_item(
+            "Increase gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); },
+            GLFW_MOD_SHIFT, 'G', false);
+        add_item(
+            "Decrease gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0,
+            'G', false);
+        menu->popup()->add<Separator>();
         add_item(
             "Reset tonemapping", 0,
             [this]()
@@ -683,13 +706,16 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                 m_images_panel->request_histogram_update(true);
             },
             0, '0', false);
-
-        add_item(
-            "Increase gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); },
-            GLFW_MOD_SHIFT, 'G', false);
-        add_item(
-            "Decrease gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0,
-            'G', false);
+        if (has_float_buffer())
+        {
+            add_item(
+                "Force LDR display", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
+            auto LDR_checkbox = m_menu_items.back();
+            LDR_checkbox->set_flags(Button::ToggleButton);
+            LDR_checkbox->set_pushed(m_image_view->LDR());
+            LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
+            LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_LDR(v); });
+        }
         menu->popup()->add<Separator>();
 
         add_item(
@@ -721,7 +747,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
                         m_images_panel->set_channel(EChannel(i));
                 };
                 add_item(fmt::format("Select color channel {}", channel_names()[i]), 0, cb, SYSTEM_COMMAND_MOD,
-                         GLFW_KEY_1 + i);
+                         GLFW_KEY_0 + i);
                 m_menu_items.back()->set_visible(false);
             }
             menu->popup()->add<Separator>()->set_visible(false);
@@ -1285,38 +1311,6 @@ Dialog *HDRViewScreen::active_dialog() const
     return nullptr;
 }
 
-void HDRViewScreen::toggle_all_panels(bool b)
-{
-    m_gui_animation_start = glfwGetTime();
-    push_gui_refresh();
-    m_animation_running = true;
-    m_animation_goal    = b ? EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL) : EAnimationGoal(0);
-    m_show_side_panels->set_pushed(b);
-    m_show_top_panel->set_pushed(b);
-    request_layout_update();
-}
-
-void HDRViewScreen::toggle_side_panels(bool b)
-{
-    m_gui_animation_start = glfwGetTime();
-    push_gui_refresh();
-    m_animation_running = true;
-    m_animation_goal =
-        b ? EAnimationGoal(m_animation_goal | SIDE_PANELS) : EAnimationGoal(m_animation_goal & ~SIDE_PANELS);
-    m_show_all_panels->set_pushed(m_show_side_panels->pushed() && m_show_top_panel->pushed());
-    request_layout_update();
-}
-
-void HDRViewScreen::toggle_top_panel(bool b)
-{
-    m_gui_animation_start = glfwGetTime();
-    push_gui_refresh();
-    m_animation_running = true;
-    m_animation_goal = b ? EAnimationGoal(m_animation_goal | TOP_PANEL) : EAnimationGoal(m_animation_goal & ~TOP_PANEL);
-    m_show_all_panels->set_pushed(m_show_side_panels->pushed() && m_show_top_panel->pushed());
-    request_layout_update();
-}
-
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
     if (Screen::keyboard_event(key, scancode, action, modifiers))
@@ -1547,8 +1541,6 @@ void HDRViewScreen::update_layout()
             toolpanel_shift     = (m_animation_goal & SIDE_PANELS) ? 0 : toolpanel_width;
             header_shift        = (m_animation_goal & TOP_PANEL) ? 0 : -header_height;
             footer_shift        = (m_animation_goal & BOTTOM_PANEL) ? 0 : footer_height;
-
-            m_show_side_panels->set_pushed(m_animation_goal & SIDE_PANELS);
         }
         // animate the location of the panels
         else
@@ -1564,7 +1556,6 @@ void HDRViewScreen::update_layout()
                 start           = (m_animation_goal & SIDE_PANELS) ? double(toolpanel_width) : 0.0;
                 end             = (m_animation_goal & SIDE_PANELS) ? 0.0 : double(toolpanel_width);
                 toolpanel_shift = static_cast<int>(round(lerp(start, end, smoothstep(0.0, duration, elapsed))));
-                m_show_side_panels->set_pushed(true);
             }
             // only animate the header if it isn't already at the goal position
             if (((m_animation_goal & TOP_PANEL) && header_shift != 0) ||

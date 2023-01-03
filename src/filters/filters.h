@@ -51,7 +51,6 @@ std::function<void()> rotate_callback(bool clockwise, ImageListPanel *images_pan
 std::function<void()> flip_callback(bool horizontal, ImageListPanel *images_panel);
 std::function<void()> invert_callback(ImageListPanel *images_panel);
 std::function<void()> clamp_callback(ImageListPanel *images_panel);
-std::function<void()> clamp_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
 std::function<void()> crop_callback(ImageListPanel *images_panel);
 std::function<void()> bump_to_normal_map_callback(ImageListPanel *images_panel);
 std::function<void()> irradiance_envmap_callback(ImageListPanel *images_panel);
@@ -70,6 +69,7 @@ std::function<void()> remap_callback(HDRViewScreen *screen, ImageListPanel *imag
 std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
 std::function<void()> canvas_size_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
 std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> flatten_with_bg_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
 std::function<void()> flatten_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
 std::function<void()> fill_callback(const nanogui::Color &nfg, ImageListPanel *images_panel);
 std::function<void()> fill_callback(HDRViewScreen *screen, ImageListPanel *images_panel);

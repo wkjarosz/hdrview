@@ -109,7 +109,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_channels = new Dropdown(grid);
         for (int i = 0; i < (int)channel_names().size(); ++i)
-            add_item(m_channels, channel_names()[i], i, i <= 8 ? SYSTEM_COMMAND_MOD : 0, i <= 8 ? GLFW_KEY_1 + i : 0);
+            add_item(m_channels, channel_names()[i], i, i <= 8 ? SYSTEM_COMMAND_MOD : 0, i <= 8 ? GLFW_KEY_0 + i : 0);
         m_channels->set_selected_index(0);
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);

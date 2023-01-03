@@ -104,22 +104,6 @@ std::function<void()> clamp_callback(ImageListPanel *images_panel)
     };
 }
 
-std::function<void()> clamp_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
-{
-    return [screen, images_panel]
-    {
-        images_panel->async_modify_selected(
-            [screen](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
-            {
-                Color  nbg = screen->background()->color();
-                Color4 bg(nbg.r(), nbg.g(), nbg.b(), nbg.a());
-                return {make_shared<HDRImage>(
-                            img->apply_function([&bg](const Color4 &c) { return c.over(bg); }, xpuimg->roi())),
-                        nullptr};
-            });
-    };
-}
-
 std::function<void()> crop_callback(ImageListPanel *images_panel)
 {
     return [images_panel]

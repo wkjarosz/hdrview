@@ -77,9 +77,6 @@ private:
     bool    at_tool_panel_edge(const Vector2i &p);
     void    resize_side_panel(int w);
     void    resize_tool_panel(int w);
-    void    toggle_all_panels(bool b);
-    void    toggle_side_panels(bool b);
-    void    toggle_top_panel(bool b);
     Dialog *active_dialog() const;
 
     Window         *m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
@@ -87,12 +84,8 @@ private:
     ImageListPanel *m_images_panel;
     MenuBar        *m_menubar;
 
-    MenuItem *m_show_side_panels, *m_show_top_panel, *m_show_all_panels;
-
     Label              *m_zoom_label;
     Label              *m_status_label;
-    Label              *m_path_info_label;
-    Label              *m_res_info_label;
     Label              *m_color32_info_label;
     Label              *m_color8_info_label;
     Label              *m_ruler_info_label;

@@ -137,17 +137,16 @@ std::function<void()> remap_callback(HDRViewScreen *screen, ImageListPanel *imag
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
-                auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
-
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
+                        auto warp = [](const Vector2f &uv) { return convertEnvMappingUV(from, to, uv); };
                         return {make_shared<HDRImage>(img->resampled(width, height, progress, warp, samples, sampler,
                                                                      border_mode_x, border_mode_y)),
                                 nullptr};
