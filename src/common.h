@@ -74,15 +74,15 @@ std::vector<T> linspaced(size_t num, T a, T b)
  * @brief Inverse linear interpolation.
  *
  * Given three values \a a, \a b, \a m, determines the parameter value
- * \a t, such that m = lerp(a,b,lerpFactor(a,b,m))
+ * \a t, such that m = lerp(a,b,lerp_factor(a,b,m))
  *
  * @param a The start point
  * @param b The end point
  * @param m A third point (typically between \a a and \a b)
- * @return  The interpolation factor \a t such that m = lerp(a,b,lerpFactor(a,b,m))
+ * @return  The interpolation factor \a t such that m = lerp(a,b,lerp_factor(a,b,m))
  */
 template <typename T>
-inline T lerpFactor(T a, T b, T m)
+inline T lerp_factor(T a, T b, T m)
 {
     return (m - a) / (b - a);
 }
@@ -98,9 +98,9 @@ inline T lerpFactor(T a, T b, T m)
  * @return  A value between 0.0 and 1.0.
  */
 template <typename T>
-inline T smoothStep(T a, T b, T x)
+inline T smoothstep(T a, T b, T x)
 {
-    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerp_factor(a, b, x), T(0), T(1));
     return t * t * (T(3) - T(2) * t);
 }
 
@@ -116,9 +116,9 @@ inline T smoothStep(T a, T b, T x)
  * @return  A value between 0.0 and 1.0.
  */
 template <typename T>
-inline T smootherStep(T a, T b, T x)
+inline T smootherstep(T a, T b, T x)
 {
-    T t = std::clamp(lerpFactor(a, b, x), T(0), T(1));
+    T t = std::clamp(lerp_factor(a, b, x), T(0), T(1));
     return t * t * t * (t * (t * T(6) - T(15)) + T(10));
 }
 
@@ -318,9 +318,9 @@ enum EDirection
 #define HDRVIEW_BACKEND      "Metal"
 #endif
 
-int hdrview_version_major();
-int hdrview_version_minor();
-int hdrview_version_patch();
+int         hdrview_version_major();
+int         hdrview_version_minor();
+int         hdrview_version_patch();
 std::string hdrview_version();
 std::string hdrview_git_hash();
 std::string hdrview_git_describe();

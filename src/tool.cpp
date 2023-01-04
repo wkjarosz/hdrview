@@ -6,12 +6,14 @@
 
 #include "tool.h"
 #include "brush.h"
-#include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
+#include "hscrollpanel.h"
 #include "imagelistpanel.h"
+#include "menu.h"
 #include "rasterdraw.h"
+#include "well.h"
 #include <hdrview_resources.h>
 #include <nanogui/icons.h>
 #include <nanogui/toolbutton.h>
@@ -70,31 +72,41 @@ void Tool::write_settings()
     // settings();
 }
 
-ToolButton *Tool::create_toolbutton(Widget *toolbar)
+void Tool::create_toolbutton(Widget *toolbar)
 {
+    if (m_button)
+        return;
+
     m_button = new ToolButton(toolbar, m_icon);
     m_button->set_fixed_size(Vector2i(0));
     m_button->set_flags(Button::Flags::RadioButton);
     m_button->set_callback([this] { m_screen->set_tool(m_tool); });
     m_button->set_tooltip(m_name + ": " + m_tooltip);
     m_button->set_icon_extra_scale(1.5f);
-
-    return m_button;
 }
 
-void Tool::set_active(bool b)
+void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
 {
-    spdlog::trace("setting {} active: {}.", m_name, b);
-    if (m_button)
-        m_button->set_pushed(b);
-    else
-        spdlog::error("Button for {} never created.", m_name);
+    if (m_menuitem)
+        return;
 
+    m_menuitem = menu->popup()->add<MenuItem>(m_name);
+    m_menuitem->set_hotkey(modifier, button);
+    m_menuitem->set_flags(Button::RadioButton);
+    m_menuitem->set_change_callback(
+        [this](bool b)
+        {
+            spdlog::info("changing tool item {} with parent {}", (void *)m_menuitem, (void *)m_menuitem->parent());
+            m_screen->set_tool((ETool)m_tool);
+            return true;
+        });
+}
+
+void Tool::update_width(int w)
+{
+    spdlog::trace("update width");
     if (m_options)
-    {
-        m_options->set_visible(b);
-        m_screen->request_layout_update();
-    }
+        m_options->set_fixed_width(w);
     else
         spdlog::error("Options widget for {} never created.", m_name);
 }
@@ -152,130 +164,9 @@ bool Tool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int mo
     return false;
 }
 
-void Tool::add_shortcuts(HelpWindow *w)
-{
-    string section_name = "Display/Tonemapping Options";
+void Tool::add_shortcuts(HelpWindow *w) { return; }
 
-    if (w->add_section(section_name))
-    {
-        w->add_shortcut(section_name, "E / Shift+E", "Decrease/Increase Exposure");
-        w->add_shortcut(section_name, "G / Shift+G", "Decrease/Increase Gamma");
-        // w->add_shortcut(section_name, "R", "Reset tonemapping");
-        // w->add_shortcut(section_name, "N", "Normalize Image to [0,1]");
-    }
-
-    section_name = "Tools";
-    if (w->add_section(section_name))
-    {
-        w->add_shortcut(section_name, "Space", "Hand tool");
-        w->add_shortcut(section_name, "M", "Rectangular marquee tool");
-        w->add_shortcut(section_name, "S", "Clone stamp tool");
-        w->add_shortcut(section_name, "B", "Brush tool");
-        w->add_shortcut(section_name, "U", "Line tool");
-        w->add_shortcut(section_name, "I", "Eyedropper tool");
-        w->add_shortcut(section_name, "{CMD}+A", "Select entire image");
-        w->add_shortcut(section_name, "{CMD}+D", "Deselect");
-        w->add_shortcut(section_name, "D", "Default foreground/background colors");
-        w->add_shortcut(section_name, "X", "Swap foreground/background colors");
-    }
-}
-
-bool Tool::keyboard(int key, int scancode, int action, int modifiers)
-{
-    auto img = m_images_panel->current_image();
-
-    if (action == GLFW_RELEASE)
-        return false;
-
-    // handle the no-modifier shortcuts first
-    if (modifiers == 0)
-    {
-        switch (key)
-        {
-        case ' ':
-            spdlog::trace("KEY ` ` pressed");
-            m_screen->set_tool(Tool_None);
-            return true;
-
-        case 'M':
-            spdlog::trace("KEY `M` pressed");
-            m_screen->set_tool(Tool_Rectangular_Marquee);
-            return true;
-
-        case 'S':
-            spdlog::trace("KEY `S` pressed");
-            m_screen->set_tool(Tool_Clone_Stamp);
-            return true;
-
-        case 'B':
-            spdlog::trace("KEY `B` pressed");
-            m_screen->set_tool(Tool_Brush);
-            return true;
-
-        case 'U':
-            spdlog::trace("KEY `U` pressed");
-            m_screen->set_tool(Tool_Line);
-            return true;
-
-        case 'I':
-            spdlog::trace("KEY `I` pressed");
-            m_screen->set_tool(Tool_Eyedropper);
-            return true;
-
-        case 'G':
-            spdlog::trace("KEY `G` pressed");
-            m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f));
-            return true;
-
-        case 'E':
-            spdlog::trace("KEY `E` pressed");
-            m_image_view->set_exposure(m_image_view->exposure() - 0.25f);
-            return true;
-        }
-    }
-    else
-    {
-        switch (key)
-        {
-        case 'A':
-            spdlog::trace("Key `A` pressed");
-            if (img && modifiers & SYSTEM_COMMAND_MOD)
-            {
-                img->roi() = img->box();
-                return true;
-            }
-            break;
-        case 'D':
-            spdlog::trace("Key `D` pressed");
-            if (img && modifiers & SYSTEM_COMMAND_MOD)
-            {
-                img->roi() = Box2i();
-                return true;
-            }
-            break;
-
-        case 'G':
-            spdlog::trace("KEY `G` pressed");
-            if (modifiers & GLFW_MOD_SHIFT)
-            {
-                m_image_view->set_gamma(m_image_view->gamma() + 0.02f);
-                return true;
-            }
-            break;
-
-        case 'E':
-            spdlog::trace("KEY `E` pressed");
-            if (modifiers & GLFW_MOD_SHIFT)
-            {
-                m_image_view->set_exposure(m_image_view->exposure() + 0.25f);
-                return true;
-            }
-            break;
-        }
-    }
-
-    return false;
-}
+bool Tool::keyboard(int key, int scancode, int action, int modifiers) { return false; }
 
 HandTool::HandTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
                    const string &tooltip, int icon, ETool tool) :
@@ -284,52 +175,48 @@ HandTool::HandTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPan
     // empty
 }
 
-Widget *HandTool::create_options_bar(nanogui::Widget *parent)
+void HandTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     bool  sRGB     = m_image_view->sRGB();
     float gamma    = m_image_view->gamma();
     float exposure = m_image_view->exposure();
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options    = new HScrollPanel(parent);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    new Label(m_options, "EV:");
-    auto exposure_slider  = new Slider(m_options);
-    auto exposure_textbox = new FloatBox<float>(m_options, exposure);
-    auto normalize_button = new Button(m_options, "", FA_MAGIC);
+    new Label(content, "EV:");
+    auto exposure_slider  = new Slider(content);
+    auto exposure_textbox = new FloatBox<float>(content, exposure);
+    auto normalize_button = new Button(content, "", FA_MAGIC);
     normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
     normalize_button->set_icon_extra_scale(1.15f);
     normalize_button->set_callback(
         [this]()
         {
-            auto img = m_images_panel->current_image();
-            if (!img)
-                return;
-            Color4 mC  = img->image().max();
-            float  mCf = std::max({mC[0], mC[1], mC[2]});
-            spdlog::debug("max value: {}", mCf);
-            m_image_view->set_exposure(log2(1.0f / mCf));
+            m_image_view->normalize_exposure();
             m_images_panel->request_histogram_update(true);
         });
     normalize_button->set_tooltip("Normalize exposure.");
 
-    auto reset_button = new Button(m_options, "", FA_UNDO);
+    auto reset_button = new Button(content, "", FA_UNDO);
     reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
     reset_button->set_icon_extra_scale(1.15f);
     reset_button->set_callback(
         [this]()
         {
-            m_image_view->set_exposure(0.0f);
-            m_image_view->set_gamma(2.2f);
-            m_image_view->set_sRGB(true);
+            m_image_view->reset_tonemapping();
             m_images_panel->request_histogram_update(true);
         });
     reset_button->set_tooltip("Reset tonemapping.");
 
-    auto sRGB_checkbox = new CheckBox(m_options, "sRGB");
-    auto gamma_label   = new Label(m_options, "Gamma:");
-    auto gamma_slider  = new Slider(m_options);
-    auto gamma_textbox = new FloatBox<float>(m_options);
+    auto sRGB_checkbox = new CheckBox(content, "sRGB");
+    auto gamma_label   = new Label(content, "Gamma:");
+    auto gamma_slider  = new Slider(content);
+    auto gamma_textbox = new FloatBox<float>(content);
 
     exposure_textbox->number_format("%1.2f");
     exposure_textbox->set_editable(true);
@@ -417,21 +304,12 @@ Widget *HandTool::create_options_bar(nanogui::Widget *parent)
     sRGB_checkbox->callback()(sRGB);
     sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-    (new CheckBox(m_options, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
+    (new CheckBox(content, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
         ->set_checked(m_image_view->dithering_on());
-    (new CheckBox(m_options, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
+    (new CheckBox(content, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
-    (new CheckBox(m_options, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
+    (new CheckBox(content, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))
         ->set_checked(m_image_view->draw_pixel_info_on());
-
-    if (m_image_view->screen()->has_float_buffer())
-    {
-        auto LDR_checkbox = new CheckBox(m_options, "LDR", [this](bool v) { m_image_view->set_LDR(v); });
-        LDR_checkbox->set_checked(m_image_view->LDR());
-        LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
-    }
-
-    return m_options;
 }
 
 RectangularMarquee::RectangularMarquee(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -496,8 +374,11 @@ void BrushTool::write_settings()
 
 bool BrushTool::is_valid(const Vector2i &p) const { return p.x() != std::numeric_limits<int>::lowest(); }
 
-Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
+void BrushTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
     m_brush->set_radius(settings.value("size", 15));
@@ -507,13 +388,14 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_brush->set_roundness(settings.value("roundness", 1.f));
     m_brush->set_spacing(settings.value("spacing", 0.f));
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 0));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 0));
 
-    m_options->add<Label>("Size:");
-    m_size_slider  = new Slider(m_options);
-    m_size_textbox = new IntBox<int>(m_options);
+    content->add<Label>("Size:");
+    m_size_slider  = new Slider(content);
+    m_size_textbox = new IntBox<int>(content);
 
     m_size_textbox->set_editable(true);
     m_size_textbox->set_fixed_width(45);
@@ -540,11 +422,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_size_slider->set_value(m_brush->radius());
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Hard:");
-    m_hardness_slider  = new Slider(m_options);
-    m_hardness_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Hard:");
+    m_hardness_slider  = new Slider(content);
+    m_hardness_textbox = new FloatBox<float>(content);
 
     m_hardness_textbox->number_format("%3.0f");
     m_hardness_textbox->set_editable(true);
@@ -572,11 +454,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_hardness_slider->set_value(m_brush->hardness() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Flow:");
-    m_flow_slider  = new Slider(m_options);
-    m_flow_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Flow:");
+    m_flow_slider  = new Slider(content);
+    m_flow_textbox = new FloatBox<float>(content);
 
     m_flow_textbox->number_format("%3.0f");
     m_flow_textbox->set_editable(true);
@@ -604,11 +486,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_flow_slider->set_value(m_brush->flow() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Angle:");
-    m_angle_slider  = new Slider(m_options);
-    m_angle_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Angle:");
+    m_angle_slider  = new Slider(content);
+    m_angle_textbox = new FloatBox<float>(content);
 
     m_angle_textbox->number_format("%3.0f");
     m_angle_textbox->set_editable(true);
@@ -636,11 +518,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_angle_slider->set_value(m_brush->angle());
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Round:");
-    m_roundness_slider  = new Slider(m_options);
-    m_roundness_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Round:");
+    m_roundness_slider  = new Slider(content);
+    m_roundness_textbox = new FloatBox<float>(content);
 
     m_roundness_textbox->number_format("%3.0f");
     m_roundness_textbox->set_editable(true);
@@ -668,11 +550,11 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_roundness_slider->set_value(m_brush->roundness() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_options->add<Label>("Spacing:");
-    m_spacing_slider  = new Slider(m_options);
-    m_spacing_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Spacing:");
+    m_spacing_slider  = new Slider(content);
+    m_spacing_textbox = new FloatBox<float>(content);
 
     m_spacing_textbox->number_format("%3.0f");
     m_spacing_textbox->set_editable(true);
@@ -700,14 +582,12 @@ Widget *BrushTool::create_options_bar(nanogui::Widget *parent)
     m_spacing_slider->set_value(m_brush->spacing() * 100.f);
 
     // spacer
-    m_options->add<Widget>()->set_fixed_width(5);
+    content->add<Widget>()->set_fixed_width(5);
 
-    m_smoothing_checkbox = new CheckBox(m_options, "Smoothing");
+    m_smoothing_checkbox = new CheckBox(content, "Smoothing");
     m_smoothing_checkbox->set_callback([this](bool b) { m_smoothing = b; });
     m_smoothing = settings.value("smoothing", true);
     m_smoothing_checkbox->set_checked(m_smoothing);
-
-    return m_options;
 }
 
 void BrushTool::add_shortcuts(HelpWindow *w)
@@ -1162,23 +1042,25 @@ void Eyedropper::write_settings()
     settings["size"] = m_size;
 }
 
-Widget *Eyedropper::create_options_bar(nanogui::Widget *parent)
+void Eyedropper::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    new Label(m_options, "Sample size:");
+    new Label(content, "Sample size:");
 
-    auto size = new Dropdown(m_options, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
+    auto size = new Dropdown(content, {"Point sample", "3 × 3 average", "5 × 5 average", "7 × 7 average"});
     size->set_tooltip("The number of pixels sampled by the eyedropper.");
-    size->set_callback([this](int s) { m_size = s; });
+    size->set_selected_callback([this](int s) { m_size = s; });
     size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
     size->set_fixed_height(19);
-
-    return m_options;
 }
 
 bool Eyedropper::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -1382,19 +1264,23 @@ void LineTool::write_settings()
     settings["width"] = m_width_slider->value();
 }
 
-Widget *LineTool::create_options_bar(nanogui::Widget *parent)
+void LineTool::create_options_bar(nanogui::Widget *parent)
 {
+    if (m_options)
+        return;
+
     auto &settings = this_tool_settings();
 
     m_width = std::clamp(settings.value("width", 2.f), 1.f, 100.f);
 
-    m_options = new Widget(parent);
-    m_options->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
+    m_options = new HScrollPanel(parent);
     m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
 
-    m_options->add<Label>("Width:");
-    m_width_slider  = new Slider(m_options);
-    m_width_textbox = new FloatBox<float>(m_options);
+    content->add<Label>("Width:");
+    m_width_slider  = new Slider(content);
+    m_width_textbox = new FloatBox<float>(content);
 
     m_width_textbox->number_format("%3.1f");
     m_width_textbox->set_editable(true);
@@ -1421,8 +1307,6 @@ Widget *LineTool::create_options_bar(nanogui::Widget *parent)
 
     m_width_textbox->set_value(m_width);
     m_width_slider->set_value(m_width);
-
-    return m_options;
 }
 
 void LineTool::add_shortcuts(HelpWindow *w)

@@ -4,9 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "dropdown.h"        // for Dropdown
 #include "fwd.h"             // for HDRViewScreen
 #include "hdrimage.h"        // for HDRImage, HDRImage::CanvasAnchor
+#include "menu.h"            // for Dropdown
 #include <functional>        // for function
 #include <iosfwd>            // for string
 #include <nanogui/nanogui.h> // for FormHelper, Vector2i, Widget, Window
@@ -27,7 +27,7 @@ nanogui::Dropdown *add_dropdown(nanogui::FormHelper *gui, const std::string &lab
     dp->set_fixed_size({fs.x() != 0 ? fs.x() : gui->fixed_size().x(), fs.y() != 0 ? fs.y() : gui->fixed_size().y()});
     gui->add_widget(label, dp);
 
-    dp->set_callback(
+    dp->set_selected_callback(
         [&variable, cb](int i)
         {
             variable = (T)i;
@@ -42,28 +42,36 @@ std::function<void(float)> create_floatbox_and_slider(nanogui::FormHelper *gui, 
                                                       float mn, float mx, float step, std::function<void(void)> cb,
                                                       std::string help = "");
 nanogui::Widget           *create_anchor_widget(nanogui::Widget *window, HDRImage::CanvasAnchor &anchor, int bw);
-nanogui::Button *create_colorspace_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_exposure_gamma_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                           ImageListPanel *images_panel);
-nanogui::Button *create_brightness_constract_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                                 ImageListPanel *images_panel);
-nanogui::Button *create_filmic_tonemapping_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                               ImageListPanel *images_panel);
-nanogui::Button *create_hsl_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_gaussian_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                            ImageListPanel *images_panel);
-nanogui::Button *create_box_blur_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_bilateral_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                             ImageListPanel *images_panel);
-nanogui::Button *create_unsharp_mask_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen,
-                                                ImageListPanel *images_panel);
-nanogui::Button *create_median_filter_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_resize_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_remap_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_shift_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_canvas_size_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_free_xform_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_flatten_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_fill_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_channel_mixer_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
-nanogui::Button *create_zap_gremlins_btn(nanogui::Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel);
+
+std::function<void()> cut_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
+std::function<void()> copy_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
+std::function<void()> paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
+std::function<void()> seamless_paste_callback(HDRImagePtr &clipboard, ImageListPanel *images_panel);
+std::function<void()> rotate_callback(bool clockwise, ImageListPanel *images_panel);
+std::function<void()> flip_callback(bool horizontal, ImageListPanel *images_panel);
+std::function<void()> invert_callback(ImageListPanel *images_panel);
+std::function<void()> clamp_callback(ImageListPanel *images_panel);
+std::function<void()> crop_callback(ImageListPanel *images_panel);
+std::function<void()> bump_to_normal_map_callback(ImageListPanel *images_panel);
+std::function<void()> irradiance_envmap_callback(ImageListPanel *images_panel);
+std::function<void()> colorspace_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> brightness_contrast_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> filmic_tonemapping_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> hsl_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> gaussian_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> box_blur_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> bilateral_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> unsharp_mask_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> median_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> remap_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> canvas_size_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> flatten_with_bg_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> flatten_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> fill_callback(const nanogui::Color &nfg, ImageListPanel *images_panel);
+std::function<void()> fill_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPanel *images_panel);
+std::function<void()> zap_gremlins_callback(HDRViewScreen *screen, ImageListPanel *images_panel);

@@ -23,7 +23,6 @@ class XPUImage;
 class HDRImage;
 class HDRViewScreen;
 class HDRImageView;
-class EditImagePanel;
 class ImageListPanel;
 class Timer;
 
@@ -63,7 +62,10 @@ using XPUImagePtr      = std::shared_ptr<XPUImage>;
 NAMESPACE_BEGIN(nanogui)
 class Widget;
 class Button;
+class MenuBar;
 class Dropdown;
+class MenuItem;
+class Separator;
 class PopupMenu;
 class PopupWrapper;
 class CheckBox;

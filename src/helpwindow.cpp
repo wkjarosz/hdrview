@@ -92,17 +92,8 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     // adding a callback seems to be required for the tabwidget to actually update the visibility
     tab_widget->set_callback([](int) { return; });
 
-    Widget *tab;
-
-    tab = new Widget(tab_widget);
-    tab->set_fixed_height(300);
-    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
-    tab_widget->append_tab("Keybindings", tab);
-
-    auto side_scroll_panel = new VScrollPanel(tab);
-    side_scroll_panel->set_fixed_height(300);
-    m_key_bindings = new Widget(side_scroll_panel);
-    m_key_bindings->set_layout(new GroupLayout(20, 6));
+    Widget       *tab;
+    VScrollPanel *side_scroll_panel;
 
     tab = new Widget(tab_widget);
     tab->set_fixed_height(300);
@@ -137,6 +128,22 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     add_library(credits, "tev", "Some code is adapted from Thomas Müller's tev");
     add_library(credits, "colormaps", "Matt Zucker's degree 6 polynomial colormaps");
 
+    tab = new Widget(tab_widget);
+    tab->set_fixed_height(300);
+    tab->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill));
+    tab_widget->append_tab("Keybindings", tab);
+
+    side_scroll_panel = new VScrollPanel(tab);
+    side_scroll_panel->set_fixed_height(300);
+    m_key_bindings = new Widget(side_scroll_panel);
+    m_key_bindings->set_layout(new GroupLayout(20, 6));
+
+    add_text(m_key_bindings,
+             "Most keyboard shortcuts are listed alongside the items in the menu bar. Additionally, the following "
+             "keyboard shortcuts are defined for actions not listed in the menu bar:\n\n",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
+
     center();
 }
 
@@ -163,6 +170,13 @@ void HelpWindow::add_shortcut(const string &section, const string &keys, const s
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
     (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
     new Label(row, key_string(keys), "sans-bold", 14);
+}
+
+void HelpWindow::add_separator(const string &section, int height)
+{
+    add_section(section);
+    auto w = m_sections[section];
+    (new Widget(w))->set_fixed_height(height);
 }
 
 NAMESPACE_END(nanogui)

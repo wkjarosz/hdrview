@@ -17,58 +17,55 @@
 
 using namespace std;
 
-Button *create_bilateral_filter_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
+static const string         name{"Bilateral filter..."};
+static float                range_sigma = 1.0f, value_sigma = 0.1f;
+static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
+
+std::function<void()> bilateral_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    static float                rangeSigma = 1.0f, valueSigma = 0.1f;
-    static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRImage::EDGE;
-    static string               name = "Bilateral filter...";
-    auto                        b    = new Button(parent, name, FA_TINT);
-    b->set_fixed_height(21);
-    b->set_callback(
-        [&, screen, images_panel]()
-        {
-            FormHelper *gui = new FormHelper(screen);
-            gui->set_fixed_size(Vector2i(75, 20));
+    return [&, screen, images_panel]()
+    {
+        FormHelper *gui = new FormHelper(screen);
+        gui->set_fixed_size(Vector2i(75, 20));
 
-            auto window = new Dialog(screen, name);
-            gui->set_window(window);
+        auto window = new Dialog(screen, name);
+        gui->set_window(window);
 
-            auto w = gui->add_variable("Range sigma:", rangeSigma);
-            w->set_spinnable(true);
-            w->set_min_value(0.0f);
-            w = gui->add_variable("Value sigma:", valueSigma);
-            w->set_spinnable(true);
-            w->set_min_value(0.0f);
+        auto w = gui->add_variable("Range sigma:", range_sigma);
+        w->set_spinnable(true);
+        w->set_min_value(0.0f);
+        w = gui->add_variable("Value sigma:", value_sigma);
+        w->set_spinnable(true);
+        w->set_min_value(0.0f);
 
-            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
-            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
+        add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+        add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
-            screen->request_layout_update();
+        screen->request_layout_update();
 
-            auto spacer = new Widget(window);
-            spacer->set_fixed_height(15);
-            gui->add_widget("", spacer);
+        auto spacer = new Widget(window);
+        spacer->set_fixed_height(15);
+        gui->add_widget("", spacer);
 
-            window->set_callback(
-                [&](int cancel)
-                {
-                    if (cancel)
-                        return;
+        window->set_callback(
+            [&](int cancel)
+            {
+                if (cancel)
+                    return;
 
-                    images_panel->async_modify_selected(
-                        [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                            AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            return {make_shared<HDRImage>(img->bilateral_filtered(valueSigma, rangeSigma, progress,
-                                                                                  border_mode_x, border_mode_y)),
-                                    nullptr};
-                        });
-                });
+                images_panel->async_modify_selected(
+                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                        AtomicProgress &progress) -> ImageCommandResult
+                    {
+                        return {make_shared<HDRImage>(img->bilateral_filtered(value_sigma, range_sigma, progress,
+                                                                              border_mode_x, border_mode_y)),
+                                nullptr};
+                    });
+            });
 
-            gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons());
 
-            window->center();
-            window->request_focus();
-        });
-    return b;
+        window->center();
+        window->request_focus();
+    };
 }

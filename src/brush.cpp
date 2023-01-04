@@ -78,8 +78,8 @@ void Brush::make_brush()
         {
             Vector2f uv((x - m_size) * cos_theta + (y - m_size) * sin_theta,
                         b * ((y - m_size) * cos_theta - (x - m_size) * sin_theta));
-            // new_brush(x, y) = 1.0f - pow(smoothStep(start, end, norm(uv)), 0.8f);
-            new_brush(x, y) = sqr(cosf(M_PI_2 * std::clamp(lerpFactor(start, end, norm(uv)), 0.f, 1.f)));
+            // new_brush(x, y) = 1.0f - pow(smoothstep(start, end, norm(uv)), 0.8f);
+            new_brush(x, y) = sqr(cosf(M_PI_2 * std::clamp(lerp_factor(start, end, norm(uv)), 0.f, 1.f)));
             if (new_brush(x, y) > 0.00001f)
             {
                 min_x = std::min(min_x, x);

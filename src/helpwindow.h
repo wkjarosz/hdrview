@@ -22,6 +22,7 @@ public:
 
     bool add_section(const std::string &name);
     void add_shortcut(const std::string &section, const std::string &keys, const std::string &desc);
+    void add_separator(const std::string &section, int height = 10);
 
     static const std::string CMD; //! Platform-dependent name for the command/ctrl key
     static const std::string ALT; //! Platform-dependent name for the alt/option key

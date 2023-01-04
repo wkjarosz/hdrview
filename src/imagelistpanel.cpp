@@ -12,11 +12,11 @@
 
 #include "imagelistpanel.h"
 #include "colorslider.h"
-#include "dropdown.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
 #include "imagebutton.h"
+#include "menu.h"
 #include "multigraph.h"
 #include "timer.h"
 #include "well.h"
@@ -32,7 +32,7 @@ using namespace std;
 
 ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageView *img_view) :
     Well(parent, 1, Color(150, 32), Color(0, 50)), m_screen(screen), m_image_view(img_view),
-    m_async_modify_done_callback([](int) {}), m_num_images_callback([]() {})
+    m_num_images_callback([]() {})
 {
     // set_id("image list panel");
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
@@ -54,78 +54,17 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_xaxis_scale->set_selected_index(1);
         m_yaxis_scale->set_selected_index(0);
-        m_xaxis_scale->set_callback([this](int) { update_histogram(); });
-        m_yaxis_scale->set_callback([this](int) { update_histogram(); });
+        m_xaxis_scale->set_selected_callback([this](int) { update_histogram(); });
+        m_yaxis_scale->set_selected_callback([this](int) { update_histogram(); });
     }
 
-    // histogram and file buttons
+    // histogram
     {
         auto row = new Widget(this);
         row->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 4));
         m_graph = new MultiGraph(row, Color(255, 0, 0, 200));
         m_graph->add_plot(Color(0, 255, 0, 200));
         m_graph->add_plot(Color(0, 0, 255, 200));
-
-        const int pad = 2;
-        row           = new Widget(this);
-        auto agl      = new AdvancedGridLayout({0, pad, 0, pad, 0, pad, 0, pad, 0, pad, 0});
-        row->set_layout(agl);
-        agl->set_col_stretch(0, 1.0f);
-        agl->append_row(25);
-
-        auto make_image_button = [row, agl](const AdvancedGridLayout::Anchor &anchor, function<void()> callback,
-                                            int icon = 0, string tooltip = "")
-        {
-            auto b = new Button(row, "", icon);
-            b->set_icon_extra_scale(1.25f);
-            b->set_fixed_size({25, 25});
-            b->set_tooltip(tooltip);
-            b->set_callback(callback);
-            agl->set_anchor(b, anchor);
-            return b;
-        };
-
-        auto b = make_image_button(
-            AdvancedGridLayout::Anchor{0, 0}, [this] { m_screen->load_image(); }, FA_FOLDER_OPEN,
-            HelpWindow::key_string("Open ({CMD}+O)"));
-        b->set_fixed_size({0, 0});
-
-        make_image_button(
-            AdvancedGridLayout::Anchor{2, 0}, [this] { m_screen->new_image(); }, FA_FILE,
-            HelpWindow::key_string("New ({CMD}+N)"));
-
-        m_reload_btn = make_image_button(
-            AdvancedGridLayout::Anchor{4, 0},
-            [this]
-            {
-                auto *glfwWindow = m_screen->glfw_window();
-                if (glfwGetKey(glfwWindow, GLFW_KEY_LEFT_SHIFT) || glfwGetKey(glfwWindow, GLFW_KEY_RIGHT_SHIFT))
-                    reload_all_images();
-                else
-                    reload_image(current_image_index());
-            },
-            FA_REDO, HelpWindow::key_string("Reload ({CMD}+R or F5); Reload All ({CMD}+Shift+R or Shift+F5)"));
-
-        m_clone_btn = make_image_button(
-            AdvancedGridLayout::Anchor{6, 0}, [this] { m_screen->duplicate_image(); }, FA_CLONE,
-            "Duplicate current image.");
-
-        m_save_btn = make_image_button(
-            AdvancedGridLayout::Anchor{8, 0}, [this] { m_screen->save_image(); }, FA_SAVE,
-            HelpWindow::key_string("Save ({CMD}+S)"));
-        m_save_btn->set_enabled(current_image() != nullptr);
-
-        m_close_btn = make_image_button(
-            AdvancedGridLayout::Anchor{10, 0},
-            [this]
-            {
-                auto *glfwWindow = m_screen->glfw_window();
-                if (glfwGetKey(glfwWindow, GLFW_KEY_LEFT_SHIFT) || glfwGetKey(glfwWindow, GLFW_KEY_RIGHT_SHIFT))
-                    m_screen->ask_close_all_images();
-                else
-                    m_screen->ask_close_image(current_image_index());
-            },
-            FA_TIMES_CIRCLE, HelpWindow::key_string("Close ({CMD}+W); Close All ({CMD}+Shift+W)"));
     }
 
     // channel and blend mode GUI elements
@@ -139,9 +78,26 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_blend_modes = new Dropdown(grid, blend_mode_names());
+        auto add_item = [](Dropdown *btn, const std::string &name, int index, int modifier = 0, int button = 0)
+        {
+            auto i = btn->popup()->add<MenuItem>(name);
+            i->set_hotkey(modifier, button);
+            i->set_flags(Button::RadioButton);
+            i->set_callback(
+                [index, btn]
+                {
+                    btn->set_selected_index(index);
+                    if (btn->selected_callback())
+                        btn->selected_callback()(index);
+                });
+        };
+
+        m_blend_modes = new Dropdown(grid);
+        for (int i = 0; i < (int)blend_mode_names().size(); ++i)
+            add_item(m_blend_modes, blend_mode_names()[i], i, GLFW_MOD_SHIFT, GLFW_KEY_1 + i);
+        m_blend_modes->set_selected_index(0);
         m_blend_modes->set_fixed_height(19);
-        m_blend_modes->set_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
+        m_blend_modes->set_selected_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
         agl->set_anchor(m_blend_modes,
                         AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
@@ -151,10 +107,13 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Channel:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        m_channels = new Dropdown(grid, channel_names());
+        m_channels = new Dropdown(grid);
+        for (int i = 0; i < (int)channel_names().size(); ++i)
+            add_item(m_channels, channel_names()[i], i, i <= 8 ? SYSTEM_COMMAND_MOD : 0, i <= 8 ? GLFW_KEY_0 + i : 0);
+        m_channels->set_selected_index(0);
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);
-        m_channels->set_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });
+        m_channels->set_selected_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });
         agl->set_anchor(m_channels,
                         AdvancedGridLayout::Anchor(2, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
     }
@@ -200,14 +159,15 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         agl->set_anchor(new Label(grid, "Sort: ", "sans", 14), AdvancedGridLayout::Anchor{0, 0});
 
-        m_sort_mode     = new Dropdown(grid, {" ", "alphabetic (inc)", "alphabetic (dec)", "size (inc)", "size (dec)"});
+        m_sort_mode =
+            new Dropdown(grid, {" ", "Filename (A-Z)", "Filename (Z-A)", "Image size (0-9)", "Image size (9-0)"});
         m_align_btn     = new Button(grid, "", FA_ALIGN_LEFT);
         m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
 
         m_sort_mode->set_fixed_height(19);
         m_sort_mode->set_tooltip("Sort the image list. When image names are aligned right, alphabetic sorting sorts by "
                                  "reversed filename (useful for sorting files with same extension together).");
-        m_sort_mode->set_callback([this](int m) { sort_images(m); });
+        m_sort_mode->set_selected_callback([this](int m) { sort_images(m); });
         agl->set_anchor(m_sort_mode, AdvancedGridLayout::Anchor{1, 0});
 
         m_use_short_btn->set_fixed_size({19, 19});
@@ -246,16 +206,16 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         set_reference_image_index(-1);
         m_sort_mode->set_selected_index(0);
     };
+}
 
-    m_async_modify_done_callback = [this](int i)
-    {
-        m_screen->update_caption();
-        request_buttons_update();
-        set_filter(filter());
-        request_histogram_update();
-        m_screen->redraw();
-        m_image_async_modify_done_requested = true;
-    };
+void ImageListPanel::trigger_modify_done()
+{
+    m_screen->update_caption();
+    request_buttons_update();
+    set_filter(filter());
+    request_histogram_update();
+    m_screen->redraw();
+    m_image_async_modify_done_requested = true;
 }
 
 bool ImageListPanel::is_selected(int index) const
@@ -339,13 +299,7 @@ void ImageListPanel::update_buttons(bool just_created)
 
 void ImageListPanel::enable_disable_buttons()
 {
-    bool has_image       = current_image() != nullptr;
-    bool has_valid_image = has_image && !current_image()->is_null();
-    bool have_images     = num_images() > 0;
-    m_reload_btn->set_enabled(has_valid_image);
-    m_save_btn->set_enabled(has_valid_image);
-    m_close_btn->set_enabled(has_image);
-    m_clone_btn->set_enabled(has_image);
+    bool have_images = num_images() > 0;
     m_sort_mode->set_enabled(have_images);
     m_blend_modes->set_enabled(have_images);
     m_align_btn->set_enabled(have_images);
@@ -550,127 +504,8 @@ bool ImageListPanel::send_image_backward()
 void ImageListPanel::add_shortcuts(HelpWindow *w)
 {
     auto section_name = "Images list";
-    w->add_shortcut(section_name, "{CMD}+F", "Find image");
     w->add_shortcut(section_name, "Left Click", "Select image");
     w->add_shortcut(section_name, "Shift+Left Click", "Select/Deselect reference image");
-    w->add_shortcut(section_name, "1…9", "Select the n-th image");
-    w->add_shortcut(section_name, "{CMD}+1…7", "Cycle through color channels");
-    w->add_shortcut(section_name, "Shift+1…8", "Cycle through blend modes");
-    w->add_shortcut(section_name, "Down / Up", "Select previous/next image");
-    w->add_shortcut(section_name, "{CMD}+Down / {CMD}+Up", "Multiselect previous/next image");
-    w->add_shortcut(section_name, "{ALT}+Down / {ALT}+Up", "Send image forward/backward");
-    w->add_shortcut(section_name, "{ALT}+Tab", "Select previously selected image");
-}
-
-bool ImageListPanel::keyboard_event(int key, int /* scancode */, int action, int modifiers)
-{
-    if (action == GLFW_RELEASE)
-        return false;
-
-    switch (key)
-    {
-    case 'Z':
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                redo();
-            else
-                undo();
-
-            return true;
-        }
-        return false;
-
-    case 'F':
-        spdlog::trace("KEY `F` pressed");
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            focus_filter();
-            return true;
-        }
-        return false;
-
-    case GLFW_KEY_TAB:
-        spdlog::trace("KEY TAB pressed");
-        if (modifiers & GLFW_MOD_ALT)
-        {
-            swap_current_selected_with_previous();
-            return true;
-        }
-        return false;
-
-    case GLFW_KEY_DOWN:
-        if (modifiers & GLFW_MOD_ALT)
-        {
-            send_image_backward();
-            m_screen->request_layout_update();
-            return true;
-        }
-        else if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            select_image_index(next_visible_image(current_image_index(), Backward));
-            set_current_image_index(next_visible_image(current_image_index(), Backward));
-            return true;
-        }
-        else if (num_images())
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                set_reference_image_index(next_visible_image(reference_image_index(), Backward));
-            else
-                set_current_image_index(next_visible_image(current_image_index(), Backward));
-            return true;
-        }
-        return false;
-
-    case GLFW_KEY_UP:
-        if (modifiers & GLFW_MOD_ALT)
-        {
-            bring_image_forward();
-            m_screen->request_layout_update();
-            return true;
-        }
-        else if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            select_image_index(next_visible_image(current_image_index(), Forward));
-            set_current_image_index(next_visible_image(current_image_index(), Forward));
-            return true;
-        }
-        else if (num_images())
-        {
-            if (modifiers & GLFW_MOD_SHIFT)
-                set_reference_image_index(next_visible_image(reference_image_index(), Forward));
-            else
-                set_current_image_index(next_visible_image(current_image_index(), Forward));
-            return true;
-        }
-        return false;
-    }
-
-    if ((key >= GLFW_KEY_1 && key <= GLFW_KEY_9) || (key >= GLFW_KEY_KP_1 && key <= GLFW_KEY_KP_9))
-    {
-        int keyOffset = (key >= GLFW_KEY_KP_1) ? GLFW_KEY_KP_1 : GLFW_KEY_1;
-        int idx       = (key - keyOffset) % 10;
-
-        if (modifiers & SYSTEM_COMMAND_MOD && idx < NUM_CHANNELS)
-        {
-            set_channel(EChannel(idx));
-            return true;
-        }
-        else if (modifiers & GLFW_MOD_SHIFT && idx < NUM_BLEND_MODES)
-        {
-            set_blend_mode(EBlendMode(idx));
-            return true;
-        }
-        else
-        {
-            auto nth = nth_visible_image_index(idx);
-            if (nth >= 0)
-                set_current_image_index(nth);
-        }
-        return false;
-    }
-
-    return false;
 }
 
 bool ImageListPanel::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
@@ -876,7 +711,7 @@ void ImageListPanel::run_requested_callbacks()
             m_num_images_callback();
         }
 
-        m_async_modify_done_callback(m_current); // TODO: make this use the modified image
+        trigger_modify_done(); // TODO: make this use the modified image
 
         m_image_async_modify_done_requested = false;
     }
@@ -1166,7 +1001,7 @@ void ImageListPanel::reload_all_images()
         for (size_t i = 0; i < m_images.size(); ++i) reload_image(i, true);
 }
 
-bool ImageListPanel::save_image(const string &filename, float exposure, float gamma, bool sRGB, bool dither)
+bool ImageListPanel::save_image_as(const string &filename, float exposure, float gamma, bool sRGB, bool dither)
 {
     if (!current_image() || !filename.size())
         return false;
@@ -1174,7 +1009,7 @@ bool ImageListPanel::save_image(const string &filename, float exposure, float ga
     if (current_image()->save(filename, powf(2.0f, exposure), gamma, sRGB, dither))
     {
         current_image()->set_filename(filename);
-        m_async_modify_done_callback(m_current);
+        trigger_modify_done();
 
         return true;
     }
@@ -1336,26 +1171,6 @@ void ImageListPanel::async_modify_selected(const ConstImageCommandWithProgress &
     m_screen->update_caption();
 }
 
-void ImageListPanel::undo()
-{
-    if (current_image())
-    {
-        m_images[m_current]->set_async_modify_done_callback(nullptr);
-        if (m_images[m_current]->undo())
-            m_async_modify_done_callback(m_current);
-    }
-}
-
-void ImageListPanel::redo()
-{
-    if (current_image())
-    {
-        m_images[m_current]->set_async_modify_done_callback(nullptr);
-        if (m_images[m_current]->redo())
-            m_async_modify_done_callback(m_current);
-    }
-}
-
 // The following functions are adapted from tev:
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
 // It is published under the BSD 3-Clause License within the LICENSE file.
@@ -1366,6 +1181,26 @@ bool ImageListPanel::set_filter(const string &filter)
     m_erase_btn->set_visible(!filter.empty());
     m_update_filter_requested = true;
     return true;
+}
+
+void ImageListPanel::undo()
+{
+    if (auto i = current_image())
+    {
+        i->set_async_modify_done_callback(nullptr);
+        if (i->undo())
+            trigger_modify_done();
+    }
+}
+
+void ImageListPanel::redo()
+{
+    if (auto i = current_image())
+    {
+        i->set_async_modify_done_callback(nullptr);
+        if (i->redo())
+            trigger_modify_done();
+    }
 }
 
 std::string ImageListPanel::filter() const { return m_filter->value(); }

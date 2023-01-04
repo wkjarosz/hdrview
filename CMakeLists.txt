@@ -370,17 +370,11 @@ add_executable(
   src/dialog.cpp
   src/dialog.h
   src/dithermatrix256.h
-  src/dropdown.cpp
-  src/dropdown.h
-  src/editimagepanel.cpp
-  src/editimagepanel.h
   src/envmap.cpp
   src/envmap.h
   src/filmictonecurve.cpp
   src/filmictonecurve.h
   src/fwd.h
-  src/xpuimage.cpp
-  src/xpuimage.h
   src/hdrcolorpicker.cpp
   src/hdrcolorpicker.h
   src/hdrimage.cpp
@@ -389,11 +383,15 @@ add_executable(
   src/hdrimageio.cpp
   src/hdrimageraw.cpp
   src/hdrimageraw.h
+  src/hdrimageview.cpp
+  src/hdrimageview.h
   src/hdrview.cpp
   src/hdrviewscreen.cpp
   src/hdrviewscreen.h
   src/helpwindow.cpp
   src/helpwindow.h
+  src/hscrollpanel.cpp
+  src/hscrollpanel.h
   src/hslgradient.cpp
   src/hslgradient.h
   src/imagebutton.cpp
@@ -401,16 +399,14 @@ add_executable(
   src/imagelistpanel.cpp
   src/imagelistpanel.h
   src/json.h
-  src/hdrimageview.cpp
-  src/hdrimageview.h
+  src/menu.cpp
+  src/menu.h
   src/multigraph.cpp
   src/multigraph.h
   src/parallelfor.cpp
   src/parallelfor.h
   src/pfm.h
   src/pfm.cpp
-  src/popupmenu.cpp
-  src/popupmenu.h
   src/ppm.h
   src/ppm.cpp
   src/progress.cpp
@@ -423,6 +419,8 @@ add_executable(
   src/tool.h
   src/well.cpp
   src/well.h
+  src/xpuimage.cpp
+  src/xpuimage.h
   ${EXTRA_SOURCE})
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")

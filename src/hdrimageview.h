@@ -134,6 +134,20 @@ public:
             m_exposure_callback(e);
         }
     }
+    void reset_tonemapping()
+    {
+        set_exposure(0.0f);
+        set_gamma(2.2f);
+        set_sRGB(true);
+    }
+    void normalize_exposure()
+    {
+        if (!m_current_image)
+            return;
+        Color4 mC  = m_current_image->image().max();
+        float  mCf = std::max({mC[0], mC[1], mC[2]});
+        set_exposure(log2(1.0f / mCf));
+    }
 
     bool sRGB() const { return m_sRGB; }
     void set_sRGB(bool b)
@@ -142,8 +156,8 @@ public:
         m_sRGB_callback(b);
     }
 
-    void set_LDR(bool value)    { m_LDR = value; }
-    bool LDR() const            { return m_LDR; }
+    void set_LDR(bool value) { m_LDR = value; }
+    bool LDR() const { return m_LDR; }
 
     bool dithering_on() const { return m_dither; }
     void set_dithering(bool b) { m_dither = b; }

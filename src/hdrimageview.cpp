@@ -343,8 +343,6 @@ void HDRImageView::add_shortcuts(HelpWindow *w)
     auto section_name = "Image view";
     w->add_shortcut(section_name, "Left Click+Drag / Shift+Scroll", "Pan image");
     w->add_shortcut(section_name, "Scroll", "Zoom In and Out Continuously");
-    w->add_shortcut(section_name, "- / +", "Zoom In and Out by Powers of 2");
-    w->add_shortcut(section_name, "{CMD}+0", "Fit Image to Screen");
 }
 
 bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int modifiers)
@@ -468,7 +466,7 @@ void HDRImageView::draw_pixel_grid(NVGcontext *ctx) const
         return;
 
     float factor = clamp01((m_zoom - m_grid_threshold) / (2 * m_grid_threshold));
-    float alpha  = lerp(0.0f, 0.2f, smoothStep(0.0f, 1.0f, factor));
+    float alpha  = lerp(0.0f, 0.2f, smoothstep(0.0f, 1.0f, factor));
 
     if (alpha > 0.0f)
     {
@@ -532,7 +530,7 @@ void HDRImageView::draw_pixel_info(NVGcontext *ctx) const
         return;
 
     float factor = clamp01((m_zoom - m_pixel_info_threshold) / (2 * m_pixel_info_threshold));
-    float alpha  = lerp(0.0f, 0.5f, smoothStep(0.0f, 1.0f, factor));
+    float alpha  = lerp(0.0f, 0.5f, smoothstep(0.0f, 1.0f, factor));
 
     if (alpha > 0.0f && m_pixel_callback)
     {

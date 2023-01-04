@@ -17,63 +17,60 @@
 
 using namespace std;
 
-Button *create_shift_btn(Widget *parent, HDRViewScreen *screen, ImageListPanel *images_panel)
+static const string         name{"Shift..."};
+static HDRImage::Sampler    sampler       = HDRImage::BILINEAR;
+static HDRImage::BorderMode border_mode_x = HDRImage::REPEAT, border_mode_y = HDRImage::REPEAT;
+static float                dx = 0.f, dy = 0.f;
+
+std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    static HDRImage::Sampler    sampler       = HDRImage::BILINEAR;
-    static HDRImage::BorderMode border_mode_x = HDRImage::REPEAT, border_mode_y = HDRImage::REPEAT;
-    static float                dx = 0.f, dy = 0.f;
-    static string               name = "Shift...";
-    auto                        b    = new Button(parent, name, FA_ARROWS_ALT);
-    b->set_fixed_height(21);
-    b->set_callback(
-        [&, screen, images_panel]()
-        {
-            FormHelper *gui = new FormHelper(screen);
-            gui->set_fixed_size(Vector2i(125, 20));
+    return [&, screen, images_panel]()
+    {
+        FormHelper *gui = new FormHelper(screen);
+        gui->set_fixed_size(Vector2i(125, 20));
 
-            auto window = new Dialog(screen, name);
-            gui->set_window(window);
+        auto window = new Dialog(screen, name);
+        gui->set_window(window);
 
-            auto w = gui->add_variable("X offset:", dx);
-            w->set_spinnable(true);
-            w->set_units("px");
+        auto w = gui->add_variable("X offset:", dx);
+        w->set_spinnable(true);
+        w->set_units("px");
 
-            w = gui->add_variable("Y offset:", dy);
-            w->set_spinnable(true);
-            w->set_units("px");
+        w = gui->add_variable("Y offset:", dy);
+        w->set_spinnable(true);
+        w->set_units("px");
 
-            add_dropdown(gui, "Sampler:", sampler, HDRImage::sampler_names());
-            add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
-            add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
+        add_dropdown(gui, "Sampler:", sampler, HDRImage::sampler_names());
+        add_dropdown(gui, "Border mode X:", border_mode_x, HDRImage::border_mode_names());
+        add_dropdown(gui, "Border mode Y:", border_mode_y, HDRImage::border_mode_names());
 
-            screen->request_layout_update();
+        screen->request_layout_update();
 
-            auto spacer = new Widget(window);
-            spacer->set_fixed_height(15);
-            gui->add_widget("", spacer);
+        auto spacer = new Widget(window);
+        spacer->set_fixed_height(15);
+        gui->add_widget("", spacer);
 
-            window->set_callback(
-                [&](int cancel)
-                {
-                    if (cancel)
-                        return;
-                    images_panel->async_modify_selected(
-                        [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                            AtomicProgress &progress) -> ImageCommandResult
-                        {
-                            // by default use a no-op passthrough warp function
-                            function<Vector2f(const Vector2f &)> shift = [&](const Vector2f &uv)
-                            { return (uv + Vector2f(dx / img->width(), dy / img->height())); };
-                            return {make_shared<HDRImage>(img->resampled(img->width(), img->height(), progress, shift,
-                                                                         1, sampler, border_mode_x, border_mode_y)),
-                                    nullptr};
-                        });
-                });
+        window->set_callback(
+            [&](int cancel)
+            {
+                if (cancel)
+                    return;
+                images_panel->async_modify_selected(
+                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                        AtomicProgress &progress) -> ImageCommandResult
+                    {
+                        // by default use a no-op passthrough warp function
+                        function<Vector2f(const Vector2f &)> shift = [&](const Vector2f &uv)
+                        { return (uv + Vector2f(dx / img->width(), dy / img->height())); };
+                        return {make_shared<HDRImage>(img->resampled(img->width(), img->height(), progress, shift, 1,
+                                                                     sampler, border_mode_x, border_mode_y)),
+                                nullptr};
+                    });
+            });
 
-            gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons());
 
-            window->center();
-            window->request_focus();
-        });
-    return b;
+        window->center();
+        window->request_focus();
+    };
 }
