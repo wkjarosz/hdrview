@@ -4,11 +4,10 @@
 // be found in the LICENSE.txt file.
 //
 
-
 #include "common.h"
-#include <CLI/CLI.hpp>
-#include <filesystem/path.h>
 #include "hdrviewscreen.h"
+#include "json.h"
+#include <CLI/CLI.hpp>
 
 #ifdef __APPLE__
 #define GLFW_EXPOSE_NATIVE_COCOA
@@ -16,45 +15,20 @@
 #include <GLFW/glfw3native.h>
 #endif
 
+#include "cliformatter.h"
 #include <cstdlib>
-#include <fstream>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>
-#include "cliformatter.h"
 
 using namespace std;
 using json = nlohmann::json;
 
-
-static HDRViewScreen * g_screen = nullptr;
+static HDRViewScreen *g_screen = nullptr;
 
 // Force usage of discrete GPU on laptops
 NANOGUI_FORCE_DISCRETE_GPU();
-
-json read_settings()
-{
-    try
-    {
-        string directory = config_directory();
-        ::filesystem::create_directories(directory);
-        string filename = directory + "settings.json";
-        spdlog::info("Reading configuration from file {}", filename);
-
-        std::ifstream stream(filename);
-        if (!stream.good())
-            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
-
-        json settings;
-        stream >> settings;
-        return settings;
-    }
-    catch (const exception &e)
-    {
-        return json::object();
-    }
-}
 
 void write_settings()
 {
@@ -67,64 +41,63 @@ void write_settings()
 int main(int argc, char **argv)
 {
     // vector<string>             arg_vector = {argv + 1, argv + argc};
-    constexpr int              default_verbosity = spdlog::level::info;
-    int                        verbosity         = default_verbosity;
+    constexpr int default_verbosity = spdlog::level::info;
+    int           verbosity         = default_verbosity;
 
-    float gamma  = 2.2f, exposure = 0.0f;
+    float gamma = 2.2f, exposure = 0.0f;
     bool  dither = true, sRGB = true;
 
-    vector<string> inFiles;
+    vector<string> in_files;
 
     try
     {
 
-// #if defined(__APPLE__)
-//         bool launched_from_finder = false;
-//         // check whether -psn is set, and remove it from the arguments
-//         for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
-//         {
-//             if (strncmp("-psn", i->c_str(), 4) == 0)
-//             {
-//                 launched_from_finder = true;
-//                 arg_vector.erase(i);
-//                 break;
-//             }
-//         }
-// #endif
+        // #if defined(__APPLE__)
+        //         bool launched_from_finder = false;
+        //         // check whether -psn is set, and remove it from the arguments
+        //         for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
+        //         {
+        //             if (strncmp("-psn", i->c_str(), 4) == 0)
+        //             {
+        //                 launched_from_finder = true;
+        //                 arg_vector.erase(i);
+        //                 break;
+        //             }
+        //         }
+        // #endif
 
-        string version_string = fmt::format("HDRView {}. (built using {} backend on {})",
-                                            hdrview_version(), HDRVIEW_BACKEND, hdrview_build_timestamp());
+        string version_string = fmt::format("HDRView {}. (built using {} backend on {})", hdrview_version(),
+                                            HDRVIEW_BACKEND, hdrview_build_timestamp());
 
         CLI::App app{
-R"(HDRView is a simple research-oriented tool for examining,
+            R"(HDRView is a simple research-oriented tool for examining,
 comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 )",
-"HDRView"};
+            "HDRView"};
 
         app.formatter(std::make_shared<ColorFormatter>());
         app.get_formatter()->column_width(20);
-        app.get_formatter()->label("OPTIONS", fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
+        app.get_formatter()->label("OPTIONS",
+                                   fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
 
         app.add_option("-e,--exposure", exposure,
-R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
+                       R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
 [default: 0].)")
             ->capture_default_str()
-            ->group("Tone mapping and display")
-            ;
-                
-        app.add_option("-g,--gamma", gamma,
-R"(Desired gamma value for exposure+gamma tonemapping. An
-sRGB curve is used if gamma is not specified.)")
-            ->group("Tone mapping and display")
-            ;
+            ->group("Tone mapping and display");
 
-        app.add_flag("--dither,--no-dither{false}", dither, "Enable/disable dithering when converting to LDR\n[default: on].")
-            ->group("Tone mapping and display")
-            ;
+        app.add_option("-g,--gamma", gamma,
+                       R"(Desired gamma value for exposure+gamma tonemapping. An
+sRGB curve is used if gamma is not specified.)")
+            ->group("Tone mapping and display");
+
+        app.add_flag("--dither,--no-dither{false}", dither,
+                     "Enable/disable dithering when converting to LDR\n[default: on].")
+            ->group("Tone mapping and display");
 
         app.add_option("-v,--verbosity", verbosity,
-R"(Set verbosity threshold T with lower values meaning more
+                       R"(Set verbosity threshold T with lower values meaning more
 verbose and higher values removing low-priority messages.
 All messages with severity >= T are displayed, where the
 severities are:
@@ -138,28 +111,20 @@ severities are:
 The default is 2 (info).)")
             ->check(CLI::Range(0, 6))
             ->option_text("INT in [0-6]")
-            ->group("Misc")
-            ;
+            ->group("Misc");
 
-        app.set_version_flag("--version", version_string, "Show the version and exit.")
-            ->group("Misc")
-            ;
+        app.set_version_flag("--version", version_string, "Show the version and exit.")->group("Misc");
 
-        app.set_help_flag("-h, --help", "Print this help message and exit.")
-            ->group("Misc")
-            ;
-        
+        app.set_help_flag("-h, --help", "Print this help message and exit.")->group("Misc");
 
-        app.add_option(
-            "IMAGES", inFiles,
-            "The images files to load.")
+        app.add_option("IMAGES", in_files, "The images files to load.")
             ->check(CLI::ExistingPath)
             ->option_text("PATH(existing) ...");
 
         // Console logger with color
         spdlog::set_pattern("%^[%l]%$ %v");
         spdlog::set_level(spdlog::level::level_enum(default_verbosity));
-     
+
         CLI11_PARSE(app, argc, argv);
 
         auto settings = read_settings();
@@ -175,7 +140,7 @@ The default is 2 (info).)")
         // gamma or sRGB
         if (app.count("--gamma"))
         {
-            sRGB  = false;
+            sRGB = false;
             spdlog::info("Setting gamma correction to g={:f}.", gamma);
         }
         else
@@ -188,16 +153,16 @@ The default is 2 (info).)")
         settings["image view"]["gamma"]     = gamma;
         settings["image view"]["sRGB"]      = sRGB;
         settings["image view"]["dithering"] = dither;
-        write_settings();
 
-        auto [capability10bit, capabilityEdr] = nanogui::test_10bit_edr_support();
-        spdlog::info("Launching GUI with {} bit color and {} display support.", capability10bit ? 10 : 8, capabilityEdr ? "HDR" : "LDR");
+        auto [capability_10bit, capability_EDR] = nanogui::test_10bit_edr_support();
+        spdlog::info("Launching GUI with {} bit color and {} display support.", capability_10bit ? 10 : 8,
+                     capability_EDR ? "HDR" : "LDR");
         nanogui::init();
 
-// #if defined(__APPLE__)
-//         if (launched_from_finder)
-//             nanogui::chdir_to_bundle_parent();
-// #endif
+        // #if defined(__APPLE__)
+        //         if (launched_from_finder)
+        //             nanogui::chdir_to_bundle_parent();
+        // #endif
 
         {
 #ifdef __APPLE__
@@ -208,24 +173,22 @@ The default is 2 (info).)")
             // There are two components to this special handling:
 
             // 1. The filenames that were passed to this application when it was opened.
-            if (inFiles.empty()) {
+            if (in_files.empty())
+            {
                 // If we didn't get any command line arguments for files to open,
                 // then, on macOS, they might have been supplied through the NS api.
-                const char* const* openedFiles = glfwGetOpenedFilenames();
-                if (openedFiles) {
-                    for (auto p = openedFiles; *p; ++p) {
-                        inFiles.push_back(string(*p));
-                    }
+                const char *const *opened_files = glfwGetOpenedFilenames();
+                if (opened_files)
+                {
+                    for (auto p = opened_files; *p; ++p) { in_files.push_back(string(*p)); }
                 }
             }
 
             // 2. a callback for when the same application is opened additional
             //    times with more files.
-            glfwSetOpenedFilenamesCallback([](const char* imageFile) {
-                g_screen->drop_event({string(imageFile)});
-            });
+            glfwSetOpenedFilenamesCallback([](const char *image_file) { g_screen->drop_event({string(image_file)}); });
 #endif
-            g_screen = new HDRViewScreen(exposure, gamma, sRGB, dither, inFiles);
+            g_screen = new HDRViewScreen(settings, in_files);
             g_screen->draw_all();
             g_screen->set_visible(true);
             nanogui::mainloop(-1.f);

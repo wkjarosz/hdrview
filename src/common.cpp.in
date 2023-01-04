@@ -5,8 +5,11 @@
 //
 
 #include "common.h"
+#include "json.h"
 #include <regex>
 #include <sago/platform_folders.h>
+#include <filesystem/path.h>
+#include <fstream>
 
 using namespace std;
 
@@ -151,4 +154,31 @@ bool matches(string text, string filter, bool is_regex)
     };
 
     return is_regex ? matchesRegex(text, filter) : matchesFuzzy(text, filter);
+}
+
+
+
+json read_settings()
+{
+    try
+    {
+        string directory = config_directory();
+        ::filesystem::create_directories(directory);
+        string filename = directory + "settings.json";
+        spdlog::info("Reading configuration from file {}", filename);
+
+        std::ifstream stream(filename);
+        if (!stream.good())
+            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
+
+        json settings;
+        stream >> settings;
+        return settings;
+    }
+    catch (const exception &e)
+    {
+        spdlog::warn("Could not read settings file: {}", e.what());
+        spdlog::info("Using default settings.");
+        return json::object();
+    }
 }

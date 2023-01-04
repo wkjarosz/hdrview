@@ -35,11 +35,10 @@ using std::string;
 using std::vector;
 using json = nlohmann::json;
 
-HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, true), m_clipboard(nullptr)
+HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args) :
+    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, true), m_settings(settings),
+    m_clipboard(nullptr)
 {
-    read_settings();
-
     set_background(Color(0.23f, 1.0f));
 
     auto theme                     = new Theme(m_nvg_context);
@@ -829,11 +828,6 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
     set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
                                (int)Tool_None, (int)Tool_Num_Tools - 1));
 
-    m_image_view->set_exposure(exposure);
-    m_image_view->set_gamma(gamma);
-    m_image_view->set_sRGB(sRGB);
-    m_image_view->set_dithering(dither);
-
     drop_event(args);
 
     set_size(m_settings.value("geometry", json::object()).value("size", Vector2i(800, 600)));
@@ -875,7 +869,7 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 HDRViewScreen::~HDRViewScreen()
 {
     m_join_requested = true;
-    spdlog::trace("quitting HDRView");
+    spdlog::info("quitting HDRView");
     m_gui_refresh_thread.join();
 }
 
@@ -885,29 +879,6 @@ void HDRViewScreen::ask_to_quit()
                                    "No", true);
     dialog->set_callback([this](int result) { this->set_visible(result != 0); });
     dialog->request_focus();
-}
-
-void HDRViewScreen::read_settings()
-{
-    try
-    {
-        string directory = config_directory();
-        filesystem::create_directories(directory);
-        string filename = directory + "settings.json";
-        spdlog::info("Reading configuration from file {}", filename);
-
-        std::ifstream stream(filename);
-        if (!stream.good())
-            throw std::runtime_error(fmt::format("Cannot open settings file: \"{}\".", filename));
-
-        stream >> m_settings;
-    }
-    catch (const exception &e)
-    {
-        spdlog::warn("Error while reading settings file: {}", e.what());
-        spdlog::info("Using default settings.");
-        m_settings = json::object();
-    }
 }
 
 void HDRViewScreen::write_settings()
