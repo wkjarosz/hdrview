@@ -47,3 +47,5 @@ inline void to_json(json &j, const Array<Value, Size> &a)
 }
 
 } // namespace nanogui
+
+json read_settings();

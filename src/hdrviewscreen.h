@@ -22,12 +22,11 @@ using namespace nanogui;
 class HDRViewScreen : public Screen
 {
 public:
-    HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither, std::vector<std::string> args);
+    HDRViewScreen(const nlohmann::json & settings, std::vector<std::string> args);
     virtual ~HDRViewScreen() override;
 
     void ask_to_quit();
 
-    void                  read_settings();
     void                  write_settings();
     const nlohmann::json &settings() const { return m_settings; }
     nlohmann::json       &settings() { return m_settings; }
