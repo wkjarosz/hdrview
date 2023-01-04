@@ -574,8 +574,8 @@ HDRViewScreen::HDRViewScreen(float exposure, float gamma, bool sRGB, bool dither
 
         add_item("Fill...", FA_FILL, fill_callback(this, m_images_panel), SYSTEM_COMMAND_MOD, GLFW_KEY_BACKSPACE);
         add_item("Invert", FA_IMAGE, invert_callback(m_images_panel), SYSTEM_COMMAND_MOD, 'I');
-        add_item("Clamp", FA_ADJUST, clamp_callback(m_images_panel));
-        add_item("Flatten", FA_CHESS_BOARD, flatten_callback(this, m_images_panel));
+        add_item("Clamp to [0,1]", FA_ADJUST, clamp_callback(m_images_panel));
+        add_item("Flatten...", FA_CHESS_BOARD, flatten_callback(this, m_images_panel));
         add_item("Flatten with bg color", FA_CHESS_BOARD, flatten_with_bg_callback(this, m_images_panel));
         add_item("Zap gremlins...", FA_SKULL_CROSSBONES, zap_gremlins_callback(this, m_images_panel));
         menu->popup()->add<Separator>();

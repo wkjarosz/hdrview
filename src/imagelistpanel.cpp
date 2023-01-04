@@ -159,7 +159,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         agl->set_anchor(new Label(grid, "Sort: ", "sans", 14), AdvancedGridLayout::Anchor{0, 0});
 
-        m_sort_mode     = new Dropdown(grid, {" ", "alphabetic (inc)", "alphabetic (dec)", "size (inc)", "size (dec)"});
+        m_sort_mode =
+            new Dropdown(grid, {" ", "Filename (A-Z)", "Filename (Z-A)", "Image size (0-9)", "Image size (9-0)"});
         m_align_btn     = new Button(grid, "", FA_ALIGN_LEFT);
         m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
 
