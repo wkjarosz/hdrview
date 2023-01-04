@@ -31,7 +31,7 @@ Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *imag
            const string &tooltip, int icon, ETool tool) :
     m_name(name),
     m_tooltip(tooltip), m_icon(icon), m_tool(tool), m_screen(screen), m_image_view(image_view),
-    m_images_panel(images_panel), m_button(nullptr), m_options(nullptr)
+    m_images_panel(images_panel), m_button(nullptr), m_options(nullptr), m_menuitem(nullptr)
 {
     // empty
 }
