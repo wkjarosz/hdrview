@@ -1,11 +1,11 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=hdrview
+Name=HDRView
 GenericName=Image Viewer
-Comment=High dynamic range (HDR) image viewer and comparison tool/
-Exec=hdrview %F
-Icon=hdrview.png
+Comment=High dynamic range (HDR) image viewer and comparison tool
+Exec=HDRView %F
+Icon=hdrview
 Terminal=false
 MimeType=image/*;
 Categories=Graphics;
