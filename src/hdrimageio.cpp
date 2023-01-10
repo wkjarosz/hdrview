@@ -249,9 +249,9 @@ bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, 
     transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
 
     auto     img = this;
-    HDRImage imgCopy;
+    HDRImage img_copy;
 
-    bool hdrFormat = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
+    bool hdr_format = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
 
     // if we need to tonemap, then modify a copy of the image data
     if (gain != 1.0f || sRGB || gamma != 1.0f)
@@ -259,19 +259,19 @@ bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, 
         Color4 gainC  = Color4(gain, gain, gain, 1.0f);
         Color4 gammaC = Color4(1.0f / gamma, 1.0f / gamma, 1.0f / gamma, 1.0f);
 
-        imgCopy = *this;
-        img     = &imgCopy;
+        img_copy = *this;
+        img      = &img_copy;
 
         if (gain != 1.0f)
-            imgCopy *= gainC;
+            img_copy *= gainC;
 
         // only do gamma or sRGB tonemapping if we are saving to an LDR format
-        if (!hdrFormat)
+        if (!hdr_format)
         {
             if (sRGB)
-                imgCopy = imgCopy.apply_function([](const Color4 &c) { return LinearToSRGB(c); });
+                img_copy = img_copy.apply_function([](const Color4 &c) { return LinearToSRGB(c); });
             else if (gamma != 1.0f)
-                imgCopy = imgCopy.apply_function([&gammaC](const Color4 &c) { return pow(c, gammaC); });
+                img_copy = img_copy.apply_function([&gammaC](const Color4 &c) { return pow(c, gammaC); });
         }
     }
 

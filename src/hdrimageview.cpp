@@ -591,11 +591,11 @@ void HDRImageView::draw_contents()
                             std::generate_canonical<float, 10>(g_rand) * 255);
 
         m_image_shader->set_uniform("randomness", randomness);
-        m_image_shader->set_uniform("gain", (float)powf(2.0f, m_exposure));
+        m_image_shader->set_uniform("gain", powf(2.0f, m_exposure));
         m_image_shader->set_uniform("gamma", m_gamma);
-        m_image_shader->set_uniform("sRGB", (bool)m_sRGB);
-        m_image_shader->set_uniform("LDR", (bool)m_LDR);
-        m_image_shader->set_uniform("do_dither", (bool)m_dither);
+        m_image_shader->set_uniform("sRGB", m_sRGB);
+        m_image_shader->set_uniform("LDR", m_LDR || !screen()->has_float_buffer());
+        m_image_shader->set_uniform("do_dither", m_dither);
 
         Vector2f curr_pos, curr_scale;
         image_position_and_scale(curr_pos, curr_scale, m_current_image);
