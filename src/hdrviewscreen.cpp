@@ -629,6 +629,10 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
         show_top_panel->set_change_callback(
             [this, show_top_panel, show_side_panels, show_all_panels](bool b)
             {
+                // make sure the menu bar is always on top
+                // FIXME: This is a hack, would be nice to avoid it
+                move_window_to_front(m_menubar);
+
                 m_gui_animation_start = glfwGetTime();
                 push_gui_refresh();
                 m_animation_running = true;
@@ -655,6 +659,10 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
         show_all_panels->set_change_callback(
             [this, show_top_panel, show_side_panels](bool b)
             {
+                // make sure the menu bar is always on top
+                // FIXME: This is a hack, would be nice to avoid it
+                move_window_to_front(m_menubar);
+
                 m_gui_animation_start = glfwGetTime();
                 push_gui_refresh();
                 m_animation_running = true;
@@ -668,6 +676,8 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
             "Zoom in", 0, [this] { m_image_view->zoom_in(); }, 0, '+');
         add_item(
             "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
+        add_item(
+            "Center", 0, [this] { m_image_view->center(); }, 0, 'R');
         add_item("Fit to screen", 0,
                  [this]
                  {
@@ -1355,9 +1365,6 @@ bool HDRViewScreen::at_tool_panel_edge(const Vector2i &p)
 
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
-    // make sure the menu bar is always on top
-    move_window_to_front(m_menubar);
-
     // temporarily increase the gui refresh rate between mouse down and up events.
     // makes things like dragging smoother
     if (down)

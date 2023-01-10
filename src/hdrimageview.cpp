@@ -366,26 +366,6 @@ bool HDRImageView::keyboard_event(int key, int /* scancode */, int action, int m
         spdlog::trace("KEY `-` pressed");
         zoom_out();
         return true;
-
-    case GLFW_KEY_KP_0:
-    case '0':
-        if (modifiers & SYSTEM_COMMAND_MOD)
-        {
-            center();
-            fit();
-            // draw_all();
-            return true;
-        }
-        return false;
-
-    case 'R':
-        if (!modifiers)
-        {
-            center();
-            return true;
-        }
-        else
-            return false;
     }
 
     return false;
