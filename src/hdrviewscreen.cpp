@@ -35,10 +35,13 @@ using std::string;
 using std::vector;
 using json = nlohmann::json;
 
-HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, true), m_settings(settings),
-    m_clipboard(nullptr)
+HDRViewScreen::HDRViewScreen(bool request_float_fb, const nlohmann::json &settings, vector<string> args) :
+    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, request_float_fb),
+    m_settings(settings), m_clipboard(nullptr)
 {
+    if (request_float_fb && !has_float_buffer())
+        spdlog::warn("Failed to create floating point frame buffer.");
+
     set_background(Color(0.23f, 1.0f));
 
     auto theme                     = new Theme(m_nvg_context);
@@ -47,7 +50,7 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
     theme->m_text_box_font_size    = 14;
     theme->m_window_corner_radius  = 4;
     theme->m_window_fill_unfocused = Color(40, 250);
-    theme->m_window_fill_focused   = Color(45, 250);
+    theme->m_window_fill_focused   = Color(40, 250);
     set_theme(theme);
 
     auto panel_theme                       = new Theme(m_nvg_context);
@@ -56,7 +59,7 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
     panel_theme->m_text_box_font_size      = 14;
     panel_theme->m_window_corner_radius    = 0;
     panel_theme->m_window_fill_unfocused   = Color(50, 255);
-    panel_theme->m_window_fill_focused     = Color(52, 255);
+    panel_theme->m_window_fill_focused     = Color(50, 255);
     panel_theme->m_window_header_height    = 0;
     panel_theme->m_window_drop_shadow_size = 0;
 
