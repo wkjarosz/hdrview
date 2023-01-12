@@ -22,7 +22,8 @@ using namespace nanogui;
 class HDRViewScreen : public Screen
 {
 public:
-    HDRViewScreen(bool request_float_fb, const nlohmann::json &settings, std::vector<std::string> args);
+    HDRViewScreen(bool capability_10bit, bool capability_EDR, const nlohmann::json &settings,
+                  std::vector<std::string> args);
     virtual ~HDRViewScreen() override;
 
     void ask_to_quit();

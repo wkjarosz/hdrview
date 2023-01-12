@@ -104,7 +104,7 @@ public:
     /// Zoom out to the previous power of two
     void zoom_out();
 
-    float zoom_level() const { return m_zoom_level; }
+    float zoom_level() const;
     void  set_zoom_level(float l);
 
     float zoom() const { return m_zoom; }
@@ -243,7 +243,6 @@ protected:
 
     // Image display parameters.
     float      m_zoom;                                  ///< The scale/zoom of the image
-    float      m_zoom_level;                            ///< The zoom level
     Vector2f   m_offset     = 0;                        ///< The panning offset of the
     EChannel   m_channel    = EChannel::RGB;            ///< Which channel to display
     EBlendMode m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images

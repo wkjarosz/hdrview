@@ -226,20 +226,19 @@ void HDRImageView::fit()
     m_zoom_callback(m_zoom);
 }
 
+float HDRImageView::zoom_level() const { return log(m_zoom * screen()->pixel_ratio()) / log(m_zoom_sensitivity); }
+
 void HDRImageView::set_zoom_level(float level)
 {
-    m_zoom       = ::clamp(std::pow(m_zoom_sensitivity, level), MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level = log(m_zoom) / log(m_zoom_sensitivity);
-
+    m_zoom = ::clamp(std::pow(m_zoom_sensitivity, level) / screen()->pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
     m_zoom_callback(m_zoom);
 }
 
 void HDRImageView::zoom_by(float amount, const Vector2f &focus_pos)
 {
     auto  focused_pixel = pixel_at_position(focus_pos);
-    float scaleFactor   = std::pow(m_zoom_sensitivity, amount);
-    m_zoom              = ::clamp(scaleFactor * m_zoom, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level        = log(m_zoom) / log(m_zoom_sensitivity);
+    float scale_factor  = std::pow(m_zoom_sensitivity, amount);
+    m_zoom              = ::clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
     set_pixel_at_position(focus_pos, focused_pixel);
 
     m_zoom_callback(m_zoom);
@@ -255,7 +254,6 @@ void HDRImageView::zoom_in()
     float level_for_sensitivity = std::ceil(log(m_zoom) / log(2.f) + 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
     m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level                = log(m_zoom) / log(m_zoom_sensitivity);
     set_pixel_at_position(center_pos, center_pixel);
 
     m_zoom_callback(m_zoom);
@@ -271,7 +269,6 @@ void HDRImageView::zoom_out()
     float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
     m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
-    m_zoom_level                = log(m_zoom) / log(m_zoom_sensitivity);
     set_pixel_at_position(center_pos, center_pixel);
 
     m_zoom_callback(m_zoom);
@@ -315,10 +312,10 @@ bool HDRImageView::scroll_event(const Vector2i &p, const Vector2f &rel)
         return true;
 
     // query glfw directly to check if a modifier key is pressed
-    int lState = glfwGetKey(screen()->glfw_window(), GLFW_KEY_LEFT_SHIFT);
-    int rState = glfwGetKey(screen()->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
+    int l_state = glfwGetKey(screen()->glfw_window(), GLFW_KEY_LEFT_SHIFT);
+    int r_state = glfwGetKey(screen()->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
 
-    if (lState == GLFW_PRESS || rState == GLFW_PRESS)
+    if (l_state == GLFW_PRESS || r_state == GLFW_PRESS)
     {
         // panning
         set_pixel_at_position(Vector2f(p) + rel * 4.f, pixel_at_position(p));

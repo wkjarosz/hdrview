@@ -304,8 +304,6 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     sRGB_checkbox->callback()(sRGB);
     sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-    (new CheckBox(content, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
-        ->set_checked(m_image_view->dithering_on());
     (new CheckBox(content, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
     (new CheckBox(content, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))

@@ -35,12 +35,13 @@ using std::string;
 using std::vector;
 using json = nlohmann::json;
 
-HDRViewScreen::HDRViewScreen(bool request_float_fb, const nlohmann::json &settings, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, request_float_fb),
+HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const nlohmann::json &settings,
+                             vector<string> args) :
+    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, capability_10bit || capability_EDR),
     m_settings(settings), m_clipboard(nullptr)
 {
-    if (request_float_fb && !has_float_buffer())
-        spdlog::warn("Failed to create floating point frame buffer.");
+    if ((capability_10bit || capability_EDR) && !has_float_buffer())
+        spdlog::warn("Tried to create a floating-point frame buffer, but failed.");
 
     set_background(Color(0.23f, 1.0f));
 
@@ -687,6 +688,8 @@ HDRViewScreen::HDRViewScreen(bool request_float_fb, const nlohmann::json &settin
                      m_image_view->center();
                      m_image_view->fit();
                  });
+        add_item(
+            "100%", 0, [this] { m_image_view->set_zoom_level(0.f); }, 0, 0);
         menu->popup()->add<Separator>();
         add_item(
             "Increase exposure", 0, [this] { m_image_view->set_exposure(m_image_view->exposure() + 0.25f); },
@@ -718,15 +721,30 @@ HDRViewScreen::HDRViewScreen(bool request_float_fb, const nlohmann::json &settin
                 m_images_panel->request_histogram_update(true);
             },
             0, '0', false);
-        if (has_float_buffer())
+        if (capability_EDR)
         {
             add_item(
-                "Force LDR display", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
+                "Clamp display to LDR", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
             auto LDR_checkbox = m_menu_items.back();
             LDR_checkbox->set_flags(Button::ToggleButton);
             LDR_checkbox->set_pushed(m_image_view->LDR());
-            LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
+            LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying low-dynamic content.");
             LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_LDR(v); });
+        }
+        if (!capability_10bit)
+        {
+            add_item(
+                "Dither", 0, [] {}, 0, 0, false);
+            auto dither_checkbox = m_menu_items.back();
+            dither_checkbox->set_flags(Button::ToggleButton);
+            dither_checkbox->set_pushed(m_image_view->dithering_on());
+            dither_checkbox->set_tooltip("Dither the displayed intensities to reduce banding on 8-bit displays.");
+            dither_checkbox->set_change_callback([this](bool v) { m_image_view->set_dithering(v); });
+        }
+        else
+        {
+            // disable dithering on 10bit displays
+            m_image_view->set_dithering(false);
         }
         menu->popup()->add<Separator>();
 
