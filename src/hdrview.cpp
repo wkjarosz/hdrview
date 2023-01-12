@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     int           verbosity         = default_verbosity;
 
     float gamma = 2.2f, exposure = 0.0f;
-    bool  dither = true, sRGB = true, sdf = false;
+    bool  dither = true, sRGB = true, sdr = false;
 
     vector<string> in_files;
 
@@ -96,7 +96,7 @@ sRGB curve is used if gamma is not specified.)")
                      "Enable/disable dithering when converting to LDR\n[default: on].")
             ->group("Tone mapping and display");
 
-        app.add_flag("--sdr", sdf, "Force standard dynamic range (8-bit per channel) display.")
+        app.add_flag("--sdr", sdr, "Force standard dynamic range (8-bit per channel) display.")
             ->group("Tone mapping and display");
 
         app.add_option("-v,--verbosity", verbosity,
@@ -158,7 +158,7 @@ The default is 2 (info).)")
         settings["image view"]["dithering"] = dither;
 
         auto [capability_10bit, capability_EDR] = nanogui::test_10bit_edr_support();
-        if (sdf)
+        if (sdr)
         {
             capability_10bit = false;
             capability_EDR   = false;
