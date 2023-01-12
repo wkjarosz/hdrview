@@ -45,7 +45,7 @@ int main(int argc, char **argv)
     int           verbosity         = default_verbosity;
 
     float gamma = 2.2f, exposure = 0.0f;
-    bool  dither = true, sRGB = true;
+    bool  dither = true, sRGB = true, sdr = false;
 
     vector<string> in_files;
 
@@ -94,6 +94,9 @@ sRGB curve is used if gamma is not specified.)")
 
         app.add_flag("--dither,--no-dither{false}", dither,
                      "Enable/disable dithering when converting to LDR\n[default: on].")
+            ->group("Tone mapping and display");
+
+        app.add_flag("--sdr", sdr, "Force standard dynamic range (8-bit per channel) display.")
             ->group("Tone mapping and display");
 
         app.add_option("-v,--verbosity", verbosity,
@@ -155,8 +158,13 @@ The default is 2 (info).)")
         settings["image view"]["dithering"] = dither;
 
         auto [capability_10bit, capability_EDR] = nanogui::test_10bit_edr_support();
+        if (sdr)
+        {
+            capability_10bit = false;
+            capability_EDR   = false;
+        }
         spdlog::info("Launching GUI with {} bit color and {} display support.", capability_10bit ? 10 : 8,
-                     capability_EDR ? "HDR" : "LDR");
+                     capability_EDR ? "EDR" : "SDR");
         nanogui::init();
 
         // #if defined(__APPLE__)
@@ -188,7 +196,7 @@ The default is 2 (info).)")
             //    times with more files.
             glfwSetOpenedFilenamesCallback([](const char *image_file) { g_screen->drop_event({string(image_file)}); });
 #endif
-            g_screen = new HDRViewScreen(settings, in_files);
+            g_screen = new HDRViewScreen(capability_10bit, capability_EDR, settings, in_files);
             g_screen->draw_all();
             g_screen->set_visible(true);
             nanogui::mainloop(-1.f);

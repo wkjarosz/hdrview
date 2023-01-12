@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <nanogui/vector.h>
-#include <algorithm>
 // #include "fwd.h"
 
 class Color3
@@ -44,7 +44,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Element access and manipulation.
     //-----------------------------------------------------------------------
-    float &      operator[](int i) { return (&r)[i]; }
+    float       &operator[](int i) { return (&r)[i]; }
     const float &operator[](int i) const { return (&r)[i]; }
     void         set(float s) { r = g = b = s; }
     void         set(float x, float y, float z)
@@ -189,7 +189,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Constructors and assignment
     //-----------------------------------------------------------------------
-    Color4()                = default;
+    Color4() = default;
     // Color4(const Color4 &c) = default;
     Color4(float x, float y, float z, float w) : Color3(x, y, z), a(w) {}
     Color4(float g, float a) : Color3(g), a(a) {}
@@ -214,7 +214,7 @@ public:
     //-----------------------------------------------------------------------
     //@{ \name Element access and manipulation.
     //-----------------------------------------------------------------------
-    float &      operator[](int i) { return (&r)[i]; }
+    float       &operator[](int i) { return (&r)[i]; }
     const float &operator[](int i) const { return (&r)[i]; }
     void         set(float x) { r = g = b = a = x; }
     void         set(float x, float y, float z, float w)
@@ -338,13 +338,23 @@ public:
         for (int i = 0; i < 4; ++i) res[i] = (*this)[i] > 0.0f ? powf((*this)[i], exp[i]) : 0.0f;
         return res;
     }
-    /// Duff & Porter's over operator for unassociated (not premultiplied) alpha
+    /// Duff & Porter's over operator
+    template <bool premultiplied = false>
     Color4 over(const Color4 &bg) const
     {
-        float  a_over = a + bg.a * (1.f - a);
-        Color4 c_over = (*this * a + bg * bg.a * (1.f - a)) / (a_over == 0.f ? 1.f : a_over);
-        c_over.a      = a_over;
-        return c_over;
+        float  alpha_o{a + bg.a * (1.f - a)};
+        Color3 c3_a{r, g, b};
+        Color3 c3_b{bg.r, bg.g, bg.b};
+        if constexpr (premultiplied)
+        {
+            Color3 c3_o{c3_a + c3_b * (1.f - a)};
+            return Color4{c3_o, alpha_o};
+        }
+        else
+        {
+            Color3 c3_o{(c3_a * a + c3_b * bg.a * (1.f - a)) / (alpha_o == 0.f ? 1.f : alpha_o)};
+            return Color4{c3_o, alpha_o};
+        }
     }
 
     friend std::ostream &operator<<(std::ostream &out, const Color4 &c)
@@ -365,7 +375,10 @@ public:
 };
 
 #define COLOR_FUNCTION_WRAPPER(FUNC)                                                                                   \
-    inline Color3 FUNC(const Color3 &c) { return Color3(std::FUNC(c[0]), std::FUNC(c[1]), std::FUNC(c[2])); }          \
+    inline Color3 FUNC(const Color3 &c)                                                                                \
+    {                                                                                                                  \
+        return Color3(std::FUNC(c[0]), std::FUNC(c[1]), std::FUNC(c[2]));                                              \
+    }                                                                                                                  \
     inline Color4 FUNC(const Color4 &c)                                                                                \
     {                                                                                                                  \
         return Color4(std::FUNC(c[0]), std::FUNC(c[1]), std::FUNC(c[2]), std::FUNC(c[3]));                             \

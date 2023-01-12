@@ -35,10 +35,14 @@ using std::string;
 using std::vector;
 using json = nlohmann::json;
 
-HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args) :
-    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, true), m_settings(settings),
-    m_clipboard(nullptr)
+HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const nlohmann::json &settings,
+                             vector<string> args) :
+    Screen(nanogui::Vector2i(800, 600), "HDRView", true, false, false, true, true, capability_10bit || capability_EDR),
+    m_settings(settings), m_clipboard(nullptr)
 {
+    if ((capability_10bit || capability_EDR) && !has_float_buffer())
+        spdlog::warn("Tried to create a floating-point frame buffer, but failed.");
+
     set_background(Color(0.23f, 1.0f));
 
     auto theme                     = new Theme(m_nvg_context);
@@ -47,7 +51,7 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
     theme->m_text_box_font_size    = 14;
     theme->m_window_corner_radius  = 4;
     theme->m_window_fill_unfocused = Color(40, 250);
-    theme->m_window_fill_focused   = Color(45, 250);
+    theme->m_window_fill_focused   = Color(40, 250);
     set_theme(theme);
 
     auto panel_theme                       = new Theme(m_nvg_context);
@@ -56,7 +60,7 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
     panel_theme->m_text_box_font_size      = 14;
     panel_theme->m_window_corner_radius    = 0;
     panel_theme->m_window_fill_unfocused   = Color(50, 255);
-    panel_theme->m_window_fill_focused     = Color(52, 255);
+    panel_theme->m_window_fill_focused     = Color(50, 255);
     panel_theme->m_window_header_height    = 0;
     panel_theme->m_window_drop_shadow_size = 0;
 
@@ -629,6 +633,10 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
         show_top_panel->set_change_callback(
             [this, show_top_panel, show_side_panels, show_all_panels](bool b)
             {
+                // make sure the menu bar is always on top
+                // FIXME: This is a hack, would be nice to avoid it
+                move_window_to_front(m_menubar);
+
                 m_gui_animation_start = glfwGetTime();
                 push_gui_refresh();
                 m_animation_running = true;
@@ -655,6 +663,10 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
         show_all_panels->set_change_callback(
             [this, show_top_panel, show_side_panels](bool b)
             {
+                // make sure the menu bar is always on top
+                // FIXME: This is a hack, would be nice to avoid it
+                move_window_to_front(m_menubar);
+
                 m_gui_animation_start = glfwGetTime();
                 push_gui_refresh();
                 m_animation_running = true;
@@ -668,12 +680,18 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
             "Zoom in", 0, [this] { m_image_view->zoom_in(); }, 0, '+');
         add_item(
             "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
-        add_item("Fit to screen", 0,
-                 [this]
-                 {
-                     m_image_view->center();
-                     m_image_view->fit();
-                 });
+        add_item(
+            "Center", 0, [this] { m_image_view->center(); }, 0, 'C');
+        add_item(
+            "Fit to screen", 0,
+            [this]
+            {
+                m_image_view->center();
+                m_image_view->fit();
+            },
+            0, 'F');
+        add_item(
+            "100%", 0, [this] { m_image_view->set_zoom_level(0.f); }, 0, 0);
         menu->popup()->add<Separator>();
         add_item(
             "Increase exposure", 0, [this] { m_image_view->set_exposure(m_image_view->exposure() + 0.25f); },
@@ -690,12 +708,40 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
             },
             0, 'N', false);
         menu->popup()->add<Separator>();
-        add_item(
-            "Increase gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); },
-            GLFW_MOD_SHIFT, 'G', false);
-        add_item(
-            "Decrease gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0,
-            'G', false);
+        {
+            add_item(
+                "sRGB", 0, [] {}, 0, 0, false);
+            auto sRGB_checkbox = m_menu_items.back();
+
+            add_item(
+                "Increase gamma", 0,
+                [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); }, GLFW_MOD_SHIFT,
+                'G', false);
+            auto gamma_up_checkbox = m_menu_items.back();
+
+            add_item(
+                "Decrease gamma", 0,
+                [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0, 'G', false);
+            auto gamma_down_checkbox = m_menu_items.back();
+
+            sRGB_checkbox->set_flags(Button::ToggleButton);
+            sRGB_checkbox->set_tooltip(
+                "Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
+
+            // add more to m_image_view's existing callback (initially set by HandTool::create_options_bar)
+            auto prev_cb = m_image_view->sRGB_callback();
+            m_image_view->set_sRGB_callback(
+                [gamma_up_checkbox, gamma_down_checkbox, sRGB_checkbox, prev_cb](bool b)
+                {
+                    gamma_up_checkbox->set_enabled(!b);
+                    gamma_down_checkbox->set_enabled(!b);
+                    sRGB_checkbox->set_pushed(b);
+                    prev_cb(b);
+                });
+            sRGB_checkbox->set_change_callback([this](bool v) { m_image_view->set_sRGB(v); });
+            sRGB_checkbox->set_pushed(m_image_view->sRGB());
+            sRGB_checkbox->change_callback()(m_image_view->sRGB());
+        }
         menu->popup()->add<Separator>();
         add_item(
             "Reset tonemapping", 0,
@@ -705,15 +751,30 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
                 m_images_panel->request_histogram_update(true);
             },
             0, '0', false);
-        if (has_float_buffer())
+        if (capability_EDR)
         {
             add_item(
-                "Force LDR display", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
+                "Clamp display to LDR", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
             auto LDR_checkbox = m_menu_items.back();
             LDR_checkbox->set_flags(Button::ToggleButton);
             LDR_checkbox->set_pushed(m_image_view->LDR());
-            LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying a low-dynamic range image.");
+            LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying low-dynamic content.");
             LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_LDR(v); });
+        }
+        if (!capability_10bit)
+        {
+            add_item(
+                "Dither", 0, [] {}, 0, 0, false);
+            auto dither_checkbox = m_menu_items.back();
+            dither_checkbox->set_flags(Button::ToggleButton);
+            dither_checkbox->set_pushed(m_image_view->dithering_on());
+            dither_checkbox->set_tooltip("Dither the displayed intensities to reduce banding on 8-bit displays.");
+            dither_checkbox->set_change_callback([this](bool v) { m_image_view->set_dithering(v); });
+        }
+        else
+        {
+            // disable dithering on 10bit displays
+            m_image_view->set_dithering(false);
         }
         menu->popup()->add<Separator>();
 
@@ -821,6 +882,35 @@ HDRViewScreen::HDRViewScreen(const nlohmann::json &settings, vector<string> args
             add_item(
                 "Find image", 0, [this] { m_images_panel->focus_filter(); }, SYSTEM_COMMAND_MOD, 'F');
             m_menu_items.back()->set_visible(false);
+        }
+
+        {
+            // Check for duplicate keyboard shortcuts in the menu bar
+            // This is O(n^2), but shouldn't be too bad if done once at startup for a small number of items.
+            auto find_equal = [this](MenuItem *item) -> MenuItem *
+            {
+                for (auto other_item : m_menu_items)
+                {
+                    if (other_item != item && other_item->hotkey() == item->hotkey() &&
+                        item->hotkey() != std::pair<int, int>{0, 0})
+                        return other_item;
+                }
+                return nullptr;
+            };
+
+            std::set<std::pair<int, int>> duplicates;
+            for (auto item : m_menu_items)
+            {
+                spdlog::debug("Menu item \"{}\" with keyboard shortcut {}", item->caption(), item->shortcut_string());
+                if (duplicates.count(item->hotkey()))
+                    continue;
+                if (auto other_item = find_equal(item))
+                {
+                    spdlog::error("Keyboard shortcut {} set for both \"{}\" and \"{}\". Only the first will be used.",
+                                  item->shortcut_string(), item->caption(), other_item->caption());
+                    duplicates.insert(item->hotkey());
+                }
+            }
         }
     }
 
@@ -1355,9 +1445,6 @@ bool HDRViewScreen::at_tool_panel_edge(const Vector2i &p)
 
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
-    // make sure the menu bar is always on top
-    move_window_to_front(m_menubar);
-
     // temporarily increase the gui refresh rate between mouse down and up events.
     // makes things like dragging smoother
     if (down)

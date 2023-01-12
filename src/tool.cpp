@@ -31,7 +31,7 @@ Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *imag
            const string &tooltip, int icon, ETool tool) :
     m_name(name),
     m_tooltip(tooltip), m_icon(icon), m_tool(tool), m_screen(screen), m_image_view(image_view),
-    m_images_panel(images_panel), m_button(nullptr), m_options(nullptr), m_menuitem(nullptr)
+    m_images_panel(images_panel), m_button(nullptr), m_menuitem(nullptr), m_options(nullptr)
 {
     // empty
 }
@@ -277,35 +277,27 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
             gamma_textbox->set_value(g);
             gamma_slider->set_value(g);
         });
+
+    // this callback will be extended for more GUI elements when creating the menu bar
     m_image_view->set_sRGB_callback(
-        [sRGB_checkbox, gamma_textbox, gamma_slider](bool b)
+        [this, sRGB_checkbox, gamma_textbox, gamma_slider, gamma_label](bool b)
         {
             sRGB_checkbox->set_checked(b);
             gamma_textbox->set_enabled(!b);
             gamma_textbox->set_spinnable(!b);
             gamma_slider->set_enabled(!b);
+            gamma_label->set_enabled(!b);
+            gamma_label->set_color(b ? m_screen->theme()->m_disabled_text_color : m_screen->theme()->m_text_color);
         });
     m_image_view->set_exposure(exposure);
     m_image_view->set_gamma(gamma);
 
-    sRGB_checkbox->set_callback(
-        [&, this, gamma_slider, gamma_textbox, gamma_label](bool value)
-        {
-            m_image_view->set_sRGB(value);
-            gamma_slider->set_enabled(!value);
-            gamma_textbox->set_spinnable(!value);
-            gamma_textbox->set_enabled(!value);
-            gamma_label->set_enabled(!value);
-            gamma_label->set_color(value ? m_screen->theme()->m_disabled_text_color : m_screen->theme()->m_text_color);
-            m_screen->request_layout_update();
-        });
+    sRGB_checkbox->set_callback([&, this](bool value) { m_image_view->set_sRGB(value); });
 
     sRGB_checkbox->set_checked(sRGB);
     sRGB_checkbox->callback()(sRGB);
     sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-    (new CheckBox(content, "Dither", [this](bool v) { m_image_view->set_dithering(v); }))
-        ->set_checked(m_image_view->dithering_on());
     (new CheckBox(content, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
     (new CheckBox(content, "RGB values", [this](bool v) { m_image_view->set_draw_pixel_info(v); }))

@@ -219,7 +219,7 @@ namespace
 {
 
 // Taken from http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
-const M33f XYZD65TosRGB(3.2406f, -1.5372f, -0.4986f, -0.9689f, 1.8758f, 0.0415f, 0.0557f, -0.2040f, 1.0570f);
+// const M33f XYZ_D65_to_sRGB(3.2406f, -1.5372f, -0.4986f, -0.9689f, 1.8758f, 0.0415f, 0.0557f, -0.2040f, 1.0570f);
 
 const M33f XYZ_D50_to_XYZ_D65(0.9555766f, -0.0230393f, 0.0631636f, -0.0282895f, 1.0099416f, 0.0210077f, 0.0122982f,
                               -0.0204830f, 1.3299098f);

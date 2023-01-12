@@ -22,7 +22,8 @@ using namespace nanogui;
 class HDRViewScreen : public Screen
 {
 public:
-    HDRViewScreen(const nlohmann::json & settings, std::vector<std::string> args);
+    HDRViewScreen(bool capability_10bit, bool capability_EDR, const nlohmann::json &settings,
+                  std::vector<std::string> args);
     virtual ~HDRViewScreen() override;
 
     void ask_to_quit();
@@ -96,8 +97,8 @@ private:
     VScrollPanel           *m_side_scroll_panel;
     Widget                 *m_side_panel_contents;
     std::vector<Button *>   m_panel_btns;
-    std::vector<MenuItem *> m_menu_items;
-    std::vector<MenuItem *> m_edit_items;
+    std::vector<MenuItem *> m_menu_items; /// All menu items
+    std::vector<MenuItem *> m_edit_items; /// Menu items that are enabled iff we have an editable image
 
     double m_gui_animation_start;
     bool   m_animation_running = false;

@@ -110,7 +110,7 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v3
         with:
-          name: HDRView${{ matrix.config.suffix }}-${{ matrix.buildtype }}.dmg
+          name: HDRView-${{ matrix.config.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}.dmg
           path: |
             ${{github.workspace}}/build/HDRView${{ matrix.config.suffix }}.dmg
 

@@ -541,7 +541,7 @@ MenuBar::MenuBar(Widget *parent, const string &title) : Window(parent, title)
     menu_theme->m_text_box_font_size            = 14;
     menu_theme->m_window_corner_radius          = 0;
     menu_theme->m_window_fill_unfocused         = Color(25, 255);
-    menu_theme->m_window_fill_focused           = Color(27, 255);
+    menu_theme->m_window_fill_focused           = Color(25, 255);
     menu_theme->m_drop_shadow                   = Color(0, 100);
     menu_theme->m_window_header_height          = 0;
     menu_theme->m_window_drop_shadow_size       = 0;
@@ -599,7 +599,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
 bool MenuBar::process_hotkeys(int modifiers, int key)
 {
-    // spdlog::info("Hot keys:");
+    spdlog::trace("Processing hotkeys:");
     for (auto c : children())
         if (auto menu = dynamic_cast<Dropdown *>(c))
         {
