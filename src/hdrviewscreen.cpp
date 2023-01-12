@@ -681,13 +681,15 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         add_item(
             "Zoom out", 0, [this] { m_image_view->zoom_out(); }, 0, '-');
         add_item(
-            "Center", 0, [this] { m_image_view->center(); }, 0, 'R');
-        add_item("Fit to screen", 0,
-                 [this]
-                 {
-                     m_image_view->center();
-                     m_image_view->fit();
-                 });
+            "Center", 0, [this] { m_image_view->center(); }, 0, 'C');
+        add_item(
+            "Fit to screen", 0,
+            [this]
+            {
+                m_image_view->center();
+                m_image_view->fit();
+            },
+            0, 'F');
         add_item(
             "100%", 0, [this] { m_image_view->set_zoom_level(0.f); }, 0, 0);
         menu->popup()->add<Separator>();
@@ -706,12 +708,40 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             },
             0, 'N', false);
         menu->popup()->add<Separator>();
-        add_item(
-            "Increase gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); },
-            GLFW_MOD_SHIFT, 'G', false);
-        add_item(
-            "Decrease gamma", 0, [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0,
-            'G', false);
+        {
+            add_item(
+                "sRGB", 0, [] {}, 0, 0, false);
+            auto sRGB_checkbox = m_menu_items.back();
+
+            add_item(
+                "Increase gamma", 0,
+                [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() + 0.02f)); }, GLFW_MOD_SHIFT,
+                'G', false);
+            auto gamma_up_checkbox = m_menu_items.back();
+
+            add_item(
+                "Decrease gamma", 0,
+                [this] { m_image_view->set_gamma(std::max(0.02f, m_image_view->gamma() - 0.02f)); }, 0, 'G', false);
+            auto gamma_down_checkbox = m_menu_items.back();
+
+            sRGB_checkbox->set_flags(Button::ToggleButton);
+            sRGB_checkbox->set_tooltip(
+                "Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
+
+            // add more to m_image_view's existing callback (initially set by HandTool::create_options_bar)
+            auto prev_cb = m_image_view->sRGB_callback();
+            m_image_view->set_sRGB_callback(
+                [gamma_up_checkbox, gamma_down_checkbox, sRGB_checkbox, prev_cb](bool b)
+                {
+                    gamma_up_checkbox->set_enabled(!b);
+                    gamma_down_checkbox->set_enabled(!b);
+                    sRGB_checkbox->set_pushed(b);
+                    prev_cb(b);
+                });
+            sRGB_checkbox->set_change_callback([this](bool v) { m_image_view->set_sRGB(v); });
+            sRGB_checkbox->set_pushed(m_image_view->sRGB());
+            sRGB_checkbox->change_callback()(m_image_view->sRGB());
+        }
         menu->popup()->add<Separator>();
         add_item(
             "Reset tonemapping", 0,
@@ -852,6 +882,35 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             add_item(
                 "Find image", 0, [this] { m_images_panel->focus_filter(); }, SYSTEM_COMMAND_MOD, 'F');
             m_menu_items.back()->set_visible(false);
+        }
+
+        {
+            // Check for duplicate keyboard shortcuts in the menu bar
+            // This is O(n^2), but shouldn't be too bad if done once at startup for a small number of items.
+            auto find_equal = [this](MenuItem *item) -> MenuItem *
+            {
+                for (auto other_item : m_menu_items)
+                {
+                    if (other_item != item && other_item->hotkey() == item->hotkey() &&
+                        item->hotkey() != std::pair<int, int>{0, 0})
+                        return other_item;
+                }
+                return nullptr;
+            };
+
+            std::set<std::pair<int, int>> duplicates;
+            for (auto item : m_menu_items)
+            {
+                spdlog::debug("Menu item \"{}\" with keyboard shortcut {}", item->caption(), item->shortcut_string());
+                if (duplicates.count(item->hotkey()))
+                    continue;
+                if (auto other_item = find_equal(item))
+                {
+                    spdlog::error("Keyboard shortcut {} set for both \"{}\" and \"{}\". Only the first will be used.",
+                                  item->shortcut_string(), item->caption(), other_item->caption());
+                    duplicates.insert(item->hotkey());
+                }
+            }
         }
     }
 

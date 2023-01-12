@@ -599,7 +599,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
 bool MenuBar::process_hotkeys(int modifiers, int key)
 {
-    // spdlog::info("Hot keys:");
+    spdlog::trace("Processing hotkeys:");
     for (auto c : children())
         if (auto menu = dynamic_cast<Dropdown *>(c))
         {

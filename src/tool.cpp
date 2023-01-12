@@ -277,28 +277,22 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
             gamma_textbox->set_value(g);
             gamma_slider->set_value(g);
         });
+
+    // this callback will be extended for more GUI elements when creating the menu bar
     m_image_view->set_sRGB_callback(
-        [sRGB_checkbox, gamma_textbox, gamma_slider](bool b)
+        [this, sRGB_checkbox, gamma_textbox, gamma_slider, gamma_label](bool b)
         {
             sRGB_checkbox->set_checked(b);
             gamma_textbox->set_enabled(!b);
             gamma_textbox->set_spinnable(!b);
             gamma_slider->set_enabled(!b);
+            gamma_label->set_enabled(!b);
+            gamma_label->set_color(b ? m_screen->theme()->m_disabled_text_color : m_screen->theme()->m_text_color);
         });
     m_image_view->set_exposure(exposure);
     m_image_view->set_gamma(gamma);
 
-    sRGB_checkbox->set_callback(
-        [&, this, gamma_slider, gamma_textbox, gamma_label](bool value)
-        {
-            m_image_view->set_sRGB(value);
-            gamma_slider->set_enabled(!value);
-            gamma_textbox->set_spinnable(!value);
-            gamma_textbox->set_enabled(!value);
-            gamma_label->set_enabled(!value);
-            gamma_label->set_color(value ? m_screen->theme()->m_disabled_text_color : m_screen->theme()->m_text_color);
-            m_screen->request_layout_update();
-        });
+    sRGB_checkbox->set_callback([&, this](bool value) { m_image_view->set_sRGB(value); });
 
     sRGB_checkbox->set_checked(sRGB);
     sRGB_checkbox->callback()(sRGB);
