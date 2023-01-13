@@ -10,11 +10,13 @@
 #include "hdrimage.h"
 #include "parallelfor.h"
 #include "timer.h"
-#include <ImathBox.h>    // for Box2i
-#include <ImathVec.h>    // for Vec2
-#include <ImfArray.h>    // for Array2D
+#include <ImathBox.h> // for Box2i
+#include <ImathVec.h> // for Vec2
+#include <ImfArray.h> // for Array2D
+#include <ImfChromaticities.h>
 #include <ImfRgba.h>     // for Rgba, RgbaChannels::WRITE_RGBA
 #include <ImfRgbaFile.h> // for RgbaInputFile, RgbaOutputFile
+#include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <algorithm>     // for transform
 #include <ctype.h>       // for tolower
@@ -186,22 +188,42 @@ bool HDRImage::load(const string &filename)
             h = dw.max.y - dw.min.y + 1;
 
             Imf::Array2D<Imf::Rgba> pixels(h, w);
-
             file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
             file.readPixels(dw.min.y, dw.max.y);
-
             spdlog::debug("Reading EXR image took: {} seconds.", (timer.lap() / 1000.f));
+
+            // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
+            Imath::M44f chr_M; // the conversion matrix to rec709 RGB; defaults to identity
+            if (hasChromaticities(file.header()))
+            {
+                // equality comparison for Imf::Chromaticities
+                auto chr_eq = [](const Imf::Chromaticities &a, const Imf::Chromaticities &b)
+                {
+                    return (a.red - b.red).length2() + (a.green - b.green).length2() + (a.blue - b.blue).length2() +
+                               (a.white - b.white).length2() <
+                           1e-8f;
+                };
+
+                Imf::Chromaticities rec709_chr; // default rec709 (sRGB) primaries
+                Imf::Chromaticities file_chr = Imf::chromaticities(file.header());
+                if (!chr_eq(file_chr, rec709_chr))
+                {
+                    chr_M = Imf::RGBtoXYZ(file_chr, 1) * Imf::XYZtoRGB(rec709_chr, 1);
+                    spdlog::info("Converting pixel values to Rec709/sRGB primaries and whitepoint.");
+                }
+            }
 
             resize(w, h);
 
             // copy pixels over to the Image
             parallel_for(0, h,
-                         [this, w, &pixels](int y)
+                         [this, w, &pixels, &chr_M](int y)
                          {
                              for (int x = 0; x < w; ++x)
                              {
-                                 const Imf::Rgba &p = pixels[y][x];
-                                 (*this)(x, y)      = Color4(p.r, p.g, p.b, p.a);
+                                 const Imf::Rgba &p    = pixels[y][x];
+                                 auto             sRGB = Imath::V3f(p.r, p.g, p.b) * chr_M;
+                                 (*this)(x, y)         = Color4(sRGB.x, sRGB.y, sRGB.z, p.a);
                              }
                          });
 

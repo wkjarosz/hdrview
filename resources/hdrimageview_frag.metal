@@ -37,10 +37,9 @@ struct VertexOut
     float2 secondary_uv;
 };
 
-
 float3 tonemap(const float3 color, const float gamma, const bool sRGB)
 {
-    return sRGB ? linearToSRGB(color) : pow(color, float3(1.0 / gamma));
+    return sRGB ? linearToSRGB(color) : sign(color) * pow(abs(color), float3(1.0 / gamma));
 }
 
 // note: uniformly distributed, normalized rand, [0;1[
