@@ -10,11 +10,13 @@
 #include "hdrimage.h"
 #include "parallelfor.h"
 #include "timer.h"
-#include <ImathBox.h>    // for Box2i
-#include <ImathVec.h>    // for Vec2
-#include <ImfArray.h>    // for Array2D
+#include <ImathBox.h> // for Box2i
+#include <ImathVec.h> // for Vec2
+#include <ImfArray.h> // for Array2D
+#include <ImfChromaticities.h>
 #include <ImfRgba.h>     // for Rgba, RgbaChannels::WRITE_RGBA
 #include <ImfRgbaFile.h> // for RgbaInputFile, RgbaOutputFile
+#include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <algorithm>     // for transform
 #include <ctype.h>       // for tolower
@@ -57,6 +59,9 @@
 
 using namespace nanogui;
 using namespace std;
+using namespace Imath;
+using namespace Iex;
+using namespace Imf;
 
 // local functions
 namespace
@@ -170,38 +175,58 @@ bool HDRImage::load(const string &filename)
     }
 
     // next try exrs
-    if (Imf::isOpenExrFile(filename.c_str()))
+    if (isOpenExrFile(filename.c_str()))
     {
         try
         {
             // FIXME: the threading below seems to cause issues, but shouldn't.
             // turning off for now
-            Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
+            setGlobalThreadCount(std::thread::hardware_concurrency());
             Timer timer;
 
-            Imf::RgbaInputFile file(filename.c_str());
-            Imath::Box2i       dw = file.dataWindow();
+            RgbaInputFile file(filename.c_str());
+            Imath::Box2i  dw = file.dataWindow();
 
             w = dw.max.x - dw.min.x + 1;
             h = dw.max.y - dw.min.y + 1;
 
-            Imf::Array2D<Imf::Rgba> pixels(h, w);
-
+            Imf::Array2D<Rgba> pixels(h, w);
             file.setFrameBuffer(&pixels[0][0] - dw.min.x - dw.min.y * w, 1, w);
             file.readPixels(dw.min.y, dw.max.y);
-
             spdlog::debug("Reading EXR image took: {} seconds.", (timer.lap() / 1000.f));
+
+            // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
+            M44f chr_M; // the conversion matrix to rec709 RGB; defaults to identity
+            if (hasChromaticities(file.header()))
+            {
+                // equality comparison for Imf::Chromaticities
+                auto chr_eq = [](const Chromaticities &a, const Chromaticities &b)
+                {
+                    return (a.red - b.red).length2() + (a.green - b.green).length2() + (a.blue - b.blue).length2() +
+                               (a.white - b.white).length2() <
+                           1e-8f;
+                };
+
+                Chromaticities rec709_chr; // default rec709 (sRGB) primaries
+                Chromaticities file_chr = chromaticities(file.header());
+                if (!chr_eq(file_chr, rec709_chr))
+                {
+                    chr_M = RGBtoXYZ(file_chr, 1) * XYZtoRGB(rec709_chr, 1);
+                    spdlog::info("Converting pixel values to Rec709/sRGB primaries and whitepoint.");
+                }
+            }
 
             resize(w, h);
 
             // copy pixels over to the Image
             parallel_for(0, h,
-                         [this, w, &pixels](int y)
+                         [this, w, &pixels, &chr_M](int y)
                          {
                              for (int x = 0; x < w; ++x)
                              {
-                                 const Imf::Rgba &p = pixels[y][x];
-                                 (*this)(x, y)      = Color4(p.r, p.g, p.b, p.a);
+                                 const Rgba &p    = pixels[y][x];
+                                 V3f         sRGB = V3f(p.r, p.g, p.b) * chr_M;
+                                 (*this)(x, y)    = Color4(sRGB.x, sRGB.y, sRGB.z, p.a);
                              }
                          });
 
@@ -283,9 +308,9 @@ bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, 
     {
         try
         {
-            Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
-            Imf::RgbaOutputFile     file(filename.c_str(), width(), height(), Imf::WRITE_RGBA);
-            Imf::Array2D<Imf::Rgba> pixels(height(), width());
+            setGlobalThreadCount(std::thread::hardware_concurrency());
+            RgbaOutputFile     file(filename.c_str(), width(), height(), WRITE_RGBA);
+            Imf::Array2D<Rgba> pixels(height(), width());
 
             Timer timer;
             // copy image data over to Rgba pixels
@@ -294,12 +319,12 @@ bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, 
                          {
                              for (int x = 0; x < width(); ++x)
                              {
-                                 Imf::Rgba &p = pixels[y][x];
-                                 Color4     c = (*img)(x, y);
-                                 p.r          = c[0];
-                                 p.g          = c[1];
-                                 p.b          = c[2];
-                                 p.a          = c[3];
+                                 Rgba  &p = pixels[y][x];
+                                 Color4 c = (*img)(x, y);
+                                 p.r      = c[0];
+                                 p.g      = c[1];
+                                 p.b      = c[2];
+                                 p.a      = c[3];
                              }
                          });
             spdlog::debug("Copying pixel data took: {} seconds.", (timer.lap() / 1000.f));
