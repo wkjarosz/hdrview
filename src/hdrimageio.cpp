@@ -138,9 +138,8 @@ bool HDRImage::load(const string &filename)
         else
             errors = stbi_failure_reason();
     }
-
     // then try pfm
-    if (is_pfm_image(filename.c_str()))
+    else if (is_pfm_image(filename.c_str()))
     {
         float *float_data = 0;
         try
@@ -170,9 +169,8 @@ bool HDRImage::load(const string &filename)
             errors = e.what();
         }
     }
-
     // next try exrs
-    if (Imf::isOpenExrFile(filename.c_str()))
+    else if (Imf::isOpenExrFile(filename.c_str()))
     {
         try
         {
@@ -236,22 +234,23 @@ bool HDRImage::load(const string &filename)
             errors = e.what();
         }
     }
-
-    try
+    else if (extension == "dng")
     {
-        load_dng(filename);
-
-        return true;
-    }
-    catch (const exception &e)
-    {
-        resize(0, 0);
-        // only report errors to the user if the extension was actually dng
-        if (extension == "dng")
+        try
+        {
+            load_dng(filename);
+            return true;
+        }
+        catch (const exception &e)
+        {
+            resize(0, 0);
             errors = e.what();
+        }
     }
+    else
+        errors = "This doesn't seem to be a supported image file.";
 
-    spdlog::error("ERROR: Unable to read image file \"{}\":\n\t{}\n", filename, errors);
+    spdlog::error("Unable to read image file \"{}\":\n\t{}", filename, errors);
 
     return false;
 }
@@ -334,7 +333,7 @@ bool HDRImage::save(const string &filename, float gain, float gamma, bool sRGB, 
         }
         catch (const exception &e)
         {
-            spdlog::error("ERROR: Unable to write image file \"{}\": {}", filename, e.what());
+            spdlog::error("Unable to write image file \"{}\": {}", filename, e.what());
             return false;
         }
     }

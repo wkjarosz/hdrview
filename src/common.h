@@ -292,6 +292,10 @@ inline int codePointLength(char first)
         return 1;
 }
 
+//! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
+//! range that is unique across the strings
+std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
+
 std::vector<std::string> split(std::string text, const std::string &delim);
 std::string              to_lower(std::string str);
 std::string              to_upper(std::string str);
