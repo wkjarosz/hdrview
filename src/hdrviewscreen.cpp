@@ -284,7 +284,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     }
 
     auto visible_panels =
-        m_settings.value("side panel", json::object()).value("visible panels", json::array()).get<std::vector<int>>();
+        m_settings.value("side panel", json::object()).value("visible panels", json::array()).get<vector<int>>();
     for (size_t i = 0; i < popup_menus.size(); ++i)
     {
         auto item = dynamic_cast<MenuItem *>(popup_menus[i]->child_at(0));
@@ -487,7 +487,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     {
         auto menu = m_menubar->add_menu("File");
 
-        auto add_item = [this, &menu](const std::string &name, int icon, const std::function<void(void)> &cb,
+        auto add_item = [this, &menu](const string &name, int icon, const std::function<void(void)> &cb,
                                       int modifier = 0, int button = 0, bool edit = true)
         {
             auto i = menu->popup()->add<MenuItem>(name, icon);
@@ -500,8 +500,57 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
 
         add_item(
             "New...", FA_FILE, [this] { new_image(); }, SYSTEM_COMMAND_MOD, 'N', false);
+        menu->popup()->add<Separator>();
         add_item(
             "Open...", FA_FOLDER_OPEN, [this] { load_image(); }, SYSTEM_COMMAND_MOD, 'O', false);
+        add_item(
+            "Open recent:", 0, [] {}, 0, 0, false);
+        m_menu_items.back()->set_enabled(false);
+        auto before_recent_widget = m_menu_items.back();
+        add_item(
+            "Clear recently opened", 0,
+            [this]
+            {
+                recent_files().clear();
+                repopulate_recent_files_menu();
+            },
+            0, 0, false);
+        auto after_recent_widget = m_menu_items.back();
+
+        m_repopulate_recent_files_menu = [this, parent = menu->popup(), before_recent_widget, after_recent_widget]()
+        {
+            // first delete previous recent file items
+            int first = parent->child_index(before_recent_widget);
+            int last  = parent->child_index(after_recent_widget);
+            // prevent crash when the focus path includes any of the widgets we are destroying
+            clear_focus_path();
+            for (int i = first + 1; i < last; --last) parent->remove_child_at(i);
+
+            auto &recent = recent_files();
+
+            // only keep the 5 most recent items
+            if (recent.size() > 5)
+                recent.erase(recent.begin(), recent.end() - 5);
+
+            for (auto f : recent)
+            {
+                string name = f.get<string>();
+                string short_name =
+                    (name.size() < 100) ? name : name.substr(0, 47) + "..." + name.substr(name.size() - 50);
+                MenuItem *item = new MenuItem(nullptr, short_name);
+                item->set_callback([this, f] { drop_event({f}); });
+                parent->add_child(first + 1, item);
+            }
+            before_recent_widget->set_visible(recent.size() > 0);
+            after_recent_widget->set_enabled(recent.size() > 0);
+            after_recent_widget->set_visible(recent.size() > 0);
+            perform_layout();
+        };
+
+        m_repopulate_recent_files_menu();
+
+        menu->popup()->add<Separator>();
+
         add_item(
             "Reload", FA_REDO, [this] { m_images_panel->reload_image(m_images_panel->current_image_index()); },
             SYSTEM_COMMAND_MOD, 'R');
@@ -781,7 +830,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         add_item(
             "Help", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
 
-        // add menu items that are not visible in the mnu but still have keyboard shortcuts
+        // add menu items that are not visible in the menu but still have keyboard shortcuts
         {
             menu = m_menubar->add_menu("Images list");
             menu->set_visible(false);
@@ -971,6 +1020,29 @@ void HDRViewScreen::ask_to_quit()
     dialog->request_focus();
 }
 
+json &HDRViewScreen::recent_files()
+{
+    if (!m_settings.contains("recent files") || !m_settings["recent files"].is_array())
+        m_settings["recent files"] = json::array();
+
+    return m_settings["recent files"];
+}
+
+void HDRViewScreen::remove_from_recent_files(const string &filename)
+{
+    auto &recent = recent_files();
+    for (size_t f = 0; f < recent.size();)
+    {
+        if (recent[f] == filename)
+        {
+            recent.erase(f);
+            continue;
+        }
+        else
+            ++f;
+    }
+}
+
 void HDRViewScreen::write_settings()
 {
     try
@@ -1084,6 +1156,15 @@ bool HDRViewScreen::drop_event(const vector<string> &filenames)
 {
     try
     {
+        // add the files to the recent files list
+        for (auto &f : filenames)
+        {
+            // remove any duplicates of f in recent_files before adding it to the end of recent_files
+            remove_from_recent_files(f);
+            recent_files().push_back(f);
+        }
+        repopulate_recent_files_menu();
+
         m_images_panel->load_images(filenames);
 
         bring_to_focus();
@@ -1111,7 +1192,6 @@ void HDRViewScreen::ask_close_image(int)
 
     auto curr = m_images_panel->current_image_index();
     auto next = m_images_panel->next_visible_image(curr, Forward);
-    cout << "curr: " << curr << "; next: " << next << endl;
     if (auto img = m_images_panel->image(curr))
     {
         if (img->is_modified())
@@ -1662,9 +1742,9 @@ void HDRViewScreen::update_layout()
     int lh = std::min(middle_height, m_side_panel_contents->preferred_size(m_nvg_context).y());
     m_side_scroll_panel->set_fixed_height(lh);
 
-    int zoomWidth = m_zoom_label->preferred_size(m_nvg_context).x();
-    m_zoom_label->set_width(zoomWidth);
-    m_zoom_label->set_position(nanogui::Vector2i(width() - zoomWidth - 6, 0));
+    int zoom_width = m_zoom_label->preferred_size(m_nvg_context).x();
+    m_zoom_label->set_width(zoom_width);
+    m_zoom_label->set_position(nanogui::Vector2i(width() - zoom_width - 6, 0));
 
     perform_layout();
 
@@ -1708,9 +1788,9 @@ void HDRViewScreen::draw_contents()
 
         if (!img->is_null() && img->histograms() && img->histograms()->ready() && img->histograms()->get())
         {
-            auto lazyHist = img->histograms();
-            m_stats_label->set_caption(fmt::format("{:3.3g}\n{:3.3g}\n{:3.3g}", lazyHist->get()->minimum,
-                                                   lazyHist->get()->average, lazyHist->get()->maximum));
+            auto lazy_hist = img->histograms();
+            m_stats_label->set_caption(fmt::format("{:3.3g}\n{:3.3g}\n{:3.3g}", lazy_hist->get()->minimum,
+                                                   lazy_hist->get()->average, lazy_hist->get()->maximum));
         }
         else
             m_stats_label->set_caption("");

@@ -111,7 +111,7 @@ public:
     void        focus_filter();
 
 private:
-    void        trigger_modify_done();
+    void        trigger_modify_done(bool request_done = true);
     void        update_buttons(bool just_created = false);
     void        enable_disable_buttons();
     void        update_histogram();
@@ -125,7 +125,7 @@ private:
 
     int m_previous = -1; ///< The previously selected image
 
-    bool m_image_async_modify_done_requested = false;
+    std::atomic<bool> m_image_async_modify_done_requested = false;
 
     HDRViewScreen *m_screen        = nullptr;
     HDRImageView  *m_image_view    = nullptr;

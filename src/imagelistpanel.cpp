@@ -208,14 +208,15 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
     };
 }
 
-void ImageListPanel::trigger_modify_done()
+void ImageListPanel::trigger_modify_done(bool request_done)
 {
     m_screen->update_caption();
     request_buttons_update();
     set_filter(filter());
     request_histogram_update();
     m_screen->redraw();
-    m_image_async_modify_done_requested = true;
+    if (request_done)
+        m_image_async_modify_done_requested = true;
 }
 
 bool ImageListPanel::is_selected(int index) const
@@ -675,28 +676,28 @@ void ImageListPanel::request_buttons_update()
 
 void ImageListPanel::run_requested_callbacks()
 {
-    if (m_image_async_modify_done_requested)
+    if (m_image_async_modify_done_requested.exchange(false))
     {
-        spdlog::trace("running requested callbacks");
+        spdlog::info("running requested callbacks");
         // remove any images that are not being modified and are null
-        bool num_images_changed = false;
-
         // iterate through the images, and remove the ones that didn't load properly
-        auto it = m_images.begin();
+        auto           it = m_images.begin();
+        vector<string> failed_files;
         while (it != m_images.end())
         {
             int  i   = it - m_images.begin();
             auto img = m_images[i];
             if (img && img->can_modify() && img->is_null())
             {
+                // remove the image from the recent file list
+                failed_files.push_back(img->filename());
+                m_screen->remove_from_recent_files(img->filename());
                 it = m_images.erase(it);
 
                 if (i < m_current)
                     m_current--;
                 else if (m_current >= int(m_images.size()))
                     m_current = m_images.size() - 1;
-
-                num_images_changed = true;
             }
             else
                 ++it;
@@ -704,16 +705,16 @@ void ImageListPanel::run_requested_callbacks()
 
         m_image_view->set_current_image(current_image());
 
-        if (num_images_changed)
+        if (failed_files.size() > 0)
         {
-            m_screen->update_caption();
-
+            m_screen->repopulate_recent_files_menu();
             m_num_images_callback();
+            new SimpleDialog(
+                m_screen, SimpleDialog::Type::Warning, "Error",
+                fmt::format("Could not load {} file{}.", failed_files.size(), failed_files.size() > 1 ? "s" : ""));
         }
 
-        trigger_modify_done(); // TODO: make this use the modified image
-
-        m_image_async_modify_done_requested = false;
+        trigger_modify_done(false); // TODO: make this use the modified image
     }
 }
 
@@ -881,7 +882,7 @@ XPUImagePtr ImageListPanel::load_image(const string &filename)
                 spdlog::info("Loaded \"{}\" [{:d}x{:d}] in {} seconds", filename, ret->width(), ret->height(),
                              timer.elapsed() / 1000.f);
             else
-                spdlog::info("Loading \"{}\" failed", filename);
+                spdlog::error("Loading \"{}\" failed", filename);
             return {ret, nullptr};
         });
     image->recompute_histograms(m_image_view->exposure());
@@ -1236,53 +1237,8 @@ void ImageListPanel::update_filter()
             }
         }
 
-        // determine common parts of filenames
-        // taken from tev
-        int begin_short_offset = 0;
-        int end_short_offset   = 0;
-        if (!active_image_names.empty())
-        {
-            string first     = active_image_names.front();
-            int    firstSize = (int)first.size();
-            if (firstSize > 0)
-            {
-                bool all_start_with_same_char = false;
-                do {
-                    int len = codePointLength(first[begin_short_offset]);
-
-                    all_start_with_same_char =
-                        all_of(begin(active_image_names), end(active_image_names),
-                               [&first, begin_short_offset, len](const string &name)
-                               {
-                                   if (begin_short_offset + len > (int)name.size())
-                                       return false;
-
-                                   for (int i = begin_short_offset; i < begin_short_offset + len; ++i)
-                                       if (name[i] != first[i])
-                                           return false;
-
-                                   return true;
-                               });
-
-                    if (all_start_with_same_char)
-                        begin_short_offset += len;
-                } while (all_start_with_same_char && begin_short_offset < firstSize);
-
-                bool all_end_with_same_char;
-                do {
-                    char lastChar          = first[firstSize - end_short_offset - 1];
-                    all_end_with_same_char = all_of(begin(active_image_names), end(active_image_names),
-                                                    [lastChar, end_short_offset](const string &name)
-                                                    {
-                                                        int index = (int)name.size() - end_short_offset - 1;
-                                                        return index >= 0 && name[index] == lastChar;
-                                                    });
-
-                    if (all_end_with_same_char)
-                        ++end_short_offset;
-                } while (all_end_with_same_char && end_short_offset < firstSize);
-            }
-        }
+        // determine common vs. unique parts of filenames
+        auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(active_image_names);
 
         for (int i = 0; i < num_images(); ++i)
         {
