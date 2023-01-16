@@ -129,7 +129,7 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     }
     catch (const std::exception &e)
     {
-        spdlog::trace("{}", e.what());
+        spdlog::critical("{}", e.what());
     }
 }
 
@@ -382,14 +382,14 @@ void HDRImageView::draw(NVGcontext *ctx)
         draw_pixel_info(ctx);
     }
 
-    draw_widget_border(ctx);
-
     if (m_draw_callback)
     {
         nvgTranslate(ctx, m_pos.x(), m_pos.y());
         m_draw_callback(ctx);
         nvgTranslate(ctx, -m_pos.x(), -m_pos.y());
     }
+
+    draw_widget_border(ctx);
 }
 
 void HDRImageView::draw_image_border(NVGcontext *ctx) const

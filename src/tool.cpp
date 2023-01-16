@@ -6,6 +6,7 @@
 
 #include "tool.h"
 #include "brush.h"
+#include "colorspace.h"
 #include "hdrimageview.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
@@ -704,10 +705,10 @@ void BrushTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int mo
 {
     Color4 fg =
         modifiers & GLFW_MOD_ALT ? m_screen->background()->exposed_color() : m_screen->foreground()->exposed_color();
-    fg.a *= a;
+    fg *= a;
     Color4 bg = (*img)(x, y);
 
-    (*img)(x, y) = fg.over(bg);
+    (*img)(x, y) = fg.over<true>(bg);
 }
 
 void BrushTool::start_stroke(const Vector2i &pixel, const HDRImagePtr &new_image, const Box2i &roi, int modifiers) const
@@ -927,8 +928,9 @@ EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageLis
 
 void EraserTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const
 {
-    float c        = modifiers & GLFW_MOD_ALT ? 1.f : 0.f;
-    (*img)(x, y).a = c * a + (*img)(x, y).a * (1.0f - a);
+    Color3 rgb   = (*img)(x, y);
+    Color4 c     = modifiers & GLFW_MOD_ALT ? Color4(rgb, 0.f) : Color4(0.f, 0.f);
+    (*img)(x, y) = c * a + (*img)(x, y) * (1.0f - a);
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
@@ -1209,7 +1211,17 @@ bool Ruler::mouse_button(const Vector2i &p, int button, bool down, int modifiers
 
 bool Ruler::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
-    return mouse_button(p, button, false, modifiers);
+    // 'modifiers' seems to be kept stuck at whatever it was during click even during dragging
+    // so here we grab query glfw directly to check if a modifier key is pressed
+    // note sure why this is necessary.
+    // FIXME
+    int  l_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_LEFT_SHIFT);
+    int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
+    bool shift_held = l_state == GLFW_PRESS || r_state == GLFW_PRESS;
+
+    // spdlog::info("mouse drag {}; {}; {}; {}; {}", p, rel, button, modifiers, shift_held);
+
+    return mouse_button(p, button, false, shift_held ? modifiers | GLFW_MOD_SHIFT : modifiers);
 }
 
 void Ruler::draw(NVGcontext *ctx) const
@@ -1385,12 +1397,22 @@ bool LineTool::mouse_button(const Vector2i &p, int button, bool down, int modifi
 bool LineTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
     m_dragging = true;
-    return Ruler::mouse_button(p, button, false, modifiers);
+
+    // 'modifiers' seems to be kept stuck at whatever it was during click even during dragging
+    // so here we grab query glfw directly to check if a modifier key is pressed
+    // note sure why this is necessary.
+    // FIXME
+    int  l_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_LEFT_SHIFT);
+    int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
+    bool shift_held = l_state == GLFW_PRESS || r_state == GLFW_PRESS;
+
+    // spdlog::info("mouse drag {}; {}; {}; {}; {}", p, rel, button, modifiers, shift_held);
+
+    return Ruler::mouse_button(p, button, false, shift_held ? modifiers | GLFW_MOD_SHIFT : modifiers);
 }
 
 void LineTool::draw(NVGcontext *ctx) const
 {
-    Tool::draw(ctx);
     if (m_dragging)
     {
         auto img = m_images_panel->current_image();
@@ -1423,7 +1445,235 @@ void LineTool::draw(NVGcontext *ctx) const
         }
 
         draw_crosshairs(ctx, start_pos);
-
-        Tool::draw(ctx);
     }
+    Tool::draw(ctx);
+}
+
+GradientTool::GradientTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
+                           const string &name, const string &tooltip, int icon, ETool tool) :
+    Ruler(screen, image_view, images_panel, name, tooltip, icon, tool)
+{
+    // empty
+}
+
+void GradientTool::write_settings()
+{
+    // create a json object to hold the tool's settings
+    auto &settings      = this_tool_settings();
+    settings["falloff"] = m_falloff;
+}
+
+void GradientTool::create_options_bar(nanogui::Widget *parent)
+{
+    if (m_options)
+        return;
+
+    auto &settings = this_tool_settings();
+
+    m_options = new HScrollPanel(parent);
+    m_options->set_visible(false);
+    auto content = new Widget(m_options);
+    content->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 5, 5));
+
+    content->add<Label>("Falloff:");
+
+    auto falloff = new Dropdown(content, {"Linear", "Smoothstep"});
+    falloff->set_tooltip("Set how the color values should interpolate between each other.");
+    falloff->set_selected_callback([this](int f) { m_falloff = f; });
+    falloff->set_selected_index(std::clamp(settings.value("falloff", 0), 0, 1));
+    falloff->set_fixed_height(19);
+
+    // spacer
+    content->add<Widget>()->set_fixed_width(5);
+
+    content->add<Label>("Opacity:");
+    m_opacity_slider  = new Slider(content);
+    m_opacity_textbox = new FloatBox<float>(content);
+
+    m_opacity_textbox->number_format("%3.0f");
+    m_opacity_textbox->set_editable(true);
+    m_opacity_textbox->set_fixed_width(40);
+    m_opacity_textbox->set_min_max_values(0.0f, 100.f);
+    m_opacity_textbox->set_units("%");
+    m_opacity_textbox->set_alignment(TextBox::Alignment::Right);
+    m_opacity_textbox->set_callback([this](int v) { m_opacity_slider->set_value(v); });
+    m_opacity_slider->set_fixed_width(75);
+    m_opacity_slider->set_range({0.f, 100.f});
+    m_opacity_slider->set_callback([this](int v) { m_opacity_textbox->set_value(v); });
+
+    m_opacity_textbox->set_value(settings.value("opacity", 1.f) * 100.f);
+    m_opacity_slider->set_value(settings.value("opacity", 1.f) * 100.f);
+
+    // spacer
+    content->add<Widget>()->set_fixed_width(5);
+
+    m_clamp_checkbox = new CheckBox(content, "Clamp to endpoints");
+    m_clamp_checkbox->set_checked(settings.value("clamp to endpoints", true));
+}
+
+bool GradientTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
+{
+    Ruler::mouse_button(p, button, down, modifiers);
+
+    auto  fg      = m_screen->foreground()->exposed_color();
+    auto  bg      = m_screen->background()->exposed_color();
+    float opacity = m_opacity_slider->value() / 100.f;
+    bool  clamp   = m_clamp_checkbox->checked();
+    bool  smooth  = m_falloff != 0;
+
+    fg *= opacity;
+    bg *= opacity;
+
+    Box2i roi = m_images_panel->current_image()->roi();
+    if (roi.has_volume())
+        roi.intersect(m_images_panel->current_image()->box());
+    else
+        roi = m_images_panel->current_image()->box();
+
+    // draw a gradient from the previously clicked point
+    if (!down && is_valid(m_start_pixel) && is_valid(m_end_pixel) && m_start_pixel != m_end_pixel)
+    {
+        m_images_panel->current_image()->start_modify(
+            [fg, bg, &clamp, &smooth, &roi, this](const ConstHDRImagePtr &img,
+                                                  const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+            {
+                auto new_image = make_shared<HDRImage>(*img);
+
+                Vector2f start{m_start_pixel};
+                Vector2f end{m_end_pixel};
+                Vector2f start_to_end{end - start};
+                float    normalization = squared_norm(start_to_end);
+                start_to_end /= normalization;
+
+                parallel_for(roi.min.y(), roi.max.y(),
+                             [&roi, fg, bg, &clamp, &smooth, &new_image, start, start_to_end](int y)
+                             {
+                                 for (int x = roi.min.x(); x < roi.max.x(); ++x)
+                                 {
+                                     Vector2f pixel(x, y);
+                                     Vector2f start_to_pixel{pixel - start};
+                                     float    factor    = dot(start_to_pixel, start_to_end);
+                                     factor             = clamp ? clamp01(factor) : factor;
+                                     factor             = smooth ? smootherstep(0.f, 1.f, factor) : factor;
+                                     Color4 color       = lerp(fg, bg, factor);
+                                     (*new_image)(x, y) = color.over<true>((*new_image)(x, y));
+                                 }
+                             });
+
+                return {new_image, make_shared<FullImageUndo>(*img)};
+            });
+
+        m_screen->update_caption();
+    }
+
+    m_dragging = down;
+
+    return true;
+}
+
+bool GradientTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
+{
+    m_dragging = true;
+
+    // 'modifiers' seems to be kept stuck at whatever it was during click even during dragging
+    // so here we grab query glfw directly to check if a modifier key is pressed
+    // note sure why this is necessary.
+    // FIXME
+    int  l_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_LEFT_SHIFT);
+    int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
+    bool shift_held = l_state == GLFW_PRESS || r_state == GLFW_PRESS;
+
+    return Ruler::mouse_button(p, button, false, shift_held ? modifiers | GLFW_MOD_SHIFT : modifiers);
+}
+
+void GradientTool::draw(NVGcontext *ctx) const
+{
+    if (m_dragging)
+    {
+        auto img = m_images_panel->current_image();
+        if (!img)
+            return;
+
+        Vector2i start_pos(m_image_view->position_at_pixel(Vector2f(m_start_pixel) + 0.5f));
+        if (is_valid(m_end_pixel))
+        {
+            // nanogui/nanovg operates/interpolates in sRGB, while we operate in linear space and then convert to
+            // sRGB/rec709 at the very end, so the live overlay will not match. However, we at least convert our linear
+            // color to sRGB so that the endpoints of the interpolation are correct in the nanovg overlay (though it's
+            // interpolation will still happen on the sRGB values instead of on the linear ones)
+            auto fg = Color(LinearToSRGB(Color4(m_screen->foreground()->exposed_color())));
+            auto bg = Color(LinearToSRGB(Color4(m_screen->background()->exposed_color())));
+
+            float opacity = m_opacity_slider->value() / 100.f;
+
+            fg.a() *= opacity * 0.8f;
+            bg.a() *= opacity * 0.8f;
+            // fg.a() = LinearToSRGB(fg.a() * opacity); // * 0.8f;
+            // bg.a() = LinearToSRGB(bg.a() * opacity); // * 0.8f;
+
+            // draw three rectangles to represent the gradient over the entire image
+
+            Vector2i end_pos(m_image_view->position_at_pixel(Vector2f(m_end_pixel) + 0.5f));
+            Vector2f to     = end_pos - start_pos;
+            float    length = norm(to);
+            Vector2f u      = to / length;
+            Vector2f v(u.y(), -u.x());
+            float    width = 2 * (img->width() + img->height()) * m_image_view->zoom();
+            v *= width;
+
+            nvgSave(ctx);
+            {
+                // only draw within the portion of the image visible in the image view
+                Vector2i border_start{m_image_view->position_at_pixel(Vector2f(0.f))};
+                Vector2i border_end{m_image_view->position_at_pixel(m_images_panel->current_image()->size())};
+                nvgIntersectScissor(ctx, border_start.x(), border_start.y(), border_end.x() - border_start.x(),
+                                    border_end.y() - border_start.y());
+
+                nvgTransform(ctx, u.x(), u.y(), v.x(), v.y(), start_pos.x(), start_pos.y());
+
+                // section before startpoint
+                nvgBeginPath(ctx);
+                nvgRect(ctx, 2, -0.5f, -width - 2, 1.f);
+
+                nvgFillColor(ctx, fg);
+                nvgFill(ctx);
+
+                // section after endpoint
+                nvgBeginPath(ctx);
+                nvgRect(ctx, length - 2, -0.5f, width + 2, 1.f);
+
+                nvgFillColor(ctx, bg);
+                nvgFill(ctx);
+
+                // gradient between start and end points
+                nvgBeginPath(ctx);
+                nvgRect(ctx, 0, -0.5f, length, 1.f);
+
+                NVGpaint paint = nvgLinearGradient(ctx, 0, -0.5f, length, 1.f, fg, bg);
+
+                nvgFillPaint(ctx, paint);
+                nvgFill(ctx);
+            }
+            nvgRestore(ctx);
+
+            // now draw a line connecting the start and end points
+            nvgBeginPath(ctx);
+            nvgMoveTo(ctx, start_pos.x(), start_pos.y());
+            nvgLineTo(ctx, end_pos.x(), end_pos.y());
+
+            nvgStrokeColor(ctx, Color(0, 255));
+            nvgStrokeWidth(ctx, 2.f);
+            nvgStroke(ctx);
+
+            nvgStrokeColor(ctx, Color(255, 255));
+            nvgStrokeWidth(ctx, 1.f);
+            nvgStroke(ctx);
+
+            draw_crosshairs(ctx, end_pos);
+        }
+
+        draw_crosshairs(ctx, start_pos);
+    }
+
+    Tool::draw(ctx);
 }

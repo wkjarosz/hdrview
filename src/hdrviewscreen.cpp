@@ -342,6 +342,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     m_tools.push_back(new Eyedropper(this, m_image_view, m_images_panel));
     m_tools.push_back(new Ruler(this, m_image_view, m_images_panel));
     m_tools.push_back(new LineTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new GradientTool(this, m_image_view, m_images_panel));
 
     for (auto t : m_tools) t->create_toolbutton(tool_holder);
 
@@ -386,8 +387,11 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         // ruler uses the default options bar
         m_tools[Tool_Ruler]->set_options_bar(default_tool);
 
-        // line tool uses the default options bar
+        // line tool uses its own options bar
         m_tools[Tool_Line]->create_options_bar(m_top_panel);
+
+        // gradient tool uses its own options bar
+        m_tools[Tool_Gradient]->create_options_bar(m_top_panel);
     }
 
     resize_tool_panel(m_settings.value("geometry", json::object()).value("tool panel width", 33));
@@ -651,12 +655,11 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
 
         menu = m_menubar->add_menu("Tools");
 
-        auto tool_hotkeys = vector<int>{' ', 'M', 'B', 'E', 'S', 'I', 'R', 'U'};
-        auto tool_hotmods = vector<int>{0, 0, 0, GLFW_MOD_ALT, 0, 0, GLFW_MOD_ALT, 0};
+        auto tool_hotkeys = vector<int>{' ', 'M', 'B', 'E', 'S', 'I', 'R', 'U', 'G'};
+        auto tool_hotmods = vector<int>{0, 0, 0, GLFW_MOD_ALT, 0, 0, GLFW_MOD_ALT, 0, GLFW_MOD_ALT};
         for (int t = 0; t < (int)Tool_Num_Tools; ++t)
-        {
             m_tools[t]->create_menuitem(menu, tool_hotmods[t], tool_hotkeys[t]);
-        }
+
         menu->popup()->add<Separator>();
         add_item(
             "Swap FG/BG colors", 0, [this] { m_color_btns->swap_colors(); }, 0, 'X', false);

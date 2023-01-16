@@ -47,6 +47,7 @@ enum ETool : uint32_t
     Tool_Eyedropper,
     Tool_Ruler,
     Tool_Line,
+    Tool_Gradient,
     Tool_Num_Tools
 };
 

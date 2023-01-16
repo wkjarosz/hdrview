@@ -93,7 +93,7 @@ float4 blend(float4 top, float4 bottom, int blend_mode)
     float alpha = top.a + bottom.a*(1-top.a);
     switch (blend_mode)
     {
-        case NORMAL_BLEND:              return float4(top.rgb*top.a + bottom.rgb*bottom.a*(1-top.a), alpha);
+        case NORMAL_BLEND:              return float4(top.rgb + bottom.rgb*(1-top.a), alpha);
         case MULTIPLY_BLEND:            return float4(top.rgb * bottom.rgb, alpha);
         case DIVIDE_BLEND:              return float4(top.rgb / bottom.rgb, alpha);
         case ADD_BLEND:                 return float4(top.rgb + bottom.rgb, alpha);
@@ -151,7 +151,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float3 blended = mix(background.rgb, dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler), float3(value.a));
+    float3 blended = dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler) + background.rgb*(1-value.a);
     blended = clamp(blended, LDR ? 0.0f : -64.0f, LDR ? 1.0f : 64.0f);
     return float4(blended, 1.0);
 }

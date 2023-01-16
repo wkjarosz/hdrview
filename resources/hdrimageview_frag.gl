@@ -101,7 +101,7 @@ vec4 blend(vec4 top, vec4 bottom)
     float alpha = top.a + bottom.a*(1-top.a);
     switch (blend_mode)
     {
-        case NORMAL_BLEND:              return vec4(top.rgb*top.a + bottom.rgb*bottom.a*(1-top.a), alpha);
+        case NORMAL_BLEND:              return vec4(top.rgb + bottom.rgb*(1-top.a), alpha);
         case MULTIPLY_BLEND:            return vec4(top.rgb * bottom.rgb, alpha);
         case DIVIDE_BLEND:              return vec4(top.rgb / bottom.rgb, alpha);
         case ADD_BLEND:                 return vec4(top.rgb + bottom.rgb, alpha);
@@ -146,6 +146,7 @@ void main() {
     }
 
     frag_color.a = 1.0;
-    frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(value * gain))), value.a);
+    frag_color.rgb = dither(tonemap(choose_channel(value * gain))) + background.rgb * (1-value.a);
+
     frag_color.rgb = clamp(frag_color.rgb, LDR ? 0.0 : -64.0, LDR ? 1.0 : 64.0);
 }

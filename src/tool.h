@@ -119,20 +119,20 @@ protected:
     void draw_brush(NVGcontext *ctx, const nanogui::Vector2i &center) const;
 
     std::shared_ptr<Brush>    m_brush;
-    nanogui::Slider          *m_size_slider;
-    nanogui::IntBox<int>     *m_size_textbox;
-    nanogui::Slider          *m_hardness_slider;
-    nanogui::FloatBox<float> *m_hardness_textbox;
-    nanogui::Slider          *m_flow_slider;
-    nanogui::FloatBox<float> *m_flow_textbox;
-    nanogui::Slider          *m_angle_slider;
-    nanogui::FloatBox<float> *m_angle_textbox;
-    nanogui::Slider          *m_roundness_slider;
-    nanogui::FloatBox<float> *m_roundness_textbox;
-    nanogui::Slider          *m_spacing_slider;
-    nanogui::FloatBox<float> *m_spacing_textbox;
-    nanogui::CheckBox        *m_smoothing_checkbox;
-    bool                      m_smoothing = true;
+    nanogui::Slider          *m_size_slider        = nullptr;
+    nanogui::IntBox<int>     *m_size_textbox       = nullptr;
+    nanogui::Slider          *m_hardness_slider    = nullptr;
+    nanogui::FloatBox<float> *m_hardness_textbox   = nullptr;
+    nanogui::Slider          *m_flow_slider        = nullptr;
+    nanogui::FloatBox<float> *m_flow_textbox       = nullptr;
+    nanogui::Slider          *m_angle_slider       = nullptr;
+    nanogui::FloatBox<float> *m_angle_textbox      = nullptr;
+    nanogui::Slider          *m_roundness_slider   = nullptr;
+    nanogui::FloatBox<float> *m_roundness_textbox  = nullptr;
+    nanogui::Slider          *m_spacing_slider     = nullptr;
+    nanogui::FloatBox<float> *m_spacing_textbox    = nullptr;
+    nanogui::CheckBox        *m_smoothing_checkbox = nullptr;
+    bool                      m_smoothing          = true;
 
     nanogui::Vector2i m_p0, m_p1, m_p2, m_p3; ///< mouse position history. m_p0: oldest; m_p3: most recent
 };
@@ -231,8 +231,32 @@ public:
     virtual void draw(NVGcontext *ctx) const override;
 
 protected:
-    float                     m_width = 2.f;
-    nanogui::Slider          *m_width_slider;
-    nanogui::FloatBox<float> *m_width_textbox;
-    bool                      m_dragging = false;
+    float                     m_width         = 2.f;
+    nanogui::Slider          *m_width_slider  = nullptr;
+    nanogui::FloatBox<float> *m_width_textbox = nullptr;
+    bool                      m_dragging      = false;
+};
+
+class GradientTool : public Ruler
+{
+public:
+    GradientTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Gradient tool",
+                 const std::string &tooltip = "Draw gradient.", int icon = FA_SIGNAL, ETool tool = Tool_Gradient);
+
+    virtual void write_settings() override;
+    virtual void create_options_bar(nanogui::Widget *parent) override;
+
+    virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
+    virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
+                            int modifiers) override;
+
+    virtual void draw(NVGcontext *ctx) const override;
+
+protected:
+    bool m_dragging = false;
+
+    int                       m_falloff         = 0;
+    nanogui::Slider          *m_opacity_slider  = nullptr;
+    nanogui::FloatBox<float> *m_opacity_textbox = nullptr;
+    nanogui::CheckBox        *m_clamp_checkbox  = nullptr;
 };

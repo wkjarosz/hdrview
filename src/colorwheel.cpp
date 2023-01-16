@@ -25,7 +25,6 @@ Vector2i ColorWheel2::preferred_size(NVGcontext *) const { return {130, 130}; }
 
 void ColorWheel2::draw(NVGcontext *ctx)
 {
-
     Widget::draw(ctx);
 
     if (!m_visible)
@@ -60,7 +59,7 @@ void ColorWheel2::draw(NVGcontext *ctx)
             float bx = center.x() + cosf(a1) * (inner_radius + outer_radius) * 0.5f;
             float by = center.y() + sinf(a1) * (inner_radius + outer_radius) * 0.5f;
             paint    = nvgLinearGradient(vg, ax, ay, bx, by, nvgHSLA(a0 / (NVG_PI * 2), 1.0f, 0.55f, 255),
-                                      nvgHSLA(a1 / (NVG_PI * 2), 1.0f, 0.55f, 255));
+                                         nvgHSLA(a1 / (NVG_PI * 2), 1.0f, 0.55f, 255));
             nvgFillPaint(vg, paint);
             nvgFill(vg);
         }
@@ -99,9 +98,9 @@ void ColorWheel2::draw(NVGcontext *ctx)
     // four corner circles
     Color current                 = color();
     Color colors[2][2]            = {{Color(1.f, 1.f), Color(current.r(), current.g(), current.b(), 1.f)},
-                          {Color(0.f, 1.f), Color(current.r(), current.g(), current.b(), 0.f)}};
+                                     {Color(0.f, 1.f), Color(current.r(), current.g(), current.b(), 0.f)}};
     int   corner_components[2][2] = {{(int)ColorWheel2::WHITE_CORNER, (int)ColorWheel2::OPAQUE_CORNER},
-                                   {(int)ColorWheel2::BLACK_CORNER, (int)ColorWheel2::TRANS_CORNER}};
+                                     {(int)ColorWheel2::BLACK_CORNER, (int)ColorWheel2::TRANS_CORNER}};
     float cr                      = outer_radius * std::sqrt(2.f) * 0.1f;
 
     auto checker = hdrview_image_icon(screen()->nvg_context(), checker4,
@@ -252,7 +251,7 @@ ColorWheel2::Region ColorWheel2::adjust_position(const Vector2i &p, Region consi
         Color       current       = color();
         Region      corners[2][2] = {{TLCircle, TRCircle}, {BLCircle, BRCircle}};
         Color       colors[2][2]  = {{Color(1.f, 1.f), Color(current.r(), current.g(), current.b(), 1.f)},
-                              {Color(0.f, 1.f), Color(current.r(), current.g(), current.b(), 0.f)}};
+                                     {Color(0.f, 1.f), Color(current.r(), current.g(), current.b(), 0.f)}};
         std::string tips[2][2]    = {{"Set to white.", "Set alpha to 1."}, {"Set to black.", "Set alpha to 0."}};
         float       cr            = outer_radius * std::sqrt(2.f) * 0.1f;
         for (int i = 0; i < 2; ++i)
