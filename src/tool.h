@@ -255,8 +255,16 @@ public:
 protected:
     bool m_dragging = false;
 
-    int                       m_falloff         = 0;
-    nanogui::Slider          *m_opacity_slider  = nullptr;
-    nanogui::FloatBox<float> *m_opacity_textbox = nullptr;
-    nanogui::CheckBox        *m_clamp_checkbox  = nullptr;
+    enum EType : int
+    {
+        Gradient_Linear = 0,
+        Gradient_Radial,
+        Gradient_Angle,
+        Gradient_Num_Gradients
+    };
+
+    int   m_type    = Gradient_Linear;
+    int   m_falloff = 0;
+    float m_opacity = 1.f;
+    bool  m_clamp   = true;
 };

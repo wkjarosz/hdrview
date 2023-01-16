@@ -334,7 +334,7 @@ Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
         for (auto c : m_popup->children())
             if (auto i = dynamic_cast<MenuItem *>(c))
                 w = std::max(w, i->preferred_text_size(ctx).x());
-        return Vector2i(w, font_size + 5);
+        return Vector2i(w + 0.5 * font_size * icon_scale(), font_size + 5);
     }
     else if (m_mode == Menu)
         return MenuItem::preferred_size(ctx) - Vector2i(4 + font_size * icon_scale(), 0);

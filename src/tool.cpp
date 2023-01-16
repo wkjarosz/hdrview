@@ -193,7 +193,7 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     auto exposure_slider  = new Slider(content);
     auto exposure_textbox = new FloatBox<float>(content, exposure);
     auto normalize_button = new Button(content, "", FA_MAGIC);
-    normalize_button->set_fixed_size(nanogui::Vector2i(19, 19));
+    normalize_button->set_fixed_size(nanogui::Vector2i(21, 21));
     normalize_button->set_icon_extra_scale(1.15f);
     normalize_button->set_callback(
         [this]()
@@ -204,7 +204,7 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     normalize_button->set_tooltip("Normalize exposure.");
 
     auto reset_button = new Button(content, "", FA_UNDO);
-    reset_button->set_fixed_size(nanogui::Vector2i(19, 19));
+    reset_button->set_fixed_size(nanogui::Vector2i(21, 21));
     reset_button->set_icon_extra_scale(1.15f);
     reset_button->set_callback(
         [this]()
@@ -1054,7 +1054,7 @@ void Eyedropper::create_options_bar(nanogui::Widget *parent)
     size->set_tooltip("The number of pixels sampled by the eyedropper.");
     size->set_selected_callback([this](int s) { m_size = s; });
     size->set_selected_index(std::clamp(settings.value("size", 0), 0, 3));
-    size->set_fixed_height(19);
+    size->set_fixed_height(21);
 }
 
 bool Eyedropper::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -1218,8 +1218,6 @@ bool Ruler::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, int m
     int  l_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_LEFT_SHIFT);
     int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
     bool shift_held = l_state == GLFW_PRESS || r_state == GLFW_PRESS;
-
-    // spdlog::info("mouse drag {}; {}; {}; {}; {}", p, rel, button, modifiers, shift_held);
 
     return mouse_button(p, button, false, shift_held ? modifiers | GLFW_MOD_SHIFT : modifiers);
 }
@@ -1406,8 +1404,6 @@ bool LineTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, in
     int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
     bool shift_held = l_state == GLFW_PRESS || r_state == GLFW_PRESS;
 
-    // spdlog::info("mouse drag {}; {}; {}; {}; {}", p, rel, button, modifiers, shift_held);
-
     return Ruler::mouse_button(p, button, false, shift_held ? modifiers | GLFW_MOD_SHIFT : modifiers);
 }
 
@@ -1459,8 +1455,11 @@ GradientTool::GradientTool(HDRViewScreen *screen, HDRImageView *image_view, Imag
 void GradientTool::write_settings()
 {
     // create a json object to hold the tool's settings
-    auto &settings      = this_tool_settings();
-    settings["falloff"] = m_falloff;
+    auto &settings                 = this_tool_settings();
+    settings["falloff"]            = m_falloff;
+    settings["type"]               = m_type;
+    settings["opacity"]            = m_opacity;
+    settings["clamp to endpoints"] = m_clamp;
 }
 
 void GradientTool::create_options_bar(nanogui::Widget *parent)
@@ -1477,38 +1476,80 @@ void GradientTool::create_options_bar(nanogui::Widget *parent)
 
     content->add<Label>("Falloff:");
 
+    m_falloff    = std::clamp(settings.value("falloff", 0), 0, 1);
     auto falloff = new Dropdown(content, {"Linear", "Smoothstep"});
     falloff->set_tooltip("Set how the color values should interpolate between each other.");
     falloff->set_selected_callback([this](int f) { m_falloff = f; });
-    falloff->set_selected_index(std::clamp(settings.value("falloff", 0), 0, 1));
-    falloff->set_fixed_height(19);
+    falloff->set_selected_index(m_falloff);
+    falloff->set_fixed_height(21);
+
+    auto group = content->add<Widget>();
+    group->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 3));
+
+    m_type = std::clamp(settings.value("type", 0), 0, (int)(Gradient_Num_Gradients)-1);
+    auto b = group->add<ToolButton>(FA_ARROW_RIGHT);
+    b->set_fixed_size(nanogui::Vector2i(21, 21));
+    b->set_icon_extra_scale(1.15f);
+    b->set_flags(Button::Flags::RadioButton);
+    b->set_callback([this] { m_type = Gradient_Linear; });
+    b->set_tooltip("Linear gradient");
+    b->set_pushed(m_type == Gradient_Linear);
+
+    b = group->add<ToolButton>(FA_EXPAND_ARROWS_ALT);
+    b->set_fixed_size(nanogui::Vector2i(21, 21));
+    b->set_icon_extra_scale(1.15f);
+    b->set_flags(Button::Flags::RadioButton);
+    b->set_callback([this] { m_type = Gradient_Radial; });
+    b->set_tooltip("Radial gradient");
+    b->set_pushed(m_type == Gradient_Radial);
+
+    b = group->add<ToolButton>(FA_UNDO);
+    b->set_fixed_size(nanogui::Vector2i(21, 21));
+    b->set_icon_extra_scale(1.15f);
+    b->set_flags(Button::Flags::RadioButton);
+    b->set_callback([this] { m_type = Gradient_Angle; });
+    b->set_tooltip("Angle gradient");
+    b->set_pushed(m_type == Gradient_Angle);
 
     // spacer
     content->add<Widget>()->set_fixed_width(5);
 
     content->add<Label>("Opacity:");
-    m_opacity_slider  = new Slider(content);
-    m_opacity_textbox = new FloatBox<float>(content);
+    m_opacity            = settings.value("opacity", 1.f);
+    auto opacity_slider  = new Slider(content);
+    auto opacity_textbox = new FloatBox<float>(content);
 
-    m_opacity_textbox->number_format("%3.0f");
-    m_opacity_textbox->set_editable(true);
-    m_opacity_textbox->set_fixed_width(40);
-    m_opacity_textbox->set_min_max_values(0.0f, 100.f);
-    m_opacity_textbox->set_units("%");
-    m_opacity_textbox->set_alignment(TextBox::Alignment::Right);
-    m_opacity_textbox->set_callback([this](int v) { m_opacity_slider->set_value(v); });
-    m_opacity_slider->set_fixed_width(75);
-    m_opacity_slider->set_range({0.f, 100.f});
-    m_opacity_slider->set_callback([this](int v) { m_opacity_textbox->set_value(v); });
+    opacity_textbox->number_format("%3.0f");
+    opacity_textbox->set_editable(true);
+    opacity_textbox->set_fixed_width(40);
+    opacity_textbox->set_min_max_values(0.0f, 100.f);
+    opacity_textbox->set_units("%");
+    opacity_textbox->set_alignment(TextBox::Alignment::Right);
+    opacity_textbox->set_callback(
+        [this, opacity_slider](int v)
+        {
+            opacity_slider->set_value(v);
+            m_opacity = v * 0.01f;
+        });
+    opacity_slider->set_fixed_width(75);
+    opacity_slider->set_range({0.f, 100.f});
+    opacity_slider->set_callback(
+        [this, opacity_textbox](int v)
+        {
+            opacity_textbox->set_value(v);
+            m_opacity = v * 0.01f;
+        });
 
-    m_opacity_textbox->set_value(settings.value("opacity", 1.f) * 100.f);
-    m_opacity_slider->set_value(settings.value("opacity", 1.f) * 100.f);
+    opacity_textbox->set_value(m_opacity * 100.f);
+    opacity_slider->set_value(m_opacity * 100.f);
 
     // spacer
     content->add<Widget>()->set_fixed_width(5);
 
-    m_clamp_checkbox = new CheckBox(content, "Clamp to endpoints");
-    m_clamp_checkbox->set_checked(settings.value("clamp to endpoints", true));
+    m_clamp             = settings.value("clamp to endpoints", true);
+    auto clamp_checkbox = new CheckBox(content, "Clamp to endpoints");
+    clamp_checkbox->set_callback([this](bool v) { m_clamp = v; });
+    clamp_checkbox->set_checked(m_clamp);
 }
 
 bool GradientTool::mouse_button(const Vector2i &p, int button, bool down, int modifiers)
@@ -1517,8 +1558,8 @@ bool GradientTool::mouse_button(const Vector2i &p, int button, bool down, int mo
 
     auto  fg      = m_screen->foreground()->exposed_color();
     auto  bg      = m_screen->background()->exposed_color();
-    float opacity = m_opacity_slider->value() / 100.f;
-    bool  clamp   = m_clamp_checkbox->checked();
+    float opacity = m_opacity;
+    bool  clamp   = m_clamp;
     bool  smooth  = m_falloff != 0;
 
     fg *= opacity;
@@ -1542,23 +1583,34 @@ bool GradientTool::mouse_button(const Vector2i &p, int button, bool down, int mo
                 Vector2f start{m_start_pixel};
                 Vector2f end{m_end_pixel};
                 Vector2f start_to_end{end - start};
-                float    normalization = squared_norm(start_to_end);
-                start_to_end /= normalization;
+                float    distance = norm(start_to_end);
+                float    inv_d    = 1.f / distance;
+                float    inv_d2   = inv_d * inv_d;
 
-                parallel_for(roi.min.y(), roi.max.y(),
-                             [&roi, fg, bg, &clamp, &smooth, &new_image, start, start_to_end](int y)
-                             {
-                                 for (int x = roi.min.x(); x < roi.max.x(); ++x)
-                                 {
-                                     Vector2f pixel(x, y);
-                                     Vector2f start_to_pixel{pixel - start};
-                                     float    factor    = dot(start_to_pixel, start_to_end);
-                                     factor             = clamp ? clamp01(factor) : factor;
-                                     factor             = smooth ? smootherstep(0.f, 1.f, factor) : factor;
-                                     Color4 color       = lerp(fg, bg, factor);
-                                     (*new_image)(x, y) = color.over<true>((*new_image)(x, y));
-                                 }
-                             });
+                parallel_for(
+                    roi.min.y(), roi.max.y(),
+                    [this, &roi, fg, bg, &clamp, &smooth, &new_image, start, start_to_end, inv_d, inv_d2](int y)
+                    {
+                        for (int x = roi.min.x(); x < roi.max.x(); ++x)
+                        {
+                            Vector2f pixel(x, y);
+                            Vector2f start_to_pixel{pixel - start};
+                            float    factor;
+                            if (m_type == Gradient_Linear)
+                                factor = dot(start_to_pixel, start_to_end) * inv_d2;
+                            else if (m_type == Gradient_Radial)
+                                factor = norm(start_to_pixel) * inv_d;
+                            else
+                                factor = mod(-atan2(start_to_pixel.y(), start_to_pixel.x()) +
+                                                 atan2(start_to_end.y(), start_to_end.x()),
+                                             float(2 * M_PI)) /
+                                         (2 * M_PI);
+                            factor             = clamp ? clamp01(factor) : factor;
+                            factor             = smooth ? smootherstep(0.f, 1.f, factor) : factor;
+                            Color4 color       = lerp(fg, bg, factor);
+                            (*new_image)(x, y) = color.over<true>((*new_image)(x, y));
+                        }
+                    });
 
                 return {new_image, make_shared<FullImageUndo>(*img)};
             });
@@ -1597,64 +1649,85 @@ void GradientTool::draw(NVGcontext *ctx) const
         Vector2i start_pos(m_image_view->position_at_pixel(Vector2f(m_start_pixel) + 0.5f));
         if (is_valid(m_end_pixel))
         {
-            // nanogui/nanovg operates/interpolates in sRGB, while we operate in linear space and then convert to
-            // sRGB/rec709 at the very end, so the live overlay will not match. However, we at least convert our linear
-            // color to sRGB so that the endpoints of the interpolation are correct in the nanovg overlay (though it's
-            // interpolation will still happen on the sRGB values instead of on the linear ones)
-            auto fg = Color(LinearToSRGB(Color4(m_screen->foreground()->exposed_color())));
-            auto bg = Color(LinearToSRGB(Color4(m_screen->background()->exposed_color())));
-
-            float opacity = m_opacity_slider->value() / 100.f;
-
-            fg.a() *= opacity * 0.8f;
-            bg.a() *= opacity * 0.8f;
-            // fg.a() = LinearToSRGB(fg.a() * opacity); // * 0.8f;
-            // bg.a() = LinearToSRGB(bg.a() * opacity); // * 0.8f;
-
-            // draw three rectangles to represent the gradient over the entire image
-
             Vector2i end_pos(m_image_view->position_at_pixel(Vector2f(m_end_pixel) + 0.5f));
             Vector2f to     = end_pos - start_pos;
             float    length = norm(to);
-            Vector2f u      = to / length;
-            Vector2f v(u.y(), -u.x());
-            float    width = 2 * (img->width() + img->height()) * m_image_view->zoom();
-            v *= width;
 
-            nvgSave(ctx);
+            if (m_type == Gradient_Linear)
             {
-                // only draw within the portion of the image visible in the image view
-                Vector2i border_start{m_image_view->position_at_pixel(Vector2f(0.f))};
-                Vector2i border_end{m_image_view->position_at_pixel(m_images_panel->current_image()->size())};
-                nvgIntersectScissor(ctx, border_start.x(), border_start.y(), border_end.x() - border_start.x(),
-                                    border_end.y() - border_start.y());
+                // nanogui/nanovg operates/interpolates in sRGB, while we operate in linear space and then convert to
+                // sRGB/rec709 at the very end, so the live overlay will not match. However, we at least convert our
+                // linear color to sRGB so that the endpoints of the interpolation are correct in the nanovg overlay
+                // (though it's interpolation will still happen on the sRGB values instead of on the linear ones)
+                auto fg = Color(LinearToSRGB(Color4(m_screen->foreground()->exposed_color())));
+                auto bg = Color(LinearToSRGB(Color4(m_screen->background()->exposed_color())));
 
-                nvgTransform(ctx, u.x(), u.y(), v.x(), v.y(), start_pos.x(), start_pos.y());
+                fg.a() *= m_opacity * 0.8f;
+                bg.a() *= m_opacity * 0.8f;
+                // fg.a() = LinearToSRGB(fg.a() * m_opacity); // * 0.8f;
+                // bg.a() = LinearToSRGB(bg.a() * m_opacity); // * 0.8f;
 
-                // section before startpoint
-                nvgBeginPath(ctx);
-                nvgRect(ctx, 2, -0.5f, -width - 2, 1.f);
+                // draw three rectangles to represent the gradient over the entire image
 
-                nvgFillColor(ctx, fg);
-                nvgFill(ctx);
+                Vector2f u = to / length;
+                Vector2f v(u.y(), -u.x());
+                float    width = 2 * (img->width() + img->height()) * m_image_view->zoom();
+                v *= width;
 
-                // section after endpoint
-                nvgBeginPath(ctx);
-                nvgRect(ctx, length - 2, -0.5f, width + 2, 1.f);
+                nvgSave(ctx);
+                {
+                    // only draw within the portion of the image visible in the image view
+                    Vector2i border_start{m_image_view->position_at_pixel(Vector2f(0.f))};
+                    Vector2i border_end{m_image_view->position_at_pixel(m_images_panel->current_image()->size())};
+                    nvgIntersectScissor(ctx, border_start.x(), border_start.y(), border_end.x() - border_start.x(),
+                                        border_end.y() - border_start.y());
 
-                nvgFillColor(ctx, bg);
-                nvgFill(ctx);
+                    nvgTransform(ctx, u.x(), u.y(), v.x(), v.y(), start_pos.x(), start_pos.y());
 
-                // gradient between start and end points
-                nvgBeginPath(ctx);
-                nvgRect(ctx, 0, -0.5f, length, 1.f);
+                    // section before startpoint
+                    nvgBeginPath(ctx);
+                    nvgRect(ctx, 2, -0.5f, -width - 2, 1.f);
 
-                NVGpaint paint = nvgLinearGradient(ctx, 0, -0.5f, length, 1.f, fg, bg);
+                    nvgFillColor(ctx, fg);
+                    nvgFill(ctx);
 
-                nvgFillPaint(ctx, paint);
-                nvgFill(ctx);
+                    // section after endpoint
+                    nvgBeginPath(ctx);
+                    nvgRect(ctx, length - 2, -0.5f, width + 2, 1.f);
+
+                    nvgFillColor(ctx, bg);
+                    nvgFill(ctx);
+
+                    // gradient between start and end points
+                    nvgBeginPath(ctx);
+                    nvgRect(ctx, 0, -0.5f, length, 1.f);
+
+                    NVGpaint paint = nvgLinearGradient(ctx, 0, -0.5f, length, 1.f, fg, bg);
+
+                    nvgFillPaint(ctx, paint);
+                    nvgFill(ctx);
+                }
+                nvgRestore(ctx);
             }
-            nvgRestore(ctx);
+            else
+            {
+                nvgSave(ctx);
+                {
+                    nvgTranslate(ctx, start_pos.x(), start_pos.y());
+
+                    nvgBeginPath(ctx);
+                    nvgCircle(ctx, 0, 0, length);
+
+                    nvgStrokeColor(ctx, Color(0, 255));
+                    nvgStrokeWidth(ctx, 2.f);
+                    nvgStroke(ctx);
+
+                    nvgStrokeColor(ctx, Color(255, 255));
+                    nvgStrokeWidth(ctx, 1.f);
+                    nvgStroke(ctx);
+                }
+                nvgRestore(ctx);
+            }
 
             // now draw a line connecting the start and end points
             nvgBeginPath(ctx);

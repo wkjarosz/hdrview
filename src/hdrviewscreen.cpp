@@ -92,7 +92,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     m_top_panel = new Window(this, "");
     m_top_panel->set_theme(panel_theme);
     m_top_panel->set_position(nanogui::Vector2i(0, 0));
-    m_top_panel->set_fixed_height(30);
+    m_top_panel->set_fixed_height(31);
     m_top_panel->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Middle, 5, 5));
 
     m_side_panel = new Window(this, "");
