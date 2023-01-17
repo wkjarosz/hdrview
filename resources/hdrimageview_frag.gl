@@ -23,6 +23,12 @@
 #define DIFFERENCE_BLEND 6
 #define RELATIVE_DIFFERENCE_BLEND 7
 
+#define BG_BLACK 0
+#define BG_WHITE 1
+#define BG_DARK_CHECKER 2
+#define BG_LIGHT_CHECKER 3
+#define BG_CUSTOM_COLOR 4
+
 in vec2 primary_uv;
 in vec2 secondary_uv;
 in vec4 gl_FragCoord;
@@ -37,11 +43,13 @@ uniform vec2 randomness;
 
 uniform int blend_mode;
 uniform int channel;
+uniform int bg_mode;
 
 uniform float gain;
 uniform float gamma;
 uniform bool sRGB;
-uniform bool LDR;
+uniform bool clamp_to_LDR;
+uniform vec4 bg_color;
 
 out vec4 frag_color;
 
@@ -129,13 +137,20 @@ vec4 sample(sampler2D sampler, vec2 uv)
     return texture(sampler, uv);
 }
 
-void main() {
-    float dark_gray = 0.1;
-    float light_gray = 0.2;
-
-    float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? dark_gray : light_gray;
-
-    vec4 background = vec4(vec3(checkerboard), 1.0);
+void main()
+{
+    vec4 background = vec4(bg_color.rgb, 1.0);
+    if (bg_mode == BG_BLACK)
+        background.rgb = vec3(0.0);
+    else if (bg_mode == BG_WHITE)
+        background.rgb = vec3(1.0);
+    else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
+    {
+        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? dark_gray : light_gray;
+        background.rgb = vec3(checkerboard);
+    }
 
     vec4 value = sample(primary_texture, primary_uv);
     
@@ -148,5 +163,5 @@ void main() {
     frag_color.a = 1.0;
     frag_color.rgb = dither(tonemap(choose_channel(value * gain))) + background.rgb * (1-value.a);
 
-    frag_color.rgb = clamp(frag_color.rgb, LDR ? 0.0 : -64.0, LDR ? 1.0 : 64.0);
+    frag_color.rgb = clamp(frag_color.rgb, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
 }

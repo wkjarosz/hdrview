@@ -103,7 +103,7 @@ protected:
     float m_value;
 
     /**
-     * The 'S' (satration) component of the HSV color model.  See implementation
+     * The 'S' (saturation) component of the HSV color model.  See implementation
      * \ref nanogui::ColorWheel::color for its usage.  Valid values are in the
      * range ``[0, 1]``.
      */

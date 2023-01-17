@@ -115,6 +115,13 @@ public:
     EBlendMode blend_mode() { return m_blend_mode; }
     void       set_blend_mode(EBlendMode b) { m_blend_mode = b; }
 
+    // EBGMode &bg_mode() { return m_bg_mode; }
+    EBGMode bg_mode() const { return m_bg_mode; }
+    void    set_bg_mode(EBGMode mode) { m_bg_mode = mode; }
+
+    Color bg_color() const { return m_bg_color; }
+    void  set_bg_color(const Color &c) { m_bg_color = c; }
+
     float gamma() const { return m_gamma; }
     void  set_gamma(float g)
     {
@@ -156,8 +163,8 @@ public:
         m_sRGB_callback(b);
     }
 
-    void set_LDR(bool value) { m_LDR = value; }
-    bool LDR() const { return m_LDR; }
+    bool clamp_to_LDR() const { return m_clamp_to_LDR; }
+    void set_clamp_to_LDR(bool value) { m_clamp_to_LDR = value; }
 
     bool dithering_on() const { return m_dither; }
     void set_dithering(bool b) { m_dither = b; }
@@ -239,13 +246,15 @@ protected:
     TextureRef  m_dither_tex;
 
     float m_exposure = 0.f, m_gamma = 2.2f;
-    bool  m_sRGB = true, m_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
+    bool  m_sRGB = true, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
 
     // Image display parameters.
-    float      m_zoom;                                  ///< The scale/zoom of the image
-    Vector2f   m_offset     = 0;                        ///< The panning offset of the
-    EChannel   m_channel    = EChannel::RGB;            ///< Which channel to display
-    EBlendMode m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
+    float          m_zoom;                                   ///< The scale/zoom of the image
+    Vector2f       m_offset     = 0;                         ///< The panning offset of the
+    EChannel       m_channel    = EChannel::RGB;             ///< Which channel to display
+    EBlendMode     m_blend_mode = EBlendMode::NORMAL_BLEND;  ///< How to blend the current and reference images
+    EBGMode        m_bg_mode    = EBGMode::BG_LIGHT_CHECKER; ///< How the background around the image should be rendered
+    nanogui::Color m_bg_color{0.f, 0.f, 0.f, 1.f};           ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     // Fine-tuning parameters.
     float m_zoom_sensitivity = 1.0717734625f;

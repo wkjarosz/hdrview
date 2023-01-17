@@ -5,6 +5,7 @@
 #include "hdrcolorpicker.h"
 #include "hdrviewscreen.h"
 #include "helpwindow.h"
+#include "json.h"
 #include <hdrview_resources.h>
 #include <iostream>
 #include <nanogui/opengl.h>
@@ -84,14 +85,16 @@ HDRImageView::HDRImageView(Widget *parent, const json &settings) :
     if (settings.contains("image view") && settings["image view"].is_object())
         j = settings["image view"];
 
-    m_exposure             = j.value("exposure", 0.0f);
-    m_gamma                = j.value("gamma", 2.2f);
-    m_sRGB                 = j.value("sRGB", true);
-    m_LDR                  = j.value("LDR", false);
-    m_dither               = j.value("dithering", true);
-    m_draw_grid            = j.value("grid", true);
-    m_grid_threshold       = j.value("grid threshold", 10);
-    m_draw_pixel_info      = j.value("pixel info", true);
+    m_exposure        = j.value("exposure", 0.0f);
+    m_gamma           = j.value("gamma", 2.2f);
+    m_sRGB            = j.value("sRGB", true);
+    m_bg_mode         = (EBGMode)std::clamp(j.value("background mode", (int)BG_DARK_CHECKER), 0, (int)NUM_BG_MODES - 1);
+    m_bg_color        = j.value("background color", Color(0, 255));
+    m_clamp_to_LDR    = j.value("LDR", false);
+    m_dither          = j.value("dithering", true);
+    m_draw_grid       = j.value("grid", true);
+    m_grid_threshold  = j.value("grid threshold", 10);
+    m_draw_pixel_info = j.value("pixel info", true);
     m_pixel_info_threshold = j.value("pixel info threshold", 40);
     m_zoom_sensitivity     = j.value("zoom sensitivity", 1.0717734625f);
 
@@ -141,8 +144,10 @@ void HDRImageView::write_settings(json &settings) const
     settings["image view"]["exposure"]             = exposure();
     settings["image view"]["gamma"]                = gamma();
     settings["image view"]["sRGB"]                 = sRGB();
-    settings["image view"]["LDR"]                  = LDR();
+    settings["image view"]["clamp to LDR"]         = clamp_to_LDR();
     settings["image view"]["dithering"]            = dithering_on();
+    settings["image view"]["background mode"]      = m_bg_mode;
+    settings["image view"]["background color"]     = m_bg_color;
     settings["image view"]["grid"]                 = draw_grid_on();
     settings["image view"]["grid threshold"]       = grid_threshold();
     settings["image view"]["pixel info"]           = draw_pixel_info_on();
@@ -591,7 +596,7 @@ void HDRImageView::draw_contents()
         m_image_shader->set_uniform("gain", powf(2.0f, m_exposure));
         m_image_shader->set_uniform("gamma", m_gamma);
         m_image_shader->set_uniform("sRGB", m_sRGB);
-        m_image_shader->set_uniform("LDR", m_LDR || !screen()->has_float_buffer());
+        m_image_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR || !screen()->has_float_buffer());
         m_image_shader->set_uniform("do_dither", m_dither);
 
         Vector2f curr_pos, curr_scale;
@@ -601,6 +606,8 @@ void HDRImageView::draw_contents()
 
         m_image_shader->set_uniform("blend_mode", (int)m_blend_mode);
         m_image_shader->set_uniform("channel", (int)m_channel);
+        m_image_shader->set_uniform("bg_mode", (int)m_bg_mode);
+        m_image_shader->set_uniform("bg_color", m_bg_color);
 
         if (m_reference_image)
         {

@@ -29,6 +29,12 @@ using namespace metal;
 #define DIFFERENCE_BLEND 6
 #define RELATIVE_DIFFERENCE_BLEND 7
 
+#define BG_BLACK 0
+#define BG_WHITE 1
+#define BG_DARK_CHECKER 2
+#define BG_LIGHT_CHECKER 3
+#define BG_CUSTOM_COLOR 4
+
 
 struct VertexOut
 {
@@ -136,12 +142,22 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               constant float &gain,
                               constant float &gamma,
                               constant bool &sRGB,
-                              constant bool &LDR)
+                              constant bool &clamp_to_LDR,
+                              constant int &bg_mode,
+                              constant float4 &bg_color)
 {
-    float dark_gray = 0.1;
-    float light_gray = 0.2;
-    float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
-    float4 background = float4(float3(checkerboard), 1.0);
+    float4 background(bg_color.rgb, 1.0);
+    if (bg_mode == BG_BLACK)
+        background.rgb = float3(0.0);
+    else if (bg_mode == BG_WHITE)
+        background.rgb = float3(1.0);
+    else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
+    {
+        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
+        background.rgb = float3(checkerboard);
+    }
 
     float4 value = sample(primary_texture, primary_sampler, vert.primary_uv);
 
@@ -152,7 +168,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     }
 
     float3 blended = dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler) + background.rgb*(1-value.a);
-    blended = clamp(blended, LDR ? 0.0f : -64.0f, LDR ? 1.0f : 64.0f);
+    blended = clamp(blended, clamp_to_LDR ? 0.0f : -64.0f, clamp_to_LDR ? 1.0f : 64.0f);
     return float4(blended, 1.0);
 }
 

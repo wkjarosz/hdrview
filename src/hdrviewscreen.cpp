@@ -746,6 +746,81 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             "100%", 0, [this] { m_image_view->set_zoom_level(0.f); }, 0, 0);
         menu->popup()->add<Separator>();
         add_item(
+            "Set image view background...", 0,
+            [this]()
+            {
+                FormHelper *gui = new FormHelper(this);
+                gui->set_fixed_size(Vector2i(135, 20));
+
+                auto window = new Dialog(this, "Set image view background");
+                window->set_modal(false);
+                gui->set_window(window);
+
+                static Color bg              = background()->color();
+                static float EV              = 0.f;
+                Widget      *color_btn_group = new Widget(window);
+                color_btn_group->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+                color_btn_group->add<Label>("Custom color:");
+                HDRColorPicker *color_btn = new HDRColorPicker(color_btn_group, bg, EV);
+
+                static EBGMode bg_mode       = m_image_view->bg_mode();
+                vector<string> bg_mode_names = {"Black", "White", "Dark checkerboard", "Light checkerboard",
+                                                "Custom color"};
+                add_dropdown<EBGMode>(gui, "Background mode:", bg_mode, bg_mode_names,
+                                      [this, color_btn_group](const EBGMode &m)
+                                      {
+                                          if (color_btn_group)
+                                              color_btn_group->set_visible(m == BG_CUSTOM_COLOR);
+
+                                          request_layout_update();
+                                      });
+                color_btn_group->set_visible(bg_mode == BG_CUSTOM_COLOR);
+
+                auto spacer = new Widget(window);
+                spacer->set_fixed_height(15);
+                gui->add_widget("", spacer);
+
+                // color_btn       = new HDRColorPicker(window, bg, EV);
+                color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
+                color_btn->set_eyedropper_callback([this, color_btn](bool pushed)
+                                                   { set_active_colorpicker(pushed ? color_btn : nullptr); });
+                gui->add_widget("", color_btn_group);
+                color_btn->set_final_callback(
+                    [](const Color &c, float e)
+                    {
+                        bg = c;
+                        EV = e;
+                    });
+
+                auto popup = color_btn->popup();
+
+                request_layout_update();
+
+                spacer = new Widget(window);
+                spacer->set_fixed_height(15);
+                gui->add_widget("", spacer);
+
+                window->set_callback(
+                    [&, popup](int cancel)
+                    {
+                        popup->set_visible(false);
+
+                        if (cancel)
+                            return;
+
+                        m_image_view->set_bg_mode(bg_mode);
+                        m_image_view->set_bg_color(bg);
+                    });
+
+                gui->add_widget("", window->add_buttons());
+
+                window->center();
+                window->request_focus();
+            },
+            0, 0, false);
+
+        menu->popup()->add<Separator>();
+        add_item(
             "Increase exposure", 0, [this] { m_image_view->set_exposure(m_image_view->exposure() + 0.25f); },
             GLFW_MOD_SHIFT, 'E', false);
         add_item(
@@ -809,9 +884,9 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                 "Clamp display to LDR", 0, [] {}, SYSTEM_COMMAND_MOD, 'L', false);
             auto LDR_checkbox = m_menu_items.back();
             LDR_checkbox->set_flags(Button::ToggleButton);
-            LDR_checkbox->set_pushed(m_image_view->LDR());
+            LDR_checkbox->set_pushed(m_image_view->clamp_to_LDR());
             LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying low-dynamic content.");
-            LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_LDR(v); });
+            LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_clamp_to_LDR(v); });
         }
         if (!capability_10bit)
         {

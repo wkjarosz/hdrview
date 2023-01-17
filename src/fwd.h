@@ -37,20 +37,6 @@ class Eyedropper;
 class Ruler;
 class LineTool;
 
-enum ETool : uint32_t
-{
-    Tool_None = 0,
-    Tool_Rectangular_Marquee,
-    Tool_Brush,
-    Tool_Eraser,
-    Tool_Clone_Stamp,
-    Tool_Eyedropper,
-    Tool_Ruler,
-    Tool_Line,
-    Tool_Gradient,
-    Tool_Num_Tools
-};
-
 template <typename T>
 class Range;
 
@@ -92,6 +78,20 @@ NAMESPACE_END(nanogui)
 
 // define some common types
 using Box2i = Box<nanogui::Vector2i>;
+
+enum ETool : int
+{
+    Tool_None = 0,
+    Tool_Rectangular_Marquee,
+    Tool_Brush,
+    Tool_Eraser,
+    Tool_Clone_Stamp,
+    Tool_Eyedropper,
+    Tool_Ruler,
+    Tool_Line,
+    Tool_Gradient,
+    Tool_Num_Tools
+};
 
 enum EColorSpace : int
 {
@@ -137,4 +137,15 @@ enum EBlendMode : int
     RELATIVE_DIFFERENCE_BLEND,
 
     NUM_BLEND_MODES
+};
+
+enum EBGMode : int
+{
+    BG_BLACK = 0,
+    BG_WHITE,
+    BG_DARK_CHECKER,
+    BG_LIGHT_CHECKER,
+    BG_CUSTOM_COLOR,
+
+    NUM_BG_MODES
 };
