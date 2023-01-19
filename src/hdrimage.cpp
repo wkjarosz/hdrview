@@ -232,11 +232,8 @@ void HDRImage::copy_paste(const HDRImage &src, Box2i roi, int dst_x, int dst_y, 
                      {
                          for (int x = roi.min.x(); x < roi.max.x(); ++x)
                          {
-                             Color4 &p         = (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y());
-                             float   alpha_src = src(x, y).a;
-                             float   alpha_bg  = p.a;
-                             p                 = src(x, y) * alpha_src + p * (1.f - alpha_src);
-                             p.a               = alpha_src + alpha_bg * (1.f - alpha_src);
+                             Color4 &dst = (*this)(dst_x + x - roi.min.x(), dst_y + y - roi.min.y());
+                             dst         = src(x, y) + dst * (1.f - src(x, y).a);
                          }
                      });
 }
@@ -432,43 +429,43 @@ const vector<string> &HDRImage::sampler_names()
     return names;
 }
 
-const Color4 &HDRImage::pixel(int x, int y, BorderMode mX, BorderMode mY) const
+const Color4 &HDRImage::pixel(int x, int y, BorderMode mx, BorderMode my) const
 {
-    x = wrap_coord(x, width(), mX);
-    y = wrap_coord(y, height(), mY);
+    x = wrap_coord(x, width(), mx);
+    y = wrap_coord(y, height(), my);
     if (x < 0 || y < 0)
         return g_blackPixel;
 
     return (*this)(x, y);
 }
 
-Color4 &HDRImage::pixel(int x, int y, BorderMode mX, BorderMode mY)
+Color4 &HDRImage::pixel(int x, int y, BorderMode mx, BorderMode my)
 {
-    x = wrap_coord(x, width(), mX);
-    y = wrap_coord(y, height(), mY);
+    x = wrap_coord(x, width(), mx);
+    y = wrap_coord(y, height(), my);
     if (x < 0 || y < 0)
         throw out_of_range("Cannot assign to out-of-bounds pixel when BorderMode==BLACK.");
 
     return (*this)(x, y);
 }
 
-Color4 HDRImage::sample(float sx, float sy, Sampler s, BorderMode mX, BorderMode mY) const
+Color4 HDRImage::sample(float sx, float sy, Sampler s, BorderMode mx, BorderMode my) const
 {
     switch (s)
     {
-    case NEAREST: return nearest(sx, sy, mX, mY);
-    case BILINEAR: return bilinear(sx, sy, mX, mY);
+    case NEAREST: return nearest(sx, sy, mx, my);
+    case BILINEAR: return bilinear(sx, sy, mx, my);
     case BICUBIC:
-    default: return bicubic(sx, sy, mX, mY);
+    default: return bicubic(sx, sy, mx, my);
     }
 }
 
-Color4 HDRImage::nearest(float sx, float sy, BorderMode mX, BorderMode mY) const
+Color4 HDRImage::nearest(float sx, float sy, BorderMode mx, BorderMode my) const
 {
-    return pixel(std::floor(sx), std::floor(sy), mX, mY);
+    return pixel(std::floor(sx), std::floor(sy), mx, my);
 }
 
-Color4 HDRImage::bilinear(float sx, float sy, BorderMode mX, BorderMode mY) const
+Color4 HDRImage::bilinear(float sx, float sy, BorderMode mx, BorderMode my) const
 {
     // shift so that pixels are defined at their centers
     sx -= 0.5f;
@@ -481,12 +478,12 @@ Color4 HDRImage::bilinear(float sx, float sy, BorderMode mX, BorderMode mY) cons
     sx -= x0;
     sy -= y0;
 
-    return lerp(lerp(pixel(x0, y0, mX, mY), pixel(x1, y0, mX, mY), sx),
-                lerp(pixel(x0, y1, mX, mY), pixel(x1, y1, mX, mY), sx), sy);
+    return lerp(lerp(pixel(x0, y0, mx, my), pixel(x1, y0, mx, my), sx),
+                lerp(pixel(x0, y1, mx, my), pixel(x1, y1, mx, my), sx), sy);
 }
 
 // photoshop bicubic
-Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
+Color4 HDRImage::bicubic(float sx, float sy, BorderMode mx, BorderMode my) const
 {
     // shift so that pixels are defined at their centers
     sx -= 0.5f;
@@ -511,7 +508,7 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
             float weight = (distx <= 1) ? (((A + 2.0f) * distx - (A + 3.0f)) * distx * distx + 1.0f) * yweight
                                         : (((A * distx - 5.0f * A) * distx + 8.0f * A) * distx - 4.0f * A) * yweight;
 
-            val += pixel(x, y, mX, mY) * weight;
+            val += pixel(x, y, mx, my) * weight;
             totalweight += weight;
         }
     }
@@ -520,8 +517,8 @@ Color4 HDRImage::bicubic(float sx, float sy, BorderMode mX, BorderMode mY) const
 }
 
 HDRImage HDRImage::resampled(int w, int h, AtomicProgress progress,
-                             function<nanogui::Vector2f(const nanogui::Vector2f &)> warpFn, int superSample,
-                             Sampler sampler, BorderMode mX, BorderMode mY) const
+                             function<nanogui::Vector2f(const nanogui::Vector2f &)> warp_cb, int super_sample,
+                             Sampler sampler, BorderMode mx, BorderMode my) const
 {
     HDRImage result(w, h);
 
@@ -529,23 +526,23 @@ HDRImage HDRImage::resampled(int w, int h, AtomicProgress progress,
     progress.set_num_steps(result.height());
     // for every pixel in the image
     parallel_for(0, result.height(),
-                 [this, w, h, &progress, &warpFn, &result, superSample, sampler, mX, mY](int y)
+                 [this, w, h, &progress, &warp_cb, &result, super_sample, sampler, mx, my](int y)
                  {
                      for (int x = 0; x < result.width(); ++x)
                      {
                          Color4 sum(0, 0, 0, 0);
-                         for (int yy = 0; yy < superSample; ++yy)
+                         for (int yy = 0; yy < super_sample; ++yy)
                          {
-                             float j = (yy + 0.5f) / superSample;
-                             for (int xx = 0; xx < superSample; ++xx)
+                             float j = (yy + 0.5f) / super_sample;
+                             for (int xx = 0; xx < super_sample; ++xx)
                              {
-                                 float             i     = (xx + 0.5f) / superSample;
-                                 nanogui::Vector2f srcUV = warpFn(nanogui::Vector2f((x + i) / w, (y + j) / h)) *
+                                 float             i     = (xx + 0.5f) / super_sample;
+                                 nanogui::Vector2f srcUV = warp_cb(nanogui::Vector2f((x + i) / w, (y + j) / h)) *
                                                            nanogui::Vector2f(width(), height());
-                                 sum += sample(srcUV[0], srcUV[1], sampler, mX, mY);
+                                 sum += sample(srcUV[0], srcUV[1], sampler, mx, my);
                              }
                          }
-                         result(x, y) = sum / (superSample * superSample);
+                         result(x, y) = sum / (super_sample * super_sample);
                      }
                      ++progress;
                  });
@@ -609,7 +606,7 @@ HDRImage HDRImage::rotated_90_ccw() const
     return rotated.flipped_vertical();
 }
 
-HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, BorderMode mX, BorderMode mY,
+HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, BorderMode mx, BorderMode my,
                              Box2i roi) const
 {
     HDRImage result = *this;
@@ -630,7 +627,7 @@ HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, Bo
     progress.set_num_steps(roi.size().x());
     // for every pixel in the image
     parallel_for(roi.min.x(), roi.max.x(),
-                 [this, &roi, &progress, &kernel, mX, mY, &result, centerX, centerY](int x)
+                 [this, &roi, &progress, &kernel, mx, my, &result, centerX, centerY](int x)
                  {
                      for (int y = roi.min.y(); y < roi.max.y(); y++)
                      {
@@ -644,7 +641,7 @@ HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, Bo
                              for (int yFilter = 0; yFilter < kernel.height(); yFilter++)
                              {
                                  int yy = y - yFilter + centerY;
-                                 accum += kernel(xFilter, yFilter) * pixel(xx, yy, mX, mY);
+                                 accum += kernel(xFilter, yFilter) * pixel(xx, yy, mx, my);
                                  weightSum += kernel(xFilter, yFilter);
                              }
                          }
@@ -659,7 +656,7 @@ HDRImage HDRImage::convolved(const Array2Df &kernel, AtomicProgress progress, Bo
     return result;
 }
 
-HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mX, BorderMode mY, Box2i roi) const
+HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mx, BorderMode my, Box2i roi) const
 {
     HDRImage result = *this;
 
@@ -676,15 +673,15 @@ HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mX, Bo
     progress.set_num_steps(roi.size().x());
     // for every pixel in the image
     parallel_for(roi.min.x(), roi.max.x(),
-                 [this, &roi, &progress, mX, mY, &result](int x)
+                 [this, &roi, &progress, mx, my, &result](int x)
                  {
                      for (int y = roi.min.y(); y < roi.max.y(); y++)
                      {
-                         result(x, y) = pixel(x - 1, y, mX, mY) + pixel(x + 1, y, mX, mY) + pixel(x, y - 1, mX, mY) +
-                                        pixel(x, y + 1, mX, mY) + pixel(x - 1, y - 1, mX, mY) +
-                                        pixel(x + 1, y + 1, mX, mY) + pixel(x + 1, y - 1, mX, mY) +
-                                        pixel(x - 1, y + 1, mX, mY) - 8 * pixel(x, y, mX, mY);
-                         result(x, y).a = pixel(x, y, mX, mY).a;
+                         result(x, y) = pixel(x - 1, y, mx, my) + pixel(x + 1, y, mx, my) + pixel(x, y - 1, mx, my) +
+                                        pixel(x, y + 1, mx, my) + pixel(x - 1, y - 1, mx, my) +
+                                        pixel(x + 1, y + 1, mx, my) + pixel(x + 1, y - 1, mx, my) +
+                                        pixel(x - 1, y + 1, mx, my) - 8 * pixel(x, y, mx, my);
+                         result(x, y).a = pixel(x, y, mx, my).a;
                      }
                      ++progress;
                  });
@@ -693,44 +690,44 @@ HDRImage HDRImage::laplacian_filtered(AtomicProgress progress, BorderMode mX, Bo
     return result;
 }
 
-HDRImage HDRImage::gaussian_blurred_x(float sigmaX, AtomicProgress progress, BorderMode mX, float truncateX,
+HDRImage HDRImage::gaussian_blurred_x(float sigma_x, AtomicProgress progress, BorderMode mx, float truncate_x,
                                       Box2i roi) const
 {
-    return convolved(horizontal_gaussian_kernel(sigmaX, truncateX), progress, mX, mX, roi);
+    return convolved(horizontal_gaussian_kernel(sigma_x, truncate_x), progress, mx, mx, roi);
 }
 
-HDRImage HDRImage::gaussian_blurred_y(float sigmaY, AtomicProgress progress, BorderMode mY, float truncateY,
+HDRImage HDRImage::gaussian_blurred_y(float sigma_y, AtomicProgress progress, BorderMode my, float truncate_y,
                                       Box2i roi) const
 {
-    return convolved(horizontal_gaussian_kernel(sigmaY, truncateY).swapped_dims(), progress, mY, mY, roi);
+    return convolved(horizontal_gaussian_kernel(sigma_y, truncate_y).swapped_dims(), progress, my, my, roi);
 }
 
 // Use principles of separability to blur an image using 2 1D Gaussian Filters
-HDRImage HDRImage::gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress progress, BorderMode mX, BorderMode mY,
-                                    float truncateX, float truncateY, Box2i roi) const
+HDRImage HDRImage::gaussian_blurred(float sigma_x, float sigma_y, AtomicProgress progress, BorderMode mx, BorderMode my,
+                                    float truncate_x, float truncate_y, Box2i roi) const
 {
     // blur using 2, 1D filters in the x and y directions
-    return gaussian_blurred_x(sigmaX, AtomicProgress(progress, .5f), mX, truncateX, roi)
-        .gaussian_blurred_y(sigmaY, AtomicProgress(progress, .5f), mY, truncateY, roi);
+    return gaussian_blurred_x(sigma_x, AtomicProgress(progress, .5f), mx, truncate_x, roi)
+        .gaussian_blurred_y(sigma_y, AtomicProgress(progress, .5f), my, truncate_y, roi);
 }
 
 // sharpen an image
-HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mX, BorderMode mY,
+HDRImage HDRImage::unsharp_masked(float sigma, float strength, AtomicProgress progress, BorderMode mx, BorderMode my,
                                   Box2i roi) const
 {
     Timer timer;
     spdlog::trace("Starting unsharp mask...");
-    HDRImage result = fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi);
+    HDRImage result = fast_gaussian_blurred(sigma, sigma, progress, mx, my, roi);
     result *= -1.f;
     result += *this;
     result *= strength;
     result += *this;
-    // HDRImage result = *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mX, mY, roi));
+    // HDRImage result = *this + strength * (*this - fast_gaussian_blurred(sigma, sigma, progress, mx, my, roi));
     spdlog::trace("Unsharp mask took: {} seconds.", (timer.elapsed() / 1000.f));
     return result;
 }
 
-HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress progress, BorderMode mX, BorderMode mY,
+HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress progress, BorderMode mx, BorderMode my,
                                    bool round, Box2i roi) const
 {
     int      radiusi    = int(std::ceil(radius));
@@ -749,7 +746,7 @@ HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress pro
     progress.set_num_steps(roi.size().y());
     // for every pixel in the image
     parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &roi, &tempBuffer, &progress, radius, radiusi, channel, mX, mY, round](int y)
+                 [this, &roi, &tempBuffer, &progress, radius, radiusi, channel, mx, my, round](int y)
                  {
                      vector<float> mBuffer;
                      mBuffer.reserve((2 * (radiusi + 1)) * (2 * (radiusi + 1)));
@@ -768,7 +765,7 @@ HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress pro
                                      continue;
 
                                  y_coord = y + j;
-                                 mBuffer.push_back(pixel(x_coord, y_coord, mX, mY)[channel]);
+                                 mBuffer.push_back(pixel(x_coord, y_coord, mx, my)[channel]);
                              }
                          }
 
@@ -785,8 +782,8 @@ HDRImage HDRImage::median_filtered(float radius, int channel, AtomicProgress pro
     return tempBuffer;
 }
 
-HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain, AtomicProgress progress, BorderMode mX,
-                                      BorderMode mY, float truncateDomain, Box2i roi) const
+HDRImage HDRImage::bilateral_filtered(float sigma_range, float sigma_domain, AtomicProgress progress, BorderMode mx,
+                                      BorderMode my, float truncate_domain, Box2i roi) const
 {
     HDRImage filtered = *this;
 
@@ -800,13 +797,13 @@ HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain, Atom
         return filtered;
 
     // calculate the filter size
-    int radius = int(std::ceil(truncateDomain * sigma_domain));
+    int radius = int(std::ceil(truncate_domain * sigma_domain));
 
     Timer timer;
     progress.set_num_steps(roi.size().y());
     // for every pixel in the image
     parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &roi, &filtered, &progress, radius, sigmaRange, sigma_domain, mX, mY](int y)
+                 [this, &roi, &filtered, &progress, radius, sigma_range, sigma_domain, mx, my](int y)
                  {
                      for (int x = roi.min.x(); x < roi.max.x(); x++)
                      {
@@ -821,14 +818,14 @@ HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain, Atom
                              {
                                  int xx = x + xFilter;
                                  // calculate the squared distance between the 2 pixels (in range)
-                                 float rangeExp  = ::pow(pixel(xx, yy, mX, mY) - (*this)(x, y), 2).sum();
+                                 float rangeExp  = ::pow(pixel(xx, yy, mx, my) - (*this)(x, y), 2).sum();
                                  float domainExp = std::pow(xFilter, 2) + std::pow(yFilter, 2);
 
                                  // calculate the exponentiated weighting factor from the domain and range
                                  float factorDomain = std::exp(-domainExp / (2.0 * std::pow(sigma_domain, 2)));
-                                 float factorRange  = std::exp(-rangeExp / (2.0 * std::pow(sigmaRange, 2)));
+                                 float factorRange  = std::exp(-rangeExp / (2.0 * std::pow(sigma_range, 2)));
                                  weightSum += factorDomain * factorRange;
-                                 accum += factorDomain * factorRange * pixel(xx, yy, mX, mY);
+                                 accum += factorDomain * factorRange * pixel(xx, yy, mx, my);
                              }
                          }
 
@@ -844,8 +841,8 @@ HDRImage HDRImage::bilateral_filtered(float sigmaRange, float sigma_domain, Atom
 
 static int nextOddInt(int i) { return (i % 2 == 0) ? i + 1 : i; }
 
-HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgress progress, BorderMode mX,
-                                        BorderMode mY, Box2i roi) const
+HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgress progress, BorderMode mx,
+                                        BorderMode my, Box2i roi) const
 {
     // Compute box blur size for desired sigma and number of iterations:
     // The kernel resulting from repeated box blurs of the same width is the
@@ -880,13 +877,13 @@ HDRImage HDRImage::iterated_box_blurred(float sigma, int iterations, AtomicProgr
 
     HDRImage result = *this;
     for (int i = 0; i < iterations; i++)
-        result = result.box_blurred(hw, AtomicProgress(progress, 1.f / iterations), mX, mY, roi);
+        result = result.box_blurred(hw, AtomicProgress(progress, 1.f / iterations), mx, my, roi);
 
     return result;
 }
 
-HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY, AtomicProgress progress, BorderMode mX,
-                                         BorderMode mY, Box2i roi) const
+HDRImage HDRImage::fast_gaussian_blurred(float sigma_x, float sigma_y, AtomicProgress progress, BorderMode mx,
+                                         BorderMode my, Box2i roi) const
 {
     // ensure valid ROI
     if (roi.has_volume())
@@ -899,45 +896,45 @@ HDRImage HDRImage::fast_gaussian_blurred(float sigmaX, float sigmaY, AtomicProgr
 
     Timer timer;
     // See comments in HDRImage::iterated_box_blurred for derivation of width
-    int hw = std::round((std::sqrt(12.f / 6) * sigmaX - 1) / 2.f);
-    int hh = std::round((std::sqrt(12.f / 6) * sigmaY - 1) / 2.f);
+    int hw = std::round((std::sqrt(12.f / 6) * sigma_x - 1) / 2.f);
+    int hh = std::round((std::sqrt(12.f / 6) * sigma_y - 1) / 2.f);
 
     HDRImage im;
     // do horizontal blurs
     if (hw < 3)
         // for small blurs, just use a separable Gaussian
-        im = gaussian_blurred_x(sigmaX, AtomicProgress(progress, 0.5f), mX, 6.f, roi);
+        im = gaussian_blurred_x(sigma_x, AtomicProgress(progress, 0.5f), mx, 6.f, roi);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi.expanded(5 * hw))
-                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi.expanded(4 * hw))
-                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi.expanded(3 * hw))
-                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi.expanded(2 * hw))
-                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi.expanded(1 * hw))
-                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mX, roi);
+        im = box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi.expanded(5 * hw))
+                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi.expanded(4 * hw))
+                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi.expanded(3 * hw))
+                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi.expanded(2 * hw))
+                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi.expanded(1 * hw))
+                 .box_blurred_x(hw, AtomicProgress(progress, .5f / 6.f), mx, roi);
 
     // now do vertical blurs
     if (hh < 3)
         // for small blurs, just use a separable Gaussian
-        im = im.gaussian_blurred_y(sigmaY, AtomicProgress(progress, 0.5f), mY, 6.f, roi);
+        im = im.gaussian_blurred_y(sigma_y, AtomicProgress(progress, 0.5f), my, 6.f, roi);
     else
         // for large blurs, approximate Gaussian with 6 box blurs
-        im = im.box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi.expanded(5 * hh))
-                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi.expanded(4 * hh))
-                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi.expanded(3 * hh))
-                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi.expanded(2 * hh))
-                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi.expanded(1 * hh))
-                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), mY, roi);
+        im = im.box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi.expanded(5 * hh))
+                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi.expanded(4 * hh))
+                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi.expanded(3 * hh))
+                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi.expanded(2 * hh))
+                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi.expanded(1 * hh))
+                 .box_blurred_y(hh, AtomicProgress(progress, .5f / 6.f), my, roi);
 
     // copy just the roi
     HDRImage im2 = *this;
-    im2.copy_paste(im, roi, roi.min.x(), roi.min.y());
+    im2.copy_paste(im, roi, roi.min.x(), roi.min.y(), true);
 
     spdlog::trace("fast_gaussian_blurred filter took: {} seconds.", (timer.elapsed() / 1000.f));
     return im2;
 }
 
-HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress, BorderMode mX, Box2i roi) const
+HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress, BorderMode mx, Box2i roi) const
 {
     HDRImage filtered = *this;
 
@@ -954,17 +951,17 @@ HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress
     progress.set_num_steps(roi.size().y());
     // for every pixel in the image
     parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &roi, &filtered, &progress, l_size, r_size, mX](int y)
+                 [this, &roi, &filtered, &progress, l_size, r_size, mx](int y)
                  {
                      // fill up the accumulator
                      int x          = roi.min.x();
                      filtered(x, y) = 0;
-                     for (int dx = -l_size; dx <= r_size; ++dx) filtered(x, y) += pixel(x + dx, y, mX, mX);
+                     for (int dx = -l_size; dx <= r_size; ++dx) filtered(x, y) += pixel(x + dx, y, mx, mx);
 
                      // blur all other pixels
                      for (x = roi.min.x() + 1; x < roi.max.x(); ++x)
                          filtered(x, y) =
-                             filtered(x - 1, y) - pixel(x - 1 - l_size, y, mX, mX) + pixel(x + r_size, y, mX, mX);
+                             filtered(x - 1, y) - pixel(x - 1 - l_size, y, mx, mx) + pixel(x + r_size, y, mx, mx);
                      // normalize
                      for (x = roi.min.x(); x < roi.max.x(); ++x) filtered(x, y) *= 1.f / (l_size + r_size + 1);
 
@@ -975,7 +972,7 @@ HDRImage HDRImage::box_blurred_x(int l_size, int r_size, AtomicProgress progress
     return filtered;
 }
 
-HDRImage HDRImage::box_blurred_y(int l_size, int r_size, AtomicProgress progress, BorderMode mY, Box2i roi) const
+HDRImage HDRImage::box_blurred_y(int l_size, int r_size, AtomicProgress progress, BorderMode my, Box2i roi) const
 {
     HDRImage filtered = *this;
 
@@ -992,17 +989,17 @@ HDRImage HDRImage::box_blurred_y(int l_size, int r_size, AtomicProgress progress
     progress.set_num_steps(roi.size().x());
     // for every pixel in the image
     parallel_for(roi.min.x(), roi.max.x(),
-                 [this, &roi, &filtered, &progress, l_size, r_size, mY](int x)
+                 [this, &roi, &filtered, &progress, l_size, r_size, my](int x)
                  {
                      // fill up the accumulator
                      int y          = roi.min.y();
                      filtered(x, y) = 0;
-                     for (int dy = -l_size; dy <= r_size; ++dy) filtered(x, y) += pixel(x, y + dy, mY, mY);
+                     for (int dy = -l_size; dy <= r_size; ++dy) filtered(x, y) += pixel(x, y + dy, my, my);
 
                      // blur all other pixels
                      for (y = roi.min.y() + 1; y < roi.max.y(); ++y)
                          filtered(x, y) =
-                             filtered(x, y - 1) - pixel(x, y - 1 - l_size, mY, mY) + pixel(x, y + r_size, mY, mY);
+                             filtered(x, y - 1) - pixel(x, y - 1 - l_size, my, my) + pixel(x, y + r_size, my, my);
 
                      // normalize
                      for (y = roi.min.y(); y < roi.max.y(); ++y) filtered(x, y) *= 1.f / (l_size + r_size + 1);
@@ -1022,54 +1019,54 @@ HDRImage HDRImage::resized_canvas(int newW, int newH, CanvasAnchor anchor, const
     // fill in new regions with border value
     HDRImage img = HDRImage(newW, newH, bgColor);
 
-    nanogui::Vector2i tlDst(0, 0);
+    nanogui::Vector2i tl_dst(0, 0);
     // find top-left corner
     switch (anchor)
     {
     case HDRImage::TOP_RIGHT:
     case HDRImage::MIDDLE_RIGHT:
-    case HDRImage::BOTTOM_RIGHT: tlDst.x() = newW - oldW; break;
+    case HDRImage::BOTTOM_RIGHT: tl_dst.x() = newW - oldW; break;
 
     case HDRImage::TOP_CENTER:
     case HDRImage::MIDDLE_CENTER:
-    case HDRImage::BOTTOM_CENTER: tlDst.x() = (newW - oldW) / 2; break;
+    case HDRImage::BOTTOM_CENTER: tl_dst.x() = (newW - oldW) / 2; break;
 
     case HDRImage::TOP_LEFT:
     case HDRImage::MIDDLE_LEFT:
     case HDRImage::BOTTOM_LEFT:
-    default: tlDst.x() = 0; break;
+    default: tl_dst.x() = 0; break;
     }
     switch (anchor)
     {
     case HDRImage::BOTTOM_LEFT:
     case HDRImage::BOTTOM_CENTER:
-    case HDRImage::BOTTOM_RIGHT: tlDst.y() = newH - oldH; break;
+    case HDRImage::BOTTOM_RIGHT: tl_dst.y() = newH - oldH; break;
 
     case HDRImage::MIDDLE_LEFT:
     case HDRImage::MIDDLE_CENTER:
-    case HDRImage::MIDDLE_RIGHT: tlDst.y() = (newH - oldH) / 2; break;
+    case HDRImage::MIDDLE_RIGHT: tl_dst.y() = (newH - oldH) / 2; break;
 
     case HDRImage::TOP_LEFT:
     case HDRImage::TOP_CENTER:
     case HDRImage::TOP_RIGHT:
-    default: tlDst.y() = 0; break;
+    default: tl_dst.y() = 0; break;
     }
 
-    nanogui::Vector2i tlSrc(0, 0);
-    if (tlDst.x() < 0)
+    nanogui::Vector2i tl_src(0, 0);
+    if (tl_dst.x() < 0)
     {
-        tlSrc.x() = -tlDst.x();
-        tlDst.x() = 0;
+        tl_src.x() = -tl_dst.x();
+        tl_dst.x() = 0;
     }
-    if (tlDst.y() < 0)
+    if (tl_dst.y() < 0)
     {
-        tlSrc.y() = -tlDst.y();
-        tlDst.y() = 0;
+        tl_src.y() = -tl_dst.y();
+        tl_dst.y() = 0;
     }
 
     nanogui::Vector2i bs(std::min(oldW, newW), std::min(oldH, newH));
 
-    img.copy_paste(*this, Box2i(tlSrc, tlSrc + bs), tlDst.x(), tlDst.y());
+    img.copy_paste(*this, Box2i(tl_src, tl_src + bs), tl_dst.x(), tl_dst.y(), true);
     return img;
 }
 
@@ -1094,7 +1091,7 @@ HDRImage HDRImage::resized(int w, int h) const
  *                    0 -> no change; 45 degree diagonal line;
  *                    1 -> no gray/black & white; vertical line.
  *                  If linear is False, this changes the contrast by shifting the 0.25 value by c/4.
- * @param linear    Whether to linear or non-linear remapping.
+ * @param linear    Whether to use linear or non-linear remapping.
  *                  The non-linear mapping keeps values within [0,1], while
  *                  the linear mapping may produce negative values and values > 1.
  * @param channel   Apply the adjustment to the specified channel(s).
@@ -1123,8 +1120,9 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return apply_function(
                 [slope, midpoint](const Color4 &c)
                 {
-                    return Color4(brightnessContrastL(c.r, slope, midpoint), brightnessContrastL(c.g, slope, midpoint),
-                                  brightnessContrastL(c.b, slope, midpoint), c.a);
+                    return Color4(brightness_contrast_linear(c.r, slope, midpoint),
+                                  brightness_contrast_linear(c.g, slope, midpoint),
+                                  brightness_contrast_linear(c.b, slope, midpoint), c.a);
                 },
                 roi);
         else if (channel == LUMINANCE || channel == CIE_L)
@@ -1132,8 +1130,9 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                 [slope, midpoint](const Color4 &c)
                 {
                     Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
-                    return convert_colorspace(Color4(brightnessContrastL(lab.r, slope, midpoint), lab.g, lab.b, c.a),
-                                              LinearSRGB_CS, CIELab_CS);
+                    return convert_colorspace(
+                        Color4(brightness_contrast_linear(lab.r, slope, midpoint), lab.g, lab.b, c.a), LinearSRGB_CS,
+                        CIELab_CS);
                 },
                 roi);
         else if (channel == CIE_CHROMATICITY)
@@ -1141,8 +1140,8 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                 [slope, midpoint](const Color4 &c)
                 {
                     Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
-                    return convert_colorspace(Color4(lab.r, brightnessContrastL(lab.g, slope, midpoint),
-                                                     brightnessContrastL(lab.b, slope, midpoint), c.a),
+                    return convert_colorspace(Color4(lab.r, brightness_contrast_linear(lab.g, slope, midpoint),
+                                                     brightness_contrast_linear(lab.b, slope, midpoint), c.a),
                                               LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
@@ -1157,8 +1156,9 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
             return apply_function(
                 [aB, slope](const Color4 &c)
                 {
-                    return Color4(brightnessContrastNL(c.r, slope, aB), brightnessContrastNL(c.g, slope, aB),
-                                  brightnessContrastNL(c.b, slope, aB), c.a);
+                    return Color4(brightness_contrast_nonlinear(c.r, slope, aB),
+                                  brightness_contrast_nonlinear(c.g, slope, aB),
+                                  brightness_contrast_nonlinear(c.b, slope, aB), c.a);
                 },
                 roi);
         else if (channel == LUMINANCE || channel == CIE_L)
@@ -1166,8 +1166,9 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                 [aB, slope](const Color4 &c)
                 {
                     Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
-                    return convert_colorspace(Color4(brightnessContrastNL(lab.r, slope, aB), lab.g, lab.b, c.a),
-                                              LinearSRGB_CS, CIELab_CS);
+                    return convert_colorspace(
+                        Color4(brightness_contrast_nonlinear(lab.r, slope, aB), lab.g, lab.b, c.a), LinearSRGB_CS,
+                        CIELab_CS);
                 },
                 roi);
         else if (channel == CIE_CHROMATICITY)
@@ -1175,8 +1176,8 @@ HDRImage HDRImage::brightness_contrast(float b, float c, bool linear, EChannel c
                 [aB, slope](const Color4 &c)
                 {
                     Color4 lab = convert_colorspace(c, CIELab_CS, LinearSRGB_CS);
-                    return convert_colorspace(Color4(lab.r, brightnessContrastNL(lab.g, slope, aB),
-                                                     brightnessContrastNL(lab.b, slope, aB), c.a),
+                    return convert_colorspace(Color4(lab.r, brightness_contrast_nonlinear(lab.g, slope, aB),
+                                                     brightness_contrast_nonlinear(lab.b, slope, aB), c.a),
                                               LinearSRGB_CS, CIELab_CS);
                 },
                 roi);
@@ -1190,7 +1191,7 @@ HDRImage HDRImage::inverted(Box2i roi) const
     return apply_function([](const Color4 &c) { return Color4(1.f - c.r, 1.f - c.g, 1.f - c.b, c.a); }, roi);
 }
 
-HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mX, BorderMode mY,
+HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, BorderMode mx, BorderMode my,
                                       Box2i roi) const
 {
     HDRImage normal_map = *this;
@@ -1210,12 +1211,12 @@ HDRImage HDRImage::bump_to_normal_map(float scale, AtomicProgress progress, Bord
     progress.set_num_steps(roi.size().y());
     // for every pixel in the image
     parallel_for(roi.min.y(), roi.max.y(),
-                 [this, &roi, &normal_map, &progress, scale, dx, dy, mX, mY](int j)
+                 [this, &roi, &normal_map, &progress, scale, dx, dy, mx, my](int j)
                  {
                      for (int i = roi.min.x(); i < roi.max.x(); ++i)
                      {
                          auto i1 = i + 1, j1 = j + 1;
-                         auto p00 = pixel(i, j, mX, mY), p10 = pixel(i1, j, mX, mY), p01 = pixel(i, j1, mX, mY);
+                         auto p00 = pixel(i, j, mx, my), p10 = pixel(i1, j, mx, my), p01 = pixel(i, j1, mx, my);
 
                          auto              g00 = (p00.r + p00.g + p00.b) / 3;
                          auto              g01 = (p01.r + p01.g + p01.b) / 3;

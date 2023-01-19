@@ -92,7 +92,7 @@ pair<int, int> find_common_prefix_suffix(const vector<string> &names)
         {
             bool all_start_with_same_char = false;
             do {
-                int len = codePointLength(first[begin_short_offset]);
+                int len = code_point_length(first[begin_short_offset]);
 
                 all_start_with_same_char =
                     all_of(begin(names), end(names),

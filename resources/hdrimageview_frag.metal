@@ -43,9 +43,9 @@ struct VertexOut
     float2 secondary_uv;
 };
 
-float3 tonemap(const float3 color, const float gamma, const bool sRGB)
+float4 tonemap(const float4 color, const float gamma, const bool sRGB)
 {
-    return sRGB ? linearToSRGB(color) : sign(color) * pow(abs(color), float3(1.0 / gamma));
+    return float4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma)), color.a);
 }
 
 // note: uniformly distributed, normalized rand, [0;1[
@@ -71,26 +71,26 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
     return (r < 0) ? rn : rp;
 }
 
-float3 choose_channel(float4 rgba, int channel)
+float4 choose_channel(float4 rgba, int channel)
 {
-    float3 rgb = rgba.rgb;
     switch (channel)
     {
-        case CHANNEL_RED:               return rgba.rrr;
-        case CHANNEL_GREEN:             return rgba.ggg;
-        case CHANNEL_BLUE:              return rgba.bbb;
-        case CHANNEL_ALPHA:             return rgba.aaa;
-        case CHANNEL_LUMINANCE:         return RGBToLuminance(rgb);
-        case CHANNEL_GRAY:              return RGBToGray(rgb);
-        case CHANNEL_CIE_L:             return RGBToLab(rgb).xxx;
-        case CHANNEL_CIE_a:             return RGBToLab(rgb).yyy;
-        case CHANNEL_CIE_b:             return RGBToLab(rgb).zzz;
-        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(float3(0.5, RGBToLab(rgb).yz));
+        case CHANNEL_RGB:               return rgba;
+        case CHANNEL_RED:               return float4(rgba.rrr, 1.0);
+        case CHANNEL_GREEN:             return float4(rgba.ggg, 1.0);
+        case CHANNEL_BLUE:              return float4(rgba.bbb, 1.0);
+        case CHANNEL_ALPHA:             return float4(rgba.aaa, 1.0);
+        case CHANNEL_LUMINANCE:         return float4(RGBToLuminance(rgba.rgb), 1.0);
+        case CHANNEL_GRAY:              return float4(RGBToGray(rgba.rgb), 1.0);
+        case CHANNEL_CIE_L:             return float4(RGBToLab(rgba.rgb).xxx, 1.0);
+        case CHANNEL_CIE_a:             return float4(RGBToLab(rgba.rgb).yyy, 1.0);
+        case CHANNEL_CIE_b:             return float4(RGBToLab(rgba.rgb).zzz, 1.0);
+        case CHANNEL_CIE_CHROMATICITY:  return float4(LabToRGB(float3(0.5, RGBToLab(rgba.rgb).yz)), 1.0);
         // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(rgb).r));
-        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(rgb);
+        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(RGBToLuminance(rgba.rgb).r)), 1.0);
+        case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(rgba.rgb), 1.0);
     }
-    return rgb;
+    return rgba;
 }
 
 float4 blend(float4 top, float4 bottom, int blend_mode)
@@ -111,20 +111,17 @@ float4 blend(float4 top, float4 bottom, int blend_mode)
     return float4(0.0);
 }
 
-float3 dither(float3 color, float2 xy, const float2 randomness, const bool do_dither, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
+float4 dither(float4 color, float2 xy, const float2 randomness, const bool do_dither, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
 {
     if (!do_dither)
 		return color;
 
-    return color + float3(rand_tent(xy + randomness, dither_texture, dither_sampler)/255.0);
+    return color + float4(float3(rand_tent(xy + randomness, dither_texture, dither_sampler)/255.0), 0.0);
 }
 
-float4 sample(texture2d<float, access::sample> texture, sampler the_sampler, float2 uv)
+float4 sample(texture2d<float, access::sample> texture, sampler the_sampler, float2 uv, bool within_image)
 {
-    if (uv.x > 1.0 || uv.y > 1.0 || uv.x < 0.0 || uv.y < 0.0)
-        return float4(0.0);
-
-    return texture.sample(the_sampler, uv);
+    return (within_image) ? texture.sample(the_sampler, uv) : float4(0.0);
 }
 
 fragment float4 fragment_main(VertexOut vert [[stage_in]],
@@ -134,17 +131,17 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               sampler primary_sampler,
                               sampler secondary_sampler,
                               sampler dither_sampler,
-                              constant uint &has_reference,
-                              constant uint &do_dither,
-                              constant float2 &randomness,
-                              constant int &blend_mode,
-                              constant int &channel,
-                              constant float &gain,
-                              constant float &gamma,
-                              constant bool &sRGB,
-                              constant bool &clamp_to_LDR,
-                              constant int &bg_mode,
-                              constant float4 &bg_color)
+                              const constant bool& has_reference,
+                              const constant bool& do_dither,
+                              const constant float2 &randomness,
+                              const constant int &blend_mode,
+                              const constant int &channel,
+                              const constant float &gain,
+                              const constant float &gamma,
+                              const constant bool &sRGB,
+                              const constant bool &clamp_to_LDR,
+                              const constant int &bg_mode,
+                              const constant float4 &bg_color)
 {
     float4 background(bg_color.rgb, 1.0);
     if (bg_mode == BG_BLACK)
@@ -159,16 +156,23 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         background.rgb = float3(checkerboard);
     }
 
-    float4 value = sample(primary_texture, primary_sampler, vert.primary_uv);
+    bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
+    bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);
 
-    if (has_reference != 0u)
+    if (!in_img and !in_ref)
+        return background;
+
+    float4 value = sample(primary_texture, primary_sampler, vert.primary_uv, in_img);
+
+    if (has_reference)
     {
-        float4 reference_val = sample(secondary_texture, secondary_sampler, vert.secondary_uv);
+        float4 reference_val = sample(secondary_texture, secondary_sampler, vert.secondary_uv, in_ref);
         value = blend(value, reference_val, blend_mode);
     }
 
-    float3 blended = dither(tonemap(choose_channel(value * gain, channel), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler) + background.rgb*(1-value.a);
+    float4 foreground = dither(tonemap(choose_channel(value, channel) * float4(float3(gain), 1.0), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
+    float4 blended = foreground + background*(1-foreground.a);
     blended = clamp(blended, clamp_to_LDR ? 0.0f : -64.0f, clamp_to_LDR ? 1.0f : 64.0f);
-    return float4(blended, 1.0);
+    return float4(blended.rgb, 1.0);
 }
 
