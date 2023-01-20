@@ -494,8 +494,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         auto add_item = [this, &menu](const string &name, int icon, const std::function<void(void)> &cb,
                                       int modifier = 0, int button = 0, bool edit = true)
         {
-            auto i = menu->popup()->add<MenuItem>(name, icon);
-            i->set_hotkey(modifier, button);
+            auto i = menu->popup()->add<MenuItem>(name, icon, MenuItem::Shortcut{modifier, button});
             i->set_callback(cb);
             m_menu_items.push_back(i);
             if (edit)
@@ -752,16 +751,25 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                 FormHelper *gui = new FormHelper(this);
                 gui->set_fixed_size(Vector2i(135, 20));
 
-                auto window = new Dialog(this, "Set image view background");
-                window->set_modal(false);
-                gui->set_window(window);
+                auto dialog = new Dialog(this, "Set image view background");
+                dialog->set_modal(false);
+                gui->set_window(dialog);
 
-                static Color bg              = background()->color();
+                static Color bg              = m_image_view->bg_color();
                 static float EV              = 0.f;
-                Widget      *color_btn_group = new Widget(window);
+                Widget      *color_btn_group = new Widget(dialog);
                 color_btn_group->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
+
+                // add a small vertical space (need one for each column)
+                color_btn_group->add<Widget>()->set_fixed_height(1);
+                color_btn_group->add<Widget>()->set_fixed_height(1);
+
                 color_btn_group->add<Label>("Custom color:");
-                HDRColorPicker *color_btn = new HDRColorPicker(color_btn_group, bg, EV);
+                auto color_btn = color_btn_group->add<HDRColorPicker>(bg, EV);
+
+                // add a small vertical space (need one for each column)
+                color_btn_group->add<Widget>()->set_fixed_height(1);
+                color_btn_group->add<Widget>()->set_fixed_height(1);
 
                 static EBGMode bg_mode       = m_image_view->bg_mode();
                 vector<string> bg_mode_names = {"Black", "White", "Dark checkerboard", "Light checkerboard",
@@ -773,49 +781,39 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                                               color_btn_group->set_visible(m == BG_CUSTOM_COLOR);
 
                                           request_layout_update();
+
+                                          m_image_view->set_bg_mode(bg_mode);
+                                          m_image_view->set_bg_color(bg);
                                       });
                 color_btn_group->set_visible(bg_mode == BG_CUSTOM_COLOR);
 
-                auto spacer = new Widget(window);
-                spacer->set_fixed_height(15);
-                gui->add_widget("", spacer);
-
-                // color_btn       = new HDRColorPicker(window, bg, EV);
                 color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
                 color_btn->set_eyedropper_callback([this, color_btn](bool pushed)
                                                    { set_active_colorpicker(pushed ? color_btn : nullptr); });
                 gui->add_widget("", color_btn_group);
                 color_btn->set_final_callback(
-                    [](const Color &c, float e)
+                    [this](const Color &c, float e)
                     {
                         bg = c;
                         EV = e;
-                    });
-
-                auto popup = color_btn->popup();
-
-                request_layout_update();
-
-                spacer = new Widget(window);
-                spacer->set_fixed_height(15);
-                gui->add_widget("", spacer);
-
-                window->set_callback(
-                    [&, popup](int cancel)
-                    {
-                        popup->set_visible(false);
-
-                        if (cancel)
-                            return;
 
                         m_image_view->set_bg_mode(bg_mode);
                         m_image_view->set_bg_color(bg);
                     });
 
-                gui->add_widget("", window->add_buttons());
+                request_layout_update();
 
-                window->center();
-                window->request_focus();
+                auto close_button = new Button{dialog->button_panel(), "", FA_TIMES};
+                close_button->set_callback(
+                    [dialog]()
+                    {
+                        if (dialog->callback())
+                            dialog->callback()(0);
+                        dialog->dispose();
+                    });
+
+                dialog->center();
+                dialog->request_focus();
             },
             0, 0, false);
 
@@ -906,7 +904,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         menu->popup()->add<Separator>();
 
         add_item(
-            "Help", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
+            "Help...", FA_QUESTION_CIRCLE, [this] { show_help_window(); }, 0, 'H', false);
 
         // add menu items that are not visible in the menu but still have keyboard shortcuts
         {
@@ -1018,24 +1016,24 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             {
                 for (auto other_item : m_menu_items)
                 {
-                    if (other_item != item && other_item->hotkey() == item->hotkey() &&
-                        item->hotkey() != std::pair<int, int>{0, 0})
+                    if (other_item != item && other_item->shortcut() == item->shortcut() &&
+                        item->shortcut() != MenuItem::Shortcut{})
                         return other_item;
                 }
                 return nullptr;
             };
 
-            std::set<std::pair<int, int>> duplicates;
+            std::set<MenuItem::Shortcut> duplicates;
             for (auto item : m_menu_items)
             {
-                spdlog::debug("Menu item \"{}\" with keyboard shortcut {}", item->caption(), item->shortcut_string());
-                if (duplicates.count(item->hotkey()))
+                spdlog::debug("Menu item \"{}\" with keyboard shortcut {}", item->caption(), item->shortcut().text);
+                if (duplicates.count(item->shortcut()))
                     continue;
                 if (auto other_item = find_equal(item))
                 {
                     spdlog::error("Keyboard shortcut {} set for both \"{}\" and \"{}\". Only the first will be used.",
-                                  item->shortcut_string(), item->caption(), other_item->caption());
-                    duplicates.insert(item->hotkey());
+                                  item->shortcut().text, item->caption(), other_item->caption());
+                    duplicates.insert(item->shortcut());
                 }
             }
         }
@@ -1345,8 +1343,8 @@ void HDRViewScreen::new_image()
     FormHelper *gui = new FormHelper(this);
     gui->set_fixed_size(Vector2i(0, 20));
 
-    auto window = new Dialog(this, name);
-    gui->set_window(window);
+    auto dialog = new Dialog(this, name);
+    gui->set_window(dialog);
 
     if (m_images_panel->current_image() && m_images_panel->current_image()->roi().has_volume())
     {
@@ -1368,13 +1366,13 @@ void HDRViewScreen::new_image()
         h->set_units("px");
     }
 
-    auto spacer = new Widget(window);
+    auto spacer = new Widget(dialog);
     spacer->set_fixed_height(5);
     gui->add_widget("", spacer);
 
     bg             = background()->color();
     EV             = background()->exposure();
-    auto color_btn = new HDRColorPicker(window, bg, EV);
+    auto color_btn = new HDRColorPicker(dialog, bg, EV);
     color_btn->popup()->set_anchor_offset(color_btn->popup()->height());
     color_btn->set_eyedropper_callback([this, color_btn](bool pushed)
                                        { set_active_colorpicker(pushed ? color_btn : nullptr); });
@@ -1389,11 +1387,11 @@ void HDRViewScreen::new_image()
     auto popup = color_btn->popup();
     request_layout_update();
 
-    spacer = new Widget(window);
+    spacer = new Widget(dialog);
     spacer->set_fixed_height(15);
     gui->add_widget("", spacer);
 
-    window->set_callback(
+    dialog->set_callback(
         [this, popup](int close)
         {
             popup->set_visible(false);
@@ -1411,10 +1409,10 @@ void HDRViewScreen::new_image()
             request_layout_update();
         });
 
-    gui->add_widget("", window->add_buttons());
+    gui->add_widget("", dialog->add_buttons());
 
-    window->center();
-    window->request_focus();
+    dialog->center();
+    dialog->request_focus();
 }
 
 void HDRViewScreen::duplicate_image()
@@ -1541,7 +1539,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
         {
             spdlog::trace("Modal dialog: {}", dialog->title());
 
-            // if the help window is open, close it with the 'H' key
+            // if the help dialog is open, close it with the 'H' key
             if (auto help = dynamic_cast<HelpWindow *>(dialog))
             {
                 if (key == 'H')

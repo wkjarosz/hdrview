@@ -81,7 +81,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         auto add_item = [](Dropdown *btn, const std::string &name, int index, int modifier = 0, int button = 0)
         {
             auto i = btn->popup()->add<MenuItem>(name);
-            i->set_hotkey(modifier, button);
+            i->set_shortcut(modifier, button);
             i->set_flags(Button::RadioButton);
             i->set_callback(
                 [index, btn]

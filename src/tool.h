@@ -241,7 +241,7 @@ class GradientTool : public Ruler
 {
 public:
     GradientTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Gradient tool",
-                 const std::string &tooltip = "Draw gradient.", int icon = FA_SIGNAL, ETool tool = Tool_Gradient);
+                 const std::string &tooltip = "Draw gradients.", int icon = FA_SIGNAL, ETool tool = Tool_Gradient);
 
     virtual void write_settings() override;
     virtual void create_options_bar(nanogui::Widget *parent) override;

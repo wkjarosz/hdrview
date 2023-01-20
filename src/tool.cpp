@@ -92,8 +92,9 @@ void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
         return;
 
     m_menuitem = menu->popup()->add<MenuItem>(m_name);
-    m_menuitem->set_hotkey(modifier, button);
+    m_menuitem->set_shortcut(modifier, button);
     m_menuitem->set_flags(Button::RadioButton);
+    m_menuitem->set_tooltip(m_tooltip);
     m_menuitem->set_change_callback(
         [this](bool b)
         {

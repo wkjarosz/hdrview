@@ -26,57 +26,55 @@ using std::vector;
 
 NAMESPACE_BEGIN(nanogui)
 
-MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon) : Button(parent, caption, button_icon)
+MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, const Shortcut &s) :
+    Button(parent, caption, button_icon), m_shortcut(s)
 {
     set_fixed_height(PopupMenu::menu_item_height);
     m_icon_position = IconPosition::Left;
 }
 
-void MenuItem::set_hotkey(int modcode, int keycode)
+MenuItem::Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
 {
-    m_button    = keycode;
-    m_modifiers = modcode;
-    string str;
-    if (modcode & SYSTEM_COMMAND_MOD)
-        str += "{CMD}+";
-    if (modcode & GLFW_MOD_ALT)
-        str += "{ALT}+";
-    if (modcode & GLFW_MOD_SHIFT)
-        str += "Shift+";
+    if (modifiers & SYSTEM_COMMAND_MOD)
+        text += HelpWindow::key_string("{CMD}+");
+    if (modifiers & GLFW_MOD_ALT)
+        text += HelpWindow::key_string("{ALT}+");
+    if (modifiers & GLFW_MOD_SHIFT)
+        text += "Shift+";
 
     // printable characters
-    if (32 < keycode && keycode < 128)
-        str += char(keycode);
+    if (32 < key && key < 128)
+        text += char(key);
     // function keys
-    else if (keycode == GLFW_KEY_SPACE)
-        str += "Space";
-    else if (GLFW_KEY_F1 <= keycode && keycode <= GLFW_KEY_F25)
-        str += fmt::format("F{}", keycode - GLFW_KEY_F1 + 1);
-    else if (keycode == GLFW_KEY_BACKSPACE)
-        str += "Backspace";
-    else if (keycode == GLFW_KEY_DELETE)
-        str += "Delete";
-    else if (keycode == GLFW_KEY_UP)
-        str += "Up";
-    else if (keycode == GLFW_KEY_DOWN)
-        str += "Down";
-    else if (keycode == GLFW_KEY_LEFT)
-        str += "Left";
-    else if (keycode == GLFW_KEY_RIGHT)
-        str += "Right";
-    else if (keycode == GLFW_KEY_PAGE_UP)
-        str += "Page Up";
-    else if (keycode == GLFW_KEY_DOWN)
-        str += "Page Down";
-    else if (keycode == GLFW_KEY_TAB)
-        str += "Tab";
-    else if (keycode == GLFW_KEY_ESCAPE)
-        str += "Esc";
-    else if (keycode == GLFW_KEY_ENTER)
-        str += "Enter";
-
-    m_hotkey = HelpWindow::key_string(str);
+    else if (key == GLFW_KEY_SPACE)
+        text += "Space";
+    else if (GLFW_KEY_F1 <= key && key <= GLFW_KEY_F25)
+        text += fmt::format("F{}", key - GLFW_KEY_F1 + 1);
+    else if (key == GLFW_KEY_BACKSPACE)
+        text += "Backspace";
+    else if (key == GLFW_KEY_DELETE)
+        text += "Delete";
+    else if (key == GLFW_KEY_UP)
+        text += "Up";
+    else if (key == GLFW_KEY_DOWN)
+        text += "Down";
+    else if (key == GLFW_KEY_LEFT)
+        text += "Left";
+    else if (key == GLFW_KEY_RIGHT)
+        text += "Right";
+    else if (key == GLFW_KEY_PAGE_UP)
+        text += "Page Up";
+    else if (key == GLFW_KEY_DOWN)
+        text += "Page Down";
+    else if (key == GLFW_KEY_TAB)
+        text += "Tab";
+    else if (key == GLFW_KEY_ESCAPE)
+        text += "Esc";
+    else if (key == GLFW_KEY_ENTER)
+        text += "Enter";
 }
+
+void MenuItem::set_shortcut(int modifiers, int key) { m_shortcut = Shortcut(modifiers, key); }
 
 Vector2i MenuItem::preferred_text_size(NVGcontext *ctx) const
 {
@@ -97,7 +95,8 @@ Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
     // nvgFontSize(ctx, ih);
     // iw = nvgTextBounds(ctx, 0, 0, utf8(m_icon).data(), nullptr, nullptr) + m_size.y() * 0.15f;
     float iw = font_size * icon_scale();
-    float sw = m_hotkey.size() ? nvgTextBounds(ctx, 0, 0, m_hotkey.c_str(), nullptr, nullptr) + iw * 5 : 0;
+    float sw =
+        m_shortcut.text.size() ? nvgTextBounds(ctx, 0, 0, m_shortcut.text.c_str(), nullptr, nullptr) + iw * 5 : 0;
     return preferred_text_size(ctx) + Vector2i((int)(iw + sw), 0);
 }
 
@@ -188,17 +187,17 @@ void MenuItem::draw(NVGcontext *ctx)
     nvgFillColor(ctx, text_color);
     nvgText(ctx, text_pos.x(), text_pos.y() + 1, m_caption.c_str(), nullptr);
 
-    if (!m_hotkey.size())
+    if (!m_shortcut.text.size())
         return;
 
-    // float    sw = nvgTextBounds(ctx, 0, 0, m_hotkey.c_str(), nullptr, nullptr);
+    // float    sw = nvgTextBounds(ctx, 0, 0, m_shortcut.text.c_str(), nullptr, nullptr);
     Vector2f hotkey_pos(m_pos.x() + m_size.x() - 8, center.y() - 1);
 
     nvgTextAlign(ctx, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
     nvgFillColor(ctx, m_theme->m_text_color_shadow);
-    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y(), m_hotkey.c_str(), nullptr);
+    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y(), m_shortcut.text.c_str(), nullptr);
     nvgFillColor(ctx, m_theme->m_disabled_text_color);
-    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, m_hotkey.c_str(), nullptr);
+    nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, m_shortcut.text.c_str(), nullptr);
 }
 
 Separator::Separator(Widget *parent) : MenuItem(parent, "")
@@ -309,7 +308,7 @@ Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
     set_flags(Flags::ToggleButton);
 
     m_popup = new PopupMenu(screen(), window());
-    m_popup->set_size(Vector2i(320, 250));
+    // m_popup->set_size(Vector2i(320, 250));
     m_popup->set_visible(false);
 
     if (m_mode == Menu)
@@ -385,7 +384,7 @@ void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
     set_selected_index(0);
 }
 
-Vector2i Dropdown::compute_position() const
+void Dropdown::update_popup_geometry() const
 {
     int      font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     Vector2i offset;
@@ -405,7 +404,8 @@ Vector2i Dropdown::compute_position() const
     if (abs_pos.y() <= 1)
         abs_pos.y() = absolute_position().y() + size().y() - 2;
 
-    return abs_pos;
+    m_popup->set_position(abs_pos);
+    m_popup->set_width(std::max(m_popup->width(), width() + int(font_size * icon_scale()) + 4));
 }
 
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
@@ -416,7 +416,7 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         if (!m_focused)
             request_focus();
 
-        m_popup->set_position(compute_position());
+        update_popup_geometry();
 
         // first turn focus off on all menu buttons
         for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
@@ -438,7 +438,10 @@ void Dropdown::draw(NVGcontext *ctx)
     if (!m_popup->visible())
         set_pushed(false);
     else
-        m_popup->set_position(compute_position());
+    {
+        update_popup_geometry();
+        m_popup->perform_layout(ctx);
+    }
 
     if (!m_enabled && m_pushed)
         m_pushed = false;
@@ -606,12 +609,12 @@ bool MenuBar::process_hotkeys(int modifiers, int key)
             for (auto c2 : menu->popup()->children())
                 if (auto item = dynamic_cast<MenuItem *>(c2))
                 {
-                    auto [hotmod, hotkey] = item->hotkey();
+                    auto shortcut = item->shortcut();
 
-                    if (item->enabled() && key == hotkey && modifiers == hotmod)
+                    if (item->enabled() && key == shortcut.key && modifiers == shortcut.modifiers)
                     {
-                        spdlog::trace("Handling keyboard shortcut {}: {} > {}", item->shortcut_string(),
-                                      menu->caption(), item->caption());
+                        spdlog::trace("Handling keyboard shortcut {}: {} > {}", shortcut.text, menu->caption(),
+                                      item->caption());
                         if (item->flags() & Button::NormalButton)
                         {
                             if (item->callback())
@@ -643,8 +646,8 @@ void MenuBar::add_shortcuts(HelpWindow *w)
                     if (!sep->visible())
                         w->add_separator(menu->caption());
                 if (auto item = dynamic_cast<MenuItem *>(c2))
-                    if (item->shortcut_string().size() && !item->visible())
-                        w->add_shortcut(menu->caption(), item->shortcut_string(), item->caption());
+                    if (item->shortcut().text.size() && !item->visible())
+                        w->add_shortcut(menu->caption(), item->shortcut().text, item->caption());
             }
         }
 }
