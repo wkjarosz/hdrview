@@ -13,8 +13,8 @@ public:
     Dialog(Widget *parent, const std::string &title = "Untitled", bool form = true);
 
     void    make_form();
-    Widget *add_buttons(const std::string &button_text = "OK", const std::string &alt_button_text = "Cancel",
-                        bool alt_button = true);
+    Widget *add_buttons(const std::string &button_text = "OK", bool alt_button = true,
+                        const std::string &alt_button_text = "Cancel");
 
     std::function<void(int)> callback() const { return m_callback; }
     void                     set_callback(const std::function<void(int)> &callback) { m_callback = callback; }
@@ -40,7 +40,7 @@ public:
                  const std::string &message = "Message", const std::string &button_text = "OK",
                  const std::string &alt_button_text = "Cancel", bool alt_button = false);
 
-    Label *      message_label() { return m_message_label; }
+    Label       *message_label() { return m_message_label; }
     const Label *message_label() const { return m_message_label; }
 
 protected:

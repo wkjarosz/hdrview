@@ -79,12 +79,12 @@ std::function<void()> brightness_contrast_callback(HDRViewScreen *screen, ImageL
             float midpoint = (1.f - brightness) / 2.f;
             float bias     = (brightness + 1.f) / 2.f;
             auto  lCurve   = linspaced(257, 0.0f, 1.0f);
-            for (auto &&i : lCurve) i = brightnessContrastL(i, slope, midpoint);
+            for (auto &&i : lCurve) i = brightness_contrast_linear(i, slope, midpoint);
             lCurve.back() = 1;
             graph->set_values(lCurve, 1);
 
             auto nlCurve = linspaced(257, 0.0f, 1.0f);
-            for (auto &&i : nlCurve) i = brightnessContrastNL(i, slope, bias);
+            for (auto &&i : nlCurve) i = brightness_contrast_nonlinear(i, slope, bias);
 
             nlCurve.back() = 1;
             graph->set_values(nlCurve, 2);

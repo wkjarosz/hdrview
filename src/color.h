@@ -342,16 +342,15 @@ public:
     template <bool premultiplied = false>
     Color4 over(const Color4 &bg) const
     {
-        float  alpha_o{a + bg.a * (1.f - a)};
-        Color3 c3_a{r, g, b};
-        Color3 c3_b{bg.r, bg.g, bg.b};
         if constexpr (premultiplied)
         {
-            Color3 c3_o{c3_a + c3_b * (1.f - a)};
-            return Color4{c3_o, alpha_o};
+            return *this + bg * (1.f - a);
         }
         else
         {
+            float  alpha_o{a + bg.a * (1.f - a)};
+            Color3 c3_a{r, g, b};
+            Color3 c3_b{bg.r, bg.g, bg.b};
             Color3 c3_o{(c3_a * a + c3_b * bg.a * (1.f - a)) / (alpha_o == 0.f ? 1.f : alpha_o)};
             return Color4{c3_o, alpha_o};
         }

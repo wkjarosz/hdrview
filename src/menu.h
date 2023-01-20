@@ -15,19 +15,33 @@ NAMESPACE_BEGIN(nanogui)
 class MenuItem : public Button
 {
 public:
-    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0);
+    struct Shortcut
+    {
+        int         modifiers, key; ///< The GLFW modifiers (shift, command, etc) and key used to execute this shortcut
+        std::string text;           ///< Human-readable string auto-generated from the above
 
-    std::string         shortcut_string() const { return m_hotkey; }
-    std::pair<int, int> hotkey() const { return {m_modifiers, m_button}; }
-    void                set_hotkey(int modifiers, int button);
+        /// Construct a shortcut from a GLFW modifier and key code combination
+        Shortcut(int m = 0, int k = 0);
+
+        bool operator==(const Shortcut &rhs) const { return modifiers == rhs.modifiers && key == rhs.key; }
+        bool operator!=(const Shortcut &rhs) const { return modifiers != rhs.modifiers || key != rhs.key; }
+        bool operator<(const Shortcut &rhs) const
+        {
+            return modifiers < rhs.modifiers || (modifiers == rhs.modifiers && key < rhs.key);
+        }
+    };
+
+    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0, const Shortcut &s = {0, 0});
+
+    const Shortcut &shortcut() const { return m_shortcut; }
+    void            set_shortcut(int modifiers, int button);
 
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 
 protected:
-    int         m_button, m_modifiers;
-    std::string m_hotkey;
+    Shortcut m_shortcut;
 };
 
 class Separator : public MenuItem
@@ -37,7 +51,7 @@ public:
     virtual void draw(NVGcontext *ctx) override;
 };
 
-/// The actual popup window containing the menu
+/// The popup window containing the menu
 class PopupMenu : public Popup
 {
 public:
@@ -105,7 +119,7 @@ public:
     MenuItem *item(int idx) const;
 
 protected:
-    Vector2i compute_position() const;
+    void update_popup_geometry() const;
 
     PopupMenu *m_popup;
 

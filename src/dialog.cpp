@@ -25,7 +25,7 @@ void Dialog::make_form()
     set_layout(layout);
 }
 
-Widget *Dialog::add_buttons(const std::string &button_text, const std::string &alt_button_text, bool alt_button)
+Widget *Dialog::add_buttons(const std::string &button_text, bool alt_button, const std::string &alt_button_text)
 {
     Widget *button_panel = new Widget(this);
     button_panel->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
@@ -74,7 +74,7 @@ SimpleDialog::SimpleDialog(Widget *parent, Type type, const std::string &title, 
     m_message_label = new Label(message_panel, message);
     m_message_label->set_fixed_width(icon ? 200 : 0);
 
-    add_buttons(button_text, alt_button_text, alt_button);
+    add_buttons(button_text, alt_button, alt_button_text);
 
     center();
     request_focus();

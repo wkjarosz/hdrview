@@ -143,7 +143,7 @@ inline T smootherstep(T a, T b, T x)
  * @return   The remapped result in [0,1]
  */
 template <typename T>
-inline T biasPerlin(T t, T a)
+inline T bias_Perlin(T t, T a)
 {
     return pow(t, -log2(a));
 }
@@ -173,7 +173,7 @@ inline T biasPerlin(T t, T a)
  * @return   The remapped result in [0,1]
  */
 template <typename T>
-inline T gainPerlin(T t, T P)
+inline T gain_Perlin(T t, T P)
 {
     if (t > T(0.5))
         return T(1) - T(0.5) * pow(T(2) - T(2) * t, P);
@@ -194,7 +194,7 @@ inline T gainPerlin(T t, T P)
  * @return   The remapped result
  */
 template <typename T>
-inline T biasSchlick(T t, T a)
+inline T bias_Schlick(T t, T a)
 {
     return t / ((((T(1) / a) - T(2)) * (T(1) - t)) + T(1));
 }
@@ -212,24 +212,24 @@ inline T biasSchlick(T t, T a)
  * @return   The remapped result
  */
 template <typename T>
-inline T gainSchlick(T t, T a)
+inline T gain_Schlick(T t, T a)
 {
     if (t < T(0.5))
-        return biasSchlick(t * T(2), a) / T(2);
+        return bias_Schlick(t * T(2), a) / T(2);
     else
-        return biasSchlick(t * T(2) - T(1), T(1) - a) / T(2) + T(0.5);
+        return bias_Schlick(t * T(2) - T(1), T(1) - a) / T(2) + T(0.5);
 }
 
 template <typename T>
-inline T brightnessContrastL(T v, T slope, T midpoint)
+inline T brightness_contrast_linear(T v, T slope, T midpoint)
 {
     return (v - midpoint) * slope + T(0.5);
 }
 
 template <typename T>
-inline T brightnessContrastNL(T v, T slope, T bias)
+inline T brightness_contrast_nonlinear(T v, T slope, T bias)
 {
-    return gainPerlin(biasSchlick(clamp01(v), bias), slope);
+    return gain_Perlin(bias_Schlick(clamp01(v), bias), slope);
 }
 
 //! Returns a modulus b.
@@ -280,7 +280,7 @@ const std::vector<std::string> &blend_mode_names();
 std::string                     channel_to_string(EChannel channel);
 std::string                     blend_mode_to_string(EBlendMode mode);
 
-inline int codePointLength(char first)
+inline int code_point_length(char first)
 {
     if ((first & 0xf8) == 0xf0)
         return 4;

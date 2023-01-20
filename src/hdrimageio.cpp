@@ -115,6 +115,19 @@ bool HDRImage::load(const string &filename)
 
     int n, w, h;
 
+    auto premultiply = [this]()
+    {
+        parallel_for(0, height(),
+                     [this](int y)
+                     {
+                         for (int x = 0; x < width(); ++x)
+                         {
+                             const Color4 &p = (*this)(x, y);
+                             (*this)(x, y)   = Color4(p.a * p.r, p.a * p.g, p.a * p.b, p.a);
+                         }
+                     });
+    };
+
     // try stb library first
     if (is_stb_image(filename))
     {
@@ -133,6 +146,7 @@ bool HDRImage::load(const string &filename)
             spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
             stbi_image_free(float_data);
+            premultiply();
             return true;
         }
         else
@@ -157,6 +171,7 @@ bool HDRImage::load(const string &filename)
                 spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
 
                 delete[] float_data;
+                premultiply();
                 return true;
             }
             else

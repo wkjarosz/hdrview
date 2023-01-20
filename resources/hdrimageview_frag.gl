@@ -23,6 +23,12 @@
 #define DIFFERENCE_BLEND 6
 #define RELATIVE_DIFFERENCE_BLEND 7
 
+#define BG_BLACK 0
+#define BG_WHITE 1
+#define BG_DARK_CHECKER 2
+#define BG_LIGHT_CHECKER 3
+#define BG_CUSTOM_COLOR 4
+
 in vec2 primary_uv;
 in vec2 secondary_uv;
 in vec4 gl_FragCoord;
@@ -37,17 +43,19 @@ uniform vec2 randomness;
 
 uniform int blend_mode;
 uniform int channel;
+uniform int bg_mode;
 
 uniform float gain;
 uniform float gamma;
 uniform bool sRGB;
-uniform bool LDR;
+uniform bool clamp_to_LDR;
+uniform vec4 bg_color;
 
 out vec4 frag_color;
 
-vec3 tonemap(vec3 color)
+vec4 tonemap(vec4 color)
 {
-    return sRGB ? linearToSRGB(color) : sign(color) * pow(abs(color), vec3(1.0/gamma));
+    return vec4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(1.0/gamma)), color.a);
 }
 
 // note: uniformly distributed, normalized rand, [0;1[
@@ -73,26 +81,26 @@ float rand_tent(vec2 xy)
     return (r < 0) ? rn : rp;
 }
 
-vec3 choose_channel(vec4 rgba)
+vec4 choose_channel(vec4 rgba)
 {
-    vec3 rgb = rgba.rgb;
     switch (channel)
     {
-        case CHANNEL_RED:               return rgba.rrr;
-        case CHANNEL_GREEN:             return rgba.ggg;
-        case CHANNEL_BLUE:              return rgba.bbb;
-        case CHANNEL_ALPHA:             return rgba.aaa;
-        case CHANNEL_LUMINANCE:         return RGBToLuminance(rgb);
-        case CHANNEL_GRAY:              return RGBToGray(rgb);
-        case CHANNEL_CIE_L:             return RGBToLab(rgb).xxx;
-        case CHANNEL_CIE_a:             return RGBToLab(rgb).yyy;
-        case CHANNEL_CIE_b:             return RGBToLab(rgb).zzz;
-        case CHANNEL_CIE_CHROMATICITY:  return LabToRGB(vec3(0.5, RGBToLab(rgb).yz));
+        case CHANNEL_RGB:               return rgba;
+        case CHANNEL_RED:               return vec4(rgba.rrr, 1.0);
+        case CHANNEL_GREEN:             return vec4(rgba.ggg, 1.0);
+        case CHANNEL_BLUE:              return vec4(rgba.bbb, 1.0);
+        case CHANNEL_ALPHA:             return vec4(rgba.aaa, 1.0);
+        case CHANNEL_LUMINANCE:         return vec4(RGBToLuminance(rgba.rgb), 1.0);
+        case CHANNEL_GRAY:              return vec4(RGBToGray(rgba.rgb), 1.0);
+        case CHANNEL_CIE_L:             return vec4(RGBToLab(rgba.rgb).xxx, 1.0);
+        case CHANNEL_CIE_a:             return vec4(RGBToLab(rgba.rgb).yyy, 1.0);
+        case CHANNEL_CIE_b:             return vec4(RGBToLab(rgba.rgb).zzz, 1.0);
+        case CHANNEL_CIE_CHROMATICITY:  return vec4(LabToRGB(vec3(0.5, RGBToLab(rgba.rgb).yz)), 1.0);
         // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-        case CHANNEL_FALSE_COLOR:       return inferno(saturate(RGBToLuminance(rgb).r));
-        case CHANNEL_POSITIVE_NEGATIVE: return positiveNegative(rgb);
+        case CHANNEL_FALSE_COLOR:       return vec4(inferno(saturate(RGBToLuminance(rgba.rgb).r)), 1.0);
+        case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(rgba.rgb), 1.0);
     }
-    return rgb;
+    return rgba;
 }
 
 vec4 blend(vec4 top, vec4 bottom)
@@ -101,7 +109,7 @@ vec4 blend(vec4 top, vec4 bottom)
     float alpha = top.a + bottom.a*(1-top.a);
     switch (blend_mode)
     {
-        case NORMAL_BLEND:              return vec4(top.rgb*top.a + bottom.rgb*bottom.a*(1-top.a), alpha);
+        case NORMAL_BLEND:              return vec4(top.rgb + bottom.rgb*(1-top.a), alpha);
         case MULTIPLY_BLEND:            return vec4(top.rgb * bottom.rgb, alpha);
         case DIVIDE_BLEND:              return vec4(top.rgb / bottom.rgb, alpha);
         case ADD_BLEND:                 return vec4(top.rgb + bottom.rgb, alpha);
@@ -113,39 +121,53 @@ vec4 blend(vec4 top, vec4 bottom)
     return vec4(0.0);
 }
 
-vec3 dither(vec3 color)
+vec4 dither(vec4 color)
 {
     if (!do_dither)
 		return color;
 
-    return color + vec3(rand_tent(gl_FragCoord.xy + randomness)/255.0);
+    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + randomness)/255.0), 0.0);
 }
 
-vec4 sample(sampler2D sampler, vec2 uv)
+vec4 sample(sampler2D sampler, vec2 uv, bool within_image)
 {
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
-        return vec4(0.0);
-    }
-    return texture(sampler, uv);
+    return within_image ? texture(sampler, uv) : vec4(0.0);
 }
 
-void main() {
-    float dark_gray = 0.1;
-    float light_gray = 0.2;
+void main()
+{
+    vec4 background = vec4(bg_color.rgb, 1.0);
+    if (bg_mode == BG_BLACK)
+        background.rgb = vec3(0.0);
+    else if (bg_mode == BG_WHITE)
+        background.rgb = vec3(1.0);
+    else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
+    {
+        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? dark_gray : light_gray;
+        background.rgb = vec3(checkerboard);
+    }
 
-    float checkerboard = mod(int(floor(gl_FragCoord.x / 8) + floor(gl_FragCoord.y / 8)), 2) == 0 ? dark_gray : light_gray;
+    bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
+    bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
-    vec4 background = vec4(vec3(checkerboard), 1.0);
+    if (!in_img && !in_ref)
+    {
+        frag_color = background;
+        return;
+    }
 
-    vec4 value = sample(primary_texture, primary_uv);
+    vec4 value = sample(primary_texture, primary_uv, in_img);
     
     if (has_reference)
     {
-        vec4 reference_val = sample(secondary_texture, secondary_uv);
+        vec4 reference_val = sample(secondary_texture, secondary_uv, in_ref);
         value = blend(value, reference_val);
     }
 
-    frag_color.a = 1.0;
-    frag_color.rgb = mix(background.rgb, dither(tonemap(choose_channel(value * gain))), value.a);
-    frag_color.rgb = clamp(frag_color.rgb, LDR ? 0.0 : -64.0, LDR ? 1.0 : 64.0);
+    vec4 foreground = dither(tonemap(choose_channel(value) * vec4(vec3(gain), 1.0)));
+    vec4 blended = foreground + background*(1-foreground.a);
+    blended = clamp(blended, clamp_to_LDR ? 0.0f : -64.0f, clamp_to_LDR ? 1.0f : 64.0f);
+    frag_color = vec4(blended.rgb, 1.0);
 }
