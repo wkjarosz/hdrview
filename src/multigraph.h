@@ -53,7 +53,7 @@ public:
     }
 
     const std::vector<float> &values(int plot = 0) const { return m_values[plot]; }
-    std::vector<float> &      values(int plot = 0) { return m_values[plot]; }
+    std::vector<float>       &values(int plot = 0) { return m_values[plot]; }
     void                      set_values(const std::vector<float> &values, int plot = 0) { m_values[plot] = values; }
 
     void set_xticks(const std::vector<float> &ticks, const std::vector<std::string> &labels);

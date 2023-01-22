@@ -78,10 +78,9 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        auto add_item = [](Dropdown *btn, const std::string &name, int index, int modifier = 0, int button = 0)
+        auto add_item = [](Dropdown *btn, const std::string &name, int index, const vector<MenuItem::Shortcut> &s)
         {
-            auto i = btn->popup()->add<MenuItem>(name);
-            i->set_shortcut(modifier, button);
+            auto i = new MenuItem(btn->popup(), name, 0, s);
             i->set_flags(Button::RadioButton);
             i->set_callback(
                 [index, btn]
@@ -94,7 +93,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_blend_modes = new Dropdown(grid);
         for (int i = 0; i < (int)blend_mode_names().size(); ++i)
-            add_item(m_blend_modes, blend_mode_names()[i], i, GLFW_MOD_SHIFT, GLFW_KEY_1 + i);
+            add_item(m_blend_modes, blend_mode_names()[i], i, {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}});
         m_blend_modes->set_selected_index(0);
         m_blend_modes->set_fixed_height(19);
         m_blend_modes->set_selected_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
@@ -109,7 +108,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_channels = new Dropdown(grid);
         for (int i = 0; i < (int)channel_names().size(); ++i)
-            add_item(m_channels, channel_names()[i], i, i <= 8 ? SYSTEM_COMMAND_MOD : 0, i <= 8 ? GLFW_KEY_0 + i : 0);
+            add_item(m_channels, channel_names()[i], i,
+                     {{i <= 9 ? SYSTEM_COMMAND_MOD : 0, i <= 9 ? GLFW_KEY_0 + i : 0}});
         m_channels->set_selected_index(0);
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);

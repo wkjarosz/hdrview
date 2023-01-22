@@ -17,8 +17,8 @@ using std::vector;
 
 namespace
 {
-const int hpad     = 11;
-const int text_pad = 4;
+constexpr int hpad     = 11;
+constexpr int text_pad = 4;
 } // namespace
 
 NAMESPACE_BEGIN(nanogui)
@@ -39,10 +39,10 @@ Vector2i MultiGraph::preferred_size(NVGcontext *) const { return Vector2i(256, 7
 
 Vector2f MultiGraph::graph_coordinate_at(const Vector2f &position) const
 {
-    Vector2f topLeft(x_position(0), y_position(0));
-    Vector2f bottomRight(x_position(1), y_position(1));
-    Vector2f graphSize = bottomRight - topLeft;
-    return (position - topLeft) / (graphSize);
+    Vector2f top_left(x_position(0), y_position(0));
+    Vector2f bottom_right(x_position(1), y_position(1));
+    Vector2f graph_size = bottom_right - top_left;
+    return (position - top_left) / (graph_size);
 }
 
 void MultiGraph::set_xticks(const std::vector<float> &ticks, const vector<string> &labels)

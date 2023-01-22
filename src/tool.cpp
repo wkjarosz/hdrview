@@ -91,14 +91,12 @@ void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
     if (m_menuitem)
         return;
 
-    m_menuitem = menu->popup()->add<MenuItem>(m_name);
-    m_menuitem->set_shortcut(modifier, button);
+    m_menuitem = new MenuItem(menu->popup(), m_name, 0, {{modifier, button}});
     m_menuitem->set_flags(Button::RadioButton);
     m_menuitem->set_tooltip(m_tooltip);
     m_menuitem->set_change_callback(
         [this](bool b)
         {
-            spdlog::info("changing tool item {} with parent {}", (void *)m_menuitem, (void *)m_menuitem->parent());
             m_screen->set_tool((ETool)m_tool);
             return true;
         });
@@ -1111,7 +1109,7 @@ void Eyedropper::draw(NVGcontext *ctx) const
     Vector2i        center_pixel(m_image_view->pixel_at_position((center)));
     const HDRImage &image = img->image();
 
-    if (image.contains(center.x(), center.y()))
+    if (m_image_view->contains(m_screen->mouse_pos()) && image.contains(center.x(), center.y()))
     {
         Color4 c_sum(0.f);
         int    w_sum = 0;
@@ -1128,9 +1126,9 @@ void Eyedropper::draw(NVGcontext *ctx) const
 
         Color4 color_orig  = c_sum / w_sum;
         Color4 color_toned = m_image_view->tonemap(color_orig);
-        // FIXME: the conversion operator doesn't seem to work on linux
-        // Color ng_color(color_toned);
-        Color ng_color(color_toned[0], color_toned[1], color_toned[2], color_toned[3]);
+
+        // TODO: until we find a way to do premultipled colors properly in nanovg, just make the color opaque.
+        Color ng_color(color_toned[0], color_toned[1], color_toned[2], 1.f);
 
         nvgBeginPath(ctx);
         nvgCircle(ctx, center.x(), center.y(), 26);

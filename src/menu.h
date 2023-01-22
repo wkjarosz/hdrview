@@ -12,9 +12,28 @@
 
 NAMESPACE_BEGIN(nanogui)
 
+/**
+
+    A #MenuItem can have one or more keyboard #Shortcuts which can be used to run the callback associated with the item.
+   These callbacks are run by #MenuBar::process_shortcuts for all #MenuItems associated with a #MenuBar.
+
+   If an item has more than one shortcut, the first one is the default one that is shown on the drawn UI (for instance,
+   along the right side of a dropdown menu). Since each shortcut can only represent a single key (plus modifiers), it is
+   sometimes useful to associate multiple keyboard shortcuts with the same menu item (e.g. to allow zooming with the '+'
+   key on the number row of the keyboard, as well as the '+' on the number pad).
+
+   These additional shortcuts are not currently visible directly in the UI. In the future, the plan is to also allow the
+   drawn UI to display alternate shortcuts based on what modifiers are currently being pressed (e.g. show "Close" when
+   only the command key is pressed, but "Close all" when the shift key is also pressed).
+*/
 class MenuItem : public Button
 {
 public:
+    /**
+       Represents a key press optionally combined with one or more modifier keys.
+
+       A Shortcut also stores a human-readible #text string describing the key combination for use by UI elements.
+    */
     struct Shortcut
     {
         int         modifiers, key; ///< The GLFW modifiers (shift, command, etc) and key used to execute this shortcut
@@ -31,17 +50,19 @@ public:
         }
     };
 
-    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0, const Shortcut &s = {0, 0});
+    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0,
+             const std::vector<Shortcut> &s = {{0, 0}});
 
-    const Shortcut &shortcut() const { return m_shortcut; }
-    void            set_shortcut(int modifiers, int button);
+    size_t          num_shortcuts() const { return m_shortcuts.size(); }
+    const Shortcut &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
+    void            add_shortcut(const Shortcut &s);
 
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 
 protected:
-    Shortcut m_shortcut;
+    std::vector<Shortcut> m_shortcuts;
 };
 
 class Separator : public MenuItem
@@ -140,7 +161,7 @@ public:
 
     Dropdown *add_menu(const std::string &name);
 
-    bool process_hotkeys(int modifiers, int key);
+    bool process_shortcuts(int modifiers, int key);
     void add_shortcuts(HelpWindow *w);
 
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;

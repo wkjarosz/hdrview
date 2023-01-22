@@ -157,8 +157,9 @@ void HDRImageView::write_settings(json &settings) const
 
 Color4 HDRImageView::tonemap(const Color4 &color) const
 {
-    float gain = powf(2.0f, m_exposure);
-    return m_sRGB ? LinearToSRGB(color * gain) : pow(color * gain, Color4(1.0 / m_gamma));
+    float  gain = powf(2.0f, m_exposure);
+    Color4 exposed{Color3(color) * gain, color.a};
+    return m_sRGB ? LinearToSRGB(exposed) : pow(exposed, Color4(1.0 / m_gamma));
 }
 
 void HDRImageView::set_current_image(XPUImagePtr cur)
