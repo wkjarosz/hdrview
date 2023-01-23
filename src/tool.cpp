@@ -1396,8 +1396,8 @@ bool LineTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int button, in
     m_dragging = true;
 
     // 'modifiers' seems to be kept stuck at whatever it was during click even during dragging
-    // so here we grab query glfw directly to check if a modifier key is pressed
-    // note sure why this is necessary.
+    // so here we query glfw directly to check if a modifier key is pressed.
+    // not sure why this is necessary.
     // FIXME
     int  l_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_LEFT_SHIFT);
     int  r_state    = glfwGetKey(m_screen->glfw_window(), GLFW_KEY_RIGHT_SHIFT);
