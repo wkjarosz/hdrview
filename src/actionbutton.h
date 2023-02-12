@@ -81,16 +81,19 @@ public:
 
 protected:
     /// The position to draw the icon at.
-    IconPosition m_icon_position;
+    IconPosition m_icon_position{IconPosition::LeftCentered};
+
+    /// Whether or not this button is currently pressed by the mouse.
+    bool m_pressed{false};
 
     /// The current flags of this button (see \ref nanogui::ActionButton::Flags for options).
-    int m_flags;
+    int m_flags{NormalButton};
 
     /// The background color of this ActionButton.
-    Color m_background_color;
+    Color m_background_color{0, 0};
 
     /// The color of the caption text of this ActionButton.
-    Color m_text_color;
+    Color m_text_color{0, 0};
 };
 
 NAMESPACE_END(nanogui)

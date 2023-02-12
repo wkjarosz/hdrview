@@ -11,9 +11,7 @@
 
 NAMESPACE_BEGIN(nanogui)
 
-ActionButton::ActionButton(Widget *parent, Action *action) :
-    ActionWidget(parent, action), m_icon_position(IconPosition::LeftCentered), m_flags(NormalButton),
-    m_background_color(Color(0, 0)), m_text_color(Color(0, 0))
+ActionButton::ActionButton(Widget *parent, Action *action) : ActionWidget(parent, action)
 {
     // empty
 }
@@ -62,10 +60,17 @@ bool ActionButton::mouse_button_event(const Vector2i &p, int button, bool down, 
     if (m_enabled == 1 && ((button == GLFW_MOUSE_BUTTON_1) || (button == GLFW_MOUSE_BUTTON_2)))
     {
         // trigger on mouse down for toggle buttons, and mouse up for normal buttons
-        if (down && (m_flags & ToggleButton))
-            m_action->trigger();
+        if (down)
+        {
+            if (m_flags & ToggleButton)
+                m_action->trigger();
+        }
         else
-            m_action->trigger();
+        {
+            if (!(m_flags & ToggleButton))
+                m_action->trigger();
+        }
+        m_pressed = down;
 
         return true;
     }
@@ -76,7 +81,7 @@ void ActionButton::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
 
-    bool pushed = m_action->checked();
+    bool pushed = m_action->checked() || m_pressed;
 
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;

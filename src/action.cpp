@@ -97,18 +97,21 @@ void Action::trigger()
 
     if (!m_checked)
     {
-        // first uncheck all other (checkable) actions in the group
-        for (auto a : m_group->actions)
+        if (m_checkable)
         {
-            if (a != this && a->checkable() && a->checked())
+            // first uncheck all other (checkable) actions in the group
+            for (auto a : m_group->actions)
             {
-                a->set_checked(false);
-                if (a->toggled_callback())
-                    a->toggled_callback()(false);
+                if (a != this && a->checkable() && a->checked())
+                {
+                    a->set_checked(false);
+                    if (a->toggled_callback())
+                        a->toggled_callback()(false);
+                }
             }
-        }
 
-        m_checked = true;
+            m_checked = true;
+        }
         if (m_triggered_callback)
             m_triggered_callback();
     }

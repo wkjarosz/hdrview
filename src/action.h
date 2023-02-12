@@ -112,7 +112,11 @@ public:
     /// Whether or not this Action is currently checked.
     bool checked() const { return m_checked; }
     /// Sets whether or not this Action is currently checked.
-    void set_checked(bool checked) { m_checked = checked; }
+    void set_checked(bool checked)
+    {
+        if (m_checkable)
+            m_checked = checked;
+    }
 
     /// Trigger the action (run the associated callback, and update the state)
     void trigger();
