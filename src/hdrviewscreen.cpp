@@ -537,7 +537,7 @@ void HDRViewScreen::create_menubar()
     auto menu = m_menubar->add_menu("File");
 
     auto add_item = [this, &menu](const string &name, int icon, const std::function<void(void)> &cb,
-                                  const std::vector<MenuItem::Shortcut> &s = {{}}, bool edit = true)
+                                  const std::vector<Shortcut> &s = {{}}, bool edit = true)
     {
         auto i = new MenuItem(menu->popup(), name, icon, s);
         i->set_callback(cb);
@@ -1078,14 +1078,13 @@ void HDRViewScreen::create_menubar()
         {
             for (auto other_item : m_menu_items)
             {
-                if (other_item != item && other_item->shortcut() == item->shortcut() &&
-                    item->shortcut() != MenuItem::Shortcut{})
+                if (other_item != item && other_item->shortcut() == item->shortcut() && item->shortcut() != Shortcut{})
                     return other_item;
             }
             return nullptr;
         };
 
-        std::set<MenuItem::Shortcut> duplicates;
+        std::set<Shortcut> duplicates;
         for (auto item : m_menu_items)
         {
             spdlog::debug("Menu item \"{}\" with keyboard shortcut \"{}\"", item->caption(), item->shortcut().text);

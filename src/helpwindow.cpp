@@ -9,6 +9,7 @@
 
 #include "helpwindow.h"
 
+#include "action.h"
 #include "well.h"
 #include <nanogui/button.h>
 #include <nanogui/icons.h>
@@ -27,23 +28,6 @@ constexpr int fwidth = 450;
 }
 
 NAMESPACE_BEGIN(nanogui)
-
-#ifdef __APPLE__
-const string HelpWindow::CMD = "Cmd";
-#else
-const string HelpWindow::CMD = "Ctrl";
-#endif
-
-#ifdef __APPLE__
-const string HelpWindow::ALT = "Opt";
-#else
-const string HelpWindow::ALT = "Alt";
-#endif
-
-string HelpWindow::key_string(const string &text)
-{
-    return fmt::format(text, fmt::arg("CMD", HelpWindow::CMD), fmt::arg("ALT", HelpWindow::ALT));
-}
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
@@ -169,7 +153,7 @@ void HelpWindow::add_shortcut(const string &section, const string &keys, const s
     auto row = new Widget(w);
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
     (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
-    new Label(row, key_string(keys), "sans-bold", 14);
+    new Label(row, Shortcut::key_string(keys), "sans-bold", 14);
 }
 
 void HelpWindow::add_separator(const string &section, int height)

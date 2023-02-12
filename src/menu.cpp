@@ -33,60 +33,6 @@ MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, 
     m_icon_position = IconPosition::Left;
 }
 
-MenuItem::Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
-{
-    if (modifiers & SYSTEM_COMMAND_MOD)
-        text += HelpWindow::key_string("{CMD}+");
-    if (modifiers & GLFW_MOD_ALT)
-        text += HelpWindow::key_string("{ALT}+");
-    if (modifiers & GLFW_MOD_SHIFT)
-        text += "Shift+";
-
-    // printable characters
-    if (32 < key && key < 128)
-        text += char(key);
-    // function keys
-    else if (GLFW_KEY_F1 <= key && key <= GLFW_KEY_F25)
-        text += fmt::format("F{}", key - GLFW_KEY_F1 + 1);
-    else if (GLFW_KEY_KP_0 <= key && key <= GLFW_KEY_KP_0)
-        text += fmt::format("{}", key - GLFW_KEY_KP_0);
-
-    static const std::map<int, string> key_map = {
-        {GLFW_KEY_SPACE, "Space"},
-        {GLFW_KEY_ESCAPE, "Esc"},
-        {GLFW_KEY_ENTER, "Enter"},
-        {GLFW_KEY_TAB, "Tab"},
-        {GLFW_KEY_BACKSPACE, "Backspace"},
-        {GLFW_KEY_INSERT, "Insert"},
-        {GLFW_KEY_DELETE, "Delete"},
-        {GLFW_KEY_RIGHT, "Right"},
-        {GLFW_KEY_LEFT, "Left"},
-        {GLFW_KEY_DOWN, "Down"},
-        {GLFW_KEY_UP, "Up"},
-        {GLFW_KEY_PAGE_UP, "Page Up"},
-        {GLFW_KEY_PAGE_DOWN, "Page Down"},
-        {GLFW_KEY_HOME, "Home"},
-        {GLFW_KEY_END, "End"},
-        {GLFW_KEY_CAPS_LOCK, "Caps lock"},
-        {GLFW_KEY_SCROLL_LOCK, "Scroll lock"},
-        {GLFW_KEY_NUM_LOCK, "Num lock"},
-        {GLFW_KEY_PRINT_SCREEN, "Print"},
-        {GLFW_KEY_PAUSE, "Pause"},
-        {GLFW_KEY_KP_DECIMAL, "."},
-        {GLFW_KEY_KP_DIVIDE, "/"},
-        {GLFW_KEY_KP_MULTIPLY, "*"},
-        {GLFW_KEY_KP_SUBTRACT, "-"},
-        {GLFW_KEY_KP_ADD, "+"},
-        {GLFW_KEY_KP_ENTER, "Enter"},
-        {GLFW_KEY_KP_EQUAL, "="},
-    };
-
-    if (auto search = key_map.find(key); search != key_map.end())
-        text += search->second;
-}
-
-void MenuItem::add_shortcut(const Shortcut &s) { m_shortcuts.push_back(s); }
-
 Vector2i MenuItem::preferred_text_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
@@ -613,7 +559,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
 bool MenuBar::process_shortcuts(int modifiers, int key)
 {
-    MenuItem::Shortcut pressed{modifiers, key};
+    Shortcut pressed{modifiers, key};
     spdlog::trace("Checking for keyboard shortcut: \"{}\"", pressed.text);
     for (auto c : children())
         if (auto menu = dynamic_cast<Dropdown *>(c))

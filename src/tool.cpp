@@ -981,7 +981,7 @@ bool CloneStampTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int butt
 void CloneStampTool::add_shortcuts(HelpWindow *w)
 {
     auto section_name = m_name;
-    w->add_shortcut(section_name, fmt::format("{0}+Click", HelpWindow::ALT), "Select source location");
+    w->add_shortcut(section_name, Shortcut::key_string("{ALT}+Click"), "Select source location");
     w->add_shortcut(section_name, " ", "All brush tool shortcuts");
 }
 
