@@ -73,33 +73,26 @@ void Tool::write_settings()
     // settings();
 }
 
-void Tool::create_toolbutton(Widget *toolbar)
+void Tool::create_toolbutton(Widget *toolbar, ActionGroup *action_group, const Shortcut &shortcut)
 {
     if (m_button)
         return;
 
-    m_button = new ToolButton(toolbar, m_icon);
+    m_button = new ActionButton{toolbar, new Action{m_name, m_icon, action_group, {shortcut}}};
+    m_button->set_caption("");
     m_button->set_fixed_size(Vector2i(0));
-    m_button->set_flags(Button::Flags::RadioButton);
-    m_button->set_callback([this] { m_screen->set_tool(m_tool); });
+    m_button->set_toggled_callback([this](bool b) { m_screen->set_tool((ETool)m_tool, b); });
     m_button->set_tooltip(m_name + ": " + m_tooltip);
     m_button->set_icon_extra_scale(1.5f);
 }
 
-void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
+void Tool::create_menuitem(Dropdown *menu)
 {
     if (m_menuitem)
         return;
 
-    m_menuitem = new MenuItem(menu->popup(), m_name, 0, {{modifier, button}});
-    m_menuitem->set_flags(Button::RadioButton);
+    m_menuitem = new MenuItem(menu->popup(), m_button->action());
     m_menuitem->set_tooltip(m_tooltip);
-    m_menuitem->set_change_callback(
-        [this](bool b)
-        {
-            m_screen->set_tool((ETool)m_tool);
-            return true;
-        });
 }
 
 void Tool::update_width(int w)

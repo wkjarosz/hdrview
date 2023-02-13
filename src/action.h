@@ -38,19 +38,14 @@ class Action;
 
 struct ActionGroup : public Object
 {
+    /// The array of actions in this group
     std::vector<Action *> actions;
-
-    /// Add an action to this group; returns whether the action was already in the group.
-    bool add(Action *action)
-    {
-        // check if the action is already in the group
-        for (auto a : actions)
-            if (a == action)
-                return true;
-
-        actions.push_back(action);
-        return false;
-    }
+    /// The currently checked action in the group, or `nullptr` if none is checked.
+    Action *checked_action = nullptr;
+    /// The index of the currently checked action in the group, or -1 if none are checked.
+    int checked_index = -1;
+    /// If true, the actions are exclusive, but can also all be unchecked.
+    bool exclusive_optional = false;
 };
 
 /// Actions allows using different (and multiple) Widgets to perform the same command and remain in sync.
@@ -68,7 +63,8 @@ public:
         The text is used by associated Widgets, e.g. as the caption for buttons.
         By default, the text is also used as the Widget's tooltip, unless set separately by #set_tooltip().
 
-        Set the action's group to group, and if it is not `nullptr`, then automatically insert it into the group.
+        The action's #group() is set to #group. If not `nullptr`, then this action is automatically insert it into the
+        group, and the action is set to be #checkable(). This can be set manually with #set_checkable().
     */
     Action(const std::string &text, int icon = 0, ActionGroup *group = nullptr,
            const std::vector<Shortcut> &shortcuts = {{0, 0}});
@@ -96,11 +92,7 @@ public:
 
         If group is a nullptr, a new, empty ActionGroup will be created.
     */
-    void set_group(ActionGroup *group)
-    {
-        m_group = group ? group : new ActionGroup{};
-        m_group->add(this);
-    }
+    void set_group(ActionGroup *group);
 
     /// Return the list of keyboard shortcuts for this action
     const std::vector<Shortcut> &shortcuts() const { return m_shortcuts; }
@@ -109,14 +101,16 @@ public:
 
     /// Whether this Action can be checked/unchecked
     bool checkable() const { return m_checkable; }
+    /// Sets whether this Action can be checked/unchecked
+    void set_checkable(bool checkable = true) { m_checkable = checkable; }
     /// Whether or not this Action is currently checked.
     bool checked() const { return m_checked; }
-    /// Sets whether or not this Action is currently checked.
-    void set_checked(bool checked)
-    {
-        if (m_checkable)
-            m_checked = checked;
-    }
+    /// Sets whether or not this Action is currently checked. Returns whether the checked status changed.
+    /**
+        Does not call any callbacks on this action, but does call #toggled_callback()(false) on any other action in the
+        group that gets unchecked.
+    */
+    bool set_checked(bool checked = true);
 
     /// Trigger the action (run the associated callback, and update the state)
     void trigger();
@@ -183,6 +177,18 @@ public:
     const Action *action() const { return m_action; }
     /// Set the action associated with the widget, or create a new action if a nullptr is passed.
     void set_action(Action *action = nullptr) { m_action = action ? action : new Action{"Untitled"}; }
+
+    /// Convenience function calls Action::checkable() on the underlying Action.
+    virtual bool checkable() const { return m_action->checkable(); }
+    /// Convenience function calls Action::checkable() on the underlying Action.
+    virtual void set_checkable(bool checkable = true) { m_action->set_checkable(checkable); }
+    /// Convenience function calls Action::checked() on the underlying Action.
+    virtual bool checked() const { return m_action->checked(); }
+    /// Convenience function calls Action::set_checked() on the underlying Action.
+    virtual bool set_checked(bool checked = true) { return m_action->set_checked(checked); }
+
+    /// Convenience function that calls Action::trigger() on the underlying Action.
+    void trigger() { return m_action->trigger(); }
 
     /// Convenience function that returns the action's triggered callback
     std::function<void()> triggered_callback() const { return m_action->triggered_callback(); }

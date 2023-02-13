@@ -26,8 +26,7 @@ using std::vector;
 
 NAMESPACE_BEGIN(nanogui)
 
-MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, const std::vector<Shortcut> &s) :
-    Button(parent, caption, button_icon), m_shortcuts(s)
+MenuItem::MenuItem(Widget *parent, Action *action) : ActionButton(parent, action)
 {
     set_fixed_height(PopupMenu::menu_item_height);
     m_icon_position = IconPosition::Left;
@@ -38,7 +37,7 @@ Vector2i MenuItem::preferred_text_size(NVGcontext *ctx) const
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     nvgFontSize(ctx, font_size);
     nvgFontFace(ctx, "sans-bold");
-    float tw = nvgTextBounds(ctx, 0, 0, m_caption.c_str(), nullptr, nullptr);
+    float tw = nvgTextBounds(ctx, 0, 0, caption().c_str(), nullptr, nullptr);
 
     return Vector2i((int)(tw) + 24, font_size + 10);
 }
@@ -61,6 +60,8 @@ void MenuItem::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
 
+    bool pushed = m_action->checked();
+
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
@@ -79,7 +80,7 @@ void MenuItem::draw(NVGcontext *ctx)
     {
         nvgFillColor(ctx, Color(m_background_color[0], m_background_color[1], m_background_color[2], 1.f));
         nvgFill(ctx);
-        if (m_pushed)
+        if (pushed)
         {
             grad_top.a = grad_bot.a = 0.8f;
         }
@@ -97,8 +98,8 @@ void MenuItem::draw(NVGcontext *ctx)
 
     nvgBeginPath(ctx);
     nvgStrokeWidth(ctx, 1.0f);
-    nvgRoundedRect(ctx, m_pos.x() + 0.5f, m_pos.y() + (m_pushed ? 0.5f : 1.5f), m_size.x() - 1,
-                   m_size.y() - 1 - (m_pushed ? 0.0f : 1.0f), m_theme->m_button_corner_radius);
+    nvgRoundedRect(ctx, m_pos.x() + 0.5f, m_pos.y() + (pushed ? 0.5f : 1.5f), m_size.x() - 1,
+                   m_size.y() - 1 - (pushed ? 0.0f : 1.0f), m_theme->m_button_corner_radius);
     nvgStrokeColor(ctx, m_theme->m_border_light);
     nvgStroke(ctx);
 
@@ -118,13 +119,15 @@ void MenuItem::draw(NVGcontext *ctx)
     if (!m_enabled)
         text_color = m_theme->m_disabled_text_color;
 
-    auto  icon = m_icon && !m_pushed ? utf8(m_icon) : utf8(FA_CHECK);
-    float ih   = font_size * icon_scale();
+    auto icon      = (!m_action->checkable() && m_action->icon()) ? utf8(m_action->icon()) : utf8(FA_CHECK);
+    bool show_icon = (m_action->checkable() && m_action->checked()) || (!m_action->checkable() && m_action->icon());
+
+    float ih = font_size * icon_scale();
     nvgFontSize(ctx, ih);
     nvgFontFace(ctx, "icons");
     float iw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
 
-    if (m_caption != "")
+    if (caption() != "")
         ih += m_size.y() * 0.15f;
 
     nvgFillColor(ctx, text_color);
@@ -133,16 +136,16 @@ void MenuItem::draw(NVGcontext *ctx)
 
     text_pos.x() = icon_pos.x() + ih + 2;
 
-    if (m_pushed || m_icon)
+    if (show_icon)
         nvgText(ctx, icon_pos.x() + (ih - iw - 3) / 2, icon_pos.y() + 1, icon.data(), nullptr);
 
     nvgFontSize(ctx, font_size);
     nvgFontFace(ctx, "sans-bold");
     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     nvgFillColor(ctx, m_theme->m_text_color_shadow);
-    nvgText(ctx, text_pos.x(), text_pos.y(), m_caption.c_str(), nullptr);
+    nvgText(ctx, text_pos.x(), text_pos.y(), caption().c_str(), nullptr);
     nvgFillColor(ctx, text_color);
-    nvgText(ctx, text_pos.x(), text_pos.y() + 1, m_caption.c_str(), nullptr);
+    nvgText(ctx, text_pos.x(), text_pos.y() + 1, caption().c_str(), nullptr);
 
     if (!shortcut().text.size())
         return;
@@ -157,7 +160,7 @@ void MenuItem::draw(NVGcontext *ctx)
     nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, shortcut().text.c_str(), nullptr);
 }
 
-Separator::Separator(Widget *parent) : MenuItem(parent, "")
+Separator::Separator(Widget *parent) : MenuItem(parent)
 {
     set_enabled(false);
     set_fixed_height(PopupMenu::seperator_height);
@@ -165,9 +168,6 @@ Separator::Separator(Widget *parent) : MenuItem(parent, "")
 
 void Separator::draw(NVGcontext *ctx)
 {
-    if (!m_enabled && m_pushed)
-        m_pushed = false;
-
     nvgBeginPath(ctx);
     nvgMoveTo(ctx, m_pos.x() + 8, m_pos.y() + m_size.y() * 0.5f);
     nvgLineTo(ctx, m_pos.x() + m_size.x() - 8, m_pos.y() + m_size.y() * 0.5f);
@@ -231,7 +231,7 @@ void PopupMenu::draw(NVGcontext *ctx)
     nvgSave(ctx);
     nvgResetScissor(ctx);
 
-    /* Draw a drop shadow */
+    // Draw a drop shadow
     NVGpaint shadow_paint = nvgBoxGradient(ctx, m_pos.x(), m_pos.y() + 0.25 * ds, m_size.x(), m_size.y(), cr * 2,
                                            ds * 2, m_theme->m_drop_shadow, m_theme->m_transparent);
 
@@ -242,7 +242,7 @@ void PopupMenu::draw(NVGcontext *ctx)
     nvgFillPaint(ctx, shadow_paint);
     nvgFill(ctx);
 
-    /* Draw window */
+    // Draw window
     nvgBeginPath(ctx);
     nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
     nvgStrokeWidth(ctx, 3.f);
@@ -259,10 +259,11 @@ void PopupMenu::draw(NVGcontext *ctx)
     Widget::draw(ctx);
 }
 
-Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
-    MenuItem(parent, caption), m_selected_index(0), m_mode(mode)
+Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption, Action *action) :
+    MenuItem(parent, action), m_selected_index(0), m_mode(mode)
 {
-    set_flags(Flags::ToggleButton);
+    set_caption(caption);
+    set_checkable();
 
     m_popup = new PopupMenu(screen(), window());
     // m_popup->set_size(Vector2i(320, 250));
@@ -275,8 +276,8 @@ Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
 }
 
 Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons, Mode mode,
-                   const string &caption) :
-    Dropdown(parent, mode, caption)
+                   const string &caption, Action *action) :
+    Dropdown(parent, mode, caption, action)
 {
     set_items(items, icons);
 }
@@ -309,12 +310,10 @@ MenuItem *Dropdown::item(int idx) const
 
 void Dropdown::set_selected_index(int idx)
 {
-    if (m_mode != ComboBox || m_popup->child_count() <= idx)
+    if (m_mode != ComboBox || m_popup->child_count() <= idx || idx < 0)
         return;
 
-    item(m_selected_index)->set_pushed(false);
-    item(idx)->set_pushed(true);
-
+    item(idx)->action()->set_checked(true);
     m_selected_index = idx;
     set_caption(item(m_selected_index)->caption());
 }
@@ -324,13 +323,35 @@ void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
     // remove all children
     while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
 
+    auto combo_group = new ActionGroup{};
+
     for (int index = 0; index < (int)items.size(); ++index)
     {
         auto caption = items[index];
         auto icon    = icons.size() == items.size() ? icons[index] : 0;
-        auto item    = m_popup->add<MenuItem>(caption, icon);
-        item->set_flags(m_mode == ComboBox ? Button::RadioButton : Button::NormalButton);
-        item->set_callback(
+        // comboboxes use an action group, menus don't
+        auto a    = new Action{caption, icon, m_mode == ComboBox ? combo_group : nullptr};
+        auto item = m_popup->add<MenuItem>(a);
+        item->action()->set_triggered_callback(
+            [&, index, this]
+            {
+                set_selected_index(index);
+                if (m_selected_callback)
+                    m_selected_callback(index);
+            });
+    }
+    set_selected_index(0);
+}
+
+void Dropdown::set_items(const ActionGroup &items)
+{
+    // remove all children
+    while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
+
+    for (int index = 0; index < (int)items.actions.size(); ++index)
+    {
+        auto item = m_popup->add<MenuItem>(items.actions[index]);
+        item->action()->set_triggered_callback(
             [&, index, this]
             {
                 set_selected_index(index);
@@ -367,8 +388,10 @@ void Dropdown::update_popup_geometry() const
 
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-    auto ret = MenuItem::mouse_button_event(p, button, down, modifiers);
-    if (m_enabled && m_pushed)
+    auto ret    = MenuItem::mouse_button_event(p, button, down, modifiers);
+    bool pushed = m_action->checked();
+
+    if (m_enabled && pushed)
     {
         if (!m_focused)
             request_focus();
@@ -393,22 +416,30 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
 void Dropdown::draw(NVGcontext *ctx)
 {
     if (!m_popup->visible())
-        set_pushed(false);
+    {
+        m_pressed = false;
+        set_checked(false);
+    }
     else
     {
         update_popup_geometry();
         m_popup->perform_layout(ctx);
     }
 
-    if (!m_enabled && m_pushed)
-        m_pushed = false;
+    if (!m_enabled && m_pressed)
+    {
+        m_pressed = false;
+        set_checked(false);
+    }
 
     Widget::draw(ctx);
+
+    bool pushed = m_action->checked();
 
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
-    if (m_pushed || (m_mouse_focus && (m_flags & MenuButton)))
+    if (pushed)
     {
         grad_top = m_theme->m_button_gradient_top_pushed;
         grad_bot = m_theme->m_button_gradient_bot_pushed;
@@ -428,7 +459,7 @@ void Dropdown::draw(NVGcontext *ctx)
     {
         nvgFillColor(ctx, Color(m_background_color[0], m_background_color[1], m_background_color[2], 1.f));
         nvgFill(ctx);
-        if (m_pushed)
+        if (pushed)
         {
             grad_top.a = grad_bot.a = 0.8f;
         }
@@ -446,8 +477,8 @@ void Dropdown::draw(NVGcontext *ctx)
 
     nvgBeginPath(ctx);
     nvgStrokeWidth(ctx, 1.0f);
-    nvgRoundedRect(ctx, m_pos.x() + 0.5f, m_pos.y() + (m_pushed ? 0.5f : 1.5f), m_size.x() - 1,
-                   m_size.y() - 1 - (m_pushed ? 0.0f : 1.0f), m_theme->m_button_corner_radius);
+    nvgRoundedRect(ctx, m_pos.x() + 0.5f, m_pos.y() + (pushed ? 0.5f : 1.5f), m_size.x() - 1,
+                   m_size.y() - 1 - (pushed ? 0.0f : 1.0f), m_theme->m_button_corner_radius);
     nvgStrokeColor(ctx, m_theme->m_border_light);
     nvgStroke(ctx);
 
@@ -471,9 +502,9 @@ void Dropdown::draw(NVGcontext *ctx)
     nvgFontFace(ctx, "sans-bold");
     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     nvgFillColor(ctx, m_theme->m_text_color_shadow);
-    nvgText(ctx, text_pos.x(), text_pos.y(), m_caption.c_str(), nullptr);
+    nvgText(ctx, text_pos.x(), text_pos.y(), caption().c_str(), nullptr);
     nvgFillColor(ctx, text_color);
-    nvgText(ctx, text_pos.x(), text_pos.y() + 1, m_caption.c_str(), nullptr);
+    nvgText(ctx, text_pos.x(), text_pos.y() + 1, caption().c_str(), nullptr);
 
     if (m_mode != Menu)
     {
@@ -525,7 +556,8 @@ MenuBar::MenuBar(Widget *parent, const string &title) : Window(parent, title)
 Dropdown *MenuBar::add_menu(const string &name)
 {
     auto menu = add<Dropdown>(Dropdown::Menu, name);
-    menu->set_flags(Button::RadioButton);
+    menu->set_checkable();
+    menu->action()->group()->exclusive_optional = true;
     return menu;
 }
 
@@ -546,10 +578,10 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
         auto hovered_item = dynamic_cast<Dropdown *>(find_widget(p));
         if (hovered_item && opened_menu != hovered_item)
         {
-            opened_menu->set_pushed(false);
+            opened_menu->set_checked(false);
             opened_menu->popup()->set_visible(false);
 
-            hovered_item->set_pushed(true);
+            hovered_item->set_checked(true);
             hovered_item->popup()->set_visible(true);
         }
     }
@@ -574,18 +606,18 @@ bool MenuBar::process_shortcuts(int modifiers, int key)
                         {
                             spdlog::trace("Handling keyboard shortcut \"{}\" with menu item: {} > {}",
                                           item->shortcut(i).text, menu->caption(), item->caption());
-                            if (item->flags() & Button::NormalButton)
+                            if (item->checkable())
                             {
-                                if (item->callback())
-                                    item->callback()();
+                                if (item->toggled_callback())
+                                {
+                                    item->action()->set_checked(!item->action()->checked());
+                                    item->toggled_callback()(item->action()->checked());
+                                }
                             }
                             else
                             {
-                                if (item->change_callback())
-                                {
-                                    item->set_pushed(!item->pushed());
-                                    item->change_callback()(item->pushed());
-                                }
+                                if (item->triggered_callback())
+                                    item->triggered_callback()();
                             }
                             return true;
                         }

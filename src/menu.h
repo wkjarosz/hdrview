@@ -7,6 +7,7 @@
 #pragma once
 
 #include "action.h"
+#include "actionbutton.h"
 #include "fwd.h"
 #include <nanogui/button.h>
 #include <nanogui/popup.h>
@@ -26,22 +27,18 @@ NAMESPACE_BEGIN(nanogui)
     the drawn UI to display alternate shortcuts based on what modifiers are currently being pressed (e.g. show "Close"
     when only the command key is pressed, but "Close all" when the shift key is also pressed).
 */
-class MenuItem : public Button
+class MenuItem : public ActionButton
 {
 public:
-    MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0,
-             const std::vector<Shortcut> &s = {{0, 0}});
+    MenuItem(Widget *parent, Action *action = nullptr);
 
-    size_t          num_shortcuts() const { return m_shortcuts.size(); }
-    const Shortcut &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
+    size_t          num_shortcuts() const { return m_action->shortcuts().size(); }
+    const Shortcut &shortcut(size_t i = 0) const { return m_action->shortcuts().at(i); }
     // void            add_shortcut(const Shortcut &s);
 
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
-
-protected:
-    std::vector<Shortcut> m_shortcuts;
 };
 
 class Separator : public MenuItem
@@ -82,14 +79,11 @@ public:
     };
 
     /// Create an empty combo box
-    Dropdown(Widget *parent, Mode mode = ComboBox, const std::string &caption = "Untitled");
+    Dropdown(Widget *parent, Mode mode = ComboBox, const std::string &caption = "Untitled", Action *action = nullptr);
 
-    /**
-     * \brief Create a new combo box with the given items, providing long names and optionally short names and icons for
-     * each item
-     */
+    /// Create a new combo box with the given items, providing names and icons for each item
     Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<int> &icons = {},
-             Mode mode = ComboBox, const std::string &caption = "Untitled");
+             Mode mode = ComboBox, const std::string &caption = "Untitled", Action *action = nullptr);
 
     /// The current index this Dropdown has selected.
     int selected_index() const { return m_selected_index; }
@@ -108,6 +102,9 @@ public:
 
     /// Sets the items for this Dropdown, providing names and optionally icons for each item
     void set_items(const std::vector<std::string> &items, const std::vector<int> &icons = {});
+
+    /// Sets the items for this Dropdown from an array of actions
+    void set_items(const ActionGroup &items);
 
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 

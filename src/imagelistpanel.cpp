@@ -78,23 +78,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        auto add_item = [](Dropdown *btn, const std::string &name, int index, const vector<Shortcut> &s)
-        {
-            auto i = new MenuItem(btn->popup(), name, 0, s);
-            i->set_flags(Button::RadioButton);
-            i->set_callback(
-                [index, btn]
-                {
-                    btn->set_selected_index(index);
-                    if (btn->selected_callback())
-                        btn->selected_callback()(index);
-                });
-        };
-
         m_blend_modes = new Dropdown(grid);
-        for (int i = 0; i < (int)blend_mode_names().size(); ++i)
-            add_item(m_blend_modes, blend_mode_names()[i], i, {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}});
-        m_blend_modes->set_selected_index(0);
+        {
+            auto items = new ActionGroup{};
+            // vector<Action *> actions(nullptr, blend_mode_names().size());
+            for (int i = 0; i < (int)blend_mode_names().size(); ++i)
+                new Action{blend_mode_names()[i], 0, items, {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}}};
+            m_blend_modes->set_items(*items);
+        }
         m_blend_modes->set_fixed_height(19);
         m_blend_modes->set_selected_callback([img_view](int b) { img_view->set_blend_mode(EBlendMode(b)); });
         agl->set_anchor(m_blend_modes,
@@ -107,10 +98,13 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
         m_channels = new Dropdown(grid);
-        for (int i = 0; i < (int)channel_names().size(); ++i)
-            add_item(m_channels, channel_names()[i], i,
-                     {{i <= 9 ? SYSTEM_COMMAND_MOD : 0, i <= 9 ? GLFW_KEY_0 + i : 0}});
-        m_channels->set_selected_index(0);
+        {
+            auto items = new ActionGroup{};
+            for (int i = 0; i < (int)channel_names().size(); ++i)
+                new Action{
+                    channel_names()[i], 0, items, {{i <= 9 ? SYSTEM_COMMAND_MOD : 0, i <= 9 ? GLFW_KEY_0 + i : 0}}};
+            m_channels->set_items(*items);
+        }
         m_channels->set_fixed_height(19);
         set_channel(EChannel::RGB);
         m_channels->set_selected_callback([img_view](int c) { img_view->set_channel(EChannel(c)); });

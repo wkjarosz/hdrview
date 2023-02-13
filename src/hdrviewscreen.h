@@ -41,7 +41,7 @@ public:
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
     ETool tool() const { return m_tool; }
-    void  set_tool(ETool t);
+    void  set_tool(ETool t, bool show = true);
 
     const HDRColorPicker *active_colorpicker() const { return m_active_colorpicker; }
     void                  set_active_colorpicker(HDRColorPicker *cp);

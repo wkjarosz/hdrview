@@ -18,13 +18,6 @@ NAMESPACE_BEGIN(nanogui)
 class ActionButton : public ActionWidget
 {
 public:
-    /// Flags to specify the button behavior (can be combined with binary OR)
-    enum Flags
-    {
-        NormalButton = (1 << 0), ///< A normal button.
-        ToggleButton = (1 << 1), ///< A toggle button.
-    };
-
     /// The available icon positions.
     enum class IconPosition
     {
@@ -45,8 +38,16 @@ public:
      */
     ActionButton(Widget *parent, Action *action = nullptr);
 
-    /// Returns the caption of this ActionButton.
-    const std::string &caption() const { return m_action->text(); }
+    /// Returns the caption of this button.
+    virtual const std::string &caption() const { return m_override_caption ? m_caption : m_action->text(); }
+    /// Sets the caption of this button.
+    void set_caption(const std::string &caption)
+    {
+        m_caption          = caption;
+        m_override_caption = true;
+    }
+    /// Sets the caption back to the text of the associated action.
+    void reset_caption() { m_override_caption = false; }
 
     /// Returns the background color of this ActionButton.
     const Color &background_color() const { return m_background_color; }
@@ -60,11 +61,6 @@ public:
 
     /// Returns the icon of this ActionButton.
     int icon() const { return m_action->icon(); }
-
-    /// The current flags of this ActionButton (see \ref nanogui::ActionButton::Flags for options).
-    int flags() const { return m_flags; }
-    /// Sets the flags of this ActionButton (see \ref nanogui::ActionButton::Flags for options).
-    void set_flags(int button_flags) { m_flags = button_flags; }
 
     /// The position of the icon for this ActionButton.
     IconPosition icon_position() const { return m_icon_position; }
@@ -80,6 +76,9 @@ public:
     virtual void draw(NVGcontext *ctx) override;
 
 protected:
+    bool        m_override_caption = false; ///< Whether to use the text from the action, or a custom caption.
+    std::string m_caption;                  ///< The overriding caption text.
+
     /// The position to draw the icon at.
     IconPosition m_icon_position{IconPosition::LeftCentered};
 
@@ -87,7 +86,7 @@ protected:
     bool m_pressed{false};
 
     /// The current flags of this button (see \ref nanogui::ActionButton::Flags for options).
-    int m_flags{NormalButton};
+    // int m_flags{NormalButton};
 
     /// The background color of this ActionButton.
     Color m_background_color{0, 0};

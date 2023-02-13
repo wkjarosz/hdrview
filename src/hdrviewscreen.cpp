@@ -277,10 +277,12 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     //
     for (auto m : popup_menus)
     {
-        m->add<MenuItem>("Solo mode")->set_flags(Button::ToggleButton);
+        auto a = new Action{"Solo mode"};
+        a->set_checkable();
+        m->add<MenuItem>(a);
         m->add<Separator>();
-        m->add<MenuItem>("Expand all", FA_ANGLE_DOUBLE_DOWN);
-        m->add<MenuItem>("Collapse all", FA_ANGLE_DOUBLE_UP);
+        m->add<MenuItem>(new Action{"Expand all", FA_ANGLE_DOUBLE_DOWN});
+        m->add<MenuItem>(new Action{"Collapse all", FA_ANGLE_DOUBLE_UP});
     }
 
     auto visible_panels =
@@ -288,8 +290,8 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     for (size_t i = 0; i < popup_menus.size(); ++i)
     {
         auto item = dynamic_cast<MenuItem *>(popup_menus[i]->child_at(0));
-        item->set_pushed(m_solo_mode);
-        item->set_change_callback(
+        item->set_checked(m_solo_mode);
+        item->set_toggled_callback(
             [popup_menus, toggle_panel, i, this](bool b)
             {
                 m_solo_mode = b;
@@ -297,7 +299,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                 for (size_t j = 0; j < popup_menus.size(); ++j)
                 {
                     auto item = dynamic_cast<MenuItem *>(popup_menus[j]->child_at(0));
-                    item->set_pushed(m_solo_mode);
+                    item->set_checked(m_solo_mode);
                     popup_menus[j]->child_at(2)->set_enabled(!m_solo_mode);
                 }
 
@@ -305,8 +307,8 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             });
 
         popup_menus[i]->child_at(2)->set_enabled(!m_solo_mode);
-        dynamic_cast<Button *>(popup_menus[i]->child_at(2))
-            ->set_callback(
+        dynamic_cast<ActionButton *>(popup_menus[i]->child_at(2))
+            ->set_triggered_callback(
                 [toggle_panel, popup_menus, i, this]
                 {
                     // expand this panel, and all other panels if solo mode isn't on
@@ -317,8 +319,8 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                     }
                 });
 
-        dynamic_cast<Button *>(popup_menus[i]->child_at(3))
-            ->set_callback(
+        dynamic_cast<ActionButton *>(popup_menus[i]->child_at(3))
+            ->set_triggered_callback(
                 [toggle_panel, popup_menus]
                 {
                     // collapse all panels
@@ -344,7 +346,11 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     m_tools.push_back(new LineTool(this, m_image_view, m_images_panel));
     m_tools.push_back(new GradientTool(this, m_image_view, m_images_panel));
 
-    for (auto t : m_tools) t->create_toolbutton(tool_holder);
+    auto tool_group = new ActionGroup{};
+    auto shortcuts  = vector<Shortcut>{
+        {0, ' '}, {0, 'M'},           {0, 'B'}, {GLFW_MOD_ALT, 'E'}, {0, 'S'}, {0, 'I'}, {GLFW_MOD_ALT, 'R'},
+        {0, 'U'}, {GLFW_MOD_ALT, 'G'}};
+    for (int t = 0; t < (int)Tool_Num_Tools; ++t) m_tools[t]->create_toolbutton(tool_holder, tool_group, shortcuts[t]);
 
     m_color_btns = new DualHDRColorPicker(m_tool_panel);
     m_color_btns->set_fixed_size(Vector2i(0));
@@ -539,8 +545,8 @@ void HDRViewScreen::create_menubar()
     auto add_item = [this, &menu](const string &name, int icon, const std::function<void(void)> &cb,
                                   const std::vector<Shortcut> &s = {{}}, bool edit = true)
     {
-        auto i = new MenuItem(menu->popup(), name, icon, s);
-        i->set_callback(cb);
+        auto i = new MenuItem(menu->popup(), new Action{name, icon, nullptr, s});
+        i->set_triggered_callback(cb);
         m_menu_items.push_back(i);
         if (edit)
             m_edit_items.push_back(i);
@@ -584,8 +590,8 @@ void HDRViewScreen::create_menubar()
         {
             string name       = f.get<string>();
             string short_name = (name.size() < 100) ? name : name.substr(0, 47) + "..." + name.substr(name.size() - 50);
-            MenuItem *item    = new MenuItem(nullptr, short_name);
-            item->set_callback([this, f] { drop_event({f}); });
+            MenuItem *item    = new MenuItem(nullptr, new Action{short_name});
+            item->set_triggered_callback([this, f] { drop_event({f}); });
             parent->add_child(first + 1, item);
         }
         before_recent_widget->set_visible(recent.size() > 0);
@@ -688,9 +694,7 @@ void HDRViewScreen::create_menubar()
 
     menu = m_menubar->add_menu("Tools");
 
-    auto tool_hotkeys = vector<int>{' ', 'M', 'B', 'E', 'S', 'I', 'R', 'U', 'G'};
-    auto tool_hotmods = vector<int>{0, 0, 0, GLFW_MOD_ALT, 0, 0, GLFW_MOD_ALT, 0, GLFW_MOD_ALT};
-    for (int t = 0; t < (int)Tool_Num_Tools; ++t) m_tools[t]->create_menuitem(menu, tool_hotmods[t], tool_hotkeys[t]);
+    for (auto t : m_tools) t->create_menuitem(menu);
 
     menu->popup()->add<Separator>();
     add_item(
@@ -712,9 +716,9 @@ void HDRViewScreen::create_menubar()
         "Show all panels", 0, [] {}, {{GLFW_MOD_SHIFT, GLFW_KEY_TAB}}, false);
     auto show_all_panels = m_menu_items.back();
 
-    show_top_panel->set_flags(Button::ToggleButton);
-    show_top_panel->set_pushed(true);
-    show_top_panel->set_change_callback(
+    show_top_panel->set_checkable();
+    show_top_panel->set_checked(true);
+    show_top_panel->set_toggled_callback(
         [this, show_top_panel, show_side_panels, show_all_panels](bool b)
         {
             // make sure the menu bar is always on top
@@ -726,12 +730,12 @@ void HDRViewScreen::create_menubar()
             m_animation_running = true;
             m_animation_goal =
                 b ? EAnimationGoal(m_animation_goal | TOP_PANEL) : EAnimationGoal(m_animation_goal & ~TOP_PANEL);
-            show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+            show_all_panels->set_checked(show_side_panels->checked() && show_top_panel->checked());
             request_layout_update();
         });
-    show_side_panels->set_flags(Button::ToggleButton);
-    show_side_panels->set_pushed(true);
-    show_side_panels->set_change_callback(
+    show_side_panels->set_checkable();
+    show_side_panels->set_checked(true);
+    show_side_panels->set_toggled_callback(
         [this, show_top_panel, show_side_panels, show_all_panels](bool b)
         {
             m_gui_animation_start = glfwGetTime();
@@ -739,12 +743,12 @@ void HDRViewScreen::create_menubar()
             m_animation_running = true;
             m_animation_goal =
                 b ? EAnimationGoal(m_animation_goal | SIDE_PANELS) : EAnimationGoal(m_animation_goal & ~SIDE_PANELS);
-            show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+            show_all_panels->set_checked(show_side_panels->checked() && show_top_panel->checked());
             request_layout_update();
         });
-    show_all_panels->set_flags(Button::ToggleButton);
-    show_all_panels->set_pushed(true);
-    show_all_panels->set_change_callback(
+    show_all_panels->set_checkable();
+    show_all_panels->set_checked(true);
+    show_all_panels->set_toggled_callback(
         [this, show_top_panel, show_side_panels](bool b)
         {
             // make sure the menu bar is always on top
@@ -755,8 +759,8 @@ void HDRViewScreen::create_menubar()
             push_gui_refresh();
             m_animation_running = true;
             m_animation_goal    = b ? EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL) : EAnimationGoal(0);
-            show_side_panels->set_pushed(b);
-            show_top_panel->set_pushed(b);
+            show_side_panels->set_checked(b);
+            show_top_panel->set_checked(b);
             request_layout_update();
         });
     menu->popup()->add<Separator>();
@@ -876,7 +880,7 @@ void HDRViewScreen::create_menubar()
             {{0, 'G'}}, false);
         auto gamma_down_checkbox = m_menu_items.back();
 
-        sRGB_checkbox->set_flags(Button::ToggleButton);
+        sRGB_checkbox->set_checkable();
         sRGB_checkbox->set_tooltip(
             "Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
@@ -887,12 +891,12 @@ void HDRViewScreen::create_menubar()
             {
                 gamma_up_checkbox->set_enabled(!b);
                 gamma_down_checkbox->set_enabled(!b);
-                sRGB_checkbox->set_pushed(b);
+                sRGB_checkbox->set_checked(b);
                 prev_cb(b);
             });
-        sRGB_checkbox->set_change_callback([this](bool v) { m_image_view->set_sRGB(v); });
-        sRGB_checkbox->set_pushed(m_image_view->sRGB());
-        sRGB_checkbox->change_callback()(m_image_view->sRGB());
+        sRGB_checkbox->set_toggled_callback([this](bool v) { m_image_view->set_sRGB(v); });
+        sRGB_checkbox->set_checked(m_image_view->sRGB());
+        sRGB_checkbox->toggled_callback()(m_image_view->sRGB());
     }
     menu->popup()->add<Separator>();
     add_item(
@@ -908,20 +912,20 @@ void HDRViewScreen::create_menubar()
         add_item(
             "Clamp display to LDR", 0, [] {}, {{SYSTEM_COMMAND_MOD, 'L'}}, false);
         auto LDR_checkbox = m_menu_items.back();
-        LDR_checkbox->set_flags(Button::ToggleButton);
-        LDR_checkbox->set_pushed(m_image_view->clamp_to_LDR());
+        LDR_checkbox->set_checkable();
+        LDR_checkbox->set_checked(m_image_view->clamp_to_LDR());
         LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying low-dynamic content.");
-        LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_clamp_to_LDR(v); });
+        LDR_checkbox->set_toggled_callback([this](bool v) { m_image_view->set_clamp_to_LDR(v); });
     }
     if (!m_capability_10bit)
     {
         add_item(
             "Dither", 0, [] {}, {{}}, false);
         auto dither_checkbox = m_menu_items.back();
-        dither_checkbox->set_flags(Button::ToggleButton);
-        dither_checkbox->set_pushed(m_image_view->dithering_on());
+        dither_checkbox->set_checkable();
+        dither_checkbox->set_checked(m_image_view->dithering_on());
         dither_checkbox->set_tooltip("Dither the displayed intensities to reduce banding on 8-bit displays.");
-        dither_checkbox->set_change_callback([this](bool v) { m_image_view->set_dithering(v); });
+        dither_checkbox->set_toggled_callback([this](bool v) { m_image_view->set_dithering(v); });
     }
     else
     {
@@ -1205,35 +1209,28 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
     }
 }
 
-void HDRViewScreen::set_tool(ETool t)
+void HDRViewScreen::set_tool(ETool t, bool show)
 {
-    auto set_active = [this](int i, bool b)
+    auto prev_tool = m_tools[m_tool];
+    m_tool         = t;
+
+    auto tool = m_tools[m_tool];
+    spdlog::trace("setting {} active: {}.", tool->name(), show);
+    if (tool->toolbutton())
+        tool->toolbutton()->set_checked(show);
+    else
+        spdlog::error("Button for {} never created.", tool->name());
+
+    if (prev_tool->options_bar())
+        prev_tool->options_bar()->set_visible(false);
+
+    if (tool->options_bar())
     {
-        auto tool = m_tools[i];
-        spdlog::trace("setting {} active: {}.", tool->name(), b);
-        if (tool->toolbutton())
-            tool->toolbutton()->set_pushed(b);
-        else
-            spdlog::error("Button for {} never created.", tool->name());
-
-        if (tool->menuitem())
-            tool->menuitem()->set_pushed(b);
-        else
-            spdlog::error("Menu item for {} never created.", tool->name());
-
-        if (tool->options_bar())
-        {
-            tool->options_bar()->set_visible(b);
-            request_layout_update();
-        }
-        else
-            spdlog::error("Options widget for {} never created.", tool->name());
-    };
-
-    m_tool = t;
-    for (int i = 0; i < (int)Tool_Num_Tools; ++i) set_active(i, false);
-
-    set_active(t, true);
+        tool->options_bar()->set_visible(show);
+        request_layout_update();
+    }
+    else
+        spdlog::error("Options widget for {} never created.", tool->name());
 }
 
 void HDRViewScreen::update_caption()

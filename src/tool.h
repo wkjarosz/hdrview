@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "actionbutton.h"
 #include "fwd.h"
 #include <nanogui/icons.h>
 #include <nanogui/nanogui.h>
@@ -27,14 +28,15 @@ public:
     virtual void         write_settings();
 
     virtual nanogui::Widget *options_bar() { return m_options; }
-    nanogui::ToolButton     *toolbutton() { return m_button; }
+    nanogui::ActionButton   *toolbutton() { return m_button; }
     nanogui::MenuItem       *menuitem() { return m_menuitem; }
 
     void set_options_bar(nanogui::Widget *options) { m_options = options; }
 
     virtual void create_options_bar(nanogui::Widget *parent){};
-    void         create_toolbutton(nanogui::Widget *parent);
-    void         create_menuitem(nanogui::Dropdown *menu, int modifier, int button);
+    void         create_toolbutton(nanogui::Widget *parent, nanogui::ActionGroup *action_group,
+                                   const nanogui::Shortcut &shortcut);
+    void         create_menuitem(nanogui::Dropdown *menu);
 
     void         update_width(int w);
     virtual void draw(NVGcontext *ctx) const;
@@ -51,12 +53,12 @@ protected:
     int         m_icon;
     ETool       m_tool;
 
-    HDRViewScreen       *m_screen;
-    HDRImageView        *m_image_view;
-    ImageListPanel      *m_images_panel;
-    nanogui::ToolButton *m_button;
-    nanogui::MenuItem   *m_menuitem;
-    nanogui::Widget     *m_options;
+    HDRViewScreen         *m_screen;
+    HDRImageView          *m_image_view;
+    ImageListPanel        *m_images_panel;
+    nanogui::ActionButton *m_button;
+    nanogui::MenuItem     *m_menuitem;
+    nanogui::Widget       *m_options;
 };
 
 class HandTool : public Tool

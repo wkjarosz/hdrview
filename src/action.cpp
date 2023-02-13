@@ -86,39 +86,89 @@ Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
 }
 
 Action::Action(const string &text, int icon, ActionGroup *group, const vector<Shortcut> &shortcuts) :
-    m_text(text), m_icon(icon), m_shortcuts(shortcuts)
+    m_text(text), m_tooltip(text), m_icon(icon), m_shortcuts(shortcuts)
 {
+    m_checkable = group != nullptr;
     set_group(group);
 }
 
-void Action::trigger()
+void Action::set_group(ActionGroup *group)
 {
-    bool checked_backup = m_checked;
+    if (group)
+    {
+        m_group = group;
 
+        // check if this action is already in the group
+        for (auto a : m_group->actions)
+            if (a == this)
+                return;
+    }
+    else
+    {
+        m_group                     = new ActionGroup{};
+        m_group->exclusive_optional = true;
+    }
+
+    m_group->actions.push_back(this);
+}
+
+bool Action::set_checked(bool checked)
+{
+    if (checked == m_checked || !m_checkable)
+        return false;
+
+    if (m_checkable && m_checked && !m_group->exclusive_optional)
+        return false;
+
+    // now we know we are toggling checked, and the action is checkable
+    m_checked = !m_checked;
+
+    // update the state in the ActionGroup
     if (!m_checked)
     {
-        if (m_checkable)
+        m_group->checked_index  = -1;
+        m_group->checked_action = nullptr;
+    }
+    else
+    {
+        int this_index = -1;
+        // uncheck all other (checkable) actions in the group
+        for (int i = 0; i < (int)m_group->actions.size(); ++i)
         {
-            // first uncheck all other (checkable) actions in the group
-            for (auto a : m_group->actions)
+            auto a = m_group->actions[i];
+            if (a != this)
             {
-                if (a != this && a->checkable() && a->checked())
+                if (a->checkable() && a->checked())
                 {
-                    a->set_checked(false);
+                    a->m_checked = false;
                     if (a->toggled_callback())
                         a->toggled_callback()(false);
                 }
             }
-
-            m_checked = true;
+            else
+                this_index = i;
         }
-        if (m_triggered_callback)
-            m_triggered_callback();
-    }
-    else
-        m_checked = false;
 
-    if (checked_backup != m_checked && m_toggled_callback)
+        // now update the state in the ActionGroup
+        m_group->checked_index = this_index;
+        m_group->checked_action =
+            (this_index >= 0 && this_index < (int)m_group->actions.size()) ? m_group->actions[this_index] : nullptr;
+    }
+
+    // if (toggled_callback())
+    //     toggled_callback()(m_checked);
+
+    return true;
+}
+
+void Action::trigger()
+{
+    bool toggled = set_checked(!m_checked);
+
+    if (m_triggered_callback)
+        m_triggered_callback();
+
+    if (toggled && m_toggled_callback)
         m_toggled_callback(m_checked);
 }
 

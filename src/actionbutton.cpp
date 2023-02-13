@@ -62,12 +62,12 @@ bool ActionButton::mouse_button_event(const Vector2i &p, int button, bool down, 
         // trigger on mouse down for toggle buttons, and mouse up for normal buttons
         if (down)
         {
-            if (m_flags & ToggleButton)
+            if (checkable())
                 m_action->trigger();
         }
         else
         {
-            if (!(m_flags & ToggleButton))
+            if (!checkable())
                 m_action->trigger();
         }
         m_pressed = down;
@@ -81,7 +81,7 @@ void ActionButton::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
 
-    bool pushed = m_action->checked() || m_pressed;
+    bool pushed = m_action->checked(); // || m_pressed;
 
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
