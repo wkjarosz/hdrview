@@ -74,8 +74,7 @@ public:
     enum Mode : int
     {
         ComboBox,
-        Menu,
-        Submenu
+        Menu
     };
 
     /// Create an empty combo box

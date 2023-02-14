@@ -86,7 +86,7 @@ Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
 }
 
 Action::Action(const string &text, int icon, ActionGroup *group, const vector<Shortcut> &shortcuts) :
-    m_text(text), m_tooltip(text), m_icon(icon), m_shortcuts(shortcuts)
+    m_text(text), m_icon(icon), m_shortcuts(shortcuts)
 {
     m_checkable = group != nullptr;
     set_group(group);
@@ -114,7 +114,7 @@ void Action::set_group(ActionGroup *group)
 
 bool Action::set_checked(bool checked)
 {
-    if (checked == m_checked || !m_checkable)
+    if (checked == m_checked || !m_checkable || !m_enabled)
         return false;
 
     if (m_checkable && m_checked && !m_group->exclusive_optional)
@@ -155,14 +155,14 @@ bool Action::set_checked(bool checked)
             (this_index >= 0 && this_index < (int)m_group->actions.size()) ? m_group->actions[this_index] : nullptr;
     }
 
-    // if (toggled_callback())
-    //     toggled_callback()(m_checked);
-
     return true;
 }
 
 void Action::trigger()
 {
+    if (!m_enabled)
+        return;
+
     bool toggled = set_checked(!m_checked);
 
     if (m_triggered_callback)
@@ -170,6 +170,15 @@ void Action::trigger()
 
     if (toggled && m_toggled_callback)
         m_toggled_callback(m_checked);
+}
+
+void ActionWidget::set_action(Action *action)
+{
+    m_action             = action ? action : new Action{"Untitled"};
+    string shortcut_text = m_action->shortcuts().size() && m_action->shortcuts()[0].text.size()
+                               ? fmt::format(" ({})", m_action->shortcuts()[0].text)
+                               : "";
+    set_tooltip(fmt::format("{}{}", m_action->text(), shortcut_text));
 }
 
 NAMESPACE_END(nanogui)

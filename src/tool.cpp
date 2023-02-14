@@ -82,7 +82,8 @@ void Tool::create_toolbutton(Widget *toolbar, ActionGroup *action_group, const S
     m_button->set_caption("");
     m_button->set_fixed_size(Vector2i(0));
     m_button->set_toggled_callback([this](bool b) { m_screen->set_tool((ETool)m_tool, b); });
-    m_button->set_tooltip(m_name + ": " + m_tooltip);
+    string opt_shortcut = shortcut.text.size() ? fmt::format(" ({})", shortcut.text) : "";
+    m_button->set_tooltip(fmt::format("{}: {}{}", m_name, m_tooltip, opt_shortcut));
     m_button->set_icon_extra_scale(1.5f);
 }
 
@@ -184,10 +185,10 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     new Label(content, "EV:");
     auto exposure_slider  = new Slider(content);
     auto exposure_textbox = new FloatBox<float>(content, exposure);
-    auto normalize_button = new Button(content, "", FA_MAGIC);
+    auto normalize_button = new ActionButton(content, new Action{"", FA_MAGIC});
     normalize_button->set_fixed_size(nanogui::Vector2i(21, 21));
     normalize_button->set_icon_extra_scale(1.15f);
-    normalize_button->set_callback(
+    normalize_button->set_triggered_callback(
         [this]()
         {
             m_image_view->normalize_exposure();
@@ -195,10 +196,10 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
         });
     normalize_button->set_tooltip("Normalize exposure.");
 
-    auto reset_button = new Button(content, "", FA_UNDO);
+    auto reset_button = new ActionButton(content, new Action{"", FA_UNDO});
     reset_button->set_fixed_size(nanogui::Vector2i(21, 21));
     reset_button->set_icon_extra_scale(1.15f);
-    reset_button->set_callback(
+    reset_button->set_triggered_callback(
         [this]()
         {
             m_image_view->reset_tonemapping();

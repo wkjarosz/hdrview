@@ -47,6 +47,10 @@ using ConstXPUImagePtr = std::shared_ptr<const XPUImage>;
 using XPUImagePtr      = std::shared_ptr<XPUImage>;
 
 NAMESPACE_BEGIN(nanogui)
+struct ActionGroup;
+class Action;
+class ActionButton;
+class ActionCheckBox;
 class Widget;
 class Button;
 class MenuBar;

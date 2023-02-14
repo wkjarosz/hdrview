@@ -130,12 +130,12 @@ private:
     HDRViewScreen *m_screen        = nullptr;
     HDRImageView  *m_image_view    = nullptr;
     TextBox       *m_filter        = nullptr;
-    Button        *m_erase_btn     = nullptr;
-    Button        *m_regex_btn     = nullptr;
-    Button        *m_align_btn     = nullptr;
+    ActionButton  *m_erase_btn     = nullptr;
+    ActionButton  *m_regex_btn     = nullptr;
+    ActionButton  *m_align_btn     = nullptr;
     bool           m_align_left    = false;
     Dropdown      *m_sort_mode     = nullptr;
-    Button        *m_use_short_btn = nullptr;
+    ActionButton  *m_use_short_btn = nullptr;
     Widget        *m_image_list    = nullptr;
     Dropdown      *m_blend_modes   = nullptr;
     Dropdown      *m_channels      = nullptr;

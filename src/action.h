@@ -74,9 +74,6 @@ public:
     /// Sets the text of this Action ( (used for e.g. the caption of Buttons).
     void set_text(const std::string &text) { m_text = text; }
 
-    const std::string &tooltip() const { return m_tooltip; }
-    void               set_tooltip(const std::string &tooltip) { m_tooltip = tooltip; }
-
     /// Returns the icon of this Action. See #nanogui::Action::m_icon.
     int icon() const { return m_icon; }
     /// Sets the icon of this Button. See #nanogui::Action::m_icon.
@@ -112,6 +109,11 @@ public:
     */
     bool set_checked(bool checked = true);
 
+    /// Return whether or not this action is currently enabled
+    bool enabled() const { return m_enabled; }
+    /// Set whether or not this action is currently enabled
+    void set_enabled(bool enabled) { m_enabled = enabled; }
+
     /// Trigger the action (run the associated callback, and update the state)
     void trigger();
 
@@ -127,11 +129,10 @@ public:
     void set_toggled_callback(const std::function<void(bool)> &callback) { m_toggled_callback = callback; }
 
 protected:
+    bool m_enabled = true; ///< Whether this action is enabled.
+
     /// The text to use for Widgets using this Action, e.g. for Button::caption().
     std::string m_text;
-
-    /// The tooltip to use for Widgets using this Action.
-    std::string m_tooltip;
 
     /**
         \brief The icon of this Action (``0`` means no icon).
@@ -176,7 +177,7 @@ public:
     /// Returns the action associated with this widget.
     const Action *action() const { return m_action; }
     /// Set the action associated with the widget, or create a new action if a nullptr is passed.
-    void set_action(Action *action = nullptr) { m_action = action ? action : new Action{"Untitled"}; }
+    void set_action(Action *action = nullptr);
 
     /// Convenience function calls Action::checkable() on the underlying Action.
     virtual bool checkable() const { return m_action->checkable(); }
@@ -186,6 +187,15 @@ public:
     virtual bool checked() const { return m_action->checked(); }
     /// Convenience function calls Action::set_checked() on the underlying Action.
     virtual bool set_checked(bool checked = true) { return m_action->set_checked(checked); }
+
+    /// Return whether or not this action is currently enabled
+    virtual bool enabled() const { return m_action->enabled(); }
+    /// Set whether or not this action is currently enabled
+    virtual void set_enabled(bool enabled)
+    {
+        m_action->set_enabled(enabled);
+        Widget::set_enabled(enabled);
+    }
 
     /// Convenience function that calls Action::trigger() on the underlying Action.
     void trigger() { return m_action->trigger(); }

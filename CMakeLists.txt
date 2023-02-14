@@ -356,6 +356,8 @@ add_executable(
   src/action.h
   src/actionbutton.cpp
   src/actionbutton.h
+  src/actioncheckbox.cpp
+  src/actioncheckbox.h
   src/async.h
   src/box.h
   src/brush.cpp
@@ -415,7 +417,6 @@ add_executable(
   src/ppm.cpp
   src/progress.cpp
   src/progress.h
-  src/range.h
   src/rasterdraw.cpp
   src/rasterdraw.h
   src/timer.h
@@ -457,7 +458,6 @@ add_executable(
   src/ppm.h
   src/progress.cpp
   src/progress.h
-  src/range.h
   src/timer.h)
 
 add_executable(force-random-dither src/forced-random-dither.cpp)

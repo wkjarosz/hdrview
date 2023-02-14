@@ -81,7 +81,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         m_blend_modes = new Dropdown(grid);
         {
             auto items = new ActionGroup{};
-            // vector<Action *> actions(nullptr, blend_mode_names().size());
             for (int i = 0; i < (int)blend_mode_names().size(); ++i)
                 new Action{blend_mode_names()[i], 0, items, {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}}};
             m_blend_modes->set_items(*items);
@@ -120,8 +119,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_col_stretch(0, 1.0f);
 
         m_filter    = new TextBox(grid, "");
-        m_erase_btn = new Button(grid, "", FA_BACKSPACE);
-        m_regex_btn = new Button(grid, ".*");
+        m_erase_btn = new ActionButton(grid, new Action{"", FA_BACKSPACE});
+        m_regex_btn = new ActionButton(grid, new Action{".*"});
 
         m_filter->set_editable(true);
         m_filter->set_alignment(TextBox::Alignment::Left);
@@ -134,14 +133,14 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_erase_btn->set_fixed_size({19, 19});
         m_erase_btn->set_tooltip("Clear the search string.");
-        m_erase_btn->set_change_callback([this](bool b) { set_filter(""); });
+        m_erase_btn->set_toggled_callback([this](bool b) { set_filter(""); });
         agl->set_anchor(m_erase_btn, AdvancedGridLayout::Anchor{2, 0});
 
         m_regex_btn->set_fixed_size({19, 19});
         m_regex_btn->set_tooltip("Treat search string as a regular expression.");
-        m_regex_btn->set_flags(Button::ToggleButton);
-        m_regex_btn->set_pushed(false);
-        m_regex_btn->set_change_callback([this](bool b) { set_use_regex(b); });
+        m_regex_btn->set_checkable(true);
+        m_regex_btn->set_checked(false);
+        m_regex_btn->set_toggled_callback([this](bool b) { set_use_regex(b); });
         agl->set_anchor(m_regex_btn, AdvancedGridLayout::Anchor{4, 0});
     }
 
@@ -155,8 +154,8 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_sort_mode =
             new Dropdown(grid, {" ", "Filename (A-Z)", "Filename (Z-A)", "Image size (0-9)", "Image size (9-0)"});
-        m_align_btn     = new Button(grid, "", FA_ALIGN_LEFT);
-        m_use_short_btn = new Button(grid, "", FA_HIGHLIGHTER);
+        m_align_btn     = new ActionButton(grid, new Action{"", FA_ALIGN_LEFT});
+        m_use_short_btn = new ActionButton(grid, new Action{"", FA_HIGHLIGHTER});
 
         m_sort_mode->set_fixed_height(19);
         m_sort_mode->set_tooltip("Sort the image list. When image names are aligned right, alphabetic sorting sorts by "
@@ -166,18 +165,18 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
 
         m_use_short_btn->set_fixed_size({19, 19});
         m_use_short_btn->set_tooltip("Toggle showing full filenames vs. only the unique portion of each filename.");
-        m_use_short_btn->set_flags(Button::ToggleButton);
-        m_use_short_btn->set_pushed(false);
-        m_use_short_btn->set_change_callback([this](bool b) { m_update_filter_requested = true; });
+        m_use_short_btn->set_checkable(true);
+        m_use_short_btn->set_checked(false);
+        m_use_short_btn->set_toggled_callback([this](bool b) { m_update_filter_requested = true; });
         agl->set_anchor(m_use_short_btn, AdvancedGridLayout::Anchor{3, 0});
 
         m_align_btn->set_fixed_size({19, 19});
         m_align_btn->set_tooltip("Toggle aligning filenames left vs. right.");
-        m_align_btn->set_callback(
+        m_align_btn->set_triggered_callback(
             [this]()
             {
                 m_sort_mode->set_selected_index(0);
-                m_align_btn->set_icon(m_align_left ? FA_ALIGN_LEFT : FA_ALIGN_RIGHT);
+                m_align_btn->action()->set_icon(m_align_left ? FA_ALIGN_LEFT : FA_ALIGN_RIGHT);
                 m_align_left = !m_align_left;
 
                 // now set alignment on all buttons
@@ -1200,11 +1199,11 @@ void ImageListPanel::redo()
 
 std::string ImageListPanel::filter() const { return m_filter->value(); }
 
-bool ImageListPanel::use_regex() const { return m_regex_btn->pushed(); }
+bool ImageListPanel::use_regex() const { return m_regex_btn->checked(); }
 
 void ImageListPanel::set_use_regex(bool value)
 {
-    m_regex_btn->set_pushed(value);
+    m_regex_btn->set_checked(value);
     m_update_filter_requested = true;
 }
 
@@ -1244,7 +1243,7 @@ void ImageListPanel::update_filter()
             auto img = image(i);
             btn->set_caption(img->filename());
             btn->set_highlight_range(begin_short_offset, end_short_offset);
-            btn->set_hide_unhighlighted(m_use_short_btn->pushed());
+            btn->set_hide_unhighlighted(m_use_short_btn->checked());
         }
 
         if (m_current == -1 || (current_image() && !dynamic_cast<ImageButton *>(buttons[m_current])->visible()))

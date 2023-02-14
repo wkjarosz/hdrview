@@ -13,7 +13,7 @@ NAMESPACE_BEGIN(nanogui)
 
 ActionButton::ActionButton(Widget *parent, Action *action) : ActionWidget(parent, action)
 {
-    // empty
+    set_caption(m_action->text());
 }
 
 Vector2i ActionButton::preferred_size(NVGcontext *ctx) const
@@ -57,7 +57,7 @@ bool ActionButton::mouse_button_event(const Vector2i &p, int button, bool down, 
        button causes the parent window to be destructed */
     ref<ActionButton> self = this;
 
-    if (m_enabled == 1 && ((button == GLFW_MOUSE_BUTTON_1) || (button == GLFW_MOUSE_BUTTON_2)))
+    if (enabled() && ((button == GLFW_MOUSE_BUTTON_1) || (button == GLFW_MOUSE_BUTTON_2)))
     {
         // trigger on mouse down for toggle buttons, and mouse up for normal buttons
         if (down)
@@ -86,12 +86,12 @@ void ActionButton::draw(NVGcontext *ctx)
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
-    if (pushed || (m_mouse_focus))
+    if (pushed)
     {
         grad_top = m_theme->m_button_gradient_top_pushed;
         grad_bot = m_theme->m_button_gradient_bot_pushed;
     }
-    else if (m_mouse_focus && m_enabled)
+    else if (m_mouse_focus && enabled())
     {
         grad_top = m_theme->m_button_gradient_top_focused;
         grad_bot = m_theme->m_button_gradient_bot_focused;
@@ -113,7 +113,7 @@ void ActionButton::draw(NVGcontext *ctx)
         else
         {
             double v   = 1 - m_background_color.w();
-            grad_top.a = grad_bot.a = m_enabled ? v : v * .5f + .5f;
+            grad_top.a = grad_bot.a = enabled() ? v : v * .5f + .5f;
         }
     }
 
@@ -143,7 +143,7 @@ void ActionButton::draw(NVGcontext *ctx)
     Vector2f center = Vector2f(m_pos) + Vector2f(m_size) * 0.5f;
     Vector2f text_pos(center.x() - tw * 0.5f, center.y() - 1);
     NVGcolor text_color = m_text_color.w() == 0 ? m_theme->m_text_color : m_text_color;
-    if (!m_enabled)
+    if (!enabled())
         text_color = m_theme->m_disabled_text_color;
 
     if (m_action->icon())
@@ -198,7 +198,7 @@ void ActionButton::draw(NVGcontext *ctx)
         else
         {
             NVGpaint img_paint = nvgImagePattern(ctx, icon_pos.x(), icon_pos.y() - ih / 2, iw, ih, 0, m_action->icon(),
-                                                 m_enabled ? 0.5f : 0.25f);
+                                                 enabled() ? 0.5f : 0.25f);
 
             nvgFillPaint(ctx, img_paint);
             nvgFill(ctx);
