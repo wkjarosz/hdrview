@@ -265,6 +265,13 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
         // close popup and defocus all menu items
         if (down)
         {
+            // only close the popup menu if we clicked on an enabled menu item
+            if (auto w = find_widget(screen()->mouse_pos() - parent()->absolute_position()))
+            {
+                if (!w->enabled())
+                    return true;
+            }
+
             set_visible(false);
             m_parent_window->request_focus();
 
@@ -319,7 +326,6 @@ Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
     set_flags(Flags::ToggleButton);
 
     m_popup = new PopupMenu(screen(), window());
-    // m_popup->set_size(Vector2i(320, 250));
     m_popup->set_visible(false);
 
     if (m_mode == Menu)
