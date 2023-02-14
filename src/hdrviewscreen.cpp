@@ -546,6 +546,7 @@ void HDRViewScreen::create_menubar()
                                   const std::vector<Shortcut> &s = {{}}, bool edit = true)
     {
         auto i = new MenuItem(menu->popup(), new Action{name, icon, nullptr, s});
+        i->set_tooltip("");
         i->set_triggered_callback(cb);
         m_menu_items.push_back(i);
         if (edit)
