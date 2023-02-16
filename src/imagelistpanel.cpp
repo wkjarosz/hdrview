@@ -78,7 +78,7 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         agl->set_anchor(new Label(grid, "Mode:", "sans", 14),
                         AdvancedGridLayout::Anchor(0, agl->row_count() - 1, Alignment::Fill, Alignment::Fill));
 
-        auto add_item = [](Dropdown *btn, const std::string &name, int index, const vector<MenuItem::Shortcut> &s)
+        auto add_item = [](Dropdown *btn, const std::string &name, int index, const vector<Shortcut> &s)
         {
             auto i = new MenuItem(btn->popup(), name, 0, s);
             i->set_flags(Button::RadioButton);

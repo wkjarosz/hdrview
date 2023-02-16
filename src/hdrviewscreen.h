@@ -41,7 +41,10 @@ public:
     bool keyboard_event(int key, int scancode, int action, int modifiers) override;
 
     ETool tool() const { return m_tool; }
-    void  set_tool(ETool t);
+    void  set_tool(ETool t, bool show = true);
+
+    MenuBar       *menubar() { return m_menubar; }
+    const MenuBar *menubar() const { return m_menubar; }
 
     const HDRColorPicker *active_colorpicker() const { return m_active_colorpicker; }
     void                  set_active_colorpicker(HDRColorPicker *cp);
@@ -87,23 +90,23 @@ private:
     Dialog         *active_dialog() const;
     nlohmann::json &recent_files();
 
-    Window         *m_top_panel, *m_side_panel, *m_tool_panel, *m_status_bar;
-    HDRImageView   *m_image_view;
-    ImageListPanel *m_images_panel;
-    MenuBar        *m_menubar;
+    Window         *m_top_panel = nullptr, *m_side_panel = nullptr, *m_tool_panel = nullptr, *m_status_bar = nullptr;
+    HDRImageView   *m_image_view   = nullptr;
+    ImageListPanel *m_images_panel = nullptr;
+    MenuBar        *m_menubar      = nullptr;
 
-    Label              *m_zoom_label;
-    Label              *m_status_label;
-    Label              *m_color32_info_label;
-    Label              *m_color8_info_label;
-    Label              *m_ruler_info_label;
-    Label              *m_pixel_info_label;
-    Label              *m_roi_info_label;
-    Label              *m_stats_label;
-    DualHDRColorPicker *m_color_btns;
+    Label              *m_zoom_label         = nullptr;
+    Label              *m_status_label       = nullptr;
+    Label              *m_color32_info_label = nullptr;
+    Label              *m_color8_info_label  = nullptr;
+    Label              *m_ruler_info_label   = nullptr;
+    Label              *m_pixel_info_label   = nullptr;
+    Label              *m_roi_info_label     = nullptr;
+    Label              *m_stats_label        = nullptr;
+    DualHDRColorPicker *m_color_btns         = nullptr;
 
-    VScrollPanel           *m_side_scroll_panel;
-    Widget                 *m_side_panel_contents;
+    VScrollPanel           *m_side_scroll_panel   = nullptr;
+    Widget                 *m_side_panel_contents = nullptr;
     std::vector<Button *>   m_panel_btns;
     std::vector<MenuItem *> m_menu_items; /// All menu items
     std::vector<MenuItem *> m_edit_items; /// Menu items that are enabled iff we have an editable image

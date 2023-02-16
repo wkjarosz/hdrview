@@ -24,21 +24,31 @@ using std::runtime_error;
 using std::string;
 using std::vector;
 
-NAMESPACE_BEGIN(nanogui)
+//! Platform-dependent name for the command/ctrl key
+#ifdef __APPLE__
+static const string CMD = "Cmd";
+#else
+static const string CMD = "Ctrl";
+#endif
 
-MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, const std::vector<Shortcut> &s) :
-    Button(parent, caption, button_icon), m_shortcuts(s)
+//! Platform-dependent name for the alt/option key
+#ifdef __APPLE__
+static const string ALT = "Opt";
+#else
+static const string ALT = "Alt";
+#endif
+
+string Shortcut::key_string(const string &text)
 {
-    set_fixed_height(PopupMenu::menu_item_height);
-    m_icon_position = IconPosition::Left;
+    return fmt::format(text, fmt::arg("CMD", CMD), fmt::arg("ALT", ALT));
 }
 
-MenuItem::Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
+Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
 {
     if (modifiers & SYSTEM_COMMAND_MOD)
-        text += HelpWindow::key_string("{CMD}+");
+        text += key_string("{CMD}+");
     if (modifiers & GLFW_MOD_ALT)
-        text += HelpWindow::key_string("{ALT}+");
+        text += key_string("{ALT}+");
     if (modifiers & GLFW_MOD_SHIFT)
         text += "Shift+";
 
@@ -85,7 +95,14 @@ MenuItem::Shortcut::Shortcut(int m, int k) : modifiers(m), key(k)
         text += search->second;
 }
 
-void MenuItem::add_shortcut(const Shortcut &s) { m_shortcuts.push_back(s); }
+NAMESPACE_BEGIN(nanogui)
+
+MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, const std::vector<Shortcut> &s) :
+    Button(parent, caption, button_icon), m_shortcuts(s)
+{
+    set_fixed_height(PopupMenu::menu_item_height);
+    m_icon_position = IconPosition::Left;
+}
 
 Vector2i MenuItem::preferred_text_size(NVGcontext *ctx) const
 {
@@ -589,6 +606,39 @@ Dropdown *MenuBar::add_menu(const string &name)
     return menu;
 }
 
+static MenuItem *find_item_recursive(const Widget *parent, const std::vector<std::string> &menu_path, size_t index)
+{
+    if (index >= menu_path.size() || !parent)
+        return nullptr;
+
+    string name = menu_path[index];
+
+    for (auto &child : parent->children())
+        if (auto item = dynamic_cast<MenuItem *>(child))
+            if (item->caption() == name)
+            {
+                if (index + 1 < menu_path.size())
+                {
+                    if (auto dp = dynamic_cast<Dropdown *>(item))
+                        return find_item_recursive(dp->popup(), menu_path, index + 1);
+                    return nullptr;
+                }
+                else
+                    return item;
+            }
+
+    return nullptr;
+}
+
+MenuItem *MenuBar::find_item(const std::vector<std::string> &menu_path, bool throw_on_fail) const
+{
+    auto ret = find_item_recursive(this, menu_path, 0);
+    if (ret || !throw_on_fail)
+        return ret;
+    else
+        throw std::out_of_range(fmt::format("Could not find {} in the menu bar.", fmt::join(menu_path, " > ")));
+}
+
 bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
     // if any menus are open, we switch menus via hover
@@ -619,7 +669,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
 bool MenuBar::process_shortcuts(int modifiers, int key)
 {
-    MenuItem::Shortcut pressed{modifiers, key};
+    Shortcut pressed{modifiers, key};
     spdlog::trace("Checking for keyboard shortcut: \"{}\"", pressed.text);
     for (auto c : children())
         if (auto menu = dynamic_cast<Dropdown *>(c))

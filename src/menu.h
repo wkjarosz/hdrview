@@ -10,6 +10,29 @@
 #include <nanogui/button.h>
 #include <nanogui/popup.h>
 
+/**
+    Represents a key press optionally combined with one or more modifier keys.
+    A Shortcut also stores a human-readable #text string describing the key combination for use by UI elements.
+*/
+struct Shortcut
+{
+    int         modifiers, key; ///< The GLFW modifiers (shift, command, etc) and key used to execute this shortcut
+    std::string text;           ///< Human-readable string auto-generated from the above
+
+    /// Construct a shortcut from a GLFW modifier and key code combination
+    Shortcut(int m = 0, int k = 0);
+
+    bool operator==(const Shortcut &rhs) const { return modifiers == rhs.modifiers && key == rhs.key; }
+    bool operator!=(const Shortcut &rhs) const { return modifiers != rhs.modifiers || key != rhs.key; }
+    bool operator<(const Shortcut &rhs) const
+    {
+        return modifiers < rhs.modifiers || (modifiers == rhs.modifiers && key < rhs.key);
+    }
+
+    //! Takes a fmt-format string and replaces any instances of {CMD} and {ALT} with CMD an ALT.
+    static std::string key_string(const std::string &text);
+};
+
 NAMESPACE_BEGIN(nanogui)
 
 /**
@@ -29,33 +52,11 @@ NAMESPACE_BEGIN(nanogui)
 class MenuItem : public Button
 {
 public:
-    /**
-       Represents a key press optionally combined with one or more modifier keys.
-
-       A Shortcut also stores a human-readible #text string describing the key combination for use by UI elements.
-    */
-    struct Shortcut
-    {
-        int         modifiers, key; ///< The GLFW modifiers (shift, command, etc) and key used to execute this shortcut
-        std::string text;           ///< Human-readable string auto-generated from the above
-
-        /// Construct a shortcut from a GLFW modifier and key code combination
-        Shortcut(int m = 0, int k = 0);
-
-        bool operator==(const Shortcut &rhs) const { return modifiers == rhs.modifiers && key == rhs.key; }
-        bool operator!=(const Shortcut &rhs) const { return modifiers != rhs.modifiers || key != rhs.key; }
-        bool operator<(const Shortcut &rhs) const
-        {
-            return modifiers < rhs.modifiers || (modifiers == rhs.modifiers && key < rhs.key);
-        }
-    };
-
     MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0,
              const std::vector<Shortcut> &s = {{0, 0}});
 
     size_t          num_shortcuts() const { return m_shortcuts.size(); }
     const Shortcut &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
-    void            add_shortcut(const Shortcut &s);
 
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
@@ -160,6 +161,9 @@ public:
     MenuBar(Widget *parent, const std::string &title = "Untitled");
 
     Dropdown *add_menu(const std::string &name);
+
+    /// Return the menu item specified by menu_path.
+    MenuItem *find_item(const std::vector<std::string> &menu_path, bool throw_on_fail = true) const;
 
     bool process_shortcuts(int modifiers, int key);
     void add_shortcuts(HelpWindow *w);

@@ -7,14 +7,16 @@
 #pragma once
 
 #include "fwd.h"
+#include "menu.h"
 #include <nanogui/icons.h>
 #include <nanogui/nanogui.h>
+#include <nanogui/opengl.h>
 
 class Tool
 {
 public:
     Tool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name, const std::string &tooltip,
-         int icon, ETool tool);
+         int icon, const std::vector<Shortcut> &shortcuts, ETool tool);
 
     std::string name() const { return m_name; }
     int         icon() const { return m_icon; }
@@ -34,7 +36,7 @@ public:
 
     virtual void create_options_bar(nanogui::Widget *parent){};
     void         create_toolbutton(nanogui::Widget *parent);
-    void         create_menuitem(nanogui::Dropdown *menu, int modifier, int button);
+    void         create_menuitem(nanogui::Dropdown *menu);
 
     void         update_width(int w);
     virtual void draw(NVGcontext *ctx) const;
@@ -46,10 +48,11 @@ public:
 protected:
     void draw_crosshairs(NVGcontext *ctx, const nanogui::Vector2i &p) const;
 
-    std::string m_name;
-    std::string m_tooltip;
-    int         m_icon;
-    ETool       m_tool;
+    std::string           m_name;
+    std::string           m_tooltip;
+    int                   m_icon;
+    std::vector<Shortcut> m_shortcuts;
+    ETool                 m_tool;
 
     HDRViewScreen       *m_screen;
     HDRImageView        *m_image_view;
@@ -64,7 +67,7 @@ class HandTool : public Tool
 public:
     HandTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string & = "Hand tool",
              const std::string & = "Pan around or zoom into the image.", int icon = FA_HAND_PAPER,
-             ETool tool = Tool_None);
+             const std::vector<Shortcut> &shortcuts = {{0, ' '}}, ETool tool = Tool_None);
 
     virtual void create_options_bar(nanogui::Widget *parent) override;
 };
@@ -74,7 +77,7 @@ class RectangularMarquee : public Tool
 public:
     RectangularMarquee(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string & = "Rectangular Marquee",
                        const std::string & = "Make a selection in the shape of a rectangle.", int icon = FA_EXPAND,
-                       ETool tool = Tool_Rectangular_Marquee);
+                       const std::vector<Shortcut> &shortcuts = {{0, 'M'}}, ETool tool = Tool_Rectangular_Marquee);
 
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
     virtual bool mouse_drag(const nanogui::Vector2i &p, const nanogui::Vector2i &rel, int button,
@@ -89,7 +92,7 @@ class BrushTool : public Tool
 public:
     BrushTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Brush tool",
               const std::string &tooltip = "Paint with the foreground or background color.", int icon = FA_PAINT_BRUSH,
-              ETool tool = Tool_Brush);
+              const std::vector<Shortcut> &shortcuts = {{0, 'B'}}, ETool tool = Tool_Brush);
 
     virtual void write_settings() override;
     virtual void create_options_bar(nanogui::Widget *parent) override;
@@ -142,7 +145,7 @@ class EraserTool : public BrushTool
 public:
     EraserTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Eraser tool",
                const std::string &tooltip = "Makes pixels transparent.", int icon = FA_ERASER,
-               ETool tool = Tool_Eraser);
+               const std::vector<Shortcut> &shortcuts = {{GLFW_MOD_ALT, 'E'}}, ETool tool = Tool_Eraser);
 
     virtual void plot_pixel(const HDRImagePtr &img, int x, int y, float a, int modifiers) const override;
 
@@ -154,7 +157,8 @@ class CloneStampTool : public BrushTool
 public:
     CloneStampTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Clone stamp",
                    const std::string &tooltip = "Paints with pixels from another part of the image.",
-                   int icon = FA_STAMP, ETool tool = Tool_Clone_Stamp);
+                   int icon = FA_STAMP, const std::vector<Shortcut> &shortcuts = {{0, 'S'}},
+                   ETool tool = Tool_Clone_Stamp);
 
     virtual void draw(NVGcontext *ctx) const override;
     virtual bool mouse_button(const nanogui::Vector2i &p, int button, bool down, int modifiers) override;
@@ -180,7 +184,7 @@ class Eyedropper : public Tool
 public:
     Eyedropper(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Eyedropper",
                const std::string &tooltip = "Sample colors from the image.", int icon = FA_EYE_DROPPER,
-               ETool tool = Tool_Eyedropper);
+               const std::vector<Shortcut> &shortcuts = {{0, 'I'}}, ETool tool = Tool_Eyedropper);
 
     virtual void write_settings() override;
     virtual void create_options_bar(nanogui::Widget *parent) override;
@@ -197,7 +201,8 @@ class Ruler : public Tool
 {
 public:
     Ruler(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Ruler",
-          const std::string &tooltip = "Measure distances and angles.", int icon = FA_RULER, ETool tool = Tool_Ruler);
+          const std::string &tooltip = "Measure distances and angles.", int icon = FA_RULER,
+          const std::vector<Shortcut> &shortcuts = {{GLFW_MOD_ALT, 'R'}}, ETool tool = Tool_Ruler);
 
     float distance() const;
     float angle() const;
@@ -217,7 +222,8 @@ class LineTool : public Ruler
 {
 public:
     LineTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Line tool",
-             const std::string &tooltip = "Draw lines.", int icon = FA_SLASH, ETool tool = Tool_Line);
+             const std::string &tooltip = "Draw lines.", int icon = FA_SLASH,
+             const std::vector<Shortcut> &shortcuts = {{0, 'U'}}, ETool tool = Tool_Line);
 
     virtual void write_settings() override;
     virtual void create_options_bar(nanogui::Widget *parent) override;
@@ -241,7 +247,8 @@ class GradientTool : public Ruler
 {
 public:
     GradientTool(HDRViewScreen *, HDRImageView *, ImageListPanel *, const std::string &name = "Gradient tool",
-                 const std::string &tooltip = "Draw gradients.", int icon = FA_SIGNAL, ETool tool = Tool_Gradient);
+                 const std::string &tooltip = "Draw gradients.", int icon = FA_SIGNAL,
+                 const std::vector<Shortcut> &shortcuts = {{GLFW_MOD_ALT, 'G'}}, ETool tool = Tool_Gradient);
 
     virtual void write_settings() override;
     virtual void create_options_bar(nanogui::Widget *parent) override;

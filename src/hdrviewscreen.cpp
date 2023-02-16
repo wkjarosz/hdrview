@@ -150,6 +150,22 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     panels.push_back(m_images_panel);
 
     //
+    // create tools
+    //
+
+    m_tools.push_back(new HandTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new RectangularMarquee(this, m_image_view, m_images_panel));
+    m_tools.push_back(new BrushTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new EraserTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new CloneStampTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new Eyedropper(this, m_image_view, m_images_panel));
+    m_tools.push_back(new Ruler(this, m_image_view, m_images_panel));
+    m_tools.push_back(new LineTool(this, m_image_view, m_images_panel));
+    m_tools.push_back(new GradientTool(this, m_image_view, m_images_panel));
+
+    create_menubar();
+
+    //
     // create info panel
     //
 
@@ -331,18 +347,8 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     }
 
     //
-    // create tools
+    // set up tools
     //
-
-    m_tools.push_back(new HandTool(this, m_image_view, m_images_panel));
-    m_tools.push_back(new RectangularMarquee(this, m_image_view, m_images_panel));
-    m_tools.push_back(new BrushTool(this, m_image_view, m_images_panel));
-    m_tools.push_back(new EraserTool(this, m_image_view, m_images_panel));
-    m_tools.push_back(new CloneStampTool(this, m_image_view, m_images_panel));
-    m_tools.push_back(new Eyedropper(this, m_image_view, m_images_panel));
-    m_tools.push_back(new Ruler(this, m_image_view, m_images_panel));
-    m_tools.push_back(new LineTool(this, m_image_view, m_images_panel));
-    m_tools.push_back(new GradientTool(this, m_image_view, m_images_panel));
 
     for (auto t : m_tools) t->create_toolbutton(tool_holder);
 
@@ -476,7 +482,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     m_image_view->set_draw_callback([this](NVGcontext *ctx) { m_tools[m_tool]->draw(ctx); });
 
     m_image_view->set_changed_callback(
-        [this]()
+        [this]
         {
             if (auto img = m_images_panel->current_image())
             {
@@ -487,8 +493,6 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                 m_stats_label->set_caption("");
             }
         });
-
-    create_menubar();
 
     // set the active tool
     set_tool((ETool)std::clamp(m_tools.front()->all_tool_settings().value("active tool", (int)Tool_None),
@@ -513,7 +517,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     // Nanogui will redraw the screen for key/mouse events, but we need to manually
     // invoke redraw for things like gui animations. do this in a separate thread
     m_gui_refresh_thread = std::thread(
-        [this]()
+        [this]
         {
             static int                refresh_count = 0;
             std::chrono::microseconds idle_quantum  = std::chrono::microseconds(1000 * 1000 / 20);
@@ -537,7 +541,7 @@ void HDRViewScreen::create_menubar()
     auto menu = m_menubar->add_menu("File");
 
     auto add_item = [this, &menu](const string &name, int icon, const std::function<void(void)> &cb,
-                                  const std::vector<MenuItem::Shortcut> &s = {{}}, bool edit = true)
+                                  const std::vector<Shortcut> &s = {{}}, bool edit = true)
     {
         auto i = new MenuItem(menu->popup(), name, icon, s);
         i->set_callback(cb);
@@ -565,7 +569,7 @@ void HDRViewScreen::create_menubar()
         {{}}, false);
     auto after_recent_widget = m_menu_items.back();
 
-    m_repopulate_recent_files_menu = [this, parent = menu->popup(), before_recent_widget, after_recent_widget]()
+    m_repopulate_recent_files_menu = [this, parent = menu->popup(), before_recent_widget, after_recent_widget]
     {
         // first delete previous recent file items
         int first = parent->child_index(before_recent_widget);
@@ -687,10 +691,7 @@ void HDRViewScreen::create_menubar()
     add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
 
     menu = m_menubar->add_menu("Tools");
-
-    auto tool_hotkeys = vector<int>{' ', 'M', 'B', 'E', 'S', 'I', 'R', 'U', 'G'};
-    auto tool_hotmods = vector<int>{0, 0, 0, GLFW_MOD_ALT, 0, 0, GLFW_MOD_ALT, 0, GLFW_MOD_ALT};
-    for (int t = 0; t < (int)Tool_Num_Tools; ++t) m_tools[t]->create_menuitem(menu, tool_hotmods[t], tool_hotkeys[t]);
+    for (auto tool : m_tools) tool->create_menuitem(menu);
 
     menu->popup()->add<Separator>();
     add_item(
@@ -763,7 +764,7 @@ void HDRViewScreen::create_menubar()
     add_item("Zoom in", FA_SEARCH_PLUS, [this] { m_image_view->zoom_in(); }, {{0, '+'}, {0, GLFW_KEY_KP_ADD}});
     add_item("Zoom out", FA_SEARCH_MINUS, [this] { m_image_view->zoom_out(); }, {{0, '-'}, {0, GLFW_KEY_KP_SUBTRACT}});
     add_item("Center", 0, [this] { m_image_view->center(); }, {{0, 'C'}, {0, GLFW_KEY_HOME}});
-    add_item("Fit to screen", 0,
+    add_item("Fit to screen", FA_EXPAND_ARROWS_ALT,
              [this]
              {
                  m_image_view->center();
@@ -774,7 +775,7 @@ void HDRViewScreen::create_menubar()
     menu->popup()->add<Separator>();
     add_item(
         "Set image view background...", 0,
-        [this]()
+        [this]
         {
             FormHelper *gui = new FormHelper(this);
             gui->set_fixed_size(Vector2i(135, 20));
@@ -833,7 +834,7 @@ void HDRViewScreen::create_menubar()
 
             auto close_button = new Button{dialog->button_panel(), "", FA_TIMES};
             close_button->set_callback(
-                [dialog]()
+                [dialog]
                 {
                     if (dialog->callback())
                         dialog->callback()(0);
@@ -854,7 +855,7 @@ void HDRViewScreen::create_menubar()
         false);
     add_item(
         "Normalize exposure", 0,
-        [this]()
+        [this]
         {
             m_image_view->normalize_exposure();
             m_images_panel->request_histogram_update(true);
@@ -880,16 +881,15 @@ void HDRViewScreen::create_menubar()
         sRGB_checkbox->set_tooltip(
             "Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
 
-        // add more to m_image_view's existing callback (initially set by HandTool::create_options_bar)
-        auto prev_cb = m_image_view->sRGB_callback();
+        // this callback will be extended for more GUI elements when creating the toolbar
         m_image_view->set_sRGB_callback(
-            [gamma_up_checkbox, gamma_down_checkbox, sRGB_checkbox, prev_cb](bool b)
+            [gamma_up_checkbox, gamma_down_checkbox, sRGB_checkbox](bool b)
             {
                 gamma_up_checkbox->set_enabled(!b);
                 gamma_down_checkbox->set_enabled(!b);
                 sRGB_checkbox->set_pushed(b);
-                prev_cb(b);
             });
+
         sRGB_checkbox->set_change_callback([this](bool v) { m_image_view->set_sRGB(v); });
         sRGB_checkbox->set_pushed(m_image_view->sRGB());
         sRGB_checkbox->change_callback()(m_image_view->sRGB());
@@ -897,7 +897,7 @@ void HDRViewScreen::create_menubar()
     menu->popup()->add<Separator>();
     add_item(
         "Reset tonemapping", 0,
-        [this]()
+        [this]
         {
             m_image_view->reset_tonemapping();
             m_images_panel->request_histogram_update(true);
@@ -932,7 +932,7 @@ void HDRViewScreen::create_menubar()
 
     add_item(
         "Set console verbosity...", FA_TERMINAL,
-        [this]()
+        [this]
         {
             FormHelper *gui = new FormHelper(this);
             gui->set_fixed_size(Vector2i(135, 20));
@@ -961,7 +961,7 @@ void HDRViewScreen::create_menubar()
 
             auto close_button = new Button{dialog->button_panel(), "", FA_TIMES};
             close_button->set_callback(
-                [dialog]()
+                [dialog]
                 {
                     if (dialog->callback())
                         dialog->callback()(0);
@@ -1078,14 +1078,13 @@ void HDRViewScreen::create_menubar()
         {
             for (auto other_item : m_menu_items)
             {
-                if (other_item != item && other_item->shortcut() == item->shortcut() &&
-                    item->shortcut() != MenuItem::Shortcut{})
+                if (other_item != item && other_item->shortcut() == item->shortcut() && item->shortcut() != Shortcut{})
                     return other_item;
             }
             return nullptr;
         };
 
-        std::set<MenuItem::Shortcut> duplicates;
+        std::set<Shortcut> duplicates;
         for (auto item : m_menu_items)
         {
             spdlog::debug("Menu item \"{}\" with keyboard shortcut \"{}\"", item->caption(), item->shortcut().text);
@@ -1206,7 +1205,7 @@ void HDRViewScreen::set_active_colorpicker(HDRColorPicker *cp)
     }
 }
 
-void HDRViewScreen::set_tool(ETool t)
+void HDRViewScreen::set_tool(ETool t, bool show)
 {
     auto set_active = [this](int i, bool b)
     {
@@ -1216,25 +1215,21 @@ void HDRViewScreen::set_tool(ETool t)
             tool->toolbutton()->set_pushed(b);
         else
             spdlog::error("Button for {} never created.", tool->name());
-
         if (tool->menuitem())
             tool->menuitem()->set_pushed(b);
         else
             spdlog::error("Menu item for {} never created.", tool->name());
 
         if (tool->options_bar())
-        {
             tool->options_bar()->set_visible(b);
-            request_layout_update();
-        }
         else
             spdlog::error("Options widget for {} never created.", tool->name());
     };
 
     m_tool = t;
     for (int i = 0; i < (int)Tool_Num_Tools; ++i) set_active(i, false);
-
     set_active(t, true);
+    request_layout_update();
 }
 
 void HDRViewScreen::update_caption()
@@ -1530,7 +1525,7 @@ void HDRViewScreen::show_help_window()
 
     auto close_button = new Button{help->button_panel(), "", FA_TIMES};
     close_button->set_callback(
-        [help]()
+        [help]
         {
             if (help->callback())
                 help->callback()(0);
