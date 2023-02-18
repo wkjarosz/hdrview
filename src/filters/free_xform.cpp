@@ -297,7 +297,7 @@ std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel 
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

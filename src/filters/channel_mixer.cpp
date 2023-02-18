@@ -200,7 +200,7 @@ std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPan
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

@@ -415,6 +415,8 @@ add_executable(
   src/rasterdraw.cpp
   src/rasterdraw.h
   src/timer.h
+  src/searchbox.cpp
+  src/searchbox.h
   src/tool.cpp
   src/tool.h
   src/well.cpp

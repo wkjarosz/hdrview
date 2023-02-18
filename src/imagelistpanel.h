@@ -8,6 +8,7 @@
 
 #include "common.h"
 #include "fwd.h"
+#include "searchbox.h"
 #include "well.h"
 #include "xpuimage.h"
 #include <vector>
@@ -106,7 +107,7 @@ public:
     bool use_regex() const;
     void set_use_regex(bool value);
 
-    bool        set_filter(const std::string &filter);
+    bool        set_filter(const std::string &filter, bool temp = false);
     std::string filter() const;
     void        focus_filter();
 
@@ -129,7 +130,7 @@ private:
 
     HDRViewScreen *m_screen        = nullptr;
     HDRImageView  *m_image_view    = nullptr;
-    TextBox       *m_filter        = nullptr;
+    SearchBox     *m_filter        = nullptr;
     Button        *m_erase_btn     = nullptr;
     Button        *m_regex_btn     = nullptr;
     Button        *m_align_btn     = nullptr;

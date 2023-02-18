@@ -23,6 +23,7 @@
 #include "xpuimage.h"
 #include <alphanum.h>
 #include <nanogui/opengl.h>
+#include <nanogui/textarea.h>
 #include <set>
 #include <spdlog/spdlog.h>
 #include <tinydir.h>
@@ -125,13 +126,19 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
         grid->set_layout(agl);
         agl->set_col_stretch(0, 1.0f);
 
-        m_filter    = new TextBox(grid, "");
+        m_filter    = new SearchBox(grid, "");
         m_erase_btn = new Button(grid, "", FA_BACKSPACE);
         m_regex_btn = new Button(grid, ".*");
 
         m_filter->set_editable(true);
         m_filter->set_alignment(TextBox::Alignment::Left);
         m_filter->set_callback([this](const string &filter) { return set_filter(filter); });
+        m_filter->set_temporary_callback(
+            [this](const string &filter)
+            {
+                spdlog::debug("Temporary callback {}", filter);
+                return set_filter(filter, true);
+            });
 
         m_filter->set_placeholder("Find");
         m_filter->set_tooltip(
@@ -306,7 +313,7 @@ void ImageListPanel::enable_disable_buttons()
     m_align_btn->set_enabled(have_images);
     m_use_short_btn->set_enabled(have_images);
     m_channels->set_enabled(have_images);
-    // m_filter->set_editable(have_images);
+    m_filter->set_editable(have_images);
     m_filter->set_enabled(have_images);
     m_regex_btn->set_enabled(have_images);
     // m_erase_btn->set_enabled(have_images);
@@ -314,7 +321,7 @@ void ImageListPanel::enable_disable_buttons()
 
 void ImageListPanel::sort_images(int m)
 {
-    spdlog::info("sorting image list as: {}", m);
+    spdlog::trace("sorting image list as: {}", m);
     if (m == 0)
         return;
 
@@ -678,7 +685,7 @@ void ImageListPanel::run_requested_callbacks()
 {
     if (m_image_async_modify_done_requested.exchange(false))
     {
-        spdlog::info("running requested callbacks");
+        spdlog::trace("running requested callbacks");
         // remove any images that are not being modified and are null
         // iterate through the images, and remove the ones that didn't load properly
         auto           it = m_images.begin();
@@ -709,9 +716,24 @@ void ImageListPanel::run_requested_callbacks()
         {
             m_screen->repopulate_recent_files_menu();
             m_num_images_callback();
-            new SimpleDialog(
+            auto dialog = new SimpleDialog(
                 m_screen, SimpleDialog::Type::Warning, "Error",
-                fmt::format("Could not load {} file{}.", failed_files.size(), failed_files.size() > 1 ? "s" : ""));
+                fmt::format("Could not load {} file{}:", failed_files.size(), failed_files.size() > 1 ? "s" : ""), "");
+
+            auto vscroll  = new VScrollPanel(dialog);
+            auto textarea = new TextArea(vscroll);
+
+            for (auto &f : failed_files) textarea->append_line(f);
+
+            auto s = textarea->preferred_size(screen()->nvg_context());
+            vscroll->set_fixed_size(min(Vector2i{screen()->width() - 50, screen()->height() - 300}, s));
+
+            dialog->add_buttons("OK");
+
+            dialog->set_size(dialog->preferred_size(screen()->nvg_context()));
+            dialog->perform_layout(screen()->nvg_context());
+            dialog->request_focus();
+            dialog->center();
         }
 
         trigger_modify_done(false); // TODO: make this use the modified image
@@ -722,9 +744,10 @@ ConstXPUImagePtr ImageListPanel::image(int index) const { return is_valid(index)
 
 XPUImagePtr ImageListPanel::image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
 
-bool ImageListPanel::set_current_image_index(int index, bool forceCallback)
+bool ImageListPanel::set_current_image_index(int index, bool force_callback)
 {
-    if (index == m_current && !forceCallback)
+    spdlog::trace("set_current_image_index({}), m_current is {}", index, m_current);
+    if (index == m_current && !force_callback)
         return false;
 
     auto &buttons          = m_image_list->children();
@@ -966,11 +989,11 @@ bool ImageListPanel::reload_image(int index, bool force)
     else
     {
         auto dialog = new SimpleDialog(m_screen, SimpleDialog::Type::Warning, "Warning!",
-                                       "Image has unsaved modifications. Reload anyway?", "Yes", "Cancel", true);
+                                       "Image has unsaved modifications. Reload anyway?", "Yes", "Cancel");
         dialog->set_callback(
             [this, index](int cancel)
             {
-                spdlog::trace("reloading image callback {} {} {}", cancel);
+                spdlog::trace("reloading image callback with cancel = {}", cancel);
                 if (!cancel)
                     m_images[index] = load_image(image(index)->filename());
             });
@@ -986,9 +1009,9 @@ void ImageListPanel::reload_all_images()
 
     if (any_modified)
     {
-        auto dialog = new SimpleDialog(m_screen, SimpleDialog::Type::Warning, "Warning!",
-                                       "Some images have unsaved modifications. Reload all images anyway?", "Yes",
-                                       "Cancel", true);
+        auto dialog =
+            new SimpleDialog(m_screen, SimpleDialog::Type::Warning, "Warning!",
+                             "Some images have unsaved modifications. Reload all images anyway?", "Yes", "Cancel");
         dialog->set_callback(
             [this](int cancel)
             {
@@ -1176,10 +1199,14 @@ void ImageListPanel::async_modify_selected(const ConstImageCommandWithProgress &
 // This file was developed by Thomas Müller <thomas94@gmx.net>.
 // It is published under the BSD 3-Clause License within the LICENSE file.
 
-bool ImageListPanel::set_filter(const string &filter)
+bool ImageListPanel::set_filter(const string &filter, bool temp)
 {
-    m_filter->set_value(filter);
-    m_erase_btn->set_visible(!filter.empty());
+    spdlog::trace("set_filter(\"{}\", {})", filter, temp);
+    if (temp)
+        m_filter->set_temporary_value(filter);
+    else
+        m_filter->set_value(filter);
+    m_erase_btn->set_visible(!ImageListPanel::filter().empty());
     m_update_filter_requested = true;
     return true;
 }
@@ -1204,7 +1231,12 @@ void ImageListPanel::redo()
     }
 }
 
-std::string ImageListPanel::filter() const { return m_filter->value(); }
+std::string ImageListPanel::filter() const
+{
+    auto ret = m_filter->temporary_value().empty() ? m_filter->value() : m_filter->temporary_value();
+    spdlog::debug("Filter is: {}", ret);
+    return ret;
+}
 
 bool ImageListPanel::use_regex() const { return m_regex_btn->pushed(); }
 
@@ -1216,7 +1248,7 @@ void ImageListPanel::set_use_regex(bool value)
 
 void ImageListPanel::update_filter()
 {
-    string filter = m_filter->value();
+    string filter = ImageListPanel::filter();
     m_previous    = -1;
 
     // filename filtering
@@ -1268,6 +1300,7 @@ void ImageListPanel::update_filter()
 
 int ImageListPanel::next_visible_image(int index, EDirection direction) const
 {
+    spdlog::trace("next_visible_image({})", index);
     if (!num_images())
         return -1;
 
@@ -1280,7 +1313,7 @@ int ImageListPanel::next_visible_image(int index, EDirection direction) const
     int   i       = start_index;
     do {
         i = (i + num_images() + dir) % num_images();
-    } while (!dynamic_cast<ImageButton *>(buttons[i])->visible() && i != start_index);
+    } while (!buttons[i]->visible() && i != start_index);
 
     return i;
 }
@@ -1294,7 +1327,7 @@ int ImageListPanel::nth_visible_image_index(int n) const
     int   last_visible = -1;
     for (int i = 0; i < num_images(); ++i)
     {
-        if (dynamic_cast<ImageButton *>(buttons[i])->visible())
+        if (buttons[i]->visible())
         {
             last_visible = i;
             if (n == 0)

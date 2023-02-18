@@ -65,7 +65,7 @@ std::function<void()> box_blur_callback(HDRViewScreen *screen, ImageListPanel *i
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

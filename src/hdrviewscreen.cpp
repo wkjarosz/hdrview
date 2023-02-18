@@ -1109,8 +1109,8 @@ HDRViewScreen::~HDRViewScreen()
 
 void HDRViewScreen::ask_to_quit()
 {
-    auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?", "Yes",
-                                   "No", true);
+    auto dialog =
+        new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!", "Do you really want to quit?", "Yes", "No");
     dialog->set_callback([this](int result) { this->set_visible(result != 0); });
     dialog->request_focus();
 }
@@ -1288,7 +1288,7 @@ void HDRViewScreen::ask_close_image(int)
         if (img->is_modified())
         {
             auto dialog = new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
-                                           "Image has unsaved modifications. Close anyway?", "Yes", "Cancel", true);
+                                           "Image has unsaved modifications. Close anyway?", "Yes", "Cancel");
             dialog->set_callback(
                 [curr, next, closeit](int cancel)
                 {
@@ -1311,7 +1311,7 @@ void HDRViewScreen::ask_close_all_images()
     {
         auto dialog =
             new SimpleDialog(this, SimpleDialog::Type::Warning, "Warning!",
-                             "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel", true);
+                             "Some images have unsaved modifications. Close all images anyway?", "Yes", "Cancel");
         dialog->set_callback(
             [this](int close)
             {
@@ -1424,7 +1424,7 @@ void HDRViewScreen::new_image()
             request_layout_update();
         });
 
-    gui->add_widget("", dialog->add_buttons());
+    gui->add_widget("", dialog->add_buttons("OK", "Cancel"));
 
     dialog->center();
     dialog->request_focus();
@@ -1545,8 +1545,10 @@ Dialog *HDRViewScreen::active_dialog() const
 
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
+    spdlog::debug("1keyboard event {}", key);
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
+    spdlog::debug("2keyboard event {}", key);
 
     if (action == GLFW_PRESS)
     {
@@ -1590,7 +1592,9 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (action == GLFW_RELEASE)
         return false;
 
+    spdlog::debug("3keyboard event {}", key);
     m_menubar->process_shortcuts(modifiers, key);
+    spdlog::debug("4keyboard event {}", key);
 
     return false;
 }

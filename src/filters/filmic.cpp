@@ -101,7 +101,7 @@ std::function<void()> filmic_tonemapping_callback(HDRViewScreen *screen, ImageLi
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

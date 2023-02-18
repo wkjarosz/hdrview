@@ -119,7 +119,7 @@ std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *ima
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

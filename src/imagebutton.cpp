@@ -105,7 +105,7 @@ string ImageButton::highlighted() const
     return pieces.size() > 1 ? pieces[1] : "";
 }
 
-static float triangleWave(float t, float period = 1.f)
+static float triangle_wave(float t, float period = 1.f)
 {
     float a = period / 2.f;
     return fabs(2 * (t / a - floor(t / a + 0.5f)));
@@ -168,8 +168,8 @@ void ImageButton::draw(NVGcontext *ctx)
     {
         int   left_edge = m_pos.x() + 2;
         float time      = glfwGetTime();
-        float anim1 = smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, triangleWave(time / 4.f))));
-        float anim2 = smoothstep(0.0f, 1.0f, triangleWave(time / 4.f * 2.f));
+        float anim1 = smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, triangle_wave(time / 4.f))));
+        float anim2 = smoothstep(0.0f, 1.0f, triangle_wave(time / 4.f * 2.f));
 
         int bar_size = (int)std::round(lerp(float(m_size.x() - 4) * 0.05f, float(m_size.x() - 4) * 0.25f, anim2));
         int left     = (int)std::round(lerp((float)left_edge, float(m_size.x() - 2 - bar_size), anim1));
@@ -280,15 +280,15 @@ void ImageButton::draw(NVGcontext *ctx)
 
 void ImageButton::set_highlight_range(size_t begin, size_t end)
 {
-    size_t beginIndex = begin;
+    size_t begin_index = begin;
     if (end > m_caption.size())
     {
         throw std::invalid_argument{
             fmt::format("end ({:d}) must not be larger than m_caption.size() ({:d})", end, m_caption.size())};
     }
 
-    m_highlight_begin = beginIndex;
-    m_highlight_end   = std::max(m_caption.size() - end, beginIndex);
+    m_highlight_begin = begin_index;
+    m_highlight_end   = std::max(m_caption.size() - end, begin_index);
 
     if (m_highlight_begin == m_highlight_end || m_caption.empty())
         return;

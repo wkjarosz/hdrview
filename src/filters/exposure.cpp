@@ -95,7 +95,7 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

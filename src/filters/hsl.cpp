@@ -90,7 +90,7 @@ std::function<void()> hsl_callback(HDRViewScreen *screen, ImageListPanel *images
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

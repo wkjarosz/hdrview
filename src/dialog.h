@@ -13,8 +13,7 @@ public:
     Dialog(Widget *parent, const std::string &title = "Untitled", bool form = true);
 
     void    make_form();
-    Widget *add_buttons(const std::string &button_text = "OK", bool alt_button = true,
-                        const std::string &alt_button_text = "Cancel");
+    Widget *add_buttons(const std::string &button_text = "OK", const std::string &alt_button_text = "");
 
     std::function<void(int)> callback() const { return m_callback; }
     void                     set_callback(const std::function<void(int)> &callback) { m_callback = callback; }
@@ -23,7 +22,7 @@ protected:
     std::function<void(int)> m_callback;
 };
 
-/// Identical to MessageDialog but derived from the above Dialog class.
+/// Similar to MessageDialog but derived from the above Dialog class.
 class SimpleDialog : public Dialog
 {
 public:
@@ -36,9 +35,10 @@ public:
         Warning
     };
 
+    /// Set alt_button_text to a non-empty string to include the alt button
     SimpleDialog(Widget *parent, Type type, const std::string &title = "Untitled",
                  const std::string &message = "Message", const std::string &button_text = "OK",
-                 const std::string &alt_button_text = "Cancel", bool alt_button = false);
+                 const std::string &alt_button_text = "");
 
     Label       *message_label() { return m_message_label; }
     const Label *message_label() const { return m_message_label; }
