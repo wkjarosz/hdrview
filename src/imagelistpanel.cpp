@@ -321,7 +321,7 @@ void ImageListPanel::enable_disable_buttons()
 
 void ImageListPanel::sort_images(int m)
 {
-    spdlog::trace("sorting image list as: {}", m);
+    spdlog::trace("sort_images({})", m);
     if (m == 0)
         return;
 
@@ -685,7 +685,7 @@ void ImageListPanel::run_requested_callbacks()
 {
     if (m_image_async_modify_done_requested.exchange(false))
     {
-        spdlog::trace("running requested callbacks");
+        spdlog::trace("run_requested_callbacks()");
         // remove any images that are not being modified and are null
         // iterate through the images, and remove the ones that didn't load properly
         auto           it = m_images.begin();
