@@ -1018,30 +1018,30 @@ void HDRViewScreen::create_menubar()
             m_menu_items.back()->set_visible(false);
         }
         menu->popup()->add<Separator>()->set_visible(false);
-        add_item("Go to previous image", 0,
-                 [p = m_images_panel]
-                 { p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward)); },
-                 {{0, GLFW_KEY_DOWN}});
-        m_menu_items.back()->set_visible(false);
         add_item("Go to next image", 0,
                  [p = m_images_panel]
                  { p->set_current_image_index(p->next_visible_image(p->current_image_index(), Forward)); },
+                 {{0, GLFW_KEY_DOWN}});
+        m_menu_items.back()->set_visible(false);
+        add_item("Go to previous image", 0,
+                 [p = m_images_panel]
+                 { p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward)); },
                  {{0, GLFW_KEY_UP}});
         m_menu_items.back()->set_visible(false);
         menu->popup()->add<Separator>()->set_visible(false);
-        add_item("Expand selection to previous image", 0,
-                 [p = m_images_panel]
-                 {
-                     p->select_image_index(p->next_visible_image(p->current_image_index(), Backward));
-                     p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward));
-                 },
-                 {{SYSTEM_COMMAND_MOD, GLFW_KEY_DOWN}});
-        m_menu_items.back()->set_visible(false);
         add_item("Expand selection to next image", 0,
                  [p = m_images_panel]
                  {
                      p->select_image_index(p->next_visible_image(p->current_image_index(), Forward));
                      p->set_current_image_index(p->next_visible_image(p->current_image_index(), Forward));
+                 },
+                 {{SYSTEM_COMMAND_MOD, GLFW_KEY_DOWN}});
+        m_menu_items.back()->set_visible(false);
+        add_item("Expand selection to previous image", 0,
+                 [p = m_images_panel]
+                 {
+                     p->select_image_index(p->next_visible_image(p->current_image_index(), Backward));
+                     p->set_current_image_index(p->next_visible_image(p->current_image_index(), Backward));
                  },
                  {{SYSTEM_COMMAND_MOD, GLFW_KEY_UP}});
         m_menu_items.back()->set_visible(false);
@@ -1545,10 +1545,8 @@ Dialog *HDRViewScreen::active_dialog() const
 
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
-    spdlog::debug("1keyboard event {}", key);
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
-    spdlog::debug("2keyboard event {}", key);
 
     if (action == GLFW_PRESS)
     {
@@ -1592,9 +1590,7 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
     if (action == GLFW_RELEASE)
         return false;
 
-    spdlog::debug("3keyboard event {}", key);
     m_menubar->process_shortcuts(modifiers, key);
-    spdlog::debug("4keyboard event {}", key);
 
     return false;
 }

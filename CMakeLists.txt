@@ -421,6 +421,8 @@ add_executable(
   src/tool.h
   src/well.cpp
   src/well.h
+  src/widgetutils.cpp
+  src/widgetutils.h
   src/xpuimage.cpp
   src/xpuimage.h
   ${EXTRA_SOURCE})

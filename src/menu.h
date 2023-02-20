@@ -58,12 +58,30 @@ public:
     size_t          num_shortcuts() const { return m_shortcuts.size(); }
     const Shortcut &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
 
+    bool mouse_enter_event(const Vector2i &p, bool enter) override;
+
+    /// Whether or not this MenuItem is currently highlighted.
+    bool highlighted() const { return m_highlighted; }
+    /// Sets whether or not this MenuItem is currently highlighted.
+    void set_highlighted(bool highlight, bool unhighlight_others = false, bool run_callbacks = false);
+
+    /// Return the highlight callback
+    std::function<void(bool)> highlight_callback() const { return m_highlight_callback; }
+    /// Set the highlight callback
+    void set_highlight_callback(const std::function<void(bool)> &callback) { m_highlight_callback = callback; }
+
     virtual void     draw(NVGcontext *ctx) override;
     Vector2i         preferred_text_size(NVGcontext *ctx) const;
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
 
 protected:
     std::vector<Shortcut> m_shortcuts;
+
+    /// Whether or not this MenuItem is currently highlighted.
+    bool m_highlighted = false;
+
+    /// The callback issued for all types of buttons.
+    std::function<void(bool)> m_highlight_callback;
 };
 
 class Separator : public MenuItem

@@ -53,7 +53,7 @@ struct ImageStatistics
     An XPUImage also maintains a current histogram for the image data.
 
     Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing
-   commands
+    commands
 */
 class XPUImage : public std::enable_shared_from_this<XPUImage>
 {

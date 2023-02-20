@@ -128,6 +128,43 @@ Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
     return preferred_text_size(ctx) + Vector2i((int)(iw + sw), 0);
 }
 
+void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run_callbacks)
+{
+    if (highlight == m_highlighted || !m_enabled)
+        return;
+
+    if (highlight)
+    {
+        m_highlighted = true;
+        if (run_callbacks && m_highlight_callback)
+            m_highlight_callback(true);
+
+        if (unhighlight_others)
+            for (auto widget : parent()->children())
+            {
+                auto b = dynamic_cast<MenuItem *>(widget);
+                if (b != this && b && b->m_highlighted)
+                {
+                    b->m_highlighted = false;
+                    if (run_callbacks && b->m_highlight_callback)
+                        b->m_highlight_callback(false);
+                }
+            }
+    }
+    else
+        m_highlighted = false;
+}
+
+bool MenuItem::mouse_enter_event(const Vector2i &p, bool enter)
+{
+    Button::mouse_enter_event(p, enter);
+
+    // on mouse enter highlight the item and unhighlight all siblings
+    if (enter)
+        set_highlighted(true, true, true);
+    return true;
+}
+
 void MenuItem::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
@@ -641,6 +678,8 @@ MenuItem *MenuBar::find_item(const std::vector<std::string> &menu_path, bool thr
 
 bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers)
 {
+    // FIXME: maybe this needs to be moved to the mouse_enter_event for the child Dropdowns
+
     // if any menus are open, we switch menus via hover
     Dropdown *opened_menu = nullptr;
     for (auto c : children())
@@ -653,14 +692,14 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
     if (opened_menu)
     {
-        auto hovered_item = dynamic_cast<Dropdown *>(find_widget(p));
-        if (hovered_item && opened_menu != hovered_item)
+        auto hovered_menu = dynamic_cast<Dropdown *>(find_widget(p));
+        if (hovered_menu && opened_menu != hovered_menu)
         {
             opened_menu->set_pushed(false);
             opened_menu->popup()->set_visible(false);
 
-            hovered_item->set_pushed(true);
-            hovered_item->popup()->set_visible(true);
+            hovered_menu->set_pushed(true);
+            hovered_menu->popup()->set_visible(true);
         }
     }
 

@@ -149,3 +149,9 @@ enum EBGMode : int
 
     NUM_BG_MODES
 };
+
+enum EDirection
+{
+    Forward,
+    Backward,
+};

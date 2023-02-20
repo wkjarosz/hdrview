@@ -20,6 +20,7 @@
 #include "multigraph.h"
 #include "timer.h"
 #include "well.h"
+#include "widgetutils.h"
 #include "xpuimage.h"
 #include <alphanum.h>
 #include <nanogui/opengl.h>
@@ -1300,44 +1301,10 @@ void ImageListPanel::update_filter()
 
 int ImageListPanel::next_visible_image(int index, EDirection direction) const
 {
-    spdlog::trace("next_visible_image({})", index);
-    if (!num_images())
-        return -1;
-
-    int dir = direction == Forward ? -1 : 1;
-
-    // If the image does not exist, start at image 0.
-    int start_index = max(0, index);
-
-    auto &buttons = m_image_list->children();
-    int   i       = start_index;
-    do {
-        i = (i + num_images() + dir) % num_images();
-    } while (!buttons[i]->visible() && i != start_index);
-
-    return i;
+    return next_visible_child(m_image_list, index, direction);
 }
 
-int ImageListPanel::nth_visible_image_index(int n) const
-{
-    if (n < 0)
-        return -1;
-
-    auto &buttons      = m_image_list->children();
-    int   last_visible = -1;
-    for (int i = 0; i < num_images(); ++i)
-    {
-        if (buttons[i]->visible())
-        {
-            last_visible = i;
-            if (n == 0)
-                break;
-
-            --n;
-        }
-    }
-    return last_visible;
-}
+int ImageListPanel::nth_visible_image_index(int n) const { return nth_visible_child_index(m_image_list, n); }
 
 bool ImageListPanel::nth_image_is_visible(int n) const
 {
