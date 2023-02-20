@@ -172,7 +172,7 @@ void MenuItem::draw(NVGcontext *ctx)
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
-    if (m_mouse_focus && m_enabled)
+    if (m_highlighted)
     {
         grad_top = m_theme->m_button_gradient_top_focused;
         grad_bot = m_theme->m_button_gradient_bot_focused;

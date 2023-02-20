@@ -365,6 +365,8 @@ add_executable(
   src/colorwheel.cpp
   src/colorwheel.h
   src/commandhistory.h
+  src/commandpalette.cpp
+  src/commandpalette.h
   common.cpp
   src/common.h
   src/dialog.cpp
@@ -374,6 +376,8 @@ add_executable(
   src/envmap.h
   src/filmictonecurve.cpp
   src/filmictonecurve.h
+  src/filterablelist.cpp
+  src/filterablelist.h
   src/fwd.h
   src/hdrcolorpicker.cpp
   src/hdrcolorpicker.h

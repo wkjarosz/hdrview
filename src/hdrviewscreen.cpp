@@ -6,14 +6,18 @@
 
 #include "hdrviewscreen.h"
 #include "commandhistory.h"
+#include "commandpalette.h"
 #include "common.h"
 #include "dialog.h"
+#include "filterablelist.h"
 #include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
 #include "helpwindow.h"
+#include "imagebutton.h"
 #include "imagelistpanel.h"
 #include "menu.h"
+#include "searchbox.h"
 #include "tool.h"
 #include "xpuimage.h"
 #include <filesystem/path.h>
@@ -727,7 +731,8 @@ void HDRViewScreen::create_menubar()
             m_animation_running = true;
             m_animation_goal =
                 b ? EAnimationGoal(m_animation_goal | TOP_PANEL) : EAnimationGoal(m_animation_goal & ~TOP_PANEL);
-            show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+            show_all_panels->set_pushed(show_side_panels->pushed() && b);
+            show_top_panel->set_pushed(b); // this is needed so that the command palette can reuse the same action
             request_layout_update();
         });
     show_side_panels->set_flags(Button::ToggleButton);
@@ -740,13 +745,14 @@ void HDRViewScreen::create_menubar()
             m_animation_running = true;
             m_animation_goal =
                 b ? EAnimationGoal(m_animation_goal | SIDE_PANELS) : EAnimationGoal(m_animation_goal & ~SIDE_PANELS);
-            show_all_panels->set_pushed(show_side_panels->pushed() && show_top_panel->pushed());
+            show_all_panels->set_pushed(b && show_top_panel->pushed());
+            show_side_panels->set_pushed(b); // this is needed so that the command palette can reuse the same action
             request_layout_update();
         });
     show_all_panels->set_flags(Button::ToggleButton);
     show_all_panels->set_pushed(true);
     show_all_panels->set_change_callback(
-        [this, show_top_panel, show_side_panels](bool b)
+        [this, show_all_panels, show_top_panel, show_side_panels](bool b)
         {
             // make sure the menu bar is always on top
             // FIXME: This is a hack, would be nice to avoid it
@@ -758,6 +764,7 @@ void HDRViewScreen::create_menubar()
             m_animation_goal    = b ? EAnimationGoal(TOP_PANEL | SIDE_PANELS | BOTTOM_PANEL) : EAnimationGoal(0);
             show_side_panels->set_pushed(b);
             show_top_panel->set_pushed(b);
+            show_all_panels->set_pushed(b); // this is needed so that the command palette can reuse the same action
             request_layout_update();
         });
     menu->popup()->add<Separator>();
@@ -1575,6 +1582,12 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
                 return true;
             }
             return true;
+        }
+
+        Shortcut pressed{modifiers, key};
+        if (pressed == Shortcut{SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'P'})
+        {
+            new CommandPalette(this, m_menu_items);
         }
     }
 
