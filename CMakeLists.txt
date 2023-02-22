@@ -376,8 +376,6 @@ add_executable(
   src/envmap.h
   src/filmictonecurve.cpp
   src/filmictonecurve.h
-  src/filterablelist.cpp
-  src/filterablelist.h
   src/fwd.h
   src/hdrcolorpicker.cpp
   src/hdrcolorpicker.h

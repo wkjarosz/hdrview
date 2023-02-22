@@ -23,7 +23,7 @@ static bool         aspect = true;
 
 std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(0, 20));
@@ -114,7 +114,7 @@ std::function<void()> resize_callback(HDRViewScreen *screen, ImageListPanel *ima
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult {
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult {
                         return {make_shared<HDRImage>(img->resized(width, height)), nullptr};
                     });
             });

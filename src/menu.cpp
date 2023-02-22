@@ -245,7 +245,7 @@ void MenuItem::draw(NVGcontext *ctx)
         nvgText(ctx, icon_pos.x() + (ih - iw - 3) / 2, icon_pos.y() + 1, icon.data(), nullptr);
 
     nvgFontSize(ctx, font_size);
-    nvgFontFace(ctx, "sans-bold");
+    nvgFontFace(ctx, "sans");
     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     nvgFillColor(ctx, m_theme->m_text_color_shadow);
     nvgText(ctx, text_pos.x(), text_pos.y(), m_caption.c_str(), nullptr);

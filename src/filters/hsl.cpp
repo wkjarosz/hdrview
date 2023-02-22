@@ -26,7 +26,7 @@ static float        lightness  = 0.0f;
 
 std::function<void()> hsl_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(55, 20));
@@ -71,12 +71,12 @@ std::function<void()> hsl_callback(HDRViewScreen *screen, ImageListPanel *images
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->apply_function(
                                     [](Color4 c)

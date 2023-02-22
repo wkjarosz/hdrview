@@ -142,8 +142,8 @@ std::function<void()> irradiance_envmap_callback(ImageListPanel *images_panel)
     return [images_panel]
     {
         images_panel->async_modify_selected(
-            [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                AtomicProgress &progress) -> ImageCommandResult {
+            [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+               AtomicProgress &progress) -> ImageCommandResult {
                 return {make_shared<HDRImage>(img->irradiance_envmap(progress)), nullptr};
             });
     };

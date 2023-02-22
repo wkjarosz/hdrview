@@ -9,7 +9,6 @@
 #include "commandpalette.h"
 #include "common.h"
 #include "dialog.h"
-#include "filterablelist.h"
 #include "filters/filters.h" // for create_bilateral_filter_btn, create_box...
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
@@ -695,7 +694,11 @@ void HDRViewScreen::create_menubar()
     add_item("Irradiance envmap", FA_GLOBE_AMERICAS, irradiance_envmap_callback(m_images_panel));
 
     menu = m_menubar->add_menu("Tools");
-    for (auto tool : m_tools) tool->create_menuitem(menu);
+    for (auto tool : m_tools)
+    {
+        tool->create_menuitem(menu);
+        m_menu_items.push_back(tool->menuitem());
+    }
 
     menu->popup()->add<Separator>();
     add_item(
@@ -722,6 +725,7 @@ void HDRViewScreen::create_menubar()
     show_top_panel->set_change_callback(
         [this, show_top_panel, show_side_panels, show_all_panels](bool b)
         {
+            spdlog::info("show_top_panel->change_callback({})", b);
             // make sure the menu bar is always on top
             // FIXME: This is a hack, would be nice to avoid it
             move_window_to_front(m_menubar);
@@ -918,7 +922,13 @@ void HDRViewScreen::create_menubar()
         LDR_checkbox->set_flags(Button::ToggleButton);
         LDR_checkbox->set_pushed(m_image_view->clamp_to_LDR());
         LDR_checkbox->set_tooltip("Clip the display to [0,1] as if displaying low-dynamic content.");
-        LDR_checkbox->set_change_callback([this](bool v) { m_image_view->set_clamp_to_LDR(v); });
+        LDR_checkbox->set_change_callback(
+            [this, LDR_checkbox](bool v)
+            {
+                m_image_view->set_clamp_to_LDR(v);
+                LDR_checkbox->set_pushed(
+                    m_image_view->clamp_to_LDR()); // needed to reuse this callback for the command palette
+            });
     }
     if (!m_capability_10bit)
     {
@@ -997,7 +1007,7 @@ void HDRViewScreen::create_menubar()
                 if (nth >= 0)
                     m_images_panel->set_current_image_index(nth);
             };
-            add_item(fmt::format("Select image {}", i + 1), 0, cb, {{0, GLFW_KEY_1 + i}});
+            add_item(fmt::format("Go to image {}", i + 1), 0, cb, {{0, GLFW_KEY_1 + i}});
             m_menu_items.back()->set_visible(false);
         }
         menu->popup()->add<Separator>()->set_visible(false);
@@ -1008,7 +1018,7 @@ void HDRViewScreen::create_menubar()
                 if (i < EChannel::NUM_CHANNELS)
                     m_images_panel->set_channel(EChannel(i));
             };
-            add_item(fmt::format("Select color channel {}", channel_names()[i]), 0, cb,
+            add_item(fmt::format("Color channel: {}", channel_names()[i]), 0, cb,
                      {{SYSTEM_COMMAND_MOD, GLFW_KEY_0 + i}});
             m_menu_items.back()->set_visible(false);
         }
@@ -1020,8 +1030,7 @@ void HDRViewScreen::create_menubar()
                 if (i < EBlendMode::NUM_BLEND_MODES)
                     m_images_panel->set_blend_mode(EBlendMode(i));
             };
-            add_item(fmt::format("Select blend mode {}", blend_mode_names()[i]), 0, cb,
-                     {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}});
+            add_item(fmt::format("Blend mode: {}", blend_mode_names()[i]), 0, cb, {{GLFW_MOD_SHIFT, GLFW_KEY_1 + i}});
             m_menu_items.back()->set_visible(false);
         }
         menu->popup()->add<Separator>()->set_visible(false);
@@ -1071,8 +1080,8 @@ void HDRViewScreen::create_menubar()
         m_menu_items.back()->set_visible(false);
 
         menu->popup()->add<Separator>()->set_visible(false);
-        add_item("Go to previous image", 0, [this] { m_images_panel->swap_current_selected_with_previous(); },
-                 {{GLFW_MOD_ALT, GLFW_KEY_TAB}});
+        add_item("Go to previously selected image", 0,
+                 [this] { m_images_panel->swap_current_selected_with_previous(); }, {{GLFW_MOD_ALT, GLFW_KEY_TAB}});
         m_menu_items.back()->set_visible(false);
         add_item("Find image", 0, [this] { m_images_panel->focus_filter(); }, {{SYSTEM_COMMAND_MOD, 'F'}});
         m_menu_items.back()->set_visible(false);

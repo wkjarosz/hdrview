@@ -27,7 +27,7 @@ static const auto                       active_color = Color(255, 255, 255, 200)
 
 std::function<void()> filmic_tonemapping_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(55, 20));
@@ -86,12 +86,12 @@ std::function<void()> filmic_tonemapping_callback(HDRViewScreen *screen, ImageLi
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->apply_function(
                                     [](const Color4 &c)

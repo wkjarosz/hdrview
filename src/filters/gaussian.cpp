@@ -24,7 +24,7 @@ static bool                 exact = false;
 
 std::function<void()> gaussian_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(75, 20));
@@ -55,17 +55,14 @@ std::function<void()> gaussian_filter_callback(HDRViewScreen *screen, ImageListP
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
-                for (int i = 0; i < images_panel->num_images(); ++i)
-                    spdlog::trace("image: {} is {}", i, images_panel->is_selected(i));
-
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
                         auto roi = xpuimg->roi();
                         return {make_shared<HDRImage>(

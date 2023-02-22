@@ -337,6 +337,7 @@ bool FilterableList::remove_current_item()
 
 void FilterableList::clear_items()
 {
+    // FIXME, this has a bug
     for (int i = 0; i < child_count(); ++i) remove_child_at(i);
 
     m_current   = -1;

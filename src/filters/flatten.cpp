@@ -40,7 +40,7 @@ std::function<void()> flatten_with_bg_callback(HDRViewScreen *screen, ImageListP
 
 std::function<void()> flatten_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(75, 20));
@@ -70,7 +70,7 @@ std::function<void()> flatten_callback(HDRViewScreen *screen, ImageListPanel *im
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&, popup](int cancel)
+            [images_panel, popup](int cancel)
             {
                 popup->set_visible(false);
 
@@ -78,7 +78,7 @@ std::function<void()> flatten_callback(HDRViewScreen *screen, ImageListPanel *im
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->apply_function(
                                     [](const Color4 &c)

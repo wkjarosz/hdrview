@@ -23,7 +23,7 @@ static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRI
 
 std::function<void()> median_filter_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(75, 20));
@@ -45,14 +45,14 @@ std::function<void()> median_filter_callback(HDRViewScreen *screen, ImageListPan
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->median_filtered(radius, progress, border_mode_x,
                                                                            border_mode_y, false, xpuimg->roi())),

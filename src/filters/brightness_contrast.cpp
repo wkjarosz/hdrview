@@ -44,7 +44,7 @@ static enum EChannel
 
 std::function<void()> brightness_contrast_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(100, 20));
@@ -127,12 +127,12 @@ std::function<void()> brightness_contrast_callback(HDRViewScreen *screen, ImageL
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         return {make_shared<HDRImage>(img->brightness_contrast(
                                     brightness, contrast, linear, channel_map[local::channel], xpuimg->roi())),

@@ -29,7 +29,7 @@ static const float          auto_aspects[] = {1.f, 1.f, 2.f, 2.f, 0.75f, 1.f};
 
 std::function<void()> remap_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(135, 20));
