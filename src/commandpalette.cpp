@@ -41,7 +41,7 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     menu_theme->m_button_gradient_bot_pushed    = menu_theme->m_button_gradient_top_focused;
     menu_theme->m_button_gradient_top_unfocused = menu_theme->m_transparent;
     menu_theme->m_button_gradient_bot_unfocused = menu_theme->m_transparent;
-    menu_theme->m_window_popup                  = Color(42, 255);
+    menu_theme->m_window_popup                  = Color(25, 245);
     menu_theme->m_text_color_shadow             = menu_theme->m_transparent;
     set_theme(menu_theme);
 
@@ -57,10 +57,11 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     // auto well = new Well{this};
     auto well = new Well{this, 3, Color(0, 16), Color(0, 32), Color(0, 64)};
     well->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0));
-    auto vscroll = new VScrollPanel{well};
-    vscroll->set_fixed_height(300);
 
-    m_commandlist = new Widget{vscroll};
+    m_vscroll = new VScrollPanel{well};
+    m_vscroll->set_fixed_height(300);
+
+    m_commandlist = new Widget{m_vscroll};
     m_commandlist->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 5));
 
     {
@@ -88,7 +89,7 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
         new Widget{grid};
     }
 
-    auto create_items = [this, vscroll](const string &pattern)
+    auto create_items = [this](const string &pattern)
     {
         spdlog::debug("creating command list for pattern \"{}\"", pattern);
         // first, delete all current items in the commandlist
@@ -145,7 +146,7 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
             return matches;
         };
 
-        auto scroll_to_ensure_visible = [this, vscroll](int j)
+        auto scroll_to_ensure_visible = [this](int j)
         {
             spdlog::debug("scroll_to_ensure_visible({})", j);
             if (j >= m_commandlist->child_count())
@@ -154,12 +155,12 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
             auto item = dynamic_cast<MenuItem *>(m_commandlist->child_at(j));
 
             spdlog::trace("scroll_to_ensure_visible({}): item {}", j, item->caption());
-            spdlog::trace("item->position().y(): {}; m_commandlist->height(): {}; vscroll->height(): {}",
-                          item->position().y(), m_commandlist->height(), vscroll->height());
+            spdlog::trace("item->position().y(): {}; m_commandlist->height(): {}; m_vscroll->height(): {}",
+                          item->position().y(), m_commandlist->height(), m_vscroll->height());
 
             // compute visible range
             int visible_top    = -m_commandlist->position().y();
-            int visible_bottom = visible_top + vscroll->height();
+            int visible_bottom = visible_top + m_vscroll->height();
             spdlog::trace("{} : {}", visible_top, visible_bottom);
 
             int item_top    = item->position().y();
@@ -168,18 +169,18 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
             {
                 // item is above the visible region, need to scroll up
                 spdlog::trace("item is above the visible region, need to scroll up");
-                float new_scroll = item_top / float(m_commandlist->height() - vscroll->height());
+                float new_scroll = item_top / float(m_commandlist->height() - m_vscroll->height());
                 spdlog::trace("setting scroll to {}", new_scroll);
-                vscroll->set_scroll(new_scroll);
+                m_vscroll->set_scroll(new_scroll);
             }
             else if (item_top >= visible_bottom)
             {
                 // item is below the visible region, need to scroll down
                 spdlog::trace("item is below the visible region, need to scroll down");
-                float new_scroll = (item_top - vscroll->height() + item->height()) /
-                                   float(m_commandlist->height() - vscroll->height());
+                float new_scroll = (item_top - m_vscroll->height() + item->height()) /
+                                   float(m_commandlist->height() - m_vscroll->height());
                 spdlog::trace("setting scroll to {}", new_scroll);
-                vscroll->set_scroll(new_scroll);
+                m_vscroll->set_scroll(new_scroll);
             }
             else
             {
@@ -257,41 +258,53 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     create_items("");
 
     m_search_box->set_temporary_callback(
-        [this, vscroll, create_items](const string &pattern)
+        [create_items](const string &pattern)
         {
             create_items(pattern);
-
-            int preferred_height = m_commandlist->preferred_size(screen()->nvg_context()).y();
-            if (preferred_height < 300)
-                vscroll->set_fixed_height(0);
-            else
-                vscroll->set_fixed_height(300);
-            // perform_layout(screen()->nvg_context());
-            set_height(preferred_size(screen()->nvg_context()).y());
-            perform_layout(screen()->nvg_context());
-
             return true;
         });
 
     auto first_item = dynamic_cast<MenuItem *>(m_commandlist->child_at(0));
     first_item->set_highlighted(true, true, true);
 
-    vscroll->set_scroll(0.f);
+    m_vscroll->set_scroll(0.f);
 
-    // auto dialog = new Dialog(this, "");
     set_callback([this](int result) { this->set_visible(result != 0); });
 
-    {
-        if (size() == 0)
-        {
-            set_size(preferred_size(screen()->nvg_context()));
-            perform_layout(screen()->nvg_context());
-        }
-        auto pos = (screen()->size() - size()) / 2;
-        pos.y() /= 2;
-        set_position(pos);
-    }
     m_search_box->request_focus();
+}
+
+void CommandPalette::update_geometry()
+{
+    auto ctx = screen()->nvg_context();
+
+    constexpr int window_top = 75;
+
+    auto screen_size       = screen()->size();
+    auto vscroll_to_window = size() - m_vscroll->size();
+
+    auto cl_ps = m_commandlist->preferred_size(ctx);
+
+    int min_vscroll_w = std::max(cl_ps.x(), child_at(child_count() - 1)->preferred_size(ctx).x());
+    int max_vscroll_w = 500;
+    int max_vscroll_h = std::max(60, screen_size.y() - window_top - vscroll_to_window.y() - 50);
+    int margin_w      = 60;
+
+    if (screen_size.x() > max_vscroll_w + vscroll_to_window.x() + margin_w)
+        m_vscroll->set_fixed_width(max_vscroll_w);
+    else if (screen_size.x() < min_vscroll_w + vscroll_to_window.x() + margin_w)
+        m_vscroll->set_fixed_width(min_vscroll_w);
+    else
+        m_vscroll->set_fixed_width(screen_size.x() - vscroll_to_window.x() - margin_w);
+
+    if (cl_ps.y() < max_vscroll_h)
+        m_vscroll->set_fixed_height(0);
+    else
+        m_vscroll->set_fixed_height(max_vscroll_h);
+
+    set_size(preferred_size(ctx));
+    set_position({(screen_size.x() - width()) / 2, window_top});
+    perform_layout(ctx);
 }
 
 void CommandPalette::draw(NVGcontext *ctx)
@@ -299,12 +312,14 @@ void CommandPalette::draw(NVGcontext *ctx)
     if (!m_visible)
         return;
 
+    update_geometry();
+
     int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 
     nvgSave(ctx);
     nvgResetScissor(ctx);
 
-    /* Draw a drop shadow */
+    // Draw a drop shadow
     NVGpaint shadow_paint = nvgBoxGradient(ctx, m_pos.x(), m_pos.y() + 0.25 * ds, m_size.x(), m_size.y(), cr * 2,
                                            ds * 2, m_theme->m_drop_shadow, m_theme->m_transparent);
 
@@ -315,7 +330,7 @@ void CommandPalette::draw(NVGcontext *ctx)
     nvgFillPaint(ctx, shadow_paint);
     nvgFill(ctx);
 
-    /* Draw window */
+    // Draw window
     nvgBeginPath(ctx);
     nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
     nvgStrokeWidth(ctx, 3.f);
