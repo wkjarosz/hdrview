@@ -4,6 +4,7 @@
 #include <nanogui/formhelper.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
+#include <nanogui/opengl.h>
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -51,6 +52,29 @@ Widget *Dialog::add_buttons(const std::string &button_text, const std::string &a
         });
 
     return button_panel;
+}
+
+void Dialog::draw(NVGcontext *ctx)
+{
+    if (!modal())
+        return Window::draw(ctx);
+
+    if (!m_visible)
+        return;
+
+    nvgSave(ctx);
+    {
+        nvgResetScissor(ctx);
+
+        // Fade everything else on the screen
+        nvgBeginPath(ctx);
+        nvgRect(ctx, 0, 0, screen()->width(), screen()->height());
+        nvgFillColor(ctx, m_theme->m_drop_shadow);
+        nvgFill(ctx);
+
+        Window::draw(ctx);
+    }
+    nvgRestore(ctx);
 }
 
 SimpleDialog::SimpleDialog(Widget *parent, Type type, const std::string &title, const std::string &message,

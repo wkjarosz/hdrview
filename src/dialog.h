@@ -18,6 +18,8 @@ public:
     std::function<void(int)> callback() const { return m_callback; }
     void                     set_callback(const std::function<void(int)> &callback) { m_callback = callback; }
 
+    void draw(NVGcontext *ctx) override;
+
 protected:
     std::function<void(int)> m_callback;
 };
