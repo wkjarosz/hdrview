@@ -27,11 +27,7 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     menu_theme->m_button_font_size              = 15;
     menu_theme->m_text_box_font_size            = 18;
     menu_theme->m_window_corner_radius          = 8;
-    menu_theme->m_window_fill_unfocused         = Color(32, 255);
-    menu_theme->m_window_fill_focused           = Color(32, 255);
-    menu_theme->m_drop_shadow                   = Color(0, 100);
-    menu_theme->m_window_header_height          = 0;
-    menu_theme->m_window_drop_shadow_size       = 50;
+    menu_theme->m_drop_shadow                   = Color(0, 150);
     menu_theme->m_button_corner_radius          = 4;
     menu_theme->m_border_light                  = menu_theme->m_transparent;
     menu_theme->m_border_dark                   = menu_theme->m_transparent;
@@ -41,7 +37,6 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     menu_theme->m_button_gradient_bot_pushed    = menu_theme->m_button_gradient_top_focused;
     menu_theme->m_button_gradient_top_unfocused = menu_theme->m_transparent;
     menu_theme->m_button_gradient_bot_unfocused = menu_theme->m_transparent;
-    menu_theme->m_window_popup                  = Color(25, 245);
     menu_theme->m_text_color_shadow             = menu_theme->m_transparent;
     set_theme(menu_theme);
 
@@ -271,6 +266,9 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
 
     set_callback([this](int result) { this->set_visible(result != 0); });
 
+    // this is needed so that the sizes of the widgets are already computed upon first draw
+    update_geometry();
+
     m_search_box->request_focus();
 }
 
@@ -283,22 +281,29 @@ void CommandPalette::update_geometry()
     auto screen_size       = screen()->size();
     auto vscroll_to_window = size() - m_vscroll->size();
 
-    auto cl_ps = m_commandlist->preferred_size(ctx);
+    auto commandlist_size = m_commandlist->preferred_size(ctx);
 
-    int min_vscroll_w = std::max(cl_ps.x(), child_at(child_count() - 1)->preferred_size(ctx).x());
-    int max_vscroll_w = 500;
-    int max_vscroll_h = std::max(60, screen_size.y() - window_top - vscroll_to_window.y() - 50);
-    int margin_w      = 60;
+    // vscroll needs to be wide enough for the commandlist and the last widget which contains keyboard navigation help
+    int           min_vscroll_w = std::max(commandlist_size.x(), child_at(child_count() - 1)->preferred_size(ctx).x());
+    constexpr int max_vscroll_w = 500;
+    int           max_vscroll_h = std::max(60, screen_size.y() - window_top - vscroll_to_window.y() - 50);
+    constexpr int margin_w      = 60;
 
+    // if the screen is large enough, draw the command palette at the max width and include a margin
     if (screen_size.x() > max_vscroll_w + vscroll_to_window.x() + margin_w)
         m_vscroll->set_fixed_width(max_vscroll_w);
+    // if the screen is not quite large enough, still include a margin but shrink the width of the command list
+    else if (screen_size.x() > min_vscroll_w + vscroll_to_window.x() + margin_w)
+        m_vscroll->set_fixed_width(screen_size.x() - vscroll_to_window.x() - margin_w);
+    // if the command palette can't even fit on screen, don't use a margin and just draw the palette at its minimum
+    // width
     else if (screen_size.x() < min_vscroll_w + vscroll_to_window.x() + margin_w)
         m_vscroll->set_fixed_width(min_vscroll_w);
-    else
-        m_vscroll->set_fixed_width(screen_size.x() - vscroll_to_window.x() - margin_w);
 
-    if (cl_ps.y() < max_vscroll_h)
+    // if we can fit the entire command list on screen, then have it figure out its preferred height
+    if (commandlist_size.y() < max_vscroll_h)
         m_vscroll->set_fixed_height(0);
+    // otherwise, use the calculated maximum height and include a vertical scrollbar
     else
         m_vscroll->set_fixed_height(max_vscroll_h);
 
@@ -317,31 +322,36 @@ void CommandPalette::draw(NVGcontext *ctx)
     int ds = m_theme->m_window_drop_shadow_size, cr = m_theme->m_window_corner_radius;
 
     nvgSave(ctx);
-    nvgResetScissor(ctx);
+    {
+        nvgResetScissor(ctx);
 
-    // Draw a drop shadow
-    NVGpaint shadow_paint = nvgBoxGradient(ctx, m_pos.x(), m_pos.y() + 0.25 * ds, m_size.x(), m_size.y(), cr * 2,
-                                           ds * 2, m_theme->m_drop_shadow, m_theme->m_transparent);
+        // Fade everything else on the screen
+        nvgBeginPath(ctx);
+        nvgRect(ctx, 0, 0, screen()->width(), screen()->height());
+        nvgFillColor(ctx, m_theme->m_drop_shadow);
+        nvgFill(ctx);
 
-    nvgBeginPath(ctx);
-    nvgRect(ctx, m_pos.x() - ds, m_pos.y() - ds + 0.25 * ds, m_size.x() + 2 * ds, m_size.y() + 2 * ds);
-    nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
-    nvgPathWinding(ctx, NVG_HOLE);
-    nvgFillPaint(ctx, shadow_paint);
-    nvgFill(ctx);
+        // Draw a drop shadow
+        nvgBeginPath(ctx);
+        nvgRect(ctx, m_pos.x() - ds, m_pos.y() - ds + 0.25 * ds, m_size.x() + 2 * ds, m_size.y() + 2 * ds);
+        nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
+        nvgPathWinding(ctx, NVG_HOLE);
+        nvgFillPaint(ctx, nvgBoxGradient(ctx, m_pos.x(), m_pos.y() + 0.25 * ds, m_size.x(), m_size.y(), cr * 2, ds * 2,
+                                         m_theme->m_drop_shadow, m_theme->m_transparent));
+        nvgFill(ctx);
 
-    // Draw window
-    nvgBeginPath(ctx);
-    nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
-    nvgStrokeWidth(ctx, 3.f);
-    nvgStrokeColor(ctx, Color(6, 255));
-    nvgStroke(ctx);
-    nvgStrokeWidth(ctx, 2.f);
-    nvgStrokeColor(ctx, Color(89, 255));
-    nvgStroke(ctx);
-    nvgFillColor(ctx, m_theme->m_window_popup);
-    nvgFill(ctx);
-
+        // Draw window
+        nvgBeginPath(ctx);
+        nvgRoundedRect(ctx, m_pos.x(), m_pos.y(), m_size.x(), m_size.y(), cr);
+        nvgStrokeWidth(ctx, 3.f);
+        nvgStrokeColor(ctx, Color(6, 255));
+        nvgStroke(ctx);
+        nvgStrokeWidth(ctx, 2.f);
+        nvgStrokeColor(ctx, Color(89, 255));
+        nvgStroke(ctx);
+        nvgFillColor(ctx, m_theme->m_window_popup);
+        nvgFill(ctx);
+    }
     nvgRestore(ctx);
 
     Widget::draw(ctx);
