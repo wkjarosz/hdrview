@@ -11,6 +11,7 @@ class CommandPalette : public Dialog
 {
 public:
     class PaletteItem;
+    class SortableList;
 
     CommandPalette(Widget *parent, const std::vector<MenuItem *> &commands = {});
 
@@ -21,10 +22,9 @@ protected:
     void update_geometry();
 
     SearchBox                 *m_search_box  = nullptr;
-    Widget                    *m_commandlist = nullptr;
+    SortableList              *m_commandlist = nullptr;
     VScrollPanel              *m_vscroll     = nullptr;
     int                        m_current     = -1; ///< The currently selected item
-    std::vector<MenuItem *>    m_original_commands;
     std::vector<PaletteItem *> m_commands;
 };
 
