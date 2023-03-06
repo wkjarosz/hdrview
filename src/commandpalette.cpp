@@ -33,6 +33,8 @@
 #include "menu.h"
 #include "well.h"
 #include "widgetutils.h"
+#include <algorithm>
+#include <cctype>
 #include <nanogui/button.h>
 #include <nanogui/formhelper.h>
 #include <nanogui/label.h>
@@ -47,9 +49,21 @@
 
 using namespace std;
 
-static constexpr int MAX_MATCHES = 256;
-
 NAMESPACE_BEGIN(nanogui)
+
+// local functions and variables
+namespace
+{
+
+bool alphabetical(const Widget *a, const Widget *b)
+{
+    auto as = dynamic_cast<const MenuItem *>(a)->caption(), bs = dynamic_cast<const MenuItem *>(b)->caption();
+    std::transform(as.begin(), as.end(), as.begin(), [](unsigned char c) { return std::toupper(c); });
+    std::transform(bs.begin(), bs.end(), bs.begin(), [](unsigned char c) { return std::toupper(c); });
+    return as < bs;
+}
+
+} // namespace
 
 class CommandPalette::SortableList : public Widget
 {
@@ -66,18 +80,18 @@ public:
 class CommandPalette::PaletteItem : public MenuItem
 {
 public:
-    PaletteItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0,
-                const std::vector<Shortcut> &s = {{0, 0}}) :
-        MenuItem(parent, caption, button_icon, s)
+    PaletteItem(Widget *parent, const vector<string> &aliases, int button_icon = 0,
+                const vector<Shortcut> &s = {{0, 0}}) :
+        MenuItem(parent, aliases.front(), button_icon, s),
+        aliases(aliases)
     {
         // empty
     }
 
     virtual void draw(NVGcontext *ctx) override;
 
-    int     score                = 0;
-    int     match_count          = 0;
-    uint8_t matches[MAX_MATCHES] = {0};
+    vector<string> aliases;
+    vector<int>    matches;
 };
 
 void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
@@ -171,7 +185,7 @@ void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
 
     nvgFontSize(ctx, font_size);
     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-    if (match_count <= 0)
+    if (matches.size() <= 0)
         // draw text as-is, without highlighting matches
         draw_shadowed_text(false, m_caption.c_str());
     else
@@ -194,7 +208,7 @@ void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
         range_end   = range_begin;
 
         int last_char_idx = -1;
-        for (int j = 0; j < match_count; ++j)
+        for (int j = 0; j < (int)matches.size(); ++j)
         {
             int char_idx = matches[j];
 
@@ -233,7 +247,9 @@ void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
     nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, shortcut().text.c_str(), nullptr);
 }
 
-CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &commands) : Dialog(parent, "", false)
+CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &commands,
+                               const vector<vector<string>> &aliases) :
+    Dialog(parent, "", false)
 {
     auto menu_theme                             = new Theme(screen()->nvg_context());
     menu_theme->m_standard_font_size            = 16;
@@ -297,157 +313,110 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
 
     spdlog::debug("creating command list");
 
-    auto scroll_to_ensure_visible = [this](int j)
-    {
-        spdlog::debug("scroll_to_ensure_visible({})", j);
-        if (j >= m_commandlist->child_count())
-            return;
-
-        auto item = dynamic_cast<MenuItem *>(m_commandlist->child_at(j));
-
-        spdlog::trace("scroll_to_ensure_visible({}): item {}", j, item->caption());
-        spdlog::trace("item->position().y(): {}; m_commandlist->height(): {}; m_vscroll->height(): {}",
-                      item->position().y(), m_commandlist->height(), m_vscroll->height());
-
-        // compute visible range
-        int visible_top    = -m_commandlist->position().y();
-        int visible_bottom = visible_top + m_vscroll->height();
-        spdlog::trace("{} : {}", visible_top, visible_bottom);
-
-        int item_top    = item->position().y();
-        int item_bottom = item_top + item->height();
-        if (item_bottom <= visible_top)
-        {
-            // item is above the visible region, need to scroll up
-            spdlog::trace("item is above the visible region, need to scroll up");
-            float new_scroll = item_top / float(m_commandlist->height() - m_vscroll->height());
-            spdlog::trace("setting scroll to {}", new_scroll);
-            m_vscroll->set_scroll(new_scroll);
-        }
-        else if (item_top >= visible_bottom)
-        {
-            // item is below the visible region, need to scroll down
-            spdlog::trace("item is below the visible region, need to scroll down");
-            float new_scroll = (item_top - m_vscroll->height() + item->height()) /
-                               float(m_commandlist->height() - m_vscroll->height());
-            spdlog::trace("setting scroll to {}", new_scroll);
-            m_vscroll->set_scroll(new_scroll);
-        }
-        else
-        {
-            // item is visible
-            spdlog::trace("item is visible");
-        }
-    };
-
-    m_commands.clear();
-
-    m_commands.push_back(new PaletteItem{m_commandlist, "No matching commands"});
+    m_commands.push_back(new PaletteItem{m_commandlist, {"No matching commands"}});
     m_commands.back()->set_enabled(false);
     m_commands.back()->set_visible(false);
 
-    for (const auto &orig : commands)
-    {
-        spdlog::debug("adding item \"{}\"", orig->caption());
-        auto item = new PaletteItem{m_commandlist, orig->caption(), orig->icon(), {orig->shortcut(0)}};
-        item->set_flags(orig->flags());
-        item->set_tooltip(orig->tooltip());
-        item->set_callback(
-            [cb = orig->callback(), this]()
-            {
-                dispose();
-                cb();
-            });
-        if (orig->flags() & Button::ToggleButton || orig->flags() & Button::RadioButton)
-        {
-            item->set_pushed(orig->pushed());
-            auto tmp = [this, cb = orig->change_callback()](bool b)
-            {
-                spdlog::debug("change_callback({}) on command", b);
-                dispose();
-                return cb(b);
-            };
-            if (orig->change_callback())
-            {
-                spdlog::debug("set_change_callback() on command {}", item->caption());
-                item->set_change_callback(tmp);
-            }
-            else
-            {
-                spdlog::error("No change_callback() on toggle or radio item {}", item->caption());
-            }
-        }
-        item->set_highlight_callback(
-            [this, item, scroll_to_ensure_visible](bool b)
-            {
-                if (b)
-                {
-                    m_current = m_commandlist->child_index(item);
-                    scroll_to_ensure_visible(m_current);
-                }
-            });
-        item->set_visible(orig->enabled());
-        item->set_enabled(orig->enabled());
-        m_commands.push_back(item);
-    }
+    if (commands.size() != aliases.size())
+        spdlog::critical("commands size ({}) and aliases size ({}) do not match.", commands.size(), aliases.size());
 
-    auto alphabetical = [](Widget *a, Widget *b)
-    { return dynamic_cast<PaletteItem *>(a)->caption() < dynamic_cast<PaletteItem *>(b)->caption(); };
-
-    auto by_score = [](Widget *a, Widget *b)
-    {
-        auto ia = dynamic_cast<PaletteItem *>(a);
-        auto ib = dynamic_cast<PaletteItem *>(b);
-
-        // score-based if the scores are different, otherwise alphabetical by caption
-        return (ia->score != ib->score) ? ia->score > ib->score : ia->caption() < ib->caption();
-    };
+    for (int i = 0; i < (int)commands.size(); ++i) add_command(commands[i], aliases[i]);
 
     m_search_box->set_temporary_callback(
-        [this, &alphabetical, &by_score](const string &pattern)
+        [this](const string &pattern)
         {
-            bool none_found = true;
+            bool                               none_found = true;
+            std::map<const PaletteItem *, int> scores;
             for (auto &entry : m_commands)
             {
-                if (!pattern.empty() && entry->enabled() &&
-                    fts::fuzzy_match(pattern.c_str(), entry->caption().c_str(), entry->score, entry->matches,
-                                     MAX_MATCHES, entry->match_count))
+                if (pattern.empty())
                 {
-                    spdlog::trace("Matched \"{}\" with score {} and {} matches", entry->caption().c_str(), entry->score,
-                                  entry->match_count);
-                    for (int j = 0; j < entry->match_count; ++j) spdlog::trace("   {}", entry->matches[j]);
-
-                    none_found = false;
+                    entry->matches.resize(0);
+                    scores[entry] = -1;
+                    entry->set_visible(true);
+                    entry->set_caption(entry->aliases[0]);
                 }
                 else
                 {
-                    entry->score       = -1;
-                    entry->match_count = 0;
-                }
+                    constexpr int MAX_MATCHES = 256;
+                    struct SearchResult
+                    {
+                        int     score                = -1;
+                        int     match_count          = 0;
+                        uint8_t matches[MAX_MATCHES] = {0};
+                    } result, best;
+                    int best_i = 0;
+                    for (int i = 0; i < (int)entry->aliases.size(); ++i)
+                    {
+                        auto &alias = entry->aliases[i];
+                        if (fts::fuzzy_match(pattern.c_str(), alias.c_str(), result.score, result.matches, MAX_MATCHES,
+                                             result.match_count))
+                        {
+                            spdlog::trace("Matched \"{}\" with score {} and {} matches", alias, result.score,
+                                          result.match_count);
+                            // aliases have lower scores
+                            if (i > 0)
+                                result.score = result.score * 0.75f;
+                            // for (int j = 0; j < entry->match_count; ++j) spdlog::trace("   {}", entry->matches[j]);
 
-                if (entry->enabled())
-                    entry->set_visible(pattern.empty() || entry->score > 0);
+                            if (result.score > best.score)
+                            {
+                                best   = result;
+                                best_i = i;
+                                // for (int j = 0; j < best.match_count; ++j) spdlog::trace("   {}", best.matches[j]);
+
+                                none_found = false;
+                            }
+                        }
+                    }
+
+                    scores[entry]  = best.score;
+                    entry->matches = vector<int>{best.matches, best.matches + best.match_count};
+
+                    if (best_i == 0)
+                    {
+                        // if the best match is with the command, then set the caption of the button to it
+                        entry->set_caption(entry->aliases[0]);
+                    }
+                    else
+                    {
+                        // if the best match is to one of the other aliases, then put the matching alias name in
+                        // parentheses after the command name
+                        entry->set_caption(fmt::format("{} ({})", entry->aliases[0], entry->aliases[best_i]));
+                        int offset = entry->aliases[0].length() + 2;
+                        for (auto &m : entry->matches) m += offset;
+                    }
+
+                    entry->set_visible(best.score > 0);
+                }
             }
 
-            m_commandlist->sort(pattern.empty() ? alphabetical : by_score);
+            auto by_score = [&scores](const Widget *a, const Widget *b)
+            {
+                auto ia = dynamic_cast<const CommandPalette::PaletteItem *>(a);
+                auto ib = dynamic_cast<const CommandPalette::PaletteItem *>(b);
+
+                // score-based if the scores are different, otherwise alphabetical by caption
+                return (scores[ia] != scores[ib]) ? scores[ia] > scores[ib] : ia->caption() < ib->caption();
+            };
+
+            if (pattern.empty())
+                m_commandlist->sort(alphabetical);
+            else
+                m_commandlist->sort(by_score);
+
             m_commandlist->child_at(0)->set_visible(none_found && !pattern.empty());
 
             perform_layout(screen()->nvg_context());
 
-            // highlight the first result
-            m_current = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward);
-            if (m_current >= 0 && m_current < m_commandlist->child_count())
-                dynamic_cast<MenuItem *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
+            highlight_first_item();
 
             return true;
         });
 
     m_commandlist->sort(alphabetical);
 
-    // highlight the first visible command
-    m_current = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward);
-    if (m_current >= 0 && m_current < m_commandlist->child_count())
-        dynamic_cast<PaletteItem *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
+    highlight_first_item();
 
     m_vscroll->set_scroll(0.f);
 
@@ -457,6 +426,103 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
     update_geometry();
 
     m_search_box->request_focus();
+}
+
+void CommandPalette::scroll_to_ensure_visible(int idx)
+{
+    spdlog::trace("scroll_to_ensure_visible({})", idx);
+    if (idx >= m_commandlist->child_count())
+        return;
+
+    auto item = dynamic_cast<PaletteItem *>(m_commandlist->child_at(idx));
+
+    // compute visible range
+    int visible_top    = -m_commandlist->position().y();
+    int visible_bottom = visible_top + m_vscroll->height();
+
+    int item_top    = item->position().y();
+    int item_bottom = item_top + item->height();
+    if (item_bottom <= visible_top)
+    {
+        // item is above the visible region, need to scroll up
+        spdlog::trace("item is above the visible region, scrolling up");
+        float new_scroll = item_top / float(m_commandlist->height() - m_vscroll->height());
+        m_vscroll->set_scroll(new_scroll);
+    }
+    else if (item_top >= visible_bottom)
+    {
+        // item is below the visible region, need to scroll down
+        spdlog::trace("item is below the visible region, scrolling down");
+        float new_scroll =
+            (item_top - m_vscroll->height() + item->height()) / float(m_commandlist->height() - m_vscroll->height());
+        m_vscroll->set_scroll(new_scroll);
+    }
+    else
+    {
+        // item is visible
+        spdlog::trace("item is already visible");
+    }
+}
+
+void CommandPalette::add_command(const vector<string> &aliases, int icon, int flags, const function<void()> &callback,
+                                 const function<void(bool)> &change_callback, bool pushed,
+                                 const vector<Shortcut> &shortcuts, const string &tooltip)
+{
+    spdlog::trace("adding item \"{}\"", fmt::join(aliases, ", "));
+
+    auto item = new PaletteItem{m_commandlist, aliases, icon, shortcuts};
+    item->set_flags(flags);
+    item->set_tooltip(tooltip);
+    item->set_callback(
+        [callback, this]()
+        {
+            dispose();
+            callback();
+        });
+    if (flags & Button::ToggleButton || flags & Button::RadioButton)
+    {
+        item->set_pushed(pushed);
+        if (change_callback)
+        {
+            spdlog::trace("set_change_callback() on command {}", item->caption());
+            item->set_change_callback(
+                [this, change_callback](bool b)
+                {
+                    spdlog::trace("change_callback({}) on command", b);
+                    dispose();
+                    return change_callback(b);
+                });
+        }
+        else
+        {
+            spdlog::error("No change_callback() on toggle or radio item {}", item->caption());
+        }
+    }
+    item->set_highlight_callback(
+        [this, item](bool b)
+        {
+            if (b)
+            {
+                m_current = m_commandlist->child_index(item);
+                scroll_to_ensure_visible(m_current);
+            }
+        });
+
+    m_commands.push_back(item);
+}
+
+void CommandPalette::add_command(const MenuItem *orig, const vector<string> &aliases)
+{
+    if (orig->enabled())
+        add_command(aliases, orig->icon(), orig->flags(), orig->callback(), orig->change_callback(), orig->pushed(),
+                    orig->shortcuts(), orig->tooltip());
+}
+
+void CommandPalette::highlight_first_item()
+{
+    m_current = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward);
+    if (m_current >= 0 && m_current < m_commandlist->child_count())
+        dynamic_cast<PaletteItem *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
 }
 
 void CommandPalette::update_geometry()
@@ -472,7 +538,7 @@ void CommandPalette::update_geometry()
 
     // vscroll needs to be wide enough for the commandlist and the last widget which contains keyboard navigation help
     int           min_vscroll_w = std::max(commandlist_size.x(), child_at(child_count() - 1)->preferred_size(ctx).x());
-    constexpr int max_vscroll_w = 500;
+    constexpr int max_vscroll_w = 900;
     int           max_vscroll_h = std::max(60, screen_size.y() - window_top - vscroll_to_window.y() - 50);
     constexpr int margin_w      = 60;
 
@@ -567,7 +633,7 @@ bool CommandPalette::keyboard_event(int key, int scancode, int action, int modif
             }
             else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
             {
-                auto item = dynamic_cast<MenuItem *>(m_commandlist->child_at(m_current));
+                auto item = dynamic_cast<PaletteItem *>(m_commandlist->child_at(m_current));
                 if (item->flags() & Button::NormalButton)
                 {
                     if (item->callback())

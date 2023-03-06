@@ -29,25 +29,24 @@ struct Shortcut
         return modifiers < rhs.modifiers || (modifiers == rhs.modifiers && key < rhs.key);
     }
 
-    //! Takes a fmt-format string and replaces any instances of {CMD} and {ALT} with CMD an ALT.
+    //! Takes a fmt-format string and replaces any instances of {CMD} and {ALT} with CMD and ALT.
     static std::string key_string(const std::string &text);
 };
 
 NAMESPACE_BEGIN(nanogui)
 
 /**
-
     A #MenuItem can have one or more keyboard #Shortcuts which can be used to run the callback associated with the item.
-   These callbacks are run by #MenuBar::process_shortcuts for all #MenuItems associated with a #MenuBar.
+    These callbacks are run by #MenuBar::process_shortcuts for all #MenuItems associated with a #MenuBar.
 
-   If an item has more than one shortcut, the first one is the default one that is shown on the drawn UI (for instance,
-   along the right side of a dropdown menu). Since each shortcut can only represent a single key (plus modifiers), it is
-   sometimes useful to associate multiple keyboard shortcuts with the same menu item (e.g. to allow zooming with the '+'
-   key on the number row of the keyboard, as well as the '+' on the number pad).
+    If an item has more than one shortcut, the first one is the default one that is shown on the drawn UI (for instance,
+    along the right side of a dropdown menu). Since each shortcut can only represent a single key (plus modifiers), it
+    is sometimes useful to associate multiple keyboard shortcuts with the same menu item (e.g. to allow zooming with the
+    '+' key on the number row of the keyboard, as well as the '+' on the number pad).
 
-   These additional shortcuts are not currently visible directly in the UI. In the future, the plan is to also allow the
-   drawn UI to display alternate shortcuts based on what modifiers are currently being pressed (e.g. show "Close" when
-   only the command key is pressed, but "Close all" when the shift key is also pressed).
+    These additional shortcuts are not currently visible directly in the UI. In the future, the plan is to also allow
+    the drawn UI to display alternate shortcuts based on what modifiers are currently being pressed (e.g. show "Close"
+    when only the command key is pressed, but "Close all" when the shift key is also pressed).
 */
 class MenuItem : public Button
 {
@@ -55,8 +54,9 @@ public:
     MenuItem(Widget *parent, const std::string &caption = "Untitled", int button_icon = 0,
              const std::vector<Shortcut> &s = {{0, 0}});
 
-    size_t          num_shortcuts() const { return m_shortcuts.size(); }
-    const Shortcut &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
+    size_t                       num_shortcuts() const { return m_shortcuts.size(); }
+    const Shortcut              &shortcut(size_t i = 0) const { return m_shortcuts.at(i); }
+    const std::vector<Shortcut> &shortcuts() const { return m_shortcuts; }
 
     bool mouse_enter_event(const Vector2i &p, bool enter) override;
 

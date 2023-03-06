@@ -105,11 +105,12 @@ private:
     Label              *m_stats_label        = nullptr;
     DualHDRColorPicker *m_color_btns         = nullptr;
 
-    VScrollPanel           *m_side_scroll_panel   = nullptr;
-    Widget                 *m_side_panel_contents = nullptr;
-    std::vector<Button *>   m_panel_btns;
-    std::vector<MenuItem *> m_menu_items; /// All menu items
-    std::vector<MenuItem *> m_edit_items; /// Menu items that are enabled iff we have an editable image
+    VScrollPanel                         *m_side_scroll_panel   = nullptr;
+    Widget                               *m_side_panel_contents = nullptr;
+    std::vector<Button *>                 m_panel_btns;
+    std::vector<MenuItem *>               m_menu_items;   /// All menu items
+    std::vector<std::vector<std::string>> m_menu_aliases; /// Alternate names for menu item commands
+    std::vector<MenuItem *>               m_edit_items;   /// Menu items that are enabled iff we have an editable image
 
     double m_gui_animation_start;
     bool   m_animation_running = false;
