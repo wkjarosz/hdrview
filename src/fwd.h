@@ -63,6 +63,8 @@ class Window;
 class HelpWindow;
 class Dialog;
 class SimpleDialog;
+class Command;
+class CommandPalette;
 template <typename Scalar>
 class FloatBox;
 

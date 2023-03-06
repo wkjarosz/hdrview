@@ -1618,7 +1618,17 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
 
         if (Shortcut{modifiers, key} == Shortcut{SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'P'})
         {
-            new CommandPalette{this, m_menu_items, m_menu_aliases};
+            vector<Command *> commands;
+            // create the commands from the aliases and
+            for (int i = 0; i < (int)m_menu_items.size(); ++i)
+            {
+                auto &item = m_menu_items[i];
+                if (item->enabled())
+                    commands.push_back(new Command{m_menu_aliases[i], item->icon(), item->flags(), item->callback(),
+                                                   item->change_callback(), item->pushed(), item->shortcuts(),
+                                                   item->tooltip()});
+            }
+            new CommandPalette{this, commands};
         }
     }
 

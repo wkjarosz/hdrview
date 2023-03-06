@@ -4,7 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 //
-// The part of the PaletteItem::draw function that performs the substring highlighting logic is adapted from ImGui
+// The part of the Command::draw function that performs the substring highlighting logic is adapted from ImGui
 // Command Palette, it's license follows.
 //
 // The MIT License (MIT)
@@ -65,7 +65,7 @@ bool alphabetical(const Widget *a, const Widget *b)
 
 } // namespace
 
-class CommandPalette::SortableList : public Widget
+class SortableList : public Widget
 {
 public:
     SortableList(Widget *parent) : Widget(parent) {}
@@ -77,24 +77,44 @@ public:
     }
 };
 
-class CommandPalette::PaletteItem : public MenuItem
+Command::Command(const vector<string> &aliases, int icon, int flags, const function<void()> &callback,
+                 const function<void(bool)> &change_callback, bool pushed, const vector<Shortcut> &shortcuts,
+                 const string &tooltip) :
+    MenuItem(nullptr, aliases.front(), icon, shortcuts),
+    aliases(aliases)
 {
-public:
-    PaletteItem(Widget *parent, const vector<string> &aliases, int button_icon = 0,
-                const vector<Shortcut> &s = {{0, 0}}) :
-        MenuItem(parent, aliases.front(), button_icon, s),
-        aliases(aliases)
+    spdlog::trace("creating item \"{}\"", fmt::join(aliases, ", "));
+
+    set_flags(flags);
+    set_tooltip(tooltip);
+    set_callback(
+        [this, callback]()
+        {
+            window()->dispose();
+            callback();
+        });
+    if (flags & Button::ToggleButton || flags & Button::RadioButton)
     {
-        // empty
+        set_pushed(pushed);
+        if (change_callback)
+        {
+            spdlog::trace("set_change_callback() on command {}", caption());
+            set_change_callback(
+                [this, change_callback](bool b)
+                {
+                    spdlog::trace("change_callback({}) on command", b);
+                    window()->dispose();
+                    return change_callback(b);
+                });
+        }
+        else
+        {
+            spdlog::error("No change_callback() on toggle or radio item {}", caption());
+        }
     }
+}
 
-    virtual void draw(NVGcontext *ctx) override;
-
-    vector<string> aliases;
-    vector<int>    matches;
-};
-
-void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
+void Command::draw(NVGcontext *ctx)
 {
     Widget::draw(ctx);
 
@@ -247,9 +267,7 @@ void CommandPalette::PaletteItem::draw(NVGcontext *ctx)
     nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, shortcut().text.c_str(), nullptr);
 }
 
-CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &commands,
-                               const vector<vector<string>> &aliases) :
-    Dialog(parent, "", false)
+CommandPalette::CommandPalette(Widget *parent, const std::vector<Command *> &commands) : Dialog(parent, "", false)
 {
     auto menu_theme                             = new Theme(screen()->nvg_context());
     menu_theme->m_standard_font_size            = 16;
@@ -313,22 +331,33 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
 
     spdlog::debug("creating command list");
 
-    m_commands.push_back(new PaletteItem{m_commandlist, {"No matching commands"}});
-    m_commands.back()->set_enabled(false);
-    m_commands.back()->set_visible(false);
+    auto no_matching_command = new Command{m_commandlist, {"No matching commands"}};
+    no_matching_command->set_enabled(false);
+    no_matching_command->set_visible(false);
 
-    if (commands.size() != aliases.size())
-        spdlog::critical("commands size ({}) and aliases size ({}) do not match.", commands.size(), aliases.size());
-
-    for (int i = 0; i < (int)commands.size(); ++i) add_command(commands[i], aliases[i]);
+    // add all the commands
+    for (auto &c : commands)
+    {
+        c->set_highlight_callback(
+            [this, c](bool b)
+            {
+                if (b)
+                {
+                    m_current = m_commandlist->child_index(c);
+                    scroll_to_ensure_visible(m_current);
+                }
+            });
+        m_commandlist->add_child(c);
+    }
 
     m_search_box->set_temporary_callback(
-        [this](const string &pattern)
+        [this, no_matching_command](const string &pattern)
         {
-            bool                               none_found = true;
-            std::map<const PaletteItem *, int> scores;
-            for (auto &entry : m_commands)
+            bool                           none_found = true;
+            std::map<const Command *, int> scores;
+            for (auto &child : m_commandlist->children())
             {
+                auto entry = dynamic_cast<Command *>(child);
                 if (pattern.empty())
                 {
                     entry->matches.resize(0);
@@ -393,8 +422,8 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
 
             auto by_score = [&scores](const Widget *a, const Widget *b)
             {
-                auto ia = dynamic_cast<const CommandPalette::PaletteItem *>(a);
-                auto ib = dynamic_cast<const CommandPalette::PaletteItem *>(b);
+                auto ia = dynamic_cast<const Command *>(a);
+                auto ib = dynamic_cast<const Command *>(b);
 
                 // score-based if the scores are different, otherwise alphabetical by caption
                 return (scores[ia] != scores[ib]) ? scores[ia] > scores[ib] : ia->caption() < ib->caption();
@@ -405,7 +434,7 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<MenuItem *> &co
             else
                 m_commandlist->sort(by_score);
 
-            m_commandlist->child_at(0)->set_visible(none_found && !pattern.empty());
+            no_matching_command->set_visible(none_found && !pattern.empty());
 
             perform_layout(screen()->nvg_context());
 
@@ -434,7 +463,7 @@ void CommandPalette::scroll_to_ensure_visible(int idx)
     if (idx >= m_commandlist->child_count())
         return;
 
-    auto item = dynamic_cast<PaletteItem *>(m_commandlist->child_at(idx));
+    auto item = dynamic_cast<Command *>(m_commandlist->child_at(idx));
 
     // compute visible range
     int visible_top    = -m_commandlist->position().y();
@@ -464,65 +493,11 @@ void CommandPalette::scroll_to_ensure_visible(int idx)
     }
 }
 
-void CommandPalette::add_command(const vector<string> &aliases, int icon, int flags, const function<void()> &callback,
-                                 const function<void(bool)> &change_callback, bool pushed,
-                                 const vector<Shortcut> &shortcuts, const string &tooltip)
-{
-    spdlog::trace("adding item \"{}\"", fmt::join(aliases, ", "));
-
-    auto item = new PaletteItem{m_commandlist, aliases, icon, shortcuts};
-    item->set_flags(flags);
-    item->set_tooltip(tooltip);
-    item->set_callback(
-        [callback, this]()
-        {
-            dispose();
-            callback();
-        });
-    if (flags & Button::ToggleButton || flags & Button::RadioButton)
-    {
-        item->set_pushed(pushed);
-        if (change_callback)
-        {
-            spdlog::trace("set_change_callback() on command {}", item->caption());
-            item->set_change_callback(
-                [this, change_callback](bool b)
-                {
-                    spdlog::trace("change_callback({}) on command", b);
-                    dispose();
-                    return change_callback(b);
-                });
-        }
-        else
-        {
-            spdlog::error("No change_callback() on toggle or radio item {}", item->caption());
-        }
-    }
-    item->set_highlight_callback(
-        [this, item](bool b)
-        {
-            if (b)
-            {
-                m_current = m_commandlist->child_index(item);
-                scroll_to_ensure_visible(m_current);
-            }
-        });
-
-    m_commands.push_back(item);
-}
-
-void CommandPalette::add_command(const MenuItem *orig, const vector<string> &aliases)
-{
-    if (orig->enabled())
-        add_command(aliases, orig->icon(), orig->flags(), orig->callback(), orig->change_callback(), orig->pushed(),
-                    orig->shortcuts(), orig->tooltip());
-}
-
 void CommandPalette::highlight_first_item()
 {
     m_current = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward);
     if (m_current >= 0 && m_current < m_commandlist->child_count())
-        dynamic_cast<PaletteItem *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
+        dynamic_cast<Command *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
 }
 
 void CommandPalette::update_geometry()
@@ -538,7 +513,7 @@ void CommandPalette::update_geometry()
 
     // vscroll needs to be wide enough for the commandlist and the last widget which contains keyboard navigation help
     int           min_vscroll_w = std::max(commandlist_size.x(), child_at(child_count() - 1)->preferred_size(ctx).x());
-    constexpr int max_vscroll_w = 900;
+    constexpr int max_vscroll_w = 500;
     int           max_vscroll_h = std::max(60, screen_size.y() - window_top - vscroll_to_window.y() - 50);
     constexpr int margin_w      = 60;
 
@@ -633,7 +608,7 @@ bool CommandPalette::keyboard_event(int key, int scancode, int action, int modif
             }
             else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
             {
-                auto item = dynamic_cast<PaletteItem *>(m_commandlist->child_at(m_current));
+                auto item = dynamic_cast<Command *>(m_commandlist->child_at(m_current));
                 if (item->flags() & Button::NormalButton)
                 {
                     if (item->callback())
