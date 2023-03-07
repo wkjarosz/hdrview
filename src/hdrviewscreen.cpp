@@ -731,6 +731,26 @@ void HDRViewScreen::create_menubar()
 
     menu = m_menubar->add_menu("View");
 
+    add_item(
+        {"Command palette..."}, FA_BARS,
+        [this]
+        {
+            vector<Command *> commands;
+            // create the commands from the aliases and
+            for (int i = 0; i < (int)m_menu_items.size(); ++i)
+            {
+                auto &item = m_menu_items[i];
+                if (item->enabled())
+                    commands.push_back(new Command{m_menu_aliases[i], item->icon(), item->flags(), item->callback(),
+                                                   item->change_callback(), item->pushed(), item->shortcuts(),
+                                                   item->tooltip()});
+            }
+            new CommandPalette{this, commands};
+        },
+        {{SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'P'}}, false);
+
+    menu->popup()->add<Separator>();
+
     add_item({"Show top toolbar", "Hide top toolbar"}, 0, nullptr, {{0, 'T'}}, false);
     auto show_top_panel = m_menu_items.back();
 
@@ -1558,8 +1578,6 @@ void HDRViewScreen::show_help_window()
 
     for (auto t : m_tools) t->add_shortcuts(help);
 
-    m_menubar->add_shortcuts(help);
-
     help->center();
 
     auto close_button = new Button{help->button_panel(), "", FA_TIMES};
@@ -1614,21 +1632,6 @@ bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifi
                 return true;
             }
             return true;
-        }
-
-        if (Shortcut{modifiers, key} == Shortcut{SYSTEM_COMMAND_MOD | GLFW_MOD_SHIFT, 'P'})
-        {
-            vector<Command *> commands;
-            // create the commands from the aliases and
-            for (int i = 0; i < (int)m_menu_items.size(); ++i)
-            {
-                auto &item = m_menu_items[i];
-                if (item->enabled())
-                    commands.push_back(new Command{m_menu_aliases[i], item->icon(), item->flags(), item->callback(),
-                                                   item->change_callback(), item->pushed(), item->shortcuts(),
-                                                   item->tooltip()});
-            }
-            new CommandPalette{this, commands};
         }
     }
 

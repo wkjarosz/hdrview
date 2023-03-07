@@ -743,30 +743,6 @@ bool MenuBar::process_shortcuts(int modifiers, int key)
     return false;
 }
 
-void MenuBar::add_shortcuts(HelpWindow *w)
-{
-    for (auto c : children())
-        if (auto menu = dynamic_cast<Dropdown *>(c))
-        {
-            for (auto c2 : menu->popup()->children())
-            {
-                if (auto sep = dynamic_cast<Separator *>(c2))
-                    if (!sep->visible())
-                        w->add_separator(menu->caption());
-                if (auto item = dynamic_cast<MenuItem *>(c2))
-                {
-                    // document the keyboard shortcut only if it is not visible in the menu
-                    if (item->shortcut().text.size() && !item->visible())
-                        w->add_shortcut(menu->caption(), item->shortcut().text, item->caption());
-
-                    // any additional shortcuts are not visible, so document them if they exist
-                    for (size_t i = 1; i < item->num_shortcuts(); ++i)
-                        w->add_shortcut(menu->caption(), item->shortcut(i).text, item->caption());
-                }
-            }
-        }
-}
-
 PopupWrapper::PopupWrapper(Widget *parent, PopupMenu *menu) : Widget(parent), m_right_click_menu(menu)
 {
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));

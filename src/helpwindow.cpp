@@ -122,9 +122,23 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     m_key_bindings = new Widget(side_scroll_panel);
     m_key_bindings->set_layout(new GroupLayout(20, 6));
 
+    add_text(m_key_bindings, Shortcut::key_string("The main keyboard shortcut to remember is {CMD}+Shift+P."),
+             "sans-bold", 16)
+        ->set_fixed_width(fwidth);
+
     add_text(m_key_bindings,
-             "Most keyboard shortcuts are listed alongside the items in the menu bar. Additionally, the following "
-             "keyboard shortcuts are defined for actions not listed in the menu bar:\n\n",
+             "This opens the command palette, which lists every available HDRView command along with its keyboard "
+             "shortcuts (if any).",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
+
+    add_text(m_key_bindings, "Many commands and their keyboard shortcuts are also listed in the menu bar.\n\n", "sans",
+             16)
+        ->set_fixed_width(fwidth);
+
+    add_text(m_key_bindings,
+             "The following additional keyboard shortcuts are defined for actions not listed in the menu bar or "
+             "command palette:\n",
              "sans", 16)
         ->set_fixed_width(fwidth);
 

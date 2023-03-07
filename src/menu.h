@@ -184,7 +184,6 @@ public:
     MenuItem *find_item(const std::vector<std::string> &menu_path, bool throw_on_fail = true) const;
 
     bool process_shortcuts(int modifiers, int key);
-    void add_shortcuts(HelpWindow *w);
 
     virtual bool mouse_motion_event(const Vector2i &p, const Vector2i &rel, int button, int modifiers) override;
 };
