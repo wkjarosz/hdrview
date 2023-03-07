@@ -9,6 +9,7 @@
 #include "fwd.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
+#include "well.h"
 #include <nanogui/nanogui.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>
@@ -102,7 +103,9 @@ private:
     Label              *m_ruler_info_label   = nullptr;
     Label              *m_pixel_info_label   = nullptr;
     Label              *m_roi_info_label     = nullptr;
-    Label              *m_stats_label        = nullptr;
+    AlignedLabel       *m_stats_label1       = nullptr;
+    AlignedLabel       *m_stats_label2       = nullptr;
+    AlignedLabel       *m_stats_label3       = nullptr;
     DualHDRColorPicker *m_color_btns         = nullptr;
 
     VScrollPanel                         *m_side_scroll_panel   = nullptr;

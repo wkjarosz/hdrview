@@ -184,75 +184,102 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
 
     {
         auto info_panel = new Well(m_side_panel_contents, 1, Color(150, 32), Color(0, 50));
-        info_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 5));
+        info_panel->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 10, 15));
 
         auto row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
         auto tb = new ToolButton(row, FA_EYE_DROPPER);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new Label(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
-        m_color32_info_label = new Label(row, "");
-        m_color32_info_label->set_fixed_width(50 + 24 + 5);
-        m_color8_info_label = new Label(row, "");
-        m_color8_info_label->set_fixed_width(50);
+        (new AlignedLabel(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+        m_color32_info_label = new AlignedLabel(row, "");
+        m_color32_info_label->set_fixed_width(50);
 
-        // spacer
-        (new Widget(info_panel))->set_fixed_height(5);
+        (new Widget(row))->set_fixed_width(10);
+
+        m_color8_info_label = new AlignedLabel(row, "");
+        m_color8_info_label->set_fixed_width(40);
 
         row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
         tb = new ToolButton(row, FA_CROSSHAIRS);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new Label(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
-        m_pixel_info_label = new Label(row, "");
-        m_pixel_info_label->set_fixed_width(50);
+        (new AlignedLabel(row, "X:\nY:", "sans-bold"))->set_fixed_width(15);
+        m_pixel_info_label = new AlignedLabel(row, "");
+        m_pixel_info_label->set_fixed_width(40);
+
+        (new Widget(row))->set_fixed_width(10);
 
         tb = new ToolButton(row, FA_EXPAND);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new Label(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
-        m_roi_info_label = new Label(row, "");
-        m_roi_info_label->set_fixed_width(50);
-
-        // spacer
-        (new Widget(info_panel))->set_fixed_height(5);
+        (new AlignedLabel(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
+        m_roi_info_label = new AlignedLabel(row, "");
+        m_roi_info_label->set_fixed_width(40);
 
         row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
         tb = new ToolButton(row, FA_PERCENTAGE);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new Label(row, "Min:\nAvg:\nMax:", "sans-bold"))->set_fixed_width(30);
-        m_stats_label = new Label(row, "");
-        m_stats_label->set_fixed_width(130);
+        auto column = new Widget(row);
+        column->set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 
-        // spacer
-        (new Widget(info_panel))->set_fixed_height(5);
+        (new AlignedLabel(column, "Minumum", "sans-bold"));
+
+        auto sub_row = new Widget(column);
+        sub_row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+
+        (new AlignedLabel(sub_row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+        m_stats_label1 = new AlignedLabel(sub_row, "");
+        m_stats_label1->set_alignment(AlignedLabel::Alignment::Right);
+        m_stats_label1->set_fixed_width(80);
+
+        (new Widget(column))->set_fixed_height(5); // spacer
+        (new AlignedLabel(column, "Average", "sans-bold"));
+
+        sub_row = new Widget(column);
+        sub_row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+
+        (new AlignedLabel(sub_row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+        m_stats_label2 = new AlignedLabel(sub_row, "");
+        m_stats_label2->set_alignment(AlignedLabel::Alignment::Right);
+        m_stats_label2->set_fixed_width(80);
+
+        (new Widget(column))->set_fixed_height(5); // spacer
+        (new AlignedLabel(column, "Maximum", "sans-bold"));
+
+        sub_row = new Widget(column);
+        sub_row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
+
+        (new AlignedLabel(sub_row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
+        m_stats_label3 = new AlignedLabel(sub_row, "");
+        m_stats_label3->set_alignment(AlignedLabel::Alignment::Right);
+        m_stats_label3->set_fixed_width(80);
 
         row = new Widget(info_panel);
-        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 5));
+        row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
 
         tb = new ToolButton(row, FA_RULER);
         tb->set_theme(flat_theme);
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new Label(row, "°:\nΔ:", "sans-bold"))->set_fixed_width(20);
-        m_ruler_info_label = new Label(row, "");
-        m_ruler_info_label->set_fixed_width(50);
+        (new AlignedLabel(row, "°:\nΔ:", "sans-bold"))->set_fixed_width(15);
+        m_ruler_info_label = new AlignedLabel(row, "");
+        m_ruler_info_label->set_fixed_width(80);
 
         info_panel->set_fixed_height(4);
         panels.push_back(info_panel);
@@ -494,7 +521,9 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
             }
             else
             {
-                m_stats_label->set_caption("");
+                m_stats_label1->set_caption("");
+                m_stats_label2->set_caption("");
+                m_stats_label3->set_caption("");
             }
         });
 
@@ -1937,11 +1966,22 @@ void HDRViewScreen::draw_contents()
         if (!img->is_null() && img->histograms() && img->histograms()->ready() && img->histograms()->get())
         {
             auto lazy_hist = img->histograms();
-            m_stats_label->set_caption(fmt::format("{:3.3g}\n{:3.3g}\n{:3.3g}", lazy_hist->get()->minimum,
-                                                   lazy_hist->get()->average, lazy_hist->get()->maximum));
+            m_stats_label1->set_caption(fmt::format("{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}",
+                                                    lazy_hist->get()->minimum[0], lazy_hist->get()->minimum[1],
+                                                    lazy_hist->get()->minimum[2], lazy_hist->get()->minimum[3]));
+            m_stats_label2->set_caption(fmt::format("{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}",
+                                                    lazy_hist->get()->average[0], lazy_hist->get()->average[1],
+                                                    lazy_hist->get()->average[2], lazy_hist->get()->average[3]));
+            m_stats_label3->set_caption(fmt::format("{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}",
+                                                    lazy_hist->get()->maximum[0], lazy_hist->get()->maximum[1],
+                                                    lazy_hist->get()->maximum[2], lazy_hist->get()->maximum[3]));
         }
         else
-            m_stats_label->set_caption("");
+        {
+            m_stats_label1->set_caption("");
+            m_stats_label2->set_caption("");
+            m_stats_label3->set_caption("");
+        }
 
         m_roi_info_label->set_caption(
             img->roi().has_volume() ? fmt::format("{: 4d}\n{: 4d}", img->roi().size().x(), img->roi().size().y()) : "");

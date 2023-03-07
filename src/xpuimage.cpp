@@ -23,52 +23,48 @@ using namespace std;
 shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &img, float exposure,
                                                                 AtomicProgress &prog)
 {
-    static const int numBins  = 256;
-    static const int numTicks = 8;
+    static const int num_bins  = 256;
+    static const int num_ticks = 8;
 
     try
     {
-        auto  ret        = make_shared<ImageStatistics>();
-        float displayMax = pow(2.f, -exposure);
+        auto  ret         = make_shared<ImageStatistics>();
+        float display_max = pow(2.f, -exposure);
 
         for (int i = 0; i < ENumAxisScales; ++i)
         {
-            ret->histogram[i].values[0] = vector<float>(numBins, 0);
-            ret->histogram[i].values[1] = vector<float>(numBins, 0);
-            ret->histogram[i].values[2] = vector<float>(numBins, 0);
+            ret->histogram[i].values[0] = vector<float>(num_bins, 0);
+            ret->histogram[i].values[1] = vector<float>(num_bins, 0);
+            ret->histogram[i].values[2] = vector<float>(num_bins, 0);
         }
 
-        ret->exposure = exposure;
-        ret->average  = 0;
-
-        ret->maximum = img.max().Color3::max();
-        ret->minimum = img.min().Color3::min();
-
         Color4 gain(pow(2.f, exposure), 1.f);
-        float  d = 1.f / (img.width() * img.height());
+        ret->exposure = exposure;
+        ret->maximum  = gain * img.max();
+        ret->minimum  = gain * img.min();
+        ret->average  = gain * img.mean();
+
+        float d = 1.f / (img.width() * img.height());
 
         for (int i = 0; i < img.size(); ++i)
         {
             if (prog.canceled())
                 throw std::exception();
 
-            ret->average += img(i)[0] + img(i)[1] + img(i)[2];
             Color4 val = gain * img(i);
 
             for (int c = 0; c < 3; ++c)
             {
-                ret->histogram[ELinear].values[c][::clamp(int(floor(val[c] * numBins)), 0, numBins - 1)] += d;
-                ret->histogram[ESRGB].values[c][::clamp(int(floor(LinearToSRGB(val[c]) * numBins)), 0, numBins - 1)] +=
-                    d;
+                ret->histogram[ELinear].values[c][::clamp(int(floor(val[c] * num_bins)), 0, num_bins - 1)] += d;
+                ret->histogram[ESRGB]
+                    .values[c][::clamp(int(floor(LinearToSRGB(val[c]) * num_bins)), 0, num_bins - 1)] += d;
                 ret->histogram[ELog]
-                    .values[c][::clamp(int(floor(normalized_log_scale(val[c]) * numBins)), 0, numBins - 1)] += d;
+                    .values[c][::clamp(int(floor(normalized_log_scale(val[c]) * num_bins)), 0, num_bins - 1)] += d;
             }
         }
 
         if (prog.canceled())
             throw std::exception();
-
-        ret->average /= 3 * img.width() * img.height();
 
         // Normalize each histogram according to its 10th-largest bin
         for (int i = 0; i < ENumAxisScales; ++i)
@@ -97,7 +93,7 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
             throw std::exception();
 
         // create the tick marks
-        auto ticks                     = linspaced(numTicks + 1, 0.0f, 1.0f);
+        auto ticks                     = linspaced(num_ticks + 1, 0.0f, 1.0f);
         ret->histogram[ELinear].xTicks = ticks;
         ret->histogram[ESRGB].xTicks   = ticks;
         ret->histogram[ELog].xTicks    = ticks;
@@ -109,8 +105,8 @@ shared_ptr<ImageStatistics> ImageStatistics::compute_statistics(const HDRImage &
 
         // create the tick labels
         auto &hist = ret->histogram[ELinear];
-        hist.xTickLabels.resize(numTicks + 1);
-        for (int i = 0; i <= numTicks; ++i) hist.xTickLabels[i] = fmt::format("{:.3f}", displayMax * hist.xTicks[i]);
+        hist.xTickLabels.resize(num_ticks + 1);
+        for (int i = 0; i <= num_ticks; ++i) hist.xTickLabels[i] = fmt::format("{:.3f}", display_max * hist.xTicks[i]);
         ret->histogram[ESRGB].xTickLabels = ret->histogram[ELog].xTickLabels = hist.xTickLabels;
 
         return ret;

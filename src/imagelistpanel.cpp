@@ -616,9 +616,9 @@ void ImageListPanel::draw(NVGcontext *ctx)
         m_graph->set_yticks(yTicks);
 
         float gain = pow(2.f, m_image_view->exposure());
-        m_graph->set_left_header(fmt::format("{:.3f}", lazyHist->get()->minimum * gain));
-        m_graph->set_center_header(fmt::format("{:.3f}", lazyHist->get()->average * gain));
-        m_graph->set_right_header(fmt::format("{:.3f}", lazyHist->get()->maximum * gain));
+        m_graph->set_left_header(fmt::format("{:.3f}", lazyHist->get()->minimum.Color3::min() * gain));
+        m_graph->set_center_header(fmt::format("{:.3f}", lazyHist->get()->average.Color3::average() * gain));
+        m_graph->set_right_header(fmt::format("{:.3f}", lazyHist->get()->maximum.Color3::max() * gain));
         m_histogram_dirty = false;
     }
     enable_disable_buttons();

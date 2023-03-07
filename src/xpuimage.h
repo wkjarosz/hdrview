@@ -21,10 +21,10 @@
 
 struct ImageStatistics
 {
-    float minimum;
-    float average;
-    float maximum;
-    float exposure;
+    Color4 minimum;
+    Color4 average;
+    Color4 maximum;
+    float  exposure;
 
     enum AxisScale : int
     {
