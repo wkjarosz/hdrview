@@ -336,6 +336,27 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
     return false;
 }
 
+bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
+{
+    try
+    {
+        if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+        {
+            set_visible(false);
+            m_parent_window->request_focus();
+            return true;
+        }
+
+        return Popup::keyboard_event(key, scancode, action, modifiers);
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Caught an exception in PopupMenu::keyboard_event(): {}", e.what());
+    }
+
+    return false;
+}
+
 void PopupMenu::draw(NVGcontext *ctx)
 {
     if (!m_visible)
@@ -700,6 +721,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
 
             hovered_menu->set_pushed(true);
             hovered_menu->popup()->set_visible(true);
+            hovered_menu->popup()->request_focus();
         }
     }
 

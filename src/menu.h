@@ -101,6 +101,7 @@ public:
     /// Invoke the associated layout generator to properly place child widgets, if any
     virtual void perform_layout(NVGcontext *ctx) override { Widget::perform_layout(ctx); }
 
+    virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
     /// Draw the popup window
