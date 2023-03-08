@@ -196,9 +196,9 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
 
         (new AlignedLabel(row, "R:\nG:\nB:\nA:", "sans-bold"))->set_fixed_width(15);
         m_color32_info_label = new AlignedLabel(row, "");
-        m_color32_info_label->set_fixed_width(50);
+        m_color32_info_label->set_fixed_width(75);
 
-        (new Widget(row))->set_fixed_width(10);
+        (new Widget(row))->set_fixed_width(15);
 
         m_color8_info_label = new AlignedLabel(row, "");
         m_color8_info_label->set_fixed_width(40);
@@ -222,7 +222,7 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
         tb->set_enabled(false);
         tb->set_icon_extra_scale(1.5f);
 
-        (new AlignedLabel(row, "W:\nH:", "sans-bold"))->set_fixed_width(20);
+        (new AlignedLabel(row, "W:\nH:", "sans-bold"))->set_fixed_width(15);
         m_roi_info_label = new AlignedLabel(row, "");
         m_roi_info_label->set_fixed_width(40);
 
@@ -482,8 +482,8 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
                         pixel.x(), pixel.y(), color32[0], color32[1], color32[2], color32[3], (int)round(color8[0]),
                         (int)round(color8[1]), (int)round(color8[2]), (int)round(color8[3])));
 
-                    m_color32_info_label->set_caption(fmt::format("{: 6.3f}\n{: 6.3f}\n{: 6.3f}\n{: 6.3f}", color32[0],
-                                                                  color32[1], color32[2], color32[3]));
+                    m_color32_info_label->set_caption(fmt::format("{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}\n{: > 9.4f}",
+                                                                  color32[0], color32[1], color32[2], color32[3]));
 
                     m_color8_info_label->set_caption(fmt::format("{: >3d}\n{: >3d}\n{: >3d}\n{: >3d}",
                                                                  (int)round(color8[0]), (int)round(color8[1]),
