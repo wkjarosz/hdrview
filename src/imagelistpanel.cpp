@@ -1234,8 +1234,8 @@ void ImageListPanel::redo()
 
 std::string ImageListPanel::filter() const
 {
-    auto ret = m_filter->temporary_value().empty() ? m_filter->value() : m_filter->temporary_value();
-    spdlog::debug("Filter is: {}", ret);
+    auto ret = m_filter->committed() ? m_filter->value() : m_filter->temporary_value();
+    spdlog::debug("Filter is: \"{}\". It is {}committed", ret, m_filter->committed() ? "" : "not yet ");
     return ret;
 }
 

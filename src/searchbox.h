@@ -32,6 +32,8 @@ public:
         m_temporary_callback = callback;
     }
 
+    bool committed() { return m_committed; }
+
     virtual bool focus_event(bool focused) override;
     virtual bool keyboard_event(int key, int scancode, int action, int modifiers) override;
     virtual bool keyboard_character_event(unsigned int codepoint) override;
