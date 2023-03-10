@@ -42,10 +42,10 @@ protected:
     void update_geometry();
     void scroll_to_ensure_visible(int idx);
 
-    SearchBox          *m_search_box  = nullptr;
-    class SortableList *m_commandlist = nullptr;
-    VScrollPanel       *m_vscroll     = nullptr;
-    int                 m_current     = -1; ///< The currently selected item
+    SearchBox          *m_search_box      = nullptr;
+    class SortableList *m_commandlist     = nullptr;
+    VScrollPanel       *m_vscroll         = nullptr;
+    int                 m_highlighted_idx = -1; ///< The index of the currently hovered/highlighted item
 };
 
 NAMESPACE_END(nanogui)

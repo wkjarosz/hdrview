@@ -6,6 +6,7 @@
 
 #include "menu.h"
 #include "helpwindow.h"
+#include "widgetutils.h"
 #include <cassert>
 #include <nanogui/button.h>
 #include <nanogui/icons.h>
@@ -37,6 +38,12 @@ static const string ALT = "Opt";
 #else
 static const string ALT = "Alt";
 #endif
+
+namespace
+{
+constexpr int menu_item_height = 20;
+constexpr int seperator_height = 8;
+} // namespace
 
 string Shortcut::key_string(const string &text)
 {
@@ -100,7 +107,7 @@ NAMESPACE_BEGIN(nanogui)
 MenuItem::MenuItem(Widget *parent, const std::string &caption, int button_icon, const std::vector<Shortcut> &s) :
     Button(parent, caption, button_icon), m_shortcuts(s)
 {
-    set_fixed_height(PopupMenu::menu_item_height);
+    set_fixed_height(menu_item_height);
     m_icon_position = IconPosition::Left;
 }
 
@@ -130,6 +137,8 @@ Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
 
 void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run_callbacks)
 {
+    spdlog::trace("MenuItem::set_highlighted({}, {}, {}) for \"{}\"; m_highlighted = {}", highlight, unhighlight_others,
+                  run_callbacks, caption(), m_highlighted);
     if (highlight == m_highlighted || !m_enabled)
         return;
 
@@ -268,7 +277,7 @@ void MenuItem::draw(NVGcontext *ctx)
 Separator::Separator(Widget *parent) : MenuItem(parent, "")
 {
     set_enabled(false);
-    set_fixed_height(PopupMenu::seperator_height);
+    set_fixed_height(seperator_height);
 }
 
 void Separator::draw(NVGcontext *ctx)
@@ -284,7 +293,8 @@ void Separator::draw(NVGcontext *ctx)
     nvgStroke(ctx);
 }
 
-PopupMenu::PopupMenu(Widget *parent, Window *parent_window) : Popup(parent, parent_window)
+PopupMenu::PopupMenu(Widget *parent, Window *parent_window, bool exclusive) :
+    Popup(parent, parent_window), m_exclusive(exclusive)
 {
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 3));
     set_visible(false);
@@ -312,6 +322,70 @@ PopupMenu::PopupMenu(Widget *parent, Window *parent_window) : Popup(parent, pare
     set_theme(flat_theme);
 }
 
+MenuItem *PopupMenu::item(int idx) const
+{
+    if (0 > idx || idx >= child_count())
+        throw runtime_error(
+            fmt::format("Trying to access invalid index {} on a PopupMenu with {} items.", idx, child_count()));
+
+    return (MenuItem *)child_at(idx);
+}
+
+void PopupMenu::set_items(const vector<string> &items, const vector<int> &icons, bool exclusive)
+{
+    m_exclusive = exclusive;
+    // remove all children
+    while (child_count() != 0) remove_child_at(child_count() - 1);
+
+    for (int index = 0; index < (int)items.size(); ++index)
+    {
+        auto caption = items[index];
+        auto icon    = icons.size() == items.size() ? icons[index] : 0;
+        auto item    = new MenuItem{this, caption, icon};
+        item->set_flags(exclusive ? Button::RadioButton : Button::NormalButton);
+        item->set_highlight_callback(
+            [this, item](bool b)
+            {
+                spdlog::trace("set_items highlight_callback({}), {}", b, child_index(item));
+                if (b)
+                    set_highlighted_index(child_index(item));
+            });
+        item->set_callback(
+            [this, index]
+            {
+                set_selected_index(index);
+                if (m_selected_callback)
+                    m_selected_callback(index);
+            });
+    }
+}
+
+void PopupMenu::set_highlighted_index(int idx)
+{
+    spdlog::trace("PopupMenu::set_highlighted_index({}); m_highlighted_idx = {}", idx, m_highlighted_idx);
+
+    if (0 <= m_highlighted_idx && m_highlighted_idx < child_count())
+        item(m_highlighted_idx)->set_highlighted(false);
+    if (0 <= idx && idx < child_count())
+        item(idx)->set_highlighted(true);
+
+    m_highlighted_idx = idx;
+    spdlog::trace("PopupMenu::set_highlighted_index({}) end; m_highlighted_idx = {}", idx, m_highlighted_idx);
+}
+
+void PopupMenu::set_selected_index(int idx)
+{
+    spdlog::trace("PopupMenu::set_selected_index({})", idx);
+    if (!(m_exclusive && 0 <= idx && idx < child_count()))
+        return;
+
+    if (0 <= m_selected_idx && m_selected_idx < child_count())
+        item(m_selected_idx)->set_pushed(false);
+    item(idx)->set_pushed(true);
+
+    m_selected_idx = idx;
+}
+
 bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
     if (Popup::mouse_button_event(p, button, down, modifiers))
@@ -329,7 +403,10 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
             set_visible(false);
             m_parent_window->request_focus();
 
+            // remove mouse focus from all menu items
             for (auto it = m_children.begin(); it != m_children.end(); ++it) (*it)->mouse_enter_event(p, false);
+
+            set_highlighted_index(-1);
         }
         return true;
     }
@@ -344,7 +421,42 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
         {
             set_visible(false);
             m_parent_window->request_focus();
+            set_highlighted_index(-1);
             return true;
+        }
+
+        if (action == GLFW_PRESS || action == GLFW_REPEAT)
+        {
+            if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
+            {
+                m_highlighted_idx =
+                    next_visible_child(this, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true);
+                dynamic_cast<MenuItem *>(child_at(m_highlighted_idx))->set_highlighted(true, true, true);
+                return true;
+            }
+            else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
+            {
+                auto item = dynamic_cast<MenuItem *>(child_at(m_highlighted_idx));
+                // if (item->flags() & Button::NormalButton)
+                {
+                    if (item->callback())
+                        item->callback()();
+                }
+                if (!(item->flags() & Button::NormalButton))
+                {
+                    if (item->change_callback())
+                    {
+                        item->set_pushed(!item->pushed());
+                        item->change_callback()(item->pushed());
+                    }
+                }
+
+                set_visible(false);
+                m_parent_window->request_focus();
+                set_highlighted_index(-1);
+
+                return true;
+            }
         }
 
         return Popup::keyboard_event(key, scancode, action, modifiers);
@@ -395,25 +507,26 @@ void PopupMenu::draw(NVGcontext *ctx)
     Widget::draw(ctx);
 }
 
-Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) :
-    MenuItem(parent, caption), m_selected_index(0), m_mode(mode)
+Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) : MenuItem(parent, caption), m_mode(mode)
 {
     set_flags(Flags::ToggleButton);
 
-    m_popup = new PopupMenu(screen(), window());
+    m_popup = new PopupMenu(screen(), window(), m_mode == ComboBox);
     m_popup->set_visible(false);
 
     if (m_mode == Menu)
         set_fixed_size(preferred_size(screen()->nvg_context()));
 
-    set_fixed_height(PopupMenu::menu_item_height);
+    set_fixed_height(menu_item_height);
 }
 
 Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int> &icons, Mode mode,
                    const string &caption) :
     Dropdown(parent, mode, caption)
 {
-    set_items(items, icons);
+    m_popup->set_items(items, icons, m_mode == ComboBox);
+
+    set_selected_index(0);
 }
 
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
@@ -433,55 +546,34 @@ Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
         return MenuItem::preferred_size(ctx);
 }
 
-MenuItem *Dropdown::item(int idx) const
-{
-    if (idx >= (int)m_popup->child_count())
-        throw runtime_error(fmt::format("Trying to access invalid index {} on a menu with only {} items.", idx,
-                                        (int)m_popup->child_count()));
+// MenuItem *Dropdown::item(int idx) const
+// {
+//     if (idx >= (int)m_popup->child_count())
+//         throw runtime_error(fmt::format("Trying to access invalid index {} on a menu with only {} items.", idx,
+//                                         (int)m_popup->child_count()));
 
-    return (MenuItem *)m_popup->child_at(idx);
-}
+//     return (MenuItem *)m_popup->child_at(idx);
+// }
 
-void Dropdown::set_selected_index(int idx)
-{
-    if (m_mode != ComboBox || m_popup->child_count() <= idx)
-        return;
+// void Dropdown::set_selected_index(int idx)
+// {
+//     if (m_mode != ComboBox || m_popup->child_count() <= idx)
+//         return;
 
-    item(m_selected_index)->set_pushed(false);
-    item(idx)->set_pushed(true);
+//     item(m_selected_index)->set_pushed(false);
+//     item(idx)->set_pushed(true);
 
-    m_selected_index = idx;
-    set_caption(item(m_selected_index)->caption());
-}
-
-void Dropdown::set_items(const vector<string> &items, const vector<int> &icons)
-{
-    // remove all children
-    while (m_popup->child_count() != 0) m_popup->remove_child_at(m_popup->child_count() - 1);
-
-    for (int index = 0; index < (int)items.size(); ++index)
-    {
-        auto caption = items[index];
-        auto icon    = icons.size() == items.size() ? icons[index] : 0;
-        auto item    = m_popup->add<MenuItem>(caption, icon);
-        item->set_flags(m_mode == ComboBox ? Button::RadioButton : Button::NormalButton);
-        item->set_callback(
-            [&, index, this]
-            {
-                set_selected_index(index);
-                if (m_selected_callback)
-                    m_selected_callback(index);
-            });
-    }
-    set_selected_index(0);
-}
+//     m_selected_index = idx;
+//     // FIXME, need to move this elsewhere
+//     set_caption(item(m_selected_index)->caption());
+// }
 
 void Dropdown::update_popup_geometry() const
 {
     int      font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
     Vector2i offset;
     if (m_mode == ComboBox)
-        offset = Vector2i(-3 - font_size * icon_scale(), -m_selected_index * PopupMenu::menu_item_height - 4);
+        offset = Vector2i(-3 - font_size * icon_scale(), -selected_index() * menu_item_height - 4);
     else if (m_mode == Menu)
         offset = Vector2i(0, height() + 4);
     else
@@ -513,7 +605,7 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         // first turn focus off on all menu buttons
         for (auto it : m_popup->children()) it->mouse_enter_event(p - m_pos, false);
 
-        // now turn focus on to just the button under the cursor
+        // now turn focus on to just the item under the cursor
         if (auto w = m_popup->find_widget(screen()->mouse_pos() - m_popup->parent()->absolute_position()))
             w->mouse_enter_event(p + absolute_position() - w->absolute_position(), true);
 
@@ -718,6 +810,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
         {
             opened_menu->set_pushed(false);
             opened_menu->popup()->set_visible(false);
+            opened_menu->popup()->set_highlighted_index(-1);
 
             hovered_menu->set_pushed(true);
             hovered_menu->popup()->set_visible(true);

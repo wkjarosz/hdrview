@@ -95,8 +95,28 @@ public:
 class PopupMenu : public Popup
 {
 public:
-    /// Create a new popup parented to a screen (first argument) and a parent window (if applicable)
-    PopupMenu(Widget *parent, Window *parent_window = nullptr);
+    /// Create a new popup menu parented to a screen (first argument) and a parent window (if applicable)
+    PopupMenu(Widget *parent, Window *parent_window, bool exclusive);
+
+    /// Returns the idx-th item in the menu
+    MenuItem *item(int idx) const;
+
+    /// Sets the items for this menu, providing names and optionally icons for each item
+    void set_items(const std::vector<std::string> &items, const std::vector<int> &icons, bool exclusive = false);
+
+    void set_highlighted_index(int idx);
+
+    /// For PopupMenus with mutually exclusive items, returns the currently selected index.
+    int selected_index() const { return m_selected_idx; }
+
+    /// For PopupMenus with mutually exclusive items, set the selected index.
+    void set_selected_index(int idx);
+
+    /// The callback to execute when an item is selected.
+    std::function<void(int)> selected_callback() const { return m_selected_callback; }
+
+    /// Sets the callback to execute when an item is selected
+    void set_selected_callback(const std::function<void(int)> &callback) { m_selected_callback = callback; }
 
     /// Invoke the associated layout generator to properly place child widgets, if any
     virtual void perform_layout(NVGcontext *ctx) override { Widget::perform_layout(ctx); }
@@ -107,8 +127,11 @@ public:
     /// Draw the popup window
     virtual void draw(NVGcontext *ctx) override;
 
-    static constexpr int menu_item_height = 20;
-    static constexpr int seperator_height = 8;
+protected:
+    bool                     m_exclusive = false; ///< Whether the items are mutually exclusive
+    std::function<void(int)> m_selected_callback; ///< The callback to execute when an item is selected.
+    int m_selected_idx    = -1; ///< For mutually exclusive popups, the index of the currently selected item.
+    int m_highlighted_idx = -1; ///< The index of the currently hovered/highlighted item
 };
 
 /// A ComboBox or Menubar menu
@@ -133,42 +156,40 @@ public:
              Mode mode = ComboBox, const std::string &caption = "Untitled");
 
     /// The current index this Dropdown has selected.
-    int selected_index() const { return m_selected_index; }
+    int selected_index() const { return m_popup->selected_index(); }
 
     /// Sets the current index this Dropdown has selected.
-    void set_selected_index(int idx);
+    void set_selected_index(int idx)
+    {
+        m_popup->set_selected_index(idx);
+        set_caption(m_popup->item(selected_index())->caption());
+    }
 
     /// The callback to execute for this Dropdown.
-    std::function<void(int)> selected_callback() const { return m_selected_callback; }
+    std::function<void(int)> selected_callback() const { return m_popup->selected_callback(); }
 
     /// Sets the callback to execute for this Dropdown.
-    void set_selected_callback(const std::function<void(int)> &callback) { m_selected_callback = callback; }
+    void set_selected_callback(const std::function<void(int)> &callback)
+    {
+        m_popup->set_selected_callback(
+            [this, callback](int idx)
+            {
+                callback(idx);
+                set_caption(m_popup->item(selected_index())->caption());
+            });
+    }
 
     PopupMenu       *popup() { return m_popup; }
     const PopupMenu *popup() const { return m_popup; }
 
-    /// Sets the items for this Dropdown, providing names and optionally icons for each item
-    void set_items(const std::vector<std::string> &items, const std::vector<int> &icons = {});
-
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
-
-    virtual void draw(NVGcontext *ctx) override;
-
-    virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
-
-    /// Returns the idx-th item in the menu
-    MenuItem *item(int idx) const;
+    virtual void     draw(NVGcontext *ctx) override;
+    virtual bool     mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
 protected:
     void update_popup_geometry() const;
 
-    PopupMenu *m_popup;
-
-    /// The callback for this Dropdown.
-    std::function<void(int)> m_selected_callback;
-
-    /// The current index this Dropdown has selected.
-    int m_selected_index;
+    PopupMenu *m_popup = nullptr;
 
     Mode m_mode = ComboBox;
 };

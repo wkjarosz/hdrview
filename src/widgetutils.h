@@ -8,5 +8,5 @@
 
 #include "fwd.h"
 
-int next_visible_child(const nanogui::Widget *w, int index, EDirection direction);
+int next_visible_child(const nanogui::Widget *w, int index, EDirection direction, bool must_be_enabled = false);
 int nth_visible_child_index(const nanogui::Widget *w, int n);

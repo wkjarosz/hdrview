@@ -343,8 +343,10 @@ CommandPalette::CommandPalette(Widget *parent, const std::vector<Command *> &com
             {
                 if (b)
                 {
-                    m_current = m_commandlist->child_index(c);
-                    scroll_to_ensure_visible(m_current);
+                    // The items get dynamically sorted, so we can't count on the index order staying the same.
+                    // Instead, we check the current index of the item.
+                    m_highlighted_idx = m_commandlist->child_index(c);
+                    scroll_to_ensure_visible(m_highlighted_idx);
                 }
             });
         m_commandlist->add_child(c);
@@ -495,9 +497,9 @@ void CommandPalette::scroll_to_ensure_visible(int idx)
 
 void CommandPalette::highlight_first_item()
 {
-    m_current = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward);
-    if (m_current >= 0 && m_current < m_commandlist->child_count())
-        dynamic_cast<Command *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
+    m_highlighted_idx = next_visible_child(m_commandlist, m_commandlist->child_count() - 1, Forward, true);
+    if (m_highlighted_idx >= 0 && m_highlighted_idx < m_commandlist->child_count())
+        dynamic_cast<Command *>(m_commandlist->child_at(m_highlighted_idx))->set_highlighted(true, true, true);
 }
 
 void CommandPalette::update_geometry()
@@ -602,13 +604,14 @@ bool CommandPalette::keyboard_event(int key, int scancode, int action, int modif
         {
             if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
             {
-                m_current = next_visible_child(m_commandlist, m_current, key == GLFW_KEY_UP ? Backward : Forward);
-                dynamic_cast<MenuItem *>(m_commandlist->child_at(m_current))->set_highlighted(true, true, true);
+                m_highlighted_idx =
+                    next_visible_child(m_commandlist, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true);
+                dynamic_cast<MenuItem *>(m_commandlist->child_at(m_highlighted_idx))->set_highlighted(true, true, true);
                 return true;
             }
             else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
             {
-                auto item = dynamic_cast<Command *>(m_commandlist->child_at(m_current));
+                auto item = dynamic_cast<Command *>(m_commandlist->child_at(m_highlighted_idx));
                 if (item->flags() & Button::NormalButton)
                 {
                     if (item->callback())
