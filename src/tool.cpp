@@ -96,14 +96,6 @@ void Tool::create_menuitem(Dropdown *menu)
     m_menuitem->set_flags(Button::RadioButton);
     m_menuitem->set_tooltip(m_tooltip);
     m_menuitem->set_change_callback([this](bool b) { m_screen->set_tool((ETool)m_tool, b); });
-    m_menuitem->set_highlight_callback(
-        [this, menu](bool b)
-        {
-            spdlog::trace("Tool::create_menuitem highlight_callback({}), {}", b,
-                          menu->popup()->child_index(m_menuitem));
-            if (b)
-                menu->popup()->set_highlighted_index(menu->popup()->child_index(m_menuitem));
-        });
 }
 
 void Tool::update_width(int w)

@@ -91,13 +91,6 @@ ImageListPanel::ImageListPanel(Widget *parent, HDRViewScreen *screen, HDRImageVi
                     if (btn->selected_callback())
                         btn->selected_callback()(index);
                 });
-            // FIXME, this should really be consolidated into the Popup or dropdown class
-            i->set_highlight_callback(
-                [i, btn](bool b)
-                {
-                    if (b)
-                        btn->popup()->set_highlighted_index(btn->popup()->child_index(i));
-                });
         };
 
         m_blend_modes = new Dropdown(grid);

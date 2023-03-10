@@ -101,9 +101,6 @@ public:
     /// Returns the idx-th item in the menu
     MenuItem *item(int idx) const;
 
-    /// Sets the items for this menu, providing names and optionally icons for each item
-    void set_items(const std::vector<std::string> &items, const std::vector<int> &icons, bool exclusive = false);
-
     void set_highlighted_index(int idx);
 
     /// For PopupMenus with mutually exclusive items, returns the currently selected index.

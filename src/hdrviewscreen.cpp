@@ -578,14 +578,6 @@ void HDRViewScreen::create_menubar()
     {
         auto i = new MenuItem{menu->popup(), aliases.front(), icon, s};
         i->set_callback(cb);
-        // FIXME, this should really be consolidated into the Popup or dropdown class
-        i->set_highlight_callback(
-            [i, menu](bool b)
-            {
-                spdlog::trace("item highlight_callback({}), {}", b, menu->popup()->child_index(i));
-                if (b)
-                    menu->popup()->set_highlighted_index(menu->popup()->child_index(i));
-            });
         i->set_visible(visible);
         m_menu_items.push_back(i);
         // add the menu name as a prefix to the aliases

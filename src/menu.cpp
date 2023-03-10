@@ -145,8 +145,16 @@ void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run
     if (highlight)
     {
         m_highlighted = true;
-        if (run_callbacks && m_highlight_callback)
-            m_highlight_callback(true);
+        if (run_callbacks)
+        {
+            if (m_highlight_callback)
+                m_highlight_callback(true);
+            if (auto popup = dynamic_cast<PopupMenu *>(parent()))
+            {
+                spdlog::trace("parent is a popup");
+                popup->set_highlighted_index(popup->child_index(this));
+            }
+        }
 
         if (unhighlight_others)
             for (auto widget : parent()->children())
@@ -331,35 +339,6 @@ MenuItem *PopupMenu::item(int idx) const
     return (MenuItem *)child_at(idx);
 }
 
-void PopupMenu::set_items(const vector<string> &items, const vector<int> &icons, bool exclusive)
-{
-    m_exclusive = exclusive;
-    // remove all children
-    while (child_count() != 0) remove_child_at(child_count() - 1);
-
-    for (int index = 0; index < (int)items.size(); ++index)
-    {
-        auto caption = items[index];
-        auto icon    = icons.size() == items.size() ? icons[index] : 0;
-        auto item    = new MenuItem{this, caption, icon};
-        item->set_flags(exclusive ? Button::RadioButton : Button::NormalButton);
-        item->set_highlight_callback(
-            [this, item](bool b)
-            {
-                spdlog::trace("set_items highlight_callback({}), {}", b, child_index(item));
-                if (b)
-                    set_highlighted_index(child_index(item));
-            });
-        item->set_callback(
-            [this, index]
-            {
-                set_selected_index(index);
-                if (m_selected_callback)
-                    m_selected_callback(index);
-            });
-    }
-}
-
 void PopupMenu::set_highlighted_index(int idx)
 {
     spdlog::trace("PopupMenu::set_highlighted_index({}); m_highlighted_idx = {}", idx, m_highlighted_idx);
@@ -434,9 +413,13 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
                 dynamic_cast<MenuItem *>(child_at(m_highlighted_idx))->set_highlighted(true, true, true);
                 return true;
             }
-            else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER)
+            else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER || key == GLFW_KEY_SPACE)
             {
+                set_visible(false);
+                m_parent_window->request_focus();
+
                 auto item = dynamic_cast<MenuItem *>(child_at(m_highlighted_idx));
+                set_highlighted_index(-1);
                 // if (item->flags() & Button::NormalButton)
                 {
                     if (item->callback())
@@ -450,10 +433,6 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
                         item->change_callback()(item->pushed());
                     }
                 }
-
-                set_visible(false);
-                m_parent_window->request_focus();
-                set_highlighted_index(-1);
 
                 return true;
             }
@@ -524,7 +503,20 @@ Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int
                    const string &caption) :
     Dropdown(parent, mode, caption)
 {
-    m_popup->set_items(items, icons, m_mode == ComboBox);
+    for (int index = 0; index < (int)items.size(); ++index)
+    {
+        auto caption = items[index];
+        auto icon    = icons.size() == items.size() ? icons[index] : 0;
+        auto item    = new MenuItem{m_popup, caption, icon};
+        item->set_flags(m_mode == ComboBox ? Button::RadioButton : Button::NormalButton);
+        item->set_callback(
+            [this, index]
+            {
+                set_selected_index(index);
+                if (m_popup->selected_callback())
+                    m_popup->selected_callback()(index);
+            });
+    }
 
     set_selected_index(0);
 }
