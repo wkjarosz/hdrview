@@ -149,11 +149,6 @@ void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run
         {
             if (m_highlight_callback)
                 m_highlight_callback(true);
-            if (auto popup = dynamic_cast<PopupMenu *>(parent()))
-            {
-                spdlog::trace("parent is a popup");
-                popup->set_highlighted_index(popup->child_index(this));
-            }
         }
 
         if (unhighlight_others)
@@ -170,6 +165,9 @@ void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run
     }
     else
         m_highlighted = false;
+
+    if (auto popup = dynamic_cast<PopupMenu *>(parent()))
+        popup->set_highlighted_index(highlight ? popup->child_index(this) : -1);
 }
 
 bool MenuItem::mouse_enter_event(const Vector2i &p, bool enter)
@@ -177,8 +175,7 @@ bool MenuItem::mouse_enter_event(const Vector2i &p, bool enter)
     Button::mouse_enter_event(p, enter);
 
     // on mouse enter highlight the item and unhighlight all siblings
-    if (enter)
-        set_highlighted(true, true, true);
+    set_highlighted(enter, enter, enter);
     return true;
 }
 
@@ -301,13 +298,13 @@ void Separator::draw(NVGcontext *ctx)
     nvgStroke(ctx);
 }
 
-PopupMenu::PopupMenu(Widget *parent, Window *parent_window, bool exclusive) :
-    Popup(parent, parent_window), m_exclusive(exclusive)
+PopupMenu::PopupMenu(Screen *screen, Window *parent_window, MenuItem *parent_item, bool exclusive) :
+    Popup(screen, parent_window), m_parent_item(parent_item), m_exclusive(exclusive)
 {
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 3));
     set_visible(false);
 
-    auto flat_theme                             = new Theme(screen()->nvg_context());
+    auto flat_theme                             = new Theme(screen->nvg_context());
     flat_theme->m_standard_font_size            = 16;
     flat_theme->m_button_font_size              = 15;
     flat_theme->m_text_box_font_size            = 14;
@@ -333,8 +330,7 @@ PopupMenu::PopupMenu(Widget *parent, Window *parent_window, bool exclusive) :
 MenuItem *PopupMenu::item(int idx) const
 {
     if (0 > idx || idx >= child_count())
-        throw runtime_error(
-            fmt::format("Trying to access invalid index {} on a PopupMenu with {} items.", idx, child_count()));
+        return nullptr;
 
     return (MenuItem *)child_at(idx);
 }
@@ -343,10 +339,10 @@ void PopupMenu::set_highlighted_index(int idx)
 {
     spdlog::trace("PopupMenu::set_highlighted_index({}); m_highlighted_idx = {}", idx, m_highlighted_idx);
 
-    if (0 <= m_highlighted_idx && m_highlighted_idx < child_count())
-        item(m_highlighted_idx)->set_highlighted(false);
-    if (0 <= idx && idx < child_count())
-        item(idx)->set_highlighted(true);
+    if (auto i = item(m_highlighted_idx))
+        i->set_highlighted(false);
+    if (auto i = item(idx))
+        i->set_highlighted(true);
 
     m_highlighted_idx = idx;
     spdlog::trace("PopupMenu::set_highlighted_index({}) end; m_highlighted_idx = {}", idx, m_highlighted_idx);
@@ -355,12 +351,13 @@ void PopupMenu::set_highlighted_index(int idx)
 void PopupMenu::set_selected_index(int idx)
 {
     spdlog::trace("PopupMenu::set_selected_index({})", idx);
-    if (!(m_exclusive && 0 <= idx && idx < child_count()))
+    if (!m_exclusive)
         return;
 
-    if (0 <= m_selected_idx && m_selected_idx < child_count())
-        item(m_selected_idx)->set_pushed(false);
-    item(idx)->set_pushed(true);
+    if (auto i = item(m_selected_idx))
+        i->set_pushed(false);
+    if (auto i = item(idx))
+        i->set_pushed(true);
 
     m_selected_idx = idx;
 }
@@ -396,49 +393,98 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
 {
     try
     {
-        if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE)
+        spdlog::trace("PopupMenu::keyboard_event({}, {}, {}, {})", key, scancode, action, modifiers);
+        if (visible() && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
-            set_visible(false);
-            m_parent_window->request_focus();
-            set_highlighted_index(-1);
-            return true;
-        }
-
-        if (action == GLFW_PRESS || action == GLFW_REPEAT)
-        {
-            if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
+            if (key == GLFW_KEY_ESCAPE)
             {
-                m_highlighted_idx =
-                    next_visible_child(this, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true);
-                dynamic_cast<MenuItem *>(child_at(m_highlighted_idx))->set_highlighted(true, true, true);
+                set_visible(false);
+                m_parent_window->request_focus();
+                set_highlighted_index(-1);
+
+                // deselect/dehighlight the parent item
+                if (m_parent_item)
+                {
+                    if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
+                    {
+                        spdlog::info("deselecting it!");
+                        m_parent_item->set_pushed(false);
+                        m_parent_item->set_highlighted(false);
+                    }
+                }
                 return true;
             }
             else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER || key == GLFW_KEY_SPACE)
             {
                 set_visible(false);
                 m_parent_window->request_focus();
-
-                auto item = dynamic_cast<MenuItem *>(child_at(m_highlighted_idx));
+                auto idx_backup = m_highlighted_idx;
                 set_highlighted_index(-1);
-                // if (item->flags() & Button::NormalButton)
+
+                // deselect/dehighlight the parent item
+                if (m_parent_item)
                 {
-                    if (item->callback())
-                        item->callback()();
-                }
-                if (!(item->flags() & Button::NormalButton))
-                {
-                    if (item->change_callback())
+                    if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
                     {
-                        item->set_pushed(!item->pushed());
-                        item->change_callback()(item->pushed());
+                        spdlog::info("deselecting it!");
+                        m_parent_item->set_pushed(false);
+                        m_parent_item->set_highlighted(false);
+                    }
+                }
+
+                if (auto i = item(idx_backup))
+                {
+                    if (i->callback())
+                        i->callback()();
+                    if (!(i->flags() & Button::NormalButton) && i->change_callback())
+                    {
+                        i->set_pushed(!i->pushed());
+                        i->change_callback()(i->pushed());
                     }
                 }
 
                 return true;
             }
+            else if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
+            {
+                m_highlighted_idx =
+                    next_visible_child(this, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true);
+                dynamic_cast<MenuItem *>(child_at(m_highlighted_idx))->set_highlighted(true, true, true);
+                return true;
+            }
+            else if ((key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT) && m_parent_item)
+            {
+                if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
+                {
+                    m_parent_item->set_pushed(false);
+                    set_visible(false);
+                    set_highlighted_index(-1);
+
+                    int our_idx = menubar->child_index(m_parent_item);
+                    int sibling_idx =
+                        next_visible_child(menubar, our_idx, key == GLFW_KEY_LEFT ? Backward : Forward, true);
+
+                    spdlog::info("our_idx: {}; sibling_idx: {}", our_idx, sibling_idx);
+                    if (auto sibling_dropdown = dynamic_cast<Dropdown *>(menubar->child_at(sibling_idx)))
+                    {
+                        sibling_dropdown->set_pushed(true);
+                        sibling_dropdown->popup()->set_visible(true);
+                        sibling_dropdown->popup()->request_focus();
+                        sibling_dropdown->set_highlighted(true, true, true);
+
+                        return true;
+                    }
+                    else
+                    {
+                        spdlog::info("failed");
+                    }
+
+                    return false;
+                }
+            }
         }
 
-        return Popup::keyboard_event(key, scancode, action, modifiers);
+        return false;
     }
     catch (const std::exception &e)
     {
@@ -448,8 +494,42 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
     return false;
 }
 
+// void PopupMenu::refresh_relative_placement()
+// {
+//     if (!m_parent_window)
+//         return;
+
+//     m_parent_window->refresh_relative_placement();
+//     m_visible &= m_parent_window->visible_recursive();
+//     m_pos = m_parent_window->position() + m_anchor_pos - Vector2i(0, m_anchor_offset);
+
+//     int      font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
+//     Vector2i offset;
+
+//     if (m_exclusive)
+//         offset = Vector2i(-3 - font_size * icon_scale(), -selected_index() * menu_item_height - 4);
+//     else// if (m_mode == Menu)
+//         offset = Vector2i(0, height() + 4);
+//     // else
+//     //     offset = Vector2i(size().x(), -4);
+
+//     Vector2i abs_pos = absolute_position() + offset;
+
+//     // prevent bottom of menu from getting clipped off screen
+//     abs_pos.y() += std::min(0, screen()->height() - (abs_pos.y() + m_popup->size().y() + 2));
+
+//     // prevent top of menu from getting clipped off screen
+//     if (abs_pos.y() <= 1)
+//         abs_pos.y() = absolute_position().y() + size().y() - 2;
+
+//     set_position(abs_pos);
+//     set_width(std::max(m_parent_item->width(), width() + int(font_size * icon_scale()) + 4));
+// }
+
 void PopupMenu::draw(NVGcontext *ctx)
 {
+    // refresh_relative_placement();
+
     if (!m_visible)
         return;
 
@@ -490,7 +570,7 @@ Dropdown::Dropdown(Widget *parent, Mode mode, const string &caption) : MenuItem(
 {
     set_flags(Flags::ToggleButton);
 
-    m_popup = new PopupMenu(screen(), window(), m_mode == ComboBox);
+    m_popup = new PopupMenu(screen(), window(), this, m_mode == ComboBox);
     m_popup->set_visible(false);
 
     if (m_mode == Menu)
@@ -537,28 +617,6 @@ Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
     else
         return MenuItem::preferred_size(ctx);
 }
-
-// MenuItem *Dropdown::item(int idx) const
-// {
-//     if (idx >= (int)m_popup->child_count())
-//         throw runtime_error(fmt::format("Trying to access invalid index {} on a menu with only {} items.", idx,
-//                                         (int)m_popup->child_count()));
-
-//     return (MenuItem *)m_popup->child_at(idx);
-// }
-
-// void Dropdown::set_selected_index(int idx)
-// {
-//     if (m_mode != ComboBox || m_popup->child_count() <= idx)
-//         return;
-
-//     item(m_selected_index)->set_pushed(false);
-//     item(idx)->set_pushed(true);
-
-//     m_selected_index = idx;
-//     // FIXME, need to move this elsewhere
-//     set_caption(item(m_selected_index)->caption());
-// }
 
 void Dropdown::update_popup_geometry() const
 {
@@ -627,12 +685,12 @@ void Dropdown::draw(NVGcontext *ctx)
     NVGcolor grad_top = m_theme->m_button_gradient_top_unfocused;
     NVGcolor grad_bot = m_theme->m_button_gradient_bot_unfocused;
 
-    if (m_pushed || (m_mouse_focus && (m_flags & MenuButton)))
+    if (m_pushed)
     {
         grad_top = m_theme->m_button_gradient_top_pushed;
         grad_bot = m_theme->m_button_gradient_bot_pushed;
     }
-    else if (m_mouse_focus && m_enabled)
+    else if (m_highlighted && m_enabled)
     {
         grad_top = m_theme->m_button_gradient_top_focused;
         grad_bot = m_theme->m_button_gradient_bot_focused;
@@ -743,7 +801,7 @@ MenuBar::MenuBar(Widget *parent, const string &title) : Window(parent, title)
 
 Dropdown *MenuBar::add_menu(const string &name)
 {
-    auto menu = add<Dropdown>(Dropdown::Menu, name);
+    auto menu = new Dropdown{this, Dropdown::Menu, name};
     menu->set_flags(Button::RadioButton);
     return menu;
 }
@@ -801,10 +859,12 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
         if (hovered_menu && opened_menu != hovered_menu)
         {
             opened_menu->set_pushed(false);
+            opened_menu->set_highlighted(false);
             opened_menu->popup()->set_visible(false);
             opened_menu->popup()->set_highlighted_index(-1);
 
             hovered_menu->set_pushed(true);
+            hovered_menu->set_highlighted(true);
             hovered_menu->popup()->set_visible(true);
             hovered_menu->popup()->request_focus();
         }
@@ -850,27 +910,25 @@ bool MenuBar::process_shortcuts(int modifiers, int key)
     return false;
 }
 
-PopupWrapper::PopupWrapper(Widget *parent, PopupMenu *menu) : Widget(parent), m_right_click_menu(menu)
+PopupWrapper::PopupWrapper(Widget *parent) : Widget(parent)
 {
+    m_popup = new PopupMenu{screen(), window(), nullptr, false};
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Fill, 0, 0));
 }
 
 bool PopupWrapper::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
-    if (m_enabled && m_right_click_menu)
+    if (m_enabled && m_popup && down)
     {
-        if (m_right_click_menu->visible() && down)
+        if (button == GLFW_MOUSE_BUTTON_2)
         {
-            m_right_click_menu->set_visible(false);
-            return true;
+            m_popup->set_visible(true);
+            m_popup->request_focus();
         }
+        else
+            m_popup->set_visible(false);
 
-        if (down && (button == GLFW_MOUSE_BUTTON_2))
-            m_right_click_menu->set_visible(!m_right_click_menu->visible());
-        else if (down)
-            m_right_click_menu->set_visible(false);
-
-        m_right_click_menu->set_position(p + Vector2i(0, m_right_click_menu->size().y() / 2 - 10));
+        m_popup->set_position(p + Vector2i(0, m_popup->size().y() - menu_item_height));
     }
 
     return Widget::mouse_button_event(p, button, down, modifiers);

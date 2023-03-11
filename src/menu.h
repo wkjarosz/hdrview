@@ -96,7 +96,10 @@ class PopupMenu : public Popup
 {
 public:
     /// Create a new popup menu parented to a screen (first argument) and a parent window (if applicable)
-    PopupMenu(Widget *parent, Window *parent_window, bool exclusive);
+    PopupMenu(Screen *screen, Window *parent_window, MenuItem *parent_item, bool exclusive);
+
+    MenuItem       *parent_item() { return m_parent_item; }
+    const MenuItem *parent_item() const { return m_parent_item; }
 
     /// Returns the idx-th item in the menu
     MenuItem *item(int idx) const;
@@ -125,8 +128,9 @@ public:
     virtual void draw(NVGcontext *ctx) override;
 
 protected:
-    bool                     m_exclusive = false; ///< Whether the items are mutually exclusive
-    std::function<void(int)> m_selected_callback; ///< The callback to execute when an item is selected.
+    MenuItem                *m_parent_item = nullptr; ///< Parent MenuItem that this Popup is spawned from.
+    bool                     m_exclusive   = false;   ///< Whether the items are mutually exclusive
+    std::function<void(int)> m_selected_callback;     ///< The callback to execute when an item is selected.
     int m_selected_idx    = -1; ///< For mutually exclusive popups, the index of the currently selected item.
     int m_highlighted_idx = -1; ///< The index of the currently hovered/highlighted item
 };
@@ -152,6 +156,9 @@ public:
     Dropdown(Widget *parent, const std::vector<std::string> &items, const std::vector<int> &icons = {},
              Mode mode = ComboBox, const std::string &caption = "Untitled");
 
+    Mode mode() const { return m_mode; }
+    void set_mode(Mode mode) { m_mode = mode; }
+
     /// The current index this Dropdown has selected.
     int selected_index() const { return m_popup->selected_index(); }
 
@@ -159,7 +166,8 @@ public:
     void set_selected_index(int idx)
     {
         m_popup->set_selected_index(idx);
-        set_caption(m_popup->item(selected_index())->caption());
+        if (auto i = m_popup->item(selected_index()))
+            set_caption(i->caption());
     }
 
     /// The callback to execute for this Dropdown.
@@ -172,7 +180,8 @@ public:
             [this, callback](int idx)
             {
                 callback(idx);
-                set_caption(m_popup->item(selected_index())->caption());
+                if (auto i = m_popup->item(selected_index()))
+                    set_caption(i->caption());
             });
     }
 
@@ -211,13 +220,15 @@ public:
 class PopupWrapper : public Widget
 {
 public:
-    PopupWrapper(Widget *parent, PopupMenu *menu = nullptr);
+    PopupWrapper(Widget *parent);
+
+    PopupMenu       *popup() { return m_popup; }
+    const PopupMenu *popup() const { return m_popup; }
 
     virtual bool mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
 protected:
-    PopupMenu *m_right_click_menu;
-    bool       m_right_pushed = false;
+    PopupMenu *m_popup = nullptr;
 };
 
 NAMESPACE_END(nanogui)

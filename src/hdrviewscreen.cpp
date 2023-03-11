@@ -140,9 +140,9 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     // create file/images panel
     //
 
-    popup_menus.push_back(new PopupMenu(this, m_side_panel, false));
-    m_panel_btns.push_back(
-        m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("File", FA_CARET_DOWN));
+    auto wrapper = new PopupWrapper{m_side_panel_contents};
+    popup_menus.push_back(wrapper->popup());
+    m_panel_btns.push_back(wrapper->add<Button>("File", FA_CARET_DOWN));
     m_panel_btns.back()->set_theme(flat_theme);
     m_panel_btns.back()->set_flags(Button::ToggleButton);
     m_panel_btns.back()->set_pushed(false);
@@ -173,9 +173,9 @@ HDRViewScreen::HDRViewScreen(bool capability_10bit, bool capability_EDR, const n
     // create info panel
     //
 
-    popup_menus.push_back(new PopupMenu(this, m_side_panel, false));
-    m_panel_btns.push_back(
-        m_side_panel_contents->add<PopupWrapper>(popup_menus.back())->add<Button>("Info", FA_CARET_RIGHT));
+    wrapper = new PopupWrapper{m_side_panel_contents};
+    popup_menus.push_back(wrapper->popup());
+    m_panel_btns.push_back(wrapper->add<Button>("Info", FA_CARET_RIGHT));
     m_panel_btns.back()->set_theme(flat_theme);
     m_panel_btns.back()->set_flags(Button::ToggleButton);
     m_panel_btns.back()->set_pushed(false);
