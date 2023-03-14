@@ -13,13 +13,20 @@ int next_visible_child(const Widget *w, int start_index, EDirection direction, b
 
     int dir = direction == Forward ? 1 : -1;
 
-    start_index = mod(start_index, w->child_count());
-    int i       = start_index;
-    do {
-        i = mod(i + w->child_count() + dir, w->child_count());
-    } while ((!w->child_at(i)->visible() || !(w->child_at(i)->enabled() || !must_be_enabled)) && i != start_index);
+    int found_index = start_index;
+    if (!(0 <= start_index && start_index < w->child_count()))
+        start_index = dir > 0 ? -1 : w->child_count();
 
-    return i;
+    for (int inc = 1; inc < w->child_count(); ++inc)
+    {
+        int i = mod(start_index - dir * inc, w->child_count());
+        if (!w->child_at(i)->visible() || !(w->child_at(i)->enabled() || !must_be_enabled))
+            continue;
+
+        found_index = i;
+    }
+
+    return found_index;
 }
 
 int nth_visible_child_index(const Widget *w, int n)

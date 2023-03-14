@@ -576,7 +576,7 @@ void HDRViewScreen::create_menubar()
     auto add_item = [this, &menu](const vector<string> &aliases, int icon, const function<void(void)> &cb,
                                   const vector<Shortcut> &s = {{}}, bool edit = true, bool visible = true)
     {
-        auto i = new MenuItem{menu->popup(), aliases.front(), icon, s};
+        auto i = menu->add_item(aliases.front(), icon, s);
         i->set_callback(cb);
         i->set_visible(visible);
         m_menu_items.push_back(i);
@@ -593,9 +593,12 @@ void HDRViewScreen::create_menubar()
     menu->popup()->add<Separator>();
     add_item(
         {"Open...", "Load", "Read"}, FA_FOLDER_OPEN, [this] { load_image(); }, {{SYSTEM_COMMAND_MOD, 'O'}}, false);
-    add_item({"Open recent:"}, 0, nullptr, {{}}, false);
-    m_menu_items.back()->set_enabled(false);
-    auto before_recent_widget = m_menu_items.back();
+
+    Dropdown *recent_dropdown = menu->add_submenu("Open recent", FA_FOLDER_OPEN);
+    auto      after_separator = recent_dropdown->popup()->add<Separator>();
+
+    auto menu_backup = menu;
+    menu             = recent_dropdown;
     add_item(
         {"Clear recently opened"}, 0,
         [this]
@@ -604,22 +607,23 @@ void HDRViewScreen::create_menubar()
             repopulate_recent_files_menu();
         },
         {{}}, false);
-    auto after_recent_widget = m_menu_items.back();
+    auto clear_recent = m_menu_items.back();
 
-    m_repopulate_recent_files_menu = [this, parent = menu->popup(), before_recent_widget, after_recent_widget]
+    m_repopulate_recent_files_menu = [this, recent_dropdown, after_separator, clear_recent]
     {
         // first delete previous recent file items
-        int first = parent->child_index(before_recent_widget);
-        int last  = parent->child_index(after_recent_widget);
+        int first = 0;
+        int last  = recent_dropdown->popup()->child_index(after_separator);
         // prevent crash when the focus path includes any of the widgets we are destroying
         clear_focus_path();
-        for (int i = first + 1; i < last; --last) parent->remove_child_at(i);
+        for (int i = first; i < last; --last) recent_dropdown->popup()->remove_child_at(i);
 
         auto &recent = recent_files();
 
-        // only keep the 5 most recent items
-        if (recent.size() > 5)
-            recent.erase(recent.begin(), recent.end() - 5);
+        // only keep the max_recent most recent items
+        constexpr int max_recent = 15;
+        if (recent.size() > max_recent)
+            recent.erase(recent.begin(), recent.end() - max_recent);
 
         for (auto f : recent)
         {
@@ -627,15 +631,17 @@ void HDRViewScreen::create_menubar()
             string short_name = (name.size() < 100) ? name : name.substr(0, 47) + "..." + name.substr(name.size() - 50);
             MenuItem *item    = new MenuItem(nullptr, short_name);
             item->set_callback([this, f] { drop_event({f}); });
-            parent->add_child(first + 1, item);
+            recent_dropdown->popup()->add_child(first, item);
         }
-        before_recent_widget->set_visible(recent.size() > 0);
-        after_recent_widget->set_enabled(recent.size() > 0);
-        after_recent_widget->set_visible(recent.size() > 0);
+        recent_dropdown->set_enabled(recent.size() > 0);
+        clear_recent->set_enabled(recent.size() > 0);
+        clear_recent->set_visible(recent.size() > 0);
         perform_layout();
     };
 
     m_repopulate_recent_files_menu();
+
+    menu = menu_backup;
 
     menu->popup()->add<Separator>();
 
@@ -1631,6 +1637,7 @@ Dialog *HDRViewScreen::active_dialog() const
 
 bool HDRViewScreen::keyboard_event(int key, int scancode, int action, int modifiers)
 {
+    spdlog::trace("HDRViewScreen::keyboard_event({}, {}, {}, {})", key, scancode, action, modifiers);
     if (Screen::keyboard_event(key, scancode, action, modifiers))
         return true;
 
@@ -1702,6 +1709,7 @@ bool HDRViewScreen::at_tool_panel_edge(const Vector2i &p)
 
 bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, bool down, int modifiers)
 {
+    spdlog::trace("HDRViewScreen::mouse_button_event({}, {}, {}, {})", p, button, down, modifiers);
     // temporarily increase the gui refresh rate between mouse down and up events.
     // makes things like dragging smoother
     if (down)
@@ -1720,18 +1728,22 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
     // close all popup menus
     if (down)
     {
-        bool closed_a_menu = false;
-        for (auto it = m_children.rbegin(); it != m_children.rend(); ++it)
+        auto clicked_menu = dynamic_cast<PopupMenu *>(find_widget(p)->window());
+        if (!clicked_menu)
         {
-            Widget *child = *it;
-            if (child->visible() && !child->contains(p - m_pos) && dynamic_cast<PopupMenu *>(child))
+            bool closed_a_menu = false;
+            for (auto it = m_children.begin(); it != m_children.end(); ++it)
             {
-                child->set_visible(false);
-                closed_a_menu = true;
+                Widget *child = *it;
+                if (child->visible() && !child->contains(p - m_pos) && dynamic_cast<PopupMenu *>(child))
+                {
+                    child->set_visible(false);
+                    closed_a_menu = true;
+                }
             }
+            if (closed_a_menu)
+                return true;
         }
-        if (closed_a_menu)
-            return true;
     }
 
     if (button == GLFW_MOUSE_BUTTON_1 && down && at_side_panel_edge(p))
@@ -1759,6 +1771,7 @@ bool HDRViewScreen::mouse_button_event(const nanogui::Vector2i &p, int button, b
         m_dragging_tool_panel = false;
 
     bool ret = Screen::mouse_button_event(p, button, down, modifiers);
+    spdlog::trace("finished Screen::mouse_button_event");
 
     return ret;
 }

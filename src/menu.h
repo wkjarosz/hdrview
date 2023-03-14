@@ -63,7 +63,7 @@ public:
     /// Whether or not this MenuItem is currently highlighted.
     bool highlighted() const { return m_highlighted; }
     /// Sets whether or not this MenuItem is currently highlighted.
-    void set_highlighted(bool highlight, bool unhighlight_others = false, bool run_callbacks = false);
+    void set_highlighted(bool highlight, bool unhighlight_siblings = false, bool run_callbacks = false);
 
     /// Return the highlight callback
     std::function<void(bool)> highlight_callback() const { return m_highlight_callback; }
@@ -159,6 +159,9 @@ public:
     Mode mode() const { return m_mode; }
     void set_mode(Mode mode) { m_mode = mode; }
 
+    MenuItem *add_item(const std::string &caption, int icon = 0, const std::vector<Shortcut> &s = {{0, 0}});
+    Dropdown *add_submenu(const std::string &caption, int icon = 0);
+
     /// The current index this Dropdown has selected.
     int selected_index() const { return m_popup->selected_index(); }
 
@@ -190,6 +193,7 @@ public:
 
     virtual Vector2i preferred_size(NVGcontext *ctx) const override;
     virtual void     draw(NVGcontext *ctx) override;
+    virtual bool     mouse_enter_event(const Vector2i &p, bool enter) override;
     virtual bool     mouse_button_event(const Vector2i &p, int button, bool down, int modifiers) override;
 
 protected:

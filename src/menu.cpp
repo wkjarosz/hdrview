@@ -135,39 +135,43 @@ Vector2i MenuItem::preferred_size(NVGcontext *ctx) const
     return preferred_text_size(ctx) + Vector2i((int)(iw + sw), 0);
 }
 
-void MenuItem::set_highlighted(bool highlight, bool unhighlight_others, bool run_callbacks)
+void MenuItem::set_highlighted(bool highlight, bool unhighlight_siblings, bool run_callbacks)
 {
-    spdlog::trace("MenuItem::set_highlighted({}, {}, {}) for \"{}\"; m_highlighted = {}", highlight, unhighlight_others,
-                  run_callbacks, caption(), m_highlighted);
-    if (highlight == m_highlighted || !m_enabled)
-        return;
+    spdlog::trace("MenuItem::set_highlighted({}, {}, {}) for \"{}\"; m_highlighted = {}", highlight,
+                  unhighlight_siblings, run_callbacks, caption(), m_highlighted);
 
-    if (highlight)
+    if (highlight != m_highlighted)
     {
-        m_highlighted = true;
+        m_highlighted = highlight;
         if (run_callbacks)
         {
             if (m_highlight_callback)
-                m_highlight_callback(true);
+                m_highlight_callback(highlight);
         }
+    }
 
-        if (unhighlight_others)
-            for (auto widget : parent()->children())
+    // un-highlight siblings
+    if (unhighlight_siblings)
+    {
+        for (auto &sibling : parent()->children())
+        {
+            if (sibling == this)
+                continue;
+
+            if (auto i = dynamic_cast<MenuItem *>(sibling))
             {
-                auto b = dynamic_cast<MenuItem *>(widget);
-                if (b != this && b && b->m_highlighted)
+                // unhighlight sibling and collapse any submenus
+                i->set_highlighted(false);
+                if (auto dd = dynamic_cast<Dropdown *>(i))
                 {
-                    b->m_highlighted = false;
-                    if (run_callbacks && b->m_highlight_callback)
-                        b->m_highlight_callback(false);
+                    dd->popup()->set_visible(false);
+                    dd->popup()->set_highlighted_index(-1);
+                    if (dd->mode() == Dropdown::Submenu)
+                        parent()->request_focus();
                 }
             }
+        }
     }
-    else
-        m_highlighted = false;
-
-    if (auto popup = dynamic_cast<PopupMenu *>(parent()))
-        popup->set_highlighted_index(highlight ? popup->child_index(this) : -1);
 }
 
 bool MenuItem::mouse_enter_event(const Vector2i &p, bool enter)
@@ -175,7 +179,24 @@ bool MenuItem::mouse_enter_event(const Vector2i &p, bool enter)
     Button::mouse_enter_event(p, enter);
 
     // on mouse enter highlight the item and unhighlight all siblings
-    set_highlighted(enter, enter, enter);
+    if (enter)
+    {
+        set_highlighted(m_enabled && enter, true, m_enabled && enter);
+        if (m_enabled && enter)
+        {
+            // register the currently highlighted index in the parent popup
+            if (auto p = dynamic_cast<PopupMenu *>(parent()))
+                p->set_highlighted_index(p->child_index(this));
+
+            // if this is a submenu, then show and focus it
+            auto self = dynamic_cast<Dropdown *>(this);
+            if (self && self->mode() == Dropdown::Submenu)
+            {
+                self->popup()->set_visible(true);
+                self->popup()->request_focus();
+            }
+        }
+    }
     return true;
 }
 
@@ -279,7 +300,7 @@ void MenuItem::draw(NVGcontext *ctx)
     nvgText(ctx, hotkey_pos.x(), hotkey_pos.y() + 1, shortcut().text.c_str(), nullptr);
 }
 
-Separator::Separator(Widget *parent) : MenuItem(parent, "")
+Separator::Separator(Widget *parent) : MenuItem(parent, "--separator--")
 {
     set_enabled(false);
     set_fixed_height(seperator_height);
@@ -339,13 +360,15 @@ void PopupMenu::set_highlighted_index(int idx)
 {
     spdlog::trace("PopupMenu::set_highlighted_index({}); m_highlighted_idx = {}", idx, m_highlighted_idx);
 
+    // unhighlight the current item
     if (auto i = item(m_highlighted_idx))
-        i->set_highlighted(false);
+        i->set_highlighted(false, false, false);
+
+    // highlight the desired item
     if (auto i = item(idx))
-        i->set_highlighted(true);
+        i->set_highlighted(true, true, true);
 
     m_highlighted_idx = idx;
-    spdlog::trace("PopupMenu::set_highlighted_index({}) end; m_highlighted_idx = {}", idx, m_highlighted_idx);
 }
 
 void PopupMenu::set_selected_index(int idx)
@@ -364,6 +387,7 @@ void PopupMenu::set_selected_index(int idx)
 
 bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
+    spdlog::trace("PopupMenu::mouse_button_event({}, {}, {}, {})", p, button, down, modifiers);
     if (Popup::mouse_button_event(p, button, down, modifiers))
     {
         // close popup and defocus all menu items
@@ -376,13 +400,27 @@ bool PopupMenu::mouse_button_event(const Vector2i &p, int button, bool down, int
                     return true;
             }
 
-            set_visible(false);
-            m_parent_window->request_focus();
-
             // remove mouse focus from all menu items
-            for (auto it = m_children.begin(); it != m_children.end(); ++it) (*it)->mouse_enter_event(p, false);
+            for (auto &child : children()) child->mouse_enter_event(p, false);
 
             set_highlighted_index(-1);
+            set_visible(false);
+
+            // close the menu and any parent menus
+            Window *parent_window = m_parent_window;
+            while (parent_window)
+            {
+                if (auto i = dynamic_cast<PopupMenu *>(parent_window))
+                {
+                    parent_window->set_visible(false);
+                    parent_window = i->m_parent_window;
+                }
+                else
+                {
+                    parent_window->request_focus();
+                    parent_window = nullptr;
+                }
+            }
         }
         return true;
     }
@@ -394,44 +432,43 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
     try
     {
         spdlog::trace("PopupMenu::keyboard_event({}, {}, {}, {})", key, scancode, action, modifiers);
+
+        auto idx_backup       = m_highlighted_idx;
+        auto highlighted_item = item(m_highlighted_idx);
+        auto menu             = dynamic_cast<Dropdown *>(m_parent_item);
+        auto menubar          = m_parent_item ? dynamic_cast<MenuBar *>(m_parent_item->parent()) : nullptr;
+
         if (visible() && (action == GLFW_PRESS || action == GLFW_REPEAT))
         {
             if (key == GLFW_KEY_ESCAPE)
             {
                 set_visible(false);
-                m_parent_window->request_focus();
                 set_highlighted_index(-1);
-
-                // deselect/dehighlight the parent item
-                if (m_parent_item)
-                {
-                    if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
-                    {
-                        spdlog::info("deselecting it!");
-                        m_parent_item->set_pushed(false);
-                        m_parent_item->set_highlighted(false);
-                    }
-                }
+                m_parent_window->request_focus();
                 return true;
             }
             else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER || key == GLFW_KEY_SPACE)
             {
                 set_visible(false);
-                m_parent_window->request_focus();
-                auto idx_backup = m_highlighted_idx;
                 set_highlighted_index(-1);
 
-                // deselect/dehighlight the parent item
-                if (m_parent_item)
+                // close the menu and any parent menus
+                Window *parent_window = m_parent_window;
+                while (parent_window)
                 {
-                    if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
+                    if (auto i = dynamic_cast<PopupMenu *>(parent_window))
                     {
-                        spdlog::info("deselecting it!");
-                        m_parent_item->set_pushed(false);
-                        m_parent_item->set_highlighted(false);
+                        parent_window->set_visible(false);
+                        parent_window = i->m_parent_window;
+                    }
+                    else
+                    {
+                        parent_window->request_focus();
+                        parent_window = nullptr;
                     }
                 }
 
+                // execute the item's callback
                 if (auto i = item(idx_backup))
                 {
                     if (i->callback())
@@ -447,39 +484,61 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
             }
             else if (key == GLFW_KEY_UP || key == GLFW_KEY_DOWN)
             {
-                m_highlighted_idx =
-                    next_visible_child(this, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true);
-                dynamic_cast<MenuItem *>(child_at(m_highlighted_idx))->set_highlighted(true, true, true);
+                set_highlighted_index(
+                    next_visible_child(this, m_highlighted_idx, key == GLFW_KEY_UP ? Backward : Forward, true));
                 return true;
             }
             else if ((key == GLFW_KEY_LEFT || key == GLFW_KEY_RIGHT) && m_parent_item)
             {
-                if (auto menubar = dynamic_cast<MenuBar *>(m_parent_item->parent()))
+                if (!menu)
+                    return false;
+
+                // if we are in a submenu, collapse it when hitting the left arrow
+                if (menu->mode() == Dropdown::Submenu && key == GLFW_KEY_LEFT)
                 {
-                    m_parent_item->set_pushed(false);
                     set_visible(false);
                     set_highlighted_index(-1);
+                    m_parent_window->request_focus();
+                    return true;
+                }
+                else if (menu->mode() == Dropdown::Menu || menu->mode() == Dropdown::Submenu)
+                {
+                    auto i = dynamic_cast<Dropdown *>(highlighted_item);
 
-                    int our_idx = menubar->child_index(m_parent_item);
-                    int sibling_idx =
-                        next_visible_child(menubar, our_idx, key == GLFW_KEY_LEFT ? Backward : Forward, true);
-
-                    spdlog::info("our_idx: {}; sibling_idx: {}", our_idx, sibling_idx);
-                    if (auto sibling_dropdown = dynamic_cast<Dropdown *>(menubar->child_at(sibling_idx)))
+                    // if the highlighted item is a submenu, show it, focus it, and highlight the first submenu item
+                    // when pressing the right arrow
+                    if (i && key == GLFW_KEY_RIGHT)
                     {
-                        sibling_dropdown->set_pushed(true);
-                        sibling_dropdown->popup()->set_visible(true);
-                        sibling_dropdown->popup()->request_focus();
-                        sibling_dropdown->set_highlighted(true, true, true);
-
+                        i->popup()->set_visible(true);
+                        i->popup()->request_focus();
+                        i->popup()->set_highlighted_index(next_visible_child(i->popup(), -1, Forward, true));
                         return true;
                     }
-                    else
+                    // otherwise, if a regular menu item is highlighted in a top-level menu, left/right arrows move
+                    // between top-level menus
+                    else if (menubar)
                     {
-                        spdlog::info("failed");
-                    }
+                        m_parent_item->set_pushed(false);
+                        m_parent_item->set_highlighted(false);
+                        set_visible(false);
+                        set_highlighted_index(-1);
 
-                    return false;
+                        int our_idx = menubar->child_index(m_parent_item);
+                        int sibling_idx =
+                            next_visible_child(menubar, our_idx, key == GLFW_KEY_LEFT ? Backward : Forward, true);
+
+                        if (auto sibling_dropdown = dynamic_cast<Dropdown *>(menubar->child_at(sibling_idx)))
+                        {
+                            sibling_dropdown->set_pushed(true);
+                            sibling_dropdown->popup()->set_visible(true);
+                            sibling_dropdown->popup()->request_focus();
+                            sibling_dropdown->set_highlighted(true, true, true);
+
+                            return true;
+                        }
+
+                        return false;
+                    }
                 }
             }
         }
@@ -494,41 +553,10 @@ bool PopupMenu::keyboard_event(int key, int scancode, int action, int modifiers)
     return false;
 }
 
-// void PopupMenu::refresh_relative_placement()
-// {
-//     if (!m_parent_window)
-//         return;
-
-//     m_parent_window->refresh_relative_placement();
-//     m_visible &= m_parent_window->visible_recursive();
-//     m_pos = m_parent_window->position() + m_anchor_pos - Vector2i(0, m_anchor_offset);
-
-//     int      font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
-//     Vector2i offset;
-
-//     if (m_exclusive)
-//         offset = Vector2i(-3 - font_size * icon_scale(), -selected_index() * menu_item_height - 4);
-//     else// if (m_mode == Menu)
-//         offset = Vector2i(0, height() + 4);
-//     // else
-//     //     offset = Vector2i(size().x(), -4);
-
-//     Vector2i abs_pos = absolute_position() + offset;
-
-//     // prevent bottom of menu from getting clipped off screen
-//     abs_pos.y() += std::min(0, screen()->height() - (abs_pos.y() + m_popup->size().y() + 2));
-
-//     // prevent top of menu from getting clipped off screen
-//     if (abs_pos.y() <= 1)
-//         abs_pos.y() = absolute_position().y() + size().y() - 2;
-
-//     set_position(abs_pos);
-//     set_width(std::max(m_parent_item->width(), width() + int(font_size * icon_scale()) + 4));
-// }
-
 void PopupMenu::draw(NVGcontext *ctx)
 {
     // refresh_relative_placement();
+    m_visible &= m_parent_window->visible_recursive();
 
     if (!m_visible)
         return;
@@ -601,6 +629,19 @@ Dropdown::Dropdown(Widget *parent, const vector<string> &items, const vector<int
     set_selected_index(0);
 }
 
+MenuItem *Dropdown::add_item(const string &caption, int icon, const vector<Shortcut> &s)
+{
+    auto ret = new MenuItem{popup(), caption, icon, s};
+    return ret;
+}
+
+Dropdown *Dropdown::add_submenu(const string &caption, int icon)
+{
+    auto ret = new Dropdown{popup(), Dropdown::Submenu, caption};
+    ret->set_icon(icon);
+    return ret;
+}
+
 Vector2i Dropdown::preferred_size(NVGcontext *ctx) const
 {
     int font_size = m_font_size == -1 ? m_theme->m_button_font_size : m_font_size;
@@ -642,8 +683,17 @@ void Dropdown::update_popup_geometry() const
     m_popup->set_width(std::max(m_popup->width(), width() + int(font_size * icon_scale()) + 4));
 }
 
+bool Dropdown::mouse_enter_event(const Vector2i &p, bool enter)
+{
+    if (m_mode == Submenu)
+        return MenuItem::mouse_enter_event(p, enter);
+    else
+        return Button::mouse_enter_event(p, enter);
+}
+
 bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int modifiers)
 {
+    spdlog::trace("Dropdown::mouse_button_event({}, {}, {}, {})", p, button, down, modifiers);
     auto ret = MenuItem::mouse_button_event(p, button, down, modifiers);
     if (m_enabled && m_pushed)
     {
@@ -659,11 +709,17 @@ bool Dropdown::mouse_button_event(const Vector2i &p, int button, bool down, int 
         if (auto w = m_popup->find_widget(screen()->mouse_pos() - m_popup->parent()->absolute_position()))
             w->mouse_enter_event(p + absolute_position() - w->absolute_position(), true);
 
+        if (m_mode != ComboBox)
+            m_popup->set_highlighted_index(-1);
+
         m_popup->set_visible(true);
         m_popup->request_focus();
     }
     else
+    {
         m_popup->set_visible(false);
+        m_popup->set_highlighted_index(-1);
+    }
     return ret;
 }
 
@@ -690,7 +746,14 @@ void Dropdown::draw(NVGcontext *ctx)
         grad_top = m_theme->m_button_gradient_top_pushed;
         grad_bot = m_theme->m_button_gradient_bot_pushed;
     }
-    else if (m_highlighted && m_enabled)
+
+    if (m_mode != Submenu && m_mouse_focus && m_enabled)
+    {
+        grad_top = m_theme->m_button_gradient_top_focused;
+        grad_bot = m_theme->m_button_gradient_bot_focused;
+    }
+
+    if (m_mode == Submenu && m_highlighted && m_enabled)
     {
         grad_top = m_theme->m_button_gradient_top_focused;
         grad_bot = m_theme->m_button_gradient_bot_focused;
@@ -744,8 +807,29 @@ void Dropdown::draw(NVGcontext *ctx)
     if (!m_enabled)
         text_color = m_theme->m_disabled_text_color;
 
+    // add an icon to the left only for submenus
+    if (m_mode == Submenu)
+    {
+        auto  icon = utf8(m_icon);
+        float ih   = font_size * icon_scale();
+        nvgFontSize(ctx, ih);
+        nvgFontFace(ctx, "icons");
+        float iw = nvgTextBounds(ctx, 0, 0, icon.data(), nullptr, nullptr);
+
+        ih += m_size.y() * 0.15f;
+
+        nvgFillColor(ctx, text_color);
+        nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        Vector2f icon_pos(m_pos.x() + 6, center.y() - 1);
+
+        text_pos.x() = icon_pos.x() + ih + 2;
+
+        if (m_icon)
+            nvgText(ctx, icon_pos.x() + (ih - iw - 3) / 2, icon_pos.y() + 1, icon.data(), nullptr);
+    }
+
     nvgFontSize(ctx, font_size);
-    nvgFontFace(ctx, "sans-bold");
+    nvgFontFace(ctx, "sans");
     nvgTextAlign(ctx, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
     nvgFillColor(ctx, m_theme->m_text_color_shadow);
     nvgText(ctx, text_pos.x(), text_pos.y(), m_caption.c_str(), nullptr);
@@ -866,6 +950,7 @@ bool MenuBar::mouse_motion_event(const Vector2i &p, const Vector2i &rel, int but
             hovered_menu->set_pushed(true);
             hovered_menu->set_highlighted(true);
             hovered_menu->popup()->set_visible(true);
+            hovered_menu->popup()->set_highlighted_index(-1);
             hovered_menu->popup()->request_focus();
         }
     }
