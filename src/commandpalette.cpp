@@ -35,9 +35,6 @@
 #include "widgetutils.h"
 #include <algorithm>
 #include <cctype>
-#include <nanogui/button.h>
-#include <nanogui/formhelper.h>
-#include <nanogui/label.h>
 #include <nanogui/layout.h>
 #include <nanogui/opengl.h>
 #include <spdlog/fmt/ostr.h>
