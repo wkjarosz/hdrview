@@ -5,6 +5,7 @@
 //
 
 #include "hdrviewscreen.h"
+#include "alignedlabel.h"
 #include "commandhistory.h"
 #include "commandpalette.h"
 #include "common.h"
@@ -18,6 +19,7 @@
 #include "menu.h"
 #include "searchbox.h"
 #include "tool.h"
+#include "well.h"
 #include "xpuimage.h"
 #include <filesystem/path.h>
 #include <fstream>

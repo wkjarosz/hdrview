@@ -322,7 +322,7 @@ void ImageListPanel::enable_disable_buttons()
 
 void ImageListPanel::sort_images(int m)
 {
-    spdlog::trace("sort_images({})", m);
+    spdlog::trace("ImageListPanel::sort_images({})", m);
     if (m == 0)
         return;
 
@@ -686,7 +686,7 @@ void ImageListPanel::run_requested_callbacks()
 {
     if (m_image_async_modify_done_requested.exchange(false))
     {
-        spdlog::trace("run_requested_callbacks()");
+        spdlog::trace("ImageListPanel::run_requested_callbacks()");
         // remove any images that are not being modified and are null
         // iterate through the images, and remove the ones that didn't load properly
         auto           it = m_images.begin();
@@ -747,7 +747,7 @@ XPUImagePtr ImageListPanel::image(int index) { return is_valid(index) ? m_images
 
 bool ImageListPanel::set_current_image_index(int index, bool force_callback)
 {
-    spdlog::trace("set_current_image_index({}), m_current is {}", index, m_current);
+    spdlog::trace("ImageListPanel::set_current_image_index({}), m_current is {}", index, m_current);
     if (index == m_current && !force_callback)
         return false;
 
@@ -994,7 +994,6 @@ bool ImageListPanel::reload_image(int index, bool force)
         dialog->set_callback(
             [this, index](int cancel)
             {
-                spdlog::trace("reloading image callback with cancel = {}", cancel);
                 if (!cancel)
                     m_images[index] = load_image(image(index)->filename());
             });
@@ -1202,7 +1201,7 @@ void ImageListPanel::async_modify_selected(const ConstImageCommandWithProgress &
 
 bool ImageListPanel::set_filter(const string &filter, bool temp)
 {
-    spdlog::trace("set_filter(\"{}\", {})", filter, temp);
+    spdlog::trace("ImageListPanel::set_filter(\"{}\", {})", filter, temp);
     if (temp)
         m_filter->set_temporary_value(filter);
     else

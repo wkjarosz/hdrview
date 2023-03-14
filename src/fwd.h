@@ -68,6 +68,7 @@ class CommandPalette;
 template <typename Scalar>
 class FloatBox;
 
+class AlignedLabel;
 class HDRColorPicker;
 class DualHDRColorPicker;
 class ColorWheel2;

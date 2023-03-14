@@ -352,6 +352,8 @@ add_executable(
   src/filters/shift.cpp
   src/filters/unsharp_mask.cpp
   src/filters/zap_gremlins.cpp
+  src/alignedlabel.cpp
+  src/alignedlabel.h
   src/async.h
   src/box.h
   src/brush.cpp

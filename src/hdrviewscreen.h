@@ -9,7 +9,6 @@
 #include "fwd.h"
 #include "hdrcolorpicker.h"
 #include "hdrimageview.h"
-#include "well.h"
 #include <nanogui/nanogui.h>
 #include <nanogui/renderpass.h>
 #include <nanogui/shader.h>
