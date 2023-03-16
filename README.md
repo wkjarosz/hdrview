@@ -5,11 +5,6 @@ Master branch:
 [![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
 [![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
-Develop branch:
-[![macOS build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-mac.yml)
-[![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
-[![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=develop)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
-
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images, and including minimalistic editing and tonemapping capabilities. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
 HDRView can display true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
@@ -17,12 +12,21 @@ HDRView can display true HDR on Apple extended dynamic range (EDR) and 10-bit di
 ## Example screenshots
 HDRView supports loading several images and provides exposure and gamma/sRGB tone mapping control with high-quality dithering of HDR images.
 ![Screenshot](resources/screenshot1.png "Screenshot1")
-When sufficiently zoomed in, HDRView can overlay the pixel grid and numeric color values on each pixel to facilitate inspection.
+
+When sufficiently zoomed in, HDRView can overlay the pixel grid and numeric color values on each pixel to facilitate inspection:
 ![Screenshot](resources/screenshot2.png "Screenshot2")
-Displaying HDR images naively on a 24 bit display leads to visible banding in smooth gradients.
-![Screenshot](resources/screenshot3.png "Screenshot3")
-HDRView supports high-quality dithering (both when viewing and when saving to an LDR file) to reduce these artifacts.
+
+In addition to the menubar, HDRView features extensive keyboard shortcuts, and pressing `Cmd+Shift+P` brings up a VS Code/Atom/Sublime Text-style command palette allowing you to find any command with keyboard-based fuzzy searching:
+![Screenshot](resources/screenshot-command-palette.png "Screenshot of command palette")
+
+HDRView supports the extended dynamic range (XDR, 30 bit) capabilities of recent Macs, allowing it to use finer precision (reducing banding) and brighter whites (reducing clipping) when displaying HDR images.
+
+When displaying images on a standard dynamic range (SDR, 24 bit) display (or saving to an LDR file format), HDRView uses high-quality dithering:
 ![Screenshot](resources/screenshot4.png "Screenshot4")
+
+This reduces apparent banding artifacts in smooth gradients compared to naively displaying HDR images such displays:
+![Screenshot](resources/screenshot3.png "Screenshot3")
+
 
 ## Obtaining HDRView
 
