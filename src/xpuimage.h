@@ -21,10 +21,10 @@
 
 struct ImageStatistics
 {
-    float minimum;
-    float average;
-    float maximum;
-    float exposure;
+    Color4 minimum;
+    Color4 average;
+    Color4 maximum;
+    float  exposure;
 
     enum AxisScale : int
     {
@@ -53,7 +53,7 @@ struct ImageStatistics
     An XPUImage also maintains a current histogram for the image data.
 
     Edit access to the HDRImage is provided only through the modify function, which accepts undo-able image editing
-   commands
+    commands
 */
 class XPUImage : public std::enable_shared_from_this<XPUImage>
 {

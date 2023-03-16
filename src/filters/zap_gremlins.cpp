@@ -41,13 +41,13 @@ std::function<void()> zap_gremlins_callback(HDRViewScreen *screen, ImageListPane
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [screen, images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [screen](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         if (mode == 0)
                         {
@@ -118,7 +118,7 @@ std::function<void()> zap_gremlins_callback(HDRViewScreen *screen, ImageListPane
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

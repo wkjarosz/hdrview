@@ -35,7 +35,7 @@ static int                    samples = 1;
 
 std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(0, 20));
@@ -226,8 +226,8 @@ std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel 
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
                         Imath::M33f t;
                         Imath::V2f  origin(0.f, 0.f);
@@ -297,7 +297,7 @@ std::function<void()> free_xform_callback(HDRViewScreen *screen, ImageListPanel 
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

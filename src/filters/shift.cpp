@@ -24,7 +24,7 @@ static float                dx = 0.f, dy = 0.f;
 
 std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(125, 20));
@@ -51,16 +51,16 @@ std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *imag
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
-                        AtomicProgress &progress) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg,
+                       AtomicProgress &progress) -> ImageCommandResult
                     {
                         // by default use a no-op passthrough warp function
-                        function<Vector2f(const Vector2f &)> shift = [&](const Vector2f &uv)
+                        function<Vector2f(const Vector2f &)> shift = [img](const Vector2f &uv)
                         { return (uv + Vector2f(dx / img->width(), dy / img->height())); };
                         return {make_shared<HDRImage>(img->resampled(img->width(), img->height(), progress, shift, 1,
                                                                      sampler, border_mode_x, border_mode_y)),
@@ -68,7 +68,7 @@ std::function<void()> shift_callback(HDRViewScreen *screen, ImageListPanel *imag
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

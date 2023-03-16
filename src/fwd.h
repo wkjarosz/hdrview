@@ -63,9 +63,12 @@ class Window;
 class HelpWindow;
 class Dialog;
 class SimpleDialog;
+class Command;
+class CommandPalette;
 template <typename Scalar>
 class FloatBox;
 
+class AlignedLabel;
 class HDRColorPicker;
 class DualHDRColorPicker;
 class ColorWheel2;
@@ -148,4 +151,10 @@ enum EBGMode : int
     BG_CUSTOM_COLOR,
 
     NUM_BG_MODES
+};
+
+enum EDirection
+{
+    Forward,
+    Backward,
 };

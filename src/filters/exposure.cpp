@@ -27,7 +27,7 @@ static float        offset   = 0.0f;
 
 std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(55, 20));
@@ -74,13 +74,13 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         spdlog::debug("{}; {}; {}", local::exposure, local::offset, local::gamma);
                         return {make_shared<HDRImage>(img->apply_function(
@@ -95,7 +95,7 @@ std::function<void()> exposure_gamma_callback(HDRViewScreen *screen, ImageListPa
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

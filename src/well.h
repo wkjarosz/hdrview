@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <nanogui/label.h>
 #include <nanogui/widget.h>
 
 NAMESPACE_BEGIN(nanogui)

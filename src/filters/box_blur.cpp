@@ -23,7 +23,7 @@ static HDRImage::BorderMode border_mode_x = HDRImage::EDGE, border_mode_y = HDRI
 
 std::function<void()> box_blur_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(75, 20));
@@ -65,7 +65,7 @@ std::function<void()> box_blur_callback(HDRViewScreen *screen, ImageListPanel *i
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

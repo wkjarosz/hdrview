@@ -49,7 +49,7 @@ std::function<void()> fill_callback(const Color &nfg, ImageListPanel *images_pan
 
 std::function<void()> fill_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(200, 20));
@@ -138,7 +138,7 @@ std::function<void()> fill_callback(HDRViewScreen *screen, ImageListPanel *image
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

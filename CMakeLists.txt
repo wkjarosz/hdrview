@@ -352,6 +352,8 @@ add_executable(
   src/filters/shift.cpp
   src/filters/unsharp_mask.cpp
   src/filters/zap_gremlins.cpp
+  src/alignedlabel.cpp
+  src/alignedlabel.h
   src/async.h
   src/box.h
   src/brush.cpp
@@ -365,6 +367,8 @@ add_executable(
   src/colorwheel.cpp
   src/colorwheel.h
   src/commandhistory.h
+  src/commandpalette.cpp
+  src/commandpalette.h
   common.cpp
   src/common.h
   src/dialog.cpp
@@ -415,10 +419,14 @@ add_executable(
   src/rasterdraw.cpp
   src/rasterdraw.h
   src/timer.h
+  src/searchbox.cpp
+  src/searchbox.h
   src/tool.cpp
   src/tool.h
   src/well.cpp
   src/well.h
+  src/widgetutils.cpp
+  src/widgetutils.h
   src/xpuimage.cpp
   src/xpuimage.h
   ${EXTRA_SOURCE})

@@ -45,7 +45,7 @@ static bool normalize  = false;
 
 std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPanel *images_panel)
 {
-    return [&, screen, images_panel]()
+    return [screen, images_panel]()
     {
         FormHelper *gui = new FormHelper(screen);
         gui->set_fixed_size(Vector2i(75, 20));
@@ -158,14 +158,14 @@ std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPan
         gui->add_widget("", spacer);
 
         window->set_callback(
-            [&](int cancel)
+            [images_panel](int cancel)
             {
                 spdlog::trace("monochrome {}, {}", local::monochrome, local::normalize);
                 if (cancel)
                     return;
 
                 images_panel->async_modify_selected(
-                    [&](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
+                    [](const ConstHDRImagePtr &img, const ConstXPUImagePtr &xpuimg) -> ImageCommandResult
                     {
                         // compute normalized weights
                         auto n_weights = local::weights;
@@ -177,16 +177,16 @@ std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPan
 
                         if (local::monochrome)
                         {
-                            return {
-                                make_shared<HDRImage>(img->apply_function(
-                                    [&](const Color4 &c) { return Color4(dot((Color)c, n_weights[local::GRAY]), c.a); },
-                                    xpuimg->roi())),
-                                nullptr};
+                            return {make_shared<HDRImage>(img->apply_function(
+                                        [n_weights](const Color4 &c)
+                                        { return Color4(dot((Color)c, n_weights[local::GRAY]), c.a); },
+                                        xpuimg->roi())),
+                                    nullptr};
                         }
                         else
                         {
                             return {make_shared<HDRImage>(img->apply_function(
-                                        [&](const Color4 &c)
+                                        [n_weights](const Color4 &c)
                                         {
                                             Color  c2(c);
                                             Color4 result(dot(c2, n_weights[local::RED]),
@@ -200,7 +200,7 @@ std::function<void()> channel_mixer_callback(HDRViewScreen *screen, ImageListPan
                     });
             });
 
-        gui->add_widget("", window->add_buttons());
+        gui->add_widget("", window->add_buttons("OK", "Cancel"));
 
         window->center();
         window->request_focus();

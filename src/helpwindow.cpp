@@ -9,6 +9,7 @@
 
 #include "helpwindow.h"
 
+#include "menu.h"
 #include "well.h"
 #include <nanogui/button.h>
 #include <nanogui/icons.h>
@@ -27,23 +28,6 @@ constexpr int fwidth = 450;
 }
 
 NAMESPACE_BEGIN(nanogui)
-
-#ifdef __APPLE__
-const string HelpWindow::CMD = "Cmd";
-#else
-const string HelpWindow::CMD = "Ctrl";
-#endif
-
-#ifdef __APPLE__
-const string HelpWindow::ALT = "Opt";
-#else
-const string HelpWindow::ALT = "Alt";
-#endif
-
-string HelpWindow::key_string(const string &text)
-{
-    return fmt::format(text, fmt::arg("CMD", HelpWindow::CMD), fmt::arg("ALT", HelpWindow::ALT));
-}
 
 HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
 {
@@ -138,9 +122,23 @@ HelpWindow::HelpWindow(Widget *parent) : Dialog(parent, "Help", false)
     m_key_bindings = new Widget(side_scroll_panel);
     m_key_bindings->set_layout(new GroupLayout(20, 6));
 
+    add_text(m_key_bindings, Shortcut::key_string("The main keyboard shortcut to remember is {CMD}+Shift+P."),
+             "sans-bold", 16)
+        ->set_fixed_width(fwidth);
+
     add_text(m_key_bindings,
-             "Most keyboard shortcuts are listed alongside the items in the menu bar. Additionally, the following "
-             "keyboard shortcuts are defined for actions not listed in the menu bar:\n\n",
+             "This opens the command palette, which lists every available HDRView command along with its keyboard "
+             "shortcuts (if any).",
+             "sans", 16)
+        ->set_fixed_width(fwidth);
+
+    add_text(m_key_bindings, "Many commands and their keyboard shortcuts are also listed in the menu bar.\n\n", "sans",
+             16)
+        ->set_fixed_width(fwidth);
+
+    add_text(m_key_bindings,
+             "The following additional keyboard shortcuts are defined for actions not listed in the menu bar or "
+             "command palette:\n",
              "sans", 16)
         ->set_fixed_width(fwidth);
 
@@ -169,7 +167,7 @@ void HelpWindow::add_shortcut(const string &section, const string &keys, const s
     auto row = new Widget(w);
     row->set_layout(new BoxLayout(Orientation::Horizontal, Alignment::Fill, 0, 0));
     (new Label(row, desc, "sans", 14))->set_fixed_width(0.6 * fwidth);
-    new Label(row, key_string(keys), "sans-bold", 14);
+    new Label(row, Shortcut::key_string(keys), "sans-bold", 14);
 }
 
 void HelpWindow::add_separator(const string &section, int height)

@@ -24,12 +24,6 @@ public:
     void add_shortcut(const std::string &section, const std::string &keys, const std::string &desc);
     void add_separator(const std::string &section, int height = 10);
 
-    static const std::string CMD; //! Platform-dependent name for the command/ctrl key
-    static const std::string ALT; //! Platform-dependent name for the alt/option key
-
-    //! Takes a fmt-format string and replaces any instances of {CMD} and {ALT} with CMD an ALT.
-    static std::string key_string(const std::string &text);
-
 private:
     Widget                         *m_key_bindings;
     std::map<std::string, Widget *> m_sections;

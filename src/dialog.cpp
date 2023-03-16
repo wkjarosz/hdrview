@@ -4,6 +4,7 @@
 #include <nanogui/formhelper.h>
 #include <nanogui/label.h>
 #include <nanogui/layout.h>
+#include <nanogui/opengl.h>
 
 NAMESPACE_BEGIN(nanogui)
 
@@ -25,12 +26,12 @@ void Dialog::make_form()
     set_layout(layout);
 }
 
-Widget *Dialog::add_buttons(const std::string &button_text, bool alt_button, const std::string &alt_button_text)
+Widget *Dialog::add_buttons(const std::string &button_text, const std::string &alt_button_text)
 {
     Widget *button_panel = new Widget(this);
     button_panel->set_layout(new GridLayout(Orientation::Horizontal, 2, Alignment::Fill, 0, 5));
 
-    if (alt_button)
+    if (!alt_button_text.empty())
     {
         Button *button = new Button(button_panel, alt_button_text, m_theme->m_message_alt_button_icon);
         button->set_callback(
@@ -53,8 +54,31 @@ Widget *Dialog::add_buttons(const std::string &button_text, bool alt_button, con
     return button_panel;
 }
 
+void Dialog::draw(NVGcontext *ctx)
+{
+    if (!modal())
+        return Window::draw(ctx);
+
+    if (!m_visible)
+        return;
+
+    nvgSave(ctx);
+    {
+        nvgResetScissor(ctx);
+
+        // Fade everything else on the screen
+        nvgBeginPath(ctx);
+        nvgRect(ctx, 0, 0, screen()->width(), screen()->height());
+        nvgFillColor(ctx, m_theme->m_drop_shadow);
+        nvgFill(ctx);
+
+        Window::draw(ctx);
+    }
+    nvgRestore(ctx);
+}
+
 SimpleDialog::SimpleDialog(Widget *parent, Type type, const std::string &title, const std::string &message,
-                           const std::string &button_text, const std::string &alt_button_text, bool alt_button) :
+                           const std::string &button_text, const std::string &alt_button_text) :
     Dialog(parent, title, false)
 {
     set_layout(new BoxLayout(Orientation::Vertical, Alignment::Middle, 10, 10));
@@ -74,7 +98,8 @@ SimpleDialog::SimpleDialog(Widget *parent, Type type, const std::string &title, 
     m_message_label = new Label(message_panel, message);
     m_message_label->set_fixed_width(icon ? 200 : 0);
 
-    add_buttons(button_text, alt_button, alt_button_text);
+    if (!button_text.empty())
+        add_buttons(button_text, alt_button_text);
 
     center();
     request_focus();

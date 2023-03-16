@@ -29,9 +29,9 @@ using namespace std;
 using json = nlohmann::json;
 
 Tool::Tool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
-           const string &tooltip, int icon, ETool tool) :
+           const string &tooltip, int icon, const vector<Shortcut> &shortcuts, ETool tool) :
     m_name(name),
-    m_tooltip(tooltip), m_icon(icon), m_tool(tool), m_screen(screen), m_image_view(image_view),
+    m_tooltip(tooltip), m_icon(icon), m_shortcuts(shortcuts), m_tool(tool), m_screen(screen), m_image_view(image_view),
     m_images_panel(images_panel), m_button(nullptr), m_menuitem(nullptr), m_options(nullptr)
 {
     // empty
@@ -80,26 +80,22 @@ void Tool::create_toolbutton(Widget *toolbar)
 
     m_button = new ToolButton(toolbar, m_icon);
     m_button->set_fixed_size(Vector2i(0));
-    m_button->set_flags(Button::Flags::RadioButton);
-    m_button->set_callback([this] { m_screen->set_tool(m_tool); });
-    m_button->set_tooltip(m_name + ": " + m_tooltip);
+    m_button->set_change_callback([this](bool b) { m_screen->set_tool((ETool)m_tool, b); });
+    string opt_shortcut =
+        (m_shortcuts.size() && m_shortcuts[0].text.size()) ? fmt::format(" ({})", m_shortcuts[0].text) : "";
+    m_button->set_tooltip(fmt::format("{}: {}{}", m_name, m_tooltip, opt_shortcut));
     m_button->set_icon_extra_scale(1.5f);
 }
 
-void Tool::create_menuitem(Dropdown *menu, int modifier, int button)
+void Tool::create_menuitem(Dropdown *menu)
 {
     if (m_menuitem)
         return;
 
-    m_menuitem = new MenuItem(menu->popup(), m_name, 0, {{modifier, button}});
+    m_menuitem = new MenuItem(menu->popup(), m_name, 0, m_shortcuts);
     m_menuitem->set_flags(Button::RadioButton);
     m_menuitem->set_tooltip(m_tooltip);
-    m_menuitem->set_change_callback(
-        [this](bool b)
-        {
-            m_screen->set_tool((ETool)m_tool);
-            return true;
-        });
+    m_menuitem->set_change_callback([this](bool b) { m_screen->set_tool((ETool)m_tool, b); });
 }
 
 void Tool::update_width(int w)
@@ -169,8 +165,8 @@ void Tool::add_shortcuts(HelpWindow *w) { return; }
 bool Tool::keyboard(int key, int scancode, int action, int modifiers) { return false; }
 
 HandTool::HandTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
-                   const string &tooltip, int icon, ETool tool) :
-    Tool(screen, image_view, images_panel, name, tooltip, icon, tool)
+                   const string &tooltip, int icon, const vector<Shortcut> &shortcuts, ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -180,7 +176,6 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     if (m_options)
         return;
 
-    bool  sRGB     = m_image_view->sRGB();
     float gamma    = m_image_view->gamma();
     float exposure = m_image_view->exposure();
 
@@ -194,24 +189,22 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
     auto normalize_button = new Button(content, "", FA_MAGIC);
     normalize_button->set_fixed_size(nanogui::Vector2i(21, 21));
     normalize_button->set_icon_extra_scale(1.15f);
-    normalize_button->set_callback(
-        [this]()
-        {
-            m_image_view->normalize_exposure();
-            m_images_panel->request_histogram_update(true);
-        });
-    normalize_button->set_tooltip("Normalize exposure.");
+    {
+        auto item = m_screen->menubar()->find_item({"View", "Normalize exposure"});
+        auto sc   = item->shortcut(0);
+        normalize_button->set_callback(item->callback());
+        normalize_button->set_tooltip(fmt::format("{} ({}).", item->caption(), sc.text));
+    }
 
     auto reset_button = new Button(content, "", FA_UNDO);
     reset_button->set_fixed_size(nanogui::Vector2i(21, 21));
     reset_button->set_icon_extra_scale(1.15f);
-    reset_button->set_callback(
-        [this]()
-        {
-            m_image_view->reset_tonemapping();
-            m_images_panel->request_histogram_update(true);
-        });
-    reset_button->set_tooltip("Reset tonemapping.");
+    {
+        auto item = m_screen->menubar()->find_item({"View", "Reset tonemapping"});
+        auto sc   = item->shortcut(0);
+        reset_button->set_callback(item->callback());
+        reset_button->set_tooltip(fmt::format("{} ({}).", item->caption(), sc.text));
+    }
 
     auto sRGB_checkbox = new CheckBox(content, "sRGB");
     auto gamma_label   = new Label(content, "Gamma:");
@@ -278,9 +271,9 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
             gamma_slider->set_value(g);
         });
 
-    // this callback will be extended for more GUI elements when creating the menu bar
+    // add more to m_image_view's existing callback
     m_image_view->set_sRGB_callback(
-        [this, sRGB_checkbox, gamma_textbox, gamma_slider, gamma_label](bool b)
+        [this, sRGB_checkbox, gamma_textbox, gamma_slider, gamma_label, prev_cb = m_image_view->sRGB_callback()](bool b)
         {
             sRGB_checkbox->set_checked(b);
             gamma_textbox->set_enabled(!b);
@@ -288,15 +281,19 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
             gamma_slider->set_enabled(!b);
             gamma_label->set_enabled(!b);
             gamma_label->set_color(b ? m_screen->theme()->m_disabled_text_color : m_screen->theme()->m_text_color);
+            prev_cb(b);
         });
+
     m_image_view->set_exposure(exposure);
     m_image_view->set_gamma(gamma);
 
-    sRGB_checkbox->set_callback([&, this](bool value) { m_image_view->set_sRGB(value); });
-
-    sRGB_checkbox->set_checked(sRGB);
-    sRGB_checkbox->callback()(sRGB);
-    sRGB_checkbox->set_tooltip("Use the sRGB non-linear response curve (instead of inverse power gamma correction).");
+    {
+        auto item = m_screen->menubar()->find_item({"View", "sRGB"});
+        sRGB_checkbox->set_checked(m_image_view->sRGB());
+        sRGB_checkbox->set_tooltip(item->tooltip());
+        sRGB_checkbox->set_callback(item->change_callback());
+        sRGB_checkbox->callback()(m_image_view->sRGB());
+    }
 
     (new CheckBox(content, "Grid", [this](bool v) { m_image_view->set_draw_grid(v); }))
         ->set_checked(m_image_view->draw_grid_on());
@@ -305,8 +302,9 @@ void HandTool::create_options_bar(nanogui::Widget *parent)
 }
 
 RectangularMarquee::RectangularMarquee(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
-                                       const string &name, const string &tooltip, int icon, ETool tool) :
-    Tool(screen, image_view, images_panel, name, tooltip, icon, tool)
+                                       const string &name, const string &tooltip, int icon,
+                                       const vector<Shortcut> &shortcuts, ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -343,8 +341,8 @@ bool RectangularMarquee::mouse_drag(const Vector2i &p, const Vector2i &rel, int 
 }
 
 BrushTool::BrushTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
-                     const string &tooltip, int icon, ETool tool) :
-    Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
+                     const string &tooltip, int icon, const vector<Shortcut> &shortcuts, ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool),
     m_brush(make_shared<Brush>(80)), m_p0(std::numeric_limits<int>::lowest()), m_p1(std::numeric_limits<int>::lowest()),
     m_p2(std::numeric_limits<int>::lowest()), m_p3(std::numeric_limits<int>::lowest())
 {
@@ -919,8 +917,9 @@ void BrushTool::draw_brush(NVGcontext *ctx, const Vector2i &center) const
 }
 
 EraserTool::EraserTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
-                       const string &name, const string &tooltip, int icon, ETool tool) :
-    BrushTool(screen, image_view, images_panel, name, tooltip, icon, tool)
+                       const string &name, const string &tooltip, int icon, const vector<Shortcut> &shortcuts,
+                       ETool tool) :
+    BrushTool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -933,8 +932,9 @@ void EraserTool::plot_pixel(const HDRImagePtr &img, int x, int y, float a, int m
 }
 
 CloneStampTool::CloneStampTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
-                               const string &name, const string &tooltip, int icon, ETool tool) :
-    BrushTool(screen, image_view, images_panel, name, tooltip, icon, tool)
+                               const string &name, const string &tooltip, int icon, const vector<Shortcut> &shortcuts,
+                               ETool tool) :
+    BrushTool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -981,7 +981,7 @@ bool CloneStampTool::mouse_drag(const Vector2i &p, const Vector2i &rel, int butt
 void CloneStampTool::add_shortcuts(HelpWindow *w)
 {
     auto section_name = m_name;
-    w->add_shortcut(section_name, fmt::format("{0}+Click", HelpWindow::ALT), "Select source location");
+    w->add_shortcut(section_name, Shortcut::key_string("{ALT}+Click"), "Select source location");
     w->add_shortcut(section_name, " ", "All brush tool shortcuts");
 }
 
@@ -1022,8 +1022,9 @@ void CloneStampTool::draw(NVGcontext *ctx) const
 }
 
 Eyedropper::Eyedropper(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
-                       const string &name, const string &tooltip, int icon, ETool tool) :
-    Tool(screen, image_view, images_panel, name, tooltip, icon, tool)
+                       const string &name, const string &tooltip, int icon, const vector<Shortcut> &shortcuts,
+                       ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -1155,8 +1156,8 @@ void Eyedropper::draw(NVGcontext *ctx) const
 }
 
 Ruler::Ruler(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
-             const string &tooltip, int icon, ETool tool) :
-    Tool(screen, image_view, images_panel, name, tooltip, icon, tool),
+             const string &tooltip, int icon, const vector<Shortcut> &shortcuts, ETool tool) :
+    Tool(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool),
     m_start_pixel(std::numeric_limits<int>::lowest()), m_end_pixel(std::numeric_limits<int>::lowest())
 {
     // empty
@@ -1252,8 +1253,8 @@ void Ruler::draw(NVGcontext *ctx) const
 }
 
 LineTool::LineTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel, const string &name,
-                   const string &tooltip, int icon, ETool tool) :
-    Ruler(screen, image_view, images_panel, name, tooltip, icon, tool)
+                   const string &tooltip, int icon, const vector<Shortcut> &shortcuts, ETool tool) :
+    Ruler(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }
@@ -1445,8 +1446,9 @@ void LineTool::draw(NVGcontext *ctx) const
 }
 
 GradientTool::GradientTool(HDRViewScreen *screen, HDRImageView *image_view, ImageListPanel *images_panel,
-                           const string &name, const string &tooltip, int icon, ETool tool) :
-    Ruler(screen, image_view, images_panel, name, tooltip, icon, tool)
+                           const string &name, const string &tooltip, int icon, const vector<Shortcut> &shortcuts,
+                           ETool tool) :
+    Ruler(screen, image_view, images_panel, name, tooltip, icon, shortcuts, tool)
 {
     // empty
 }

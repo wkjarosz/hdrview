@@ -299,13 +299,7 @@ std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &na
 std::vector<std::string> split(std::string text, const std::string &delim);
 std::string              to_lower(std::string str);
 std::string              to_upper(std::string str);
-bool                     matches(std::string text, std::string filter, bool isRegex);
-
-enum EDirection
-{
-    Forward,
-    Backward,
-};
+bool                     matches(std::string text, std::string filter, bool is_regex);
 
 /// Access binary data stored in hdrview_resources.cpp
 #define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
