@@ -25,8 +25,8 @@ using namespace linalg::aliases;
 namespace la = linalg;
 
 // forward declarations
-template <typename Vec, typename Scalar = typename linalg::scalar_t<Vec>,
-          size_t Dims = linalg::detail::apply<linalg::detail::op_pos, void, Vec>::size>
+template <typename Vec_, typename Value_ = typename linalg::scalar_t<Vec_>,
+          size_t Dims_ = linalg::detail::apply<linalg::detail::op_pos, void, Vec_>::size>
 class Box;
 using Color3 = float3;
 using Color4 = float4;
