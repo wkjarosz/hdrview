@@ -15,11 +15,14 @@
 /*!
     Box is an N-D interval.
 */
-template <typename Vec, typename Value, size_t Dims>
+template <typename Vec_, typename Value_, size_t Dims_>
 class Box
 {
 public:
-    using BoxT = Box<Vec, Value, Dims>;
+    static constexpr size_t Dims = Dims_;
+    using Value                  = Value_;
+    using Vec                    = Vec_;
+    using BoxT                   = Box<Vec, Value, Dims>;
 
     Vec min; //!< The lower-bound of the interval
     Vec max; //!< The upper-bound of the interval
@@ -129,9 +132,10 @@ public:
         for (size_t i = 0; i < Dims; ++i) point[i] = std::min(std::max(point[i], min[i]), max[i]);
         return point;
     }
-    bool contains(const Vec &point, bool proper = false) const
+    template <bool Inclusive = false>
+    bool contains(const Vec &point) const
     {
-        if (proper)
+        if constexpr (Inclusive)
         {
             for (size_t i = 0; i < Dims; ++i)
                 if (point[i] <= min[i] || point[i] >= max[i])
@@ -146,9 +150,10 @@ public:
             return true;
         }
     }
-    bool intersects(const BoxT &box, bool proper = false) const
+    template <bool Inclusive = false>
+    bool intersects(const BoxT &box) const
     {
-        if (proper)
+        if constexpr (Inclusive)
         {
             for (size_t i = 0; i < Dims; ++i)
                 if (box.max[i] <= min[i] || box.min[i] >= max[i])

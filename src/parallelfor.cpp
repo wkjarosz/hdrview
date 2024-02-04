@@ -17,6 +17,10 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
     atomic<int> nextIndex;
     nextIndex = begin;
 
+#if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    serial = true;
+#endif
+
     auto                 policy  = serial ? std::launch::deferred : std::launch::async;
     size_t               numCPUs = thread::hardware_concurrency();
     vector<future<void>> futures(numCPUs);
@@ -35,7 +39,8 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
                                  }
                              });
     }
-    for (auto &f : futures) f.get();
+    for (auto &f : futures)
+        f.get();
 }
 
 void parallel_for(int begin, int end, int step, function<void(int)> body, bool serial)

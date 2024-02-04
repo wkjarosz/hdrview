@@ -7,24 +7,24 @@
 #pragma once
 
 #if defined(_MSC_VER)
-// Make MS cmath define M_PI
+// Make MS cmath define M_PI but not the min/max macros
 #define _USE_MATH_DEFINES
+#define NOMINMAX
 #endif
 
 #include "fwd.h"
-#include <algorithm>
-#include <cmath>
-#include <memory>
 #include <string>
 #include <vector>
 
-// Also define control key for windows/mac/linux
-#if defined(__APPLE__) || defined(DOXYGEN_DOCUMENTATION_BUILD)
-/// If on OSX, maps to ``GLFW_MOD_CONTROL``.  Otherwise, maps to ``GLFW_MOD_SUPER``.
-#define SYSTEM_CONTROL_MOD GLFW_MOD_CONTROL
-#else
-#define SYSTEM_CONTROL_MOD GLFW_MOD_SUPER
-#endif
+// #include <fmt/core.h>
+#include <fmt/color.h>
+#include <fmt/format.h>
+
+#include <spdlog/spdlog.h>
+
+#define MY_ASSERT(cond, description, ...)                                                                              \
+    if (!(cond))                                                                                                       \
+        throw std::runtime_error{fmt::format(description, ##__VA_ARGS__)};
 
 template <typename T>
 inline T sqr(T x)
@@ -65,7 +65,8 @@ template <typename T>
 std::vector<T> linspaced(size_t num, T a, T b)
 {
     std::vector<T> retVal(num);
-    for (size_t i = 0; i < num; ++i) retVal[i] = lerp(a, b, T(i) / (num - 1));
+    for (size_t i = 0; i < num; ++i)
+        retVal[i] = lerp(a, b, T(i) / (num - 1));
 
     return retVal;
 }
@@ -100,7 +101,7 @@ inline T lerp_factor(T a, T b, T m)
 template <typename T>
 inline T smoothstep(T a, T b, T x)
 {
-    T t = std::clamp(lerp_factor(a, b, x), T(0), T(1));
+    T t = clamp01(lerp_factor(a, b, x));
     return t * t * (T(3) - T(2) * t);
 }
 
@@ -272,55 +273,105 @@ inline T square(T value)
     return value * value;
 }
 
+//
+// The code below allows us to use the fmt format/print, spdlog logging functions, and
+// standard C++ iostreams like cout with linalg vectors, colors and matrices.
+//
+
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
+//
+// Base class for both vec and mat fmtlib formatters.
+//
+// Based on the great blog tutorial: https://wgml.pl/blog/formatting-user-defined-types-fmt.html
+//
+template <typename V, typename T, bool Newline>
+struct vecmat_formatter
+{
+    using underlying_formatter_type = fmt::formatter<T>;
+
+    template <typename ParseContext>
+    constexpr auto parse(ParseContext &ctx)
+    {
+        return underlying_formatter.parse(ctx);
+    }
+
+    template <typename FormatContext>
+    auto format(const V &v, FormatContext &ctx)
+    {
+        fmt::format_to(ctx.out(), "{{");
+        auto it = begin(v);
+        while (true)
+        {
+            ctx.advance_to(underlying_formatter.format(*it, ctx));
+            if (++it == end(v))
+            {
+                fmt::format_to(ctx.out(), "}}");
+                break;
+            }
+            else
+                fmt::format_to(ctx.out(), ",{} ", Newline ? "\n" : "");
+        }
+        return ctx.out();
+    }
+
+protected:
+    underlying_formatter_type underlying_formatter;
+};
+
+template <typename T, int N>
+struct fmt::formatter<la::vec<T, N>> : public vecmat_formatter<la::vec<T, N>, T, false>
+{
+};
+
+template <typename T, int M, int N>
+struct fmt::formatter<la::mat<T, M, N>> : public vecmat_formatter<la::mat<T, M, N>, la::vec<T, N>, true>
+{
+};
+
+#ifdef HDRVIEW_IOSTREAMS
+#include <iomanip>
+#include <iostream>
+template <class C, int N, class T>
+std::basic_ostream<C> &operator<<(std::basic_ostream<C> &out, const Vec<N, T> &v)
+{
+    std::ios_base::fmtflags oldFlags = out.flags();
+    auto                    width    = out.precision() + 2;
+
+    out.setf(std::ios_base::right);
+    if (!(out.flags() & std::ios_base::scientific))
+        out.setf(std::ios_base::fixed);
+    width += 5;
+
+    out << '{';
+    for (size_t i = 0; i < N - 1; ++i)
+        out << std::setw(width) << v[i] << ',';
+    out << std::setw(width) << v[N - 1] << '}';
+
+    out.flags(oldFlags);
+    return out;
+}
+
+template <class C, class T>
+std::basic_ostream<C> &operator<<(std::basic_ostream<C> &s, const Mat44<T> &m)
+{
+    return s << "{" << m[0] << ",\n " << m[1] << ",\n " << m[2] << ",\n " << m[3] << "}";
+}
+#endif // HDRVIEW_IOSTREAMS
+
+#endif // DOXYGEN_SHOULD_SKIP_THIS
+
+bool        starts_with(const std::string &s, const std::string &prefix);
+bool        ends_with(const std::string &s, const std::string &suffix);
 std::string get_extension(const std::string &filename);
 std::string get_basename(const std::string &filename);
-
+std::string to_lower(std::string str);
+std::string to_upper(std::string str);
+/// Run func on each line of the input string
+void process_lines(std::string_view input, std::function<void(std::string_view &)> op);
+/// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true
+std::string                     indent(std::string_view input, bool also_indent_first = false, int amount = 2);
+std::string                     add_line_numbers(std::string_view input);
 const std::vector<std::string> &channel_names();
 const std::vector<std::string> &blend_mode_names();
 std::string                     channel_to_string(EChannel channel);
 std::string                     blend_mode_to_string(EBlendMode mode);
-
-inline int code_point_length(char first)
-{
-    if ((first & 0xf8) == 0xf0)
-        return 4;
-    else if ((first & 0xf0) == 0xe0)
-        return 3;
-    else if ((first & 0xe0) == 0xc0)
-        return 2;
-    else
-        return 1;
-}
-
-//! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
-//! range that is unique across the strings
-std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
-
-std::vector<std::string> split(std::string text, const std::string &delim);
-std::string              to_lower(std::string str);
-std::string              to_upper(std::string str);
-bool                     matches(std::string text, std::string filter, bool is_regex);
-
-/// Access binary data stored in hdrview_resources.cpp
-#define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
-
-/// Access a shader stored in hdrview_resources.cpp
-#if defined(NANOGUI_USE_OPENGL)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
-#define HDRVIEW_BACKEND      "OpenGL"
-#elif defined(NANOGUI_USE_GLES)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
-#define HDRVIEW_BACKEND      "OpenGL ES"
-#elif defined(NANOGUI_USE_METAL)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
-#define HDRVIEW_BACKEND      "Metal"
-#endif
-
-int         hdrview_version_major();
-int         hdrview_version_minor();
-int         hdrview_version_patch();
-std::string hdrview_version();
-std::string hdrview_git_hash();
-std::string hdrview_git_describe();
-std::string hdrview_build_timestamp();
-std::string config_directory();

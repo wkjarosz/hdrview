@@ -1,10 +1,11 @@
 name: Linux build
 
 on:
-  push:
+  pull_request:
     branches:
       - "*"
-    pull_request:
+  push:
+    branches:
       - "*"
     paths:
       # This action only runs on push when C++ files are changed
@@ -25,13 +26,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        buildtype: [Release, Debug]
         config:
-          - { name: "Ubuntu Latest", os: ubuntu-latest }
+          - { name: "Ubuntu 22.04", os: ubuntu-22.04 }
+          - { name: "Ubuntu 20.04", os: ubuntu-20.04 }
+        buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev
 
       - uses: actions/checkout@v3
         with:
@@ -44,7 +46,6 @@ jobs:
 
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
-        if: runner.os != 'Windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
@@ -59,14 +60,13 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build/${{ matrix.buildtype }} --parallel 4 --config ${{ matrix.buildtype }}
 
-      - name: Checking that HDRView and hdrbatch run
+      - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView --help
-          ${{github.workspace}}/build/${{ matrix.buildtype }}/hdrbatch --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: linux-build-artifacts-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
             ${{github.workspace}}/build/${{ matrix.buildtype }}

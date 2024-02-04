@@ -1,0 +1,92 @@
+<html lang="en-us">
+
+<head>
+    <link rel="icon" type="image/png" sizes="1024x1024" href="@HELLO_IMGUI_FAVICON@?v=4">
+    <link rel="shortcut icon" href="@HELLO_IMGUI_FAVICON@?v=4">
+    <link rel="apple-touch-icon" sizes="1024x1024" href="@HELLO_IMGUI_FAVICON@?v=4">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#000000">
+
+    <meta charset="utf-8">
+    <meta name="viewport"
+        content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+    <title>@HELLO_IMGUI_ICON_DISPLAY_NAME@</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: black
+        }
+
+        .emscripten {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            margin: 0px;
+            border: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: block;
+            image-rendering: optimizeSpeed;
+            image-rendering: crisp-edges;
+            -ms-interpolation-mode: nearest-neighbor;
+        }
+    </style>
+
+    <script src="FileSaver.js" type='text/javascript'> </script>
+    <script type='text/javascript'>
+        // This function copied from geomgram, BSD 3-Clause License; Copyright (c) 2000-2022 Inria
+        function saveFileFromMemoryFSToDisk(name) {
+            var data = FS.readFile(name);
+            var blob;
+            var isSafari = /^((?!chrome|android).)*safari/i.test(
+                navigator.userAgent
+            );
+            if (isSafari) {
+                blob = new Blob([data.buffer], { type: "application/octet-stream" });
+            } else {
+                blob = new Blob([data.buffer], { type: "application/octet-binary" });
+            }
+            saveAs(blob, name);
+        }
+    </script>
+</head>
+
+<body>
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <script type='text/javascript'>
+        var Module = {
+            preRun: [],
+            postRun: [],
+            print: (function () {
+                return function (text) {
+                    text = Array.prototype.slice.call(arguments).join(' ');
+                    console.log(text);
+                };
+            })(),
+            printErr: function (text) {
+                text = Array.prototype.slice.call(arguments).join(' ');
+                console.error(text);
+            },
+            canvas: (function () {
+                var canvas = document.getElementById('canvas');
+                //canvas.addEventListener("webglcontextlost", function(e) { alert('FIXME: WebGL context lost, please reload the page'); e.preventDefault(); }, false);
+                return canvas;
+            })(),
+            setStatus: function (text) {
+                console.log("status: " + text);
+            },
+            monitorRunDependencies: function (left) {
+                // no run dependencies to log
+            }
+        };
+        window.onerror = function () {
+            console.log("onerror: " + event);
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+
+</html>

@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-cmake_minimum_required( VERSION 3.0.0 )
+cmake_minimum_required(VERSION 3.13)
 
 include( CMakeParseArguments )
 
@@ -62,9 +62,10 @@ function( version_from_git )
     ERROR_STRIP_TRAILING_WHITESPACE
     )
   if( NOT git_result EQUAL 0 )
-    message( FATAL_ERROR
+    message( WARNING
       "[VersionFromGit] Failed to execute Git: ${git_error}"
       )
+    set( git_describe "" )
   endif()
 
   # Get Git tag
@@ -78,9 +79,10 @@ function( version_from_git )
     ERROR_STRIP_TRAILING_WHITESPACE
     )
   if( NOT git_result EQUAL 0 )
-    message( FATAL_ERROR
+    message( WARNING
       "[VersionFromGit] Failed to execute Git: ${git_error}"
       )
+    set( git_tag "" )
   endif()
 
   if( git_tag MATCHES "^v(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-[.0-9A-Za-z-]+)?([+][.0-9A-Za-z-]+)?$" )
@@ -90,9 +92,14 @@ function( version_from_git )
     set( identifiers   "${CMAKE_MATCH_4}" )
     set( metadata      "${CMAKE_MATCH_5}" )
   else()
-    message( FATAL_ERROR
+    message( WARNING
       "[VersionFromGit] Git tag isn't valid semantic version: [${git_tag}]"
       )
+    set( version_major "0" )
+    set( version_minor "0" )
+    set( version_patch "0" )
+    set( identifiers   "" )
+    set( metadata      "" )
   endif()
 
   if( "${git_tag}" STREQUAL "${git_describe}" )
@@ -130,7 +137,7 @@ function( version_from_git )
 
     # Timestamp
     if( DEFINED ARG_TIMESTAMP )
-      string( TIMESTAMP timestamp "${ARG_TIMESTAMP}" ${ARG_UTC} )
+      string( TIMESTAMP timestamp "${ARG_TIMESTAMP}" UTC )
       list( APPEND metadata "${timestamp}" )
     endif( DEFINED ARG_TIMESTAMP )
 
