@@ -7,6 +7,7 @@
 #pragma once
 
 #include <istream>
+#include <memory>
 #include <string>
 
 bool is_pfm_image(std::istream &is) noexcept;
