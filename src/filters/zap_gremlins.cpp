@@ -12,6 +12,7 @@
 #include "hdrimage.h"
 #include "hdrviewscreen.h"
 #include "imagelistpanel.h"
+#include "parallelfor.h"
 #include "xpuimage.h"
 #include <spdlog/fmt/ostr.h>
 #include <spdlog/spdlog.h>

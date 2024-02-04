@@ -3,9 +3,10 @@
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
-//
-// The part of the Command::draw function that performs the substring highlighting logic is adapted from ImGui
-// Command Palette, it's license follows.
+// Outside sources:
+// [1]
+// The part of the Command::draw function that performs the substring highlighting logic is adapted from
+// [ImGui Command Palette](https://github.com/hnOsmium0001/imgui-command-palette), it's license follows.
 //
 // The MIT License (MIT)
 //
@@ -207,6 +208,9 @@ void Command::draw(NVGcontext *ctx)
         draw_shadowed_text(false, m_caption.c_str());
     else
     {
+        //
+        // CITATION: The logic below is adapted from the ImGui Command Palette. See [1] above.
+        //
         auto text = m_caption.c_str();
         int  range_begin;
         int  range_end;

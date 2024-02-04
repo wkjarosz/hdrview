@@ -9,9 +9,7 @@
 #include "array2d.h"
 #include "box.h"
 #include "color.h" // for Color4, max, min
-#include "parallelfor.h"
 #include "progress.h"
-#include <ImathMatrix.h>
 #include <functional> // for function
 #include <nanogui/vector.h>
 #include <set>    // for set

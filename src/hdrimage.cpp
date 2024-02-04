@@ -28,10 +28,9 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "stb_image_resize.h" // for stbir_resize_float
 
+#include "parallelfor.h"
+
 using namespace std;
-using Imath::M33f;
-using Imath::V2f;
-using Imath::V3f;
 
 // local functions
 namespace

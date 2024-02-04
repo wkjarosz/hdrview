@@ -209,17 +209,9 @@ bool HDRImage::load(const string &filename)
             Imath::M44f chr_M; // the conversion matrix to rec709 RGB; defaults to identity
             if (hasChromaticities(file.header()))
             {
-                // equality comparison for Imf::Chromaticities
-                auto chr_eq = [](const Imf::Chromaticities &a, const Imf::Chromaticities &b)
-                {
-                    return (a.red - b.red).length2() + (a.green - b.green).length2() + (a.blue - b.blue).length2() +
-                               (a.white - b.white).length2() <
-                           1e-8f;
-                };
-
                 Imf::Chromaticities rec709_chr; // default rec709 (sRGB) primaries
                 Imf::Chromaticities file_chr = Imf::chromaticities(file.header());
-                if (!chr_eq(file_chr, rec709_chr))
+                if (file_chr != rec709_chr)
                 {
                     chr_M = Imf::RGBtoXYZ(file_chr, 1) * Imf::XYZtoRGB(rec709_chr, 1);
                     spdlog::info("Converting pixel values to Rec709/sRGB primaries and whitepoint.");

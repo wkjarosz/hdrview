@@ -701,9 +701,9 @@ void HDRViewScreen::create_menubar()
              {{GLFW_MOD_ALT, 'H'}});
     add_item({"Flip vertically", "Mirror vertically"}, FA_ARROWS_ALT_V, flip_callback(false, m_images_panel),
              {{GLFW_MOD_ALT, 'V'}});
-    add_item({"Rotate 90° clockwise", "Turn clockwise"}, FA_REDO, rotate_callback(true, m_images_panel),
+    add_item({"Rotate 90° clockwise", "Rotate right", "Turn clockwise"}, FA_REDO, rotate_callback(true, m_images_panel),
              {{SYSTEM_COMMAND_MOD, ']'}});
-    add_item({"Rotate 90° counter clockwise", "Turn counter clockwise"}, FA_UNDO,
+    add_item({"Rotate 90° counter clockwise", "Rotate left", "Turn counter clockwise"}, FA_UNDO,
              rotate_callback(false, m_images_panel), {{SYSTEM_COMMAND_MOD, '['}});
     menu->popup()->add<Separator>();
     add_item({"Crop to selection"}, FA_CROP, crop_callback(m_images_panel), {{GLFW_MOD_ALT, 'C'}});

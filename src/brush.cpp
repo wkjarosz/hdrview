@@ -5,9 +5,9 @@
 //
 
 #include "brush.h"
-
 #include "color.h"
 #include "common.h"
+#include "parallelfor.h"
 #include <nanogui/vector.h>
 
 using namespace nanogui;

@@ -13,6 +13,7 @@
 #include "hscrollpanel.h"
 #include "imagelistpanel.h"
 #include "menu.h"
+#include "parallelfor.h"
 #include "rasterdraw.h"
 #include "well.h"
 #include <hdrview_resources.h>
