@@ -169,7 +169,7 @@ if(portable-file-dialogs_ADDED)
   target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
 endif()
 
-if(NOT EMSCRIPTEN)
+if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_USE_GLFW_METAL ON)
 
   # set(HELLOIMGUI_USE_GLFW_OPENGL3 ON)
