@@ -6,6 +6,7 @@
 #include "opengl_check.h"
 #include "shader.h"
 #include "texture.h"
+#include <cstring>
 
 #if !defined(GL_HALF_FLOAT)
 #define GL_HALF_FLOAT 0x140B
@@ -99,8 +100,7 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
             throw std::invalid_argument("Shader::Shader(): argument name 'indices' is reserved!");
 
         Buffer &buf = m_buffers[name];
-        for (int i = 0; i < 3; ++i)
-            buf.shape[i] = 1;
+        for (int i = 0; i < 3; ++i) buf.shape[i] = 1;
         buf.ndim  = 1;
         buf.index = index;
         buf.type  = type;
@@ -218,10 +218,7 @@ Shader::Shader(RenderPass *render_pass, const std::string &name, const std::stri
 
         if (type == VertexBuffer)
         {
-            for (int i = (int)buf.ndim - 1; i >= 0; --i)
-            {
-                buf.shape[i + 1] = buf.shape[i];
-            }
+            for (int i = (int)buf.ndim - 1; i >= 0; --i) { buf.shape[i + 1] = buf.shape[i]; }
             buf.shape[0] = 0;
             buf.ndim++;
         }
@@ -281,16 +278,14 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     Buffer &buf = m_buffers[name];
 
     bool mismatch = ndim != buf.ndim || dtype != buf.dtype;
-    for (size_t i = (buf.type == UniformBuffer ? 0 : 1); i < ndim; ++i)
-        mismatch |= shape[i] != buf.shape[i];
+    for (size_t i = (buf.type == UniformBuffer ? 0 : 1); i < ndim; ++i) mismatch |= shape[i] != buf.shape[i];
 
     if (mismatch)
     {
         Buffer arg;
         arg.type = buf.type;
         arg.ndim = ndim;
-        for (size_t i = 0; i < 3; ++i)
-            arg.shape[i] = i < arg.ndim ? shape[i] : 1;
+        for (size_t i = 0; i < 3; ++i) arg.shape[i] = i < arg.ndim ? shape[i] : 1;
         arg.dtype = dtype;
         throw std::invalid_argument("Buffer::set_buffer(\"" + name + "\"): shape/dtype mismatch: expected " +
                                     buf.to_string() + ", got " + arg.to_string());

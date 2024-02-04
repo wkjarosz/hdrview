@@ -4,6 +4,7 @@
 #include "opengl_check.h"
 
 #include "texture.h"
+#include <cstring>
 #include <memory>
 
 #if !defined(GL_HALF_FLOAT)
