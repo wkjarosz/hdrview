@@ -312,7 +312,9 @@ hello_imgui_add_app(
   ${CMAKE_CURRENT_BINARY_DIR}/assets)
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
-target_compile_options(HDRView PRIVATE "-fobjc-arc")
+if(APPLE)
+  target_compile_options(HDRView PRIVATE "-fobjc-arc")
+endif(APPLE)
 target_link_libraries(HDRView PRIVATE linalg fmt::fmt spdlog::spdlog OpenEXR::OpenEXR Imath::Imath stb)
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
