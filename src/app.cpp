@@ -319,12 +319,10 @@ SampleViewer::SampleViewer()
                 2.5f * icon_font_size;
 
             m_sans_regular[font_size] = HelloImGui::LoadFont(sans_r, (float)font_size);
-            // Merge FontAwesome6 with the previous font
-            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams);
+            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams); // Merge FontAwesome6 with the previous font
 
             m_sans_bold[font_size] = HelloImGui::LoadFont(sans_b, (float)font_size);
-            // Merge FontAwesome6 with the previous font
-            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams);
+            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams); // Merge FontAwesome6 with the previous font
 
             m_mono_regular[font_size] = HelloImGui::LoadFont(mono_r, (float)font_size);
             m_mono_bold[font_size]    = HelloImGui::LoadFont(mono_b, (float)font_size);
@@ -580,8 +578,7 @@ void SampleViewer::load_image(std::istream &is, const string &f)
         if (!new_images.size())
             throw std::invalid_argument("Could not allocate a new image.");
 
-        for (auto &i : new_images)
-            m_images.push_back(i);
+        for (auto &i : new_images) m_images.push_back(i);
 
         m_current = int(m_images.size() - 1);
 
@@ -1507,8 +1504,7 @@ void SampleViewer::draw_about_dialog()
                     ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
                     ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
 
-                    for (auto item : g_help_strings)
-                        item_and_description(item.first, item.second);
+                    for (auto item : g_help_strings) item_and_description(item.first, item.second);
                     // for (auto item : g_help_strings2)
                     // {
                     //     string chords;
