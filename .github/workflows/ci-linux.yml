@@ -4,16 +4,16 @@ on:
   pull_request:
     branches:
       - "*"
-  push:
-    branches:
-      - "*"
-    paths:
-      # This action only runs on push when C++ files are changed
-      - "**.cpp"
-      - "**.h"
-      - "**.cmake"
-      - "**Lists.txt"
-      - "**-linux.yml"
+  # push:
+  #   branches:
+  #     - "*"
+  #   paths:
+  #     # This action only runs on push when C++ files are changed
+  #     - "**.cpp"
+  #     - "**.h"
+  #     - "**.cmake"
+  #     - "**Lists.txt"
+  #     - "**-linux.yml"
   workflow_dispatch:
 
 env:
@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev
 
       - uses: actions/checkout@v3
         with:
