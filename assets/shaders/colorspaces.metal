@@ -40,7 +40,7 @@ float3 linearToSRGB(float3 color) { return float3(linearToS(color.r), linearToS(
 float sToLinear(float a)
 {
     float old_sign = sign(a);
-    a = abs(a);
+    a = fabs(a);
     return a < 0.04045f ? old_sign * (1.0f / 12.92f) * a : old_sign * pow((a + 0.055f) * (1.0f / 1.055f), 2.4f);
 }
 

@@ -14,7 +14,8 @@ project(
   DESCRIPTION
     "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
   VERSION ${VERSION}
-  LANGUAGES C CXX)
+  LANGUAGES C CXX
+)
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(VERSION_LONG "${GIT_DESCRIBE} (64 bit)")
@@ -39,7 +40,10 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(DEFAULT_BUILD_TYPE MinSizeRel)
   endif()
   message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as none was specified.")
-  set(CMAKE_BUILD_TYPE ${DEFAULT_BUILD_TYPE} CACHE STRING "Choose the type of build." FORCE)
+  set(CMAKE_BUILD_TYPE
+      ${DEFAULT_BUILD_TYPE}
+      CACHE STRING "Choose the type of build." FORCE
+  )
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 string(TOUPPER "${CMAKE_BUILD_TYPE}" U_CMAKE_BUILD_TYPE)
@@ -110,7 +114,8 @@ if(MSVC)
       CMAKE_C_FLAGS_DEBUG
       CMAKE_C_FLAGS_RELEASE
       CMAKE_C_FLAGS_MINSIZEREL
-      CMAKE_C_FLAGS_RELWITHDEBINFO)
+      CMAKE_C_FLAGS_RELWITHDEBINFO
+  )
   foreach(CompilerFlag ${CompilerFlags})
     string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
   endforeach()
@@ -123,51 +128,70 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-cpmaddpackage("gh:sgorsten/linalg@2.2")
+CPMAddPackage("gh:sgorsten/linalg@2.2")
 if(linalg_ADDED)
   message(STATUS "linalg library added")
   add_library(linalg INTERFACE IMPORTED)
   target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 endif()
 
-cpmaddpackage("gh:fmtlib/fmt#10.1.1")
+CPMAddPackage("gh:fmtlib/fmt#10.1.1")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
 
-cpmaddpackage(
-  NAME
-  spdlog
-  URL
-  https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.zip
-  OPTIONS
-  "SPDLOG_INSTALL NO" # don't create an installable target
-  "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+CPMAddPackage(
+  NAME spdlog
+  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.zip
+  OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
+          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
 )
 if(spdlog_ADDED)
   message(STATUS "spdlog library added")
 endif()
 
-cpmaddpackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
 if(stb_ADDED)
   message(STATUS "stb library added")
   add_library(stb INTERFACE IMPORTED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
-cpmaddpackage("gh:Armchair-Software/emscripten-browser-file#2ff8f8f791c0e7177b40e621ee3f758e03b31bf5")
+CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#2ff8f8f791c0e7177b40e621ee3f758e03b31bf5")
 if(emscripten-browser-file_ADDED)
   message(STATUS "emscripten-browser-file library added")
   add_library(emscripten-browser-file INTERFACE IMPORTED)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
 endif()
 
-cpmaddpackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
-if(portable-file-dialogs_ADDED)
-  message(STATUS "portable-file-dialogs library added")
-  add_library(portable-file-dialogs INTERFACE IMPORTED)
-  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
-endif()
+# CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+# if(portable-file-dialogs_ADDED) message(STATUS "portable-file-dialogs library added")
+# add_library(portable-file-dialogs INTERFACE IMPORTED) target_include_directories(portable-file-dialogs INTERFACE
+# "${portable-file-dialogs_SOURCE_DIR}") endif()
+
+CPMAddPackage(
+  NAME Imath
+  VERSION 3.1.6 # the git repo is incredibly large, so we download the archived include directory
+  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
+  OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+)
+
+CPMAddPackage(
+  NAME openexr
+  GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
+  GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
+  OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF" "BUILD_TESTING OFF"
+          "EXCLUDE_FROM_ALL YES"
+)
+
+# CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
+# library added")
+
+# # implot has no CMake support, so we create our own target set( implot STATIC ${implot_SOURCE_DIR}/implot.h #
+# ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) #
+# target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
+# 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
+# ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
 
 if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_USE_GLFW_METAL ON)
@@ -180,8 +204,11 @@ if(APPLE AND NOT EMSCRIPTEN)
 endif()
 
 # copy asset directory to the build tree file
-file(GLOB_RECURSE MY_RESOURCE_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} # CONFIGURE_DEPENDS
-     ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.*)
+file(
+  GLOB_RECURSE MY_RESOURCE_FILES
+  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} # CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.*
+)
 
 if(APPLE AND (HELLOIMGUI_USE_GLFW_METAL OR HELLOIMGUI_USE_SDL_METAL))
 
@@ -220,40 +247,31 @@ if(APPLE AND (HELLOIMGUI_USE_GLFW_METAL OR HELLOIMGUI_USE_SDL_METAL))
 endif()
 
 foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/${MY_RESOURCE_FILE} ${CMAKE_CURRENT_BINARY_DIR}/${MY_RESOURCE_FILE}
-                 COPYONLY)
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/${MY_RESOURCE_FILE} ${CMAKE_CURRENT_BINARY_DIR}/${MY_RESOURCE_FILE} COPYONLY
+  )
 endforeach()
 
-cpmaddpackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee")
-if(hello_imgui_ADDED)
-  message(STATUS "hello_imgui library added")
+# CPMAddPackage("gh:pthom/imgui_bundle#6d6cfe8d68c0a57f62149e6ed85e8d2b905bca23")
+CPMAddPackage(
+  NAME imgui_bundle
+  GITHUB_REPOSITORY pthom/imgui_bundle
+  GIT_TAG 6d6cfe8d68c0a57f62149e6ed85e8d2b905bca23
+  OPTIONS "IMGUI_BUNDLE_WITH_TEST_ENGINE OFF"
+          "IMGUI_BUNDLE_DISABLE_NANOVG ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUI_TEX_INSPECT ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUIZMO ON"
+          "IMGUI_BUNDLE_DISABLE_IMFILEDIALOG ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
+          # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
+          "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
+)
+if(imgui_bundle_ADDED)
+  message(STATUS "imgui_bundle library added")
 endif()
 
-cpmaddpackage(
-  NAME
-  Imath
-  VERSION
-  3.1.6 # the git repo is incredibly large, so we download the archived include directory
-  URL
-  https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
-  OPTIONS
-  "BUILD_SHARED_LIBS OFF"
-  "BUILD_TESTING OFF"
-  "EXCLUDE_FROM_ALL YES")
-
-cpmaddpackage(
-  NAME
-  openexr
-  GITHUB_REPOSITORY
-  AcademySoftwareFoundation/openexr
-  GIT_TAG
-  71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS
-  "OPENEXR_BUILD_TOOLS OFF"
-  "BUILD_SHARED_LIBS OFF"
-  "OPENEXR_INSTALL_EXAMPLES OFF"
-  "BUILD_TESTING OFF"
-  "EXCLUDE_FROM_ALL YES")
+# CPMAddPackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee") if(hello_imgui_ADDED) message(STATUS
+# "hello_imgui library added") endif()
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -289,7 +307,7 @@ set(HELLO_IMGUI_BUNDLE_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_SHORT_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_ICON_FILE icon.icns)
 
-hello_imgui_add_app(
+imgui_bundle_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/app.cpp
@@ -309,13 +327,23 @@ hello_imgui_add_app(
   src/texture_gl.cpp
   ${EXTRA_SOURCES}
   ASSETS_LOCATION
-  ${CMAKE_CURRENT_BINARY_DIR}/assets)
+  ${CMAKE_CURRENT_BINARY_DIR}/assets
+)
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
 endif(APPLE)
-target_link_libraries(HDRView PRIVATE linalg fmt::fmt spdlog::spdlog OpenEXR::OpenEXR Imath::Imath stb)
+target_link_libraries(
+  HDRView
+  PRIVATE linalg
+          fmt::fmt
+          spdlog::spdlog
+          OpenEXR::OpenEXR
+          Imath::Imath
+          stb
+          implot
+)
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
 if(EMSCRIPTEN)
@@ -327,14 +355,19 @@ if(EMSCRIPTEN)
     -sEXPORTED_FUNCTIONS=[_main,_malloc,_free]
     -sNO_DISABLE_EXCEPTION_CATCHING
     -sMAX_WEBGL_VERSION=2
-    -sMIN_WEBGL_VERSION=2)
+    -sMIN_WEBGL_VERSION=2
+  )
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 240)
 else()
-  target_link_libraries(HDRView PRIVATE portable-file-dialogs)
+  # target_link_libraries(HDRView PRIVATE portable-file-dialogs)
 endif()
 
 if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
-  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
+  add_custom_command(
+    TARGET HDRView
+    POST_BUILD
+    COMMAND strip $<TARGET_FILE:HDRView>
+  )
 endif()
 
 # Force colored output for the ninja generator

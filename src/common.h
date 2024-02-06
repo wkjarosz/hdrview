@@ -65,10 +65,18 @@ template <typename T>
 std::vector<T> linspaced(size_t num, T a, T b)
 {
     std::vector<T> retVal(num);
-    for (size_t i = 0; i < num; ++i)
-        retVal[i] = lerp(a, b, T(i) / (num - 1));
+    for (size_t i = 0; i < num; ++i) retVal[i] = lerp(a, b, T(i) / (num - 1));
 
     return retVal;
+}
+
+template <size_t Num, typename T>
+std::array<T, Num> linspaced(T a, T b)
+{
+    std::array<T, Num> ret;
+    for (size_t i = 0; i < Num; ++i) ret[i] = lerp(a, b, T(i) / (Num - 1));
+
+    return ret;
 }
 
 /*!
@@ -245,26 +253,51 @@ inline T mod(T a, T b)
 }
 
 template <typename T>
-inline T log_scale(T val)
+inline T symlog_scale(T val)
 {
-    static const T eps    = T(0.001);
-    static const T logeps = std::log(eps);
+    static const T eps     = T(0.00001);
+    static const T log_eps = std::log10(eps);
 
-    return val > 0 ? (std::log(val + eps) - logeps) : -(std::log(-val + eps) - logeps);
+    return val > 0 ? (std::log10(val + eps) - log_eps) : -(std::log10(-val + eps) - log_eps);
+    // return val > 0 ? std::log10(val) : -std::log10(-val);
 }
 
 template <typename T>
-inline T normalized_log_scale(T val, T minLog, T diffLog)
+inline T symlog_scale_inv(T val)
 {
-    return (log_scale(val) - minLog) / diffLog;
+    static const T eps     = T(0.00001);
+    static const T log_eps = std::log10(eps);
+
+    return val > 0 ? (std::pow(T(10), val + log_eps) - eps) : -(pow(T(10), -val + log_eps) - eps);
+    // return val > 0 ? std::pow(T(10), val) : -std::pow(T(10), -val);
 }
 
 template <typename T>
-inline T normalized_log_scale(T val)
+inline T normalized_symlog_scale(T val, T log_min, T log_diff)
 {
-    static const T minLog  = log_scale(T(0));
-    static const T diffLog = log_scale(T(1)) - minLog;
-    return normalized_log_scale(val, minLog, diffLog);
+    return (symlog_scale(val) - log_min) / log_diff;
+}
+
+template <typename T>
+inline T normalized_symlog_scale_inv(T val, T log_min, T log_diff)
+{
+    return symlog_scale_inv(log_diff * val + log_min);
+}
+
+template <typename T>
+inline T normalized_symlog_scale(T val)
+{
+    static const T log_min  = symlog_scale(T(0));
+    static const T log_diff = symlog_scale(T(1)) - log_min;
+    return normalized_symlog_scale(val, log_min, log_diff);
+}
+
+template <typename T>
+inline T normalized_symlog_scale_inv(T val)
+{
+    static const T log_min  = symlog_scale(T(0));
+    static const T log_diff = symlog_scale(T(1)) - log_min;
+    return normalized_symlog_scale_inv(val, log_min, log_diff);
 }
 
 template <typename T>
@@ -275,7 +308,7 @@ inline T square(T value)
 
 //
 // The code below allows us to use the fmt format/print, spdlog logging functions, and
-// standard C++ iostreams like cout with linalg vectors, colors and matrices.
+// standard C++ iostreams like cout with linalg vectors and matrices.
 //
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
@@ -343,8 +376,7 @@ std::basic_ostream<C> &operator<<(std::basic_ostream<C> &out, const Vec<N, T> &v
     width += 5;
 
     out << '{';
-    for (size_t i = 0; i < N - 1; ++i)
-        out << std::setw(width) << v[i] << ',';
+    for (size_t i = 0; i < N - 1; ++i) out << std::setw(width) << v[i] << ',';
     out << std::setw(width) << v[N - 1] << '}';
 
     out.flags(oldFlags);

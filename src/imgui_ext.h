@@ -41,4 +41,13 @@ void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const std::s
 
 void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button);
 
+void PlotMultiLines(const char *label, int num_datas, const char **names, const ImColor *colors,
+                    float (*getter)(const void *data, int idx, int tableIndex), const void *datas, int values_count,
+                    float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0, 0));
+
+void PlotMultiHistograms(const char *label, int num_hists, const char **names, const ImColor *colors,
+                         float (*getter)(const void *data, int idx, int tableIndex), const void *datas,
+                         int values_count, float scale_min = FLT_MAX, float scale_max = FLT_MAX,
+                         ImVec2 graph_size = ImVec2(0, 0));
+
 } // namespace ImGui

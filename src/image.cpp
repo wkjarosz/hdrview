@@ -5,6 +5,7 @@
 //
 
 #include "image.h"
+#include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
 #include "parallelfor.h"
@@ -70,6 +71,88 @@ std::set<std::string> Image::savable_formats()
 // end static methods
 //
 
+PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure) :
+    exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
+    maximum(-std::numeric_limits<float>::infinity()), average(0.f)
+{
+    // compute pixel summary statistics
+    int    valid_pixels = 0;
+    double accum        = 0.0; // reduce numerical precision issues by accumulating in double
+    for (int i = 0; i < img.num_elements(); ++i)
+    {
+        float val = img(i);
+
+        if (isnan(val))
+            ++invalid_pixels;
+        else
+        {
+            ++valid_pixels;
+            maximum = std::max(maximum, val);
+            minimum = std::min(minimum, val);
+            accum += val;
+        }
+    }
+    average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+    //
+
+    //
+    // compute histograms
+    float inv_bins = 1.f / Histogram::NUM_BINS;
+
+    for (int a = ELinear; a < ENumAxisScales; ++a)
+    {
+        auto &hist       = histogram[a];
+        hist.gain        = pow(2.f, exposure);
+        hist.display_max = pow(2.f, -exposure);
+        hist.log_min     = symlog_scale(minimum);
+        hist.log_dif     = symlog_scale(maximum) - hist.log_min;
+
+        PlottingData user_data{this, a};
+
+        // compute bin center values
+        for (int i = 0; i < Histogram::NUM_BINS; ++i)
+            hist.xs[i] = normalized_axis_scale_inv_xform((i + 0.5) * inv_bins, &user_data);
+
+        // accumulate bin counts
+        for (int i = 0; i < img.num_elements(); ++i)
+            hist.bin_y(normalized_axis_scale_fwd_xform(img(i), &user_data)) += 1;
+
+        // normalize histogram density by dividing bin counts by bin sizes
+        // for (int i = 0; i < Histogram::NUM_BINS; ++i)
+        //     hist.ys[i] /=
+        //         axis_scale_inv_xform((i + 1) * inv_bins, &user_data) - axis_scale_inv_xform(i * inv_bins,
+        //         &user_data);
+
+        // Compute y limit for each histogram according to its 10th-largest bin
+        auto h   = histogram[a].ys; // make a copy, which we partially sort
+        auto idx = h.size() - 10;
+        std::nth_element(h.begin(), h.begin() + idx, h.end());
+        histogram[a].y_limit = h[idx] * 1.15f;
+    }
+}
+
+float4x4 ChannelGroup::colors() const
+{
+    switch (type)
+    {
+    case RGBA_Channels:
+    case RGB_Channels:
+        // We'd ideally like to do additive blending, but dear imgui seemingly doesn't support it.
+        // Setting the alpha values to 1/(c+1) would ensure that where all three R,G,B histograms overlap we get a
+        // neutral gray, but then red is fully opaque, while blue is 2/3 transparent. We instead manually choose values
+        // where all three are 0.5 transparent while producing neutral gray when composited using the over operator.
+        return float4x4{
+            {1.0f, 0.15f, 0.1f, 0.5f}, {.45f, 0.75f, 0.02f, 0.5f}, {.25f, 0.333f, 0.7f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
+    case XYZA_Channels:
+    case XYZ_Channels:
+    case YCA_Channels:
+    case YC_Channels:
+    case UVorXY_Channels:
+    case Z_Channel:
+    case Single_Channel: return float4x4{1.f};
+    }
+}
+
 Channel::Channel(const std::string &name, int2 size) : Array2Df(size), name(name) {}
 
 Texture *Channel::get_texture()
@@ -89,14 +172,24 @@ Texture *Channel::get_texture()
     return texture.get();
 }
 
+PixelStatistics *Channel::get_statistics(float exposure)
+{
+    if (!statistics || statistics_dirty || exposure != statistics->exposure)
+    {
+        statistics       = make_unique<PixelStatistics>(*this, exposure);
+        statistics_dirty = false;
+    }
+
+    return statistics.get();
+}
+
 void Image::set_null_texture(Shader &shader, const string &target)
 {
     shader.set_uniform(fmt::format("{}_M_to_Rec709", target), float4x4{la::identity});
     shader.set_uniform(fmt::format("{}_channels_type", target), (int)ChannelGroup::Single_Channel);
     shader.set_uniform(fmt::format("{}_yw", target), Rec709_luminance_weights);
 
-    for (int c = 0; c < 4; ++c)
-        shader.set_texture(fmt::format("{}_{}_texture", target, c), black_texture());
+    for (int c = 0; c < 4; ++c) shader.set_texture(fmt::format("{}_{}_texture", target, c), black_texture());
 }
 
 void Image::set_as_texture(int group_idx, Shader &shader, const string &target)
@@ -188,8 +281,7 @@ void Image::build_Layers_and_groups()
     auto find_group_channels = [](map<string, int> &channels, const string &prefix, const vector<string> &g)
     {
         fmt::print("Trying to find channels '{}' in {} layer channels\n", fmt::join(g, ","), channels.size());
-        for (auto c : channels)
-            fmt::print("\t{}: {}\n", c.second, c.first);
+        for (auto c : channels) fmt::print("\t{}: {}\n", c.second, c.first);
         vector<map<string, int>::iterator> found;
         found.reserve(g.size());
         for (const string &c : g)
@@ -203,12 +295,10 @@ void Image::build_Layers_and_groups()
     };
 
     fmt::print("Processing {} channels\n", channels.size());
-    for (size_t i = 0; i < channels.size(); ++i)
-        fmt::print("\t{:>2d}: {}\n", (int)i, channels[i].name);
+    for (size_t i = 0; i < channels.size(); ++i) fmt::print("\t{:>2d}: {}\n", (int)i, channels[i].name);
 
     set<string> layer_names;
-    for (auto &c : channels)
-        layer_names.insert(Channel::head(c.name));
+    for (auto &c : channels) layer_names.insert(Channel::head(c.name));
 
     for (const auto &layer_name : layer_names)
     {
@@ -248,11 +338,11 @@ void Image::build_Layers_and_groups()
                 layer.groups.emplace_back(groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
-                fmt::print("Created channel group: {}, {}\n", groups.back().name, group_channels);
+                fmt::print("Created channel group '{}' of type {} with {} channels\n", groups.back().name,
+                           (int)groups.back().type, group_channels);
 
                 // now erase the channels that have been processed
-                for (auto &i3 : found)
-                    layer_channels.erase(i3);
+                for (auto &i3 : found) layer_channels.erase(i3);
             }
         }
 
@@ -299,8 +389,7 @@ void Image::finalize()
         for (auto &l : layers)
         {
             size_t num_channels_in_all_groups = 0;
-            for (auto &g : l.groups)
-                num_channels_in_all_groups += groups[g].num_channels;
+            for (auto &g : l.groups) num_channels_in_all_groups += groups[g].num_channels;
 
             if (num_channels_in_all_groups != l.channels.size())
                 throw runtime_error{fmt::format(

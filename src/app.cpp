@@ -5,9 +5,11 @@
 #include "app.h"
 
 #include "hello_imgui/hello_imgui.h"
-#include "hello_imgui/hello_imgui_include_opengl.h" // cross-platform way to include OpenGL headers
 #include "imgui_ext.h"
 #include "imgui_internal.h"
+#include "immapp/immapp.h"
+#include "implot/implot.h"
+#include "implot/implot_internal.h"
 
 // Taken from https://raw.githubusercontent.com/juliettef/IconFontCppHeaders/main/IconsFontAwesome6.h
 #include "IconsFontAwesome6.h"
@@ -36,7 +38,7 @@
 #include <string_view>
 using std::string_view;
 #else
-#include "portable-file-dialogs.h"
+#include "portable_file_dialogs/portable_file_dialogs.h"
 #endif
 
 #ifdef HELLOIMGUI_USE_SDL_OPENGL3
@@ -215,15 +217,23 @@ SampleViewer::SampleViewer()
     //
     // Dockable windows
     {
-        // the file dialog
+        // the histogram window
+        HelloImGui::DockableWindow histogram_window;
+        histogram_window.label             = "Histogram";
+        histogram_window.dockSpaceName     = "HistogramSpace";
+        histogram_window.isVisible         = true;
+        histogram_window.rememberIsVisible = true;
+        histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
+
+        // the file window
         HelloImGui::DockableWindow file_window;
         file_window.label             = "File";
-        file_window.dockSpaceName     = "SideSpace";
+        file_window.dockSpaceName     = "FileSpace";
         file_window.isVisible         = true;
         file_window.rememberIsVisible = true;
         file_window.GuiFunction       = [this] { draw_file_window(); };
 
-        // the channels dialog
+        // the channels window
         HelloImGui::DockableWindow channel_window;
         channel_window.label             = "Channels";
         channel_window.dockSpaceName     = "ChannelSpace";
@@ -241,11 +251,11 @@ SampleViewer::SampleViewer()
 
         // docking layouts
         m_params.dockingParams.layoutName      = "Standard";
-        m_params.dockingParams.dockableWindows = {file_window, channel_window, console_window};
+        m_params.dockingParams.dockableWindows = {histogram_window, file_window, channel_window, console_window};
         m_params.dockingParams.dockingSplits   = {
-            // HelloImGui::DockingSplit{"MainDockSpace", "ToolbarSpace", ImGuiDir_Up, 0.1f},
-            HelloImGui::DockingSplit{"MainDockSpace", "SideSpace", ImGuiDir_Left, 0.2f},
-            HelloImGui::DockingSplit{"SideSpace", "ChannelSpace", ImGuiDir_Down, 0.25f},
+            HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
+            HelloImGui::DockingSplit{"HistogramSpace", "FileSpace", ImGuiDir_Down, 0.75f},
+            HelloImGui::DockingSplit{"FileSpace", "ChannelSpace", ImGuiDir_Down, 0.25f},
             HelloImGui::DockingSplit{"MainDockSpace", "ConsoleSpace", ImGuiDir_Down, 0.25f}};
     }
 
@@ -633,9 +643,106 @@ void SampleViewer::close_all_images()
     Image::set_null_texture(*m_shader, "secondary");
 }
 
-void SampleViewer::run() { HelloImGui::Run(m_params); }
+void SampleViewer::run()
+{
+    ImmApp::AddOnsParams addons{.withImplot = true, .withMarkdown = false};
+    ImmApp::Run(m_params, addons);
+}
 
 SampleViewer::~SampleViewer() {}
+
+void SampleViewer::draw_histogram_window()
+{
+    if (!num_images())
+        return;
+
+    static int y_axis   = PixelStatistics::ELinear;
+    static int x_axis   = PixelStatistics::ESymLog;
+    static int bin_type = 1;
+    {
+        float combo_width = 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) -
+                            ImGui::CalcTextSize("X:").x - ImGui::GetStyle().ItemSpacing.x;
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("Y:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(combo_width);
+        ImGui::Combo("##Y-axis type", &y_axis, "Linear\0Log\0\0");
+        ImGui::SameLine();
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("X:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(combo_width);
+        ImGui::Combo("##X-axis type", &x_axis, "Linear\0sRGB\0Log\0\0");
+
+        ImGui::SetNextItemWidth(combo_width);
+        ImGui::RadioButton("constant", &bin_type, 0);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(combo_width);
+        ImGui::RadioButton("linear", &bin_type, 1);
+    }
+
+    auto             c_img    = current_image();
+    auto            &group    = c_img->groups[c_img->selected_group];
+    PixelStatistics *stats[4] = {nullptr, nullptr, nullptr, nullptr};
+    const char      *names[4] = {nullptr, nullptr, nullptr, nullptr};
+    auto             colors   = group.colors();
+
+    float y_limit = 0.f;
+    for (int c = 0; c < std::min(3, group.num_channels); ++c)
+    {
+        stats[c] = c_img->channels[group.channels[c]].get_statistics(m_exposure);
+        names[c] = c_img->channels[group.channels[c]].name.c_str();
+        y_limit  = std::max(y_limit, stats[c]->histogram[x_axis].y_limit);
+    }
+
+    ImPlot::GetStyle().PlotMinSize = {100, 100};
+
+    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
+    {
+        float mx = pow(2.f, -m_exposure);
+        ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
+        ImPlot::SetupAxisScale(ImAxis_Y1, y_axis == PixelStatistics::ELinear ? ImPlotScale_Linear : ImPlotScale_Log10);
+
+        PlottingData user_data{stats[0], x_axis};
+
+        ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform, &user_data);
+        if (x_axis == PixelStatistics::ESymLog)
+            ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+
+        ImPlot::SetupAxesLimits(mx / 10000.f, mx, y_axis == PixelStatistics::ELinear ? 0.f : 0.5f, y_limit,
+                                ImPlotCond_Always);
+        // ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
+        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        {
+            ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
+            ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
+            if (bin_type != 0)
+                ImPlot::PlotShaded(names[c], stats[c]->histogram[x_axis].xs.data(),
+                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS, 0.f,
+                                   mx / 256.f, 0.f);
+            else
+                ImPlot::PlotStairs(names[c], stats[c]->histogram[x_axis].xs.data(),
+                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS,
+                                   ImPlotStairsFlags_Shaded);
+            ImPlot::PopStyleColor(2);
+        }
+        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        {
+            ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
+            ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
+            if (bin_type != 0)
+                ImPlot::PlotLine<float>(names[c], stats[c]->histogram[x_axis].xs.data(),
+                                        stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS,
+                                        mx / 256.f, 0.f);
+            else
+                ImPlot::PlotStairs(names[c], stats[c]->histogram[x_axis].xs.data(),
+                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS);
+            ImPlot::PopStyleColor(2);
+        }
+        ImPlot::EndPlot();
+    }
+}
 
 void SampleViewer::draw_file_window()
 {
@@ -680,7 +787,6 @@ void SampleViewer::draw_file_window()
     if (num_images())
     {
         static bool show_channels = true;
-
         ImGui::Checkbox("Show channel groups", &show_channels);
 
         ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
@@ -1225,13 +1331,23 @@ void SampleViewer::draw_top_toolbar()
     ImGui::SliderFloat("##ExposureSlider", &m_exposure, -9.f, 9.f, "%5.2f");
     ImGui::SameLine();
 
+    auto img = current_image();
+
+    ImGui::BeginDisabled(!img);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
                         ImVec2(0, ImGui::GetStyle().FramePadding.y));  // Remove frame padding
     ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
-    // ImGui::PushFont(m_sans_regular[16]);
-    ImGui::Button(ICON_FA_WAND_SPARKLES "##NormalizeExposure", {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()});
-    // ImGui::PopFont();
+    if (ImGui::Button(ICON_FA_WAND_SPARKLES "##NormalizeExposure", {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+    {
+        float m     = 0.f;
+        auto &group = img->groups[img->selected_group];
+        for (int c = 0; c < group.num_channels; ++c)
+            m = std::max(m, img->channels[group.channels[c]].get_statistics(m_exposure)->maximum);
+
+        m_exposure = log2(1.f / m);
+    }
     ImGui::PopStyleVar(2);
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
 
@@ -1394,8 +1510,8 @@ void SampleViewer::process_hotkeys()
         center();
 
     // update which texture is shown
-    img = current_image();
-    img->set_as_texture(img->selected_group, *m_shader, "primary");
+    if ((img = current_image()))
+        img->set_as_texture(img->selected_group, *m_shader, "primary");
 }
 
 void SampleViewer::draw_about_dialog()

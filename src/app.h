@@ -89,6 +89,7 @@ private:
     float zoom_level() const;
     void  set_zoom_level(float l);
 
+    void   draw_histogram_window();
     void   draw_about_dialog();
     void   draw_pixel_info() const;
     void   draw_pixel_grid() const;

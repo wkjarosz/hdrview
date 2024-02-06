@@ -27,8 +27,18 @@ const float maxLab[] = {100, 128, 128};
 
 using namespace std;
 
-float LinearToSRGB(float a) { return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0 / 2.4) - 0.055; }
-float SRGBToLinear(float a) { return a < 0.04045 ? (1.0 / 12.92) * a : pow((a + 0.055) * (1.0 / 1.055), 2.4); }
+float LinearToSRGB(float a)
+{
+    float old_sign = sign(a);
+    a              = fabs(a);
+    return a < 0.0031308f ? old_sign * 12.92f * a : old_sign * 1.055f * pow(a, 1.0f / 2.4f) - 0.055f;
+}
+float SRGBToLinear(float a)
+{
+    float old_sign = sign(a);
+    a              = fabs(a);
+    return a < 0.04045f ? old_sign * (1.0f / 12.92f) * a : old_sign * pow((a + 0.055f) * (1.0f / 1.055f), 2.4f);
+}
 float LinearToAdobeRGB(float a) { return pow(a, 1.f / 2.19921875f); }
 float AdobeRGBToLinear(float a) { return pow(a, 2.19921875f); }
 

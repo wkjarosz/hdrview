@@ -8,11 +8,106 @@
 
 #include "array2d.h"
 #include "box.h"
+#include "colorspace.h"
+#include "common.h"
 #include "fwd.h"
+#include <cfloat>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
+
+struct PixelStatistics
+{
+    float exposure;
+    float minimum;
+    float maximum;
+    float average;
+    int   invalid_pixels = 0;
+
+    enum AxisScale : int
+    {
+        ELinear = 0,
+        ESRGB,
+        ESymLog,
+        ENumAxisScales
+    };
+
+    struct Histogram
+    {
+        static constexpr int NUM_BINS = 256;
+
+        std::array<float, NUM_BINS> xs{};
+        std::array<float, NUM_BINS> ys{};
+
+        float y_limit = 0.f;
+        float log_min;
+        float log_dif;
+        float gain        = 1.f;
+        float display_max = 1.f;
+
+        // Map a value v in [0,1) to a bin index in [0, NUM_BINS) with clamping to bounds
+        int    bin_idx(float v) const { return std::clamp(int(floor(v * NUM_BINS)), 0, NUM_BINS - 1); }
+        float &bin_x(float v) { return xs[bin_idx(v)]; }
+        float &bin_y(float v) { return ys[bin_idx(v)]; }
+    };
+
+    Histogram histogram[ENumAxisScales];
+
+    PixelStatistics(const Array2Df &img, float new_exposure);
+};
+
+struct PlottingData
+{
+    PixelStatistics *stats;
+    int              axis_scale;
+};
+
+inline double axis_scale_fwd_xform(double value, void *user_data)
+{
+    auto data = (PlottingData *)user_data;
+    if (data->axis_scale == PixelStatistics::ESRGB)
+        return LinearToSRGB(value);
+    else if (data->axis_scale == PixelStatistics::ESymLog)
+        return symlog_scale(value);
+    else
+        return value;
+}
+
+inline double axis_scale_inv_xform(double value, void *user_data)
+{
+    auto data = (PlottingData *)user_data;
+    if (data->axis_scale == PixelStatistics::ESRGB)
+        return SRGBToLinear(value);
+    else if (data->axis_scale == PixelStatistics::ESymLog)
+        return symlog_scale_inv(value);
+    else
+        return value;
+}
+
+inline double normalized_axis_scale_fwd_xform(double value, void *user_data)
+{
+    auto  data = (PlottingData *)user_data;
+    auto &hist = data->stats->histogram[data->axis_scale];
+    if (data->axis_scale == PixelStatistics::ESRGB)
+        return axis_scale_fwd_xform(hist.gain * value, user_data);
+    else if (data->axis_scale == PixelStatistics::ESymLog)
+        return (axis_scale_fwd_xform(value, user_data) - hist.log_min) / hist.log_dif;
+    else
+        return hist.gain * value;
+}
+
+inline double normalized_axis_scale_inv_xform(double value, void *user_data)
+{
+    auto  data = (PlottingData *)user_data;
+    auto &hist = data->stats->histogram[data->axis_scale];
+    if (data->axis_scale == PixelStatistics::ESRGB)
+        return axis_scale_inv_xform(value, user_data) * hist.display_max;
+    else if (data->axis_scale == PixelStatistics::ESymLog)
+        return axis_scale_inv_xform(hist.log_dif * value + hist.log_min, user_data);
+    else
+        return value * hist.display_max;
+}
 
 struct Channel : public Array2Df
 {
@@ -21,13 +116,18 @@ public:
     static std::string                         tail(const std::string &full_name) { return split(full_name).second; }
     static std::string                         head(const std::string &full_name) { return split(full_name).first; }
 
-    std::string              name;
+    std::string name;
+
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
 
+    std::unique_ptr<PixelStatistics> statistics;
+    bool                             statistics_dirty = true;
+
     Channel(const std::string &name, int2 size);
 
-    Texture *get_texture();
+    Texture         *get_texture();
+    PixelStatistics *get_statistics(float exposure);
 };
 
 // A ChannelGroup collects up to 4 channels into a single unit
@@ -50,6 +150,8 @@ public:
         Z_Channel,
         Single_Channel
     } type{Single_Channel};
+
+    float4x4 colors() const;
 };
 
 struct Layer
