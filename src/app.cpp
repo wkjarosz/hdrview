@@ -515,7 +515,7 @@ void HDRViewApp::open_image()
         [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
     {
         isviewstream is{buffer};
-        reinterpret_cast<SampleViewer *>(my_data)->load_image(is, filename);
+        g_app()->load_image(is, filename);
     };
 
     string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",."));
@@ -605,7 +605,7 @@ void HDRViewApp::close_all_images()
 
 void HDRViewApp::run()
 {
-    ImmApp::AddOnsParams addons{.withImplot = true, .withMarkdown = false};
+    ImmApp::AddOnsParams addons{/* .withImplot = */ true, /*.withMarkdown = */ false};
     ImmApp::Run(m_params, addons);
 }
 
