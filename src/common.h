@@ -253,54 +253,6 @@ inline T mod(T a, T b)
 }
 
 template <typename T>
-inline T symlog_scale(T val)
-{
-    static const T eps     = T(0.00001);
-    static const T log_eps = std::log10(eps);
-
-    return val > 0 ? (std::log10(val + eps) - log_eps) : -(std::log10(-val + eps) - log_eps);
-    // return val > 0 ? std::log10(val) : -std::log10(-val);
-}
-
-template <typename T>
-inline T symlog_scale_inv(T val)
-{
-    static const T eps     = T(0.00001);
-    static const T log_eps = std::log10(eps);
-
-    return val > 0 ? (std::pow(T(10), val + log_eps) - eps) : -(pow(T(10), -val + log_eps) - eps);
-    // return val > 0 ? std::pow(T(10), val) : -std::pow(T(10), -val);
-}
-
-template <typename T>
-inline T normalized_symlog_scale(T val, T log_min, T log_diff)
-{
-    return (symlog_scale(val) - log_min) / log_diff;
-}
-
-template <typename T>
-inline T normalized_symlog_scale_inv(T val, T log_min, T log_diff)
-{
-    return symlog_scale_inv(log_diff * val + log_min);
-}
-
-template <typename T>
-inline T normalized_symlog_scale(T val)
-{
-    static const T log_min  = symlog_scale(T(0));
-    static const T log_diff = symlog_scale(T(1)) - log_min;
-    return normalized_symlog_scale(val, log_min, log_diff);
-}
-
-template <typename T>
-inline T normalized_symlog_scale_inv(T val)
-{
-    static const T log_min  = symlog_scale(T(0));
-    static const T log_diff = symlog_scale(T(1)) - log_min;
-    return normalized_symlog_scale_inv(val, log_min, log_diff);
-}
-
-template <typename T>
 inline T square(T value)
 {
     return value * value;

@@ -1,4 +1,4 @@
-/** \file SampleViewer.cpp
+/** \file app.cpp
     \author Wojciech Jarosz
 */
 
@@ -142,53 +142,7 @@ static const vector<std::pair<string, string>> g_help_strings = {
 //         tooltip(fmt::format("{}.\nKey: {}", t->second, t->first).c_str(), wrap_width);
 // }
 
-static void align_cursor(float width, float align)
-{
-    if (auto shift = align * (ImGui::GetContentRegionAvail().x - width))
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + shift);
-}
-
-static void align_cursor(const string &text, float align) { align_cursor(ImGui::CalcTextSize(text.c_str()).x, align); }
-
-static void push_row_colors(bool is_current, bool is_reference)
-{
-    float4 active  = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
-    float4 header  = ImGui::GetStyleColorVec4(ImGuiCol_Header);
-    float4 hovered = ImGui::GetStyleColorVec4(ImGuiCol_HeaderHovered);
-
-    // choose the complement color if we are the reference
-    float4 hovered_c = convert_colorspace(
-        convert_colorspace(hovered, HSV_CS, LinearSRGB_CS) + float4{0.67f, 0.f, -0.4f, 0.f}, LinearSRGB_CS, HSV_CS);
-    float4 active_c = convert_colorspace(
-        convert_colorspace(active, HSV_CS, LinearSRGB_CS) + float4{0.67f, 0.f, -0.4f, 0.f}, LinearSRGB_CS, HSV_CS);
-
-    if (is_reference && is_current)
-    {
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, 0.5f * (hovered_c + hovered));
-        ImGui::PushStyleColor(ImGuiCol_Header, 0.5f * (hovered_c + hovered));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, 0.5f * (active_c + active));
-    }
-    else if (is_current)
-    {
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, hovered);
-        ImGui::PushStyleColor(ImGuiCol_Header, hovered);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active);
-    }
-    else if (is_reference)
-    {
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, hovered_c);
-        ImGui::PushStyleColor(ImGuiCol_Header, hovered_c);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active_c);
-    }
-    else
-    {
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, header);
-        ImGui::PushStyleColor(ImGuiCol_Header, hovered);
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active);
-    }
-}
-
-SampleViewer::SampleViewer()
+HDRViewApp::HDRViewApp()
 {
     m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
     spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
@@ -517,7 +471,7 @@ SampleViewer::SampleViewer()
     m_params.callbacks.ShowGui          = [this]() { draw_about_dialog(); };
     m_params.callbacks.CustomBackground = [this]() { draw_background(); };
 }
-void SampleViewer::save_as(const string &filename) const
+void HDRViewApp::save_as(const string &filename) const
 {
     try
     {
@@ -548,7 +502,7 @@ void SampleViewer::save_as(const string &filename) const
     }
 }
 
-void SampleViewer::open_image()
+void HDRViewApp::open_image()
 {
 #if defined(__EMSCRIPTEN__)
     auto handle_upload_file =
@@ -577,7 +531,7 @@ void SampleViewer::open_image()
         fmt::print("Loaded image of size: {}\n", img->size());
 }
 
-void SampleViewer::load_image(std::istream &is, const string &f)
+void HDRViewApp::load_image(std::istream &is, const string &f)
 {
     // make a copy of f in case its an element of m_recent_files, which we modify
     string filename = f;
@@ -619,7 +573,7 @@ void SampleViewer::load_image(std::istream &is, const string &f)
     }
 }
 
-void SampleViewer::close_image()
+void HDRViewApp::close_image()
 {
     m_images.erase(m_images.begin() + m_current);
     m_current   = m_images.empty() ? -1 : std::clamp(m_current, 0, num_images() - 1);
@@ -634,7 +588,7 @@ void SampleViewer::close_image()
         Image::set_null_texture(*m_shader, "secondary");
 }
 
-void SampleViewer::close_all_images()
+void HDRViewApp::close_all_images()
 {
     m_images.clear();
     m_current   = -1;
@@ -643,108 +597,21 @@ void SampleViewer::close_all_images()
     Image::set_null_texture(*m_shader, "secondary");
 }
 
-void SampleViewer::run()
+void HDRViewApp::run()
 {
     ImmApp::AddOnsParams addons{.withImplot = true, .withMarkdown = false};
     ImmApp::Run(m_params, addons);
 }
 
-SampleViewer::~SampleViewer() {}
+HDRViewApp::~HDRViewApp() {}
 
-void SampleViewer::draw_histogram_window()
+void HDRViewApp::draw_histogram_window()
 {
-    if (!num_images())
-        return;
-
-    static int y_axis   = PixelStatistics::ELinear;
-    static int x_axis   = PixelStatistics::ESymLog;
-    static int bin_type = 1;
-    {
-        float combo_width = 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) -
-                            ImGui::CalcTextSize("X:").x - ImGui::GetStyle().ItemSpacing.x;
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("Y:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##Y-axis type", &y_axis, "Linear\0Log\0\0");
-        ImGui::SameLine();
-
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("X:");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##X-axis type", &x_axis, "Linear\0sRGB\0Log\0\0");
-
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::RadioButton("constant", &bin_type, 0);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::RadioButton("linear", &bin_type, 1);
-    }
-
-    auto             c_img    = current_image();
-    auto            &group    = c_img->groups[c_img->selected_group];
-    PixelStatistics *stats[4] = {nullptr, nullptr, nullptr, nullptr};
-    const char      *names[4] = {nullptr, nullptr, nullptr, nullptr};
-    auto             colors   = group.colors();
-
-    float y_limit = 0.f;
-    for (int c = 0; c < std::min(3, group.num_channels); ++c)
-    {
-        stats[c] = c_img->channels[group.channels[c]].get_statistics(m_exposure);
-        names[c] = c_img->channels[group.channels[c]].name.c_str();
-        y_limit  = std::max(y_limit, stats[c]->histogram[x_axis].y_limit);
-    }
-
-    ImPlot::GetStyle().PlotMinSize = {100, 100};
-
-    if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
-    {
-        float mx = pow(2.f, -m_exposure);
-        ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
-        ImPlot::SetupAxisScale(ImAxis_Y1, y_axis == PixelStatistics::ELinear ? ImPlotScale_Linear : ImPlotScale_Log10);
-
-        PlottingData user_data{stats[0], x_axis};
-
-        ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform, &user_data);
-        if (x_axis == PixelStatistics::ESymLog)
-            ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-
-        ImPlot::SetupAxesLimits(mx / 10000.f, mx, y_axis == PixelStatistics::ELinear ? 0.f : 0.5f, y_limit,
-                                ImPlotCond_Always);
-        // ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
-        for (int c = 0; c < std::min(3, group.num_channels); ++c)
-        {
-            ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
-            if (bin_type != 0)
-                ImPlot::PlotShaded(names[c], stats[c]->histogram[x_axis].xs.data(),
-                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS, 0.f,
-                                   mx / 256.f, 0.f);
-            else
-                ImPlot::PlotStairs(names[c], stats[c]->histogram[x_axis].xs.data(),
-                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS,
-                                   ImPlotStairsFlags_Shaded);
-            ImPlot::PopStyleColor(2);
-        }
-        for (int c = 0; c < std::min(3, group.num_channels); ++c)
-        {
-            ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-            if (bin_type != 0)
-                ImPlot::PlotLine<float>(names[c], stats[c]->histogram[x_axis].xs.data(),
-                                        stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS,
-                                        mx / 256.f, 0.f);
-            else
-                ImPlot::PlotStairs(names[c], stats[c]->histogram[x_axis].xs.data(),
-                                   stats[c]->histogram[x_axis].ys.data(), PixelStatistics::Histogram::NUM_BINS);
-            ImPlot::PopStyleColor(2);
-        }
-        ImPlot::EndPlot();
-    }
+    if (num_images())
+        current_image()->draw_histogram(m_exposure);
 }
 
-void SampleViewer::draw_file_window()
+void HDRViewApp::draw_file_window()
 {
     ImGui::BeginDisabled(!current_image());
     if (ImGui::BeginCombo("Mode", blend_mode_names()[m_blend_mode].c_str(), ImGuiComboFlags_HeightLargest))
@@ -815,7 +682,7 @@ void SampleViewer::draw_file_window()
                 ImGui::TableNextRow();
 
                 ImGui::TableNextColumn();
-                push_row_colors(is_current, is_reference);
+                ImGui::PushRowColors(is_current, is_reference);
                 if (ImGui::Selectable(fmt::format("##image_{}_selectable", i + 1).c_str(), is_current || is_reference,
                                       selectable_flags))
                 {
@@ -843,7 +710,7 @@ void SampleViewer::draw_file_window()
                 ImGui::SameLine();
 
                 auto image_num_str = fmt::format("{}", i + 1);
-                align_cursor(image_num_str, 1.0f);
+                ImGui::AlignCursor(image_num_str, 1.0f);
                 ImGui::TextUnformatted(image_num_str.c_str());
 
                 ImGui::TableNextColumn();
@@ -861,7 +728,7 @@ void SampleViewer::draw_file_window()
                     filename = filename.substr(1);
                     ellipsis = "...";
                 }
-                align_cursor(ellipsis + filename, 1.f);
+                ImGui::AlignCursor(ellipsis + filename, 1.f);
                 ImGui::TextUnformatted(ellipsis + filename);
 
                 if (show_channels && img->groups.size() > 1)
@@ -878,7 +745,7 @@ void SampleViewer::draw_file_window()
 
                             bool is_selected_channel = is_current && img->selected_group == layer.groups[g];
 
-                            push_row_colors(is_selected_channel, false);
+                            ImGui::PushRowColors(is_selected_channel, false);
                             {
 
                                 ImGui::TableNextRow();
@@ -886,7 +753,7 @@ void SampleViewer::draw_file_window()
                                 ImGui::TableNextColumn();
                                 string hotkey =
                                     is_current ? fmt::format(ICON_FA_ANGLE_UP "{}", layer.groups[g] + 1) : "";
-                                align_cursor(hotkey, 1.0f);
+                                ImGui::AlignCursor(hotkey, 1.0f);
                                 ImGui::TextUnformatted(hotkey);
 
                                 ImGui::TableNextColumn();
@@ -914,7 +781,7 @@ void SampleViewer::draw_file_window()
     }
 }
 
-void SampleViewer::draw_channel_window()
+void HDRViewApp::draw_channel_window()
 {
     static ImGuiSelectableFlags selectable_flags =
         ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
@@ -984,12 +851,12 @@ void SampleViewer::draw_channel_window()
 
                     bool is_selected_channel = img->selected_group == layer.groups[g];
 
-                    push_row_colors(is_selected_channel, false);
+                    ImGui::PushRowColors(is_selected_channel, false);
                     {
                         ImGui::TableNextRow();
 
                         ImGui::TableNextColumn();
-                        align_cursor(fmt::format(ICON_FA_ANGLE_UP "{}", layer.groups[g] + 1), 1.0f);
+                        ImGui::AlignCursor(fmt::format(ICON_FA_ANGLE_UP "{}", layer.groups[g] + 1), 1.0f);
                         if (ImGui::Selectable(
                                 fmt::format(ICON_FA_ANGLE_UP "{}##group_number", layer.groups[g] + 1).c_str(),
                                 is_selected_channel, selectable_flags))
@@ -1017,23 +884,23 @@ void SampleViewer::draw_channel_window()
     }
 }
 
-void SampleViewer::center() { m_offset = float2(0.f, 0.f); }
+void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
 
-void SampleViewer::fit()
+void HDRViewApp::fit()
 {
     // Calculate the appropriate scaling factor.
     m_zoom = minelem(size_f() / current_image()->display_window.size());
     center();
 }
 
-float SampleViewer::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(m_zoom_sensitivity); }
+float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(m_zoom_sensitivity); }
 
-void SampleViewer::set_zoom_level(float level)
+void HDRViewApp::set_zoom_level(float level)
 {
     m_zoom = std::clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
 }
 
-void SampleViewer::zoom_by(float amount, float2 focus_pos)
+void HDRViewApp::zoom_by(float amount, float2 focus_pos)
 {
     if (amount == 0.f)
         return;
@@ -1045,7 +912,7 @@ void SampleViewer::zoom_by(float amount, float2 focus_pos)
     set_pixel_at_position(focus_pos, focused_pixel);
 }
 
-void SampleViewer::zoom_in()
+void HDRViewApp::zoom_in()
 {
     // keep position at center of window fixed while zooming
     auto center_pos   = float2(size_f() / 2.f);
@@ -1058,7 +925,7 @@ void SampleViewer::zoom_in()
     set_pixel_at_position(center_pos, center_pixel);
 }
 
-void SampleViewer::zoom_out()
+void HDRViewApp::zoom_out()
 {
     // keep position at center of window fixed while zooming
     auto center_pos   = float2(size_f() / 2.f);
@@ -1071,26 +938,23 @@ void SampleViewer::zoom_out()
     set_pixel_at_position(center_pos, center_pixel);
 }
 
-float2 SampleViewer::pixel_at_position(float2 position) const
+float2 HDRViewApp::pixel_at_position(float2 position) const
 {
     auto image_pos = position - (m_offset + center_offset());
     return image_pos / m_zoom;
 }
 
-float2 SampleViewer::position_at_pixel(float2 pixel) const { return m_zoom * pixel + (m_offset + center_offset()); }
+float2 HDRViewApp::position_at_pixel(float2 pixel) const { return m_zoom * pixel + (m_offset + center_offset()); }
 
-float2 SampleViewer::screen_position_at_pixel(float2 pixel) const
-{
-    return position_at_pixel(pixel) + m_viewport_offset;
-}
+float2 HDRViewApp::screen_position_at_pixel(float2 pixel) const { return position_at_pixel(pixel) + m_viewport_offset; }
 
-void SampleViewer::set_pixel_at_position(float2 position, float2 pixel)
+void HDRViewApp::set_pixel_at_position(float2 position, float2 pixel)
 {
     // Calculate where the new offset must be in order to satisfy the image position equation.
     m_offset = position - (pixel * m_zoom) - center_offset();
 }
 
-Box2f SampleViewer::scaled_display_window(ConstImagePtr img) const
+Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
 {
     if (!img)
         img = current_image();
@@ -1100,7 +964,7 @@ Box2f SampleViewer::scaled_display_window(ConstImagePtr img) const
     return dw;
 }
 
-Box2f SampleViewer::scaled_data_window(ConstImagePtr img) const
+Box2f HDRViewApp::scaled_data_window(ConstImagePtr img) const
 {
     if (!img)
         img = current_image();
@@ -1110,30 +974,30 @@ Box2f SampleViewer::scaled_data_window(ConstImagePtr img) const
     return dw;
 }
 
-float SampleViewer::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
+float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
 
 // float2 SampleViewer::size_f() const { return float2{ImGui::GetIO().DisplaySize}; }
-float2 SampleViewer::size_f() const { return m_viewport_size; }
+float2 HDRViewApp::size_f() const { return m_viewport_size; }
 
-float2 SampleViewer::center_offset(ConstImagePtr img) const
+float2 HDRViewApp::center_offset(ConstImagePtr img) const
 {
     auto dw = scaled_display_window(img);
     return (size_f() - dw.size()) / 2.f - dw.min;
 }
 
-float2 SampleViewer::image_position(ConstImagePtr img) const
+float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
     auto dw = scaled_data_window(img);
     return (m_offset + center_offset(img) + dw.min) / size_f();
 }
 
-float2 SampleViewer::image_scale(ConstImagePtr img) const
+float2 HDRViewApp::image_scale(ConstImagePtr img) const
 {
     auto dw = scaled_data_window(img);
     return dw.size() / size_f();
 }
 
-void SampleViewer::draw_pixel_grid() const
+void HDRViewApp::draw_pixel_grid() const
 {
     if (!current_image())
         return;
@@ -1144,11 +1008,12 @@ void SampleViewer::draw_pixel_grid() const
         return;
 
     float factor = std::clamp((m_zoom - m_grid_threshold) / (2 * m_grid_threshold), 0.f, 1.f);
-    float alpha  = lerp(0.0f, 0.2f, smoothstep(0.0f, 1.0f, factor));
+    float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
 
     if (alpha > 0.0f)
     {
-        ImColor col(1.0f, 1.0f, 1.0f, alpha);
+        ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
+        ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
 
         auto screen_bounds = Box2i{int2(pixel_at_position({0.f, 0.f})) - 1, int2(pixel_at_position(size_f())) + 1};
         auto bounds        = screen_bounds.intersect(current_image()->data_window);
@@ -1156,42 +1021,64 @@ void SampleViewer::draw_pixel_grid() const
         // draw vertical lines
         for (int x = bounds.min.x; x <= bounds.max.x; ++x)
             ImGui::GetBackgroundDrawList()->AddLine(screen_position_at_pixel(float2(x, bounds.min.y)),
-                                                    screen_position_at_pixel(float2(x, bounds.max.y)), col, 2.f);
+                                                    screen_position_at_pixel(float2(x, bounds.max.y)), col_bg, 4.f);
 
         // draw horizontal lines
         for (int y = bounds.min.y; y <= bounds.max.y; ++y)
             ImGui::GetBackgroundDrawList()->AddLine(screen_position_at_pixel(float2(bounds.min.x, y)),
-                                                    screen_position_at_pixel(float2(bounds.max.x, y)), col, 2.f);
+                                                    screen_position_at_pixel(float2(bounds.max.x, y)), col_bg, 4.f);
+
+        // and now again with the foreground color
+        for (int x = bounds.min.x; x <= bounds.max.x; ++x)
+            ImGui::GetBackgroundDrawList()->AddLine(screen_position_at_pixel(float2(x, bounds.min.y)),
+                                                    screen_position_at_pixel(float2(x, bounds.max.y)), col_fg, 2.f);
+        for (int y = bounds.min.y; y <= bounds.max.y; ++y)
+            ImGui::GetBackgroundDrawList()->AddLine(screen_position_at_pixel(float2(bounds.min.x, y)),
+                                                    screen_position_at_pixel(float2(bounds.max.x, y)), col_fg, 2.f);
     }
 }
 
-void SampleViewer::draw_pixel_info() const
+void HDRViewApp::draw_pixel_info() const
 {
     if (!current_image() || !m_draw_pixel_info)
         return;
 
-    constexpr float3 black     = float3{0.f};
-    constexpr float2 align     = {0.5f, 0.5f};
-    constexpr int    font_size = 30;
-    auto             font      = m_mono_bold.at(font_size);
+    static constexpr float3 white     = float3{1.f};
+    static constexpr float3 black     = float3{0.f};
+    static constexpr float2 align     = {0.5f, 0.5f};
+    constexpr int           font_size = 30;
+    auto                    font      = m_mono_bold.at(font_size);
+
+    auto  &group  = current_image()->groups[current_image()->selected_group];
+    auto   colors = group.colors();
+    string names[4];
+    string longest_name;
+    for (int c = 0; c < group.num_channels; ++c)
+    {
+        auto &channel = current_image()->channels[group.channels[c]];
+        names[c]      = Channel::tail(channel.name);
+        if (names[c].length() > longest_name.length())
+            longest_name = names[c];
+    }
 
     ImGui::PushFont(font);
-    static float        line_height     = ImGui::CalcTextSize("").y;
-    static const float2 RGBA_threshold2 = float2{ImGui::CalcTextSize("R: 1.000").x, 4.f * line_height};
-    static const float2 XY_threshold2   = RGBA_threshold2 + float2{0.f, 2.f * line_height};
-    static const float  RGBA_threshold  = maxelem(RGBA_threshold2);
-    static const float  XY_threshold    = maxelem(XY_threshold2);
+    static float line_height = ImGui::CalcTextSize("").y;
+    const float2 channel_threshold2 =
+        float2{ImGui::CalcTextSize((longest_name + ": 31.000").c_str()).x, group.num_channels * line_height};
+    const float2 coord_threshold2  = channel_threshold2 + float2{0.f, 2.f * line_height};
+    const float  channel_threshold = maxelem(channel_threshold2);
+    const float  coord_threshold   = maxelem(coord_threshold2);
     ImGui::PopFont();
 
-    if (m_zoom <= RGBA_threshold)
+    if (m_zoom <= channel_threshold)
         return;
 
     // fade value for the R,G,B,A values shown at sufficient zoom
-    float factor = std::clamp((m_zoom - RGBA_threshold) / (1.25f * RGBA_threshold), 0.f, 1.f);
+    float factor = std::clamp((m_zoom - channel_threshold) / (1.25f * channel_threshold), 0.f, 1.f);
     float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
 
     // fade value for the (x,y) coordinates shown at further zoom
-    float factor2 = std::clamp((m_zoom - XY_threshold) / (1.25f * XY_threshold), 0.f, 1.f);
+    float factor2 = std::clamp((m_zoom - coord_threshold) / (1.25f * coord_threshold), 0.f, 1.f);
     float alpha2  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor2));
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
@@ -1209,24 +1096,20 @@ void SampleViewer::draw_pixel_info() const
             {
                 auto   pos   = screen_position_at_pixel(float2(x + 0.5f, y + 0.5f));
                 float4 pixel = image_pixel({x, y});
-
-                static const vector<string> prefix{"R:", "G:", "B:", "A:"};
-                static constexpr float3x4   cols{
-                      {0.7f, 0.15f, 0.15f}, {0.1f, 0.5f, 0.1f}, {0.2f, 0.2f, 0.9f}, {0.8f, 0.8f, 0.8f}};
                 if (alpha2 > 0.f)
                 {
-                    float2 c_pos = pos + float2{0.f, (-1 - 1.5f) * line_height};
+                    float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
                     auto   text  = fmt::format("({},{})", x, y);
                     ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImColor{float4{black, alpha2}}, text, align);
-                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{cols[3], alpha2}}, text, align);
+                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{white, alpha2}}, text, align);
                 }
 
-                for (int c = 0; c < 4; ++c)
+                for (int c = 0; c < group.num_channels; ++c)
                 {
-                    float2 c_pos = pos + float2{0.f, (c - 1.5f) * line_height};
-                    auto   text  = fmt::format("{}{:>6.3f}", prefix[c], pixel[c]);
+                    float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
+                    auto   text  = fmt::format("{:>2s}:{: > 7.3f}", names[c], pixel[c]);
                     ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImColor{float4{black, alpha2}}, text, align);
-                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{cols[c], alpha}}, text, align);
+                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{colors[c].xyz(), alpha}}, text, align);
                 }
             }
         }
@@ -1234,7 +1117,7 @@ void SampleViewer::draw_pixel_info() const
     }
 }
 
-void SampleViewer::draw_image_border() const
+void HDRViewApp::draw_image_border() const
 {
     if (!current_image() || minelem(current_image()->size()) == 0)
         return;
@@ -1281,7 +1164,7 @@ void SampleViewer::draw_image_border() const
                           true);
 }
 
-void SampleViewer::draw_contents() const
+void HDRViewApp::draw_contents() const
 {
     if (current_image() && !current_image()->data_window.is_empty())
     {
@@ -1321,7 +1204,7 @@ void SampleViewer::draw_contents() const
         m_shader->end();
     }
 }
-void SampleViewer::draw_top_toolbar()
+void HDRViewApp::draw_top_toolbar()
 {
     ImGui::AlignTextToFramePadding();
     ImGui::Text("EV:");
@@ -1342,7 +1225,7 @@ void SampleViewer::draw_top_toolbar()
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
         for (int c = 0; c < group.num_channels; ++c)
-            m = std::max(m, img->channels[group.channels[c]].get_statistics(m_exposure)->maximum);
+            m = std::max(m, img->channels[group.channels[c]].get_statistics()->maximum);
 
         m_exposure = log2(1.f / m);
     }
@@ -1388,7 +1271,7 @@ void SampleViewer::draw_top_toolbar()
     ImGui::SameLine();
 }
 
-void SampleViewer::draw_background()
+void HDRViewApp::draw_background()
 {
     auto &io = ImGui::GetIO();
     process_hotkeys();
@@ -1454,7 +1337,7 @@ void SampleViewer::draw_background()
     }
 }
 
-void SampleViewer::process_hotkeys()
+void HDRViewApp::process_hotkeys()
 {
     if (ImGui::GetIO().WantCaptureKeyboard)
         return;
@@ -1514,7 +1397,7 @@ void SampleViewer::process_hotkeys()
         img->set_as_texture(img->selected_group, *m_shader, "primary");
 }
 
-void SampleViewer::draw_about_dialog()
+void HDRViewApp::draw_about_dialog()
 {
     if (g_open_help)
         ImGui::OpenPopup("About");
@@ -1551,7 +1434,7 @@ void SampleViewer::draw_about_dialog()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             // right align the image
-            align_cursor(icon_size + 0.5f * HelloImGui::EmSize(), 1.f);
+            ImGui::AlignCursor(icon_size + 0.5f * HelloImGui::EmSize(), 1.f);
             HelloImGui::ImageFromAsset("app_settings/icon.png", {icon_size, icon_size}); // show the app icon
 
             ImGui::TableNextColumn();
@@ -1593,7 +1476,7 @@ void SampleViewer::draw_about_dialog()
             ImGui::TableNextColumn();
 
             ImGui::PushFont(m_sans_bold.at(14));
-            align_cursor(name, 1.f);
+            ImGui::AlignCursor(name, 1.f);
             ImGui::Text(name);
             ImGui::PopFont();
 
@@ -1740,7 +1623,7 @@ Options:
     }
     try
     {
-        SampleViewer viewer;
+        HDRViewApp viewer;
         viewer.run();
     }
     catch (const std::exception &e)

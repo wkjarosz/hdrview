@@ -1,6 +1,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_ext.h"
 #include "box.h"
+#include "colorspace.h"
 #include "imgui_internal.h"
 
 using namespace std;
@@ -188,4 +189,42 @@ void ImGui::PlotMultiHistograms(const char *label, int num_hists, const char **n
 {
     PlotMultiEx(ImGuiPlotType_Histogram, label, num_hists, names, colors, getter, datas, values_count, scale_min,
                 scale_max, graph_size);
+}
+
+void ImGui::PushRowColors(bool is_current, bool is_reference)
+{
+    float4 active  = GetStyleColorVec4(ImGuiCol_HeaderActive);
+    float4 header  = GetStyleColorVec4(ImGuiCol_Header);
+    float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
+
+    // choose the complement color if we are the reference
+    float4 hovered_c = convert_colorspace(
+        convert_colorspace(hovered, HSV_CS, LinearSRGB_CS) + float4{0.67f, 0.f, -0.4f, 0.f}, LinearSRGB_CS, HSV_CS);
+    float4 active_c = convert_colorspace(
+        convert_colorspace(active, HSV_CS, LinearSRGB_CS) + float4{0.67f, 0.f, -0.4f, 0.f}, LinearSRGB_CS, HSV_CS);
+
+    if (is_reference && is_current)
+    {
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, 0.5f * (hovered_c + hovered));
+        ImGui::PushStyleColor(ImGuiCol_Header, 0.5f * (hovered_c + hovered));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, 0.5f * (active_c + active));
+    }
+    else if (is_current)
+    {
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, hovered);
+        ImGui::PushStyleColor(ImGuiCol_Header, hovered);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active);
+    }
+    else if (is_reference)
+    {
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, hovered_c);
+        ImGui::PushStyleColor(ImGuiCol_Header, hovered_c);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active_c);
+    }
+    else
+    {
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, header);
+        ImGui::PushStyleColor(ImGuiCol_Header, hovered);
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, active);
+    }
 }

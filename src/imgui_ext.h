@@ -50,4 +50,14 @@ void PlotMultiHistograms(const char *label, int num_hists, const char **names, c
                          int values_count, float scale_min = FLT_MAX, float scale_max = FLT_MAX,
                          ImVec2 graph_size = ImVec2(0, 0));
 
+inline void AlignCursor(float width, float align)
+{
+    if (auto shift = align * (GetContentRegionAvail().x - width))
+        SetCursorPosX(GetCursorPosX() + shift);
+}
+
+inline void AlignCursor(const std::string &text, float align) { AlignCursor(CalcTextSize(text.c_str()).x, align); }
+
+void PushRowColors(bool is_current, bool is_reference);
+
 } // namespace ImGui

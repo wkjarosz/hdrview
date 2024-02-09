@@ -27,17 +27,22 @@ const float maxLab[] = {100, 128, 128};
 
 using namespace std;
 
-float LinearToSRGB(float a)
+float3 YCToRGB(float3 input, float3 Yw)
 {
-    float old_sign = sign(a);
-    a              = fabs(a);
-    return a < 0.0031308f ? old_sign * 12.92f * a : old_sign * 1.055f * pow(a, 1.0f / 2.4f) - 0.055f;
-}
-float SRGBToLinear(float a)
-{
-    float old_sign = sign(a);
-    a              = fabs(a);
-    return a < 0.04045f ? old_sign * (1.0f / 12.92f) * a : old_sign * pow((a + 0.055f) * (1.0f / 1.055f), 2.4f);
+    if (input[0] == 0.0 && input[2] == 0.0)
+        //
+        // Special case -- both chroma channels are 0.  To avoid
+        // rounding errors, we explicitly set the output R, G and B
+        // channels equal to the input luminance.
+        //
+        return float3(input[1], input[1], input[1]);
+
+    float Y = input[1];
+    float r = (input[0] + 1.0) * input[1];
+    float b = (input[2] + 1.0) * input[1];
+    float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
+
+    return float3(r, g, b);
 }
 float LinearToAdobeRGB(float a) { return pow(a, 1.f / 2.19921875f); }
 float AdobeRGBToLinear(float a) { return pow(a, 2.19921875f); }

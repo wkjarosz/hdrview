@@ -1,4 +1,4 @@
-/** \file SampleViewer.h
+/** \file app.h
     \author Wojciech Jarosz
 */
 
@@ -23,11 +23,11 @@ using std::string;
 using std::string_view;
 using std::vector;
 
-class SampleViewer
+class HDRViewApp
 {
 public:
-    SampleViewer();
-    virtual ~SampleViewer();
+    HDRViewApp();
+    virtual ~HDRViewApp();
 
     void draw_background();
     void run();

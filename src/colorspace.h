@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "common.h"
 #include "fwd.h"
 #include <string>
 #include <vector>
@@ -29,12 +30,42 @@ void   convert_colorspace(EColorSpace dst, float *a, float *b, float *c, EColorS
 Color3 convert_colorspace(const Color3 &c, EColorSpace dst, EColorSpace src);
 Color4 convert_colorspace(const Color4 &c, EColorSpace dst, EColorSpace src);
 
+template <typename Real>
+Real LinearToSRGB_positive(Real linear)
+{
+    static constexpr Real inv_gamma = Real(1) / Real(2.4);
+    if (linear <= Real(0.0031308))
+        return 12.92 * linear;
+    else
+        return Real(1.055) * std::pow(linear, inv_gamma) - Real(0.055);
+}
+
 // to/from linear to sRGB and AdobeRGB
-float  SRGBToLinear(float a);
+template <typename Real>
+Real LinearToSRGB(Real linear)
+{
+    return sign(linear) * LinearToSRGB_positive(std::fabs(linear));
+}
+
+template <typename Real>
+Real SRGBToLinear_positive(Real sRGB)
+{
+    if (sRGB < Real(0.04045))
+        return (Real(1) / Real(12.92)) * sRGB;
+    else
+        return std::pow((sRGB + Real(0.055)) * (Real(1) / Real(1.055)), Real(2.4));
+}
+
+template <typename Real>
+Real SRGBToLinear(Real sRGB)
+{
+    return sign(sRGB) * SRGBToLinear_positive(std::fabs(sRGB));
+}
+
+float3 YCToRGB(float3 input, float3 Yw);
 void   SRGBToLinear(float *r, float *g, float *b);
 Color3 SRGBToLinear(const Color3 &c);
 Color4 SRGBToLinear(const Color4 &c);
-float  LinearToSRGB(float a);
 void   LinearToSRGB(float *r, float *g, float *b);
 Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);

@@ -115,3 +115,14 @@ enum EDirection
     Forward,
     Backward,
 };
+
+using AxisScale_ = int;
+enum AxisScale : AxisScale_
+{
+    AxisScale_Linear = 0,
+    AxisScale_SRGB,
+    AxisScale_Asinh,
+    AxisScale_SymLog,
+
+    AxisScale_COUNT
+};

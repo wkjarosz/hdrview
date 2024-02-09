@@ -71,10 +71,11 @@ std::set<std::string> Image::savable_formats()
 // end static methods
 //
 
-PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure) :
+PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale) :
     exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
-    maximum(-std::numeric_limits<float>::infinity()), average(0.f)
+    maximum(-std::numeric_limits<float>::infinity()), average(0.f), histogram{x_scale, y_scale}
 {
+    fmt::print("recomputing pixel statistics\n");
     // compute pixel summary statistics
     int    valid_pixels = 0;
     double accum        = 0.0; // reduce numerical precision issues by accumulating in double
@@ -93,42 +94,91 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure) :
         }
     }
     average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+    fmt::print("Min: {}\nMean: {}\nMax: {}\n", minimum, average, maximum);
     //
 
     //
     // compute histograms
-    float inv_bins = 1.f / Histogram::NUM_BINS;
 
-    for (int a = ELinear; a < ENumAxisScales; ++a)
+    bool LDR_scale = histogram.x_scale == AxisScale_Linear || histogram.x_scale == AxisScale_SRGB;
+
+    histogram.x_limits[1] = pow(2.f, -exposure);
+    if (minimum < 0.f)
+        histogram.x_limits[0] = -histogram.x_limits[1];
+    else
     {
-        auto &hist       = histogram[a];
-        hist.gain        = pow(2.f, exposure);
-        hist.display_max = pow(2.f, -exposure);
-        hist.log_min     = symlog_scale(minimum);
-        hist.log_dif     = symlog_scale(maximum) - hist.log_min;
-
-        PlottingData user_data{this, a};
-
-        // compute bin center values
-        for (int i = 0; i < Histogram::NUM_BINS; ++i)
-            hist.xs[i] = normalized_axis_scale_inv_xform((i + 0.5) * inv_bins, &user_data);
-
-        // accumulate bin counts
-        for (int i = 0; i < img.num_elements(); ++i)
-            hist.bin_y(normalized_axis_scale_fwd_xform(img(i), &user_data)) += 1;
-
-        // normalize histogram density by dividing bin counts by bin sizes
-        // for (int i = 0; i < Histogram::NUM_BINS; ++i)
-        //     hist.ys[i] /=
-        //         axis_scale_inv_xform((i + 1) * inv_bins, &user_data) - axis_scale_inv_xform(i * inv_bins,
-        //         &user_data);
-
-        // Compute y limit for each histogram according to its 10th-largest bin
-        auto h   = histogram[a].ys; // make a copy, which we partially sort
-        auto idx = h.size() - 10;
-        std::nth_element(h.begin(), h.begin() + idx, h.end());
-        histogram[a].y_limit = h[idx] * 1.15f;
+        if (LDR_scale)
+            histogram.x_limits[0] = 0.f;
+        else
+            histogram.x_limits[0] = histogram.x_limits[1] / 10000.f;
     }
+
+    float2 normalization_factors;
+    normalization_factors[0] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
+    normalization_factors[1] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
+                               normalization_factors[0];
+
+    auto value_to_bin = [this, &normalization_factors](double value)
+    {
+        return int(std::floor((axis_scale_fwd_xform(value, &histogram.x_scale) - normalization_factors[0]) /
+                              normalization_factors[1] * Histogram::NUM_BINS));
+    };
+
+    auto bin_to_value = [this, &normalization_factors](double value)
+    {
+        static constexpr float inv_bins = 1.f / Histogram::NUM_BINS;
+        return axis_scale_inv_xform(normalization_factors[1] * value * inv_bins + normalization_factors[0],
+                                    &histogram.x_scale);
+    };
+
+    // compute bin center values
+    for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = bin_to_value(i + 0.5);
+
+    // accumulate bin counts
+    for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(value_to_bin(img(i))) += 1;
+
+    // normalize histogram density by dividing bin counts by bin sizes
+    histogram.y_limits[0] = std::numeric_limits<float>::infinity();
+    for (int i = 0; i < Histogram::NUM_BINS; ++i)
+    {
+        float bin_width = bin_to_value(i + 1) - bin_to_value(i);
+        histogram.ys[i] /= bin_width;
+        histogram.y_limits[0] = min(histogram.y_limits[0], bin_width);
+    }
+
+    // Compute y limit for each histogram according to its 10th-largest bin
+    auto ys  = histogram.ys; // make a copy, which we partially sort
+    auto idx = ys.size() - 10;
+    std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
+    // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
+    histogram.y_limits[0] = histogram.y_scale == AxisScale_Linear ? 0.f : histogram.y_limits[0]; // / 2.f;
+    // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
+    if (ys[idx] != 0.f)
+        histogram.y_limits[1] = ys[idx] * 1.15f;
+    else if (ys.back() != 0.f)
+        histogram.y_limits[1] = ys.back() * 1.15f;
+    else
+        histogram.y_limits[1] = 1.f;
+
+    fmt::print("x_limits: {}; y_limits: {}\n", histogram.x_limits, histogram.y_limits);
+
+    fmt::print("done recomputing pixel statistics\n");
+
+    // for (auto i : {-0.02, -0.015, -0.01, -0.005, 0.0, 0.005, 0.01, 0.015, 0.02})
+    // {
+    //     fmt::print("{} -> {}\n", i, axis_scale_fwd_xform(i, &histogram.x_scale));
+    //     // fmt::print("{} -> {}\n", i, LinearToSRGB(i));
+    //     // fmt::print("{} -> {}\n", i, sign(i) * LinearToSRGB(std::fabs(i)));
+    // }
+}
+
+bool PixelStatistics::needs_update(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale) const
+{
+    // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
+    // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
+    // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
+    // return new_x_scale != histogram.x_scale || (new_exposure != exposure && histogram.x_scale != AxisScale_SymLog);
+    return new_x_scale != histogram.x_scale || new_y_scale != histogram.y_scale || new_exposure != exposure;
 }
 
 float4x4 ChannelGroup::colors() const
@@ -143,13 +193,17 @@ float4x4 ChannelGroup::colors() const
         // where all three are 0.5 transparent while producing neutral gray when composited using the over operator.
         return float4x4{
             {1.0f, 0.15f, 0.1f, 0.5f}, {.45f, 0.75f, 0.02f, 0.5f}, {.25f, 0.333f, 0.7f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
-    case XYZA_Channels:
-    case XYZ_Channels:
     case YCA_Channels:
     case YC_Channels:
+        return float4x4{
+            {1, 0.35133642, 0.5, 0.5f}, {1.f, 1.f, 1.f, 0.5f}, {0.5, 0.44952777, 1, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
+    case XYZA_Channels:
+    case XYZ_Channels:
     case UVorXY_Channels:
     case Z_Channel:
-    case Single_Channel: return float4x4{1.f};
+    case Single_Channel:
+        return float4x4{
+            {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
     }
 }
 
@@ -172,11 +226,23 @@ Texture *Channel::get_texture()
     return texture.get();
 }
 
-PixelStatistics *Channel::get_statistics(float exposure)
+PixelStatistics *Channel::get_statistics()
 {
-    if (!statistics || statistics_dirty || exposure != statistics->exposure)
+    if (!statistics || statistics_dirty ||
+        statistics->needs_update(statistics->exposure, statistics->histogram.x_scale, statistics->histogram.y_scale))
     {
-        statistics       = make_unique<PixelStatistics>(*this, exposure);
+        statistics       = make_unique<PixelStatistics>(*this, 1.f, AxisScale_Linear, AxisScale_Linear);
+        statistics_dirty = false;
+    }
+
+    return statistics.get();
+}
+
+PixelStatistics *Channel::get_statistics(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale)
+{
+    if (!statistics || statistics_dirty || statistics->needs_update(new_exposure, new_x_scale, new_y_scale))
+    {
+        statistics       = make_unique<PixelStatistics>(*this, new_exposure, new_x_scale, new_y_scale);
         statistics_dirty = false;
     }
 
@@ -248,7 +314,7 @@ map<string, int> Image::channels_in_layer(const string &layer) const
     return result;
 }
 
-void Image::build_Layers_and_groups()
+void Image::build_layers_and_groups()
 {
     // set up layers and channel groups
     const vector<pair<ChannelGroup::Type, vector<string>>> recognized_groups = {
@@ -381,7 +447,7 @@ void Image::finalize()
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
-    build_Layers_and_groups();
+    build_layers_and_groups();
 
     // sanity check layers, channels, and channel groups
     {

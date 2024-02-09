@@ -28,17 +28,39 @@
 
 #include <fmt/core.h>
 
-#define STB_IMAGE_IMPLEMENTATION
+// these pragmas ignore warnings about unused static functions
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(__GNUC__) || defined(__GNUG__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#elif defined(_MSC_VER)
+#pragma warning(push, 0)
+#endif
+
+// since other libraries might include old versions of stb headers, we declare stb static here
 #define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
 #undef STB_IMAGE_STATIC
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_STATIC
-#include "stb_image_write.h" // for stbi_write_bmp, stbi_write_hdr, stbi...
-#undef STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
+#undef STB_IMAGE_WRITE_STATIC
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#elif defined(__GNUC__) || defined(__GNUG__)
+#pragma GCC diagnostic pop
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #include "pfm.h"
 
@@ -215,8 +237,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
             int subsampled_width = size.x / xs;
             for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x)
-                    data.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
+                for (int x = 0; x < size.x; ++x) data.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
         }
 
         // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
@@ -229,8 +250,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
                 Imath::M44f M = Imf::RGBtoXYZ(file_cr, 1) * Imf::XYZtoRGB(rec709_cr, 1);
 
                 for (int m = 0; m < 4; ++m)
-                    for (int n = 0; n < 4; ++n)
-                        data.M_to_Rec709[m][n] = M.x[m][n];
+                    for (int n = 0; n < 4; ++n) data.M_to_Rec709[m][n] = M.x[m][n];
 
                 spdlog::info("Converting pixel values to Rec709/sRGB primaries and whitepoint.");
             }
