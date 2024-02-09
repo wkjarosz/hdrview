@@ -4,16 +4,16 @@ on:
   pull_request:
     branches:
       - "*"
-  # push:
-  #   branches:
-  #     - "*"
-  #   paths:
-  #     # This action only runs on push when C++ files are changed
-  #     - "**.cpp"
-  #     - "**.h"
-  #     - "**.cmake"
-  #     - "**Lists.txt"
-  #     - "**-mac.yml"
+  push:
+    branches:
+      - "*"
+    paths:
+      # This action only runs on push when C++ files are changed
+      - "**.cpp"
+      - "**.h"
+      - "**.cmake"
+      - "**Lists.txt"
+      - "**-mac.yml"
   workflow_dispatch:
 
 env:
