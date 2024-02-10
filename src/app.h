@@ -116,17 +116,19 @@ private:
     float2 image_position(ConstImagePtr img = nullptr) const;
     float2 image_scale(ConstImagePtr img = nullptr) const;
 
-    void   draw_background();
-    void   draw_histogram_window();
-    void   draw_about_dialog();
-    void   draw_pixel_info() const;
-    void   draw_pixel_grid() const;
-    void   draw_image() const;
-    void   draw_top_toolbar();
-    void   draw_image_border() const;
-    void   draw_file_window();
-    void   draw_channel_window();
-    void   process_hotkeys();
+    void draw_background();
+    void draw_histogram_window();
+    void draw_info_window();
+    void draw_about_dialog();
+    void draw_pixel_info() const;
+    void draw_pixel_grid() const;
+    void draw_image() const;
+    void draw_top_toolbar();
+    void draw_image_border() const;
+    void draw_file_window();
+    void draw_channel_window();
+    void process_hotkeys();
+
     float4 image_pixel(int2 p) const
     {
         auto img = current_image();
