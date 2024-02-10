@@ -632,188 +632,160 @@ HDRViewApp::~HDRViewApp() {}
 
 void HDRViewApp::draw_info_window()
 {
-    if (auto img = current_image())
+    auto img = current_image();
+    if (!img)
+        return;
+
+    auto &io = ImGui::GetIO();
+
+    auto p = int2{pixel_at_app_pos(io.MousePos)};
+
+    float4 hovered = image_pixel(p);
+    auto  &group   = img->groups[img->selected_group];
+
+    if (ImGui::BeginTable("properties", 2))
     {
-        auto &io = ImGui::GetIO();
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::CalcTextSize(" To Rec 709 RGB:").x);
+        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
+        ImGui::PopFont();
 
-        auto p = int2{pixel_at_app_pos(io.MousePos)};
+        ImGui::TableNextRow();
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableNextColumn();
+        ImGui::AlignCursor("File path:", 1.f);
+        ImGui::TextUnformatted("File path:");
+        ImGui::PopFont();
+        ImGui::TableNextColumn();
+        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+        ImGui::TextWrapped("%s", img->filename.c_str());
+        ImGui::PopFont();
 
-        // ImGui::PushFont(m_mono_bold.at(ImGui::GetFontSize()));
-        float4 hovered = image_pixel(p);
-        auto  &group   = img->groups[img->selected_group];
-        // if (img->contains(p))
+        if (!img->partname.empty())
         {
-            // ImGui::LabelText("Resolution", "%d " ICON_FA_XMARK " %d", img->size().x, img->size().y);
-            // ImGui::LabelText("Data window", "%s",
-            //                  fmt::format("({}, {}) : ({}, {})\n", img->data_window.min.x, img->data_window.min.y,
-            //                              img->data_window.max.x, img->data_window.max.y)
-            //                      .c_str());
-            // ImGui::LabelText("Display window", "%s",
-            //                  fmt::format("({}, {}) : ({}, {})\n", img->display_window.min.x,
-            //                  img->display_window.min.y,
-            //                              img->display_window.max.x, img->display_window.max.y)
-            //                      .c_str());
-
-            if (ImGui::BeginTable("properties", 2))
-            {
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthFixed,
-                                        ImGui::CalcTextSize(" To Rec 709 RGB:").x);
-                ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
-                ImGui::PopFont();
-
-                ImGui::TableNextRow();
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                ImGui::TableNextColumn();
-                ImGui::AlignCursor("File path:", 1.f);
-                ImGui::TextUnformatted("File path:");
-                ImGui::PopFont();
-                ImGui::TableNextColumn();
-                ImGui::TextWrapped(img->filename.c_str());
-
-                if (!img->partname.empty())
-                {
-                    ImGui::TableNextRow();
-                    ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                    ImGui::TableNextColumn();
-                    ImGui::AlignCursor("Part name:", 1.f);
-                    ImGui::TextUnformatted("Part name:");
-                    ImGui::PopFont();
-                    ImGui::TableNextColumn();
-                    ImGui::TextWrapped(img->partname.c_str());
-                }
-
-                ImGui::TableNextRow();
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                ImGui::TableNextColumn();
-                ImGui::AlignCursor("Resolution:", 1.f);
-                ImGui::TextUnformatted("Resolution:");
-                ImGui::PopFont();
-                ImGui::TableNextColumn();
-                ImGui::Text("%d" ICON_FA_XMARK " %d", img->size().x, img->size().y);
-
-                ImGui::TableNextRow();
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                ImGui::TableNextColumn();
-                ImGui::AlignCursor("Data window:", 1.f);
-                ImGui::TextUnformatted("Data window:");
-                ImGui::PopFont();
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->data_window.min.x,
-                                                   img->data_window.min.y, img->data_window.max.x,
-                                                   img->data_window.max.y)
-                                           .c_str());
-
-                ImGui::TableNextRow();
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                ImGui::TableNextColumn();
-                ImGui::AlignCursor("Display window:", 1.f);
-                ImGui::TextUnformatted("Display window:");
-                ImGui::PopFont();
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->display_window.min.x,
-                                                   img->display_window.min.y, img->display_window.max.x,
-                                                   img->display_window.max.y)
-                                           .c_str());
-
-                if (img->luminance_weights != Image::Rec709_luminance_weights)
-                {
-                    ImGui::TableNextRow();
-                    ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                    ImGui::TableNextColumn();
-                    ImGui::AlignCursor("Lumi. weights:", 1.f);
-                    ImGui::TextUnformatted("Lumi. weights:");
-                    ImGui::PopFont();
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(fmt::format("{:7.4f}", img->luminance_weights).c_str());
-                }
-
-                if (img->M_to_Rec709 != float4x4{la::identity})
-                {
-                    ImGui::TableNextRow();
-                    ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                    ImGui::TableNextColumn();
-                    ImGui::AlignCursor("To Rec 709 RGB:", 1.f);
-                    ImGui::TextUnformatted("To Rec 709 RGB:");
-                    ImGui::PopFont();
-                    ImGui::TableNextColumn();
-                    ImGui::TextWrapped(fmt::format("{:> 6.3f}", img->M_to_Rec709).c_str());
-                }
-
-                ImGui::EndTable();
-            }
-
-            // for (int c = 0; c < group.num_channels; ++c)
-            // {
-            //     auto  &channel = img->channels[group.channels[c]];
-            //     string name    = Channel::tail(channel.name);
-            //     ImGui::LabelText(name.c_str(), "%6.3f", color32[c]);
-            // }
-            // float4           minimum, maximum, average;
-            PixelStatistics *stats[4] = {nullptr, nullptr, nullptr, nullptr};
-            // for (int c = 0; c < group.num_channels; ++c)
-            // {
-            //     stats[c]       = channel.get_statistics();
-            //     minimum[c]     = stats[c]->minimum;
-            //     maximum[c]     = stats[c]->maximum;
-            //     average[c]     = stats[c]->average;
-            // }
-            // string name = group.name;
-            // ImGui::InputScalarN(name.c_str(), ImGuiDataType_Float, &hovered[0], group.num_channels, nullptr, nullptr,
-            //                     "%6.3f", ImGuiInputTextFlags_ReadOnly);
-            // ImGui::InputScalarN("Minimum", ImGuiDataType_Float, &minimum[0], group.num_channels, nullptr, nullptr,
-            //                     "%6.3f", ImGuiInputTextFlags_ReadOnly);
-            // ImGui::InputScalarN("Average", ImGuiDataType_Float, &average[0], group.num_channels, nullptr, nullptr,
-            //                     "%6.3f", ImGuiInputTextFlags_ReadOnly);
-            // ImGui::InputScalarN("Maximum", ImGuiDataType_Float, &maximum[0], group.num_channels, nullptr, nullptr,
-            //                     "%6.3f", ImGuiInputTextFlags_ReadOnly);
-
-            ImGui::SeparatorText("Channel statistics");
-            static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
-            if (ImGui::BeginTable("table1", 5, table_flags))
-            {
-                // ImGui::TableNextRow(), ImGui::TableNextColumn();
-                // ImGui::TextUnformatted("Hover"), ImGui::TableNextColumn();
-                ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                // // ImGui::TextUnformatted("##Channel"),
-                // ImGui::TableNextColumn();
-                // ImGui::TextUnformatted("Min"), ImGui::TableNextColumn();
-                // ImGui::TextUnformatted("Avg"), ImGui::TableNextColumn();
-                // ImGui::TextUnformatted("Max"); //, ImGui::TableNextColumn();
-
-                // const float icon_width = ImGui::CalcTextSize(ICON_FA_EYE_LOW_VISION).x;
-                ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed,
-                                        ImGui::CalcTextSize("channel").x);
-                ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableHeadersRow();
-                ImGui::PopFont();
-
-                for (int c = 0; c < group.num_channels; ++c)
-                {
-                    auto  &channel = img->channels[group.channels[c]];
-                    string name    = Channel::tail(channel.name);
-                    auto   stats   = channel.get_statistics();
-                    ImGui::TableNextRow(), ImGui::TableNextColumn();
-                    // ImGui::Text("%6.3f", hovered[c]), ImGui::TableNextColumn();
-
-                    ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-                    ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
-                    ImGui::PopFont();
-                    ImGui::Text("%6.3f", hovered[c]), ImGui::TableNextColumn();
-                    ImGui::Text("%6.3f", stats->minimum), ImGui::TableNextColumn();
-                    // ImGui::PushID(c);
-                    // ImGui::InputFloat("##", &stats->minimum, 0, 0, "6.3f", ImGuiInputTextFlags_ReadOnly);
-                    // ImGui::PopID(), ImGui::TableNextColumn();
-                    ImGui::Text("%6.3f", stats->average), ImGui::TableNextColumn();
-                    ImGui::Text("%6.3f", stats->maximum); //, ImGui::TableNextColumn();
-                }
-                ImGui::EndTable();
-            }
+            ImGui::TableNextRow();
+            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor("Part name:", 1.f);
+            ImGui::TextUnformatted("Part name:");
+            ImGui::PopFont();
+            ImGui::TableNextColumn();
+            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+            ImGui::TextWrapped("%s", img->partname.c_str());
+            ImGui::PopFont();
         }
-        // ImGui::PopFont();
+
+        ImGui::TableNextRow();
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableNextColumn();
+        ImGui::AlignCursor("Resolution:", 1.f);
+        ImGui::TextUnformatted("Resolution:");
+        ImGui::PopFont();
+        ImGui::TableNextColumn();
+        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+        ImGui::Text("%d x %d", img->size().x, img->size().y);
+        ImGui::PopFont();
+
+        ImGui::TableNextRow();
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableNextColumn();
+        ImGui::AlignCursor("Data window:", 1.f);
+        ImGui::TextUnformatted("Data window:");
+        ImGui::PopFont();
+        ImGui::TableNextColumn();
+        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+        ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->data_window.min.x, img->data_window.min.y,
+                                           img->data_window.max.x, img->data_window.max.y)
+                                   .c_str());
+        ImGui::PopFont();
+
+        ImGui::TableNextRow();
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableNextColumn();
+        ImGui::AlignCursor("Display window:", 1.f);
+        ImGui::TextUnformatted("Display window:");
+        ImGui::PopFont();
+        ImGui::TableNextColumn();
+        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+        ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->display_window.min.x,
+                                           img->display_window.min.y, img->display_window.max.x,
+                                           img->display_window.max.y)
+                                   .c_str());
+        ImGui::PopFont();
+
+        if (img->luminance_weights != Image::Rec709_luminance_weights)
+        {
+            ImGui::TableNextRow();
+            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor("Lumi. weights:", 1.f);
+            ImGui::TextUnformatted("Lumi. weights:");
+            ImGui::PopFont();
+            ImGui::TableNextColumn();
+            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+            ImGui::TextUnformatted(fmt::format("{:>+8.2e}, {:>+8.2e}, {:>+8.2e}", img->luminance_weights.x,
+                                               img->luminance_weights.y, img->luminance_weights.z)
+                                       .c_str());
+            ImGui::PopFont();
+        }
+
+        if (img->M_to_Rec709 != float4x4{la::identity})
+        {
+            ImGui::TableNextRow();
+            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor("To Rec 709 RGB:", 1.f);
+            ImGui::TextUnformatted("To Rec 709 RGB:");
+            ImGui::PopFont();
+            ImGui::TableNextColumn();
+            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+            ImGui::Text("%+8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[0][1], img->M_to_Rec709[0][1],
+                        img->M_to_Rec709[0][2], img->M_to_Rec709[0][3]);
+            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[1][1], img->M_to_Rec709[1][1],
+                        img->M_to_Rec709[1][2], img->M_to_Rec709[1][3]);
+            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[2][1], img->M_to_Rec709[2][1],
+                        img->M_to_Rec709[2][2], img->M_to_Rec709[2][3]);
+            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[3][1], img->M_to_Rec709[3][1],
+                        img->M_to_Rec709[3][2], img->M_to_Rec709[3][3]);
+            ImGui::PopFont();
+        }
+
+        ImGui::EndTable();
+    }
+
+    ImGui::SeparatorText("Channel statistics");
+    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
+    if (ImGui::BeginTable("table1", 5, table_flags))
+    {
+        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+        ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
+                                        ImGui::CalcTextSize("channel").x*/);
+        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+        ImGui::PopFont();
+
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            auto  &channel = img->channels[group.channels[c]];
+            string name    = Channel::tail(channel.name);
+            auto   stats   = channel.get_statistics();
+            ImGui::TableNextRow(), ImGui::TableNextColumn();
+
+            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
+            ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
+            ImGui::PopFont();
+            // ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
+            ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->maximum);
+            // ImGui::PopFont();
+        }
+        ImGui::EndTable();
     }
 }
 
@@ -1382,7 +1354,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::Checkbox("Grid", &m_draw_grid);
     ImGui::SameLine();
 
-    ImGui::Checkbox("RGB values", &m_draw_pixel_info);
+    ImGui::Checkbox("Pixel values", &m_draw_pixel_info);
     ImGui::SameLine();
 }
 
