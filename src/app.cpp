@@ -221,37 +221,47 @@ HDRViewApp::HDRViewApp()
 
     m_params.callbacks.ShowStatus = [this]()
     {
+        const float y = ImGui::GetCursorPosY() - HelloImGui::EmSize(0.15f);
+        float       x = ImGui::GetStyle().ItemSpacing.x;
+
+        auto sized_text = [&](float em_size, const string &text, float align = 1.f)
+        {
+            float item_width = HelloImGui::EmSize(em_size);
+            float text_width = ImGui::CalcTextSize(text.c_str()).x;
+            float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
+
+            ImGui::SameLine();
+            ImGui::SetCursorPos({x + align * (item_width - text_width), y});
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(text.c_str());
+            x += item_width + spacing;
+        };
+
         if (auto img = current_image())
         {
             auto &io = ImGui::GetIO();
 
-            int2 p{pixel_at_app_pos(io.MousePos)};
-            ImGui::PushFont(m_mono_regular[14]);
+            auto p = int2{pixel_at_app_pos(io.MousePos)};
+
+            float4 color32 = image_pixel(p);
+            auto  &group   = img->groups[img->selected_group];
+
+            sized_text(3, fmt::format("({:>6d},", p.x), 0.f);
+            sized_text(3, fmt::format("{:>6d})", p.y), 0.f);
 
             if (img->contains(p))
             {
-                float4 color32 = image_pixel(p);
-                float4 color8  = linalg::clamp(color32 * pow(2.f, m_exposure) * 255, 0.f, 255.f);
-
-                // ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetFontSize() * 0.15f);
-                ImGui::TextUnformatted(
-                    fmt::format("({:>4d},{:>4d}) = ({:>6.3f},{:>6.3f},{:>6.3f},{:>6.3f})/({:>3d},{:>3d},{:>3d},{:>3d})",
-                                p.x, p.y, color32.x, color32.y, color32.z, color32.w, (int)round(color8.x),
-                                (int)round(color8.y), (int)round(color8.z), (int)round(color8.w))
-                        .c_str());
-                // ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.15f);
+                sized_text(0.5f, "=", 0.5f);
+                for (int c = 0; c < group.num_channels; ++c)
+                    sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
+                                                 c == group.num_channels - 1 ? ")" : ","));
             }
 
-            // ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetFontSize() * 0.15f);
-            float  real_zoom = m_zoom * pixel_ratio();
-            int    numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
-            int    denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-            auto   text      = fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom);
-            float2 text_size = ImGui::CalcTextSize(text.c_str());
-            ImGui::SameLine(ImGui::GetIO().DisplaySize.x - text_size.x - 16.f * ImGui::GetFontSize());
-            ImGui::TextUnformatted(text.c_str());
-            // ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.15f);
-            ImGui::PopFont();
+            float real_zoom = m_zoom * pixel_ratio();
+            int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
+            int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
+            x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(15.f);
+            sized_text(0.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
         }
     };
 
@@ -797,7 +807,6 @@ void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
 
 void HDRViewApp::fit()
 {
-    // Calculate the appropriate scaling factor.
     m_zoom = minelem(viewport_size() / current_image()->display_window.size());
     center();
 }
@@ -809,16 +818,16 @@ void HDRViewApp::set_zoom_level(float level)
     m_zoom = std::clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
 }
 
-void HDRViewApp::zoom_by(float amount, float2 focus_app_pos)
+void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
 {
     if (amount == 0.f)
         return;
 
-    auto  focused_pixel = pixel_at_app_pos(focus_app_pos); // save focused pixel coord before modifying zoom
+    auto  focused_pixel = pixel_at_vp_pos(focus_vp_pos); // save focused pixel coord before modifying zoom
     float scale_factor  = std::pow(m_zoom_sensitivity, amount);
     m_zoom              = std::clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
     // reposition so focused_pixel is still under focus_app_pos
-    reposition_pixel_to_vp_pos(vp_pos_at_app_pos(focus_app_pos), focused_pixel);
+    reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
 
 void HDRViewApp::zoom_in()
@@ -906,6 +915,10 @@ void HDRViewApp::draw_pixel_grid() const
     float factor = std::clamp((m_zoom - s_grid_threshold) / (2 * s_grid_threshold), 0.f, 1.f);
     float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
 
+    ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
+
+    // only draw within the image viewport
+    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     if (alpha > 0.0f)
     {
         ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
@@ -916,22 +929,23 @@ void HDRViewApp::draw_pixel_grid() const
 
         // draw vertical lines
         for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-            ImGui::GetBackgroundDrawList()->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)),
-                                                    app_pos_at_pixel(float2(x, bounds.max.y)), col_bg, 4.f);
+            draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)),
+                               col_bg, 4.f);
 
         // draw horizontal lines
         for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-            ImGui::GetBackgroundDrawList()->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)),
-                                                    app_pos_at_pixel(float2(bounds.max.x, y)), col_bg, 4.f);
+            draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)),
+                               col_bg, 4.f);
 
         // and now again with the foreground color
         for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-            ImGui::GetBackgroundDrawList()->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)),
-                                                    app_pos_at_pixel(float2(x, bounds.max.y)), col_fg, 2.f);
+            draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)),
+                               col_fg, 2.f);
         for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-            ImGui::GetBackgroundDrawList()->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)),
-                                                    app_pos_at_pixel(float2(bounds.max.x, y)), col_fg, 2.f);
+            draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)),
+                               col_fg, 2.f);
     }
+    draw_list->PopClipRect();
 }
 
 void HDRViewApp::draw_pixel_info() const
@@ -979,6 +993,8 @@ void HDRViewApp::draw_pixel_info() const
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
+    // only draw within the image viewport
+    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     if (alpha > 0.0f)
     {
         ImGui::PushFont(font);
@@ -1011,6 +1027,7 @@ void HDRViewApp::draw_pixel_info() const
         }
         ImGui::PopFont();
     }
+    draw_list->PopClipRect();
 }
 
 void HDRViewApp::draw_image_border() const
@@ -1021,11 +1038,11 @@ void HDRViewApp::draw_image_border() const
     constexpr float  thickness = 3.f;
     constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
     float2           pad       = HelloImGui::EmToVec2({0.25, 0.125});
+    auto             draw_list = ImGui::GetBackgroundDrawList();
 
     auto draw_image_window =
         [&](const Box2f &image_window, ImGuiCol col_idx, const string &text, const float2 &align, bool draw_label)
     {
-        auto  draw_list = ImGui::GetBackgroundDrawList();
         Box2f window{app_pos_at_pixel(image_window.min), app_pos_at_pixel(image_window.max)};
         draw_list->AddRect(window.min, window.max, ImGui::GetColorU32(col_idx), 0.f, ImDrawFlags_None, thickness);
 
@@ -1052,12 +1069,18 @@ void HDRViewApp::draw_image_border() const
                               ImGui::GetColorU32(ImGuiCol_Text, fade), text, align);
     };
 
-    bool non_trivial = current_image()->data_window != current_image()->display_window ||
-                       current_image()->data_window.min != int2{0, 0};
-    draw_image_window(Box2f{current_image()->data_window}, ImGuiCol_TabActive, "Data window", {0.f, 0.f}, non_trivial);
-    if (non_trivial)
-        draw_image_window(Box2f{current_image()->display_window}, ImGuiCol_TabUnfocused, "Display window", {1.f, 1.f},
-                          true);
+    // only draw within the image viewport
+    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
+    {
+        bool non_trivial = current_image()->data_window != current_image()->display_window ||
+                           current_image()->data_window.min != int2{0, 0};
+        draw_image_window(Box2f{current_image()->data_window}, ImGuiCol_TabActive, "Data window", {0.f, 0.f},
+                          non_trivial);
+        if (non_trivial)
+            draw_image_window(Box2f{current_image()->display_window}, ImGuiCol_TabUnfocused, "Display window",
+                              {1.f, 1.f}, true);
+    }
+    draw_list->PopClipRect();
 }
 
 void HDRViewApp::draw_image() const
@@ -1192,9 +1215,8 @@ void HDRViewApp::draw_background()
 
         if (!io.WantCaptureMouse)
         {
-            auto app_mouse_pos = float2{io.MousePos};
-            auto vp_mouse_pos  = vp_pos_at_app_pos(app_mouse_pos);
-            auto scroll        = float2{io.MouseWheelH, io.MouseWheel};
+            auto vp_mouse_pos = vp_pos_at_app_pos(io.MousePos);
+            auto scroll       = float2{io.MouseWheelH, io.MouseWheel};
 #if defined(__EMSCRIPTEN__)
             scroll *= 10.0f;
 #endif
@@ -1208,7 +1230,7 @@ void HDRViewApp::draw_background()
                 // panning
                 reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
             else
-                zoom_by(scroll.y / 4.f, app_mouse_pos);
+                zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
         }
 
         //

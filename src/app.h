@@ -83,6 +83,9 @@ public:
 
     /// Reposition the image so that the specified image pixel coordinate lies under the provided viewport position
     void reposition_pixel_to_vp_pos(float2 vp_pos, float2 pixel);
+
+    float  pixel_ratio() const;
+    float2 viewport_size() const { return m_viewport_size; }
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -93,11 +96,11 @@ public:
     /// Centers and scales the image so that it fits inside the widget.
     void fit();
     /**
-        Changes the scale factor by the provided amount modified by the zoom sensitivity member variable.
-        The scaling occurs such that the image pixel coordinate under the focused app position remains in
-        the same place before and after the scaling.
+        Changes the zoom factor by the provided amount modified by the zoom sensitivity member variable.
+        The scaling occurs such that the image pixel coordinate under focus_vp_pos remains in
+        the same place before and after the zoom.
     */
-    void zoom_by(float amount, float2 focus_app_pos);
+    void zoom_at_vp_pos(float amount, float2 focus_vp_pos);
     /// Zoom in to the next power of two
     void zoom_in();
     /// Zoom out to the previous power of two
@@ -107,8 +110,6 @@ public:
     //-----------------------------------------------------------------------------
 
 private:
-    float  pixel_ratio() const;
-    float2 viewport_size() const { return m_viewport_size; }
     float2 center_offset(ConstImagePtr img = nullptr) const;
     Box2f  scaled_display_window(ConstImagePtr img = nullptr) const;
     Box2f  scaled_data_window(ConstImagePtr img = nullptr) const;
@@ -155,8 +156,8 @@ private:
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    float      m_zoom       = 1.f;                      ///< The scale/zoom of the image
-    float2     m_offset     = {0.f, 0.f};               ///< The panning offset of the
+    float      m_zoom       = 1.f;                      ///< The zoom factor (image pixel size / logical pixel size)
+    float2     m_offset     = {0.f, 0.f};               ///< The panning offset of the image
     EChannel   m_channel    = EChannel::RGB;            ///< Which channel to display
     EBlendMode m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
     EBGMode    m_bg_mode    = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
