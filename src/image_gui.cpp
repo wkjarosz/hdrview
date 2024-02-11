@@ -187,7 +187,7 @@ void Image::draw_histogram(float exposure)
         }
         }
 
-        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], ImPlotCond_Once);
+        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], ImPlotCond_Always);
 
         for (int c = 0; c < std::min(3, group.num_channels); ++c)
         {
