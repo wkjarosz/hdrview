@@ -42,14 +42,10 @@ void Image::draw_histogram(float exposure)
         ImGui::SameLine();
         ImGui::SetNextItemWidth(combo_width);
         ImGui::Combo("##X-axis type", &x_axis, "Linear\0sRGB\0Asinh\0\0");
-
-        // ImGui::SetNextItemWidth(combo_width);
-        // ImGui::RadioButton("constant", &bin_type, 0);
-        // ImGui::SameLine();
-        // ImGui::SetNextItemWidth(combo_width);
-        // ImGui::RadioButton("linear", &bin_type, 1);
     }
 
+    auto             p        = int2{g_app()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
+    float4           color32  = g_app()->image_pixel(p);
     auto            &group    = groups[selected_group];
     PixelStatistics *stats[4] = {nullptr, nullptr, nullptr, nullptr};
     string           names[4];
@@ -61,11 +57,13 @@ void Image::draw_histogram(float exposure)
     {
         auto &channel = channels[group.channels[c]];
         stats[c]      = channel.get_statistics(exposure, x_axis, y_axis);
-        names[c]      = Channel::tail(channel.name);
         y_limits[0]   = std::min(y_limits[0], stats[c]->histogram.y_limits[0]);
         y_limits[1]   = std::max(y_limits[1], stats[c]->histogram.y_limits[1]);
         x_limits[0]   = std::min(x_limits[0], stats[c]->histogram.x_limits[0]);
         x_limits[1]   = std::max(x_limits[1], stats[c]->histogram.x_limits[1]);
+        names[c]      = Channel::tail(channel.name);
+        // names[c]      = fmt::format("{} ({:.3g}; {:.3g}; {:.3g})", Channel::tail(channel.name), stats[c]->minimum,
+        //                             stats[c]->average, stats[c]->maximum);
     }
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
@@ -189,7 +187,7 @@ void Image::draw_histogram(float exposure)
         }
         }
 
-        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], ImPlotCond_Always);
+        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], ImPlotCond_Once);
 
         for (int c = 0; c < std::min(3, group.num_channels); ++c)
         {
@@ -215,6 +213,56 @@ void Image::draw_histogram(float exposure)
                                    Histogram::NUM_BINS);
             ImPlot::PopStyleColor(2);
         }
+
+        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        {
+            ImPlot::PushStyleColor(ImPlotCol_InlayText, float4{colors[c].xyz(), 1.0f});
+            ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
+
+            ImPlot::PlotInfLines("##min", &stats[c]->minimum, 1);
+            ImPlot::PlotText(fmt::format("min({})", names[c]).c_str(), stats[c]->minimum,
+                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
+                             ImPlotTextFlags_Vertical);
+
+            ImPlot::PlotInfLines("##min", &stats[c]->average, 1);
+            ImPlot::PlotText(fmt::format("avg({})", names[c]).c_str(), stats[c]->average,
+                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
+                             ImPlotTextFlags_Vertical);
+
+            ImPlot::PlotInfLines("##max", &stats[c]->maximum, 1);
+            ImPlot::PlotText(fmt::format("max({})", names[c]).c_str(), stats[c]->maximum,
+                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
+                             ImPlotTextFlags_Vertical);
+            ImPlot::PopStyleColor(2);
+        }
+
+        if (contains(p))
+        {
+            for (int c = 0; c < std::min(3, group.num_channels); ++c)
+            {
+                ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
+                ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
+
+                float marker_size = 6.f;
+
+                float c_bin = stats[c]->histogram.value_to_bin(color32[c]);
+                float y1    = stats[c]->histogram.bin_y(c_bin);
+
+                // calculate the height of the up marker so that it sits just above the x axis.
+                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->histogram.bin_x(c_bin), y_limits[0]));
+                pixel.y -= 0.66f * marker_size; // roughly the
+                auto  bottom = ImPlot::PixelsToPlot(pixel);
+                float y0     = bottom.y;
+
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Up, marker_size);
+                ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c], &y0, 1, y1);
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 2.f);
+                ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c], &y1, 1, y0);
+
+                ImPlot::PopStyleColor(2);
+            }
+        }
+
         ImPlot::EndPlot();
     }
 }

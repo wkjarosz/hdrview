@@ -1201,7 +1201,7 @@ void HDRViewApp::draw_top_toolbar()
     {
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
-        for (int c = 0; c < group.num_channels; ++c)
+        for (int c = 0; c < group.num_channels && c < 3; ++c)
             m = std::max(m, img->channels[group.channels[c]].get_statistics()->maximum);
 
         m_exposure = log2(1.f / m);

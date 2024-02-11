@@ -17,37 +17,6 @@
 #include <string>
 #include <vector>
 
-struct Histogram
-{
-    static constexpr int NUM_BINS = 256;
-
-    AxisScale_ x_scale  = AxisScale_Linear;
-    AxisScale_ y_scale  = AxisScale_Linear;
-    float2     x_limits = {0.f, 1.f};
-    float2     y_limits = {0.f, 1.f};
-
-    std::array<float, NUM_BINS> xs{};
-    std::array<float, NUM_BINS> ys{};
-
-    int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
-    float &bin_x(int i) { return xs[clamp_idx(i)]; }
-    float &bin_y(int i) { return ys[clamp_idx(i)]; }
-};
-
-struct PixelStatistics
-{
-    float exposure;
-    float minimum;
-    float maximum;
-    float average;
-    int   invalid_pixels = 0;
-
-    Histogram histogram;
-
-    PixelStatistics(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
-    bool needs_update(float exposure, AxisScale_ x_scale, AxisScale_ y_scale) const;
-};
-
 inline double axis_scale_fwd_xform(double value, void *user_data)
 {
     static constexpr double eps     = 0.0001;
@@ -81,6 +50,50 @@ inline double axis_scale_inv_xform(double value, void *user_data)
     else
         return value;
 }
+
+struct Histogram
+{
+    static constexpr int NUM_BINS = 256;
+
+    AxisScale_ x_scale       = AxisScale_Linear;
+    AxisScale_ y_scale       = AxisScale_Linear;
+    float2     x_limits      = {0.f, 1.f};
+    float2     y_limits      = {0.f, 1.f};
+    float2     normalization = {0.f, 1.f};
+
+    std::array<float, NUM_BINS> xs{};
+    std::array<float, NUM_BINS> ys{};
+
+    int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
+    float &bin_x(int i) { return xs[clamp_idx(i)]; }
+    float &bin_y(int i) { return ys[clamp_idx(i)]; }
+
+    int value_to_bin(double value) const
+    {
+        return int(std::floor((axis_scale_fwd_xform(value, (void *)&x_scale) - normalization[0]) / normalization[1] *
+                              NUM_BINS));
+    };
+
+    double bin_to_value(double value)
+    {
+        static constexpr float inv_bins = 1.f / NUM_BINS;
+        return axis_scale_inv_xform(normalization[1] * value * inv_bins + normalization[0], (void *)&x_scale);
+    };
+};
+
+struct PixelStatistics
+{
+    float exposure;
+    float minimum;
+    float maximum;
+    float average;
+    int   invalid_pixels = 0;
+
+    Histogram histogram;
+
+    PixelStatistics(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
+    bool needs_update(float exposure, AxisScale_ x_scale, AxisScale_ y_scale) const;
+};
 
 struct Channel : public Array2Df
 {

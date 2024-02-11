@@ -113,35 +113,21 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
             histogram.x_limits[0] = histogram.x_limits[1] / 10000.f;
     }
 
-    float2 normalization_factors;
-    normalization_factors[0] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
-    normalization_factors[1] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
-                               normalization_factors[0];
-
-    auto value_to_bin = [this, &normalization_factors](double value)
-    {
-        return int(std::floor((axis_scale_fwd_xform(value, &histogram.x_scale) - normalization_factors[0]) /
-                              normalization_factors[1] * Histogram::NUM_BINS));
-    };
-
-    auto bin_to_value = [this, &normalization_factors](double value)
-    {
-        static constexpr float inv_bins = 1.f / Histogram::NUM_BINS;
-        return axis_scale_inv_xform(normalization_factors[1] * value * inv_bins + normalization_factors[0],
-                                    &histogram.x_scale);
-    };
+    histogram.normalization[0] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
+    histogram.normalization[1] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
+                                 histogram.normalization[0];
 
     // compute bin center values
-    for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = bin_to_value(i + 0.5);
+    for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = histogram.bin_to_value(i + 0.5);
 
     // accumulate bin counts
-    for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(value_to_bin(img(i))) += 1;
+    for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(histogram.value_to_bin(img(i))) += 1;
 
     // normalize histogram density by dividing bin counts by bin sizes
     histogram.y_limits[0] = std::numeric_limits<float>::infinity();
     for (int i = 0; i < Histogram::NUM_BINS; ++i)
     {
-        float bin_width = bin_to_value(i + 1) - bin_to_value(i);
+        float bin_width = histogram.bin_to_value(i + 1) - histogram.bin_to_value(i);
         histogram.ys[i] /= bin_width;
         histogram.y_limits[0] = min(histogram.y_limits[0], bin_width);
     }
