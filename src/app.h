@@ -19,6 +19,7 @@
 
 using std::map;
 using std::ofstream;
+using std::pair;
 using std::string;
 using std::string_view;
 using std::vector;
@@ -109,7 +110,27 @@ public:
     void  set_zoom_level(float l);
     //-----------------------------------------------------------------------------
 
+    float4 image_pixel(int2 p) const
+    {
+        auto img = current_image();
+        if (!img || !img->contains(p))
+            return float4{0.f};
+
+        float4 ret{0.f};
+        for (int c = 0; c < img->groups[img->selected_group].num_channels; ++c)
+            ret[c] = img->channels[img->groups[img->selected_group].channels[c]](p - img->data_window.min);
+
+        return ret;
+    }
+
+    // load font with the specified name at the specified size (if size > 0) or at the current font size (size <= 0)
+    ImFont *font(const string &name, int size = -1) const;
+    ImFont *load_font(const string &name, int size, bool merge_fa6 = false);
+    ImFont *deferred_load_font(const string &name, int size, bool merge_fa6 = false);
+
 private:
+    void load_fonts();
+
     float2 center_offset(ConstImagePtr img = nullptr) const;
     Box2f  scaled_display_window(ConstImagePtr img = nullptr) const;
     Box2f  scaled_data_window(ConstImagePtr img = nullptr) const;
@@ -128,19 +149,6 @@ private:
     void draw_file_window();
     void draw_channel_window();
     void process_hotkeys();
-
-    float4 image_pixel(int2 p) const
-    {
-        auto img = current_image();
-        if (!img || !img->contains(p))
-            return float4{0.f};
-
-        float4 ret{0.f};
-        for (int c = 0; c < img->groups[img->selected_group].num_channels; ++c)
-            ret[c] = img->channels[img->groups[img->selected_group].channels[c]](p - img->data_window.min);
-
-        return ret;
-    }
 
 private:
     //-----------------------------------------------------------------------------
@@ -171,8 +179,14 @@ private:
 
     vector<string> m_recent_files;
 
-    // sans and mono fonts in both regular and bold weights at various sizes
-    map<int, ImFont *> m_sans_regular, m_sans_bold, m_mono_regular, m_mono_bold;
+    map<pair<string, int>, ImFont *> m_fonts;
+    struct FontParams
+    {
+        string name;
+        int    size;
+        bool   merge_fa6;
+    };
+    vector<FontParams> m_deferred_fonts;
 };
 
 /// Return a pointer to the global singleton HDRViewApp instance

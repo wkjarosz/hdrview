@@ -315,3 +315,129 @@ void Image::draw_channels_list()
         ImGui::EndTable();
     }
 }
+
+void Image::draw_info()
+{
+    auto &io = ImGui::GetIO();
+
+    auto p = int2{g_app()->pixel_at_app_pos(io.MousePos)};
+
+    float4 hovered = g_app()->image_pixel(p);
+    auto  &group   = groups[selected_group];
+
+    auto sans_font = g_app()->font("sans regular");
+    auto bold_font = g_app()->font("sans bold");
+    auto mono_font = g_app()->font("mono regular");
+
+    auto property_name = [bold_font](const string &text)
+    {
+        ImGui::PushFont(bold_font);
+        ImGui::TextUnformatted(text);
+        ImGui::PopFont();
+    };
+    auto property_value = [](const string &text, ImFont *font, bool wrapped = false)
+    {
+        ImGui::SameLine();
+        ImGui::PushFont(font);
+
+        float avail_w = ImGui::GetContentRegionAvail().x;
+        float text_w  = ImGui::CalcTextSize(text.c_str()).x;
+
+        if (text_w < avail_w)
+        {
+            // place it on the same line as the property name
+            ImGui::TextUnformatted(text.c_str());
+        }
+        else
+        {
+            // place it indented on the next line
+            ImGui::NewLine();
+            ImGui::Indent();
+            if (wrapped)
+                ImGui::TextWrapped("%s", text.c_str());
+            else
+                ImGui::TextUnformatted(text.c_str());
+            ImGui::Unindent();
+        }
+        ImGui::PopFont();
+    };
+
+    property_name("File name:");
+    property_value(filename, sans_font, true);
+
+    property_name("Part name:");
+    property_value(partname.empty() ? "<none>" : partname, sans_font, true);
+
+    property_name("Resolution:");
+    property_value(fmt::format("{} x {}", size().x, size().y), sans_font);
+
+    property_name("Data window:");
+    property_value(
+        fmt::format("({}, {}) : ({}, {})", data_window.min.x, data_window.min.y, data_window.max.x, data_window.max.y),
+        sans_font);
+
+    property_name("Display window:");
+    property_value(fmt::format("({}, {}) : ({}, {})", display_window.min.x, display_window.min.y, display_window.max.x,
+                               display_window.max.y),
+                   sans_font);
+
+    property_name("Luminance weights:");
+    if (luminance_weights != Image::Rec709_luminance_weights)
+        property_value(
+            fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y, luminance_weights.z),
+            mono_font);
+    else
+        property_value(fmt::format("<Default Rec. 709 weights>\n{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x,
+                                   luminance_weights.y, luminance_weights.z),
+                       mono_font);
+
+    property_name("To Rec 709 RGB:");
+    if (M_to_Rec709 != float4x4{la::identity})
+    {
+        string mat_text = fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}",
+                                      M_to_Rec709[0][1], M_to_Rec709[0][1], M_to_Rec709[0][2], M_to_Rec709[0][3],
+                                      M_to_Rec709[1][1], M_to_Rec709[1][1], M_to_Rec709[1][2], M_to_Rec709[1][3],
+                                      M_to_Rec709[2][1], M_to_Rec709[2][1], M_to_Rec709[2][2], M_to_Rec709[2][3],
+                                      M_to_Rec709[3][1], M_to_Rec709[3][1], M_to_Rec709[3][2], M_to_Rec709[3][3]);
+        property_value(mat_text, mono_font);
+    }
+    else
+        property_value("<Identity matrix>", mono_font);
+
+    ImGui::SeparatorText("Channel statistics");
+    static const ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
+    if (ImGui::BeginTable("Channel statistics", 5, table_flags))
+    {
+        ImGui::PushFont(bold_font);
+        ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
+                                        ImGui::CalcTextSize("channel").x*/);
+        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+        ImGui::PopFont();
+
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            auto  &channel = channels[group.channels[c]];
+            string name    = Channel::tail(channel.name);
+            auto   stats   = channel.get_statistics();
+            ImGui::TableNextRow(), ImGui::TableNextColumn();
+
+            ImGui::PushFont(bold_font);
+            ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
+            ImGui::PopFont();
+            // ImGui::PushFont(mono_font);
+            ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
+            ImGui::Text("%-6.3g", stats->maximum);
+            // ImGui::PopFont();
+        }
+        ImGui::EndTable();
+    }
+}

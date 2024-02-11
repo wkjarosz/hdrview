@@ -240,6 +240,11 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
                 for (int x = 0; x < size.x; ++x) data.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
         }
 
+        if (Imf::hasWhiteLuminance(part.header()))
+            spdlog::info("File has white luminance info.\n");
+        else
+            spdlog::info("File does NOT have white luminance info.\n");
+
         // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
         if (Imf::hasChromaticities(part.header()))
         {
@@ -247,6 +252,8 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
             Imf::Chromaticities file_cr = Imf::chromaticities(part.header());
             if (file_cr != rec709_cr)
             {
+                // Imath matrices multiply row vectors to their left, so are read from left-to-right.
+                // This transforms from the file's RGB to Rec.709 RGB (via XYZ)
                 Imath::M44f M = Imf::RGBtoXYZ(file_cr, 1) * Imf::XYZtoRGB(rec709_cr, 1);
 
                 for (int m = 0; m < 4; ++m)

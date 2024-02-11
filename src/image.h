@@ -216,6 +216,7 @@ public:
 
     void draw_histogram(float exposure);
     void draw_channels_list();
+    void draw_info();
 };
 
 // void draw_histogram(Image *img, float exposure);

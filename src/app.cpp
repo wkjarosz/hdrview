@@ -283,40 +283,7 @@ HDRViewApp::HDRViewApp()
     m_params.callbacks.AddEdgeToolbar(
         HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, edgeToolbarOptions);
 
-    m_params.callbacks.LoadAdditionalFonts = [this]()
-    {
-        std::string sans_r = "fonts/Roboto/Roboto-Regular.ttf";
-        std::string sans_b = "fonts/Roboto/Roboto-Bold.ttf";
-        std::string mono_r = "fonts/Roboto/RobotoMono-Regular.ttf";
-        std::string mono_b = "fonts/Roboto/RobotoMono-Bold.ttf";
-        string      fa6    = "fonts/" FONT_ICON_FILE_NAME_FAS;
-
-        if (!HelloImGui::AssetExists(sans_r) || !HelloImGui::AssetExists(sans_b) || !HelloImGui::AssetExists(mono_r) ||
-            !HelloImGui::AssetExists(mono_b) || !HelloImGui::AssetExists(fa6))
-            throw std::runtime_error("Cannot find some required fonts!");
-
-        HelloImGui::FontLoadingParams iconFontParams;
-        iconFontParams.mergeToLastFont   = true;
-        iconFontParams.useFullGlyphRange = false;
-        iconFontParams.glyphRanges.push_back({ICON_MIN_FA, ICON_MAX_16_FA});
-        iconFontParams.fontConfig.PixelSnapH = true;
-
-        for (auto font_size : {14, 10, 16, 18, 30})
-        {
-            auto icon_font_size                        = 0.8f * font_size;
-            iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
-                2.5f * icon_font_size;
-
-            m_sans_regular[font_size] = HelloImGui::LoadFont(sans_r, (float)font_size);
-            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams); // Merge FontAwesome6 with the previous font
-
-            m_sans_bold[font_size] = HelloImGui::LoadFont(sans_b, (float)font_size);
-            HelloImGui::LoadFont(fa6, icon_font_size, iconFontParams); // Merge FontAwesome6 with the previous font
-
-            m_mono_regular[font_size] = HelloImGui::LoadFont(mono_r, (float)font_size);
-            m_mono_bold[font_size]    = HelloImGui::LoadFont(mono_b, (float)font_size);
-        }
-    };
+    m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
     m_params.callbacks.SetupImGuiStyle = [this]()
     {
@@ -355,6 +322,17 @@ HDRViewApp::HDRViewApp()
         {
             fmt::print(stderr, "Shader initialization failed!:\n\t{}.", e.what());
             HelloImGui::Log(HelloImGui::LogLevel::Error, "Shader initialization failed!:\n\t%s.", e.what());
+        }
+    };
+
+    m_params.callbacks.PreNewFrame = [this]
+    {
+        if (m_deferred_fonts.size())
+        {
+            // load any fonts that we wanted to load in the last frame
+            for (auto &f : m_deferred_fonts) { load_font(f.name, f.size, f.merge_fa6); }
+            m_deferred_fonts.clear();
+            // ImGui::GetIO().Fonts->Build();
         }
     };
 
@@ -628,165 +606,78 @@ void HDRViewApp::run()
     ImmApp::Run(m_params, addons);
 }
 
+ImFont *HDRViewApp::font(const string &name, int size) const
+{
+    try
+    {
+        return m_fonts.at({name, size <= 0 ? int(ImGui::GetFontSize()) : size});
+    }
+    catch (const std::exception &e)
+    {
+        throw std::runtime_error(fmt::format("Font with name '{}' and size {} was not loaded.", name, size));
+    }
+}
+
+ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
+{
+    const map<string, string> font_paths = {{"sans regular", "fonts/Roboto/Roboto-Regular.ttf"},
+                                            {"sans bold", "fonts/Roboto/Roboto-Bold.ttf"},
+                                            {"mono regular", "fonts/Roboto/RobotoMono-Regular.ttf"},
+                                            {"mono bold", "fonts/Roboto/RobotoMono-Bold.ttf"}};
+
+    auto font_path = font_paths.at(name);
+    if (!HelloImGui::AssetExists(font_path))
+        throw std::runtime_error(fmt::format("Cannot find the font asset '{}'!", name));
+
+    auto font = HelloImGui::LoadFont(font_path, (float)size);
+    if (merge_fa6)
+    {
+        HelloImGui::FontLoadingParams iconFontParams;
+        iconFontParams.mergeToLastFont   = true;
+        iconFontParams.useFullGlyphRange = false;
+        iconFontParams.glyphRanges.push_back({ICON_MIN_FA, ICON_MAX_16_FA});
+        iconFontParams.fontConfig.PixelSnapH       = true;
+        auto icon_font_size                        = 0.8f * size;
+        iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX = 2.5f * icon_font_size;
+        HelloImGui::LoadFont("fonts/" FONT_ICON_FILE_NAME_FAS, icon_font_size,
+                             iconFontParams); // Merge FontAwesome6 with the previous font
+    }
+    return m_fonts[{name, size}] = font;
+}
+
+ImFont *HDRViewApp::deferred_load_font(const string &name, int size, bool merge_fa6)
+{
+    size = size <= 0 ? ImGui::GetFontSize() : size;
+    // Check if the font exists
+    auto it = m_fonts.find({name, size});
+    if (it != m_fonts.end())
+        // font exists, use it
+        return it->second;
+    else
+    {
+        // schedule the font to the loaded on the next frame, and return the default font for now
+        m_deferred_fonts.push_back({name, size, merge_fa6});
+        return m_fonts.begin()->second;
+    }
+}
+
+void HDRViewApp::load_fonts()
+{
+    for (auto font_size : {14, 10, 16, 18, 30})
+    {
+        load_font("sans regular", font_size, true);
+        load_font("sans bold", font_size, true);
+        load_font("mono regular", font_size, false);
+        load_font("mono bold", font_size, false);
+    }
+}
+
 HDRViewApp::~HDRViewApp() {}
 
 void HDRViewApp::draw_info_window()
 {
-    auto img = current_image();
-    if (!img)
-        return;
-
-    auto &io = ImGui::GetIO();
-
-    auto p = int2{pixel_at_app_pos(io.MousePos)};
-
-    float4 hovered = image_pixel(p);
-    auto  &group   = img->groups[img->selected_group];
-
-    if (ImGui::BeginTable("properties", 2))
-    {
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthFixed,
-                                ImGui::CalcTextSize(" To Rec 709 RGB:").x);
-        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
-        ImGui::PopFont();
-
-        ImGui::TableNextRow();
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor("File path:", 1.f);
-        ImGui::TextUnformatted("File path:");
-        ImGui::PopFont();
-        ImGui::TableNextColumn();
-        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-        ImGui::TextWrapped("%s", img->filename.c_str());
-        ImGui::PopFont();
-
-        if (!img->partname.empty())
-        {
-            ImGui::TableNextRow();
-            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-            ImGui::TableNextColumn();
-            ImGui::AlignCursor("Part name:", 1.f);
-            ImGui::TextUnformatted("Part name:");
-            ImGui::PopFont();
-            ImGui::TableNextColumn();
-            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-            ImGui::TextWrapped("%s", img->partname.c_str());
-            ImGui::PopFont();
-        }
-
-        ImGui::TableNextRow();
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor("Resolution:", 1.f);
-        ImGui::TextUnformatted("Resolution:");
-        ImGui::PopFont();
-        ImGui::TableNextColumn();
-        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-        ImGui::Text("%d x %d", img->size().x, img->size().y);
-        ImGui::PopFont();
-
-        ImGui::TableNextRow();
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor("Data window:", 1.f);
-        ImGui::TextUnformatted("Data window:");
-        ImGui::PopFont();
-        ImGui::TableNextColumn();
-        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-        ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->data_window.min.x, img->data_window.min.y,
-                                           img->data_window.max.x, img->data_window.max.y)
-                                   .c_str());
-        ImGui::PopFont();
-
-        ImGui::TableNextRow();
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableNextColumn();
-        ImGui::AlignCursor("Display window:", 1.f);
-        ImGui::TextUnformatted("Display window:");
-        ImGui::PopFont();
-        ImGui::TableNextColumn();
-        ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-        ImGui::TextUnformatted(fmt::format("({}, {}) : ({}, {})\n", img->display_window.min.x,
-                                           img->display_window.min.y, img->display_window.max.x,
-                                           img->display_window.max.y)
-                                   .c_str());
-        ImGui::PopFont();
-
-        if (img->luminance_weights != Image::Rec709_luminance_weights)
-        {
-            ImGui::TableNextRow();
-            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-            ImGui::TableNextColumn();
-            ImGui::AlignCursor("Lumi. weights:", 1.f);
-            ImGui::TextUnformatted("Lumi. weights:");
-            ImGui::PopFont();
-            ImGui::TableNextColumn();
-            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-            ImGui::TextUnformatted(fmt::format("{:>+8.2e}, {:>+8.2e}, {:>+8.2e}", img->luminance_weights.x,
-                                               img->luminance_weights.y, img->luminance_weights.z)
-                                       .c_str());
-            ImGui::PopFont();
-        }
-
-        if (img->M_to_Rec709 != float4x4{la::identity})
-        {
-            ImGui::TableNextRow();
-            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-            ImGui::TableNextColumn();
-            ImGui::AlignCursor("To Rec 709 RGB:", 1.f);
-            ImGui::TextUnformatted("To Rec 709 RGB:");
-            ImGui::PopFont();
-            ImGui::TableNextColumn();
-            ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-            ImGui::Text("%+8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[0][1], img->M_to_Rec709[0][1],
-                        img->M_to_Rec709[0][2], img->M_to_Rec709[0][3]);
-            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[1][1], img->M_to_Rec709[1][1],
-                        img->M_to_Rec709[1][2], img->M_to_Rec709[1][3]);
-            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[2][1], img->M_to_Rec709[2][1],
-                        img->M_to_Rec709[2][2], img->M_to_Rec709[2][3]);
-            ImGui::Text("+%8.2e, %+8.2e, %+8.2e, %+8.2e", img->M_to_Rec709[3][1], img->M_to_Rec709[3][1],
-                        img->M_to_Rec709[3][2], img->M_to_Rec709[3][3]);
-            ImGui::PopFont();
-        }
-
-        ImGui::EndTable();
-    }
-
-    ImGui::SeparatorText("Channel statistics");
-    static ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
-    if (ImGui::BeginTable("table1", 5, table_flags))
-    {
-        ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-        ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
-                                        ImGui::CalcTextSize("channel").x*/);
-        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
-        ImGui::PopFont();
-
-        for (int c = 0; c < group.num_channels; ++c)
-        {
-            auto  &channel = img->channels[group.channels[c]];
-            string name    = Channel::tail(channel.name);
-            auto   stats   = channel.get_statistics();
-            ImGui::TableNextRow(), ImGui::TableNextColumn();
-
-            ImGui::PushFont(m_sans_bold.at(ImGui::GetFontSize()));
-            ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
-            ImGui::PopFont();
-            // ImGui::PushFont(m_mono_regular.at(ImGui::GetFontSize()));
-            ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->maximum);
-            // ImGui::PopFont();
-        }
-        ImGui::EndTable();
-    }
+    if (auto img = current_image())
+        return img->draw_info();
 }
 
 void HDRViewApp::draw_histogram_window()
@@ -1124,8 +1015,7 @@ void HDRViewApp::draw_pixel_info() const
     static constexpr float3 white     = float3{1.f};
     static constexpr float3 black     = float3{0.f};
     static constexpr float2 align     = {0.5f, 0.5f};
-    constexpr int           font_size = 30;
-    auto                    font      = m_mono_bold.at(font_size);
+    auto                    mono_font = font("mono bold", 30);
 
     auto  &group  = current_image()->groups[current_image()->selected_group];
     auto   colors = group.colors();
@@ -1139,7 +1029,7 @@ void HDRViewApp::draw_pixel_info() const
             longest_name = names[c];
     }
 
-    ImGui::PushFont(font);
+    ImGui::PushFont(mono_font);
     static float line_height = ImGui::CalcTextSize("").y;
     const float2 channel_threshold2 =
         float2{ImGui::CalcTextSize((longest_name + ": 31.000").c_str()).x, group.num_channels * line_height};
@@ -1165,7 +1055,7 @@ void HDRViewApp::draw_pixel_info() const
     draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     if (alpha > 0.0f)
     {
-        ImGui::PushFont(font);
+        ImGui::PushFont(mono_font);
 
         auto screen_bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
         auto bounds        = screen_bounds.intersect(current_image()->data_window);
@@ -1528,14 +1418,14 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextColumn();
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
 
-            ImGui::PushFont(m_sans_bold.at(30));
+            ImGui::PushFont(font("sans bold", 30));
             ImGui::Text("HDRView");
             ImGui::PopFont();
 
-            ImGui::PushFont(m_sans_bold.at(18));
+            ImGui::PushFont(font("sans bold", 18));
             ImGui::Text(version());
             ImGui::PopFont();
-            ImGui::PushFont(m_sans_regular.at(10));
+            ImGui::PushFont(font("sans regular", 10));
 #if defined(__EMSCRIPTEN__)
             ImGui::Text(fmt::format("Built with emscripten using the {} backend on {}.", backend(), build_timestamp()));
 #else
@@ -1545,7 +1435,7 @@ void HDRViewApp::draw_about_dialog()
 
             ImGui::Spacing();
 
-            ImGui::PushFont(m_sans_bold.at(16));
+            ImGui::PushFont(font("sans bold", 16));
             ImGui::Text("HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
                         "converting high-dynamic range images.");
             ImGui::PopFont();
@@ -1563,14 +1453,14 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            ImGui::PushFont(m_sans_bold.at(14));
+            ImGui::PushFont(font("sans bold", 14));
             ImGui::AlignCursor(name, 1.f);
             ImGui::Text(name);
             ImGui::PopFont();
 
             ImGui::TableNextColumn();
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - HelloImGui::EmSize());
-            ImGui::PushFont(m_sans_regular.at(14));
+            ImGui::PushFont(font("sans regular", 14));
             ImGui::Text(desc);
             ImGui::PopFont();
         };
