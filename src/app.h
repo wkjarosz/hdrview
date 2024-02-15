@@ -87,6 +87,12 @@ public:
 
     float  pixel_ratio() const;
     float2 viewport_size() const { return m_viewport_size; }
+    bool   vp_pos_in_viewport(float2 vp_pos) const
+    {
+        return all(gequal(vp_pos, 0.f)) && all(less(vp_pos, m_viewport_size));
+    }
+    bool app_pos_in_viewport(float2 app_pos) const { return vp_pos_in_viewport(vp_pos_at_app_pos(app_pos)); }
+    bool pixel_in_viewport(float2 pixel) const { return vp_pos_in_viewport(vp_pos_at_pixel(pixel)); }
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -110,15 +116,15 @@ public:
     void  set_zoom_level(float l);
     //-----------------------------------------------------------------------------
 
-    float4 image_pixel(int2 p) const
+    float4 image_pixel(int2 pixel) const
     {
         auto img = current_image();
-        if (!img || !img->contains(p))
+        if (!img || !img->contains(pixel))
             return float4{0.f};
 
         float4 ret{0.f};
         for (int c = 0; c < img->groups[img->selected_group].num_channels; ++c)
-            ret[c] = img->channels[img->groups[img->selected_group].channels[c]](p - img->data_window.min);
+            ret[c] = img->channels[img->groups[img->selected_group].channels[c]](pixel - img->data_window.min);
 
         return ret;
     }

@@ -6,14 +6,14 @@
 namespace ImGui
 {
 
-inline bool ToggleButton(const char *label, bool *active)
+inline bool ToggleButton(const char *label, bool *active, const ImVec2 &size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Button, *active ? GetColorU32(ImGuiCol_ButtonActive) : GetColorU32(ImGuiCol_Button));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, GetColorU32(ImGuiCol_FrameBgHovered));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, GetColorU32(ImGuiCol_FrameBgActive));
 
     bool ret;
-    if ((ret = ImGui::Button(label)))
+    if ((ret = ImGui::Button(label, size)))
         *active = !*active;
     ImGui::PopStyleColor(3);
     return ret;
@@ -59,5 +59,16 @@ inline void AlignCursor(float width, float align)
 inline void AlignCursor(const std::string &text, float align) { AlignCursor(CalcTextSize(text.c_str()).x, align); }
 
 void PushRowColors(bool is_current, bool is_reference);
+
+inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
+{
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::PushTextWrapPos(wrap_width);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
 
 } // namespace ImGui

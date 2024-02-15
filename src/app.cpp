@@ -125,17 +125,6 @@ static const vector<std::pair<string, string>> g_help_strings = {
 };
 // static const map<string, string> g_tooltip_map(g_help_strings.begin(), g_help_strings.end());
 
-// static auto tooltip(const char *text, float wrap_width = 400.f)
-// {
-//     if (ImGui::BeginItemTooltip())
-//     {
-//         ImGui::PushTextWrapPos(wrap_width);
-//         ImGui::TextUnformatted(text);
-//         ImGui::PopTextWrapPos();
-//         ImGui::EndTooltip();
-//     }
-// }
-
 // static auto hotkey_tooltip(const char *name, float wrap_width = 400.f)
 // {
 //     if (auto t = g_tooltip_map.find(name); t != g_tooltip_map.end())
@@ -249,21 +238,23 @@ HDRViewApp::HDRViewApp()
         if (auto img = current_image())
         {
             auto &io = ImGui::GetIO();
-
-            auto p = int2{pixel_at_app_pos(io.MousePos)};
-
-            float4 color32 = image_pixel(p);
-            auto  &group   = img->groups[img->selected_group];
-
-            sized_text(3, fmt::format("({:>6d},", p.x), 0.f);
-            sized_text(3, fmt::format("{:>6d})", p.y), 0.f);
-
-            if (img->contains(p))
+            if (vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos)))
             {
-                sized_text(0.5f, "=", 0.5f);
-                for (int c = 0; c < group.num_channels; ++c)
-                    sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
-                                                 c == group.num_channels - 1 ? ")" : ","));
+                auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+
+                float4 color32 = image_pixel(hovered_pixel);
+                auto  &group   = img->groups[img->selected_group];
+
+                sized_text(3, fmt::format("({:>6d},", hovered_pixel.x), 0.f);
+                sized_text(3, fmt::format("{:>6d})", hovered_pixel.y), 0.f);
+
+                if (img->contains(hovered_pixel))
+                {
+                    sized_text(0.5f, "=", 0.5f);
+                    for (int c = 0; c < group.num_channels; ++c)
+                        sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
+                                                     c == group.num_channels - 1 ? ")" : ","));
+                }
             }
 
             float real_zoom = m_zoom * pixel_ratio();
@@ -290,7 +281,7 @@ HDRViewApp::HDRViewApp()
         try
         {
             // make things like radio buttons look nice and round
-            ImGui::GetStyle().CircleTessellationMaxError = 0.15f;
+            ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
 
             m_render_pass = new RenderPass(false, true);
             m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);

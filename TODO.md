@@ -1,12 +1,32 @@
-## TODO
+# TODO
+
+##
+
+- [ ] load multiplate images/entire directories
+- [ ] fix reference image index when closing image
+- [ ] render pixel grid in the shader
+- [ ] figure out how to better handle channels dropdown with channel groups and arbitrary channels
+- [ ] improve statistics
+  - [ ] compute min/max/avg ignoring infinities, and report # of infinities
+  - [ ] compute statistics also over selection
+  - [ ] compute pixel hover (and statistics) while considering the blend mode
+- [ ] figure our threading while considering emscripten
+- [ ] selection support
+- [ ] command palette/improved hotkey support
+- [ ] save as support for OpenEXR
+- [ ] handle multi-view EXRs better
+- [ ] pinch-zoom and pan support in emscripten with SDL
+- [ ] move shader, texture, renderpass and others into separate library
+- [ ] merge metal/glsl shaders + C++ colorspace stuff?
+
+
+## Old
 
 - [ ] Improve responsiveness during long operations
    - [x] Add progress bars
    - [x] Run them in a separate thread and avoid freezing the main application
    - [x] Send texture data to GL in smaller tiles, across several re-draws to avoid stalling main app
    - [ ] Allow canceling/aborting long operations
-- [ ] Refactor Color3 and Color4 classes as subclasses of Eigen Matrices, so we can more easily do color conversion.
-- [x] Add log-linear and log-log histogram options?
 - [ ] Improved DNG/demosaicing pipeline
    - [ ] Improve DNG color correction
    - [ ] Allow skipping DNG demosaicing during load

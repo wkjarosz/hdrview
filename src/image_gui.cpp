@@ -24,30 +24,48 @@ using namespace std;
 
 void Image::draw_histogram(float exposure)
 {
-    static ImPlotScale y_axis   = ImPlotScale_Linear;
-    static AxisScale_  x_axis   = AxisScale_Asinh;
-    static int         bin_type = 1;
+    static ImPlotScale y_axis    = ImPlotScale_Linear;
+    static AxisScale_  x_axis    = AxisScale_Asinh;
+    static int         bin_type  = 1;
+    static ImPlotCond  plot_cond = ImPlotCond_Always;
     {
-        float combo_width = 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) -
-                            ImGui::CalcTextSize("X:").x - ImGui::GetStyle().ItemSpacing.x;
+        float combo_width =
+            std::max(HelloImGui::EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() -
+                                                      2.f * ImGui::GetStyle().ItemSpacing.x) -
+                                                  (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Y:");
-        ImGui::SameLine();
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
         ImGui::Combo("##Y-axis type", &y_axis, "Linear\0Log\0\0");
         ImGui::SameLine();
 
         ImGui::AlignTextToFramePadding();
         ImGui::Text("X:");
-        ImGui::SameLine();
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
         ImGui::Combo("##X-axis type", &x_axis, "Linear\0sRGB\0Asinh\0\0");
+
+        ImGui::SameLine();
+
+        static bool lock = true;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                            ImVec2(0, ImGui::GetStyle().FramePadding.y));  // Remove frame padding
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
+        // if (ImGui::Checkbox("Auto-fit axes to exposure", &lock))
+        //     plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
+        if (ImGui::ToggleButton(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE, &lock,
+                                {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+            plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
+        ImGui::WrappedTooltip(
+            "Toggle between manual panning/zoom in histogram vs. auto fitting histogram axes based on the exposure.");
+        ImGui::PopStyleVar(2);
     }
 
-    auto             p        = int2{g_app()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
-    float4           color32  = g_app()->image_pixel(p);
-    auto            &group    = groups[selected_group];
-    PixelStatistics *stats[4] = {nullptr, nullptr, nullptr, nullptr};
+    auto             hovered_pixel = int2{g_app()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
+    float4           color32       = g_app()->image_pixel(hovered_pixel);
+    auto            &group         = groups[selected_group];
+    PixelStatistics *stats[4]      = {nullptr, nullptr, nullptr, nullptr};
     string           names[4];
     auto             colors = group.colors();
 
@@ -62,14 +80,13 @@ void Image::draw_histogram(float exposure)
         x_limits[0]   = std::min(x_limits[0], stats[c]->histogram.x_limits[0]);
         x_limits[1]   = std::max(x_limits[1], stats[c]->histogram.x_limits[1]);
         names[c]      = Channel::tail(channel.name);
-        // names[c]      = fmt::format("{} ({:.3g}; {:.3g}; {:.3g})", Channel::tail(channel.name), stats[c]->minimum,
-        //                             stats[c]->average, stats[c]->maximum);
     }
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
     {
+        ImPlot::GetInputMap().ZoomRate = 0.03f;
         ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
         ImPlot::SetupAxisScale(ImAxis_Y1, y_axis == AxisScale_Linear ? ImPlotScale_Linear : ImPlotScale_Log10);
 
@@ -89,10 +106,12 @@ void Image::draw_histogram(float exposure)
             return int(result.size);
         };
 
-        auto powers_of_10_ticks = [x_limits, &format_power_of_10](int num_orders = 10)
+        auto powers_of_10_ticks = [&x_limits, &format_power_of_10](int num_orders = 10)
         {
             float avail_width = std::max(ImPlot::GetStyle().PlotMinSize.x, ImGui::GetContentRegionAvail().x) -
                                 2.f * ImPlot::GetStyle().PlotPadding.x;
+            // auto p_limits = ImPlot::GetPlotLimits();
+            // float2 x_limits = float2{p_limits.X.Min, p_limits.X.Max};
 
             auto calc_pixel = [x_limits, avail_width](float plt)
             {
@@ -152,6 +171,9 @@ void Image::draw_histogram(float exposure)
         if (x_limits[0] == 0)
             x_limits[0] = 1e-14f;
 
+        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], plot_cond);
+        // ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
+
         ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
         switch (x_axis)
         {
@@ -181,13 +203,16 @@ void Image::draw_histogram(float exposure)
             {
                 auto ticks = powers_of_10_ticks();
                 ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), ticks.size());
+                ImPlot::SetupAxisFormat(ImAxis_X1, format_power_of_10);
             }
 
             break;
         }
         }
 
-        ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], ImPlotCond_Always);
+        //
+        // now do the actual plotting
+        //
 
         for (int c = 0; c < std::min(3, group.num_channels); ++c)
         {
@@ -236,7 +261,7 @@ void Image::draw_histogram(float exposure)
             ImPlot::PopStyleColor(2);
         }
 
-        if (contains(p))
+        if (contains(hovered_pixel) && g_app()->app_pos_in_viewport(ImGui::GetIO().MousePos))
         {
             for (int c = 0; c < std::min(3, group.num_channels); ++c)
             {
@@ -368,10 +393,10 @@ void Image::draw_info()
 {
     auto &io = ImGui::GetIO();
 
-    auto p = int2{g_app()->pixel_at_app_pos(io.MousePos)};
+    auto hovered_pixel = int2{g_app()->pixel_at_app_pos(io.MousePos)};
 
-    float4 hovered = g_app()->image_pixel(p);
-    auto  &group   = groups[selected_group];
+    // float4 hovered = g_app()->image_pixel(hovered_pixel);
+    auto &group = groups[selected_group];
 
     auto sans_font = g_app()->font("sans regular");
     auto bold_font = g_app()->font("sans bold");
@@ -455,37 +480,89 @@ void Image::draw_info()
     else
         property_value("<Identity matrix>", mono_font);
 
+    static const ImGuiTableFlags table_flags =
+        ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg;
     ImGui::SeparatorText("Channel statistics");
-    static const ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
-    if (ImGui::BeginTable("Channel statistics", 5, table_flags))
+    // if (ImGui::BeginTable("Channel statistics", 5, table_flags))
+    // {
+    //     ImGui::PushFont(bold_font);
+    //     ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
+    //                                     ImGui::CalcTextSize("channel").x*/);
+    //     // ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn(ICON_FA_SKULL_CROSSBONES "NaNs", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableHeadersRow();
+    //     ImGui::PopFont();
+
+    //     for (int c = 0; c < group.num_channels; ++c)
+    //     {
+    //         auto  &channel = channels[group.channels[c]];
+    //         string name    = Channel::tail(channel.name);
+    //         auto   stats   = channel.get_statistics();
+    //         ImGui::TableNextRow(), ImGui::TableNextColumn();
+
+    //         ImGui::PushFont(bold_font);
+    //         ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
+    //         ImGui::PopFont();
+    //         // ImGui::PushFont(mono_font);
+    //         // ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
+    //         ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
+    //         ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
+    //         ImGui::Text("%-6.3g", stats->maximum), ImGui::TableNextColumn();
+    //         ImGui::Text("%d", stats->invalid_pixels);
+    //         // ImGui::PopFont();
+    //     }
+    //     ImGui::EndTable();
+    // }
+
+    // Set the hover and active colors to be the same as the background color
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
+    if (ImGui::BeginTable("Channel statistics", group.num_channels + 1, table_flags))
     {
+        PixelStatistics *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
+        string           channel_names[4];
+        for (int c = 0; c < group.num_channels; ++c)
+        {
+            auto &channel    = channels[group.channels[c]];
+            channel_stats[c] = channel.get_statistics();
+            channel_names[c] = Channel::tail(channel.name);
+        }
+
+        // set up header row
         ImGui::PushFont(bold_font);
-        ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
-                                        ImGui::CalcTextSize("channel").x*/);
-        ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+        for (int c = 0; c < group.num_channels; ++c)
+            ImGui::TableSetupColumn(fmt::format("{}{}", ICON_FA_LAYER_GROUP, channel_names[c]).c_str(),
+                                    ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
         ImGui::PopFont();
 
-        for (int c = 0; c < group.num_channels; ++c)
+        const char   *stat_names[4] = {"Min", "Avg", "Max", "# of NaNs"};
+        constexpr int NUM_STATS     = sizeof(stat_names) / sizeof(stat_names[0]);
+        for (int s = 0; s < NUM_STATS; ++s)
         {
-            auto  &channel = channels[group.channels[c]];
-            string name    = Channel::tail(channel.name);
-            auto   stats   = channel.get_statistics();
-            ImGui::TableNextRow(), ImGui::TableNextColumn();
-
             ImGui::PushFont(bold_font);
-            ImGui::Text(" %s", name.c_str()), ImGui::TableNextColumn();
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
+            ImGui::TextUnformatted(stat_names[s]);
             ImGui::PopFont();
-            // ImGui::PushFont(mono_font);
-            ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
-            ImGui::Text("%-6.3g", stats->maximum);
-            // ImGui::PopFont();
+            for (int c = 0; c < group.num_channels; ++c)
+            {
+                ImGui::TableNextColumn();
+                switch (s)
+                {
+                case 0: ImGui::Text("%-6.3g", channel_stats[c]->minimum); break;
+                case 1: ImGui::Text("%-6.3g", channel_stats[c]->average); break;
+                case 2: ImGui::Text("%-6.3g", channel_stats[c]->maximum); break;
+                default: ImGui::Text("%d", channel_stats[c]->invalid_pixels); break;
+                }
+            }
         }
         ImGui::EndTable();
     }
+    ImGui::PopStyleColor(2);
 }
