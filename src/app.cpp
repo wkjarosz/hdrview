@@ -817,8 +817,9 @@ void HDRViewApp::draw_file_window()
                                 ImGui::TableNextRow();
 
                                 ImGui::TableNextColumn();
-                                string hotkey =
-                                    is_current ? fmt::format(ICON_FA_ANGLE_UP "{}", layer.groups[g] + 1) : "";
+                                string hotkey = is_current && layer.groups[g] < 10
+                                                    ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
+                                                    : "";
                                 ImGui::AlignCursor(hotkey, 1.0f);
                                 ImGui::TextUnformatted(hotkey);
 
@@ -1185,10 +1186,8 @@ void HDRViewApp::draw_top_toolbar()
     auto img = current_image();
 
     ImGui::BeginDisabled(!img);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(0, ImGui::GetStyle().FramePadding.y));  // Remove frame padding
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
-    if (ImGui::Button(ICON_FA_WAND_SPARKLES "##NormalizeExposure", {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+    if (ImGui::Button(ICON_FA_WAND_MAGIC_SPARKLES "##NormalizeExposure",
+                      {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
     {
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
@@ -1197,21 +1196,16 @@ void HDRViewApp::draw_top_toolbar()
 
         m_exposure = log2(1.f / m);
     }
-    ImGui::PopStyleVar(2);
     ImGui::EndDisabled();
 
     ImGui::SameLine();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(0, ImGui::GetStyle().FramePadding.y));  // Remove frame padding
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
     if (ImGui::Button(ICON_FA_ARROWS_ROTATE "##ResetTonemapping", {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
     {
         m_exposure = 0.f;
         m_gamma    = 2.2f;
         m_sRGB     = true;
     }
-    ImGui::PopStyleVar(2);
     ImGui::SameLine();
 
     ImGui::Checkbox("sRGB", &m_sRGB);
@@ -1323,17 +1317,17 @@ void HDRViewApp::process_hotkeys()
     // below hotkeys only available if there is an image
 
     // switch the current image using the number keys
-    for (int n = 0; n < 10; ++n)
+    for (int n = 0; n < 9; ++n)
         if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_1 + n)))
             set_current_image_index(n);
     if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0)))
         set_current_image_index(9);
 
     // switch the selected channel group using Ctrl + number key
-    for (int n = 0; n < 10; ++n)
+    for (int n = 0; n < 9; ++n)
         if (n < (int)img->groups.size() && ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_1 + n) | ImGuiMod_Ctrl))
             img->selected_group = n;
-    if (10 < (int)img->groups.size() && ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0) | ImGuiMod_Ctrl))
+    if ((int)img->groups.size() > 9 && ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0) | ImGuiMod_Ctrl))
         img->selected_group = 9;
 
     if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut))

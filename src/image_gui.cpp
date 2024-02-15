@@ -363,9 +363,10 @@ void Image::draw_channels_list()
                     ImGui::TableNextRow();
 
                     ImGui::TableNextColumn();
-                    ImGui::AlignCursor(fmt::format(ICON_FA_ANGLE_UP "{}", layer.groups[g] + 1), 1.0f);
-                    if (ImGui::Selectable(fmt::format(ICON_FA_ANGLE_UP "{}##group_number", layer.groups[g] + 1).c_str(),
-                                          is_selected_channel, selectable_flags))
+                    auto hotkey =
+                        layer.groups[g] < 10 ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10)) : "";
+                    ImGui::AlignCursor(hotkey, 1.0f);
+                    if (ImGui::Selectable(hotkey.c_str(), is_selected_channel, selectable_flags))
                     {
                         selected_group = layer.groups[g];
                         set_as_texture(selected_group, *g_app()->shader(), "primary");

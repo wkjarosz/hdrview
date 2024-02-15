@@ -2,6 +2,7 @@
 
 ##
 
+- [ ] have spdlog output to the log window
 - [ ] load multiplate images/entire directories
 - [ ] fix reference image index when closing image
 - [ ] render pixel grid in the shader
