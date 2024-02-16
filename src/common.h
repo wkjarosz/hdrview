@@ -19,7 +19,6 @@
 // #include <fmt/core.h>
 #include <fmt/color.h>
 #include <fmt/format.h>
-
 #include <spdlog/spdlog.h>
 
 #define MY_ASSERT(cond, description, ...)                                                                              \

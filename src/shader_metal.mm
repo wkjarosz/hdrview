@@ -13,7 +13,8 @@
 
 #define METAL_BUFFER_THRESHOLD 64
 
-#include <fmt/core.h>
+// #include <fmt/core.h>
+#include <spdlog/spdlog.h>
 
 using std::string;
 
@@ -176,7 +177,7 @@ Shader::~Shader()
         else if (buf.type == VertexSampler || buf.type == FragmentSampler)
             (void)(__bridge_transfer id<MTLSamplerState>)buf.buffer;
         else
-            fmt::print(stderr, "Shader::~Shader(): unknown buffer type!\n");
+            spdlog::error("Shader::~Shader(): unknown buffer type!");
     }
 
     (void)(__bridge_transfer id<MTLRenderPipelineState>)m_pipeline_state;
@@ -193,8 +194,7 @@ void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim
     if (!(buf.type == VertexBuffer || buf.type == FragmentBuffer || buf.type == IndexBuffer))
         throw std::invalid_argument("Shader::set_buffer(): argument named \"" + name + "\" is not a buffer!");
 
-    for (size_t i = 0; i < 3; ++i)
-        buf.shape[i] = i < ndim ? shape[i] : 1;
+    for (size_t i = 0; i < 3; ++i) buf.shape[i] = i < ndim ? shape[i] : 1;
 
     size_t size = type_size(dtype) * buf.shape[0] * buf.shape[1] * buf.shape[2];
     if (buf.buffer && buf.size != size)
@@ -293,7 +293,7 @@ void Shader::begin()
         if (!buf.buffer)
         {
             if (!indices)
-                fmt::print(stderr, "Shader::begin(): shader \"{}\" has an unbound argument \"{}\"!\n", m_name, key);
+                spdlog::error("Shader::begin(): shader \"{}\" has an unbound argument \"{}\"!", m_name, key);
             continue;
         }
 
@@ -350,7 +350,9 @@ void Shader::begin()
     }
 }
 
-void Shader::end() { /* No-op */ }
+void Shader::end()
+{ /* No-op */
+}
 
 void Shader::draw_array(PrimitiveType primitive_type, size_t offset, size_t count, bool indexed, size_t instances)
 {

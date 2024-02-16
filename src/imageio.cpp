@@ -241,9 +241,9 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
         }
 
         if (Imf::hasWhiteLuminance(part.header()))
-            spdlog::info("File has white luminance info.\n");
+            spdlog::debug("File has white luminance info.");
         else
-            spdlog::info("File does NOT have white luminance info.\n");
+            spdlog::debug("File does NOT have white luminance info.");
 
         // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
         if (Imf::hasChromaticities(part.header()))
@@ -264,8 +264,8 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
             data.luminance_weights = float3{&Imf::RgbaYca::computeYw(file_cr)[0]};
 
-            fmt::print("M_to_Rec709 =\n{}\n", data.M_to_Rec709);
-            fmt::print("Yw = {}\n", data.luminance_weights);
+            spdlog::debug("M_to_Rec709 =\n{}", data.M_to_Rec709);
+            spdlog::debug("Yw = {}", data.luminance_weights);
         }
     }
     return images;
@@ -276,7 +276,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
 vector<ImagePtr> Image::load(istream &is, const string &filename)
 {
-    fmt::print("Loading from file: {}\n", filename);
+    spdlog::info("Loading from file: {}", filename);
 
     try
     {

@@ -23,6 +23,7 @@
 #include "timer.h"
 #include "version.h"
 
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -137,12 +138,23 @@ HDRViewApp *g_app()
     return &viewer;
 }
 
-HDRViewApp::HDRViewApp()
+HDRViewApp::HDRViewApp() : m_sink(std::make_shared<spdlog::sinks::dear_sink_mt>())
 {
+    {
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+
+        // or you can even set multi_sink logger as default logger
+        spdlog::set_default_logger(
+            std::make_shared<spdlog::logger>("multi_sink", spdlog::sinks_init_list({console_sink, m_sink})));
+        // spdlog::set_pattern("%^[%H:%M:%S %z] [thread %t] %v%$");
+        spdlog::set_pattern("%^[%H:%M:%S] [%l]: %$%v");
+        spdlog::set_level(spdlog::level::trace);
+    }
+
     m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
     spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
-    HelloImGui::Log(HelloImGui::LogLevel::Info, "Creating a %s framebuffer.",
-                    HelloImGui::hasEdrSupport() ? "floating-point precision" : "standard precision");
+    spdlog::info("Creating a {} framebuffer.",
+                 HelloImGui::hasEdrSupport() ? "floating-point precision" : "standard precision");
 
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
@@ -204,7 +216,8 @@ HDRViewApp::HDRViewApp()
         console_window.dockSpaceName     = "ConsoleSpace";
         console_window.isVisible         = false;
         console_window.rememberIsVisible = true;
-        console_window.GuiFunction       = [] { HelloImGui::LogGui(); };
+        console_window.GuiFunction       = [this] { draw_log_window(); };
+        // console_window.GuiFunction = [] { HelloImGui::LogGui(); };
 
         // docking layouts
         m_params.dockingParams.layoutName      = "Standard";
@@ -307,12 +320,12 @@ HDRViewApp::HDRViewApp()
             Image::set_null_texture(*m_shader, "primary");
             Image::set_null_texture(*m_shader, "secondary");
 
+            spdlog::info("Successfully initialized graphics API!");
             HelloImGui::Log(HelloImGui::LogLevel::Info, "Successfully initialized graphics API!");
         }
         catch (const std::exception &e)
         {
-            fmt::print(stderr, "Shader initialization failed!:\n\t{}.", e.what());
-            HelloImGui::Log(HelloImGui::LogLevel::Error, "Shader initialization failed!:\n\t%s.", e.what());
+            spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
         }
     };
 
@@ -352,8 +365,7 @@ HDRViewApp::HDRViewApp()
                 if (r.length())
                 {
                     m_recent_files.push_back(r);
-                    spdlog::info("Got this one: {}", prefix);
-                    spdlog::info("Adding recent file with length {}: '{}'", r.length(), r);
+                    spdlog::info("Adding recent file '{}{}'", prefix, r);
                 }
             }
 
@@ -487,8 +499,6 @@ void HDRViewApp::save_as(const string &filename) const
     catch (const std::exception &e)
     {
         spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
-        HelloImGui::Log(HelloImGui::LogLevel::Error,
-                        fmt::format("An error occurred while saving to '{}':\n\t{}.", filename, e.what()).c_str());
     }
     catch (...)
     {
@@ -522,14 +532,14 @@ void HDRViewApp::open_image()
     }
 #endif
     if (auto img = current_image())
-        fmt::print("Loaded image of size: {}\n", img->size());
+        spdlog::trace("Loaded image of size: {}\n", img->size());
 }
 
 void HDRViewApp::load_image(std::istream &is, const string &f)
 {
     // make a copy of f in case its an element of m_recent_files, which we modify
     string filename = f;
-    HelloImGui::Log(HelloImGui::LogLevel::Debug, "Loading file '%s'...", f.c_str());
+    spdlog::debug("Loading file '{}'...", f);
     try
     {
         auto new_images = Image::load(is, filename);
@@ -550,8 +560,7 @@ void HDRViewApp::load_image(std::istream &is, const string &f)
     }
     catch (const std::exception &e)
     {
-        HelloImGui::Log(HelloImGui::LogLevel::Error,
-                        fmt::format("Could not load image \"{}\": {}.", filename, e.what()).c_str());
+        spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
         return;
     }
 
@@ -562,8 +571,7 @@ void HDRViewApp::load_image(std::istream &is, const string &f)
     }
     catch (const std::exception &e)
     {
-        HelloImGui::Log(HelloImGui::LogLevel::Error,
-                        fmt::format("Could not upload texture to graphics backend: {}.", e.what()).c_str());
+        spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
     }
 }
 
@@ -665,6 +673,119 @@ void HDRViewApp::load_fonts()
 
 HDRViewApp::~HDRViewApp() {}
 
+void HDRViewApp::draw_log_window()
+{
+    static bool              auto_scroll = true;
+    static bool              wrap_text   = false;
+    static ImGuiTextFilter   filter;
+    static const std::string level_names[] = {"trace", "debug", "info", "warning", "error", "critical", "off"};
+    static const std::string level_icons[] = {ICON_FA_VOLUME_HIGH,          ICON_FA_BUG,          ICON_FA_CIRCLE_INFO,
+                                              ICON_FA_TRIANGLE_EXCLAMATION, ICON_FA_CIRCLE_XMARK, ICON_FA_BOMB,
+                                              ICON_FA_VOLUME_XMARK};
+    auto                     current_level = m_sink->level();
+    auto                     console_font  = font("mono regular");
+    // const ImVec2             button_size   = {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()};
+    const ImVec2 button_size   = {ImGui::CalcTextSize(ICON_FA_VOLUME_HIGH).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x,
+                                  0.f};
+    bool         filter_active = filter.IsActive(); // save here to avoid flicker
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4 * (button_size.x + ImGui::GetStyle().ItemSpacing.x) -
+                            (filter_active ? button_size.x : 0.f));
+    if (ImGui::InputTextWithHint(
+            "##log filter",
+            "Filter (in format: [include|-exclude][,...]; e.g. \"includeThis,-butNotThis,alsoIncludeThis\")",
+            filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
+        filter.Build();
+    if (filter_active)
+    {
+        ImGui::SameLine(0.f, 0.f);
+        if (ImGui::Button(ICON_FA_DELETE_LEFT, button_size))
+            filter.Clear();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(button_size.x);
+    ImGui::PushStyleColor(ImGuiCol_Text, m_sink->get_level_color(current_level));
+    if (ImGui::BeginCombo("##Log level", level_icons[int(current_level)].data(), ImGuiComboFlags_NoArrowButton))
+    {
+        for (int i = 0; i < spdlog::level::n_levels; ++i)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, i < int(current_level)
+                                                     ? ImGui::GetColorU32(ImGuiCol_TextDisabled)
+                                                     : m_sink->get_level_color(spdlog::level::level_enum(i)));
+            if (ImGui::Selectable((ICON_FA_GREATER_THAN_EQUAL + std::to_string(i) + ": " + level_icons[i] + " " +
+                                   level_names[i].data())
+                                      .c_str(),
+                                  current_level == i))
+                m_sink->set_level(spdlog::level::level_enum(i));
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopStyleColor();
+    ImGui::WrappedTooltip("Click to choose the verbosity level.");
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_FA_TRASH_CAN, button_size))
+        m_sink->clear_messages();
+    ImGui::WrappedTooltip("Clear all messages.");
+    ImGui::SameLine();
+    ImGui::ToggleButton(auto_scroll ? ICON_FA_LOCK_OPEN : ICON_FA_LOCK, &auto_scroll, button_size);
+    ImGui::WrappedTooltip(auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
+    ImGui::SameLine();
+    ImGui::ToggleButton(wrap_text ? ICON_FA_TURN_DOWN : ICON_FA_ALIGN_LEFT, &wrap_text, button_size);
+    ImGui::WrappedTooltip(wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
+
+    auto window_flags = wrap_text
+                            ? ImGuiWindowFlags_AlwaysVerticalScrollbar
+                            : ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar;
+
+    ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_None, window_flags);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
+    ImGui::PushFont(console_font);
+    ImGui::PushStyleColor(ImGuiCol_Text, m_sink->get_default_color());
+
+    m_sink->iterate(
+        [this](const typename spdlog::sinks::dear_sink_mt::LogItem &msg) -> bool
+        {
+            if (!m_sink->should_log(msg.level) ||
+                !filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
+                return true;
+
+            // if color range not specified or not not valid, just draw all the text with default color
+            if (msg.color_range_end <= msg.color_range_start ||
+                std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length())
+                ImGui::TextUnformatted(msg.message.c_str());
+            else
+            {
+                // insert the text before the color range
+                ImGui::TextUnformatted(msg.message.c_str(), msg.message.c_str() + msg.color_range_start);
+                ImGui::SameLine(0.f, 0.f);
+
+                // insert the colorized text
+                ImGui::PushStyleColor(ImGuiCol_Text, m_sink->get_level_color(msg.level));
+                ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_start,
+                                       msg.message.c_str() + msg.color_range_end);
+                ImGui::SameLine(0.f, 0.f);
+                ImGui::PopStyleColor();
+
+                // insert the text after the color range with default format
+                if (wrap_text)
+                    ImGui::TextWrapped("%s", msg.message.substr(msg.color_range_end).c_str());
+                else
+                    ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
+            }
+            return true;
+        });
+
+    ImGui::PopStyleColor();
+
+    if (m_sink->has_new_items() && auto_scroll)
+        ImGui::SetScrollHereY(1.f);
+
+    ImGui::PopFont();
+    ImGui::PopStyleVar();
+    ImGui::EndChild();
+}
+
 void HDRViewApp::draw_info_window()
 {
     if (auto img = current_image())
@@ -688,7 +809,7 @@ void HDRViewApp::draw_file_window()
             if (ImGui::Selectable(blend_mode_names()[n].c_str(), is_selected))
             {
                 m_blend_mode = (EBlendMode)n;
-                HelloImGui::Log(HelloImGui::LogLevel::Debug, "Switching to blend mode %d.", n);
+                spdlog::debug("Switching to blend mode {}.", n);
             }
 
             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -706,7 +827,7 @@ void HDRViewApp::draw_file_window()
             if (ImGui::Selectable(channel_names()[n].c_str(), is_selected))
             {
                 m_channel = (EChannel)n;
-                HelloImGui::Log(HelloImGui::LogLevel::Debug, "Switching to channel %d.", n);
+                spdlog::debug("Switching to channel {}.", n);
             }
 
             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -1295,8 +1416,7 @@ void HDRViewApp::draw_background()
     }
     catch (const std::exception &e)
     {
-        fmt::print(stderr, "Drawing failed:\n\t{}.", e.what());
-        HelloImGui::Log(HelloImGui::LogLevel::Error, "Drawing failed:\n\t%s.", e.what());
+        spdlog::error("Drawing failed:\n\t{}.", e.what());
     }
 }
 

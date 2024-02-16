@@ -1,3 +1,5 @@
+#pragma once
+
 #include "fwd.h"
 #include "imgui.h"
 

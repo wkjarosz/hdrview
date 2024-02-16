@@ -1,6 +1,7 @@
 #include "shader.h"
 
-#include <fmt/core.h>
+// #include <fmt/core.h>
+#include <spdlog/spdlog.h>
 #include <sstream>
 
 #include "hello_imgui/hello_imgui.h"
@@ -27,7 +28,7 @@ string Shader::from_asset(string_view basename)
             continue;
 
         string full_path = HelloImGui::assetFileFullPath(filename);
-        fmt::print("Loading shader from \"{}\"...\n", full_path);
+        spdlog::info("Loading shader from \"{}\"...", full_path);
         auto shader_txt = HelloImGui::LoadAssetFileData(filename.c_str());
         if (shader_txt.data == nullptr)
             throw std::runtime_error(fmt::format("Cannot load shader from file \"{}\"", filename));
@@ -45,14 +46,13 @@ string Shader::prepend_includes(string_view shader_string, const std::vector<str
     // if the shader_string is actually a precompiled binary, we can't prepend
     if (shader_string.size() > 4 && strncmp(shader_string.data(), "MTLB", 4) == 0)
     {
-        fmt::print(stderr, "Cannot add #includes to precompiled shaders, skipping.\n");
+        spdlog::error("Cannot add #includes to precompiled shaders, skipping.");
         return string(shader_string);
     }
 
     std::string includes;
 
-    for (auto &i : include_files)
-        includes += from_asset(i) + "\n";
+    for (auto &i : include_files) includes += from_asset(i) + "\n";
 
     if (includes.empty())
         return string(shader_string);
@@ -69,8 +69,7 @@ string Shader::prepend_includes(string_view shader_string, const std::vector<str
     oss << includes;
 
     // and copy over the rest of the lines in the shader
-    do
-    {
+    do {
         oss << line << std::endl;
     } while (std::getline(iss, line));
 

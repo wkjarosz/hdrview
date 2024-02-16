@@ -75,7 +75,7 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
     exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
     maximum(-std::numeric_limits<float>::infinity()), average(0.f), histogram{x_scale, y_scale}
 {
-    fmt::print("recomputing pixel statistics\n");
+    spdlog::trace("recomputing pixel statistics");
     // compute pixel summary statistics
     int    valid_pixels = 0;
     double accum        = 0.0; // reduce numerical precision issues by accumulating in double
@@ -94,7 +94,7 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
         }
     }
     average = valid_pixels ? float(accum / valid_pixels) : 0.f;
-    fmt::print("Min: {}\nMean: {}\nMax: {}\n", minimum, average, maximum);
+    spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
     //
 
     //
@@ -146,9 +146,9 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
     else
         histogram.y_limits[1] = 1.f;
 
-    fmt::print("x_limits: {}; y_limits: {}\n", histogram.x_limits, histogram.y_limits);
+    spdlog::trace("x_limits: {}; y_limits: {}", histogram.x_limits, histogram.y_limits);
 
-    fmt::print("done recomputing pixel statistics\n");
+    spdlog::trace("done recomputing pixel statistics");
 
     // for (auto i : {-0.02, -0.015, -0.01, -0.005, 0.0, 0.005, 0.01, 0.015, 0.02})
     // {
@@ -332,8 +332,8 @@ void Image::build_layers_and_groups()
     // try to find all channels from group g in layer l
     auto find_group_channels = [](map<string, int> &channels, const string &prefix, const vector<string> &g)
     {
-        fmt::print("Trying to find channels '{}' in {} layer channels\n", fmt::join(g, ","), channels.size());
-        for (auto c : channels) fmt::print("\t{}: {}\n", c.second, c.first);
+        spdlog::info("Trying to find channels '{}' in {} layer channels", fmt::join(g, ","), channels.size());
+        for (auto c : channels) spdlog::info("\t{}: {}", c.second, c.first);
         vector<map<string, int>::iterator> found;
         found.reserve(g.size());
         for (const string &c : g)
@@ -346,8 +346,8 @@ void Image::build_layers_and_groups()
         return found;
     };
 
-    fmt::print("Processing {} channels\n", channels.size());
-    for (size_t i = 0; i < channels.size(); ++i) fmt::print("\t{:>2d}: {}\n", (int)i, channels[i].name);
+    spdlog::info("Processing {} channels", channels.size());
+    for (size_t i = 0; i < channels.size(); ++i) spdlog::info("\t{:>2d}: {}", (int)i, channels[i].name);
 
     set<string> layer_names;
     for (auto &c : channels) layer_names.insert(Channel::head(c.name));
@@ -359,10 +359,10 @@ void Image::build_layers_and_groups()
 
         // add all the layer's channels
         auto layer_channels = channels_in_layer(layer_name);
-        fmt::print("Adding {} channels to layer '{}':\n", layer_channels.size(), layer_name);
+        spdlog::info("Adding {} channels to layer '{}':", layer_channels.size(), layer_name);
         for (const auto &c : layer_channels)
         {
-            fmt::print("\t{:>2d}: {}\n", c.second, c.first);
+            spdlog::info("\t{:>2d}: {}", c.second, c.first);
             layer.channels.emplace_back(c.second);
         }
 
@@ -384,14 +384,14 @@ void Image::build_layers_and_groups()
                 for (size_t i2 = 0; i2 < found.size(); ++i2)
                 {
                     group_channels[i2] = found[i2]->second;
-                    fmt::print("Found channel '{}': {}\n", group_channel_names[i2], found[i2]->second);
+                    spdlog::info("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
                 layer.groups.emplace_back(groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
-                fmt::print("Created channel group '{}' of type {} with {} channels\n", groups.back().name,
-                           (int)groups.back().type, group_channels);
+                spdlog::info("Created channel group '{}' of type {} with {} channels", groups.back().name,
+                             (int)groups.back().type, group_channels);
 
                 // now erase the channels that have been processed
                 for (auto &i3 : found) layer_channels.erase(i3);
@@ -400,14 +400,14 @@ void Image::build_layers_and_groups()
 
         if (layer_channels.size())
         {
-            fmt::print("Still have {} remaining channels\n", layer_channels.size());
+            spdlog::info("Still have {} remaining channels", layer_channels.size());
             for (auto i : layer_channels)
             {
                 layer.groups.emplace_back(groups.size());
                 groups.push_back(
                     ChannelGroup{Channel::tail(i.first), int4{i.second, 0, 0, 0}, 1, ChannelGroup::Single_Channel});
-                fmt::print("Creating channel group with single channel '{}' in layer '{}'\n", groups.back().name,
-                           layer.name);
+                spdlog::info("Creating channel group with single channel '{}' in layer '{}'", groups.back().name,
+                             layer.name);
             }
         }
     }
