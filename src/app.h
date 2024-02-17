@@ -7,8 +7,6 @@
 #include "common.h"
 #include "image.h"
 
-#include "dear_sink.h"
-
 #include "hello_imgui/hello_imgui.h"
 #include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
@@ -145,7 +143,6 @@ private:
     float2 image_position(ConstImagePtr img = nullptr) const;
     float2 image_scale(ConstImagePtr img = nullptr) const;
 
-    void draw_log_window();
     void draw_background();
     void draw_histogram_window();
     void draw_info_window();
@@ -196,8 +193,6 @@ private:
         bool   merge_fa6;
     };
     vector<FontParams> m_deferred_fonts;
-
-    std::shared_ptr<spdlog::sinks::dear_sink_mt> m_sink;
 };
 
 /// Return a pointer to the global singleton HDRViewApp instance
