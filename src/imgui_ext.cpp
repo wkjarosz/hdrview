@@ -121,6 +121,14 @@ void SpdLogWindow::draw(ImFont *console_font)
                 !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
                 return true;
 
+            // draw the level icon first
+            ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(msg.level));
+            ImGui::PushFont(nullptr);
+            ImGui::TextUnformatted(level_icons[msg.level]);
+            ImGui::PopFont();
+            ImGui::PopStyleColor();
+            ImGui::SameLine(0.f, 0.f);
+
             // if color range not specified or not not valid, just draw all the text with default color
             if (msg.color_range_end <= msg.color_range_start ||
                 std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length())
@@ -133,10 +141,6 @@ void SpdLogWindow::draw(ImFont *console_font)
 
                 // insert the colorized text
                 ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(msg.level));
-                ImGui::PushFont(nullptr);
-                ImGui::TextUnformatted(" " + level_icons[msg.level]);
-                ImGui::PopFont();
-                ImGui::SameLine(0.f, 0.f);
                 ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_start,
                                        msg.message.c_str() + msg.color_range_end);
                 ImGui::SameLine(0.f, 0.f);
