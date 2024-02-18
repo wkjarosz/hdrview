@@ -90,7 +90,7 @@ void SpdLogWindow::draw(ImFont *console_font)
                             (filter_active ? button_size.x : 0.f));
     if (ImGui::InputTextWithHint(
             "##log filter",
-            "Filter (in format: [include|-exclude][,...]; e.g. \"includeThis,-butNotThis,alsoIncludeThis\")",
+            "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
             m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
         m_filter.Build();
     if (filter_active)
@@ -139,20 +139,48 @@ void SpdLogWindow::draw(ImFont *console_font)
     ImGui::PushFont(console_font);
     ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
 
+    int  item_num = 0;
+    bool did_copy = false;
     m_sink->iterate(
-        [this](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
+        [this, &item_num, &did_copy](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
         {
+            ++item_num;
             if (!m_sink->should_log(msg.level) ||
                 !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
                 return true;
 
-            ImGui::Dummy({ImGui::GetStyle().ItemInnerSpacing.x, 0.f});
-            ImGui::SameLine(0.f, 0.f);
+            bool invalid_color_range = msg.color_range_end <= msg.color_range_start ||
+                                       std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length();
 
-            // if color range not specified or not not valid, just draw all the text with default color
-            if (msg.color_range_end <= msg.color_range_start ||
-                std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length())
-                ImGui::TextUnformatted(msg.message.c_str());
+            // compute the size of the selectable, and draw it
+            ImVec2 selectable_size{0.f, 0.f};
+            {
+                float prefix_width =
+                    ImGui::CalcTextSize(msg.message.c_str(), msg.message.c_str() + msg.color_range_end).x;
+                selectable_size.y =
+                    ImGui::CalcTextSize(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end), nullptr,
+                                        false, m_wrap_text ? (ImGui::GetContentRegionAvail().x - prefix_width) : -1.f)
+                        .y;
+                selectable_size.x = ImGui::GetContentRegionAvail().x + (m_wrap_text ? 0 : ImGui::GetScrollMaxX());
+            }
+
+            ImGui::PushID(item_num);
+            if (ImGui::Selectable("##log item selectable", false, ImGuiSelectableFlags_AllowOverlap, selectable_size))
+            {
+                did_copy = true;
+                ImGui::SetClipboardText(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end));
+            }
+            ImGui::PopID();
+            ImGui::SameLine(ImGui::GetStyle().ItemInnerSpacing.x);
+
+            // if color range not specified or not valid, just draw all the text with default color
+            if (invalid_color_range)
+            {
+                if (m_wrap_text)
+                    ImGui::TextWrapped("%s", msg.message.c_str());
+                else
+                    ImGui::TextUnformatted(msg.message.c_str());
+            }
             else
             {
                 // insert the text before the color range
@@ -172,8 +200,13 @@ void SpdLogWindow::draw(ImFont *console_font)
                 else
                     ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
             }
+
             return true;
         });
+
+    if (did_copy)
+        spdlog::trace("Copied a log item to clipboard"); // the log sink is locked during the iterate loop above, so
+                                                         // this needs to happen outside
 
     ImGui::PopStyleColor();
 

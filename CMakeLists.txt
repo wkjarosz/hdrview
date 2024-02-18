@@ -333,6 +333,8 @@ imgui_bundle_add_app(
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
+  target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
+  target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
 endif(APPLE)
 target_link_libraries(
   HDRView
