@@ -2,15 +2,15 @@
 
 ##
 
-- [ ] have spdlog output to the log window
+- [x] have spdlog output to the log window
 - [ ] load multiplate images/entire directories
 - [ ] fix reference image index when closing image
 - [ ] render pixel grid in the shader
 - [ ] figure out how to better handle channels dropdown with channel groups and arbitrary channels
 - [ ] improve statistics
-  - [ ] compute min/max/avg ignoring infinities, and report # of infinities
+  - [x] compute min/max/avg ignoring infinities, and report # of infinities
   - [ ] compute statistics also over selection
-  - [ ] compute pixel hover (and statistics) while considering the blend mode
+  - [ ] account for blend mode when computing pixel hover (and statistics)
 - [ ] figure our threading while considering emscripten
 - [ ] selection support
 - [ ] command palette/improved hotkey support

@@ -84,7 +84,9 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
         float val = img(i);
 
         if (isnan(val))
-            ++invalid_pixels;
+            ++nan_pixels;
+        else if (isinf(val))
+            ++inf_pixels;
         else
         {
             ++valid_pixels;

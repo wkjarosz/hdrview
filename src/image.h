@@ -87,7 +87,8 @@ struct PixelStatistics
     float minimum;
     float maximum;
     float average;
-    int   invalid_pixels = 0;
+    int   nan_pixels = 0;
+    int   inf_pixels = 0;
 
     Histogram histogram;
 

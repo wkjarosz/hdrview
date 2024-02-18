@@ -512,7 +512,7 @@ void Image::draw_info()
     //         ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
     //         ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
     //         ImGui::Text("%-6.3g", stats->maximum), ImGui::TableNextColumn();
-    //         ImGui::Text("%d", stats->invalid_pixels);
+    //         ImGui::Text("%d", stats->nan_pixels);
     //         // ImGui::PopFont();
     //     }
     //     ImGui::EndTable();
@@ -541,8 +541,8 @@ void Image::draw_info()
         ImGui::TableHeadersRow();
         ImGui::PopFont();
 
-        const char   *stat_names[4] = {"Min", "Avg", "Max", "# of NaNs"};
-        constexpr int NUM_STATS     = sizeof(stat_names) / sizeof(stat_names[0]);
+        const char   *stat_names[] = {"Min", "Avg", "Max", "# of NaNs", "# of Infs"};
+        constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
         for (int s = 0; s < NUM_STATS; ++s)
         {
             ImGui::PushFont(bold_font);
@@ -559,7 +559,9 @@ void Image::draw_info()
                 case 0: ImGui::Text("%-6.3g", channel_stats[c]->minimum); break;
                 case 1: ImGui::Text("%-6.3g", channel_stats[c]->average); break;
                 case 2: ImGui::Text("%-6.3g", channel_stats[c]->maximum); break;
-                default: ImGui::Text("%d", channel_stats[c]->invalid_pixels); break;
+                case 3: ImGui::Text("%d", channel_stats[c]->nan_pixels); break;
+                case 4:
+                default: ImGui::Text("%d", channel_stats[c]->inf_pixels); break;
                 }
             }
         }
