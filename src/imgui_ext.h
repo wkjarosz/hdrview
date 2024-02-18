@@ -21,8 +21,11 @@ public:
 
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> &sink() { return m_sink; }
 
+    /// set the pattern of the underlying spdlog sink.
+    /// also adds support for the custom flag %* to show the love level icon.
+    void set_pattern(const std::string &pattern);
+
     void clear();
-    void scroll_to_bottom();
 
     ImU32 get_default_color();
     void  set_default_color(ImU32 color);

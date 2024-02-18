@@ -3,6 +3,7 @@
 #include "IconsFontAwesome6.h"
 #include "box.h"
 #include "colorspace.h"
+#include "spdlog/pattern_formatter.h"
 
 #include "imgui_internal.h"
 #include <array>
@@ -32,6 +33,25 @@ enum : ImU32
     lightGray   = IM_COL32(0xc0, 0xc0, 0xc0, 0xff),
 };
 
+static const std::string s_level_icons[] = {ICON_FA_VOLUME_HIGH,          ICON_FA_BUG_SLASH,    ICON_FA_CIRCLE_INFO,
+                                            ICON_FA_TRIANGLE_EXCLAMATION, ICON_FA_CIRCLE_XMARK, ICON_FA_BOMB,
+                                            ICON_FA_VOLUME_XMARK};
+
+class level_icon_formatter_flag : public spdlog::custom_flag_formatter
+{
+public:
+    void format(const spdlog::details::log_msg &msg, const std::tm &, spdlog::memory_buf_t &dest) override
+    {
+        std::string some_txt = s_level_icons[msg.level];
+        dest.append(some_txt.data(), some_txt.data() + some_txt.size());
+    }
+
+    std::unique_ptr<custom_flag_formatter> clone() const override
+    {
+        return spdlog::details::make_unique<level_icon_formatter_flag>();
+    }
+};
+
 } // namespace
 
 namespace ImGui
@@ -49,12 +69,17 @@ SpdLogWindow::SpdLogWindow(int max_items) :
 {
 }
 
+void SpdLogWindow::set_pattern(const string &pattern)
+{
+    // add support for custom level icon flag to formatter
+    auto formatter = std::make_unique<spdlog::pattern_formatter>();
+    formatter->add_flag<level_icon_formatter_flag>('*').set_pattern(pattern);
+    m_sink->set_formatter(std::move(formatter));
+}
+
 void SpdLogWindow::draw(ImFont *console_font)
 {
-    static const std::string level_names[] = {"trace", "debug", "info", "warning", "error", "critical", "off"};
-    static const std::string level_icons[] = {ICON_FA_VOLUME_HIGH,          ICON_FA_BUG,          ICON_FA_CIRCLE_INFO,
-                                              ICON_FA_TRIANGLE_EXCLAMATION, ICON_FA_CIRCLE_XMARK, ICON_FA_BOMB,
-                                              ICON_FA_VOLUME_XMARK};
+    static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
     auto         current_level = m_sink->level();
     const ImVec2 button_size   = {ImGui::CalcTextSize(ICON_FA_VOLUME_HIGH).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x,
@@ -77,13 +102,13 @@ void SpdLogWindow::draw(ImFont *console_font)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(button_size.x);
     ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(current_level));
-    if (ImGui::BeginCombo("##Log level", level_icons[int(current_level)].data(), ImGuiComboFlags_NoArrowButton))
+    if (ImGui::BeginCombo("##Log level", s_level_icons[int(current_level)].data(), ImGuiComboFlags_NoArrowButton))
     {
         for (int i = 0; i < spdlog::level::n_levels; ++i)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, i < int(current_level) ? ImGui::GetColorU32(ImGuiCol_TextDisabled)
                                                                         : m_level_colors.at(i));
-            if (ImGui::Selectable((ICON_FA_GREATER_THAN_EQUAL + std::to_string(i) + ": " + level_icons[i] + " " +
+            if (ImGui::Selectable((ICON_FA_GREATER_THAN_EQUAL + std::to_string(i) + ": " + s_level_icons[i] + " " +
                                    level_names[i].data())
                                       .c_str(),
                                   current_level == i))
@@ -121,12 +146,7 @@ void SpdLogWindow::draw(ImFont *console_font)
                 !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
                 return true;
 
-            // draw the level icon first
-            ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(msg.level));
-            ImGui::PushFont(nullptr);
-            ImGui::TextUnformatted(level_icons[msg.level]);
-            ImGui::PopFont();
-            ImGui::PopStyleColor();
+            ImGui::Dummy({ImGui::GetStyle().ItemInnerSpacing.x, 0.f});
             ImGui::SameLine(0.f, 0.f);
 
             // if color range not specified or not not valid, just draw all the text with default color
@@ -166,8 +186,6 @@ void SpdLogWindow::draw(ImFont *console_font)
 }
 
 void SpdLogWindow::clear() { m_sink->clear_messages(); }
-
-void SpdLogWindow::scroll_to_bottom() {}
 
 ImU32 SpdLogWindow::get_default_color() { return m_default_color; }
 void  SpdLogWindow::set_default_color(ImU32 color) { m_default_color = color; }

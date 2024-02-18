@@ -141,9 +141,8 @@ HDRViewApp::HDRViewApp()
 {
     spdlog::set_pattern("%^[%H:%M:%S] [%l]: %$%v");
     spdlog::set_level(spdlog::level::trace);
-
-    ImGui::GlobalSpdLogWindow().sink()->set_pattern("%^[%H:%M:%S] [%l]: %$%v");
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
+    ImGui::GlobalSpdLogWindow().set_pattern("%^%* [%H:%M:%S | %5l]: %$%v");
 
     m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
     spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
@@ -358,7 +357,7 @@ HDRViewApp::HDRViewApp()
                 if (r.length())
                 {
                     m_recent_files.push_back(r);
-                    spdlog::info("Adding recent file '{}{}'", prefix, r);
+                    spdlog::trace("Adding recent file '{}{}'", prefix, r);
                 }
             }
 
@@ -659,7 +658,7 @@ void HDRViewApp::load_fonts()
     {
         load_font("sans regular", font_size, true);
         load_font("sans bold", font_size, true);
-        load_font("mono regular", font_size, false);
+        load_font("mono regular", font_size, true);
         load_font("mono bold", font_size, false);
     }
 }
