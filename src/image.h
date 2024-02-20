@@ -179,6 +179,8 @@ public:
     Image(const Image &) = delete;
     Image(Image &&)      = default;
 
+    std::string file_and_partname() const { return partname.empty() ? filename : filename + "/" + partname; }
+
     bool contains(int2 p) const
     {
         return p.x >= data_window.min.x && p.y >= data_window.min.y && p.x < data_window.max.x &&

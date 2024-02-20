@@ -11,7 +11,10 @@
 #include "parallelfor.h"
 #include "shader.h"
 #include "texture.h"
+#include "timer.h"
 
+#include <execution>
+#include <numeric>
 #include <sstream>
 
 #include <spdlog/spdlog.h>
@@ -76,6 +79,9 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
     maximum(-std::numeric_limits<float>::infinity()), average(0.f), histogram{x_scale, y_scale}
 {
     spdlog::trace("recomputing pixel statistics");
+    Timer timer;
+
+    //
     // compute pixel summary statistics
     int    valid_pixels = 0;
     double accum        = 0.0; // reduce numerical precision issues by accumulating in double
@@ -96,7 +102,9 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
         }
     }
     average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+
     spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
+    spdlog::trace("  finished in {} seconds", (timer.elapsed() / 1000.f));
     //
 
     //
@@ -150,14 +158,7 @@ PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisSc
 
     spdlog::trace("x_limits: {}; y_limits: {}", histogram.x_limits, histogram.y_limits);
 
-    spdlog::trace("done recomputing pixel statistics");
-
-    // for (auto i : {-0.02, -0.015, -0.01, -0.005, 0.0, 0.005, 0.01, 0.015, 0.02})
-    // {
-    //     fmt::print("{} -> {}\n", i, axis_scale_fwd_xform(i, &histogram.x_scale));
-    //     // fmt::print("{} -> {}\n", i, LinearToSRGB(i));
-    //     // fmt::print("{} -> {}\n", i, sign(i) * LinearToSRGB(std::fabs(i)));
-    // }
+    spdlog::trace("finished recomputing pixel statistics in {} seconds", (timer.elapsed() / 1000.f));
 }
 
 bool PixelStatistics::needs_update(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale) const
@@ -334,8 +335,8 @@ void Image::build_layers_and_groups()
     // try to find all channels from group g in layer l
     auto find_group_channels = [](map<string, int> &channels, const string &prefix, const vector<string> &g)
     {
-        spdlog::info("Trying to find channels '{}' in {} layer channels", fmt::join(g, ","), channels.size());
-        for (auto c : channels) spdlog::info("\t{}: {}", c.second, c.first);
+        spdlog::trace("Trying to find channels '{}' in {} layer channels", fmt::join(g, ","), channels.size());
+        for (auto c : channels) spdlog::trace("\t{}: {}", c.second, c.first);
         vector<map<string, int>::iterator> found;
         found.reserve(g.size());
         for (const string &c : g)
@@ -348,8 +349,8 @@ void Image::build_layers_and_groups()
         return found;
     };
 
-    spdlog::info("Processing {} channels", channels.size());
-    for (size_t i = 0; i < channels.size(); ++i) spdlog::info("\t{:>2d}: {}", (int)i, channels[i].name);
+    spdlog::debug("Processing {} channels", channels.size());
+    for (size_t i = 0; i < channels.size(); ++i) spdlog::debug("\t{:>2d}: {}", (int)i, channels[i].name);
 
     set<string> layer_names;
     for (auto &c : channels) layer_names.insert(Channel::head(c.name));
@@ -361,10 +362,10 @@ void Image::build_layers_and_groups()
 
         // add all the layer's channels
         auto layer_channels = channels_in_layer(layer_name);
-        spdlog::info("Adding {} channels to layer '{}':", layer_channels.size(), layer_name);
+        spdlog::debug("Adding {} channels to layer '{}':", layer_channels.size(), layer_name);
         for (const auto &c : layer_channels)
         {
-            spdlog::info("\t{:>2d}: {}", c.second, c.first);
+            spdlog::debug("\t{:>2d}: {}", c.second, c.first);
             layer.channels.emplace_back(c.second);
         }
 
@@ -386,14 +387,14 @@ void Image::build_layers_and_groups()
                 for (size_t i2 = 0; i2 < found.size(); ++i2)
                 {
                     group_channels[i2] = found[i2]->second;
-                    spdlog::info("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
+                    spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
                 layer.groups.emplace_back(groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
-                spdlog::info("Created channel group '{}' of type {} with {} channels", groups.back().name,
-                             (int)groups.back().type, group_channels);
+                spdlog::debug("Created channel group '{}' of type {} with {} channels", groups.back().name,
+                              (int)groups.back().type, group_channels);
 
                 // now erase the channels that have been processed
                 for (auto &i3 : found) layer_channels.erase(i3);
@@ -402,13 +403,13 @@ void Image::build_layers_and_groups()
 
         if (layer_channels.size())
         {
-            spdlog::info("Still have {} remaining channels", layer_channels.size());
+            spdlog::debug("Still have {} ungrouped channels", layer_channels.size());
             for (auto i : layer_channels)
             {
                 layer.groups.emplace_back(groups.size());
                 groups.push_back(
                     ChannelGroup{Channel::tail(i.first), int4{i.second, 0, 0, 0}, 1, ChannelGroup::Single_Channel});
-                spdlog::info("Creating channel group with single channel '{}' in layer '{}'", groups.back().name,
+                spdlog::info("\tcreating channel group with single channel '{}' in layer '{}'", groups.back().name,
                              layer.name);
             }
         }
@@ -498,11 +499,11 @@ string Image::to_string() const
         out += fmt::format("  {:>2d}: '{}' ({})\n", l, layer.name, layer.groups.size(), layer.groups.size());
         for (size_t g = 0; g < layer.groups.size(); ++g)
         {
+            if (g > 0)
+                out += "\n";
             auto &group = groups[layer.groups[g]];
-            out += fmt::format("    {:>2d}: '{}'\n", g, group.name);
+            out += fmt::format("    {:>2d}: '{}'", g, group.name);
         }
     }
-
-    out += "\n";
     return out;
 }

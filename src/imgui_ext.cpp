@@ -86,16 +86,19 @@ void SpdLogWindow::draw(ImFont *console_font)
                                   0.f};
     bool         filter_active = m_filter.IsActive(); // save here to avoid flicker
 
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4 * (button_size.x + ImGui::GetStyle().ItemSpacing.x) -
-                            (filter_active ? button_size.x : 0.f));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4 * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint(
             "##log filter",
+            ICON_FA_FILTER
             "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
             m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
         m_filter.Build();
     if (filter_active)
     {
         ImGui::SameLine(0.f, 0.f);
+
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
         if (ImGui::Button(ICON_FA_DELETE_LEFT, button_size))
             m_filter.Clear();
     }
@@ -124,10 +127,12 @@ void SpdLogWindow::draw(ImFont *console_font)
         m_sink->clear_messages();
     ImGui::WrappedTooltip("Clear all messages.");
     ImGui::SameLine();
-    ImGui::ToggleButton(m_auto_scroll ? ICON_FA_LOCK_OPEN : ICON_FA_LOCK, &m_auto_scroll, button_size);
+    if (ImGui::Button(m_auto_scroll ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN, button_size))
+        m_auto_scroll = !m_auto_scroll;
     ImGui::WrappedTooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
     ImGui::SameLine();
-    ImGui::ToggleButton(m_wrap_text ? ICON_FA_TURN_DOWN : ICON_FA_ALIGN_LEFT, &m_wrap_text, button_size);
+    if (ImGui::Button(m_wrap_text ? ICON_FA_BARS_STAGGERED : ICON_FA_ALIGN_LEFT, button_size))
+        m_wrap_text = !m_wrap_text;
     ImGui::WrappedTooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
 
     auto window_flags = m_wrap_text
@@ -455,6 +460,83 @@ void PushRowColors(bool is_current, bool is_reference)
         ImGui::PushStyleColor(ImGuiCol_Header, hovered);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, active);
     }
+}
+
+static float triangle_wave(float t, float period = 1.f)
+{
+    float a = period / 2.f;
+    return fabs(2 * (t / a - floor(t / a + 0.5f)));
+}
+
+void BusyBar(float fraction, const ImVec2 &size_arg, const char *overlay)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    const auto &style        = g.Style;
+    const float w            = size_arg.x == 0.f ? CalcItemWidth() : size_arg.x;
+    const float grab_padding = 2.0f;
+
+    // ImVec2 size = CalcItemSize(size_arg, CalcItemWidth(), g.FontSize + style.FramePadding.y * 2.0f);
+    ImVec2 size = ImVec2(w, g.FontSize + style.FramePadding.y * 2.0f);
+    ImVec2 pos  = window->DC.CursorPos;
+    ImRect bb(pos, pos + size);
+    ItemSize(size, style.FramePadding.y);
+    if (!ItemAdd(bb, 0))
+        return;
+
+    bool indeterminate = fraction != fraction;
+
+    RenderFrame(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
+    bb.Expand(ImVec2(-grab_padding, -grab_padding));
+
+    float left, right;
+    if (indeterminate)
+    {
+        const float time  = (float)g.Time;
+        const float speed = 0.25f;
+        const float anim1 = smoothstep(0.0f, 1.0f, smoothstep(0.0f, 1.0f, triangle_wave(time * speed)));
+        const float anim2 = smoothstep(0.0f, 1.0f, triangle_wave(time * speed * 2.f));
+
+        float bar_size = lerp(0.05f, 0.25f, anim2);
+        float t0       = lerp(0.f, 1.f - bar_size, anim1);
+        float t1       = t0 + bar_size;
+
+        left  = lerp(bb.Min.x, bb.Max.x - 2.f * style.GrabRounding, t0);
+        right = lerp(bb.Min.x + 2.f * style.GrabRounding, bb.Max.x, t1);
+        // RenderRectFilledRangeH(window->DrawList, bb, GetColorU32(ImGuiCol_SliderGrab), t0, t1, style.GrabRounding);
+
+        fraction = 0.0f; // make the overlay text show up
+    }
+    else
+    {
+        fraction = ImSaturate(fraction);
+        left     = bb.Min.x;
+        right    = lerp(bb.Min.x + 2.f * style.GrabRounding, bb.Max.x, fraction);
+        // RenderRectFilledRangeH(window->DrawList, bb, GetColorU32(ImGuiCol_SliderGrab), 0.0f, fraction,
+        //                        style.GrabRounding);
+    }
+    window->DrawList->AddRectFilled(ImVec2(left, bb.Min.y), ImVec2(right, bb.Max.y), GetColorU32(ImGuiCol_SliderGrab),
+                                    style.GrabRounding);
+
+    // Default displaying the fraction as percentage string, but user can override it
+    char overlay_buf[32];
+    if (!overlay && !indeterminate)
+    {
+        ImFormatString(overlay_buf, IM_ARRAYSIZE(overlay_buf), "%.0f%%", fraction * 100 + 0.01f);
+        overlay = overlay_buf;
+    }
+
+    const ImVec2 fill_br = ImVec2(ImLerp(bb.Min.x, bb.Max.x, fraction), bb.Max.y);
+
+    ImVec2 overlay_size = CalcTextSize(overlay, NULL);
+    if (overlay_size.x > 0.0f)
+        RenderTextClipped(ImVec2(ImClamp(fill_br.x + style.ItemSpacing.x, bb.Min.x,
+                                         bb.Max.x - overlay_size.x - style.ItemInnerSpacing.x),
+                                 bb.Min.y),
+                          bb.Max, overlay, NULL, &overlay_size, ImVec2(0.5f, 0.5f), &bb);
 }
 
 } // namespace ImGui

@@ -29,10 +29,12 @@ void Image::draw_histogram(float exposure)
     static int         bin_type  = 1;
     static ImPlotCond  plot_cond = ImPlotCond_Always;
     {
+        const ImVec2 button_size = {
+            ImGui::CalcTextSize(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x, 0.f};
         float combo_width =
-            std::max(HelloImGui::EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() -
-                                                      2.f * ImGui::GetStyle().ItemSpacing.x) -
-                                                  (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
+            std::max(HelloImGui::EmSize(5.f),
+                     0.5f * (ImGui::GetContentRegionAvail().x - button_size.x - 2.f * ImGui::GetStyle().ItemSpacing.x) -
+                         (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Y:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -54,8 +56,7 @@ void Image::draw_histogram(float exposure)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
         // if (ImGui::Checkbox("Auto-fit axes to exposure", &lock))
         //     plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
-        if (ImGui::ToggleButton(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE, &lock,
-                                {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+        if (ImGui::ToggleButton(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE, &lock, button_size))
             plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
         ImGui::WrappedTooltip(
             "Toggle between manual panning/zoom in histogram vs. auto fitting histogram axes based on the exposure.");

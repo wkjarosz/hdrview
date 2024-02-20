@@ -3,8 +3,10 @@
 ##
 
 - [x] have spdlog output to the log window
+- [x] add image and channel list filtering
 - [ ] load multiplate images/entire directories
-- [ ] fix reference image index when closing image
+  - [x] drop event to load files for GLFW
+- [x] fix reference image index when closing image
 - [ ] render pixel grid in the shader
 - [ ] figure out how to better handle channels dropdown with channel groups and arbitrary channels
 - [ ] improve statistics
@@ -19,6 +21,7 @@
 - [ ] pinch-zoom and pan support in emscripten with SDL
 - [ ] move shader, texture, renderpass and others into separate library
 - [ ] merge metal/glsl shaders + C++ colorspace stuff?
+- [ ] express app/viewport/image coordinate transforms using 2x2 matrices
 
 
 ## Old

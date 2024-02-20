@@ -176,12 +176,21 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
 )
 
+set(OPENEXR_OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF"
+                    "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+)
+
+if(EMSCRIPTEN)
+  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
+else()
+  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING ON")
+endif()
+
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
   GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF" "BUILD_TESTING OFF"
-          "EXCLUDE_FROM_ALL YES"
+  OPTIONS ${OPENEXR_OPTIONS}
 )
 
 # CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
@@ -319,6 +328,7 @@ imgui_bundle_add_app(
   src/image_gui.cpp
   src/pfm.cpp
   src/parallelfor.cpp
+  src/progress.cpp
   src/opengl_check.cpp
   src/shader.cpp
   src/shader_gl.cpp

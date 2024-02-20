@@ -41,8 +41,11 @@ using std::string_view;
 #include "portable_file_dialogs/portable_file_dialogs.h"
 #endif
 
-#ifdef HELLOIMGUI_USE_SDL_OPENGL3
+#ifdef HELLOIMGUI_USE_SDL
 #include <SDL.h>
+#endif
+#ifdef HELLOIMGUI_USE_GLFW
+#include <GLFW/glfw3.h>
 #endif
 
 using namespace linalg::ostream_overloads;
@@ -139,10 +142,10 @@ HDRViewApp *g_app()
 
 HDRViewApp::HDRViewApp()
 {
-    spdlog::set_pattern("%^[%H:%M:%S] [%l]: %$%v");
+    spdlog::set_pattern("%^[%H:%M:%S | %5l]: %$%v");
     spdlog::set_level(spdlog::level::trace);
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
-    ImGui::GlobalSpdLogWindow().set_pattern("%^%* [%H:%M:%S | %5l]: %$%v");
+    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l]: %$%v");
 
     m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
     spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
@@ -308,9 +311,7 @@ HDRViewApp::HDRViewApp()
             Image::make_default_textures();
 
             m_shader->set_texture("dither_texture", Image::dither_texture());
-            // bind to a black texture so that the shader doesn't print errors before we've selected an image
-            Image::set_null_texture(*m_shader, "primary");
-            Image::set_null_texture(*m_shader, "secondary");
+            set_image_textures();
 
             spdlog::info("Successfully initialized graphics API!");
             HelloImGui::Log(HelloImGui::LogLevel::Info, "Successfully initialized graphics API!");
@@ -321,15 +322,19 @@ HDRViewApp::HDRViewApp()
         }
     };
 
-    m_params.callbacks.PreNewFrame = [this]
+    m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
     {
-        if (m_deferred_fonts.size())
-        {
-            // load any fonts that we wanted to load in the last frame
-            for (auto &f : m_deferred_fonts) { load_font(f.name, f.size, f.merge_fa6); }
-            m_deferred_fonts.clear();
-            // ImGui::GetIO().Fonts->Build();
-        }
+#if defined(HELLOIMGUI_USE_GLFW)
+        spdlog::trace("Registering glfw drop callback");
+        spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
+        glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
+                            [](GLFWwindow *w, int count, const char **filenames)
+                            {
+                                vector<string> arg(count);
+                                for (int i = 0; i < count; ++i) arg[i] = filenames[i];
+                                g_app()->drop_event(arg);
+                            });
+#endif
     };
 
     //
@@ -337,7 +342,7 @@ HDRViewApp::HDRViewApp()
     //
     m_params.callbacks.PostInit = [this]
     {
-        spdlog::info("Restoring recent file list...");
+        spdlog::debug("Restoring recent file list...");
         auto               s = HelloImGui::LoadUserPref("Recent files");
         std::istringstream ss(s);
 
@@ -498,6 +503,20 @@ void HDRViewApp::save_as(const string &filename) const
     }
 }
 
+void HDRViewApp::drop_event(const std::vector<std::string> &filenames)
+{
+    for (auto f : filenames)
+    {
+        spdlog::trace("dropped file '{}'", f);
+        auto formats = Image::loadable_formats();
+        if (formats.find(get_extension(f)) != formats.end())
+        {
+            std::ifstream is{f, std::ios_base::binary};
+            load_image(is, f);
+        }
+    }
+}
+
 void HDRViewApp::open_image()
 {
 #if defined(__EMSCRIPTEN__)
@@ -559,7 +578,7 @@ void HDRViewApp::load_image(std::istream &is, const string &f)
     // now upload the textures
     try
     {
-        current_image()->set_as_texture(current_image()->selected_group, *m_shader, "primary");
+        set_image_textures();
     }
     catch (const std::exception &e)
     {
@@ -567,19 +586,37 @@ void HDRViewApp::load_image(std::istream &is, const string &f)
     }
 }
 
-void HDRViewApp::close_image()
+void HDRViewApp::set_image_textures()
 {
-    m_images.erase(m_images.begin() + m_current);
-    m_current   = m_images.empty() ? -1 : std::clamp(m_current, 0, num_images() - 1);
-    m_reference = m_images.empty() ? -1 : std::clamp(m_reference, 0, num_images() - 1);
+    // bind the primary and secondary images, or a placehold black texture when we have no current or reference image
     if (auto img = current_image())
         img->set_as_texture(img->selected_group, *m_shader, "primary");
     else
         Image::set_null_texture(*m_shader, "primary");
+
     if (auto img = reference_image())
         img->set_as_texture(img->selected_group, *m_shader, "secondary");
     else
         Image::set_null_texture(*m_shader, "secondary");
+}
+
+void HDRViewApp::close_image()
+{
+    if (!current_image())
+        return;
+
+    // select the next image down the list
+    int next = next_visible_image_index(m_current, Forward);
+    if (next < m_current) // there is no visible image after this one, go to previous visible
+        next = next_visible_image_index(m_current, Backward);
+
+    m_images.erase(m_images.begin() + m_current);
+
+    // adjust the indices after erasing the current image
+    set_current_image_index(next < m_current ? next : next - 1);
+    set_reference_image_index(m_reference < m_current ? m_reference : m_reference - 1);
+
+    set_image_textures();
 }
 
 void HDRViewApp::close_all_images()
@@ -587,8 +624,7 @@ void HDRViewApp::close_all_images()
     m_images.clear();
     m_current   = -1;
     m_reference = -1;
-    Image::set_null_texture(*m_shader, "primary");
-    Image::set_null_texture(*m_shader, "secondary");
+    set_image_textures();
 }
 
 void HDRViewApp::run()
@@ -629,27 +665,12 @@ ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
         iconFontParams.glyphRanges.push_back({ICON_MIN_FA, ICON_MAX_16_FA});
         iconFontParams.fontConfig.PixelSnapH       = true;
         auto icon_font_size                        = 0.8f * size;
-        iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX = 2.5f * icon_font_size;
+        iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
+            icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
         HelloImGui::LoadFont("fonts/" FONT_ICON_FILE_NAME_FAS, icon_font_size,
                              iconFontParams); // Merge FontAwesome6 with the previous font
     }
     return m_fonts[{name, size}] = font;
-}
-
-ImFont *HDRViewApp::deferred_load_font(const string &name, int size, bool merge_fa6)
-{
-    size = size <= 0 ? ImGui::GetFontSize() : size;
-    // Check if the font exists
-    auto it = m_fonts.find({name, size});
-    if (it != m_fonts.end())
-        // font exists, use it
-        return it->second;
-    else
-    {
-        // schedule the font to the loaded on the next frame, and return the default font for now
-        m_deferred_fonts.push_back({name, size, merge_fa6});
-        return m_fonts.begin()->second;
-    }
 }
 
 void HDRViewApp::load_fonts()
@@ -717,134 +738,149 @@ void HDRViewApp::draw_file_window()
     }
     ImGui::EndDisabled();
 
-    if (num_images())
+    if (!num_images())
+        return;
+
+    const ImVec2 button_size = {ImGui::CalcTextSize(ICON_FA_DELETE_LEFT).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x,
+                                0.f};
+
+    bool show_button = m_filter.IsActive(); // save here to avoid flicker
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SetNextItemAllowOverlap();
+    if (ImGui::InputTextWithHint("##file filter",
+                                 ICON_FA_FILTER " Filter list of images (format: [include|-exclude][,...]; e.g. "
+                                                "\"include_this,-but_not_this,also_include_this\")",
+                                 m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
+        m_filter.Build();
+    ImGui::WrappedTooltip(
+        "Filter open image list so that only images with a filename containing the search string will be visible.");
+    if (show_button)
     {
-        static bool show_channels = true;
-        ImGui::Checkbox("Show channel groups", &show_channels);
+        ImGui::SameLine(0.f, 0.f);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
+        if (ImGui::Button(ICON_FA_DELETE_LEFT, button_size))
+            m_filter.Clear();
+    }
 
-        ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-        static ImGuiTableFlags table_flags =
-            ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
+    ImGui::SameLine();
+    static bool show_channels = true;
+    if (ImGui::Button(show_channels ? ICON_FA_LAYER_GROUP : ICON_FA_IMAGES, button_size))
+        show_channels = !show_channels;
+    ImGui::WrappedTooltip(show_channels ? "Click to show only images." : "Click to show images and channel groups.");
 
-        if (ImGui::BeginTable("ImageList", 3, table_flags))
+    ImGuiSelectableFlags   selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+    static ImGuiTableFlags table_flags =
+        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
+
+    if (ImGui::BeginTable("ImageList", 3, table_flags))
+    {
+        const float icon_width = ImGui::CalcTextSize(ICON_FA_EYE_LOW_VISION).x;
+        ImGui::TableSetupColumn(ICON_FA_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+                                1.75f * icon_width);
+        ImGui::TableSetupColumn(ICON_FA_EYE, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+                                icon_width);
+        ImGui::TableSetupColumn(show_channels ? "File or channel group name" : "File name",
+                                ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
+        ImGui::TableHeadersRow();
+
+        int id                 = 0;
+        int visible_img_number = 0;
+        for (int i = 0; i < num_images(); ++i)
         {
-            const float icon_width = ImGui::CalcTextSize(ICON_FA_EYE_LOW_VISION).x;
-            ImGui::TableSetupColumn(ICON_FA_LIST_OL,
-                                    ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                    1.75f * icon_width);
-            ImGui::TableSetupColumn(ICON_FA_EYE, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                    icon_width);
-            ImGui::TableSetupColumn(show_channels ? "File or channel group name" : "File name",
-                                    ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
-            ImGui::TableHeadersRow();
+            auto &img          = m_images[i];
+            bool  is_current   = m_current == i;
+            bool  is_reference = m_reference == i;
 
-            int id = 0;
-            for (int i = 0; i < num_images(); ++i)
+            if (!is_visible(img))
+                continue;
+
+            ++visible_img_number;
+
+            ImGui::TableNextRow();
+
+            ImGui::TableNextColumn();
+            ImGui::PushRowColors(is_current, is_reference);
+            if (ImGui::Selectable(fmt::format("##image_{}_selectable", i + 1).c_str(), is_current || is_reference,
+                                  selectable_flags))
             {
-                auto &img          = m_images[i];
-                bool  is_current   = m_current == i;
-                bool  is_reference = m_reference == i;
-
-                ImGui::TableNextRow();
-
-                ImGui::TableNextColumn();
-                ImGui::PushRowColors(is_current, is_reference);
-                if (ImGui::Selectable(fmt::format("##image_{}_selectable", i + 1).c_str(), is_current || is_reference,
-                                      selectable_flags))
-                {
-                    if (ImGui::GetIO().KeyCtrl)
-                    {
-                        if (is_reference)
-                        {
-                            m_reference = -1;
-                            Image::set_null_texture(*m_shader, "secondary");
-                        }
-                        else
-                        {
-                            m_reference = i;
-                            img->set_as_texture(img->selected_group, *m_shader, "secondary");
-                        }
-                    }
-                    else
-                    {
-                        m_current = i;
-                        img->set_as_texture(img->selected_group, *m_shader, "primary");
-                    }
-                    spdlog::info("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
-                }
-                ImGui::PopStyleColor(3);
-                ImGui::SameLine();
-
-                auto image_num_str = fmt::format("{}", i + 1);
-                ImGui::AlignCursor(image_num_str, 1.0f);
-                ImGui::TextUnformatted(image_num_str.c_str());
-
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(is_current ? ICON_FA_EYE : (is_reference ? ICON_FA_EYE_LOW_VISION : ""));
-
-                // right-align the truncated file name
-                ImGui::TableNextColumn();
-                string filename = img->filename;
-                if (img->partname.length())
-                    filename = filename + "/" + img->partname;
-                string ellipsis    = "";
-                float  avail_width = ImGui::GetContentRegionAvail().x;
-                while (ImGui::CalcTextSize((ellipsis + filename).c_str()).x > avail_width && filename.length() > 1)
-                {
-                    filename = filename.substr(1);
-                    ellipsis = "...";
-                }
-                ImGui::AlignCursor(ellipsis + filename, 1.f);
-                ImGui::TextUnformatted(ellipsis + filename);
-
-                if (show_channels && img->groups.size() > 1)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-                    for (size_t l = 0; l < img->layers.size(); ++l)
-                    {
-                        auto &layer = img->layers[l];
-
-                        for (size_t g = 0; g < layer.groups.size(); ++g)
-                        {
-                            auto  &group = img->groups[layer.groups[g]];
-                            string name  = string(ICON_FA_LAYER_GROUP) + " " + layer.name + group.name;
-
-                            bool is_selected_channel = is_current && img->selected_group == layer.groups[g];
-
-                            ImGui::PushRowColors(is_selected_channel, false);
-                            {
-
-                                ImGui::TableNextRow();
-
-                                ImGui::TableNextColumn();
-                                string hotkey = is_current && layer.groups[g] < 10
-                                                    ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
-                                                    : "";
-                                ImGui::AlignCursor(hotkey, 1.0f);
-                                ImGui::TextUnformatted(hotkey);
-
-                                ImGui::TableNextColumn();
-                                if (ImGui::Selectable(
-                                        fmt::format("{}##{}", is_selected_channel ? ICON_FA_EYE : "", id++).c_str(),
-                                        is_selected_channel, selectable_flags))
-                                {
-                                    img->selected_group = layer.groups[g];
-                                    m_current           = i;
-                                    img->set_as_texture(img->selected_group, *m_shader, "primary");
-                                }
-
-                                ImGui::TableNextColumn();
-                                ImGui::TextUnformatted(name);
-                            }
-                            ImGui::PopStyleColor(3);
-                        }
-                    }
-                    ImGui::PopStyleColor();
-                }
+                if (ImGui::GetIO().KeyCtrl)
+                    m_reference = is_reference ? -1 : i;
+                else
+                    m_current = i;
+                set_image_textures();
+                spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
             }
+            ImGui::PopStyleColor(3);
+            ImGui::SameLine();
 
-            ImGui::EndTable();
+            auto image_num_str = fmt::format("{}", visible_img_number);
+            ImGui::AlignCursor(image_num_str, 1.0f);
+            ImGui::TextUnformatted(image_num_str.c_str());
+
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(is_current ? ICON_FA_EYE : (is_reference ? ICON_FA_EYE_LOW_VISION : ""));
+
+            // right-align the truncated file name
+            string filename = img->file_and_partname();
+
+            ImGui::TableNextColumn();
+            string ellipsis    = "";
+            float  avail_width = ImGui::GetContentRegionAvail().x;
+            while (ImGui::CalcTextSize((ellipsis + filename).c_str()).x > avail_width && filename.length() > 1)
+            {
+                filename = filename.substr(1);
+                ellipsis = "...";
+            }
+            ImGui::AlignCursor(ellipsis + filename, 1.f);
+            ImGui::TextUnformatted(ellipsis + filename);
+
+            if (show_channels && img->groups.size() > 1)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                for (size_t l = 0; l < img->layers.size(); ++l)
+                {
+                    auto &layer = img->layers[l];
+
+                    for (size_t g = 0; g < layer.groups.size(); ++g)
+                    {
+                        auto  &group = img->groups[layer.groups[g]];
+                        string name  = string(ICON_FA_LAYER_GROUP) + " " + layer.name + group.name;
+
+                        bool is_selected_channel = is_current && img->selected_group == layer.groups[g];
+
+                        ImGui::PushRowColors(is_selected_channel, false);
+                        {
+
+                            ImGui::TableNextRow();
+
+                            ImGui::TableNextColumn();
+                            string hotkey = is_current && layer.groups[g] < 10
+                                                ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
+                                                : "";
+                            ImGui::AlignCursor(hotkey, 1.0f);
+                            ImGui::TextUnformatted(hotkey);
+
+                            ImGui::TableNextColumn();
+                            if (ImGui::Selectable(
+                                    fmt::format("{}##{}", is_selected_channel ? ICON_FA_EYE : "", id++).c_str(),
+                                    is_selected_channel, selectable_flags))
+                            {
+                                img->selected_group = layer.groups[g];
+                                m_current           = i;
+                                set_image_textures();
+                            }
+
+                            ImGui::TableNextColumn();
+                            ImGui::TextUnformatted(name);
+                        }
+                        ImGui::PopStyleColor(3);
+                    }
+                }
+                ImGui::PopStyleColor();
+            }
         }
+
+        ImGui::EndTable();
     }
 }
 
@@ -1299,6 +1335,31 @@ void HDRViewApp::draw_background()
     }
 }
 
+bool HDRViewApp::is_visible(const ConstImagePtr &img) const
+{
+    return m_filter.PassFilter(img->file_and_partname().c_str());
+}
+
+bool HDRViewApp::is_visible(int index) const
+{
+    if (!is_valid(index))
+        return true;
+
+    return is_visible(image(index));
+}
+
+int HDRViewApp::next_visible_image_index(int index, EDirection direction) const
+{
+    return next_matching_index(
+        m_images, index, [this](size_t, const ImagePtr &img) { return is_visible(img); }, direction);
+}
+
+int HDRViewApp::nth_visible_image_index(int n) const
+{
+    return (int)nth_matching_index(m_images, (size_t)n,
+                                   [this](size_t, const ImagePtr &img) { return is_visible(img); });
+}
+
 void HDRViewApp::process_hotkeys()
 {
     if (ImGui::GetIO().WantCaptureKeyboard)
@@ -1316,27 +1377,29 @@ void HDRViewApp::process_hotkeys()
     // below hotkeys only available if there is an image
 
     // switch the current image using the number keys
-    for (int n = 0; n < 9; ++n)
-        if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_1 + n)))
-            set_current_image_index(n);
-    if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0)))
-        set_current_image_index(9);
+    for (int n = 0; n <= 9; ++n)
+        if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0 + n)))
+        {
+            spdlog::trace("Selecting visible image number {}", mod(n - 1, 10));
+            set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
+        }
 
     // switch the selected channel group using Ctrl + number key
-    for (int n = 0; n < 9; ++n)
-        if (n < (int)img->groups.size() && ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_1 + n) | ImGuiMod_Ctrl))
-            img->selected_group = n;
-    if ((int)img->groups.size() > 9 && ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0) | ImGuiMod_Ctrl))
-        img->selected_group = 9;
+    for (int n = 0; n <= std::min(9, (int)img->groups.size()); ++n)
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n)))
+        {
+            spdlog::trace("Selecting visible channel group number {}", mod(n - 1, 10));
+            img->selected_group = mod(n - 1, 10);
+        }
 
     if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut))
         close_image();
     else if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut | ImGuiMod_Shift))
         close_all_images();
     else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
-        m_current = mod(m_current + 1, num_images());
+        set_current_image_index(next_visible_image_index(m_current, Forward));
     else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
-        m_current = mod(m_current - 1, num_images());
+        set_current_image_index(next_visible_image_index(m_current, Backward));
     else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
         img->selected_group = mod(img->selected_group + 1, (int)img->groups.size());
     else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
@@ -1354,9 +1417,7 @@ void HDRViewApp::process_hotkeys()
     else if (ImGui::IsKeyPressed(ImGuiKey_C))
         center();
 
-    // update which texture is shown
-    if ((img = current_image()))
-        img->set_as_texture(img->selected_group, *m_shader, "primary");
+    set_image_textures();
 }
 
 void HDRViewApp::draw_about_dialog()

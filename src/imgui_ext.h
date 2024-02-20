@@ -110,4 +110,6 @@ inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
     }
 }
 
+void BusyBar(float fraction, const ImVec2 &size_arg = ImVec2(-FLT_MIN, 0), const char *overlay = NULL);
+
 } // namespace ImGui

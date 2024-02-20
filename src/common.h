@@ -358,3 +358,61 @@ const std::vector<std::string> &channel_names();
 const std::vector<std::string> &blend_mode_names();
 std::string                     channel_to_string(EChannel channel);
 std::string                     blend_mode_to_string(EBlendMode mode);
+
+/**
+    @brief Finds the index of the next element matching a given criterion in a vector.
+
+    This function searches for the next element in the vector that matches the criterion
+    starting from the current index and proceeding in the specified direction.
+    If no matching element is found after the current index, the search wraps around to the
+    beginning or end of the vector based on the specified direction.
+    The function stops at the current index if no matching element is found.
+
+    \tparam T The type of elements in the vector.
+    \param vec The vector to search in.
+    \param current_index The index to start the search from.
+    \param criterion The function object that returns true if an index-element pair matches the criterion.
+        The function should take two parameters: the index of the element and a const reference to the element.
+    \param direction The direction in which to search for the next matching element.
+    \return size_t The index of the next matching element if found, or current_index if not found.
+*/
+
+template <typename T, typename UnaryPredicate>
+size_t next_matching_index(const std::vector<T> &vec, size_t current_index, UnaryPredicate criterion,
+                           EDirection direction = Forward)
+{
+    if (vec.empty())
+        return current_index; // Return current index if vector is empty
+
+    size_t size = vec.size();
+    size_t index_increment =
+        (direction == EDirection::Forward) ? 1 : (size - 1); // Increment/decrement based on direction
+
+    for (size_t i = (current_index + index_increment) % size; i != current_index; i = (i + index_increment) % size)
+        if (criterion(i, vec[i]))
+            return i; // Found the next matching element
+
+    return current_index; // Nothing matched, return current index
+}
+
+/**
+    Finds the index of the nth element matching a given criterion in a vector.
+
+    \tparam T The type of elements in the vector.
+    \param vec The vector to search in.
+    \param n The index of the element to find.
+    \param criterion The function object that returns true if an index-element pair matches the criterion.
+        The function should take two parameters: the index of the element and a const reference to the element.
+    \return size_t The index of the nth matching element if found, or vec.size() if not found.
+*/
+template <typename T, typename UnaryPredicate>
+size_t nth_matching_index(const std::vector<T> &vec, size_t n, UnaryPredicate criterion)
+{
+    size_t match_count = 0;
+    for (size_t i = 0; i < vec.size(); ++i)
+        if (criterion(i, vec[i]))
+            if (match_count++ == n)
+                return i; // Found the nth matching element
+
+    return vec.size(); // Return vec.size() if the nth matching element is not found
+}

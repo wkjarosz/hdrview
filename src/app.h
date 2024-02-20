@@ -39,6 +39,7 @@ public:
     // loading, saving, and closing images
     //-----------------------------------------------------------------------------
     void open_image();
+    void drop_event(const std::vector<std::string> &filenames);
     void load_image(std::istream &is, const string &filename);
     void save_as(const string &filename) const;
     void close_image();
@@ -58,7 +59,13 @@ public:
     ImagePtr      reference_image() { return image(m_reference); }
     ConstImagePtr image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
+    bool          is_visible(int index) const;
+    bool          is_visible(const ConstImagePtr &img) const;
     void          set_current_image_index(int index) { m_current = is_valid(index) ? index : m_current; }
+    void          set_reference_image_index(int index) { m_reference = is_valid(index) ? index : m_reference; }
+    int           next_visible_image_index(int index, EDirection direction) const;
+    int           nth_visible_image_index(int n) const;
+    bool          nth_image_is_visible(int n) const;
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -132,7 +139,6 @@ public:
     // load font with the specified name at the specified size (if size > 0) or at the current font size (size <= 0)
     ImFont *font(const string &name, int size = -1) const;
     ImFont *load_font(const string &name, int size, bool merge_fa6 = false);
-    ImFont *deferred_load_font(const string &name, int size, bool merge_fa6 = false);
 
 private:
     void load_fonts();
@@ -155,6 +161,7 @@ private:
     void draw_file_window();
     void draw_channel_window();
     void process_hotkeys();
+    void set_image_textures();
 
 private:
     //-----------------------------------------------------------------------------
@@ -185,14 +192,9 @@ private:
 
     vector<string> m_recent_files;
 
+    ImGuiTextFilter m_filter;
+
     map<pair<string, int>, ImFont *> m_fonts;
-    struct FontParams
-    {
-        string name;
-        int    size;
-        bool   merge_fa6;
-    };
-    vector<FontParams> m_deferred_fonts;
 };
 
 /// Return a pointer to the global singleton HDRViewApp instance

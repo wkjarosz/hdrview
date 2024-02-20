@@ -21,12 +21,12 @@
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <fstream>
-#include <spdlog/spdlog.h>
 #include <stdexcept> // for runtime_error, out_of_range
 
-#include "dithermatrix256.h"
+#include <spdlog/spdlog.h>
+#include <spdlog/stopwatch.h>
 
-#include <fmt/core.h>
+#include "dithermatrix256.h"
 
 // these pragmas ignore warnings about unused static functions
 #if defined(__clang__)
@@ -93,11 +93,15 @@ static const stbi_io_callbacks stbi_callbacks = {
 
 static void copy_into_channel(Channel &channel, const float data[], int w, int h, int n, int c, bool linearize)
 {
-    parallel_for(0, w * h,
-                 [&channel, n, c, &data, linearize](int i)
+    parallel_for(0, h,
+                 [&channel, n, c, w, &data, linearize](int y)
                  {
-                     float v    = data[n * i + c];
-                     channel(i) = linearize ? SRGBToLinear(v) : v;
+                     for (int x = 0; x < w; ++x)
+                     {
+                         int   i    = x + y * w;
+                         float v    = data[n * i + c];
+                         channel(i) = linearize ? SRGBToLinear(v) : v;
+                     }
                  });
 }
 
@@ -132,11 +136,14 @@ static vector<ImagePtr> load_stb_image(std::istream &is, const string &filename)
         auto image      = make_shared<Image>(size.xy(), size.z);
         image->filename = filename;
 
-        bool  linearize = !stbi_is_hdr(filename.c_str());
-        Timer timer;
+        bool linearize = !stbi_is_hdr(filename.c_str());
+
         for (int c = 0; c < size.z; ++c)
+        {
+            Timer timer;
             copy_into_channel(image->channels[c], float_data.get(), size.x, size.y, size.z, c, linearize && c != 3);
-        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+            spdlog::debug("Copying image channel {} took: {} seconds.", c, (timer.elapsed() / 1000.f));
+        }
         return {image};
     }
     else
@@ -163,6 +170,7 @@ static vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
 
 static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 {
+    Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
     Imf::MultiPartInputFile infile{is};
 
     if (infile.parts() <= 0)
@@ -277,7 +285,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 vector<ImagePtr> Image::load(istream &is, const string &filename)
 {
     spdlog::info("Loading from file: {}", filename);
-
+    Timer timer;
     try
     {
         StdIStream exr_is{is, filename.c_str()};
@@ -298,7 +306,7 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         {
             i->finalize();
             i->filename = filename;
-            spdlog::info("\n{}", i->to_string());
+            spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
         }
         return images;
     }
