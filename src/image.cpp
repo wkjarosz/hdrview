@@ -13,7 +13,6 @@
 #include "texture.h"
 #include "timer.h"
 
-#include <execution>
 #include <numeric>
 #include <sstream>
 
