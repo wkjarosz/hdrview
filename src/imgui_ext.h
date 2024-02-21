@@ -45,6 +45,10 @@ protected:
 // reference to a global SpdLogWindow instance
 SpdLogWindow &GlobalSpdLogWindow();
 
+ImVec2 IconSize();
+ImVec2 IconButtonSize();
+bool   IconButton(const char *icon);
+
 inline bool ToggleButton(const char *label, bool *active, const ImVec2 &size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Button, *active ? GetColorU32(ImGuiCol_ButtonActive) : GetColorU32(ImGuiCol_Button));

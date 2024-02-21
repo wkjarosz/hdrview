@@ -29,9 +29,8 @@ void Image::draw_histogram(float exposure)
     static int         bin_type  = 1;
     static ImPlotCond  plot_cond = ImPlotCond_Always;
     {
-        const ImVec2 button_size = {
-            ImGui::CalcTextSize(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x, 0.f};
-        float combo_width =
+        const ImVec2 button_size = ImGui::IconButtonSize();
+        float        combo_width =
             std::max(HelloImGui::EmSize(5.f),
                      0.5f * (ImGui::GetContentRegionAvail().x - button_size.x - 2.f * ImGui::GetStyle().ItemSpacing.x) -
                          (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
@@ -50,17 +49,12 @@ void Image::draw_histogram(float exposure)
 
         ImGui::SameLine();
 
-        static bool lock = true;
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                            ImVec2(0, ImGui::GetStyle().FramePadding.y));  // Remove frame padding
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0)); // Remove frame padding
-        // if (ImGui::Checkbox("Auto-fit axes to exposure", &lock))
-        //     plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
-        if (ImGui::ToggleButton(ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE, &lock, button_size))
-            plot_cond = lock ? ImPlotCond_Always : ImPlotCond_Once;
-        ImGui::WrappedTooltip(
-            "Toggle between manual panning/zoom in histogram vs. auto fitting histogram axes based on the exposure.");
-        ImGui::PopStyleVar(2);
+        if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE
+                                                             : ICON_FA_UP_DOWN_LEFT_RIGHT))
+            plot_cond = (plot_cond == ImPlotCond_Always) ? ImPlotCond_Once : ImPlotCond_Always;
+        ImGui::WrappedTooltip((plot_cond == ImPlotCond_Always)
+                                  ? "Click to allow manually panning/zooming in histogram"
+                                  : "Click to auto-fit histogram axes based on the exposure.");
     }
 
     auto             hovered_pixel = int2{g_app()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
@@ -308,7 +302,7 @@ void Image::draw_channels_list()
 
     if (ImGui::BeginTable("ChannelList", 3, table_flags))
     {
-        const float icon_width  = ImGui::CalcTextSize(ICON_FA_EYE_LOW_VISION).x;
+        const float icon_width  = ImGui::IconSize().x;
         const float icon_indent = icon_width + ImGui::CalcTextSize(" ").x;
 
         ImGui::TableSetupColumn(ICON_FA_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,

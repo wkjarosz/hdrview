@@ -156,12 +156,19 @@ private:
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
     void draw_image() const;
-    void draw_top_toolbar();
     void draw_image_border() const;
     void draw_file_window();
     void draw_channel_window();
+    void draw_top_toolbar();
+    void draw_menus();
+    void draw_status_bar();
     void process_hotkeys();
     void set_image_textures();
+
+    void load_settings();
+    void save_settings();
+
+    void setup_rendering();
 
 private:
     //-----------------------------------------------------------------------------

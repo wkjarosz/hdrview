@@ -61,10 +61,15 @@ EM_JS(int, window_height, (), { return window.innerHeight; });
 #endif
 
 static std::mt19937     g_rand(53);
-static constexpr float  MIN_ZOOM     = 0.01f;
-static constexpr float  MAX_ZOOM     = 512.f;
-static constexpr size_t g_max_recent = 15;
-static bool             g_open_help  = false;
+static constexpr float  MIN_ZOOM                  = 0.01f;
+static constexpr float  MAX_ZOOM                  = 512.f;
+static constexpr size_t g_max_recent              = 15;
+static bool             g_open_help               = false;
+static bool             g_show_tool_metrics       = false;
+static bool             g_show_tool_debug_log     = false;
+static bool             g_show_tool_id_stack_tool = false;
+static bool             g_show_tool_style_editor  = false;
+static bool             g_show_tool_about         = false;
 
 // static const vector<std::pair<vector<int>, string>> g_help_strings2 = {
 //     {{ImGuiKey_H}, "Toggle this help window"},
@@ -157,121 +162,26 @@ HDRViewApp::HDRViewApp()
     m_params.appWindowParams.windowTitle             = "HDRView";
     m_params.appWindowParams.restorePreviousGeometry = false;
 
-    // Menu bar
-    m_params.imGuiWindowParams.showMenuBar            = true;
-    m_params.imGuiWindowParams.showStatusBar          = true;
-    m_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
-    m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
-
     // Setting this to true allows multiple viewports where you can drag windows outside out the main window in order to
-    // put their content into new native windows m_params.imGuiWindowParams.enableViewports = true;
-    m_params.imGuiWindowParams.enableViewports = false;
-    m_params.imGuiWindowParams.menuAppTitle    = "File";
+    // put their content into new native windows
+    m_params.imGuiWindowParams.enableViewports        = false;
+    m_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
+    // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
 
-    m_params.iniFolderType = HelloImGui::IniFolderType::AppUserConfigFolder;
-    m_params.iniFilename   = "HDRView/settings.ini";
+    // Load additional font
+    m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
     //
-    // Dockable windows
-    {
-        // the histogram window
-        HelloImGui::DockableWindow histogram_window;
-        histogram_window.label             = "Histogram";
-        histogram_window.dockSpaceName     = "HistogramSpace";
-        histogram_window.isVisible         = true;
-        histogram_window.rememberIsVisible = true;
-        histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
-
-        // the file window
-        HelloImGui::DockableWindow file_window;
-        file_window.label             = "File";
-        file_window.dockSpaceName     = "FileSpace";
-        file_window.isVisible         = true;
-        file_window.rememberIsVisible = true;
-        file_window.GuiFunction       = [this] { draw_file_window(); };
-
-        // the info window
-        HelloImGui::DockableWindow info_window;
-        info_window.label             = "Info";
-        info_window.dockSpaceName     = "FileSpace";
-        info_window.isVisible         = true;
-        info_window.rememberIsVisible = true;
-        info_window.GuiFunction       = [this] { draw_info_window(); };
-
-        // the channels window
-        HelloImGui::DockableWindow channel_window;
-        channel_window.label             = "Channels";
-        channel_window.dockSpaceName     = "ChannelSpace";
-        channel_window.isVisible         = true;
-        channel_window.rememberIsVisible = true;
-        channel_window.GuiFunction       = [this] { draw_channel_window(); };
-
-        // the window showing the spdlog messages
-        HelloImGui::DockableWindow log_window;
-        log_window.label             = "Log";
-        log_window.dockSpaceName     = "LogSpace";
-        log_window.isVisible         = false;
-        log_window.rememberIsVisible = true;
-        log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular")); };
-
-        // docking layouts
-        m_params.dockingParams.layoutName      = "Standard";
-        m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window,
-                                                  log_window};
-        m_params.dockingParams.dockingSplits   = {
-            HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-            HelloImGui::DockingSplit{"HistogramSpace", "FileSpace", ImGuiDir_Down, 0.75f},
-            HelloImGui::DockingSplit{"FileSpace", "ChannelSpace", ImGuiDir_Down, 0.25f},
-            HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
-    }
-
-    m_params.callbacks.ShowStatus = [this]()
-    {
-        const float y = ImGui::GetCursorPosY() - HelloImGui::EmSize(0.15f);
-        float       x = ImGui::GetStyle().ItemSpacing.x;
-
-        auto sized_text = [&](float em_size, const string &text, float align = 1.f)
-        {
-            float item_width = HelloImGui::EmSize(em_size);
-            float text_width = ImGui::CalcTextSize(text.c_str()).x;
-            float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
-
-            ImGui::SameLine();
-            ImGui::SetCursorPos({x + align * (item_width - text_width), y});
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(text.c_str());
-            x += item_width + spacing;
-        };
-
-        if (auto img = current_image())
-        {
-            auto &io = ImGui::GetIO();
-            if (vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos)))
-            {
-                auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
-
-                float4 color32 = image_pixel(hovered_pixel);
-                auto  &group   = img->groups[img->selected_group];
-
-                sized_text(3, fmt::format("({:>6d},", hovered_pixel.x), 0.f);
-                sized_text(3, fmt::format("{:>6d})", hovered_pixel.y), 0.f);
-
-                if (img->contains(hovered_pixel))
-                {
-                    sized_text(0.5f, "=", 0.5f);
-                    for (int c = 0; c < group.num_channels; ++c)
-                        sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
-                                                     c == group.num_channels - 1 ? ")" : ","));
-                }
-            }
-
-            float real_zoom = m_zoom * pixel_ratio();
-            int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
-            int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-            x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(15.f);
-            sized_text(0.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
-        }
-    };
+    // Menu bar
+    //
+    // Here, we fully customize the menu bar:
+    // by setting `showMenuBar` to true, and `showMenu_App` and `showMenu_View` to false,
+    // HelloImGui will display an empty menu bar, which we can fill with our own menu items via the callback `ShowMenus`
+    m_params.imGuiWindowParams.showMenuBar   = true;
+    m_params.imGuiWindowParams.showMenu_App  = false;
+    m_params.imGuiWindowParams.showMenu_View = false;
+    // Inside `ShowMenus`, we can call `HelloImGui::ShowViewMenu` and `HelloImGui::ShowAppMenu` if desired
+    m_params.callbacks.ShowMenus = [this]() { draw_menus(); };
 
     //
     // Toolbars
@@ -282,49 +192,74 @@ HDRViewApp::HDRViewApp()
     m_params.callbacks.AddEdgeToolbar(
         HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, edgeToolbarOptions);
 
-    m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
+    //
+    // Status bar
+    //
+    // We use the default status bar of Hello ImGui
+    m_params.imGuiWindowParams.showStatusBar = true;
+    m_params.callbacks.ShowStatus            = [this]() { draw_status_bar(); };
 
-    m_params.callbacks.SetupImGuiStyle = [this]()
+    //
+    // Dockable windows
+    //
+    // the histogram window
+    HelloImGui::DockableWindow histogram_window;
+    histogram_window.label             = "Histogram";
+    histogram_window.dockSpaceName     = "HistogramSpace";
+    histogram_window.isVisible         = true;
+    histogram_window.rememberIsVisible = true;
+    histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
+
+    // the file window
+    HelloImGui::DockableWindow file_window;
+    file_window.label             = "File";
+    file_window.dockSpaceName     = "FileSpace";
+    file_window.isVisible         = true;
+    file_window.rememberIsVisible = true;
+    file_window.GuiFunction       = [this] { draw_file_window(); };
+
+    // the info window
+    HelloImGui::DockableWindow info_window;
+    info_window.label             = "Info";
+    info_window.dockSpaceName     = "FileSpace";
+    info_window.isVisible         = true;
+    info_window.rememberIsVisible = true;
+    info_window.GuiFunction       = [this] { draw_info_window(); };
+
+    // the channels window
+    HelloImGui::DockableWindow channel_window;
+    channel_window.label             = "Channels";
+    channel_window.dockSpaceName     = "ChannelSpace";
+    channel_window.isVisible         = true;
+    channel_window.rememberIsVisible = true;
+    channel_window.GuiFunction       = [this] { draw_channel_window(); };
+
+    // the window showing the spdlog messages
+    HelloImGui::DockableWindow log_window;
+    log_window.label             = "Log";
+    log_window.dockSpaceName     = "LogSpace";
+    log_window.isVisible         = false;
+    log_window.rememberIsVisible = true;
+    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular")); };
+
+    // docking layouts
+    m_params.dockingParams.layoutName      = "Standard";
+    m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window, log_window};
+    m_params.dockingParams.dockingSplits   = {
+        HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
+        HelloImGui::DockingSplit{"HistogramSpace", "FileSpace", ImGuiDir_Down, 0.75f},
+        HelloImGui::DockingSplit{"FileSpace", "ChannelSpace", ImGuiDir_Down, 0.25f},
+        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
+
+    m_params.callbacks.SetupImGuiStyle = []()
     {
-        try
-        {
-            // make things like radio buttons look nice and round
-            ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
-
-            m_render_pass = new RenderPass(false, true);
-            m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-            m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
-            m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
-
-            m_shader = new Shader(m_render_pass,
-                                  /* An identifying name */
-                                  "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-                                  Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"),
-                                                           {"shaders/colorspaces", "shaders/colormaps"}),
-                                  Shader::BlendMode::AlphaBlend);
-
-            const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
-
-            m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-            m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-
-            Image::make_default_textures();
-
-            m_shader->set_texture("dither_texture", Image::dither_texture());
-            set_image_textures();
-
-            spdlog::info("Successfully initialized graphics API!");
-            HelloImGui::Log(HelloImGui::LogLevel::Info, "Successfully initialized graphics API!");
-        }
-        catch (const std::exception &e)
-        {
-            spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
-        }
+        // make things like radio buttons look nice and round
+        ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
     };
 
+#if defined(HELLOIMGUI_USE_GLFW)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
     {
-#if defined(HELLOIMGUI_USE_GLFW)
         spdlog::trace("Registering glfw drop callback");
         spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
         glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
@@ -334,67 +269,170 @@ HDRViewApp::HDRViewApp()
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
                                 g_app()->drop_event(arg);
                             });
-#endif
     };
+#endif
 
     //
     // Load user settings at `PostInit` and save them at `BeforeExit`
     //
+    m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
+    m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this]
     {
-        spdlog::debug("Restoring recent file list...");
-        auto               s = HelloImGui::LoadUserPref("Recent files");
-        std::istringstream ss(s);
+        load_settings();
+        setup_rendering();
+    };
+    m_params.callbacks.BeforeExit = [this] { save_settings(); };
 
-        int         i = 0;
-        std::string line;
-        m_recent_files.clear();
-        while (std::getline(ss, line))
+    m_params.callbacks.ShowGui = [this]()
+    {
+        draw_about_dialog();
+
+        if (g_show_tool_metrics)
+            ImGui::ShowMetricsWindow(&g_show_tool_metrics);
+        if (g_show_tool_debug_log)
+            ImGui::ShowDebugLogWindow(&g_show_tool_debug_log);
+        if (g_show_tool_id_stack_tool)
+            ImGui::ShowIDStackToolWindow(&g_show_tool_id_stack_tool);
+        if (g_show_tool_style_editor)
         {
-            if (line.empty())
-                continue;
+            ImGui::Begin("Dear ImGui Style Editor", &g_show_tool_style_editor);
+            ImGui::ShowStyleEditor();
+            ImGui::End();
+        }
+        if (g_show_tool_about)
+            ImGui::ShowAboutWindow(&g_show_tool_about);
+    };
+    m_params.callbacks.CustomBackground = [this]() { draw_background(); };
+}
 
-            string prefix = fmt::format("File{}=", i);
-            // check that the line starts with the prefix
-            if (starts_with(line, prefix))
+void HDRViewApp::setup_rendering()
+{
+    try
+    {
+        m_render_pass = new RenderPass(false, true);
+        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
+        m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
+        m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
+
+        m_shader = new Shader(m_render_pass,
+                              /* An identifying name */
+                              "ImageView", Shader::from_asset("shaders/image-shader_vert"),
+                              Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"),
+                                                       {"shaders/colorspaces", "shaders/colormaps"}),
+                              Shader::BlendMode::AlphaBlend);
+
+        const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
+
+        m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
+        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
+
+        Image::make_default_textures();
+
+        m_shader->set_texture("dither_texture", Image::dither_texture());
+        set_image_textures();
+
+        spdlog::info("Successfully initialized graphics API!");
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
+    }
+}
+
+void HDRViewApp::load_settings()
+{
+    spdlog::debug("Restoring recent file list...");
+    auto               s = HelloImGui::LoadUserPref("Recent files");
+    std::istringstream ss(s);
+
+    int         i = 0;
+    std::string line;
+    m_recent_files.clear();
+    while (std::getline(ss, line))
+    {
+        if (line.empty())
+            continue;
+
+        string prefix = fmt::format("File{}=", i);
+        // check that the line starts with the prefix
+        if (starts_with(line, prefix))
+        {
+            auto r = line.substr(prefix.size());
+            if (r.length())
             {
-                auto r = line.substr(prefix.size());
-                if (r.length())
-                {
-                    m_recent_files.push_back(r);
-                    spdlog::trace("Adding recent file '{}{}'", prefix, r);
-                }
+                m_recent_files.push_back(r);
+                spdlog::trace("Adding recent file '{}{}'", prefix, r);
             }
-
-            i++;
         }
+
+        i++;
+    }
+}
+
+void HDRViewApp::save_settings()
+{
+    std::stringstream ss;
+    for (size_t i = 0; i < m_recent_files.size(); ++i)
+    {
+        ss << "File" << i << "=" << m_recent_files[i];
+        if (i < m_recent_files.size() - 1)
+            ss << std::endl;
+    }
+    HelloImGui::SaveUserPref("Recent files", ss.str());
+}
+
+void HDRViewApp::draw_status_bar()
+{
+    const float y = ImGui::GetCursorPosY() - HelloImGui::EmSize(0.15f);
+    float       x = ImGui::GetStyle().ItemSpacing.x;
+
+    auto sized_text = [&](float em_size, const string &text, float align = 1.f)
+    {
+        float item_width = HelloImGui::EmSize(em_size);
+        float text_width = ImGui::CalcTextSize(text.c_str()).x;
+        float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
+
+        ImGui::SameLine();
+        ImGui::SetCursorPos({x + align * (item_width - text_width), y});
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(text.c_str());
+        x += item_width + spacing;
     };
 
-    m_params.callbacks.BeforeExit = [this]
+    if (auto img = current_image())
     {
-        std::stringstream ss;
-        for (size_t i = 0; i < m_recent_files.size(); ++i)
+        auto &io = ImGui::GetIO();
+        if (vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos)))
         {
-            ss << "File" << i << "=" << m_recent_files[i];
-            if (i < m_recent_files.size() - 1)
-                ss << std::endl;
+            auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+
+            float4 color32 = image_pixel(hovered_pixel);
+            auto  &group   = img->groups[img->selected_group];
+
+            sized_text(3, fmt::format("({:>6d},", hovered_pixel.x), 0.f);
+            sized_text(3, fmt::format("{:>6d})", hovered_pixel.y), 0.f);
+
+            if (img->contains(hovered_pixel))
+            {
+                sized_text(0.5f, "=", 0.5f);
+                for (int c = 0; c < group.num_channels; ++c)
+                    sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
+                                                 c == group.num_channels - 1 ? ")" : ","));
+            }
         }
-        HelloImGui::SaveUserPref("Recent files", ss.str());
-    };
 
-    m_params.callbacks.ShowMenus = []()
-    {
-        string text = ICON_FA_CIRCLE_INFO;
-        auto   posX = (ImGui::GetCursorPosX() + ImGui::GetColumnWidth() - ImGui::CalcTextSize(text.c_str()).x -
-                     ImGui::GetStyle().ItemSpacing.x);
-        if (posX > ImGui::GetCursorPosX())
-            ImGui::SetCursorPosX(posX);
-        // align_cursor(text, 1.f);
-        if (ImGui::MenuItem(text))
-            g_open_help = true;
-    };
+        float real_zoom = m_zoom * pixel_ratio();
+        int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
+        int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
+        x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(15.f);
+        sized_text(0.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
+    }
+}
 
-    m_params.callbacks.ShowAppMenuItems = [this]()
+void HDRViewApp::draw_menus()
+{
+    if (ImGui::BeginMenu("File"))
     {
         if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Open image...", "Cmd+O"))
             open_image();
@@ -469,11 +507,37 @@ HDRViewApp::HDRViewApp()
             close_image();
         if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close all", "Cmd+Shift+W", false, current_image() != nullptr))
             close_all_images();
-    };
 
-    m_params.callbacks.ShowGui          = [this]() { draw_about_dialog(); };
-    m_params.callbacks.CustomBackground = [this]() { draw_background(); };
+        ImGui::Separator();
+
+        if (ImGui::MenuItem(ICON_FA_POWER_OFF " Quit"))
+            m_params.appShallExit = true;
+
+        ImGui::EndMenu();
+    }
+
+    HelloImGui::ShowViewMenu(m_params);
+
+    if (ImGui::BeginMenu("Debug"))
+    {
+        ImGui::MenuItem("Metrics/Debugger", NULL, &g_show_tool_metrics);
+        ImGui::MenuItem("Debug Log", NULL, &g_show_tool_debug_log);
+        ImGui::MenuItem("ID Stack Tool", NULL, &g_show_tool_id_stack_tool);
+        ImGui::MenuItem("Style Editor", NULL, &g_show_tool_style_editor);
+        ImGui::MenuItem("About Dear ImGui", NULL, &g_show_tool_about);
+        ImGui::EndMenu();
+    }
+
+    const char *info_icon = ICON_FA_CIRCLE_INFO;
+    auto        posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x -
+                 ImGui::GetStyle().ItemSpacing.x);
+    if (posX > ImGui::GetCursorPosX())
+        ImGui::SetCursorPosX(posX);
+    // align_cursor(text, 1.f);
+    if (ImGui::MenuItem(info_icon))
+        g_open_help = true;
 }
+
 void HDRViewApp::save_as(const string &filename) const
 {
     try
@@ -741,8 +805,7 @@ void HDRViewApp::draw_file_window()
     if (!num_images())
         return;
 
-    const ImVec2 button_size = {ImGui::CalcTextSize(ICON_FA_DELETE_LEFT).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x,
-                                0.f};
+    const ImVec2 button_size = ImGui::IconButtonSize();
 
     bool show_button = m_filter.IsActive(); // save here to avoid flicker
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
@@ -758,13 +821,13 @@ void HDRViewApp::draw_file_window()
     {
         ImGui::SameLine(0.f, 0.f);
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        if (ImGui::Button(ICON_FA_DELETE_LEFT, button_size))
+        if (ImGui::IconButton(ICON_FA_DELETE_LEFT))
             m_filter.Clear();
     }
 
     ImGui::SameLine();
     static bool show_channels = true;
-    if (ImGui::Button(show_channels ? ICON_FA_LAYER_GROUP : ICON_FA_IMAGES, button_size))
+    if (ImGui::IconButton(show_channels ? ICON_FA_LAYER_GROUP : ICON_FA_IMAGES))
         show_channels = !show_channels;
     ImGui::WrappedTooltip(show_channels ? "Click to show only images." : "Click to show images and channel groups.");
 
@@ -774,7 +837,7 @@ void HDRViewApp::draw_file_window()
 
     if (ImGui::BeginTable("ImageList", 3, table_flags))
     {
-        const float icon_width = ImGui::CalcTextSize(ICON_FA_EYE_LOW_VISION).x;
+        const float icon_width = ImGui::IconSize().x;
         ImGui::TableSetupColumn(ICON_FA_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.75f * icon_width);
         ImGui::TableSetupColumn(ICON_FA_EYE, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
@@ -1214,16 +1277,15 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::AlignTextToFramePadding();
     ImGui::Text("EV:");
     ImGui::SameLine();
-    ImGui::PushItemWidth(HelloImGui::EmSize(8));
-
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure, -9.f, 9.f, "%5.2f");
+
     ImGui::SameLine();
 
     auto img = current_image();
 
     ImGui::BeginDisabled(!img);
-    if (ImGui::Button(ICON_FA_WAND_MAGIC_SPARKLES "##NormalizeExposure",
-                      {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+    if (ImGui::IconButton(ICON_FA_WAND_MAGIC_SPARKLES "##NormalizeExposure"))
     {
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
@@ -1236,7 +1298,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    if (ImGui::Button(ICON_FA_ARROWS_ROTATE "##ResetTonemapping", {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()}))
+    if (ImGui::IconButton(ICON_FA_ARROWS_ROTATE "##ResetTonemapping"))
     {
         m_exposure = 0.f;
         m_gamma    = 2.2f;
@@ -1250,8 +1312,10 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::BeginDisabled(m_sRGB);
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Gamma:");
+
     ImGui::SameLine();
-    ImGui::PushItemWidth(HelloImGui::EmSize(8));
+
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##GammaSlider", &m_gamma, 0.02f, 9.f, "%5.3f");
     ImGui::EndDisabled();
     ImGui::SameLine();

@@ -82,8 +82,7 @@ void SpdLogWindow::draw(ImFont *console_font)
     static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
     auto         current_level = m_sink->level();
-    const ImVec2 button_size   = {ImGui::CalcTextSize(ICON_FA_VOLUME_HIGH).x + 2 * ImGui::GetStyle().ItemInnerSpacing.x,
-                                  0.f};
+    const ImVec2 button_size   = IconButtonSize();
     bool         filter_active = m_filter.IsActive(); // save here to avoid flicker
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 4 * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
@@ -99,12 +98,14 @@ void SpdLogWindow::draw(ImFont *console_font)
         ImGui::SameLine(0.f, 0.f);
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        if (ImGui::Button(ICON_FA_DELETE_LEFT, button_size))
+        if (ImGui::IconButton(ICON_FA_DELETE_LEFT))
             m_filter.Clear();
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(button_size.x);
     ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(current_level));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(0.5f * ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y));
     if (ImGui::BeginCombo("##Log level", s_level_icons[int(current_level)].data(), ImGuiComboFlags_NoArrowButton))
     {
         for (int i = 0; i < spdlog::level::n_levels; ++i)
@@ -120,18 +121,19 @@ void SpdLogWindow::draw(ImFont *console_font)
         }
         ImGui::EndCombo();
     }
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::WrappedTooltip("Click to choose the verbosity level.");
     ImGui::SameLine();
-    if (ImGui::Button(ICON_FA_TRASH_CAN, button_size))
+    if (ImGui::IconButton(ICON_FA_TRASH_CAN))
         m_sink->clear_messages();
     ImGui::WrappedTooltip("Clear all messages.");
     ImGui::SameLine();
-    if (ImGui::Button(m_auto_scroll ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN, button_size))
+    if (ImGui::IconButton(m_auto_scroll ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN))
         m_auto_scroll = !m_auto_scroll;
     ImGui::WrappedTooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
     ImGui::SameLine();
-    if (ImGui::Button(m_wrap_text ? ICON_FA_BARS_STAGGERED : ICON_FA_ALIGN_LEFT, button_size))
+    if (ImGui::IconButton(m_wrap_text ? ICON_FA_BARS_STAGGERED : ICON_FA_ALIGN_LEFT))
         m_wrap_text = !m_wrap_text;
     ImGui::WrappedTooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
 
@@ -235,6 +237,26 @@ void SpdLogWindow::set_level_color(spdlog::level::level_enum level, ImU32 color)
 ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
 {
     return m_level_colors.at(static_cast<size_t>(level));
+}
+
+ImVec2 IconSize() { return CalcTextSize(ICON_FA_VOLUME_HIGH); }
+
+ImVec2 IconButtonSize()
+{
+    return {ImGui::GetFrameHeight(), ImGui::GetFrameHeight()};
+    // return {IconSize().x + 2 * ImGui::GetStyle().ItemInnerSpacing.x, 0.f};
+}
+
+bool IconButton(const char *icon)
+{
+    // Remove frame padding and spacing
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
+    // ImGui::PushID(icon);
+    bool ret = ImGui::Button(icon, IconButtonSize());
+    ImGui::PopStyleVar(2);
+    // ImGui::PopID();
+    return ret;
 }
 
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const string &text, float2 align)
