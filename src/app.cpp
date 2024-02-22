@@ -4,9 +4,11 @@
 
 #include "app.h"
 
+#include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
+#include "immapp/browse_to_url.h"
 #include "immapp/immapp.h"
 #include "implot/implot.h"
 #include "implot/implot_internal.h"
@@ -64,7 +66,7 @@ static std::mt19937     g_rand(53);
 static constexpr float  MIN_ZOOM                  = 0.01f;
 static constexpr float  MAX_ZOOM                  = 512.f;
 static constexpr size_t g_max_recent              = 15;
-static bool             g_open_help               = false;
+static bool             g_show_help               = false;
 static bool             g_show_tool_metrics       = false;
 static bool             g_show_tool_debug_log     = false;
 static bool             g_show_tool_id_stack_tool = false;
@@ -112,7 +114,7 @@ static bool             g_show_tool_about         = false;
 //     {{ImGuiKey_C}, "Center image"},
 // };
 
-static const vector<std::pair<string, string>> g_help_strings = {
+static const vector<std::pair<const char *, const char *>> g_help_strings = {
     {"h", "Toggle this help window"},
     {"Left click+drag", "Pan image"},
     {"Scroll mouse/pinch", "Zoom in and out continuously"},
@@ -151,6 +153,14 @@ HDRViewApp::HDRViewApp()
     spdlog::set_level(spdlog::level::trace);
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
     ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l]: %$%v");
+
+#if defined(__APPLE__)
+    // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may look
+    // blurry. Here we force that mac's always use the 2X retina scale factor for fonts. Produces crisp fonts on the
+    // retina screen, at the cost of more jagged fonts on the non-retina screen.
+    m_params.dpiAwareParams.dpiWindowSizeFactor = 1.f;
+    m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
+#endif
 
     m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
     spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
@@ -286,8 +296,8 @@ HDRViewApp::HDRViewApp()
 
     m_params.callbacks.ShowGui = [this]()
     {
-        draw_about_dialog();
-
+        if (g_show_help)
+            draw_about_dialog();
         if (g_show_tool_metrics)
             ImGui::ShowMetricsWindow(&g_show_tool_metrics);
         if (g_show_tool_debug_log)
@@ -518,24 +528,28 @@ void HDRViewApp::draw_menus()
 
     HelloImGui::ShowViewMenu(m_params);
 
-    if (ImGui::BeginMenu("Debug"))
+    if (ImGui::BeginMenu("Help"))
     {
-        ImGui::MenuItem("Metrics/Debugger", NULL, &g_show_tool_metrics);
-        ImGui::MenuItem("Debug Log", NULL, &g_show_tool_debug_log);
-        ImGui::MenuItem("ID Stack Tool", NULL, &g_show_tool_id_stack_tool);
-        ImGui::MenuItem("Style Editor", NULL, &g_show_tool_style_editor);
-        ImGui::MenuItem("About Dear ImGui", NULL, &g_show_tool_about);
+        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_FROM_SQUARE " Open HDRView github repository"))
+            ImmApp::BrowseToUrl("https://github.com/wkjarosz/hdrview");
+        ImGui::MenuItem(ICON_FA_RULER " Metrics/Debugger", nullptr, &g_show_tool_metrics);
+        ImGui::MenuItem(ICON_FA_TERMINAL " Debug Log", nullptr, &g_show_tool_debug_log);
+        ImGui::MenuItem(ICON_FA_DATABASE " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
+        ImGui::MenuItem(ICON_FA_SLIDERS " Style Editor", nullptr, &g_show_tool_style_editor);
+        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
+        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", nullptr, &g_show_help);
         ImGui::EndMenu();
     }
 
-    const char *info_icon = ICON_FA_CIRCLE_INFO;
-    auto        posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x -
-                 ImGui::GetStyle().ItemSpacing.x);
-    if (posX > ImGui::GetCursorPosX())
-        ImGui::SetCursorPosX(posX);
-    // align_cursor(text, 1.f);
-    if (ImGui::MenuItem(info_icon))
-        g_open_help = true;
+    // const char *info_icon = ICON_FA_CIRCLE_INFO;
+    // auto        posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x
+    // -
+    //              ImGui::GetStyle().ItemSpacing.x);
+    // if (posX > ImGui::GetCursorPosX())
+    //     ImGui::SetCursorPosX(posX);
+    // // align_cursor(text, 1.f);
+    // if (ImGui::MenuItem(info_icon))
+    //     g_show_help = true;
 }
 
 void HDRViewApp::save_as(const string &filename) const
@@ -1146,7 +1160,7 @@ void HDRViewApp::draw_pixel_info() const
     draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     if (alpha > 0.0f)
     {
-        ImGui::PushFont(mono_font);
+        ImGui::ScopedFont sf{mono_font};
 
         auto screen_bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
         auto bounds        = screen_bounds.intersect(current_image()->data_window);
@@ -1174,7 +1188,6 @@ void HDRViewApp::draw_pixel_info() const
                 }
             }
         }
-        ImGui::PopFont();
     }
     draw_list->PopClipRect();
 }
@@ -1432,7 +1445,7 @@ void HDRViewApp::process_hotkeys()
     if (ImGui::IsKeyChordPressed(ImGuiKey_O | ImGuiMod_Shortcut))
         open_image();
     else if (ImGui::IsKeyPressed(ImGuiKey_H))
-        g_open_help = !g_open_help;
+        g_show_help = !g_show_help;
 
     auto img = current_image();
     if (!img)
@@ -1486,8 +1499,7 @@ void HDRViewApp::process_hotkeys()
 
 void HDRViewApp::draw_about_dialog()
 {
-    if (g_open_help)
-        ImGui::OpenPopup("About");
+    ImGui::OpenPopup("About");
 
     // Always center this window when appearing
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -1505,8 +1517,8 @@ void HDRViewApp::draw_about_dialog()
 
     ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
 
-    bool about_open = true;
-    if (ImGui::BeginPopupModal("About", &about_open,
+    // bool about_open = true;
+    if (ImGui::BeginPopupModal("About", &g_show_help,
                                ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
                                    ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1527,9 +1539,10 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextColumn();
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
 
-            ImGui::PushFont(font("sans bold", 30));
-            ImGui::Text("HDRView");
-            ImGui::PopFont();
+            {
+                ImGui::ScopedFont sf{font("sans bold", 30)};
+                ImGui::HyperlinkText("https://github.com/wkjarosz/hdrview", "HDRView");
+            }
 
             ImGui::PushFont(font("sans bold", 18));
             ImGui::Text(version());
@@ -1557,20 +1570,20 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTable();
         }
 
-        auto item_and_description = [this, col_width](string name, string desc)
+        auto item_and_description = [this, col_width](const char *name, const char *desc, const char *url = nullptr)
         {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            ImGui::PushFont(font("sans bold", 14));
             ImGui::AlignCursor(name, 1.f);
-            ImGui::Text(name);
+            ImGui::PushFont(font("sans bold", 14));
+            ImGui::HyperlinkText(url, name);
             ImGui::PopFont();
-
             ImGui::TableNextColumn();
+
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - HelloImGui::EmSize());
             ImGui::PushFont(font("sans regular", 14));
-            ImGui::Text(desc);
+            ImGui::TextUnformatted(desc);
             ImGui::PopFont();
         };
 
@@ -1620,28 +1633,38 @@ void HDRViewApp::draw_about_dialog()
                     ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
                     ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
 
-                    item_and_description("colormaps", "Matt Zucker's degree 6 polynomial colormaps");
-                    item_and_description("Dear ImGui",
-                                         "Omar Cornut's immediate-mode graphical user interface for C++.");
+                    item_and_description("colormaps", "Matt Zucker's degree 6 polynomial colormaps.",
+                                         "https://www.shadertoy.com/view/3lBXR3");
+                    item_and_description("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
+                                         "https://github.com/ocornut/imgui");
 #ifdef __EMSCRIPTEN__
-                    item_and_description("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.");
+                    item_and_description("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.",
+                                         "https://github.com/emscripten-core/emscripten");
                     item_and_description("emscripten-browser-file",
                                          "Armchair Software's MIT-licensed header-only C++ library "
-                                         "to open and save files in the browser.");
+                                         "to open and save files in the browser.",
+                                         "https://github.com/Armchair-Software/emscripten-browser-file");
 #endif
-                    item_and_description("{fmt}", "A modern formatting library.");
-                    item_and_description("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.");
+                    item_and_description("{fmt}", "A modern formatting library.", "https://github.com/fmtlib/fmt");
+                    item_and_description("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.",
+                                         "https://github.com/pthom/hello_imgui");
                     item_and_description(
-                        "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.");
-                    item_and_description("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.");
-                    item_and_description("OpenEXR", "High Dynamic-Range (HDR) image file format");
+                        "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.",
+                        "https://github.com/sgorsten/linalg");
+                    item_and_description("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.",
+                                         "https://github.com/mitsuba-renderer/nanogui");
+                    item_and_description("OpenEXR", "High Dynamic-Range (HDR) image file format.",
+                                         "https://github.com/AcademySoftwareFoundation/openexr");
 #ifndef __EMSCRIPTEN__
                     item_and_description("portable-file-dialogs",
-                                         "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.");
+                                         "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
+                                         "https://github.com/samhocevar/portable-file-dialogs");
 #endif
                     item_and_description("stb_image/write/resize",
-                                         "Single-Header libraries for loading/writing/resizing images");
-                    item_and_description("tev", "Some code is adapted from Thomas Müller's tev");
+                                         "Single-Header libraries for loading/writing/resizing images.",
+                                         "https://github.com/nothings/stb");
+                    item_and_description("tev", "Some code is adapted from Thomas Müller's tev.",
+                                         "https://github.com/Tom94/tev");
                     ImGui::EndTable();
                 }
                 ImGui::EndTabItem();
@@ -1649,19 +1672,16 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTabBar();
         }
 
-        // ImGui::SetKeyboardFocusHere();
         if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
             ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Space) ||
-            (!g_open_help && ImGui::IsKeyPressed(ImGuiKey_H)))
+            (!ImGui::IsWindowAppearing() && ImGui::IsKeyPressed(ImGuiKey_H)))
         {
             ImGui::CloseCurrentPopup();
-            // g_dismissed_version = version_combined();
+            g_show_help = false;
         }
-        // ImGui::SetItemDefaultFocus();
 
         ImGui::ScrollWhenDraggingOnVoid(ImVec2(0.0f, -ImGui::GetIO().MouseDelta.y), ImGuiMouseButton_Left);
         ImGui::EndPopup();
-        g_open_help = false;
     }
 }
 

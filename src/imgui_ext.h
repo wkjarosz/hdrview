@@ -12,6 +12,18 @@
 namespace ImGui
 {
 
+class ScopedFont
+{
+public:
+    explicit ScopedFont(ImFont *font) { ImGui::PushFont(font); }
+    ~ScopedFont() { ImGui::PopFont(); }
+
+    ScopedFont(ScopedFont &&)                 = delete;
+    ScopedFont &operator=(ScopedFont &&)      = delete;
+    ScopedFont(const ScopedFont &)            = delete;
+    ScopedFont &operator=(const ScopedFont &) = delete;
+};
+
 class SpdLogWindow
 {
 public:
@@ -115,5 +127,13 @@ inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
 }
 
 void BusyBar(float fraction, const ImVec2 &size_arg = ImVec2(-FLT_MIN, 0), const char *overlay = NULL);
+
+// draw a horizontal line under the last item, raised by a factor of the current font size
+// (e.g. raise=0.5 would strikethrough the previous text)
+void   UnderLine(ImColor c, float raise = 0.05f);
+ImVec4 LinkColor();
+
+void HyperlinkText(const char *href, const char *fmt, ...);
+void TextWithHoverColor(ImVec4 col, const char *fmt, ...);
 
 } // namespace ImGui

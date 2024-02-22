@@ -25,7 +25,7 @@ public:
 
     /*!
      * Create an asynchronous task that can report back on its progress
-     * @param compute The function to execute asyncrhonously
+     * @param compute The function to execute asynchronously
      */
     AsyncTask(TaskFunc compute) :
         m_compute(
@@ -41,7 +41,7 @@ public:
 
     /*!
      * Create an asynchronous task without progress updates
-     * @param compute The function to execute asyncrhonously
+     * @param compute The function to execute asynchronously
      */
     AsyncTask(NoProgressTaskFunc compute) :
         m_compute([compute](AtomicProgress &) { return compute(); }), m_progress(false)

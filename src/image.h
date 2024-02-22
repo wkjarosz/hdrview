@@ -108,14 +108,15 @@ public:
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
 
-    std::unique_ptr<PixelStatistics> statistics;
-    bool                             statistics_dirty = true;
-
     Channel(const std::string &name, int2 size);
 
     Texture         *get_texture();
     PixelStatistics *get_statistics();
     PixelStatistics *get_statistics(float exposure, AxisScale_ x_scale, AxisScale_ y_scale);
+
+private:
+    std::unique_ptr<PixelStatistics> statistics;
+    bool                             statistics_dirty = true;
 };
 
 // A ChannelGroup collects up to 4 channels into a single unit

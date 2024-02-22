@@ -3,6 +3,7 @@
 #include "IconsFontAwesome6.h"
 #include "box.h"
 #include "colorspace.h"
+#include "immapp/browse_to_url.h"
 #include "spdlog/pattern_formatter.h"
 
 #include "imgui_internal.h"
@@ -559,6 +560,112 @@ void BusyBar(float fraction, const ImVec2 &size_arg, const char *overlay)
                                          bb.Max.x - overlay_size.x - style.ItemInnerSpacing.x),
                                  bb.Min.y),
                           bb.Max, overlay, NULL, &overlay_size, ImVec2(0.5f, 0.5f), &bb);
+}
+
+ImVec4 LinkColor()
+{
+    auto col_text = ImGui::GetStyle().Colors[ImGuiCol_Text];
+
+    float h, s, v;
+    ImGui::ColorConvertRGBtoHSV(col_text.x, col_text.y, col_text.z, h, s, v);
+    h = 0.57f;
+    if (v >= 0.8f)
+        v = 0.8f;
+    if (v <= 0.5f)
+        v = 0.5f;
+    if (s <= 0.5f)
+        s = 0.5f;
+
+    ImGui::ColorConvertHSVtoRGB(h, s, v, col_text.x, col_text.y, col_text.z);
+    return col_text;
+}
+
+// from https://github.com/ocornut/imgui/issues/5280#issuecomment-1117155573
+void TextWithHoverColor(ImVec4 col, const char *fmt, ...)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    // Format text
+    va_list args;
+    va_start(args, fmt);
+    auto text_begin = g.TempBuffer.Data;
+    auto text_end   = g.TempBuffer.Data + ImFormatStringV(g.TempBuffer.Data, g.TempBuffer.Size, fmt, args);
+    va_end(args);
+
+    // Layout
+    const ImVec2 text_pos(window->DC.CursorPos.x, window->DC.CursorPos.y + window->DC.CurrLineTextBaseOffset);
+    const ImVec2 text_size = CalcTextSize(text_begin, text_end);
+    ImRect       bb(text_pos.x, text_pos.y, text_pos.x + text_size.x, text_pos.y + text_size.y);
+    ItemSize(text_size, 0.0f);
+    if (!ItemAdd(bb, 0))
+        return;
+
+    // Render
+    bool hovered = IsItemHovered();
+    if (hovered)
+        PushStyleColor(ImGuiCol_Text, col);
+    RenderText(bb.Min, text_begin, text_end, false);
+    if (hovered)
+        PopStyleColor();
+}
+
+void UnderLine(ImColor c, float raise)
+{
+    ImVec2 mi = ImGui::GetItemRectMin();
+    ImVec2 ma = ImGui::GetItemRectMax();
+
+    mi.y = ma.y = ma.y - raise * ImGui::GetFontSize();
+
+    float lineThickness = ImGui::GetFontSize() / 14.5f;
+    ImGui::GetWindowDrawList()->AddLine(mi, ma, c, lineThickness);
+}
+
+// adapted from https://github.com/ocornut/imgui/issues/5280#issuecomment-1117155573
+void HyperlinkText(const char *href, const char *fmt, ...)
+{
+    ImGuiContext &g      = *GImGui;
+    ImGuiWindow  *window = GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    // Format text
+    va_list args;
+    va_start(args, fmt);
+    auto text_begin = g.TempBuffer.Data;
+    auto text_end   = g.TempBuffer.Data + ImFormatStringV(g.TempBuffer.Data, g.TempBuffer.Size, fmt, args);
+    va_end(args);
+
+    // Layout
+    const ImVec2 text_pos(window->DC.CursorPos.x, window->DC.CursorPos.y + window->DC.CurrLineTextBaseOffset);
+    const ImVec2 text_size = CalcTextSize(text_begin, text_end);
+    ImRect       bb(text_pos.x, text_pos.y, text_pos.x + text_size.x, text_pos.y + text_size.y);
+    ItemSize(text_size, 0.0f);
+    if (!ItemAdd(bb, 0))
+        return;
+
+    // Render
+    if (href)
+        PushStyleColor(ImGuiCol_Text, LinkColor());
+    RenderText(bb.Min, text_begin, text_end, false);
+    if (href)
+        PopStyleColor();
+
+    if (href)
+    {
+        if (IsItemHovered())
+        {
+            PushFont(nullptr);
+            SetMouseCursor(ImGuiMouseCursor_Hand);
+            SetTooltip("%s %s", ICON_FA_LINK, href);
+            PopFont();
+            UnderLine(LinkColor());
+        }
+        if (IsItemClicked())
+            ImmApp::BrowseToUrl(href);
+    }
 }
 
 } // namespace ImGui
