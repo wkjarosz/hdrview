@@ -613,6 +613,7 @@ void HDRViewApp::open_image()
     auto handle_upload_file =
         [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
     {
+        spdlog::trace("Loading uploaded file with filename '{}'", filename);
         isviewstream is{buffer};
         hdrview()->load_image(is, filename);
     };
@@ -620,16 +621,13 @@ void HDRViewApp::open_image()
     string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",."));
 
     // open the browser's file selector, and pass the file to the upload handler
+    spdlog::debug("Requesting file from user...");
     emscripten_browser_file::upload(extensions, handle_upload_file, this);
-    HelloImGui::Log(HelloImGui::LogLevel::Debug, "Requesting file from user");
 #else
     string extensions = fmt::format("*.{}", fmt::join(Image::loadable_formats(), " *."));
 
-    load_images(pfd::open_file("Open image", "", {"Image files", extensions}, pfd::opt::multiselect).result());
+    load_images(pfd::open_file("Open image(s)", "", {"Image files", extensions}, pfd::opt::multiselect).result());
 #endif
-
-    if (auto img = current_image())
-        spdlog::trace("Loaded image of size: {}\n", img->size());
 }
 
 void HDRViewApp::load_image(std::istream &is, const string &f)
