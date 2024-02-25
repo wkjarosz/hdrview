@@ -288,7 +288,7 @@ HDRViewApp::HDRViewApp()
                             {
                                 vector<string> arg(count);
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
-                                hdrview()->drop_event(arg);
+                                hdrview()->load_images(arg);
                             });
     };
 #endif
@@ -592,17 +592,18 @@ void HDRViewApp::save_as(const string &filename) const
     }
 }
 
-void HDRViewApp::drop_event(const std::vector<std::string> &filenames)
+void HDRViewApp::load_images(const std::vector<std::string> &filenames)
 {
     for (auto f : filenames)
     {
-        spdlog::trace("dropped file '{}'", f);
         auto formats = Image::loadable_formats();
         if (formats.find(get_extension(f)) != formats.end())
         {
             std::ifstream is{f, std::ios_base::binary};
             load_image(is, f);
         }
+        else
+            spdlog::debug("Skipping unsupported file '{}'", f);
     }
 }
 
@@ -624,13 +625,9 @@ void HDRViewApp::open_image()
 #else
     string extensions = fmt::format("*.{}", fmt::join(Image::loadable_formats(), " *."));
 
-    auto result = pfd::open_file("Open image", "", {"Image files", extensions}).result();
-    if (!result.empty())
-    {
-        std::ifstream is{result.front(), std::ios_base::binary};
-        load_image(is, result.front());
-    }
+    load_images(pfd::open_file("Open image", "", {"Image files", extensions}, pfd::opt::multiselect).result());
 #endif
+
     if (auto img = current_image())
         spdlog::trace("Loaded image of size: {}\n", img->size());
 }

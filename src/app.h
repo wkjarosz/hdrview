@@ -39,7 +39,7 @@ public:
     // loading, saving, and closing images
     //-----------------------------------------------------------------------------
     void open_image();
-    void drop_event(const std::vector<std::string> &filenames);
+    void load_images(const std::vector<std::string> &filenames);
     void load_image(std::istream &is, const string &filename);
     void save_as(const string &filename) const;
     void close_image();
