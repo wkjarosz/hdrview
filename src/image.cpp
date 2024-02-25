@@ -76,19 +76,42 @@ std::set<std::string> Image::savable_formats()
 
 void PixelStats::set_invalid()
 {
-    exposure   = 0.f;
-    minimum    = 0.f;
-    maximum    = 1.f;
-    average    = 0.5f;
-    histogram  = Histogram{};
-    nan_pixels = 0;
-    inf_pixels = 0;
-    valid      = false;
+    exposure           = 0.f;
+    minimum            = 0.f;
+    maximum            = 1.f;
+    average            = 0.5f;
+    hist_x_scale       = AxisScale_Linear;
+    hist_y_scale       = AxisScale_Linear;
+    hist_x_limits      = {0.f, 1.f};
+    hist_y_limits      = {0.f, 1.f};
+    hist_normalization = {0.f, 1.f};
+    nan_pixels         = 0;
+    inf_pixels         = 0;
+    valid              = false;
+}
+
+float2 PixelStats::x_limits(const Settings &settings) const
+{
+    bool LDR_scale = settings.x_scale == AxisScale_Linear || settings.x_scale == AxisScale_SRGB;
+
+    float2 ret;
+    ret[1] = pow(2.f, -settings.exposure);
+    if (minimum < 0.f)
+        ret[0] = -ret[1];
+    else
+    {
+        if (LDR_scale)
+            ret[0] = 0.f;
+        else
+            ret[0] = ret[1] / 10000.f;
+    }
+
+    return ret;
 }
 
 PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale) :
     exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
-    maximum(-std::numeric_limits<float>::infinity()), average(0.f), histogram{x_scale, y_scale}
+    maximum(-std::numeric_limits<float>::infinity()), average(0.f), hist_x_scale{x_scale}, hist_y_scale{y_scale}
 {
     try
     {
@@ -124,55 +147,44 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
         //
         // compute histograms
 
-        bool LDR_scale = histogram.x_scale == AxisScale_Linear || histogram.x_scale == AxisScale_SRGB;
+        bool LDR_scale = x_scale == AxisScale_Linear || x_scale == AxisScale_SRGB;
 
-        histogram.x_limits[1] = pow(2.f, -exposure);
-        if (minimum < 0.f)
-            histogram.x_limits[0] = -histogram.x_limits[1];
-        else
-        {
-            if (LDR_scale)
-                histogram.x_limits[0] = 0.f;
-            else
-                histogram.x_limits[0] = histogram.x_limits[1] / 10000.f;
-        }
+        hist_x_limits = x_limits(Settings{exposure, x_scale, y_scale});
 
-        histogram.normalization[0] =
-            axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
-        histogram.normalization[1] =
-            axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
-            histogram.normalization[0];
+        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : minimum, &x_scale);
+        hist_normalization[1] =
+            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : maximum, &x_scale) - hist_normalization[0];
 
         // compute bin center values
-        for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = histogram.bin_to_value(i + 0.5);
+        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
 
         // accumulate bin counts
-        for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(histogram.value_to_bin(img(i))) += 1;
+        for (int i = 0; i < img.num_elements(); ++i) bin_y(value_to_bin(img(i))) += 1;
 
         // normalize histogram density by dividing bin counts by bin sizes
-        histogram.y_limits[0] = std::numeric_limits<float>::infinity();
-        for (int i = 0; i < Histogram::NUM_BINS; ++i)
+        hist_y_limits[0] = std::numeric_limits<float>::infinity();
+        for (int i = 0; i < NUM_BINS; ++i)
         {
-            float bin_width = histogram.bin_to_value(i + 1) - histogram.bin_to_value(i);
-            histogram.ys[i] /= bin_width;
-            histogram.y_limits[0] = min(histogram.y_limits[0], bin_width);
+            float bin_width = bin_to_value(i + 1) - bin_to_value(i);
+            hist_ys[i] /= bin_width;
+            hist_y_limits[0] = min(hist_y_limits[0], bin_width);
         }
 
         // Compute y limit for each histogram according to its 10th-largest bin
-        auto ys  = histogram.ys; // make a copy, which we partially sort
+        auto ys  = hist_ys; // make a copy, which we partially sort
         auto idx = ys.size() - 10;
         std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
         // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-        histogram.y_limits[0] = histogram.y_scale == AxisScale_Linear ? 0.f : histogram.y_limits[0]; // / 2.f;
+        hist_y_limits[0] = y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
         // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
         if (ys[idx] != 0.f)
-            histogram.y_limits[1] = ys[idx] * 1.15f;
+            hist_y_limits[1] = ys[idx] * 1.15f;
         else if (ys.back() != 0.f)
-            histogram.y_limits[1] = ys.back() * 1.15f;
+            hist_y_limits[1] = ys.back() * 1.15f;
         else
-            histogram.y_limits[1] = 1.f;
+            hist_y_limits[1] = 1.f;
 
-        spdlog::trace("x_limits: {}; y_limits: {}", histogram.x_limits, histogram.y_limits);
+        spdlog::trace("x_limits: {}; y_limits: {}", hist_x_limits, hist_y_limits);
 
         spdlog::trace("finished recomputing pixel statistics in {} seconds", (timer.elapsed() / 1000.f));
 
@@ -241,7 +253,8 @@ bool PixelStats::Settings::match(const Settings &other) const
     // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
     // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
     // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
-    return other.x_scale == x_scale && (other.exposure == exposure || x_scale == AxisScale_SymLog);
+    return (other.x_scale == x_scale && other.exposure == exposure) ||
+           (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh));
     // return other.x_scale == x_scale && other.y_scale == y_scale && other.exposure == exposure;
 }
 
@@ -265,23 +278,16 @@ void Channel::update_stats()
 {
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
+    //
     // We always return the cached stats, but before we do we might update the cache
-    // there are 3 possibilities:
-    // 1) the settings match cached settings: just return the cached stats
-    // 2) the stats need to be updated (the settings don't match, or the async stats are invalid): schedule a new async
-    // computation, and return the cached stats for now 3) the async stats are ready and match the async settings, and
-    // it is ready: transfer ownership to cache and return it 3) the settings match the async settings, but it is not
-    // ready: return the cached stats for now 4) if nothing matches: schedule a new async computation, and return the
-    // cached stats for now
+    //
 
     PixelStats::Settings desired_settings{hdrview()->exposure(), hdrview()->histogram_x_scale(),
                                           hdrview()->histogram_y_scale()};
 
-    spdlog::trace("Comparing cached stats with new settings");
-    if (cached_stats->settings().match(desired_settings))
+    if (cached_stats->settings().match(desired_settings) && cached_stats->valid)
         return;
 
-    spdlog::trace("Comparing async stats with new settings");
     if (!async_settings.match(desired_settings) ||
         (async_stats.ready() && !(async_stats.get() && async_stats.get()->valid)))
     {

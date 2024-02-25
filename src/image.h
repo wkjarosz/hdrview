@@ -52,40 +52,11 @@ inline double axis_scale_inv_xform(double value, void *user_data)
         return value;
 }
 
-struct Histogram
-{
-    static constexpr int NUM_BINS = 256;
-
-    AxisScale_ x_scale       = AxisScale_Linear;
-    AxisScale_ y_scale       = AxisScale_Linear;
-    float2     x_limits      = {0.f, 1.f};
-    float2     y_limits      = {0.f, 1.f};
-    float2     normalization = {0.f, 1.f};
-
-    std::array<float, NUM_BINS> xs{};
-    std::array<float, NUM_BINS> ys{};
-
-    int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
-    float &bin_x(int i) { return xs[clamp_idx(i)]; }
-    float &bin_y(int i) { return ys[clamp_idx(i)]; }
-
-    int value_to_bin(double value) const
-    {
-        return int(std::floor((axis_scale_fwd_xform(value, (void *)&x_scale) - normalization[0]) / normalization[1] *
-                              NUM_BINS));
-    };
-
-    double bin_to_value(double value)
-    {
-        static constexpr float inv_bins = 1.f / NUM_BINS;
-        return axis_scale_inv_xform(normalization[1] * value * inv_bins + normalization[0], (void *)&x_scale);
-    };
-};
-
 struct PixelStats
 {
-    using Ptr  = std::unique_ptr<PixelStats>;
-    using Task = AsyncTask<PixelStats::Ptr>;
+    static constexpr int NUM_BINS = 256;
+    using Ptr                     = std::unique_ptr<PixelStats>;
+    using Task                    = AsyncTask<PixelStats::Ptr>;
 
     struct Settings
     {
@@ -103,13 +74,40 @@ struct PixelStats
     int   inf_pixels = 0;
     bool  valid      = false; ///< Did we finish computing the stats?
 
-    Histogram histogram;
+    // histogram
+    AxisScale_ hist_x_scale       = AxisScale_Linear;
+    AxisScale_ hist_y_scale       = AxisScale_Linear;
+    float2     hist_x_limits      = {0.f, 1.f};
+    float2     hist_y_limits      = {0.f, 1.f};
+    float2     hist_normalization = {0.f, 1.f};
+
+    std::array<float, NUM_BINS> hist_xs{};
+    std::array<float, NUM_BINS> hist_ys{};
 
     PixelStats() = default;
     PixelStats(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
 
     void     set_invalid();
-    Settings settings() const { return {exposure, histogram.x_scale, histogram.y_scale}; }
+    Settings settings() const { return {exposure, hist_x_scale, hist_y_scale}; }
+
+    int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
+    float &bin_x(int i) { return hist_xs[clamp_idx(i)]; }
+    float &bin_y(int i) { return hist_ys[clamp_idx(i)]; }
+
+    int value_to_bin(double value) const
+    {
+        return int(std::floor((axis_scale_fwd_xform(value, (void *)&hist_x_scale) - hist_normalization[0]) /
+                              hist_normalization[1] * NUM_BINS));
+    }
+
+    double bin_to_value(double value)
+    {
+        static constexpr float inv_bins = 1.f / NUM_BINS;
+        return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0],
+                                    (void *)&hist_x_scale);
+    }
+
+    float2 x_limits(const Settings &settings) const;
 };
 
 struct Channel : public Array2Df

@@ -157,12 +157,12 @@ HDRViewApp::HDRViewApp()
     ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l | %t]: %$%v");
 
 #if defined(__EMSCRIPTEN__)
-    unsigned threads = std::thread::hardware_concurrency();
-#else
     unsigned threads = 0;
+#else
+    unsigned threads = std::thread::hardware_concurrency();
 #endif
     spdlog::debug("Setting global OpenEXR thread count to {}", threads);
-    Imf::setGlobalThreadCount(1);
+    Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
 #if defined(__APPLE__)

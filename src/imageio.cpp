@@ -93,14 +93,19 @@ static const stbi_io_callbacks stbi_callbacks = {
 
 static void copy_into_channel(Channel &channel, const float data[], int w, int h, int n, int c, bool linearize)
 {
+    constexpr bool dither = true;
     parallel_for(0, h,
-                 [&channel, n, c, w, &data, linearize](int y)
+                 [&channel, n, c, w, &data, linearize, dither](int y)
                  {
                      for (int x = 0; x < w; ++x)
                      {
+                         int   xmod = x % 256;
+                         int   ymod = y % 256;
+                         float d    = dither ? (dither_matrix256[xmod + ymod * 256] + 0.5f) / 65536.f : 0.5f;
                          int   i    = x + y * w;
                          float v    = data[n * i + c];
-                         channel(i) = linearize ? SRGBToLinear(v) : v;
+                         // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
+                         channel(i) = linearize ? SRGBToLinear(((v * 255.f) + d) / 256.0f) : v;
                      }
                  });
 }

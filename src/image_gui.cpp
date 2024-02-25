@@ -64,18 +64,21 @@ void Image::draw_histogram()
     string      names[4];
     auto        colors = group.colors();
 
-    float2 x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
-    float2 y_limits = x_limits;
+    float2               x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
+    float2               y_limits = x_limits;
+    PixelStats::Settings settings{hdrview()->exposure_live(), hdrview()->histogram_x_scale(),
+                                  hdrview()->histogram_y_scale()};
     for (int c = 0; c < std::min(3, group.num_channels); ++c)
     {
         auto &channel = channels[group.channels[c]];
         if (stats_need_update)
             channel.update_stats();
         stats[c]    = channel.get_stats();
-        y_limits[0] = std::min(y_limits[0], stats[c]->histogram.y_limits[0]);
-        y_limits[1] = std::max(y_limits[1], stats[c]->histogram.y_limits[1]);
-        x_limits[0] = std::min(x_limits[0], stats[c]->histogram.x_limits[0]);
-        x_limits[1] = std::max(x_limits[1], stats[c]->histogram.x_limits[1]);
+        y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[0]);
+        y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[1]);
+        auto xl     = stats[c]->x_limits(settings);
+        x_limits[0] = std::min(x_limits[0], xl[0]);
+        x_limits[1] = std::max(x_limits[1], xl[1]);
         names[c]    = Channel::tail(channel.name);
     }
 
@@ -219,11 +222,11 @@ void Image::draw_histogram()
             ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
             if (bin_type != 0)
-                ImPlot::PlotShaded(names[c].c_str(), stats[c]->histogram.xs.data(), stats[c]->histogram.ys.data(),
-                                   Histogram::NUM_BINS);
+                ImPlot::PlotShaded(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                                   PixelStats::NUM_BINS);
             else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->histogram.xs.data(), stats[c]->histogram.ys.data(),
-                                   Histogram::NUM_BINS, ImPlotStairsFlags_Shaded);
+                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                                   PixelStats::NUM_BINS, ImPlotStairsFlags_Shaded);
             ImPlot::PopStyleColor(2);
         }
         for (int c = 0; c < std::min(3, group.num_channels); ++c)
@@ -231,11 +234,11 @@ void Image::draw_histogram()
             ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
             if (bin_type != 0)
-                ImPlot::PlotLine(names[c].c_str(), stats[c]->histogram.xs.data(), stats[c]->histogram.ys.data(),
-                                 Histogram::NUM_BINS);
+                ImPlot::PlotLine(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                                 PixelStats::NUM_BINS);
             else
-                ImPlot::PlotStairs(names[c].c_str(), stats[c]->histogram.xs.data(), stats[c]->histogram.ys.data(),
-                                   Histogram::NUM_BINS);
+                ImPlot::PlotStairs(names[c].c_str(), stats[c]->hist_xs.data(), stats[c]->hist_ys.data(),
+                                   PixelStats::NUM_BINS);
             ImPlot::PopStyleColor(2);
         }
 
@@ -270,11 +273,11 @@ void Image::draw_histogram()
 
                 float marker_size = 6.f;
 
-                float c_bin = stats[c]->histogram.value_to_bin(color32[c]);
-                float y1    = stats[c]->histogram.bin_y(c_bin);
+                float c_bin = stats[c]->value_to_bin(color32[c]);
+                float y1    = stats[c]->bin_y(c_bin);
 
                 // calculate the height of the up marker so that it sits just above the x axis.
-                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->histogram.bin_x(c_bin), y_limits[0]));
+                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->bin_x(c_bin), y_limits[0]));
                 pixel.y -= 0.66f * marker_size; // roughly the
                 auto  bottom = ImPlot::PixelsToPlot(pixel);
                 float y0     = bottom.y;
