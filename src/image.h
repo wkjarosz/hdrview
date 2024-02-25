@@ -7,6 +7,7 @@
 #pragma once
 
 #include "array2d.h"
+#include "async.h"
 #include "box.h"
 #include "colorspace.h"
 #include "common.h"
@@ -23,7 +24,7 @@ inline double axis_scale_fwd_xform(double value, void *user_data)
     static constexpr double log_eps = -4;        // std::log10(eps);
     static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
 
-    auto x_scale = *(AxisScale_ *)user_data;
+    const auto x_scale = *(AxisScale_ *)user_data;
     if (x_scale == AxisScale_SRGB)
         return LinearToSRGB(value);
     else if (x_scale == AxisScale_SymLog)
@@ -40,7 +41,7 @@ inline double axis_scale_inv_xform(double value, void *user_data)
     static constexpr double log_eps = -4;        // std::log10(eps);
     static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
 
-    auto x_scale = *(AxisScale_ *)user_data;
+    const auto x_scale = *(AxisScale_ *)user_data;
     if (x_scale == AxisScale_SRGB)
         return SRGBToLinear(value);
     else if (x_scale == AxisScale_SymLog)
@@ -81,19 +82,34 @@ struct Histogram
     };
 };
 
-struct PixelStatistics
+struct PixelStats
 {
-    float exposure;
-    float minimum;
-    float maximum;
-    float average;
+    using Ptr  = std::unique_ptr<PixelStats>;
+    using Task = AsyncTask<PixelStats::Ptr>;
+
+    struct Settings
+    {
+        float      exposure;
+        AxisScale_ x_scale, y_scale;
+
+        bool match(const Settings &other) const;
+    };
+
+    float exposure   = 0.f;
+    float minimum    = 0.f;
+    float maximum    = 1.f;
+    float average    = 0.0f;
     int   nan_pixels = 0;
     int   inf_pixels = 0;
+    bool  valid      = false; ///< Did we finish computing the stats?
 
     Histogram histogram;
 
-    PixelStatistics(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
-    bool needs_update(float exposure, AxisScale_ x_scale, AxisScale_ y_scale) const;
+    PixelStats() = default;
+    PixelStats(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
+
+    void     set_invalid();
+    Settings settings() const { return {exposure, histogram.x_scale, histogram.y_scale}; }
 };
 
 struct Channel : public Array2Df
@@ -108,15 +124,19 @@ public:
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
 
+    Channel() = delete;
     Channel(const std::string &name, int2 size);
 
-    Texture         *get_texture();
-    PixelStatistics *get_statistics();
-    PixelStatistics *get_statistics(float exposure, AxisScale_ x_scale, AxisScale_ y_scale);
+    Texture *get_texture();
+
+    PixelStats *get_stats();
+    void        update_stats();
 
 private:
-    std::unique_ptr<PixelStatistics> statistics;
-    bool                             statistics_dirty = true;
+    PixelStats::Ptr      cached_stats;
+    PixelStats::Task     async_stats;
+    PixelStats::Settings async_settings{};
+    // bool                 stats_dirty = true;
 };
 
 // A ChannelGroup collects up to 4 channels into a single unit
@@ -195,6 +215,8 @@ public:
     void                       build_layers_and_groups();
     void                       finalize();
     std::string                to_string() const;
+    void                       update_selected_group_stats();
+    void                       update_all_stats();
 
     /**
         Load the an image from the input stream.
@@ -231,7 +253,7 @@ public:
     bool save(const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
               bool dither = true) const;
 
-    void draw_histogram(float exposure);
+    void draw_histogram();
     void draw_channels_list();
     void draw_info();
 };

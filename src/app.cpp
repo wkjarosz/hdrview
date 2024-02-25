@@ -24,6 +24,8 @@
 #include "timer.h"
 #include "version.h"
 
+#include <ImfThreading.h>
+
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
@@ -141,7 +143,7 @@ static const vector<std::pair<const char *, const char *>> g_help_strings = {
 //         tooltip(fmt::format("{}.\nKey: {}", t->second, t->first).c_str(), wrap_width);
 // }
 
-HDRViewApp *g_app()
+HDRViewApp *hdrview()
 {
     static HDRViewApp viewer;
     return &viewer;
@@ -152,12 +154,21 @@ HDRViewApp::HDRViewApp()
     spdlog::set_pattern("%^[%H:%M:%S | %5l]: %$%v");
     spdlog::set_level(spdlog::level::trace);
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
-    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l]: %$%v");
+    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l | %t]: %$%v");
+
+#if defined(__EMSCRIPTEN__)
+    unsigned threads = std::thread::hardware_concurrency();
+#else
+    unsigned threads = 0;
+#endif
+    spdlog::debug("Setting global OpenEXR thread count to {}", threads);
+    Imf::setGlobalThreadCount(1);
+    spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
 #if defined(__APPLE__)
     // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may look
-    // blurry. Here we force that mac's always use the 2X retina scale factor for fonts. Produces crisp fonts on the
-    // retina screen, at the cost of more jagged fonts on the non-retina screen.
+    // blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp fonts on the
+    // retina screen, at the cost of more jagged fonts on screen set to a non-retina resolution.
     m_params.dpiAwareParams.dpiWindowSizeFactor = 1.f;
     m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
@@ -277,7 +288,7 @@ HDRViewApp::HDRViewApp()
                             {
                                 vector<string> arg(count);
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
-                                g_app()->drop_event(arg);
+                                hdrview()->drop_event(arg);
                             });
     };
 #endif
@@ -602,7 +613,7 @@ void HDRViewApp::open_image()
         [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
     {
         isviewstream is{buffer};
-        g_app()->load_image(is, filename);
+        hdrview()->load_image(is, filename);
     };
 
     string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",."));
@@ -773,7 +784,7 @@ void HDRViewApp::draw_info_window()
 void HDRViewApp::draw_histogram_window()
 {
     if (auto img = current_image())
-        img->draw_histogram(m_exposure);
+        img->draw_histogram();
 }
 
 void HDRViewApp::draw_file_window()
@@ -1253,10 +1264,10 @@ void HDRViewApp::draw_image() const
                           std::generate_canonical<float, 10>(g_rand) * 255);
 
         m_shader->set_uniform("randomness", randomness);
-        m_shader->set_uniform("gain", powf(2.0f, m_exposure));
+        m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
         m_shader->set_uniform("gamma", m_gamma);
         m_shader->set_uniform("sRGB", m_sRGB);
-        m_shader->set_uniform("clamp_to_LDR", !m_hdr);
+        m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
         m_shader->set_uniform("do_dither", m_dither);
 
         m_shader->set_uniform("primary_pos", image_position(current_image()));
@@ -1285,38 +1296,57 @@ void HDRViewApp::draw_image() const
         m_shader->end();
     }
 }
-void HDRViewApp::draw_top_toolbar()
+
+void HDRViewApp::reset_tonemapping()
 {
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("EV:");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
-    ImGui::SliderFloat("##ExposureSlider", &m_exposure, -9.f, 9.f, "%5.2f");
+    m_exposure_live = m_exposure = 0.0f;
+    m_gamma_live = m_gamma = 2.2f;
+    m_sRGB                 = true;
+    if (auto img = current_image())
+        img->update_selected_group_stats();
+}
 
-    ImGui::SameLine();
-
-    auto img = current_image();
-
-    ImGui::BeginDisabled(!img);
-    if (ImGui::IconButton(ICON_FA_WAND_MAGIC_SPARKLES "##NormalizeExposure"))
+void HDRViewApp::normalize_exposure()
+{
+    if (auto img = current_image())
     {
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
         for (int c = 0; c < group.num_channels && c < 3; ++c)
-            m = std::max(m, img->channels[group.channels[c]].get_statistics()->maximum);
+            m = std::max(m, img->channels[group.channels[c]].get_stats()->maximum);
 
-        m_exposure = log2(1.f / m);
+        m_exposure_live = m_exposure = log2(1.f / m);
+        img->update_selected_group_stats();
     }
+}
+
+void HDRViewApp::draw_top_toolbar()
+{
+    auto img = current_image();
+
+    ImGui::BeginDisabled(!img);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("EV:");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
+    if (ImGui::IsItemDeactivatedAfterEdit())
+    {
+        m_exposure = m_exposure_live;
+        img->update_selected_group_stats();
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::IconButton(ICON_FA_WAND_MAGIC_SPARKLES "##NormalizeExposure"))
+        normalize_exposure();
     ImGui::EndDisabled();
 
     ImGui::SameLine();
 
     if (ImGui::IconButton(ICON_FA_ARROWS_ROTATE "##ResetTonemapping"))
-    {
-        m_exposure = 0.f;
-        m_gamma    = 2.2f;
-        m_sRGB     = true;
-    }
+        reset_tonemapping();
     ImGui::SameLine();
 
     ImGui::Checkbox("sRGB", &m_sRGB);
@@ -1329,13 +1359,18 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
-    ImGui::SliderFloat("##GammaSlider", &m_gamma, 0.02f, 9.f, "%5.3f");
+    ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "%5.3f");
+    if (ImGui::IsItemDeactivatedAfterEdit())
+    {
+        m_gamma = m_gamma_live;
+        img->update_selected_group_stats();
+    }
     ImGui::EndDisabled();
     ImGui::SameLine();
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)
     {
-        ImGui::Checkbox("HDR", &m_hdr);
+        ImGui::Checkbox("Clamp to LDR", &m_clamp_to_LDR);
         ImGui::SameLine();
     }
 
@@ -1486,9 +1521,15 @@ void HDRViewApp::process_hotkeys()
     else if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
         zoom_in();
     else if (ImGui::IsKeyPressed(ImGuiKey_E))
-        m_exposure += ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.25f : -0.25f;
+    {
+        m_exposure_live = m_exposure += ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.25f : -0.25f;
+        img->update_selected_group_stats();
+    }
     else if (ImGui::IsKeyPressed(ImGuiKey_G))
-        m_gamma = std::max(0.02f, m_gamma + (ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.02f : -0.02f));
+    {
+        m_gamma_live = m_gamma = std::max(0.02f, m_gamma + (ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.02f : -0.02f));
+        img->update_selected_group_stats();
+    }
     else if (ImGui::IsKeyPressed(ImGuiKey_F))
         fit();
     else if (ImGui::IsKeyPressed(ImGuiKey_C))
@@ -1730,7 +1771,7 @@ Options:
     }
     try
     {
-        g_app()->run();
+        hdrview()->run();
     }
     catch (const std::exception &e)
     {

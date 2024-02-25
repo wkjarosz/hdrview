@@ -170,7 +170,6 @@ static vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
 
 static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 {
-    Imf::setGlobalThreadCount(std::thread::hardware_concurrency());
     Imf::MultiPartInputFile infile{is};
 
     if (infile.parts() <= 0)

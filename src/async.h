@@ -14,7 +14,9 @@ template <typename T>
 class AsyncTask
 {
 public:
-#if FORCE_SERIAL
+#if defined(FORCE_SERIAL) or defined(__EMSCRIPTEN__)
+    // In emscripten, even if compiled with pthread support, we shouldn't use these simple async-based tasks since the
+    // async would block on the mail thread, which is a no-no.
     static const auto policy = std::launch::deferred;
 #else
     static const auto policy = std::launch::async;

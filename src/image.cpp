@@ -5,6 +5,7 @@
 //
 
 #include "image.h"
+#include "app.h"
 #include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
@@ -26,7 +27,7 @@ using namespace std;
 // static methods and member definitions
 //
 
-static std::unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
+static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
 
 pair<string, string> Channel::split(const string &channel)
 {
@@ -73,100 +74,115 @@ std::set<std::string> Image::savable_formats()
 // end static methods
 //
 
-PixelStatistics::PixelStatistics(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale) :
+void PixelStats::set_invalid()
+{
+    exposure   = 0.f;
+    minimum    = 0.f;
+    maximum    = 1.f;
+    average    = 0.5f;
+    histogram  = Histogram{};
+    nan_pixels = 0;
+    inf_pixels = 0;
+    valid      = false;
+}
+
+PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale) :
     exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
     maximum(-std::numeric_limits<float>::infinity()), average(0.f), histogram{x_scale, y_scale}
 {
-    spdlog::trace("recomputing pixel statistics");
-    Timer timer;
-
-    //
-    // compute pixel summary statistics
-    int    valid_pixels = 0;
-    double accum        = 0.0; // reduce numerical precision issues by accumulating in double
-    for (int i = 0; i < img.num_elements(); ++i)
+    try
     {
-        float val = img(i);
+        spdlog::trace("Computing pixel statistics");
+        Timer timer;
 
-        if (isnan(val))
-            ++nan_pixels;
-        else if (isinf(val))
-            ++inf_pixels;
+        //
+        // compute pixel summary statistics
+        int    valid_pixels = 0;
+        double accum        = 0.0; // reduce numerical precision issues by accumulating in double
+        for (int i = 0; i < img.num_elements(); ++i)
+        {
+            float val = img(i);
+
+            if (isnan(val))
+                ++nan_pixels;
+            else if (isinf(val))
+                ++inf_pixels;
+            else
+            {
+                ++valid_pixels;
+                maximum = std::max(maximum, val);
+                minimum = std::min(minimum, val);
+                accum += val;
+            }
+        }
+        average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+
+        spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
+        spdlog::trace("  finished in {} seconds", (timer.elapsed() / 1000.f));
+        //
+
+        //
+        // compute histograms
+
+        bool LDR_scale = histogram.x_scale == AxisScale_Linear || histogram.x_scale == AxisScale_SRGB;
+
+        histogram.x_limits[1] = pow(2.f, -exposure);
+        if (minimum < 0.f)
+            histogram.x_limits[0] = -histogram.x_limits[1];
         else
         {
-            ++valid_pixels;
-            maximum = std::max(maximum, val);
-            minimum = std::min(minimum, val);
-            accum += val;
+            if (LDR_scale)
+                histogram.x_limits[0] = 0.f;
+            else
+                histogram.x_limits[0] = histogram.x_limits[1] / 10000.f;
         }
-    }
-    average = valid_pixels ? float(accum / valid_pixels) : 0.f;
 
-    spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
-    spdlog::trace("  finished in {} seconds", (timer.elapsed() / 1000.f));
-    //
+        histogram.normalization[0] =
+            axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
+        histogram.normalization[1] =
+            axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
+            histogram.normalization[0];
 
-    //
-    // compute histograms
+        // compute bin center values
+        for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = histogram.bin_to_value(i + 0.5);
 
-    bool LDR_scale = histogram.x_scale == AxisScale_Linear || histogram.x_scale == AxisScale_SRGB;
+        // accumulate bin counts
+        for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(histogram.value_to_bin(img(i))) += 1;
 
-    histogram.x_limits[1] = pow(2.f, -exposure);
-    if (minimum < 0.f)
-        histogram.x_limits[0] = -histogram.x_limits[1];
-    else
-    {
-        if (LDR_scale)
-            histogram.x_limits[0] = 0.f;
+        // normalize histogram density by dividing bin counts by bin sizes
+        histogram.y_limits[0] = std::numeric_limits<float>::infinity();
+        for (int i = 0; i < Histogram::NUM_BINS; ++i)
+        {
+            float bin_width = histogram.bin_to_value(i + 1) - histogram.bin_to_value(i);
+            histogram.ys[i] /= bin_width;
+            histogram.y_limits[0] = min(histogram.y_limits[0], bin_width);
+        }
+
+        // Compute y limit for each histogram according to its 10th-largest bin
+        auto ys  = histogram.ys; // make a copy, which we partially sort
+        auto idx = ys.size() - 10;
+        std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
+        // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
+        histogram.y_limits[0] = histogram.y_scale == AxisScale_Linear ? 0.f : histogram.y_limits[0]; // / 2.f;
+        // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
+        if (ys[idx] != 0.f)
+            histogram.y_limits[1] = ys[idx] * 1.15f;
+        else if (ys.back() != 0.f)
+            histogram.y_limits[1] = ys.back() * 1.15f;
         else
-            histogram.x_limits[0] = histogram.x_limits[1] / 10000.f;
+            histogram.y_limits[1] = 1.f;
+
+        spdlog::trace("x_limits: {}; y_limits: {}", histogram.x_limits, histogram.y_limits);
+
+        spdlog::trace("finished recomputing pixel statistics in {} seconds", (timer.elapsed() / 1000.f));
+
+        valid = true;
     }
-
-    histogram.normalization[0] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[0] : minimum, &histogram.x_scale);
-    histogram.normalization[1] = axis_scale_fwd_xform(LDR_scale ? histogram.x_limits[1] : maximum, &histogram.x_scale) -
-                                 histogram.normalization[0];
-
-    // compute bin center values
-    for (int i = 0; i < Histogram::NUM_BINS; ++i) histogram.xs[i] = histogram.bin_to_value(i + 0.5);
-
-    // accumulate bin counts
-    for (int i = 0; i < img.num_elements(); ++i) histogram.bin_y(histogram.value_to_bin(img(i))) += 1;
-
-    // normalize histogram density by dividing bin counts by bin sizes
-    histogram.y_limits[0] = std::numeric_limits<float>::infinity();
-    for (int i = 0; i < Histogram::NUM_BINS; ++i)
+    catch (const std::exception &e)
     {
-        float bin_width = histogram.bin_to_value(i + 1) - histogram.bin_to_value(i);
-        histogram.ys[i] /= bin_width;
-        histogram.y_limits[0] = min(histogram.y_limits[0], bin_width);
+        spdlog::trace("Interrupting pixel stats computation");
+        set_invalid();
     }
-
-    // Compute y limit for each histogram according to its 10th-largest bin
-    auto ys  = histogram.ys; // make a copy, which we partially sort
-    auto idx = ys.size() - 10;
-    std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
-    // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-    histogram.y_limits[0] = histogram.y_scale == AxisScale_Linear ? 0.f : histogram.y_limits[0]; // / 2.f;
-    // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
-    if (ys[idx] != 0.f)
-        histogram.y_limits[1] = ys[idx] * 1.15f;
-    else if (ys.back() != 0.f)
-        histogram.y_limits[1] = ys.back() * 1.15f;
-    else
-        histogram.y_limits[1] = 1.f;
-
-    spdlog::trace("x_limits: {}; y_limits: {}", histogram.x_limits, histogram.y_limits);
-
-    spdlog::trace("finished recomputing pixel statistics in {} seconds", (timer.elapsed() / 1000.f));
-}
-
-bool PixelStatistics::needs_update(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale) const
-{
-    // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
-    // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
-    // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
-    // return new_x_scale != histogram.x_scale || (new_exposure != exposure && histogram.x_scale != AxisScale_SymLog);
-    return new_x_scale != histogram.x_scale || new_y_scale != histogram.y_scale || new_exposure != exposure;
 }
 
 float4x4 ChannelGroup::colors() const
@@ -195,7 +211,11 @@ float4x4 ChannelGroup::colors() const
     }
 }
 
-Channel::Channel(const std::string &name, int2 size) : Array2Df(size), name(name) {}
+Channel::Channel(const std::string &name, int2 size) :
+    Array2Df(size), name(name), cached_stats(make_unique<PixelStats>()),
+    async_stats([]() { return make_unique<PixelStats>(); })
+{
+}
 
 Texture *Channel::get_texture()
 {
@@ -214,27 +234,103 @@ Texture *Channel::get_texture()
     return texture.get();
 }
 
-PixelStatistics *Channel::get_statistics()
+bool PixelStats::Settings::match(const Settings &other) const
 {
-    if (!statistics || statistics_dirty ||
-        statistics->needs_update(statistics->exposure, statistics->histogram.x_scale, statistics->histogram.y_scale))
-    {
-        statistics       = make_unique<PixelStatistics>(*this, 1.f, AxisScale_Linear, AxisScale_Linear);
-        statistics_dirty = false;
-    }
-
-    return statistics.get();
+    spdlog::trace("checking match:\n\tother [{};{};{}];\n\tthis [{};{};{}]", other.exposure, other.x_scale,
+                  other.y_scale, exposure, x_scale, y_scale);
+    // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
+    // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
+    // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
+    return other.x_scale == x_scale && (other.exposure == exposure || x_scale == AxisScale_SymLog);
+    // return other.x_scale == x_scale && other.y_scale == y_scale && other.exposure == exposure;
 }
 
-PixelStatistics *Channel::get_statistics(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale)
+PixelStats *Channel::get_stats()
 {
-    if (!statistics || statistics_dirty || statistics->needs_update(new_exposure, new_x_scale, new_y_scale))
+    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
+
+    // We always return the cached stats, but before we do we might update the cache from the async stats
+
+    if (async_stats.ready() && async_stats.get() && async_stats.get()->valid)
     {
-        statistics       = make_unique<PixelStatistics>(*this, new_exposure, new_x_scale, new_y_scale);
-        statistics_dirty = false;
+        // transfer ownership to update cached_stats
+        spdlog::trace("Transferring ownership of pixel stats");
+        cached_stats = std::move(async_stats.get());
     }
 
-    return statistics.get();
+    return cached_stats.get();
+}
+
+void Channel::update_stats()
+{
+    MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
+
+    // We always return the cached stats, but before we do we might update the cache
+    // there are 3 possibilities:
+    // 1) the settings match cached settings: just return the cached stats
+    // 2) the stats need to be updated (the settings don't match, or the async stats are invalid): schedule a new async
+    // computation, and return the cached stats for now 3) the async stats are ready and match the async settings, and
+    // it is ready: transfer ownership to cache and return it 3) the settings match the async settings, but it is not
+    // ready: return the cached stats for now 4) if nothing matches: schedule a new async computation, and return the
+    // cached stats for now
+
+    PixelStats::Settings desired_settings{hdrview()->exposure(), hdrview()->histogram_x_scale(),
+                                          hdrview()->histogram_y_scale()};
+
+    spdlog::trace("Comparing cached stats with new settings");
+    if (cached_stats->settings().match(desired_settings))
+        return;
+
+    spdlog::trace("Comparing async stats with new settings");
+    if (!async_settings.match(desired_settings) ||
+        (async_stats.ready() && !(async_stats.get() && async_stats.get()->valid)))
+    {
+        spdlog::trace("Scheduling new stats computation");
+        spdlog::trace("  match: {}; ready: {}; valid: {}; ", async_settings.match(desired_settings),
+                      async_stats.ready(), (async_stats.get() && async_stats.get()->valid));
+        async_stats = PixelStats::Task(
+            [this, desired_settings](void)
+            {
+                return make_unique<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
+                                               desired_settings.y_scale);
+            });
+        async_settings = desired_settings;
+        async_stats.compute();
+        return;
+    }
+
+    if (async_stats.ready() && (async_stats.get() && async_stats.get()->valid))
+    {
+        // replace cache with newer async stats
+        spdlog::trace("Transferring ownership of pixel stats");
+        cached_stats = std::move(async_stats.get());
+
+        spdlog::trace("Comparing recently transferred stats with new settings");
+        // if these newer stats are still outdated, schedule a new async computation
+        if (!cached_stats->settings().match(desired_settings))
+        {
+            spdlog::trace("Scheduling new stats computation");
+            async_stats = PixelStats::Task(
+                [this, desired_settings](void)
+                {
+                    return make_unique<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
+                                                   desired_settings.y_scale);
+                });
+            async_settings = desired_settings;
+            async_stats.compute();
+        }
+    }
+}
+
+void Image::update_all_stats()
+{
+    for (auto &c : channels) c.update_stats();
+}
+
+void Image::update_selected_group_stats()
+{
+    for (int c = 0; c < groups[selected_group].num_channels; ++c)
+        channels[groups[selected_group].channels[c]].update_stats();
 }
 
 void Image::set_null_texture(Shader &shader, const string &target)
@@ -457,6 +553,8 @@ void Image::finalize()
                 "Number of channels in Part '{}' doesn't match number of channels in its layers: {} vs. {}.", partname,
                 channels.size(), num_channels)};
     }
+
+    update_all_stats();
 }
 
 string Image::to_string() const

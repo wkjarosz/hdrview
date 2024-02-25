@@ -128,80 +128,6 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-CPMAddPackage("gh:sgorsten/linalg@2.2")
-if(linalg_ADDED)
-  message(STATUS "linalg library added")
-  add_library(linalg INTERFACE IMPORTED)
-  target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
-endif()
-
-CPMAddPackage("gh:fmtlib/fmt#10.1.1")
-if(fmt_ADDED)
-  message(STATUS "fmt library added")
-endif()
-
-CPMAddPackage(
-  NAME spdlog
-  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.zip
-  OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
-)
-if(spdlog_ADDED)
-  message(STATUS "spdlog library added")
-endif()
-
-CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
-if(stb_ADDED)
-  message(STATUS "stb library added")
-  add_library(stb INTERFACE IMPORTED)
-  target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
-endif()
-
-CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#2ff8f8f791c0e7177b40e621ee3f758e03b31bf5")
-if(emscripten-browser-file_ADDED)
-  message(STATUS "emscripten-browser-file library added")
-  add_library(emscripten-browser-file INTERFACE IMPORTED)
-  target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
-endif()
-
-# CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
-# if(portable-file-dialogs_ADDED) message(STATUS "portable-file-dialogs library added")
-# add_library(portable-file-dialogs INTERFACE IMPORTED) target_include_directories(portable-file-dialogs INTERFACE
-# "${portable-file-dialogs_SOURCE_DIR}") endif()
-
-CPMAddPackage(
-  NAME Imath
-  VERSION 3.1.6 # the git repo is incredibly large, so we download the archived include directory
-  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
-  OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
-)
-
-set(OPENEXR_OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF"
-                    "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
-)
-
-if(EMSCRIPTEN)
-  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
-else()
-  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING ON")
-endif()
-
-CPMAddPackage(
-  NAME openexr
-  GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
-  GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS ${OPENEXR_OPTIONS}
-)
-
-# CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
-# library added")
-
-# # implot has no CMake support, so we create our own target set( implot STATIC ${implot_SOURCE_DIR}/implot.h #
-# ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) #
-# target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
-# 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
-# ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
-
 if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_USE_GLFW_METAL ON)
 
@@ -261,7 +187,9 @@ foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
   )
 endforeach()
 
-# CPMAddPackage("gh:pthom/imgui_bundle#6d6cfe8d68c0a57f62149e6ed85e8d2b905bca23")
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD ON)
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
+
 CPMAddPackage(
   NAME imgui_bundle
   GITHUB_REPOSITORY pthom/imgui_bundle
@@ -274,13 +202,94 @@ CPMAddPackage(
           "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
           # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
           "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
+          # "HELLOIMGUI_EMSCRIPTEN_PTHREAD ON" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
+          # "IMGUI_BUNDLE_BUILD_DEMOS ON"
 )
 if(imgui_bundle_ADDED)
   message(STATUS "imgui_bundle library added")
+  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    add_compile_options(-pthread)
+  endif()
 endif()
 
 # CPMAddPackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee") if(hello_imgui_ADDED) message(STATUS
 # "hello_imgui library added") endif()
+
+CPMAddPackage("gh:sgorsten/linalg@2.2")
+if(linalg_ADDED)
+  message(STATUS "linalg library added")
+  add_library(linalg INTERFACE IMPORTED)
+  target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
+endif()
+
+CPMAddPackage("gh:fmtlib/fmt#10.1.1")
+if(fmt_ADDED)
+  message(STATUS "fmt library added")
+endif()
+
+CPMAddPackage(
+  NAME spdlog
+  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.zip
+  OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
+          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+)
+if(spdlog_ADDED)
+  message(STATUS "spdlog library added")
+endif()
+
+CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+if(stb_ADDED)
+  message(STATUS "stb library added")
+  add_library(stb INTERFACE IMPORTED)
+  target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
+endif()
+
+CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#2ff8f8f791c0e7177b40e621ee3f758e03b31bf5")
+if(emscripten-browser-file_ADDED)
+  message(STATUS "emscripten-browser-file library added")
+  add_library(emscripten-browser-file INTERFACE IMPORTED)
+  target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
+endif()
+
+# # this is part of Dear ImGui Bundle, so no need to add it separately
+# CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+# if(portable-file-dialogs_ADDED) message(STATUS "portable-file-dialogs library added")
+# add_library(portable-file-dialogs INTERFACE IMPORTED) target_include_directories(portable-file-dialogs INTERFACE
+# "${portable-file-dialogs_SOURCE_DIR}") endif()
+
+CPMAddPackage(
+  NAME Imath
+  VERSION 3.1.6 # the git repo is incredibly large, so we download the archived include directory
+  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
+  OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+)
+
+set(OPENEXR_OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF"
+                    "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+)
+
+if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
+else()
+  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING ON")
+endif()
+
+CPMAddPackage(
+  NAME openexr
+  GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
+  GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
+  OPTIONS ${OPENEXR_OPTIONS}
+)
+
+# # this is part of Dear ImGui Bundle, so no need to add it separately
+# CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
+# library added")
+
+# # implot has no CMake support, so we create our own target set( implot STATIC ${implot_SOURCE_DIR}/implot.h #
+# ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) #
+# target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
+# 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
+# ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -369,7 +378,11 @@ if(EMSCRIPTEN)
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
   )
-  hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 240)
+  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    target_link_options(HDRView PRIVATE -pthread)
+    target_link_options(HDRView PRIVATE -sPTHREAD_POOL_SIZE=2)
+  endif()
+  hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 300)
 else()
   # target_link_libraries(HDRView PRIVATE portable-file-dialogs)
 endif()

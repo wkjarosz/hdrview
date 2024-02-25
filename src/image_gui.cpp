@@ -22,12 +22,11 @@
 
 using namespace std;
 
-void Image::draw_histogram(float exposure)
+void Image::draw_histogram()
 {
-    static ImPlotScale y_axis    = ImPlotScale_Linear;
-    static AxisScale_  x_axis    = AxisScale_Asinh;
-    static int         bin_type  = 1;
-    static ImPlotCond  plot_cond = ImPlotCond_Always;
+    static int        bin_type          = 1;
+    static ImPlotCond plot_cond         = ImPlotCond_Always;
+    bool              stats_need_update = false;
     {
         const ImVec2 button_size = ImGui::IconButtonSize();
         float        combo_width =
@@ -38,14 +37,15 @@ void Image::draw_histogram(float exposure)
         ImGui::Text("Y:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##Y-axis type", &y_axis, "Linear\0Log\0\0");
+        ImGui::Combo("##Y-axis type", &hdrview()->histogram_y_scale(), "Linear\0Log\0\0");
         ImGui::SameLine();
 
         ImGui::AlignTextToFramePadding();
         ImGui::Text("X:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##X-axis type", &x_axis, "Linear\0sRGB\0Asinh\0\0");
+        if (ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0"))
+            stats_need_update = true;
 
         ImGui::SameLine();
 
@@ -57,24 +57,26 @@ void Image::draw_histogram(float exposure)
                                   : "Click to auto-fit histogram axes based on the exposure.");
     }
 
-    auto             hovered_pixel = int2{g_app()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
-    float4           color32       = g_app()->image_pixel(hovered_pixel);
-    auto            &group         = groups[selected_group];
-    PixelStatistics *stats[4]      = {nullptr, nullptr, nullptr, nullptr};
-    string           names[4];
-    auto             colors = group.colors();
+    auto        hovered_pixel = int2{hdrview()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
+    float4      color32       = hdrview()->image_pixel(hovered_pixel);
+    auto       &group         = groups[selected_group];
+    PixelStats *stats[4]      = {nullptr, nullptr, nullptr, nullptr};
+    string      names[4];
+    auto        colors = group.colors();
 
     float2 x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
     float2 y_limits = x_limits;
     for (int c = 0; c < std::min(3, group.num_channels); ++c)
     {
         auto &channel = channels[group.channels[c]];
-        stats[c]      = channel.get_statistics(exposure, x_axis, y_axis);
-        y_limits[0]   = std::min(y_limits[0], stats[c]->histogram.y_limits[0]);
-        y_limits[1]   = std::max(y_limits[1], stats[c]->histogram.y_limits[1]);
-        x_limits[0]   = std::min(x_limits[0], stats[c]->histogram.x_limits[0]);
-        x_limits[1]   = std::max(x_limits[1], stats[c]->histogram.x_limits[1]);
-        names[c]      = Channel::tail(channel.name);
+        if (stats_need_update)
+            channel.update_stats();
+        stats[c]    = channel.get_stats();
+        y_limits[0] = std::min(y_limits[0], stats[c]->histogram.y_limits[0]);
+        y_limits[1] = std::max(y_limits[1], stats[c]->histogram.y_limits[1]);
+        x_limits[0] = std::min(x_limits[0], stats[c]->histogram.x_limits[0]);
+        x_limits[1] = std::max(x_limits[1], stats[c]->histogram.x_limits[1]);
+        names[c]    = Channel::tail(channel.name);
     }
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
@@ -83,7 +85,8 @@ void Image::draw_histogram(float exposure)
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
         ImPlot::SetupAxis(ImAxis_Y1, nullptr, ImPlotAxisFlags_NoTickLabels);
-        ImPlot::SetupAxisScale(ImAxis_Y1, y_axis == AxisScale_Linear ? ImPlotScale_Linear : ImPlotScale_Log10);
+        ImPlot::SetupAxisScale(ImAxis_Y1, hdrview()->histogram_y_scale() == AxisScale_Linear ? ImPlotScale_Linear
+                                                                                             : ImPlotScale_Log10);
 
         // ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
 
@@ -111,9 +114,9 @@ void Image::draw_histogram(float exposure)
             auto calc_pixel = [x_limits, avail_width](float plt)
             {
                 float scaleToPixels = avail_width / (x_limits[1] - x_limits[0]);
-                float scaleMin      = axis_scale_fwd_xform(x_limits[0], &x_axis);
-                float scaleMax      = axis_scale_fwd_xform(x_limits[1], &x_axis);
-                float s             = axis_scale_fwd_xform(plt, &x_axis);
+                float scaleMin      = axis_scale_fwd_xform(x_limits[0], &hdrview()->histogram_x_scale());
+                float scaleMax      = axis_scale_fwd_xform(x_limits[1], &hdrview()->histogram_x_scale());
+                float s             = axis_scale_fwd_xform(plt, &hdrview()->histogram_x_scale());
                 float t             = (s - scaleMin) / (scaleMax - scaleMin);
                 plt                 = lerp(x_limits[0], x_limits[1], t);
 
@@ -170,13 +173,14 @@ void Image::draw_histogram(float exposure)
         // ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
 
         ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
-        switch (x_axis)
+        switch (hdrview()->histogram_x_scale())
         {
         case AxisScale_Linear: ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear); break;
         case AxisScale_SRGB:
         {
             auto ticks = powers_of_10_ticks();
-            ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform, &x_axis);
+            ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform,
+                                   &hdrview()->histogram_x_scale());
             ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), ticks.size());
             break;
         }
@@ -192,7 +196,8 @@ void Image::draw_histogram(float exposure)
             if (!crosses_zero)
                 ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
 
-            ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform, &x_axis);
+            ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform,
+                                   &hdrview()->histogram_x_scale());
 
             if (crosses_zero) // crosses zero
             {
@@ -256,7 +261,7 @@ void Image::draw_histogram(float exposure)
             ImPlot::PopStyleColor(2);
         }
 
-        if (contains(hovered_pixel) && g_app()->app_pos_in_viewport(ImGui::GetIO().MousePos))
+        if (contains(hovered_pixel) && hdrview()->app_pos_in_viewport(ImGui::GetIO().MousePos))
         {
             for (int c = 0; c < std::min(3, group.num_channels); ++c)
             {
@@ -364,7 +369,7 @@ void Image::draw_channels_list()
                     if (ImGui::Selectable(hotkey.c_str(), is_selected_channel, selectable_flags))
                     {
                         selected_group = layer.groups[g];
-                        set_as_texture(selected_group, *g_app()->shader(), "primary");
+                        set_as_texture(selected_group, *hdrview()->shader(), "primary");
                     }
 
                     ImGui::TableNextColumn();
@@ -389,14 +394,14 @@ void Image::draw_info()
 {
     auto &io = ImGui::GetIO();
 
-    auto hovered_pixel = int2{g_app()->pixel_at_app_pos(io.MousePos)};
+    auto hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
 
-    // float4 hovered = g_app()->image_pixel(hovered_pixel);
+    // float4 hovered = hdrview()->image_pixel(hovered_pixel);
     auto &group = groups[selected_group];
 
-    auto sans_font = g_app()->font("sans regular");
-    auto bold_font = g_app()->font("sans bold");
-    auto mono_font = g_app()->font("mono regular");
+    auto sans_font = hdrview()->font("sans regular");
+    auto bold_font = hdrview()->font("sans bold");
+    auto mono_font = hdrview()->font("mono regular");
 
     auto property_name = [bold_font](const string &text)
     {
@@ -496,7 +501,7 @@ void Image::draw_info()
     //     {
     //         auto  &channel = channels[group.channels[c]];
     //         string name    = Channel::tail(channel.name);
-    //         auto   stats   = channel.get_statistics();
+    //         auto   stats   = channel.get_stats();
     //         ImGui::TableNextRow(), ImGui::TableNextColumn();
 
     //         ImGui::PushFont(bold_font);
@@ -518,12 +523,12 @@ void Image::draw_info()
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
     if (ImGui::BeginTable("Channel statistics", group.num_channels + 1, table_flags))
     {
-        PixelStatistics *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
-        string           channel_names[4];
+        PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
+        string      channel_names[4];
         for (int c = 0; c < group.num_channels; ++c)
         {
             auto &channel    = channels[group.channels[c]];
-            channel_stats[c] = channel.get_statistics();
+            channel_stats[c] = channel.get_stats();
             channel_names[c] = Channel::tail(channel.name);
         }
 

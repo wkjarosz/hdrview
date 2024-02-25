@@ -140,6 +140,20 @@ public:
     ImFont *font(const string &name, int size = -1) const;
     ImFont *load_font(const string &name, int size, bool merge_fa6 = false);
 
+    float      &gamma_live() { return m_gamma_live; }
+    float      &gamma() { return m_gamma; }
+    float      &exposure_live() { return m_exposure_live; }
+    float      &exposure() { return m_exposure; }
+    bool       &sRGB() { return m_sRGB; }
+    bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
+    bool       &dithering_on() { return m_dither; }
+    bool       &draw_grid_on() { return m_draw_grid; }
+    bool       &draw_pixel_info_on() { return m_draw_pixel_info; }
+    AxisScale_ &histogram_x_scale() { return m_x_scale; }
+    AxisScale_ &histogram_y_scale() { return m_y_scale; }
+    void        reset_tonemapping();
+    void        normalize_exposure();
+
 private:
     void load_fonts();
 
@@ -180,8 +194,9 @@ private:
     vector<ImagePtr> m_images;
     int              m_current = -1, m_reference = -1;
 
-    float m_exposure = 0.f, m_gamma = 2.2f;
-    bool  m_sRGB = false, m_hdr = true, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
+    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.f;
+    AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
+    bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
 
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
@@ -205,4 +220,4 @@ private:
 };
 
 /// Return a pointer to the global singleton HDRViewApp instance
-HDRViewApp *g_app();
+HDRViewApp *hdrview();

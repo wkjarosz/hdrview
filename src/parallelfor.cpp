@@ -17,7 +17,9 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
     atomic<int> nextIndex;
     nextIndex = begin;
 
-#if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+#if defined(__EMSCRIPTEN__)
+    // shouldn't use this simple async-based parallel_for with emscripten since, even if compiled with pthread support,
+    // the async would block on the mail thread, which is a no-no
     serial = true;
 #endif
 
@@ -39,8 +41,7 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
                                  }
                              });
     }
-    for (auto &f : futures)
-        f.get();
+    for (auto &f : futures) f.get();
 }
 
 void parallel_for(int begin, int end, int step, function<void(int)> body, bool serial)
