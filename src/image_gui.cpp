@@ -24,9 +24,8 @@ using namespace std;
 
 void Image::draw_histogram()
 {
-    static int        bin_type          = 1;
-    static ImPlotCond plot_cond         = ImPlotCond_Always;
-    bool              stats_need_update = false;
+    static int        bin_type  = 1;
+    static ImPlotCond plot_cond = ImPlotCond_Always;
     {
         const ImVec2 button_size = ImGui::IconButtonSize();
         float        combo_width =
@@ -44,8 +43,7 @@ void Image::draw_histogram()
         ImGui::Text("X:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
-        if (ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0"))
-            stats_need_update = true;
+        ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0");
 
         ImGui::SameLine();
 
@@ -64,19 +62,17 @@ void Image::draw_histogram()
     string      names[4];
     auto        colors = group.colors();
 
-    float2               x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
-    float2               y_limits = x_limits;
-    PixelStats::Settings settings{hdrview()->exposure_live(), hdrview()->histogram_x_scale(),
-                                  hdrview()->histogram_y_scale()};
+    float2 x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
+    float2 y_limits = x_limits;
     for (int c = 0; c < std::min(3, group.num_channels); ++c)
     {
         auto &channel = channels[group.channels[c]];
-        if (stats_need_update)
-            channel.update_stats();
+        // if (stats_need_update)
+        channel.update_stats();
         stats[c]    = channel.get_stats();
         y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[0]);
         y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[1]);
-        auto xl     = stats[c]->x_limits(settings);
+        auto xl     = stats[c]->x_limits(hdrview()->exposure_live(), hdrview()->histogram_x_scale());
         x_limits[0] = std::min(x_limits[0], xl[0]);
         x_limits[1] = std::max(x_limits[1], xl[1]);
         names[c]    = Channel::tail(channel.name);

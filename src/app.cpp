@@ -1297,8 +1297,6 @@ void HDRViewApp::reset_tonemapping()
     m_exposure_live = m_exposure = 0.0f;
     m_gamma_live = m_gamma = 2.2f;
     m_sRGB                 = true;
-    if (auto img = current_image())
-        img->update_selected_group_stats();
 }
 
 void HDRViewApp::normalize_exposure()
@@ -1311,7 +1309,6 @@ void HDRViewApp::normalize_exposure()
             m = std::max(m, img->channels[group.channels[c]].get_stats()->maximum);
 
         m_exposure_live = m_exposure = log2(1.f / m);
-        img->update_selected_group_stats();
     }
 }
 
@@ -1327,10 +1324,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
-    {
         m_exposure = m_exposure_live;
-        img->update_selected_group_stats();
-    }
 
     ImGui::SameLine();
 
@@ -1356,10 +1350,8 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "%5.3f");
     if (ImGui::IsItemDeactivatedAfterEdit())
-    {
         m_gamma = m_gamma_live;
-        img->update_selected_group_stats();
-    }
+
     ImGui::EndDisabled();
     ImGui::SameLine();
 
@@ -1516,15 +1508,9 @@ void HDRViewApp::process_hotkeys()
     else if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
         zoom_in();
     else if (ImGui::IsKeyPressed(ImGuiKey_E))
-    {
         m_exposure_live = m_exposure += ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.25f : -0.25f;
-        img->update_selected_group_stats();
-    }
     else if (ImGui::IsKeyPressed(ImGuiKey_G))
-    {
         m_gamma_live = m_gamma = std::max(0.02f, m_gamma + (ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.02f : -0.02f));
-        img->update_selected_group_stats();
-    }
     else if (ImGui::IsKeyPressed(ImGuiKey_F))
         fit();
     else if (ImGui::IsKeyPressed(ImGuiKey_C))

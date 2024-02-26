@@ -95,7 +95,7 @@ static void copy_into_channel(Channel &channel, const float data[], int w, int h
 {
     constexpr bool dither = true;
     parallel_for(0, h,
-                 [&channel, n, c, w, &data, linearize, dither](int y)
+                 [&channel, n, c, w, &data, linearize](int y)
                  {
                      for (int x = 0; x < w; ++x)
                      {

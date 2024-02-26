@@ -72,14 +72,15 @@ struct PixelStats
     float average    = 0.0f;
     int   nan_pixels = 0;
     int   inf_pixels = 0;
-    bool  valid      = false; ///< Did we finish computing the stats?
+    bool  computed   = false; ///< Did we finish computing the stats?
 
     // histogram
     AxisScale_ hist_x_scale       = AxisScale_Linear;
     AxisScale_ hist_y_scale       = AxisScale_Linear;
-    float2     hist_x_limits      = {0.f, 1.f};
     float2     hist_y_limits      = {0.f, 1.f};
     float2     hist_normalization = {0.f, 1.f};
+
+    float2 x_limits(float exposure, AxisScale_ x_scale) const;
 
     std::array<float, NUM_BINS> hist_xs{};
     std::array<float, NUM_BINS> hist_ys{};
@@ -106,8 +107,6 @@ struct PixelStats
         return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0],
                                     (void *)&hist_x_scale);
     }
-
-    float2 x_limits(const Settings &settings) const;
 };
 
 struct Channel : public Array2Df
@@ -213,8 +212,6 @@ public:
     void                       build_layers_and_groups();
     void                       finalize();
     std::string                to_string() const;
-    void                       update_selected_group_stats();
-    void                       update_all_stats();
 
     /**
         Load the an image from the input stream.

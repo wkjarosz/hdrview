@@ -82,20 +82,19 @@ void PixelStats::set_invalid()
     average            = 0.5f;
     hist_x_scale       = AxisScale_Linear;
     hist_y_scale       = AxisScale_Linear;
-    hist_x_limits      = {0.f, 1.f};
     hist_y_limits      = {0.f, 1.f};
     hist_normalization = {0.f, 1.f};
     nan_pixels         = 0;
     inf_pixels         = 0;
-    valid              = false;
+    computed           = false;
 }
 
-float2 PixelStats::x_limits(const Settings &settings) const
+float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 {
-    bool LDR_scale = settings.x_scale == AxisScale_Linear || settings.x_scale == AxisScale_SRGB;
+    bool LDR_scale = scale == AxisScale_Linear || scale == AxisScale_SRGB;
 
     float2 ret;
-    ret[1] = pow(2.f, -settings.exposure);
+    ret[1] = pow(2.f, -e);
     if (minimum < 0.f)
         ret[0] = -ret[1];
     else
@@ -152,7 +151,7 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
 
         bool LDR_scale = x_scale == AxisScale_Linear || x_scale == AxisScale_SRGB;
 
-        hist_x_limits = x_limits(Settings{exposure, x_scale, y_scale});
+        auto hist_x_limits = x_limits(exposure, x_scale);
 
         hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : minimum, &x_scale);
         hist_normalization[1] =
@@ -194,7 +193,7 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
 
         spdlog::trace("x_limits: {}; y_limits: {}", hist_x_limits, hist_y_limits);
 
-        valid = true;
+        computed = true;
     }
     catch (const std::exception &e)
     {
@@ -254,14 +253,8 @@ Texture *Channel::get_texture()
 
 bool PixelStats::Settings::match(const Settings &other) const
 {
-    // spdlog::trace("checking match:\n\tother [{};{};{}];\n\tthis [{};{};{}]", other.exposure, other.x_scale,
-    //               other.y_scale, exposure, x_scale, y_scale);
-    // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
-    // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
-    // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
     return (other.x_scale == x_scale && other.exposure == exposure) ||
            (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh));
-    // return other.x_scale == x_scale && other.y_scale == y_scale && other.exposure == exposure;
 }
 
 PixelStats *Channel::get_stats()
@@ -270,7 +263,7 @@ PixelStats *Channel::get_stats()
 
     // We always return the cached stats, but before we do we might update the cache from the async stats
 
-    if (async_stats.ready() && async_stats.get()->valid)
+    if (async_stats.ready() && async_stats.get()->computed)
         cached_stats = async_stats.get();
 
     return cached_stats.get();
@@ -303,40 +296,28 @@ void Channel::update_stats()
     };
 
     // if the cached stats match and are valid, no need to recompute
-    if (cached_stats->settings().match(desired_settings) && cached_stats->valid)
+    if (cached_stats->settings().match(desired_settings) && cached_stats->computed)
         return;
 
     // cached stats are outdated, need to recompute
 
     // if the async computation settings are outdated, or it was never computed -> recompute
-    if (!async_settings.match(desired_settings) || (async_stats.ready() && !async_stats.get()->valid))
+    if (!async_settings.match(desired_settings) || (async_stats.ready() && !async_stats.get()->computed))
     {
         recompute_async_stats();
         return;
     }
 
-    // check if we have
-    if (async_stats.ready() && async_stats.get()->valid)
+    // if the async computation is ready, grab it and possibly schedule again
+    if (async_stats.ready() && async_stats.get()->computed)
     {
         // replace cache with newer async stats
-        spdlog::trace("Transferring ownership of pixel stats");
         cached_stats = async_stats.get();
 
         // if these newer stats are still outdated, schedule a new async computation
         if (!cached_stats->settings().match(desired_settings))
             recompute_async_stats();
     }
-}
-
-void Image::update_all_stats()
-{
-    for (auto &c : channels) c.update_stats();
-}
-
-void Image::update_selected_group_stats()
-{
-    for (int c = 0; c < groups[selected_group].num_channels; ++c)
-        channels[groups[selected_group].channels[c]].update_stats();
 }
 
 void Image::set_null_texture(Shader &shader, const string &target)
@@ -560,7 +541,8 @@ void Image::finalize()
                 channels.size(), num_channels)};
     }
 
-    update_all_stats();
+    // update the stats/histograms for all channels
+    for (auto &c : channels) c.update_stats();
 }
 
 string Image::to_string() const
