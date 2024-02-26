@@ -87,7 +87,7 @@ public:
     using AtomicPercent32 = AtomicFixed<std::int32_t, std::int64_t, 30>;
 
     explicit AtomicProgress(bool createState = false, float totalPercentage = 1.f);
-    AtomicProgress(const AtomicProgress &parent, float percentageOfParent = 1.f);
+    AtomicProgress(float percentageOfParent, const AtomicProgress &parent);
 
     // access to the atomic internal storage
     void  reset_progress(float p = 0.f);
@@ -96,6 +96,8 @@ public:
     void  set_busy() { reset_progress(-1.f); }
     bool  canceled() const;
     void  cancel();
+
+    bool has_state() const { return (bool)m_state; }
 
     // access to the discrete stepping
     void            set_available_percent(float percent);

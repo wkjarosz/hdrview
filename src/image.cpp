@@ -109,14 +109,15 @@ float2 PixelStats::x_limits(const Settings &settings) const
     return ret;
 }
 
-PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale) :
-    exposure(the_exposure), minimum(std::numeric_limits<float>::infinity()),
-    maximum(-std::numeric_limits<float>::infinity()), average(0.f), hist_x_scale{x_scale}, hist_y_scale{y_scale}
+PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale,
+                       AtomicProgress &prog) :
+    exposure(the_exposure),
+    minimum(std::numeric_limits<float>::infinity()), maximum(-std::numeric_limits<float>::infinity()), average(0.f),
+    hist_x_scale{x_scale}, hist_y_scale{y_scale}
 {
     try
     {
         spdlog::trace("Computing pixel statistics");
-        Timer timer;
 
         //
         // compute pixel summary statistics
@@ -124,6 +125,9 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
         double accum        = 0.0; // reduce numerical precision issues by accumulating in double
         for (int i = 0; i < img.num_elements(); ++i)
         {
+            if (prog.canceled())
+                throw std::exception();
+
             float val = img(i);
 
             if (isnan(val))
@@ -141,7 +145,6 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
         average = valid_pixels ? float(accum / valid_pixels) : 0.f;
 
         spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
-        spdlog::trace("  finished in {} seconds", (timer.elapsed() / 1000.f));
         //
 
         //
@@ -159,7 +162,12 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
 
         // accumulate bin counts
-        for (int i = 0; i < img.num_elements(); ++i) bin_y(value_to_bin(img(i))) += 1;
+        for (int i = 0; i < img.num_elements(); ++i)
+        {
+            if (prog.canceled())
+                throw std::exception();
+            bin_y(value_to_bin(img(i))) += 1;
+        }
 
         // normalize histogram density by dividing bin counts by bin sizes
         hist_y_limits[0] = std::numeric_limits<float>::infinity();
@@ -186,13 +194,11 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
 
         spdlog::trace("x_limits: {}; y_limits: {}", hist_x_limits, hist_y_limits);
 
-        spdlog::trace("finished recomputing pixel statistics in {} seconds", (timer.elapsed() / 1000.f));
-
         valid = true;
     }
     catch (const std::exception &e)
     {
-        spdlog::trace("Interrupting pixel stats computation");
+        spdlog::trace("Canceling pixel stats computation");
         set_invalid();
     }
 }
@@ -224,8 +230,8 @@ float4x4 ChannelGroup::colors() const
 }
 
 Channel::Channel(const std::string &name, int2 size) :
-    Array2Df(size), name(name), cached_stats(make_unique<PixelStats>()),
-    async_stats([]() { return make_unique<PixelStats>(); })
+    Array2Df(size), name(name), cached_stats(make_shared<PixelStats>()),
+    async_stats([]() { return make_shared<PixelStats>(); })
 {
 }
 
@@ -248,8 +254,8 @@ Texture *Channel::get_texture()
 
 bool PixelStats::Settings::match(const Settings &other) const
 {
-    spdlog::trace("checking match:\n\tother [{};{};{}];\n\tthis [{};{};{}]", other.exposure, other.x_scale,
-                  other.y_scale, exposure, x_scale, y_scale);
+    // spdlog::trace("checking match:\n\tother [{};{};{}];\n\tthis [{};{};{}]", other.exposure, other.x_scale,
+    //               other.y_scale, exposure, x_scale, y_scale);
     // fmt::print("checking needs_update {} {}\n", new_exposure, new_x_scale);
     // when we use a logarithmic x-scale, we don't need to recompute if the exposure changes
     // otherwise, we need to recompute if either the exposure changes or the x-scale changes.
@@ -264,12 +270,8 @@ PixelStats *Channel::get_stats()
 
     // We always return the cached stats, but before we do we might update the cache from the async stats
 
-    if (async_stats.ready() && async_stats.get() && async_stats.get()->valid)
-    {
-        // transfer ownership to update cached_stats
-        spdlog::trace("Transferring ownership of pixel stats");
-        cached_stats = std::move(async_stats.get());
-    }
+    if (async_stats.ready() && async_stats.get()->valid)
+        cached_stats = async_stats.get();
 
     return cached_stats.get();
 }
@@ -278,53 +280,51 @@ void Channel::update_stats()
 {
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
-    //
-    // We always return the cached stats, but before we do we might update the cache
-    //
-
     PixelStats::Settings desired_settings{hdrview()->exposure(), hdrview()->histogram_x_scale(),
                                           hdrview()->histogram_y_scale()};
 
-    if (cached_stats->settings().match(desired_settings) && cached_stats->valid)
-        return;
-
-    if (!async_settings.match(desired_settings) ||
-        (async_stats.ready() && !(async_stats.get() && async_stats.get()->valid)))
+    auto recompute_async_stats = [this, desired_settings]()
     {
+        // cancel and wait for the current task
+        spdlog::trace("Canceling and waiting for outdated stats computation.");
+        async_stats.cancel();
+        async_stats.get();
+
+        // create the new task
         spdlog::trace("Scheduling new stats computation");
-        spdlog::trace("  match: {}; ready: {}; valid: {}; ", async_settings.match(desired_settings),
-                      async_stats.ready(), (async_stats.get() && async_stats.get()->valid));
         async_stats = PixelStats::Task(
-            [this, desired_settings](void)
+            [this, desired_settings](AtomicProgress &prog)
             {
-                return make_unique<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
-                                               desired_settings.y_scale);
+                return make_shared<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
+                                               desired_settings.y_scale, prog);
             });
         async_settings = desired_settings;
         async_stats.compute();
+    };
+
+    // if the cached stats match and are valid, no need to recompute
+    if (cached_stats->settings().match(desired_settings) && cached_stats->valid)
+        return;
+
+    // cached stats are outdated, need to recompute
+
+    // if the async computation settings are outdated, or it was never computed -> recompute
+    if (!async_settings.match(desired_settings) || (async_stats.ready() && !async_stats.get()->valid))
+    {
+        recompute_async_stats();
         return;
     }
 
-    if (async_stats.ready() && (async_stats.get() && async_stats.get()->valid))
+    // check if we have
+    if (async_stats.ready() && async_stats.get()->valid)
     {
         // replace cache with newer async stats
         spdlog::trace("Transferring ownership of pixel stats");
-        cached_stats = std::move(async_stats.get());
+        cached_stats = async_stats.get();
 
-        spdlog::trace("Comparing recently transferred stats with new settings");
         // if these newer stats are still outdated, schedule a new async computation
         if (!cached_stats->settings().match(desired_settings))
-        {
-            spdlog::trace("Scheduling new stats computation");
-            async_stats = PixelStats::Task(
-                [this, desired_settings](void)
-                {
-                    return make_unique<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
-                                                   desired_settings.y_scale);
-                });
-            async_settings = desired_settings;
-            async_stats.compute();
-        }
+            recompute_async_stats();
     }
 }
 

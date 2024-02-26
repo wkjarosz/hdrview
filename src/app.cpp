@@ -151,10 +151,10 @@ HDRViewApp *hdrview()
 
 HDRViewApp::HDRViewApp()
 {
-    spdlog::set_pattern("%^[%H:%M:%S | %5l]: %$%v");
+    spdlog::set_pattern("%^[%T | %5l]: %$%v");
     spdlog::set_level(spdlog::level::trace);
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
-    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%H:%M:%S | %5l | %t]: %$%v");
+    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
 #if defined(__EMSCRIPTEN__)
     unsigned threads = 0;
@@ -678,8 +678,8 @@ void HDRViewApp::set_image_textures()
     else
         Image::set_null_texture(*m_shader, "primary");
 
-    if (auto img = reference_image())
-        img->set_as_texture(img->selected_group, *m_shader, "secondary");
+    if (auto ref = reference_image())
+        ref->set_as_texture(ref->selected_group, *m_shader, "secondary");
     else
         Image::set_null_texture(*m_shader, "secondary");
 }

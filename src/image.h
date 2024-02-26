@@ -55,7 +55,7 @@ inline double axis_scale_inv_xform(double value, void *user_data)
 struct PixelStats
 {
     static constexpr int NUM_BINS = 256;
-    using Ptr                     = std::unique_ptr<PixelStats>;
+    using Ptr                     = std::shared_ptr<PixelStats>;
     using Task                    = AsyncTask<PixelStats::Ptr>;
 
     struct Settings
@@ -85,7 +85,7 @@ struct PixelStats
     std::array<float, NUM_BINS> hist_ys{};
 
     PixelStats() = default;
-    PixelStats(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale);
+    PixelStats(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale, AtomicProgress &prog);
 
     void     set_invalid();
     Settings settings() const { return {exposure, hist_x_scale, hist_y_scale}; }

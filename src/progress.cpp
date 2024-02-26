@@ -13,17 +13,8 @@ AtomicProgress::AtomicProgress(bool createState, float totalPercentage) :
     m_state(createState ? std::make_shared<State>() : nullptr)
 {
 }
-//
-// AtomicProgress::AtomicProgress(AtomicPercent32 * state, float totalPercentage) :
-//	m_num_steps(1),
-//	m_percentage_of_parent(totalPercentagße),
-//	m_step_percent(m_num_steps == 0 ? totalPercentage : totalPercentage / m_num_steps),
-//	m_state(state), m_isStateOwner(false)
-//{
-//
-//}
 
-AtomicProgress::AtomicProgress(const AtomicProgress &parent, float percentageOfParent) :
+AtomicProgress::AtomicProgress(float percentageOfParent, const AtomicProgress &parent) :
     m_num_steps(1), m_percentage_of_parent(parent.m_percentage_of_parent * percentageOfParent),
     m_step_percent(m_num_steps == 0 ? m_percentage_of_parent : m_percentage_of_parent / m_num_steps),
     m_state(parent.m_state)
