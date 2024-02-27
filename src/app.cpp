@@ -307,6 +307,7 @@ HDRViewApp::HDRViewApp()
 
     m_params.callbacks.ShowGui = [this]()
     {
+        add_pending_images();
         if (g_show_help)
             draw_about_dialog();
         if (g_show_tool_metrics)
@@ -406,7 +407,16 @@ void HDRViewApp::save_settings()
 void HDRViewApp::draw_status_bar()
 {
     const float y = ImGui::GetCursorPosY() - HelloImGui::EmSize(0.15f);
-    float       x = ImGui::GetStyle().ItemSpacing.x;
+    if (m_pending_images.size())
+    {
+        ImGui::SetCursorPos({ImGui::GetStyle().ItemSpacing.x, y});
+        ImGui::BusyBar(
+            -1.f, {HelloImGui::EmSize(15.f), 0.f},
+            fmt::format("Loading {} image{}", m_pending_images.size(), m_pending_images.size() > 1 ? "s" : "").c_str());
+        ImGui::SameLine();
+    }
+
+    float x = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
 
     auto sized_text = [&](float em_size, const string &text, float align = 1.f)
     {
@@ -468,8 +478,7 @@ void HDRViewApp::draw_menus()
                 string short_name = (f->length() < 100) ? *f : f->substr(0, 47) + "..." + f->substr(f->length() - 50);
                 if (ImGui::MenuItem(fmt::format("{}##File{}", short_name, i).c_str()))
                 {
-                    std::ifstream is{*f, std::ios_base::binary};
-                    load_image(is, *f);
+                    load_image(*f);
                 }
             }
 
@@ -592,16 +601,13 @@ void HDRViewApp::save_as(const string &filename) const
     }
 }
 
-void HDRViewApp::load_images(const std::vector<std::string> &filenames)
+void HDRViewApp::load_images(const vector<string> &filenames)
 {
     for (auto f : filenames)
     {
         auto formats = Image::loadable_formats();
         if (formats.find(get_extension(f)) != formats.end())
-        {
-            std::ifstream is{f, std::ios_base::binary};
-            load_image(is, f);
-        }
+            load_image(f);
         else
             spdlog::debug("Skipping unsupported file '{}'", f);
     }
@@ -614,8 +620,7 @@ void HDRViewApp::open_image()
         [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
     {
         spdlog::trace("Loading uploaded file with filename '{}'", filename);
-        isviewstream is{buffer};
-        hdrview()->load_image(is, filename);
+        hdrview()->load_image(filename, buffer);
     };
 
     string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",."));
@@ -630,58 +635,106 @@ void HDRViewApp::open_image()
 #endif
 }
 
-void HDRViewApp::load_image(std::istream &is, const string &f)
+void HDRViewApp::load_image(const string filename, string_view buffer)
 {
-    // make a copy of f in case its an element of m_recent_files, which we modify
-    string filename = f;
-    spdlog::debug("Loading file '{}'...", f);
+    // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
+    spdlog::debug("Loading file '{}'...", filename);
     try
     {
-        auto new_images = Image::load(is, filename);
-        if (!new_images.size())
-            throw std::invalid_argument("Could not allocate a new image.");
+        // convert the buffer (if any) to a string so the async thread has its own copy
+        // then load from the string or filename depending on whether the buffer is empty
+        m_pending_images.emplace_back(
+            std::make_shared<PendingImage>(filename,
+                                           [buffer_str = string(buffer), filename](AtomicProgress &prog)
+                                           {
+                                               if (buffer_str.empty())
+                                               {
+                                                   std::ifstream is{filename, std::ios_base::binary};
+                                                   return Image::load(is, filename);
+                                               }
+                                               else
+                                               {
+                                                   std::istringstream is{buffer_str};
+                                                   return Image::load(is, filename);
+                                               }
+                                           }));
 
-        for (auto &i : new_images) m_images.push_back(i);
-
-        m_current = int(m_images.size() - 1);
-
-        // remove any instances of filename from the recent files list
+        // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
-
-        // if loading was successful, now add the filename to the recent list and limit to g_max_recent files
-        m_recent_files.push_back(filename);
-        if (m_recent_files.size() > g_max_recent)
-            m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
     }
     catch (const std::exception &e)
     {
         spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
         return;
     }
+}
 
-    // now upload the textures
-    try
+void HDRViewApp::add_pending_images()
+{
+    // Criterion to check if a image is ready, and copy it into our m_images vector if so
+    auto removable = [this](shared_ptr<PendingImage> p)
     {
+        if (p->images.ready())
+        {
+            // get the result, add any loaded images, and report that we can remove this task
+            auto new_images = p->images.get();
+            if (new_images.empty())
+                return true;
+
+            for (auto &i : new_images) m_images.push_back(i);
+
+            // if loading was successful, add the filename to the recent list and limit to g_max_recent files
+            m_recent_files.push_back(p->filename);
+            if (m_recent_files.size() > g_max_recent)
+                m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
+
+            return true;
+        }
+        else
+            return false;
+    };
+
+    auto num_previous = m_images.size();
+
+    // move elements matching the criterion to the end of the vector, and then erase all matching elements
+    m_pending_images.erase(std::remove_if(m_pending_images.begin(), m_pending_images.end(), removable),
+                           m_pending_images.end());
+
+    auto num_added = m_images.size() - num_previous;
+    if (num_added > 0)
+    {
+        spdlog::info("Added {} new image{}.", num_added, (num_added > 1) ? "s" : "");
+        // only select the newly loaded image if there is no valid selection
+        if (is_valid(m_current))
+            return;
+
+        m_current = int(m_images.size() - 1);
+
+        // now upload the textures
         set_image_textures();
-    }
-    catch (const std::exception &e)
-    {
-        spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
     }
 }
 
 void HDRViewApp::set_image_textures()
 {
-    // bind the primary and secondary images, or a placehold black texture when we have no current or reference image
-    if (auto img = current_image())
-        img->set_as_texture(img->selected_group, *m_shader, "primary");
-    else
-        Image::set_null_texture(*m_shader, "primary");
+    try
+    {
+        // bind the primary and secondary images, or a placehold black texture when we have no current or reference
+        // image
+        if (auto img = current_image())
+            img->set_as_texture(img->selected_group, *m_shader, "primary");
+        else
+            Image::set_null_texture(*m_shader, "primary");
 
-    if (auto ref = reference_image())
-        ref->set_as_texture(ref->selected_group, *m_shader, "secondary");
-    else
-        Image::set_null_texture(*m_shader, "secondary");
+        if (auto ref = reference_image())
+            ref->set_as_texture(ref->selected_group, *m_shader, "secondary");
+        else
+            Image::set_null_texture(*m_shader, "secondary");
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
+    }
 }
 
 void HDRViewApp::close_image()
@@ -1491,7 +1544,7 @@ void HDRViewApp::process_hotkeys()
             img->selected_group = mod(n - 1, 10);
         }
 
-    if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut))
+    if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut, 0, ImGuiInputFlags_Repeat))
         close_image();
     else if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut | ImGuiMod_Shift))
         close_all_images();

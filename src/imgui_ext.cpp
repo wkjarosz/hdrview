@@ -510,7 +510,7 @@ void BusyBar(float fraction, const ImVec2 &size_arg, const char *overlay)
     if (!ItemAdd(bb, 0))
         return;
 
-    bool indeterminate = fraction != fraction;
+    bool indeterminate = fraction != fraction || fraction < 0.f;
 
     RenderFrame(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
     bb.Expand(ImVec2(-grab_padding, -grab_padding));

@@ -20,6 +20,7 @@
 using std::map;
 using std::ofstream;
 using std::pair;
+using std::shared_ptr;
 using std::string;
 using std::string_view;
 using std::vector;
@@ -40,7 +41,7 @@ public:
     //-----------------------------------------------------------------------------
     void open_image();
     void load_images(const std::vector<std::string> &filenames);
-    void load_image(std::istream &is, const string &filename);
+    void load_image(const string filename, std::string_view buffer = std::string_view{});
     void save_as(const string &filename) const;
     void close_image();
     void close_all_images();
@@ -184,6 +185,8 @@ private:
 
     void setup_rendering();
 
+    void add_pending_images();
+
 private:
     //-----------------------------------------------------------------------------
     // Private data members
@@ -193,6 +196,15 @@ private:
     Shader          *m_shader      = nullptr;
     vector<ImagePtr> m_images;
     int              m_current = -1, m_reference = -1;
+
+    using ImageLoadTask = AsyncTask<vector<ImagePtr>>;
+    struct PendingImage
+    {
+        string        filename;
+        ImageLoadTask images;
+        PendingImage(const string &f, ImageLoadTask::TaskFunc func) : filename(f), images(func) { images.compute(); }
+    };
+    vector<shared_ptr<PendingImage>> m_pending_images;
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
