@@ -278,6 +278,9 @@ CPMAddPackage(
   GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
   OPTIONS ${OPENEXR_OPTIONS}
 )
+if(openexr_ADDED)
+  message(STATUS "openexr library added")
+endif()
 
 # # this is part of Dear ImGui Bundle, so no need to add it separately
 # CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
@@ -337,6 +340,7 @@ imgui_bundle_add_app(
   src/parallelfor.cpp
   src/progress.cpp
   src/opengl_check.cpp
+  src/scheduler.cpp
   src/shader.cpp
   src/shader_gl.cpp
   src/renderpass_gl.cpp

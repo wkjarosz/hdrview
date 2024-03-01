@@ -12,7 +12,7 @@ using namespace std;
 
 // adapted from http://www.andythomason.com/2016/08/21/c-multithreading-an-effective-parallel-for-loop/
 // license unknown, presumed public domain
-void parallel_for(int begin, int end, int step, function<void(int, size_t)> body, bool serial)
+void parallel_for(int begin, int end, int step, function<void(int, size_t)> body, size_t num_threads)
 {
     atomic<int> nextIndex;
     nextIndex = begin;
@@ -20,11 +20,11 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
 #if defined(__EMSCRIPTEN__)
     // shouldn't use this simple async-based parallel_for with emscripten since, even if compiled with pthread support,
     // the async would block on the mail thread, which is a no-no
-    serial = true;
+    num_threads = 1;
 #endif
 
-    auto                 policy  = serial ? std::launch::deferred : std::launch::async;
-    size_t               numCPUs = thread::hardware_concurrency();
+    auto                 policy  = num_threads == 1 ? std::launch::deferred : std::launch::async;
+    size_t               numCPUs = num_threads == 0 ? thread::hardware_concurrency() : num_threads;
     vector<future<void>> futures(numCPUs);
     for (size_t cpu = 0; cpu != numCPUs; ++cpu)
     {
@@ -44,8 +44,8 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
     for (auto &f : futures) f.get();
 }
 
-void parallel_for(int begin, int end, int step, function<void(int)> body, bool serial)
+void parallel_for(int begin, int end, int step, function<void(int)> body, size_t num_threads)
 {
     parallel_for(
-        begin, end, step, [&body](int i, size_t) { body(i); }, serial);
+        begin, end, step, [&body](int i, size_t) { body(i); }, num_threads);
 }

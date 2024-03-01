@@ -24,6 +24,10 @@
 using namespace std;
 
 //
+// static local functions
+//
+
+//
 // static methods and member definitions
 //
 
@@ -74,21 +78,6 @@ std::set<std::string> Image::savable_formats()
 // end static methods
 //
 
-void PixelStats::set_invalid()
-{
-    exposure           = 0.f;
-    minimum            = 0.f;
-    maximum            = 1.f;
-    average            = 0.5f;
-    hist_x_scale       = AxisScale_Linear;
-    hist_y_scale       = AxisScale_Linear;
-    hist_y_limits      = {0.f, 1.f};
-    hist_normalization = {0.f, 1.f};
-    nan_pixels         = 0;
-    inf_pixels         = 0;
-    computed           = false;
-}
-
 float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 {
     bool LDR_scale = scale == AxisScale_Linear || scale == AxisScale_SRGB;
@@ -108,54 +97,129 @@ float2 PixelStats::x_limits(float e, AxisScale_ scale) const
     return ret;
 }
 
-PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_scale, AxisScale_ y_scale,
-                       AtomicProgress &prog) :
-    exposure(the_exposure),
-    minimum(std::numeric_limits<float>::infinity()), maximum(-std::numeric_limits<float>::infinity()), average(0.f),
-    hist_x_scale{x_scale}, hist_y_scale{y_scale}
+// void PixelStats::reset(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale)
+// {
+//     *this    = PixelStats();
+//     exposure = new_exposure;
+//     // minimum            = std::numeric_limits<float>::infinity();
+//     // maximum            = -std::numeric_limits<float>::infinity();
+//     // average            = 0.0f;
+//     hist_x_scale = new_x_scale;
+//     hist_y_scale = new_y_scale;
+//     // hist_y_limits      = {0.f, 1.f};
+//     // hist_normalization = {0.f, 1.f};
+//     // nan_pixels         = 0;
+//     // inf_pixels         = 0;
+//     // hist_xs.fill(0.f);
+//     // hist_ys.fill(0.f);
+//     // computed = false;
+// }
+
+void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale,
+                           AtomicProgress &prog)
 {
     try
     {
         spdlog::trace("Computing pixel statistics");
+        spdlog::debug("Num threads in scheduler {}", Scheduler::singleton()->getNumThreads());
+
+        // initialize values
+        *this        = PixelStats();
+        exposure     = new_exposure;
+        hist_x_scale = new_x_scale;
+        hist_y_scale = new_y_scale;
 
         //
         // compute pixel summary statistics
-        int    valid_pixels = 0;
-        double accum        = 0.0; // reduce numerical precision issues by accumulating in double
-        for (int i = 0; i < img.num_elements(); ++i)
+
+        Timer timer;
         {
-            if (prog.canceled())
-                throw std::exception();
-
-            float val = img(i);
-
-            if (isnan(val))
-                ++nan_pixels;
-            else if (isinf(val))
-                ++inf_pixels;
-            else
+            constexpr int numThreads = 4;
+            struct Stats
             {
-                ++valid_pixels;
-                maximum = std::max(maximum, val);
-                minimum = std::min(minimum, val);
-                accum += val;
-            }
-        }
-        average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+                float  minimum      = std::numeric_limits<float>::infinity();
+                float  maximum      = -std::numeric_limits<float>::infinity();
+                double average      = 0.0f;
+                int    nan_pixels   = 0;
+                int    inf_pixels   = 0;
+                int    valid_pixels = 0;
+                bool   exception    = false;
+            };
+            std::array<Stats, max(1, numThreads)> partials;
 
-        spdlog::trace("Min: {}\nMean: {}\nMax: {}", minimum, average, maximum);
+            parallel_for(
+                blocked_range<int>(0, img.num_elements(), 1024),
+                [&img, &partials, &prog](int begin, int end, int unit_index, int thread_index)
+                {
+                    Stats partial = partials[unit_index]; //< compute over local symbols.
+                    if (partial.exception)
+                        return;
+
+                    try
+                    {
+                        for (int i = begin; i != end; ++i)
+                        {
+                            if (prog.canceled())
+                                throw std::exception();
+
+                            // computation
+                            float val = img(i);
+
+                            if (isnan(val))
+                                ++partial.nan_pixels;
+                            else if (isinf(val))
+                                ++partial.inf_pixels;
+                            else
+                            {
+                                ++partial.valid_pixels;
+                                partial.maximum = std::max(partial.maximum, val);
+                                partial.minimum = std::min(partial.minimum, val);
+                                partial.average += val;
+                            }
+                        }
+                    }
+                    catch (...)
+                    {
+                        partial.exception = true;
+                    }
+
+                    partials[unit_index] = partial; //< Store partials at the end.
+                },
+                numThreads);
+
+            // final reduction from partial results
+            double accum        = 0.f;
+            int    valid_pixels = 0;
+            for (auto &p : partials)
+            {
+                if (p.exception)
+                    throw std::exception();
+
+                minimum = std::min(p.minimum, minimum);
+                maximum = std::max(p.maximum, maximum);
+                nan_pixels += p.nan_pixels;
+                inf_pixels += p.inf_pixels;
+
+                valid_pixels += p.valid_pixels;
+                accum += p.average;
+            }
+            average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+        }
+
+        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.elapsed(), minimum, average,
+                      maximum);
         //
 
         //
         // compute histograms
 
-        bool LDR_scale = x_scale == AxisScale_Linear || x_scale == AxisScale_SRGB;
+        bool LDR_scale = hist_x_scale == AxisScale_Linear || hist_x_scale == AxisScale_SRGB;
 
-        auto hist_x_limits = x_limits(exposure, x_scale);
+        auto hist_x_limits = x_limits(exposure, hist_x_scale);
 
-        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : minimum, &x_scale);
+        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : minimum, &hist_x_scale);
         hist_normalization[1] =
-            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : maximum, &x_scale) - hist_normalization[0];
+            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : maximum, &hist_x_scale) - hist_normalization[0];
 
         // compute bin center values
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
@@ -182,7 +246,7 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
         auto idx = ys.size() - 10;
         std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
         // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-        hist_y_limits[0] = y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
+        hist_y_limits[0] = hist_y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
         // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
         if (ys[idx] != 0.f)
             hist_y_limits[1] = ys[idx] * 1.15f;
@@ -198,7 +262,7 @@ PixelStats::PixelStats(const Array2Df &img, float the_exposure, AxisScale_ x_sca
     catch (const std::exception &e)
     {
         spdlog::trace("Canceling pixel stats computation");
-        set_invalid();
+        *this = PixelStats(); // reset
     }
 }
 
@@ -288,9 +352,19 @@ void Channel::update_stats()
         async_stats = PixelStats::Task(
             [this, desired_settings](AtomicProgress &prog)
             {
-                return make_shared<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
-                                               desired_settings.y_scale, prog);
+                auto ret = make_shared<PixelStats>();
+                ret->calculate(*this, desired_settings.exposure, desired_settings.x_scale, desired_settings.y_scale,
+                               prog);
+                return ret;
             });
+
+        // async_tracker = do_async(
+        //     [this, desired_settings](AtomicProgress &prog)
+        //     {
+        //         async_stats2 = make_shared<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
+        //                                                desired_settings.y_scale, prog);
+        //     },
+        //     progress);
         async_settings = desired_settings;
         async_stats.compute();
     };

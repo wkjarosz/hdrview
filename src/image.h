@@ -12,6 +12,7 @@
 #include "colorspace.h"
 #include "common.h"
 #include "fwd.h"
+#include "scheduler.h"
 #include <cfloat>
 #include <map>
 #include <set>
@@ -67,12 +68,13 @@ struct PixelStats
     };
 
     float exposure   = 0.f;
-    float minimum    = 0.f;
-    float maximum    = 1.f;
+    float minimum    = std::numeric_limits<float>::infinity();
+    float maximum    = -std::numeric_limits<float>::infinity();
     float average    = 0.0f;
     int   nan_pixels = 0;
     int   inf_pixels = 0;
-    bool  computed   = false; ///< Did we finish computing the stats?
+
+    bool computed = false; ///< Did we finish computing the stats?
 
     // histogram
     AxisScale_ hist_x_scale       = AxisScale_Linear;
@@ -80,15 +82,14 @@ struct PixelStats
     float2     hist_y_limits      = {0.f, 1.f};
     float2     hist_normalization = {0.f, 1.f};
 
-    float2 x_limits(float exposure, AxisScale_ x_scale) const;
-
-    std::array<float, NUM_BINS> hist_xs{};
-    std::array<float, NUM_BINS> hist_ys{};
+    std::array<float, NUM_BINS> hist_xs{}; // {}: value-initialized to zeros
+    std::array<float, NUM_BINS> hist_ys{}; // {}: value-initialized to zeros
 
     PixelStats() = default;
-    PixelStats(const Array2Df &img, float new_exposure, AxisScale_ x_scale, AxisScale_ y_scale, AtomicProgress &prog);
 
-    void     set_invalid();
+    /// Populate the statistics from the provided img and settings
+    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale, AtomicProgress &prog);
+
     Settings settings() const { return {exposure, hist_x_scale, hist_y_scale}; }
 
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
@@ -107,6 +108,8 @@ struct PixelStats
         return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0],
                                     (void *)&hist_x_scale);
     }
+
+    float2 x_limits(float exposure, AxisScale_ x_scale) const;
 };
 
 struct Channel : public Array2Df
@@ -130,8 +133,10 @@ public:
     void        update_stats();
 
 private:
-    PixelStats::Ptr      cached_stats;
-    PixelStats::Task     async_stats;
+    PixelStats::Ptr  cached_stats;
+    PixelStats::Task async_stats;
+    // Scheduler::TaskTracker async_tracker;
+    // PixelStats::Ptr        async_stats2;
     PixelStats::Settings async_settings{};
     // bool                 stats_dirty = true;
 };
