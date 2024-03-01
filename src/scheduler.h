@@ -29,6 +29,7 @@
 // scheduler.h
 #include "progress.h"
 #include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -484,6 +485,9 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
 template <typename Func>
 Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
 {
+    if (!scheduler)
+        scheduler = Scheduler::singleton();
+
     using BaseFunc = typename std::decay<Func>::type;
 
     struct Payload
@@ -502,6 +506,9 @@ Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
 template <typename Func>
 Scheduler::TaskTracker do_async(Func &&func, AtomicProgress &progress, Scheduler *scheduler = nullptr)
 {
+    if (!scheduler)
+        scheduler = Scheduler::singleton();
+
     using BaseFunc = typename std::decay<Func>::type;
 
     struct Payload
