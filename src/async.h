@@ -6,38 +6,29 @@
 #pragma once
 
 #include "progress.h"
-#include <chrono>
+#include "scheduler.h"
 #include <functional>
-#include <future>
 
 template <typename T>
 class AsyncTask
 {
 public:
-#if defined(FORCE_SERIAL) or defined(__EMSCRIPTEN__)
-    // In emscripten, even if compiled with pthread support, we shouldn't use these simple async-based tasks since the
-    // async would block on the mail thread, which is a no-no.
-    static const auto policy = std::launch::deferred;
-#else
-    static const auto policy = std::launch::async;
-#endif
-
     using TaskFunc           = std::function<T(AtomicProgress &progress)>;
-    using NoProgressTaskFunc = std::function<T(void)>;
+    using NoProgressTaskFunc = std::function<T()>;
 
     /*!
      * Create an asynchronous task that can report back on its progress
      * @param compute The function to execute asynchronously
      */
-    AsyncTask(TaskFunc compute) :
-        m_compute(
-            [compute](AtomicProgress &prog)
+    AsyncTask(TaskFunc f, Scheduler *s = nullptr) :
+        m_func(
+            [f](AtomicProgress &prog)
             {
-                T ret = compute(prog);
+                T ret = f(prog);
                 prog.set_done();
                 return ret;
             }),
-        m_progress(true)
+        m_progress(true), m_threadpool(s)
     {
     }
 
@@ -45,8 +36,8 @@ public:
      * Create an asynchronous task without progress updates
      * @param compute The function to execute asynchronously
      */
-    AsyncTask(NoProgressTaskFunc compute) :
-        m_compute([compute](AtomicProgress &) { return compute(); }), m_progress(false)
+    AsyncTask(NoProgressTaskFunc f, Scheduler *s = nullptr) :
+        m_func([f](AtomicProgress &) { return f(); }), m_progress(false), m_threadpool(s)
     {
     }
 
@@ -56,8 +47,19 @@ public:
     void compute()
     {
         // start only if not done and not already started
-        if (!m_future.valid() && !m_ready)
-            m_future = std::async(policy, m_compute, std::ref(m_progress));
+        if (!m_started)
+        {
+            auto callback = [](int, int, void *payload)
+            {
+                AsyncTask *self = (AsyncTask *)payload;
+                self->m_value   = self->m_func(self->m_progress);
+            };
+
+            auto pool = m_threadpool ? m_threadpool : Scheduler::singleton();
+            m_task    = pool->parallelizeAsync(1, this, callback);
+
+            m_started = true;
+        }
     }
 
     /*!
@@ -68,12 +70,7 @@ public:
      */
     T &get()
     {
-        if (m_ready)
-            return m_value;
-
-        m_value = m_future.valid() ? m_future.get() : m_compute(m_progress);
-
-        m_ready = true;
+        m_task.wait();
         return m_value;
     }
 
@@ -95,25 +92,13 @@ public:
     /*!
      * @return true if the computation has finished
      */
-    bool ready() const
-    {
-        if (m_ready)
-            return true;
-
-        if (!m_future.valid())
-            return false;
-
-        auto status = m_future.wait_for(std::chrono::seconds(0));
-
-        // pretend that the computation is ready for deferred execution since we will compute it on-demand in
-        // get() anyway
-        return (status == std::future_status::ready || status == std::future_status::deferred);
-    }
+    bool ready() const { return m_started && m_task.ready(); }
 
 private:
-    TaskFunc       m_compute;
-    std::future<T> m_future;
-    T              m_value;
-    AtomicProgress m_progress;
-    bool           m_ready = false;
+    T                      m_value;
+    TaskFunc               m_func;
+    Scheduler::TaskTracker m_task;
+    AtomicProgress         m_progress;
+    bool                   m_started    = false;
+    Scheduler             *m_threadpool = nullptr;
 };

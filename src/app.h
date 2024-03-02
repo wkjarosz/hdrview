@@ -198,13 +198,13 @@ private:
     int              m_current = -1, m_reference = -1;
 
     using ImageLoadTask = AsyncTask<vector<ImagePtr>>;
-    struct PendingImage
+    struct PendingImages
     {
         string        filename;
         ImageLoadTask images;
-        PendingImage(const string &f, ImageLoadTask::TaskFunc func) : filename(f), images(func) { images.compute(); }
+        PendingImages(const string &f, ImageLoadTask::TaskFunc func) : filename(f), images(func) { images.compute(); }
     };
-    vector<shared_ptr<PendingImage>> m_pending_images;
+    vector<shared_ptr<PendingImages>> m_pending_images;
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;

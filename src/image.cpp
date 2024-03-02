@@ -345,7 +345,7 @@ void Channel::update_stats()
         // cancel and wait for the current task
         spdlog::trace("Canceling and waiting for outdated stats computation.");
         async_stats.cancel();
-        async_stats.get();
+        // async_stats.get();
 
         // create the new task
         spdlog::trace("Scheduling new stats computation");
@@ -358,13 +358,6 @@ void Channel::update_stats()
                 return ret;
             });
 
-        // async_tracker = do_async(
-        //     [this, desired_settings](AtomicProgress &prog)
-        //     {
-        //         async_stats2 = make_shared<PixelStats>(*this, desired_settings.exposure, desired_settings.x_scale,
-        //                                                desired_settings.y_scale, prog);
-        //     },
-        //     progress);
         async_settings = desired_settings;
         async_stats.compute();
     };
@@ -616,7 +609,7 @@ void Image::finalize()
     }
 
     // update the stats/histograms for all channels
-    for (auto &c : channels) c.update_stats();
+    // for (auto &c : channels) c.update_stats();
 }
 
 string Image::to_string() const

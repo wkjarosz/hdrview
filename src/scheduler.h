@@ -27,6 +27,9 @@
 //
 
 // scheduler.h
+
+#pragma once
+
 #include "progress.h"
 #include <atomic>
 #include <condition_variable>
@@ -92,7 +95,7 @@ public:
         }
 
         // Non-blocking check whether the computation is finished.
-        bool ready() const { return !task; }
+        bool ready() const;
 
         // Wait for the task to complete. Calling wait will make the calling thread to temporarily
         // enter the task scheduler and participate to the computation.

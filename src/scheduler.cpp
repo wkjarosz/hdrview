@@ -321,6 +321,8 @@ Scheduler::TaskTracker Scheduler::async(int numUnits, void *data, TaskFn f, Task
     return result;
 }
 
+bool Scheduler::TaskTracker::ready() const { return !task || task->dependencies.load() == 0; }
+
 void Scheduler::TaskTracker::wait()
 {
     if (!task)

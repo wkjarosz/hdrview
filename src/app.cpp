@@ -644,20 +644,20 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
         // convert the buffer (if any) to a string so the async thread has its own copy
         // then load from the string or filename depending on whether the buffer is empty
         m_pending_images.emplace_back(
-            std::make_shared<PendingImage>(filename,
-                                           [buffer_str = string(buffer), filename](AtomicProgress &prog)
-                                           {
-                                               if (buffer_str.empty())
-                                               {
-                                                   std::ifstream is{filename, std::ios_base::binary};
-                                                   return Image::load(is, filename);
-                                               }
-                                               else
-                                               {
-                                                   std::istringstream is{buffer_str};
-                                                   return Image::load(is, filename);
-                                               }
-                                           }));
+            std::make_shared<PendingImages>(filename,
+                                            [buffer_str = string(buffer), filename](AtomicProgress &prog)
+                                            {
+                                                if (buffer_str.empty())
+                                                {
+                                                    std::ifstream is{filename, std::ios_base::binary};
+                                                    return Image::load(is, filename);
+                                                }
+                                                else
+                                                {
+                                                    std::istringstream is{buffer_str};
+                                                    return Image::load(is, filename);
+                                                }
+                                            }));
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
@@ -672,7 +672,7 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
 void HDRViewApp::add_pending_images()
 {
     // Criterion to check if a image is ready, and copy it into our m_images vector if so
-    auto removable = [this](shared_ptr<PendingImage> p)
+    auto removable = [this](shared_ptr<PendingImages> p)
     {
         if (p->images.ready())
         {
