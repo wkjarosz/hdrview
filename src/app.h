@@ -202,7 +202,10 @@ private:
     {
         string        filename;
         ImageLoadTask images;
-        PendingImages(const string &f, ImageLoadTask::TaskFunc func) : filename(f), images(func) { images.compute(); }
+        PendingImages(const string &f, ImageLoadTask::NoProgressTaskFunc func) : filename(f), images(func)
+        {
+            images.compute();
+        }
     };
     vector<shared_ptr<PendingImages>> m_pending_images;
 

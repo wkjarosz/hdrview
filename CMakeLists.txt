@@ -187,8 +187,8 @@ foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
   )
 endforeach()
 
-set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
-set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD ON)
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH ON)
 
 CPMAddPackage(
   NAME imgui_bundle
@@ -374,15 +374,17 @@ if(EMSCRIPTEN)
   target_link_options(
     HDRView
     PRIVATE
+    -fexceptions
     -sEXPORTED_RUNTIME_METHODS=[ccall]
     -sEXPORTED_FUNCTIONS=[_main,_malloc,_free]
     -sNO_DISABLE_EXCEPTION_CATCHING
     -sMAX_WEBGL_VERSION=2
     -sMIN_WEBGL_VERSION=2
   )
+  target_compile_options(HDRView PRIVATE -fexceptions -sNO_DISABLE_EXCEPTION_CATCHING)
   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     target_link_options(HDRView PRIVATE -pthread)
-    target_link_options(HDRView PRIVATE -sPTHREAD_POOL_SIZE=2)
+    target_link_options(HDRView PRIVATE -sPTHREAD_POOL_SIZE=3)
   endif()
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 300)
 else()

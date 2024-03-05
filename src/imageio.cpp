@@ -94,8 +94,8 @@ static const stbi_io_callbacks stbi_callbacks = {
 static void copy_into_channel(Channel &channel, const float data[], int w, int h, int n, int c, bool linearize)
 {
     bool dither = true;
-    parallel_for(0, h,
-                 [&channel, n, c, w, &data, linearize, dither](int y)
+    parallel_for(blocked_range<int>(0, h),
+                 [&channel, n, c, w, &data, linearize, dither](int y, int, int, int)
                  {
                      for (int x = 0; x < w; ++x)
                      {

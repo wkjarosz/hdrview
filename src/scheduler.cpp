@@ -16,6 +16,8 @@
 #include "scheduler.h"
 #include <assert.h>
 
+#include <spdlog/spdlog.h>
+
 struct Scheduler::Task
 {
     inline Task(int numUnits, void *data, TaskFn fn, TaskFn epilogue = nullptr) :
@@ -150,7 +152,15 @@ void Scheduler::start(int nThreads)
 {
     assert(m_workers.empty() && "Assure scheduler is not initialized twice!");
     {
+#if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+        // if threading is disabled, create no threads
+        auto nLogicalThreads = 0;
+#elif defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+        // if threading is enabled in emscripten, then use just 1 thread
+        auto nLogicalThreads = 1;
+#else
         auto nLogicalThreads = std::thread::hardware_concurrency();
+#endif
         if (nThreads == k_all)
             nThreads = nLogicalThreads;
         else
@@ -171,36 +181,48 @@ void Scheduler::start(int nThreads)
     for (int threadIndex = 0; threadIndex < (int)nThreads; ++threadIndex)
     {
         m_workers[threadIndex] = new std::thread(
-            [&, threadIndex]
+            [this, threadIndex]
             {
-                // Initialize thread index, worker threads have numbers in the range [0, nThreads-1]
-                // Guest threads will get their own unique indices.
-                m_threadIndex = threadIndex;
-
-                // printf("Spawn thread %d\n", threadIndex);
-                while (true)
+                try
                 {
-                    TaskUnit workUnit;
-                    // bool     removed = false;
-                    {
-                        // usual thread-safe queue code:
-                        std::unique_lock<std::mutex> lock(m_workMutex);
-                        m_workSignal.wait(lock, [&] { return !m_work.empty(); });
+                    // Initialize thread index, worker threads have numbers in the range [0, nThreads-1]
+                    // Guest threads will get their own unique indices.
+                    m_threadIndex = threadIndex;
 
-                        // Transfer ownership to this thread, unbind tasks after running
-                        workUnit = m_work.front();
-                        m_work.pop_front();
-                    }
-
-                    // if the task is invalid, it means we are asked to abort:
-                    if (workUnit.task && !workUnit.task->valid())
+                    // printf("Spawn thread %d\n", threadIndex);
+                    spdlog::trace("Spawning worker thread {}", threadIndex);
+                    while (true)
                     {
+                        TaskUnit workUnit;
+                        // bool     removed = false;
+                        {
+                            // usual thread-safe queue code:
+                            std::unique_lock<std::mutex> lock(m_workMutex);
+                            m_workSignal.wait(lock, [&] { return !m_work.empty(); });
+
+                            // Transfer ownership to this thread, unbind tasks after running
+                            workUnit = m_work.front();
+                            m_work.pop_front();
+                        }
+
+                        // if the task is invalid, it means we are asked to abort:
+                        if (workUnit.task && !workUnit.task->valid())
+                        {
+                            unbind(workUnit.task);
+                            break;
+                        }
+
+                        runTask(workUnit.task, workUnit.index, threadIndex);
                         unbind(workUnit.task);
-                        break;
                     }
-
-                    runTask(workUnit.task, workUnit.index, threadIndex);
-                    unbind(workUnit.task);
+                }
+                catch (const std::exception &e)
+                {
+                    spdlog::error("Caught an exception in a worker thread: '{}'", e.what());
+                }
+                catch (...)
+                {
+                    spdlog::error("Caught an exception in a worker thread");
                 }
             });
     }
@@ -211,7 +233,14 @@ void Scheduler::runTask(Task *task, int unitIndex, int threadIndex)
     Task *oldTask = m_threadTask;
     m_threadTask  = task;
 
-    task->fn(unitIndex, threadIndex, task->data);
+    try
+    {
+        task->fn(unitIndex, threadIndex, task->data);
+    }
+    catch (...)
+    {
+        spdlog::error("Caught an exception while running task.");
+    }
 
     int done = ++task->completed;
     if (done == task->numUnits)

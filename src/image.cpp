@@ -97,26 +97,8 @@ float2 PixelStats::x_limits(float e, AxisScale_ scale) const
     return ret;
 }
 
-// void PixelStats::reset(float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale)
-// {
-//     *this    = PixelStats();
-//     exposure = new_exposure;
-//     // minimum            = std::numeric_limits<float>::infinity();
-//     // maximum            = -std::numeric_limits<float>::infinity();
-//     // average            = 0.0f;
-//     hist_x_scale = new_x_scale;
-//     hist_y_scale = new_y_scale;
-//     // hist_y_limits      = {0.f, 1.f};
-//     // hist_normalization = {0.f, 1.f};
-//     // nan_pixels         = 0;
-//     // inf_pixels         = 0;
-//     // hist_xs.fill(0.f);
-//     // hist_ys.fill(0.f);
-//     // computed = false;
-// }
-
 void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale,
-                           AtomicProgress &prog)
+                           std::atomic<bool> &canceled)
 {
     try
     {
@@ -134,7 +116,8 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
 
         Timer timer;
         {
-            constexpr int numThreads = 4;
+            size_t       block_size  = 1024 * 1024;
+            const size_t num_threads = estimate_threads(img.num_elements(), block_size, *Scheduler::singleton());
             struct Stats
             {
                 float  minimum      = std::numeric_limits<float>::infinity();
@@ -145,11 +128,12 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                 int    valid_pixels = 0;
                 bool   exception    = false;
             };
-            std::array<Stats, max(1, numThreads)> partials;
+            std::vector<Stats> partials(max<size_t>(1, num_threads));
+            spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<int>(0, img.num_elements(), 1024),
-                [&img, &partials, &prog](int begin, int end, int unit_index, int thread_index)
+                blocked_range<int>(0, img.num_elements(), block_size),
+                [&img, &partials, &canceled](int begin, int end, int unit_index, int thread_index)
                 {
                     Stats partial = partials[unit_index]; //< compute over local symbols.
                     if (partial.exception)
@@ -159,8 +143,8 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                     {
                         for (int i = begin; i != end; ++i)
                         {
-                            if (prog.canceled())
-                                throw std::exception();
+                            if (canceled)
+                                throw std::runtime_error("canceling summary stats");
 
                             // computation
                             float val = img(i);
@@ -180,12 +164,13 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                     }
                     catch (...)
                     {
+                        spdlog::trace("canceling summary stats computation");
                         partial.exception = true;
                     }
 
                     partials[unit_index] = partial; //< Store partials at the end.
                 },
-                numThreads);
+                num_threads);
 
             // final reduction from partial results
             double accum        = 0.f;
@@ -193,7 +178,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
             for (auto &p : partials)
             {
                 if (p.exception)
-                    throw std::exception();
+                    throw std::runtime_error("canceling summary stat final reduction");
 
                 minimum = std::min(p.minimum, minimum);
                 maximum = std::max(p.maximum, maximum);
@@ -227,8 +212,8 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         // accumulate bin counts
         for (int i = 0; i < img.num_elements(); ++i)
         {
-            if (prog.canceled())
-                throw std::exception();
+            if (canceled)
+                throw std::runtime_error("Canceling histogram accumulation");
             bin_y(value_to_bin(img(i))) += 1;
         }
 
@@ -243,8 +228,9 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
 
         // Compute y limit for each histogram according to its 10th-largest bin
         auto ys  = hist_ys; // make a copy, which we partially sort
-        auto idx = ys.size() - 10;
-        std::nth_element(ys.begin(), ys.begin() + idx, ys.end());
+        auto idx = 10;
+        // put the 10th largest value in index 10
+        std::nth_element(ys.begin(), ys.begin() + idx, ys.end(), std::greater<float>());
         // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
         hist_y_limits[0] = hist_y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
         // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
@@ -261,9 +247,10 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
     }
     catch (const std::exception &e)
     {
-        spdlog::trace("Canceling pixel stats computation");
+        spdlog::trace("Canceling pixel stats computation '{}'", e.what());
         *this = PixelStats(); // reset
     }
+    spdlog::trace("Finishing PixelStats::calculate");
 }
 
 float4x4 ChannelGroup::colors() const
@@ -293,8 +280,7 @@ float4x4 ChannelGroup::colors() const
 }
 
 Channel::Channel(const std::string &name, int2 size) :
-    Array2Df(size), name(name), cached_stats(make_shared<PixelStats>()),
-    async_stats([]() { return make_shared<PixelStats>(); })
+    Array2Df(size), name(name), cached_stats(make_shared<PixelStats>()), async_stats(make_shared<PixelStats>())
 {
 }
 
@@ -326,9 +312,12 @@ PixelStats *Channel::get_stats()
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
     // We always return the cached stats, but before we do we might update the cache from the async stats
-
-    if (async_stats.ready() && async_stats.get()->computed)
-        cached_stats = async_stats.get();
+    if (async_tracker.ready() && async_stats->computed)
+    {
+        spdlog::trace("Replacing cached channel stats with async computation");
+        cached_stats = async_stats;
+        async_stats  = make_shared<PixelStats>();
+    }
 
     return cached_stats.get();
 }
@@ -342,24 +331,23 @@ void Channel::update_stats()
 
     auto recompute_async_stats = [this, desired_settings]()
     {
-        // cancel and wait for the current task
-        spdlog::trace("Canceling and waiting for outdated stats computation.");
-        async_stats.cancel();
-        // async_stats.get();
+        // First cancel the potential previous async task
+        if (async_canceled)
+        {
+            spdlog::trace("Canceling outdated stats computation.");
+            *async_canceled = true;
+        }
 
         // create the new task
-        spdlog::trace("Scheduling new stats computation");
-        async_stats = PixelStats::Task(
-            [this, desired_settings](AtomicProgress &prog)
+        async_canceled = make_shared<atomic<bool>>(false);
+        async_tracker  = do_async(
+            [this, desired_settings, canceled = async_canceled]()
             {
-                auto ret = make_shared<PixelStats>();
-                ret->calculate(*this, desired_settings.exposure, desired_settings.x_scale, desired_settings.y_scale,
-                               prog);
-                return ret;
+                spdlog::trace("Starting a new stats computation");
+                async_stats->calculate(*this, desired_settings.exposure, desired_settings.x_scale,
+                                        desired_settings.y_scale, *canceled);
             });
-
         async_settings = desired_settings;
-        async_stats.compute();
     };
 
     // if the cached stats match and are valid, no need to recompute
@@ -369,17 +357,19 @@ void Channel::update_stats()
     // cached stats are outdated, need to recompute
 
     // if the async computation settings are outdated, or it was never computed -> recompute
-    if (!async_settings.match(desired_settings) || (async_stats.ready() && !async_stats.get()->computed))
+    if (!async_settings.match(desired_settings) || (async_tracker.ready() && !async_stats->computed))
     {
         recompute_async_stats();
         return;
     }
 
     // if the async computation is ready, grab it and possibly schedule again
-    if (async_stats.ready() && async_stats.get()->computed)
+    if (async_tracker.ready() && async_stats->computed)
     {
+        spdlog::trace("Replacing cached channel stats with async computation");
         // replace cache with newer async stats
-        cached_stats = async_stats.get();
+        cached_stats = async_stats;
+        async_stats  = make_shared<PixelStats>();
 
         // if these newer stats are still outdated, schedule a new async computation
         if (!cached_stats->settings().match(desired_settings))

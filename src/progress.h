@@ -86,8 +86,8 @@ class AtomicProgress
 public:
     using AtomicPercent32 = AtomicFixed<std::int32_t, std::int64_t, 30>;
 
-    explicit AtomicProgress(bool createState = false, float totalPercentage = 1.f);
-    AtomicProgress(float percentageOfParent, const AtomicProgress &parent);
+    explicit AtomicProgress(bool create_state = false, float total_percentage = 1.f);
+    AtomicProgress(float percentage_of_parent, const AtomicProgress &parent);
 
     // access to the atomic internal storage
     void  reset_progress(float p = 0.f);
@@ -101,7 +101,7 @@ public:
 
     // access to the discrete stepping
     void            set_available_percent(float percent);
-    void            set_num_steps(int numSteps);
+    void            set_num_steps(int num_steps);
     AtomicProgress &operator+=(int steps);
     AtomicProgress &operator++() { return ((*this) += 1); }
 

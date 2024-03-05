@@ -8,12 +8,13 @@
 #include "progress.h"
 #include "scheduler.h"
 #include <functional>
+#include <spdlog/spdlog.h>
 
 template <typename T>
 class AsyncTask
 {
 public:
-    using TaskFunc           = std::function<T(AtomicProgress &progress)>;
+    using TaskFunc           = std::function<T(std::atomic<bool> &canceled)>;
     using NoProgressTaskFunc = std::function<T()>;
 
     /*!
@@ -21,14 +22,7 @@ public:
      * @param compute The function to execute asynchronously
      */
     AsyncTask(TaskFunc f, Scheduler *s = nullptr) :
-        m_func(
-            [f](AtomicProgress &prog)
-            {
-                T ret = f(prog);
-                prog.set_done();
-                return ret;
-            }),
-        m_progress(true), m_threadpool(s)
+        m_state(std::make_shared<SharedState>([f](std::atomic<bool> &canceled) { return f(canceled); }, s))
     {
     }
 
@@ -37,8 +31,14 @@ public:
      * @param compute The function to execute asynchronously
      */
     AsyncTask(NoProgressTaskFunc f, Scheduler *s = nullptr) :
-        m_func([f](AtomicProgress &) { return f(); }), m_progress(false), m_threadpool(s)
+        m_state(std::make_shared<SharedState>([f](std::atomic<bool> &) { return f(); }, s))
     {
+    }
+
+    ~AsyncTask()
+    {
+        cancel();
+        // no need to wait, the task continues running and the scheduler will clean it up
     }
 
     /*!
@@ -46,20 +46,26 @@ public:
      */
     void compute()
     {
-        // start only if not done and not already started
-        if (!m_started)
+        if (m_state->started)
+            return;
+
+        struct Payload
         {
-            auto callback = [](int, int, void *payload)
-            {
-                AsyncTask *self = (AsyncTask *)payload;
-                self->m_value   = self->m_func(self->m_progress);
-            };
+            std::shared_ptr<SharedState> state;
+        };
 
-            auto pool = m_threadpool ? m_threadpool : Scheduler::singleton();
-            m_task    = pool->parallelizeAsync(1, this, callback);
+        auto callback = [](int, int, void *payload)
+        {
+            auto &state  = ((Payload *)payload)->state;
+            state->value = state->f(state->canceled);
+        };
+        auto deleter = [](int, int, void *payload) { delete (Payload *)payload; };
 
-            m_started = true;
-        }
+        Payload *payload = new Payload{m_state};
+
+        auto pool        = m_state->threadpool ? m_state->threadpool : Scheduler::singleton();
+        m_state->task    = pool->parallelizeAsync(1, payload, callback, deleter);
+        m_state->started = true;
     }
 
     /*!
@@ -70,8 +76,8 @@ public:
      */
     T &get()
     {
-        m_task.wait();
-        return m_value;
+        m_state->task.wait();
+        return m_state->value;
     }
 
     /*!
@@ -80,25 +86,37 @@ public:
      * @return The percentage done, ranging from 0.f to 100.f,
      * or -1 to indicate busy if the task doesn't report back progress
      */
-    float progress() const { return m_progress.progress(); }
+    // float progress() const { return m_progress.progress(); }
 
-    void set_progress(float p) { m_progress.reset_progress(p); }
+    // void set_progress(float p) { m_progress.reset_progress(p); }
 
     /// Query whether the task is canceled.
-    bool canceled() const { return m_progress.canceled(); }
+    bool canceled() const { return m_state->canceled; }
 
-    void cancel() { m_progress.cancel(); }
+    void cancel()
+    {
+        spdlog::trace("Canceling async computation");
+        m_state->canceled = true;
+    }
 
     /*!
      * @return true if the computation has finished
      */
-    bool ready() const { return m_started && m_task.ready(); }
+    bool ready() const { return m_state->started && m_state->task.ready(); }
 
 private:
-    T                      m_value;
-    TaskFunc               m_func;
-    Scheduler::TaskTracker m_task;
-    AtomicProgress         m_progress;
-    bool                   m_started    = false;
-    Scheduler             *m_threadpool = nullptr;
+    struct SharedState
+    {
+        TaskFunc               f;
+        Scheduler             *threadpool{nullptr};
+        std::atomic<bool>      canceled{false};
+        bool                   started{false};
+        Scheduler::TaskTracker task;
+        T                      value;
+
+        SharedState(TaskFunc fn, Scheduler *s) : f(fn), threadpool(s), canceled(false), started(false), task(), value()
+        {
+        }
+    };
+    std::shared_ptr<SharedState> m_state; //!< Shared state between this AsyncTask and the Scheduler executing the task
 };

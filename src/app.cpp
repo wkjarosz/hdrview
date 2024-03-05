@@ -156,11 +156,16 @@ HDRViewApp::HDRViewApp()
     spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
     ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
-#if defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    // if threading is disabled, create no threads
     unsigned threads = 0;
+#elif defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    // if threading is enabled in emscripten, then use just 1 thread
+    unsigned threads = 1;
 #else
     unsigned threads = std::thread::hardware_concurrency();
 #endif
+
     spdlog::debug("Setting global OpenEXR thread count to {}", threads);
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
@@ -645,7 +650,7 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
         // then load from the string or filename depending on whether the buffer is empty
         m_pending_images.emplace_back(
             std::make_shared<PendingImages>(filename,
-                                            [buffer_str = string(buffer), filename](AtomicProgress &prog)
+                                            [buffer_str = string(buffer), filename]()
                                             {
                                                 if (buffer_str.empty())
                                                 {
@@ -1766,6 +1771,18 @@ int main(int argc, char **argv)
     bool           help                 = false;
     bool           error                = false;
     bool           launched_from_finder = false;
+
+#if defined(__EMSCRIPTEN__)
+    spdlog::info("defined: __EMSCRIPTEN__");
+#endif
+
+#if defined(HELLOIMGUI_EMSCRIPTEN)
+    spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN");
+#endif
+
+#if defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN_PTHREAD");
+#endif
 
     try
     {

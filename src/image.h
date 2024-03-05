@@ -57,7 +57,6 @@ struct PixelStats
 {
     static constexpr int NUM_BINS = 256;
     using Ptr                     = std::shared_ptr<PixelStats>;
-    using Task                    = AsyncTask<PixelStats::Ptr>;
 
     struct Settings
     {
@@ -88,7 +87,8 @@ struct PixelStats
     PixelStats() = default;
 
     /// Populate the statistics from the provided img and settings
-    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale, AtomicProgress &prog);
+    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale,
+                   std::atomic<bool> &canceled);
 
     Settings settings() const { return {exposure, hist_x_scale, hist_y_scale}; }
 
@@ -133,12 +133,11 @@ public:
     void        update_stats();
 
 private:
-    PixelStats::Ptr  cached_stats;
-    PixelStats::Task async_stats;
-    // Scheduler::TaskTracker async_tracker;
-    // PixelStats::Ptr        async_stats2;
-    PixelStats::Settings async_settings{};
-    // bool                 stats_dirty = true;
+    PixelStats::Ptr                    cached_stats;
+    Scheduler::TaskTracker             async_tracker;
+    std::shared_ptr<std::atomic<bool>> async_canceled;
+    PixelStats::Ptr                    async_stats;
+    PixelStats::Settings               async_settings{};
 };
 
 // A ChannelGroup collects up to 4 channels into a single unit

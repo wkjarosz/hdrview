@@ -181,6 +181,7 @@ public:
     // @param epilogue optional ask wrap-up function, executed when all the unit of works are
     //        completed. The type is the same as the task function except that the first arg
     //        is "int numUnits" instead of the unitIndex.
+    //
     // Example, parallel reduction:
     //     struct TaskData
     //     {
@@ -238,7 +239,7 @@ public:
     // heap and use the epilogue function to free it. If you run parallelizeAsync from within
     // another task, make sure you call wait in the TaskTracker, unless the completion of the
     // parent task epilogue doesn't depend on the completion of this async task.
-    // Example of set-and-forget lauch:
+    // Example of set-and-forget launch:
     //     struct TaskData
     //     {
     //         [...]
@@ -315,10 +316,10 @@ private:
     }
 
     // Internal method to launch a task. Extra arguments over parallelize are:
-    // @param reservedUnits, the number of units the task launch function may want to reserve
+    // @param reservedUnits the number of units the task launch function may want to reserve
     //        to execute in the local thread. For example parallelize reserves one unit,
     //        parallelizeAsync reserves none.
-    // @param front, insert new tasks to the front of the queue or at the back. Typically,
+    // @param front insert new tasks to the front of the queue or at the back. Typically,
     //        nested parallelism inserts at the front to complete as soon as possible, before
     //        outer parallelism is exhausted; while new outer parallelization is pushes at the
     //        back of the queue, to let existing workload to complete first.
@@ -340,18 +341,14 @@ private:
     static thread_local Task *m_threadTask;
 };
 
-// Utility to estimate how many threads are appropriate to execute some parallel computation
-// based on a workload size. Template argument k_unitSize is the number of elements/thread
-// that are considered viable to mitigate scheduling overhead. k_maxThreads is an optional
-// argument for the maximum number of threads (in case it is desirable to limit parallelism
-// and control scaling). The function automatically caps the maximum number of threads to
-// the count in the scheduler.
-template <int k_unitSize, int k_maxThreads = 1 << 16>
-inline size_t estimateThreads(size_t workloadSize, const Scheduler &scheduler)
+// Utility to estimate how many threads are appropriate to execute some parallel computation based on a workload size.
+// The function automatically caps the maximum number of threads to the count in the scheduler.
+// @param workload_size Total size of the workload. e.g. number of elements to process
+// @param min_unit_size The number of elements per thread that are considered viable to mitigate scheduling overhead.
+inline size_t estimate_threads(size_t workload_size, size_t min_unit_size, const Scheduler &scheduler)
 {
-    size_t nChunks    = (workloadSize + k_unitSize - 1) / k_unitSize;
-    size_t numThreads = std::min<size_t>(nChunks, std::min<size_t>(k_maxThreads, scheduler.getNumThreads()));
-    return numThreads;
+    size_t chunks = (workload_size + min_unit_size - 1) / min_unit_size;
+    return std::min<size_t>(chunks, scheduler.getNumThreads());
 }
 
 template <typename Int>
