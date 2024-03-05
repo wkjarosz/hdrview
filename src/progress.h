@@ -69,17 +69,19 @@ public:
 using AtomicFixed16 = AtomicFixed<std::int16_t, std::int32_t, 8>;
 using AtomicFixed32 = AtomicFixed<std::int32_t, std::int64_t, 16>;
 
-/*!
- * Helper object to manage the progress display.
- * 	{
- *   	AtomicProgress p1(true);
- *   	p1.set_num_steps(10);
- *   	for (int i = 0; i < 10; ++i, ++p1)
- *   	{
- *     		// do something
- *   	}
- * 	} // end progress p1
- *
+/**
+    Helper object to manage the progress display.
+
+    \code{.cpp}
+    {
+        AtomicProgress p1(true);
+        p1.set_num_steps(10);
+        for (int i = 0; i < 10; ++i, ++p1)
+        {
+                // do something
+        }
+    } // end progress p1
+    \endcode
  */
 class AtomicProgress
 {

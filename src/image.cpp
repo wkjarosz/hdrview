@@ -103,7 +103,6 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
     try
     {
         spdlog::trace("Computing pixel statistics");
-        spdlog::debug("Num threads in scheduler {}", Scheduler::singleton()->getNumThreads());
 
         // initialize values
         *this        = PixelStats();
@@ -126,7 +125,6 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                 int    nan_pixels   = 0;
                 int    inf_pixels   = 0;
                 int    valid_pixels = 0;
-                bool   exception    = false;
             };
             std::vector<Stats> partials(max<size_t>(1, num_threads));
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
@@ -136,36 +134,26 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                 [&img, &partials, &canceled](int begin, int end, int unit_index, int thread_index)
                 {
                     Stats partial = partials[unit_index]; //< compute over local symbols.
-                    if (partial.exception)
-                        return;
 
-                    try
+                    for (int i = begin; i != end; ++i)
                     {
-                        for (int i = begin; i != end; ++i)
+                        if (canceled)
+                            throw std::runtime_error("canceling summary stats");
+
+                        // computation
+                        float val = img(i);
+
+                        if (isnan(val))
+                            ++partial.nan_pixels;
+                        else if (isinf(val))
+                            ++partial.inf_pixels;
+                        else
                         {
-                            if (canceled)
-                                throw std::runtime_error("canceling summary stats");
-
-                            // computation
-                            float val = img(i);
-
-                            if (isnan(val))
-                                ++partial.nan_pixels;
-                            else if (isinf(val))
-                                ++partial.inf_pixels;
-                            else
-                            {
-                                ++partial.valid_pixels;
-                                partial.maximum = std::max(partial.maximum, val);
-                                partial.minimum = std::min(partial.minimum, val);
-                                partial.average += val;
-                            }
+                            ++partial.valid_pixels;
+                            partial.maximum = std::max(partial.maximum, val);
+                            partial.minimum = std::min(partial.minimum, val);
+                            partial.average += val;
                         }
-                    }
-                    catch (...)
-                    {
-                        spdlog::trace("canceling summary stats computation");
-                        partial.exception = true;
                     }
 
                     partials[unit_index] = partial; //< Store partials at the end.
@@ -177,9 +165,6 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
             int    valid_pixels = 0;
             for (auto &p : partials)
             {
-                if (p.exception)
-                    throw std::runtime_error("canceling summary stat final reduction");
-
                 minimum = std::min(p.minimum, minimum);
                 maximum = std::max(p.maximum, maximum);
                 nan_pixels += p.nan_pixels;
@@ -191,7 +176,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
             average = valid_pixels ? float(accum / valid_pixels) : 0.f;
         }
 
-        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.elapsed(), minimum, average,
+        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.lap(), minimum, average,
                       maximum);
         //
 
@@ -241,16 +226,17 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         else
             hist_y_limits[1] = 1.f;
 
-        spdlog::trace("x_limits: {}; y_limits: {}", hist_x_limits, hist_y_limits);
+        spdlog::trace("Histogram computed in {} ms:\nx_limits: {}\ny_limits: {}", timer.lap(), hist_x_limits,
+                      hist_y_limits);
 
         computed = true;
     }
     catch (const std::exception &e)
     {
-        spdlog::trace("Canceling pixel stats computation '{}'", e.what());
+        spdlog::trace("Canceled PixelStats::calculate");
         *this = PixelStats(); // reset
     }
-    spdlog::trace("Finishing PixelStats::calculate");
+    spdlog::trace("Finished PixelStats::calculate");
 }
 
 float4x4 ChannelGroup::colors() const

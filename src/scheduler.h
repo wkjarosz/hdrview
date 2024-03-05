@@ -15,15 +15,17 @@
 //
 // Modifications by Wojciech Jarosz (c) 2024, released under the same Apache License as above
 // - Added ability to run tasks in serial, bypassing the thread pool
-//   - Using numThreads == 0 doesn't create any workers, and all tasks run in serial immediately by the calling thread
+//   - Using num_threads == 0 doesn't create any workers, and all tasks run in serial immediately by the calling thread
 //   - k_all is now defined as -1
 // - Added Scheduler::singleton() which returns a global instance of a Scheduler. Upon first being called, the scheduler
-//   is created and started with numThreads = k_all. The function is guarded by a mutex.
+//   is created and started with num_threads = k_all. The function is guarded by a mutex.
+// - Tasks now store an exception which is re-thrown in TaskTracker::wait()
 // - Added ready() function to TaskTracker
 // - Added various wrapper/utility templates (parallel_for, blocked_range, do_async) which provide a simpler,
 //   higher-level API and allow creating tasks with lambdas containing captures Fixed a few type inconsistencies (mixing
 //   uint32_t with int)
 // - fixed minor spelling mistakes
+// - converte to snake_casing, and added some more comments.
 //
 
 // scheduler.h
@@ -38,30 +40,32 @@
 #include <thread>
 #include <vector>
 
-// Implementation of a simple but versatile task scheduler. The scheduler allows to parallelize
-// workload and gives full control over how many threads to burst compute to. Nested parallelism
-// is fully supported, with priority to inner parallelism. Compared to a typical work stealing
-// implementation, there is no spinning, and when there is not enough workload, some threads
-// will go idle instead of spinning, making it obvious when the CPU runs underutilized.
-// Launching a task incur into a small memory allocation of 48 bytes for the task itself, that
-// is it. Lambda captures are not allowed to contain the overhead and the system implementation
-// nimble. The scheduler can be instantiated multiple times, to create multiple isolated thread
-// pools. There is no singleton that may prescribe how to access the scheduler. Schedulers can
-// be instantiated on demand and destroyed if needed.
-// Use start() and stop() methods to initialize and teardown a scheduler.
-// For examples, look at the documentation of the parallelize() and parallelizeAsync() methods.
+/**
+    Implementation of a simple but versatile task scheduler. The scheduler allows to parallelize
+    workload and gives full control over how many threads to burst compute to. Nested parallelism
+    is fully supported, with priority to inner parallelism. Compared to a typical work stealing
+    implementation, there is no spinning, and when there is not enough workload, some threads
+    will go idle instead of spinning, making it obvious when the CPU runs underutilized.
+    Launching a task incurs a small memory allocation of 48 bytes for the task itself, that
+    is it. Lambda captures are not allowed to contain the overhead and the system implementation
+    nimble. The scheduler can be instantiated multiple times, to create multiple isolated thread
+    pools or \ref singleton() returns a pointer to a global singleton (constructed on first
+    use). Schedulers can be instantiated on demand and destroyed if needed.
+    Use \ref start() and \ref stop() methods to initialize and teardown a scheduler.
+    For examples, look at the documentation of the \ref parallelize() and \ref parallelize_async() methods.
+*/
 class Scheduler
 {
 public:
     // The task function prototype. The arguments are the same for the task function and epilogue,
-    // however for the latter the first int argument is not a unitIndex, but the number of units.
-    using TaskFn = void (*)(int unitIndex, int threadIndex, void *data);
+    // however for the latter the first int argument is not a unit_index, but the number of units.
+    using TaskFn = void (*)(int unit_index, int thread_index, void *data);
 
     // Opaque task type.
     struct Task;
 
-    // The task scheduler returns a TaskTracker for any async launch. Use the method wait() to
-    // synchronize on the task completion, or ready() for a non-blocking check whether the computation is done.
+    // The task scheduler returns a TaskTracker for any async launch. Use the method \ref wait() to
+    // synchronize on the task completion, or \ref ready() for a non-blocking check whether the computation is done.
     struct TaskTracker
     {
         TaskTracker() : task(nullptr), scheduler(nullptr) {}
@@ -94,11 +98,22 @@ public:
                 scheduler->unbind(task);
         }
 
-        // Non-blocking check whether the computation is finished.
+        /**
+            Non-blocking check whether the computation is finished.
+
+            Ready tasks may still need some cleanup (via \ref ~TaskTracker() or \ref wait()).
+        */
         bool ready() const;
 
-        // Wait for the task to complete. Calling wait will make the calling thread to temporarily
-        // enter the task scheduler and participate to the computation.
+        /**
+            Wait for the task to complete.
+
+            Calling wait will make the calling thread temporarily enter the task scheduler and participate in the
+            computation.
+
+            If any exceptions were thrown during the execution of task, \ref wait() will re-throw *one* of them within
+            the context of the calling thread.
+        */
         void wait();
 
         Task      *task;
@@ -106,249 +121,274 @@ public:
     };
 
 public:
-    static constexpr int k_all                = -1;
-    static constexpr int k_invalidThreadIndex = -1;
+    static constexpr int k_all{-1};
+    static constexpr int k_invalid_thread_index{-1};
 
     Scheduler();
     ~Scheduler();
-    Scheduler(const Scheduler &)            = delete; // non construction-copyable
-    Scheduler &operator=(const Scheduler &) = delete; // non copyable
+    Scheduler(const Scheduler &)            = delete; ///< non construction-copyable
+    Scheduler &operator=(const Scheduler &) = delete; ///< non copyable
 
     // Return the global default scheduler, which is created upon the first call, and guarded by a mutex
     static Scheduler *singleton();
 
-    // Start a scheduler with a number of threads. k_all means use the full hardware
-    // concurrency available.
-    void start(int numThreads = k_all);
+    /// Start a pool with a number of threads. \ref k_all means use the full hardware concurrency available.
+    void start(int num_threads = k_all);
 
-    // Wait for any pending tasks to complete and terminate all threads in the pool.
+    /// Wait for any pending tasks to complete and terminate all threads in the pool.
     void stop();
 
-    // Get the number of threads in the scheduler pool.
-    int getNumThreads() const { return (int)m_workers.size(); }
+    /// Get the number of threads in the pool.
+    int size() const { return (int)m_workers.size(); }
 
-    // Retrieve the maximum value for a thread index. The value can be used to reserve space
-    // for parallel algorithms making use of per-thread resources. However, in the general
-    // case it is more practical to allocate resources using the numThreads value you pass
-    // to the parallelize calls and rely on the unitIndex as index into those resources. See
-    // parallelize for more details.
-    int getMaxThreadIndex(bool includeCaller = true) const
+    /**
+        Retrieve the maximum value for a thread index. The value can be used to reserve space
+        for parallel algorithms making use of per-thread resources. However, in the general
+        case it is more practical to allocate resources using the num_threads value you pass
+        to the \ref parallelize() calls and rely on the unit_index as index into those resources. See
+        \ref parallelize() for more details.
+    */
+    int max_thread_index(bool include_caller = true) const
     {
-        if (includeCaller)
+        if (include_caller)
         {
-            // If this is one of the worker threads, it should have a valid threadIndex or
+            // If this is one of the worker threads, it should have a valid thread_index or
             // we may need to assign one to it. There is a change the caller thread never
             // entered the scheduler before.
-            int threadIndex = m_threadIndex;
-            if (threadIndex == k_invalidThreadIndex)
-                threadIndex = m_threadIndex = m_nextGuestThreadIndex++;
+            int thread_index = m_thread_index;
+            if (thread_index == k_invalid_thread_index)
+                thread_index = m_thread_index = m_next_guest_thread_index++;
         }
 
-        return m_nextGuestThreadIndex - 1;
+        return m_next_guest_thread_index - 1;
     }
 
-    // In theory not necessary, threadIndex is passed as argument to the task function. This
-    // can be used in the depth of a task callstack, in case you don't want to pass down the
-    // argument. If you need to use some index to access per-thread partials in your parallel
-    // algorithm, it is best to use the unitIndex argument to the task function.
-    // That value is guaranteed to be within the task launch bounds, which tends to be smaller
-    // in size than the number you may obtain with getMaxThreadIndex.
-    static int getThreadIndex() { return m_threadIndex; }
+    /**
+        In theory not necessary since thread_index is passed as an argument to the task function. This
+        can be used in the depth of a task callstack, in case you don't want to pass down the
+        argument. If you need to use some index to access per-thread partials in your parallel
+        algorithm, it is best to use the unit_index argument to the task function.
+        That value is guaranteed to be within the task launch bounds, which tends to be smaller
+        in size than the number you may obtain with \ref max_thread_index().
+    */
+    static int get_thread_index() { return m_thread_index; }
 
-    // To know the depth of task nested parallelism. If you are calling this you may be doing
-    // something exotic, like attempting at throttling inner parallelism, but be careful because
-    // such heuristics can easily backfire.
-    static int getNestingLevel();
+    /**
+        To know the depth of task nested parallelism.
 
-    // Parallelize a task over a number of threads and make the caller to participate in the
-    // computation. The call only returns on task completion. If the task implementation will
-    // make any nested calls to execute parallel workload, the task will wait on completion of
-    // any related nested task. On completion, the task scheduler can executed an optional
-    // epilogue function where you can wrap up the computation, for example to sum the thread
-    // partials of a parallel reduction.
-    // The scheduler doesn't make any assumption on the workload complexity or its uniformity.
-    // It is up to you to partition the workload in reasonable units of work, or to use the
-    // WorkloadController utility to load balance between threads.
-    // @param numThreads defines how many threads you would like to wake up to execute the
-    //        parallel workload. Each of the threads will execute a "unit" of work whose index
-    //        will be between 0 and numThreads-1. Different from a "parellel_for", you don't
-    //        specify how many elements to iterate over, or expect the scheduler to guess how
-    //        many threads it is appropriate to partition the work. It sounds more laborious
-    //        but it gives more control over the execution.
-    // @param data a generic pointer over the task data, see example.
-    // @param fn the task function in the format void (*TaskFn)(int unitIndex, int threadIndex,
-    //        void* data).
-    // @param epilogue optional ask wrap-up function, executed when all the unit of works are
-    //        completed. The type is the same as the task function except that the first arg
-    //        is "int numUnits" instead of the unitIndex.
-    //
-    // Example, parallel reduction:
-    //     struct TaskData
-    //     {
-    //         [...]
-    //         // Be mindful of false-sharing, if you store partials this way, try to access
-    //         // them only once.
-    //         int partials[numThreads];
-    //         int result;
-    //     };
-    //     TaskData data = {...};
-    //     scheduler.parallelize(numThreads, &data, [](int unitIndex, int threadIndex, void* data)
-    //     {
-    //         TaskData& taskData = *(TaskData*)data;
-    //         int partialResult = ...; //< compute over local symbols.
-    //         [...]
-    //         taskData.partials[unitIndex] = partialResult; //< Store partials at the end.
-    //     },
-    //     [](int numUnits, int threadIndex, void* data)      //
-    //     {                                                  //
-    //         TaskData& taskData = *(TaskData*)data;         //
-    //         taskData.result = taskData.partials[0];        //< Final reduction example.
-    //         for (int i=1; i<numUnits; ++i)                 //
-    //             taskData.result += taskData.partials[i];   //
-    //     });                                                //
-    void parallelize(int numThreads, void *data, TaskFn fn, TaskFn epilogue = nullptr)
+        If you are calling this you may be doing something exotic, like attempting at throttling inner parallelism, but
+        be careful because such heuristics can easily backfire.
+    */
+    static int get_nesting_level();
+
+    /**
+        Parallelize a task over a number of threads and make the caller participate in the
+        computation.
+
+        The call only returns on task completion. If the task implementation will
+        make any nested calls to execute parallel workload, the task will wait on completion of
+        any related nested task. On completion, the task scheduler can executed an optional
+        epilogue function where you can wrap up the computation, for example to sum the thread
+        partials of a parallel reduction.
+        The scheduler doesn't make any assumption on the workload complexity or its uniformity.
+        It is up to you to partition the workload in reasonable units of work, or to use the
+        WorkloadController utility to load balance between threads.
+
+        \param num_threads defines how many threads you would like to wake up to execute the
+               parallel workload. Each of the threads will execute a "unit" of work whose index
+               will be between 0 and num_threads-1. Different from a "parellel_for", you don't
+               specify how many elements to iterate over, or expect the scheduler to guess how
+               many threads it is appropriate to partition the work. It sounds more laborious
+               but it gives more control over the execution.
+        \param data a generic pointer over the task data, see example.
+        \param fn the task function in the format void (*TaskFn)(int unit_index, int thread_index,
+               void* data).
+        \param epilogue optional ask wrap-up function, executed when all the unit of works are
+               completed. The type is the same as the task function except that the first arg
+               is "int num_units" instead of the unit_index.
+
+        Example, parallel reduction:
+        \code{.cpp}
+            struct TaskData
+            {
+                [...]
+                // Be mindful of false-sharing, if you store partials this way, try to access
+                // them only once.
+                int partials[num_threads];
+                int result;
+            };
+            TaskData data = {...};
+            scheduler.parallelize(num_threads, &data, [](int unit_index, int thread_index, void* data)
+            {
+                TaskData& taskData = *(TaskData*)data;
+                int partialResult = ...; //< compute over local symbols.
+                [...]
+                taskData.partials[unit_index] = partialResult; //< Store partials at the end.
+            },
+            [](int num_units, int thread_index, void* data)    //
+            {                                                  //
+                TaskData& taskData = *(TaskData*)data;         //
+                taskData.result = taskData.partials[0];        //< Final reduction example.
+                for (int i=1; i<num_units; ++i)                //
+                    taskData.result += taskData.partials[i];   //
+            });                                                //
+        \endcode
+    */
+    void parallelize(int num_threads, void *data, TaskFn fn, TaskFn epilogue = nullptr)
     {
-        if (numThreads == k_all)
-            numThreads = getNumThreads();
+        if (num_threads == k_all)
+            num_threads = size();
 
         // if zero worker threads were requested/exist, execute on the calling thread
-        if (numThreads == 0 || getNumThreads() == 0)
-            return runOnCallingThread(numThreads, data, fn, epilogue);
+        if (num_threads == 0 || size() == 0)
+            return run_locally(num_threads, data, fn, epilogue);
 
-        int threadIndex = getOrAssignThreadIndex();
+        int thread_index = get_or_assign_thread_index();
 
-        bool front = getNestingLevel() > 0; //< push nested parallelism to the front of the queue
+        bool front = get_nesting_level() > 0; //< push nested parallelism to the front of the queue
 
-        constexpr int localRun = 1; //< reserve 1 chunk to run in the current thread
-        TaskTracker   result   = async(numThreads, data, fn, epilogue, localRun, front);
+        constexpr int local_run = 1; //< reserve 1 chunk to run in the current thread
+        TaskTracker   result    = async(num_threads, data, fn, epilogue, local_run, front);
 
         // Run the first unit of work on the calling thread.
-        int chunkIndex = 0;
-        runTask(result.task, chunkIndex, threadIndex);
+        int chunk_index = 0;
+        run_task(result.task, chunk_index, thread_index);
 
-        // While waiting for the workload to be consumed, the current thread may participate in
-        // other tasks.
+        // While waiting for the workload to be consumed, the current thread may participate in other tasks.
         result.wait();
     }
 
-    // Similar to parallelize, but this call is non-blocking: it returns a TaskTracker on which
-    // to call wait if needed. This call can be used for set-and-forget async task launches,
-    // however some attention must be taken to make sure the task data persists for the duration
-    // of the task. Typically, you want to wait on the task completion, in which case the use of
-    // stack memory for the task data is all you need. Otherwise, allocate any task data on the
-    // heap and use the epilogue function to free it. If you run parallelizeAsync from within
-    // another task, make sure you call wait in the TaskTracker, unless the completion of the
-    // parent task epilogue doesn't depend on the completion of this async task.
-    // Example of set-and-forget launch:
-    //     struct TaskData
-    //     {
-    //         [...]
-    //     };
-    //     TaskData* data = new TaskData;
-    //     scheduler.parallelizeAsync(numThreads, data, [](int unitIndex, int threadIndex,
-    //                                                       void* data)
-    //     {
-    //         TaskData* taskData = (TaskData*)data;
-    //         [...]
-    //     },
-    //     [](int numUnits, int threadIndex, void* data)
-    //     {
-    //         TaskData* taskData = (TaskData*)data;
-    //         [...]
-    //         delete taskData;
-    //     });
-    TaskTracker parallelizeAsync(int numThreads, void *data, TaskFn fn, TaskFn epilogue = nullptr)
+    /**
+        Similar to \ref parallelize(), but this call is non-blocking: it returns a TaskTracker on which
+        to call \ref wait() if needed. This call can be used for set-and-forget async task launches,
+        however some attention must be taken to make sure the task data persists for the duration
+        of the task. Typically, you want to wait on the task completion, in which case the use of
+        stack memory for the task data is all you need. Otherwise, allocate any task data on the
+        heap and use the epilogue function to free it. If you run \ref parallelize_async() from within
+        another task, make sure you call \ref wait() in the TaskTracker, unless the completion of the
+        parent task epilogue doesn't depend on the completion of this async task.
+
+        Example of set-and-forget launch:
+        \code{.cpp}
+            struct TaskData
+            {
+                [...]
+            };
+            TaskData* data = new TaskData;
+            scheduler.parallelize_async(num_threads, data, [](int unit_index, int thread_index,
+                                                              void* data)
+            {
+                TaskData* taskData = (TaskData*)data;
+                [...]
+            },
+            [](int num_units, int thread_index, void* data)
+            {
+                TaskData* taskData = (TaskData*)data;
+                [...]
+                delete taskData;
+            });
+        \endcode
+    */
+    TaskTracker parallelize_async(int num_threads, void *data, TaskFn fn, TaskFn epilogue = nullptr)
     {
-        if (numThreads == k_all)
-            numThreads = getNumThreads();
+        if (num_threads == k_all)
+            num_threads = size();
 
         // if zero worker threads were requested/exist, execute on the calling thread
-        if (numThreads == 0 || getNumThreads() == 0)
+        if (num_threads == 0 || size() == 0)
         {
-            runOnCallingThread(numThreads, data, fn, epilogue);
+            run_locally(num_threads, data, fn, epilogue);
             return TaskTracker(); //< return an empty TaskTracker that reports it is done
         }
 
-        bool front = getNestingLevel() > 0; //< push nested parallelism to the front of the queue
-        return async(numThreads, data, fn, epilogue, 0, front);
+        bool front = get_nesting_level() > 0; //< push nested parallelism to the front of the queue
+        return async(num_threads, data, fn, epilogue, 0, front);
     }
 
 private:
     // Run a task, if the task is complete, including any nested tasks, run the epilog function.
-    void runTask(Task *task, int chunkIndex, int threadIndex);
+    void run_task(Task *task, int chunk_index, int thread_index);
 
-    // Run a task serially on the calling thread bypassing the thread pool
-    void runOnCallingThread(int numThreads, void *data, TaskFn fn, TaskFn epilogue = nullptr) const
+    // Run a task locally on the calling thread, bypassing the thread pool
+    void run_locally(int num_threads, void *data, TaskFn fn, TaskFn epilogue = nullptr) const
     {
-        if (numThreads == 0)
-            numThreads = 1;
+        if (num_threads == 0)
+            num_threads = 1;
 
-        for (int i = 0; i < numThreads; ++i) fn(i, 0, data);
+        for (int i = 0; i < num_threads; ++i) fn(i, 0, data);
+
         if (epilogue)
-            epilogue(numThreads, 0, data);
+            epilogue(num_threads, 0, data);
     }
 
     // Pick a workUnit from the queue. This is used internally for work stealing.
-    void pickWorkUnit(int nestingLevel, int threadIndex);
+    void pick_work_unit(int nesting_level, int thread_index);
 
     // Memory management functions: tasks are allocated and freed by the same module, to safeguard
-    // from heap corruption across  dso boundaries.
-    Task *newTask(void *data, TaskFn f, TaskFn epilogue = nullptr, int numUnits = 1);
-    void  deleteTask(Task *task);
+    // from heap corruption across DSO boundaries.
+    Task *new_task(void *data, TaskFn f, TaskFn epilogue = nullptr, int num_units = 1);
+    void  delete_task(Task *task);
 
     // Internal task ref-counting calls. Unbind may deallocate a task.
     void bind(Task *task);
     bool unbind(Task *task);
 
-    static int getOrAssignThreadIndex()
+    static int get_or_assign_thread_index()
     {
-        // If this is one of the worker threads, it has a valid threadIndex. Otherwise, we may
+        // If this is one of the worker threads, it has a valid thread_index. Otherwise, we may
         // need to assign one to it if this is the first time the thread enters the scheduler.
         // Note: there is a minor vulnerability if tasks are scheduled by many temporary threads
-        //       which are spawned and let to terminate, such threads will waste threadIndices
-        //       given there is no recycling policy. It is rather rare to mix the use of a task
+        //       which are spawned and allowed to terminate. Such threads will waste thread_indices
+        //       since there is no recycling policy. It is rather rare to mix the use of a task
         //       scheduler and temporary threads, typically it's one or the other, and for this
         //       reason I didn't implement protection for it.
-        int threadIndex = m_threadIndex;
-        if (threadIndex == k_invalidThreadIndex)
-            threadIndex = m_threadIndex = m_nextGuestThreadIndex++;
-        return threadIndex;
+        int thread_index = m_thread_index;
+        if (thread_index == k_invalid_thread_index)
+            thread_index = m_thread_index = m_next_guest_thread_index++;
+        return thread_index;
     }
 
-    // Internal method to launch a task. Extra arguments over parallelize are:
-    // @param reservedUnits the number of units the task launch function may want to reserve
-    //        to execute in the local thread. For example parallelize reserves one unit,
-    //        parallelizeAsync reserves none.
-    // @param front insert new tasks to the front of the queue or at the back. Typically,
-    //        nested parallelism inserts at the front to complete as soon as possible, before
-    //        outer parallelism is exhausted; while new outer parallelization is pushes at the
-    //        back of the queue, to let existing workload to complete first.
-    TaskTracker async(int numUnits, void *data, TaskFn f, TaskFn epilogue = nullptr, int reservedUnits = 0,
+    /**
+        Internal method to launch a task. Extra arguments over \ref parallelize() are:
+
+        \param reserved_units The number of units the task launch function may want to reserve
+               to execute in the local thread. For example \ref parallelize() reserves one unit,
+               \ref parallelize_async() reserves none.
+        \param front Insert new tasks to the front of the queue or at the back. Typically,
+               nested parallelism inserts at the front to complete as soon as possible, before
+               outer parallelism is exhausted; while new outer parallelization is pushes at the
+               back of the queue, to let existing workload to complete first.
+    */
+    TaskTracker async(int num_units, void *data, TaskFn f, TaskFn epilogue = nullptr, int reserved_units = 0,
                       bool front = false);
 
-    struct TaskUnit
+    struct WorkUnit
     {
-        Task *task  = nullptr;
-        int   index = 0; //< the unitIndex
+        Task *task{nullptr};
+        int   index{0}; //< the unit_index
     };
-    std::vector<std::thread *> m_workers;    //< Worker threads
-    std::deque<TaskUnit>       m_work;       //< Work queue, consumed front to back
-    std::mutex                 m_workMutex;  //< Synchronization to access the work queue
-    std::condition_variable    m_workSignal; //< Signal to wake up threads
+    std::vector<std::thread *> m_workers;     ///< Worker threads
+    std::deque<WorkUnit>       m_work;        ///< Work queue, consumed front to back
+    std::mutex                 m_work_mutex;  ///< Synchronization to access the work queue
+    std::condition_variable    m_work_signal; ///< Signal to wake up threads
 
-    static thread_local int   m_threadIndex;
-    static int                m_nextGuestThreadIndex;
-    static thread_local Task *m_threadTask;
+    static thread_local int   m_thread_index;
+    static int                m_next_guest_thread_index;
+    static thread_local Task *m_thread_task;
 };
 
-// Utility to estimate how many threads are appropriate to execute some parallel computation based on a workload size.
-// The function automatically caps the maximum number of threads to the count in the scheduler.
-// @param workload_size Total size of the workload. e.g. number of elements to process
-// @param min_unit_size The number of elements per thread that are considered viable to mitigate scheduling overhead.
+/**
+    Utility to estimate how many threads are appropriate to execute some parallel computation based on a workload size.
+
+    The function automatically caps the maximum number of threads to the count in the scheduler.
+
+    \param workload_size Total size of the workload (e.g. number of elements to process).
+    \param min_unit_size The number of elements per thread that are considered viable to mitigate scheduling overhead.
+*/
 inline size_t estimate_threads(size_t workload_size, size_t min_unit_size, const Scheduler &scheduler)
 {
     size_t chunks = (workload_size + min_unit_size - 1) / min_unit_size;
-    return std::min<size_t>(chunks, scheduler.getNumThreads());
+    return std::min<size_t>(chunks, scheduler.size());
 }
 
 template <typename Int>
@@ -387,18 +427,18 @@ template <typename Int>
 struct AtomicLoadBalance
 {
 private:
-    std::atomic<uint32_t>   &current_block; //< An atomic counter for the progress made. Goes from 0 to range.blocks();
+    std::atomic<uint32_t>   &current_block; ///< An atomic counter for the progress made. Goes from 0 to range.blocks();
     const blocked_range<Int> range;
 
 public:
-    Int begin, end; //< range of elements to process, updated with each call to advance()
+    Int begin, end; ///< Range of elements to process, updated with each call to advance()
 
     AtomicLoadBalance(std::atomic<uint32_t> &workload, const blocked_range<Int> &r) : current_block(workload), range(r)
     {
     }
 
     // Threads call advance to obtain a new range of elements [start, end).
-    // Returns false when the workload is consumed and nothing else is left to do.
+    // Returns false when the workload is consumed and there is nothing left to do.
     bool advance()
     {
         uint32_t block_index = current_block++;
@@ -426,12 +466,12 @@ void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads 
 
     Payload payload{&func, range};
 
-    auto callback = [](int unitIndex, int threadIndex, void *payload)
+    auto callback = [](int unit_index, int thread_index, void *payload)
     {
         Payload          &p = *(Payload *)payload;
         AtomicLoadBalance workload(p.workload, p.range);
 
-        while (workload.advance()) { (*p.f)(workload.begin, workload.end, unitIndex, threadIndex); }
+        while (workload.advance()) { (*p.f)(workload.begin, workload.end, unit_index, thread_index); }
     };
 
     scheduler->parallelize(num_threads, &payload, callback);
@@ -455,23 +495,23 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
         std::atomic<uint32_t> workload = 0;
     };
 
-    auto callback = [](int unitIndex, int threadIndex, void *payload)
+    auto callback = [](int unit_index, int thread_index, void *payload)
     {
         Payload          &p = *(Payload *)payload;
         AtomicLoadBalance workload(p.workload, p.range);
 
-        while (workload.advance()) { p.f(workload.begin, workload.end, unitIndex, threadIndex); }
+        while (workload.advance()) { p.f(workload.begin, workload.end, unit_index, thread_index); }
     };
-    auto deleter = [](int numUnits, int threadIndex, void *payload)
+    auto deleter = [](int num_units, int thread_index, void *payload)
     {
         Payload *p = (Payload *)payload;
-        p->e(numUnits, threadIndex);
+        p->e(num_units, thread_index);
         delete p;
     };
 
     Payload *payload = new Payload{std::forward<Func1>(func), std::forward<Func2>(epilogue), range};
 
-    return scheduler->parallelizeAsync(num_threads, payload, callback, deleter);
+    return scheduler->parallelize_async(num_threads, payload, callback, deleter);
 }
 
 template <typename Int, typename Func1>
@@ -500,7 +540,7 @@ Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
 
     Payload *payload = new Payload{std::forward<Func>(func)};
 
-    return scheduler->parallelizeAsync(1, payload, callback, deleter);
+    return scheduler->parallelize_async(1, payload, callback, deleter);
 }
 
 template <typename Func>
@@ -522,5 +562,5 @@ Scheduler::TaskTracker do_async(Func &&func, AtomicProgress &progress, Scheduler
 
     Payload *payload = new Payload{std::forward<Func>(func), progress};
 
-    return scheduler->parallelizeAsync(1, payload, callback, deleter);
+    return scheduler->parallelize_async(1, payload, callback, deleter);
 }

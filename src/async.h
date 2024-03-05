@@ -64,7 +64,7 @@ public:
         Payload *payload = new Payload{m_state};
 
         auto pool        = m_state->threadpool ? m_state->threadpool : Scheduler::singleton();
-        m_state->task    = pool->parallelizeAsync(1, payload, callback, deleter);
+        m_state->task    = pool->parallelize_async(1, payload, callback, deleter);
         m_state->started = true;
     }
 

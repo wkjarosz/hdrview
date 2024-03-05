@@ -20,35 +20,37 @@
 
 struct Scheduler::Task
 {
-    inline Task(int numUnits, void *data, TaskFn fn, TaskFn epilogue = nullptr) :
-        data(data), fn(fn), epilogue(epilogue), parent(nullptr), numUnits(numUnits)
+    inline Task(int num_units, void *data, TaskFn fn, TaskFn epilogue = nullptr) :
+        data(data), fn(fn), epilogue(epilogue), parent(nullptr), num_units(num_units)
     {
     }
 
     // These fields are read-only, they are defined on task creation and never change thereafter.
-    void  *data;     //< The task data to be passed as argument to the task function.
-    TaskFn fn;       //< The task function, executed by as many threads as numUnits.
-    TaskFn epilogue; //< The optional task epilogue function, executed only once upon task completion.
-    Task  *parent;   //< The parent task in case of nested parallelism.
-    int    numUnits; //< This is number of units of work. Ideally, this shouldn't exceed the width
-                     //  of the hardware concurrency.
+    void  *data;      //< The task data to be passed as argument to the task function.
+    TaskFn fn;        //< The task function, executed by as many threads as num_units.
+    TaskFn epilogue;  //< The optional task epilogue function, executed only once upon task completion.
+    Task  *parent;    //< The parent task in case of nested parallelism.
+    int    num_units; //< This is number of units of work. Ideally, this shouldn't exceed the width
+                      //  of the hardware concurrency.
 
     // The following fields change value during the lifetime of the task.
-    std::atomic<int> completed    = 0; //< How many units of work are completed.
-    std::atomic<int> refcount     = 0; //< Traditional ref-counting to govern the task lifetime.
-    std::atomic<int> dependencies = 1; //< How many nested tasks are still running. Set to one because
-                                       //  each task is considered to depend on its own completion too.
+    std::atomic<int> completed{0};           //< How many units of work are completed.
+    std::atomic<int> refcount{0};            //< Traditional ref-counting to govern the task lifetime.
+    std::atomic<int> dependencies{1};        //< How many nested tasks are still running. Set to one because
+                                             //  each task is considered to depend on its own completion too.
+    std::atomic<bool>  has_exception{false}; //< Atomic flag stating whether an exception has already been saved.
+    std::exception_ptr exception{nullptr};   //< Pointer to an exception in case the task failed
 
     // The insertion of an invalid task in the scheduler queue causes one of its threads to terminate.
     // Besides that, tasks are never invalid by design.
-    bool valid() const { return numUnits != 0; }
+    bool valid() const { return num_units != 0; }
 };
 
 /////////////////////////////////////////////////////////////////////////////////
 // Scheduler static members and globals
-thread_local int              Scheduler::m_threadIndex          = Scheduler::k_invalidThreadIndex;
-int                           Scheduler::m_nextGuestThreadIndex = 0;
-thread_local Scheduler::Task *Scheduler::m_threadTask           = nullptr;
+thread_local int              Scheduler::m_thread_index            = Scheduler::k_invalid_thread_index;
+int                           Scheduler::m_next_guest_thread_index = 0;
+thread_local Scheduler::Task *Scheduler::m_thread_task             = nullptr;
 
 static Scheduler *s_singleton = nullptr;
 static std::mutex s_singleton_lock;
@@ -70,7 +72,7 @@ Scheduler::Scheduler() {}
 
 Scheduler::~Scheduler() {}
 
-static int getNestingLevel(const Scheduler::Task *task)
+static int get_nesting_level(const Scheduler::Task *task)
 {
     int level = 0;
     while (task)
@@ -81,7 +83,7 @@ static int getNestingLevel(const Scheduler::Task *task)
     return level;
 }
 
-int Scheduler::getNestingLevel() { return ::getNestingLevel(m_threadTask); }
+int Scheduler::get_nesting_level() { return ::get_nesting_level(m_thread_task); }
 
 void Scheduler::bind(Task *task)
 {
@@ -95,13 +97,14 @@ bool Scheduler::unbind(Task *task)
 {
     if (!task)
         return false;
+
     int current = --task->refcount;
     assert(current >= 0);
 
     if (current == 0)
     {
         Task *parent = task->parent;
-        deleteTask(task);
+        delete_task(task);
 
         // recursion
         if (parent)
@@ -114,24 +117,24 @@ bool Scheduler::unbind(Task *task)
 
 // Memory management functions: tasks are allocated and freed by the same module, to safeguard
 // from heap corruption across DSO boundaries.
-Scheduler::Task *Scheduler::newTask(void *data, TaskFn fn, TaskFn epilogue, int numUnits)
+Scheduler::Task *Scheduler::new_task(void *data, TaskFn fn, TaskFn epilogue, int num_units)
 {
-    Task *task = new Task(numUnits, data, fn, epilogue);
-    return task;
+    return new Task(num_units, data, fn, epilogue);
 }
 
-void Scheduler::deleteTask(Task *task)
+void Scheduler::delete_task(Task *task)
 {
     if (!task)
         return;
+
     assert(task->refcount.load() == 0);
 
     delete task;
 }
 
-// Internal function to track dependencies between nested tasks. By binding a parent task,
-// we make it wait on the completion of nested task.
-static void bindParents(Scheduler::Task *task)
+// Internal function to track dependencies between nested tasks. By binding a parent task, we make it wait on the
+// completion of nested task.
+static void bind_parents(Scheduler::Task *task)
 {
     while (task)
     {
@@ -139,7 +142,7 @@ static void bindParents(Scheduler::Task *task)
         task = task->parent;
     }
 }
-static void unbindParents(Scheduler::Task *task)
+static void unbind_parents(Scheduler::Task *task)
 {
     while (task)
     {
@@ -148,25 +151,25 @@ static void unbindParents(Scheduler::Task *task)
     }
 }
 
-void Scheduler::start(int nThreads)
+void Scheduler::start(int num_threads)
 {
     assert(m_workers.empty() && "Assure scheduler is not initialized twice!");
     {
 #if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
         // if threading is disabled, create no threads
-        auto nLogicalThreads = 0;
+        auto logical_cores = 0;
 #elif defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
         // if threading is enabled in emscripten, then use just 1 thread
-        auto nLogicalThreads = 1;
+        auto logical_cores = 1;
 #else
-        auto nLogicalThreads = std::thread::hardware_concurrency();
+        auto logical_cores = std::thread::hardware_concurrency();
 #endif
-        if (nThreads == k_all)
-            nThreads = nLogicalThreads;
+        if (num_threads == k_all)
+            num_threads = logical_cores;
         else
-            nThreads = std::min<int>(nThreads, nLogicalThreads);
-        // The reason we cap nThreads to the number of logical threads in the system is to avoid
-        // any conflict in the threadIndex assignment for guest threads (calling threads) entering
+            num_threads = std::min<int>(num_threads, logical_cores);
+        // The reason we cap num_threads to the number of logical threads in the system is to avoid
+        // any conflict in the thread_index assignment for guest threads (calling threads) entering
         // the scheduler during calls to TaskTracker::wait().
         // If the thread index is above the hardware concurrency, it means it is a guest thread,
         // independently on how many threads a scheduler has. This is not important with just one
@@ -174,46 +177,44 @@ void Scheduler::start(int nThreads)
         // threads.
     }
 
-    m_nextGuestThreadIndex = nThreads;
-    m_workers.resize(nThreads, nullptr);
+    m_next_guest_thread_index = num_threads;
+    m_workers.resize(num_threads, nullptr);
 
     // Spawn worker threads
-    for (int threadIndex = 0; threadIndex < (int)nThreads; ++threadIndex)
+    for (int thread_index = 0; thread_index < (int)num_threads; ++thread_index)
     {
-        m_workers[threadIndex] = new std::thread(
-            [this, threadIndex]
+        m_workers[thread_index] = new std::thread(
+            [this, thread_index]
             {
                 try
                 {
-                    // Initialize thread index, worker threads have numbers in the range [0, nThreads-1]
+                    // Initialize thread index, worker threads have numbers in the range [0, num_threads-1]
                     // Guest threads will get their own unique indices.
-                    m_threadIndex = threadIndex;
+                    m_thread_index = thread_index;
 
-                    // printf("Spawn thread %d\n", threadIndex);
-                    spdlog::trace("Spawning worker thread {}", threadIndex);
+                    spdlog::trace("Spawning worker thread {}", thread_index);
                     while (true)
                     {
-                        TaskUnit workUnit;
-                        // bool     removed = false;
+                        WorkUnit work_unit;
                         {
                             // usual thread-safe queue code:
-                            std::unique_lock<std::mutex> lock(m_workMutex);
-                            m_workSignal.wait(lock, [&] { return !m_work.empty(); });
+                            std::unique_lock<std::mutex> lock(m_work_mutex);
+                            m_work_signal.wait(lock, [&] { return !m_work.empty(); });
 
                             // Transfer ownership to this thread, unbind tasks after running
-                            workUnit = m_work.front();
+                            work_unit = m_work.front();
                             m_work.pop_front();
                         }
 
                         // if the task is invalid, it means we are asked to abort:
-                        if (workUnit.task && !workUnit.task->valid())
+                        if (work_unit.task && !work_unit.task->valid())
                         {
-                            unbind(workUnit.task);
+                            unbind(work_unit.task);
                             break;
                         }
 
-                        runTask(workUnit.task, workUnit.index, threadIndex);
-                        unbind(workUnit.task);
+                        run_task(work_unit.task, work_unit.index, thread_index);
+                        unbind(work_unit.task);
                     }
                 }
                 catch (const std::exception &e)
@@ -228,37 +229,54 @@ void Scheduler::start(int nThreads)
     }
 }
 
-void Scheduler::runTask(Task *task, int unitIndex, int threadIndex)
+void Scheduler::run_task(Task *task, int unit_index, int thread_index)
 {
-    Task *oldTask = m_threadTask;
-    m_threadTask  = task;
+    Task *old_task = m_thread_task;
+    m_thread_task  = task;
 
-    try
+    if (!task->has_exception.load())
     {
-        task->fn(unitIndex, threadIndex, task->data);
+        try
+        {
+            task->fn(unit_index, thread_index, task->data);
+        }
+        catch (...)
+        {
+            bool value = false;
+            if (task->has_exception.compare_exchange_strong(value, true))
+            {
+                spdlog::trace("Storing exception thrown by a task...");
+                task->exception = std::current_exception();
+            }
+            else
+                spdlog::trace("Ignoring exception thrown by a task (another exception has already been stored)...");
+        }
     }
-    catch (...)
+    else
     {
-        spdlog::error("Caught an exception while running task.");
+        spdlog::trace(
+            "Skipping callback (task={}, unit_index={}, thread_index={}) because another work unit of this task "
+            "threw an exception.",
+            (void *)task, unit_index, thread_index);
     }
 
     int done = ++task->completed;
-    if (done == task->numUnits)
+    if (done == task->num_units)
     {
         if (task->epilogue)
-            task->epilogue(task->numUnits, threadIndex, task->data);
+            task->epilogue(task->num_units, thread_index, task->data);
 
-        unbindParents(task);
+        unbind_parents(task);
     }
 
-    m_threadTask = oldTask;
+    m_thread_task = old_task;
 }
 
-void Scheduler::pickWorkUnit(int nestingLevel, int threadIndex)
+void Scheduler::pick_work_unit(int nesting_level, int thread_index)
 {
-    TaskUnit workUnit;
+    WorkUnit work_unit;
     {
-        std::unique_lock<std::mutex> lock(m_workMutex);
+        std::unique_lock<std::mutex> lock(m_work_mutex);
         if (m_work.empty())
             return;
 
@@ -271,29 +289,29 @@ void Scheduler::pickWorkUnit(int nestingLevel, int threadIndex)
         // These are examples of real problems I had to work around in past projects using TBB,
         // where there is no such protection in place.
         // Note: this mechanism is still simplistic, ideally we could use a dependency tree, and
-        //       pick only workUnits that are in the current branch; recursively looking at the
+        //       pick only work_units that are in the current branch; recursively looking at the
         //       Task::parent should do the trick. We could also look ahead in the queue to
-        //       search for such a workUnit. Up to now this proved not to be needed; I am post-
+        //       search for such a work_unit. Up to now this proved not to be needed; I am post-
         //       poning any feature adding significant complexity to the system if not strictly
         //       required.
-        workUnit                 = m_work.front();
-        int workUnitNestingLevel = ::getNestingLevel(workUnit.task);
-        if (workUnitNestingLevel < nestingLevel)
+        work_unit                   = m_work.front();
+        int work_unit_nesting_level = ::get_nesting_level(work_unit.task);
+        if (work_unit_nesting_level < nesting_level)
             return;
 
         m_work.pop_front();
     }
 
     // if the task is invalid, it means we are asked to abort:
-    if (workUnit.task && !workUnit.task->valid())
+    if (work_unit.task && !work_unit.task->valid())
     {
         assert(false);
-        unbind(workUnit.task);
+        unbind(work_unit.task);
         return;
     }
 
-    runTask(workUnit.task, workUnit.index, threadIndex);
-    unbind(workUnit.task);
+    run_task(work_unit.task, work_unit.index, thread_index);
+    unbind(work_unit.task);
 }
 
 void Scheduler::stop()
@@ -303,7 +321,7 @@ void Scheduler::stop()
 
     // Push invalid tasks, one for each thread. The invalid task will make a thread to terminate
     {
-        std::unique_lock<std::mutex> lock(m_workMutex);
+        std::unique_lock<std::mutex> lock(m_work_mutex);
         for (size_t i = 0; i < m_workers.size(); ++i)
         {
             Task *task = new Task(0, nullptr, nullptr);
@@ -311,7 +329,7 @@ void Scheduler::stop()
             m_work.push_back({task, 0});
         }
     }
-    m_workSignal.notify_all();
+    m_work_signal.notify_all();
 
     // Wait for threads to terminate
     for (std::thread *thread : m_workers) thread->join();
@@ -320,32 +338,32 @@ void Scheduler::stop()
     assert(m_work.empty() && "Work queue should be empty");
 }
 
-Scheduler::TaskTracker Scheduler::async(int numUnits, void *data, TaskFn f, TaskFn epilogue, int reservedUnits,
+Scheduler::TaskTracker Scheduler::async(int num_units, void *data, TaskFn f, TaskFn epilogue, int reserved_units,
                                         bool front)
 {
-    Task *task   = newTask(data, f, epilogue, numUnits);
-    task->parent = m_threadTask;
+    Task *task   = new_task(data, f, epilogue, num_units);
+    task->parent = m_thread_task;
     if (task->parent)
         bind(task->parent);
-    bindParents(task->parent);
+    bind_parents(task->parent);
 
     // Get the future return value before we hand off the task
     TaskTracker result(task, this);
 
-    numUnits -= reservedUnits;
-    task->refcount += numUnits;
+    num_units -= reserved_units;
+    task->refcount += num_units;
     // Store the task in the queue
-    if (numUnits > 0)
+    if (num_units > 0)
     {
-        std::unique_lock<std::mutex> lock(m_workMutex);
+        std::unique_lock<std::mutex> lock(m_work_mutex);
         if (front)
-            while (--numUnits >= 0) m_work.push_front({task, reservedUnits + numUnits});
+            while (--num_units >= 0) m_work.push_front({task, reserved_units + num_units});
         else
-            while (--numUnits >= 0) m_work.push_back({task, reservedUnits + numUnits});
+            while (--num_units >= 0) m_work.push_back({task, reserved_units + num_units});
     }
 
     // Wake as many thread as we need to work on the task
-    m_workSignal.notify_all();
+    m_work_signal.notify_all();
 
     return result;
 }
@@ -357,10 +375,8 @@ void Scheduler::TaskTracker::wait()
     if (!task)
         return;
 
-    int threadIndex = getOrAssignThreadIndex();
-
-    // It is not allowed
-    int nestingLevel = getNestingLevel();
+    int thread_index  = get_or_assign_thread_index();
+    int nesting_level = get_nesting_level();
 
     while (true)
     {
@@ -368,8 +384,16 @@ void Scheduler::TaskTracker::wait()
             break;
 
         // Work stealing
-        scheduler->pickWorkUnit(nestingLevel, threadIndex);
+        scheduler->pick_work_unit(nesting_level, thread_index);
     }
+
+    // save the exception
+    std::exception_ptr exc = task->exception;
+
+    // cleanup
     scheduler->unbind(task);
     task = nullptr, scheduler = nullptr;
+
+    if (exc)
+        std::rethrow_exception(exc);
 }
