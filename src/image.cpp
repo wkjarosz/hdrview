@@ -231,7 +231,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
 
         computed = true;
     }
-    catch (const std::exception &e)
+    catch (...)
     {
         spdlog::trace("Canceled PixelStats::calculate");
         *this = PixelStats(); // reset
