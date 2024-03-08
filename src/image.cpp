@@ -84,7 +84,7 @@ float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 
     float2 ret;
     ret[1] = pow(2.f, -e);
-    if (minimum < 0.f)
+    if (summary.minimum < 0.f)
         ret[0] = -ret[1];
     else
     {
@@ -105,10 +105,10 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         spdlog::trace("Computing pixel statistics");
 
         // initialize values
-        *this        = PixelStats();
-        exposure     = new_exposure;
-        hist_x_scale = new_x_scale;
-        hist_y_scale = new_y_scale;
+        *this             = PixelStats();
+        settings.exposure = new_exposure;
+        settings.x_scale  = new_x_scale;
+        settings.y_scale  = new_y_scale;
 
         //
         // compute pixel summary statistics
@@ -117,23 +117,14 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         {
             size_t       block_size  = 1024 * 1024;
             const size_t num_threads = estimate_threads(img.num_elements(), block_size, *Scheduler::singleton());
-            struct Stats
-            {
-                float  minimum      = std::numeric_limits<float>::infinity();
-                float  maximum      = -std::numeric_limits<float>::infinity();
-                double average      = 0.0f;
-                int    nan_pixels   = 0;
-                int    inf_pixels   = 0;
-                int    valid_pixels = 0;
-            };
-            std::vector<Stats> partials(max<size_t>(1, num_threads));
+            std::vector<Summary> partials(max<size_t>(1, num_threads));
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
                 blocked_range<int>(0, img.num_elements(), block_size),
                 [&img, &partials, &canceled](int begin, int end, int unit_index, int thread_index)
                 {
-                    Stats partial = partials[unit_index]; //< compute over local symbols.
+                    Summary partial = partials[unit_index]; //< compute over local symbols.
 
                     for (int i = begin; i != end; ++i)
                     {
@@ -161,35 +152,34 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                 num_threads);
 
             // final reduction from partial results
-            double accum        = 0.f;
-            int    valid_pixels = 0;
+            double accum = 0.f;
             for (auto &p : partials)
             {
-                minimum = std::min(p.minimum, minimum);
-                maximum = std::max(p.maximum, maximum);
-                nan_pixels += p.nan_pixels;
-                inf_pixels += p.inf_pixels;
-
-                valid_pixels += p.valid_pixels;
+                summary.minimum = std::min(p.minimum, summary.minimum);
+                summary.maximum = std::max(p.maximum, summary.maximum);
+                summary.nan_pixels += p.nan_pixels;
+                summary.inf_pixels += p.inf_pixels;
+                summary.valid_pixels += p.valid_pixels;
                 accum += p.average;
             }
-            average = valid_pixels ? float(accum / valid_pixels) : 0.f;
+            summary.average = summary.valid_pixels ? float(accum / summary.valid_pixels) : 0.f;
         }
 
-        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.lap(), minimum, average,
-                      maximum);
+        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.lap(), summary.minimum,
+                      summary.average, summary.maximum);
         //
 
         //
         // compute histograms
 
-        bool LDR_scale = hist_x_scale == AxisScale_Linear || hist_x_scale == AxisScale_SRGB;
+        bool LDR_scale = settings.x_scale == AxisScale_Linear || settings.x_scale == AxisScale_SRGB;
 
-        auto hist_x_limits = x_limits(exposure, hist_x_scale);
+        auto hist_x_limits = x_limits(settings.exposure, settings.x_scale);
 
-        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : minimum, &hist_x_scale);
+        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : summary.minimum, &settings.x_scale);
         hist_normalization[1] =
-            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : maximum, &hist_x_scale) - hist_normalization[0];
+            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : summary.maximum, &settings.x_scale) -
+            hist_normalization[0];
 
         // compute bin center values
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
@@ -217,7 +207,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         // put the 10th largest value in index 10
         std::nth_element(ys.begin(), ys.begin() + idx, ys.end(), std::greater<float>());
         // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-        hist_y_limits[0] = hist_y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
+        hist_y_limits[0] = settings.y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
         // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
         if (ys[idx] != 0.f)
             hist_y_limits[1] = ys[idx] * 1.15f;
@@ -337,7 +327,7 @@ void Channel::update_stats()
     };
 
     // if the cached stats match and are valid, no need to recompute
-    if (cached_stats->settings().match(desired_settings) && cached_stats->computed)
+    if (cached_stats->settings.match(desired_settings) && cached_stats->computed)
         return;
 
     // cached stats are outdated, need to recompute
@@ -358,7 +348,7 @@ void Channel::update_stats()
         async_stats  = make_shared<PixelStats>();
 
         // if these newer stats are still outdated, schedule a new async computation
-        if (!cached_stats->settings().match(desired_settings))
+        if (!cached_stats->settings.match(desired_settings))
             recompute_async_stats();
     }
 }

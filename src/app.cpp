@@ -1364,7 +1364,7 @@ void HDRViewApp::normalize_exposure()
         float m     = 0.f;
         auto &group = img->groups[img->selected_group];
         for (int c = 0; c < group.num_channels && c < 3; ++c)
-            m = std::max(m, img->channels[group.channels[c]].get_stats()->maximum);
+            m = std::max(m, img->channels[group.channels[c]].get_stats()->summary.maximum);
 
         m_exposure_live = m_exposure = log2(1.f / m);
     }

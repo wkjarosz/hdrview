@@ -243,18 +243,18 @@ void Image::draw_histogram()
             ImPlot::PushStyleColor(ImPlotCol_InlayText, float4{colors[c].xyz(), 1.0f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
 
-            ImPlot::PlotInfLines("##min", &stats[c]->minimum, 1);
-            ImPlot::PlotText(fmt::format("min({})", names[c]).c_str(), stats[c]->minimum,
+            ImPlot::PlotInfLines("##min", &stats[c]->summary.minimum, 1);
+            ImPlot::PlotText(fmt::format("min({})", names[c]).c_str(), stats[c]->summary.minimum,
                              lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
                              ImPlotTextFlags_Vertical);
 
-            ImPlot::PlotInfLines("##min", &stats[c]->average, 1);
-            ImPlot::PlotText(fmt::format("avg({})", names[c]).c_str(), stats[c]->average,
+            ImPlot::PlotInfLines("##min", &stats[c]->summary.average, 1);
+            ImPlot::PlotText(fmt::format("avg({})", names[c]).c_str(), stats[c]->summary.average,
                              lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
                              ImPlotTextFlags_Vertical);
 
-            ImPlot::PlotInfLines("##max", &stats[c]->maximum, 1);
-            ImPlot::PlotText(fmt::format("max({})", names[c]).c_str(), stats[c]->maximum,
+            ImPlot::PlotInfLines("##max", &stats[c]->summary.maximum, 1);
+            ImPlot::PlotText(fmt::format("max({})", names[c]).c_str(), stats[c]->summary.maximum,
                              lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
                              ImPlotTextFlags_Vertical);
             ImPlot::PopStyleColor(2);
@@ -555,12 +555,12 @@ void Image::draw_info()
                 ImGui::TableNextColumn();
                 switch (s)
                 {
-                case 0: ImGui::Text("%-6.3g", channel_stats[c]->minimum); break;
-                case 1: ImGui::Text("%-6.3g", channel_stats[c]->average); break;
-                case 2: ImGui::Text("%-6.3g", channel_stats[c]->maximum); break;
-                case 3: ImGui::Text("%d", channel_stats[c]->nan_pixels); break;
+                case 0: ImGui::Text("%-6.3g", channel_stats[c]->summary.minimum); break;
+                case 1: ImGui::Text("%-6.3g", channel_stats[c]->summary.average); break;
+                case 2: ImGui::Text("%-6.3g", channel_stats[c]->summary.maximum); break;
+                case 3: ImGui::Text("%d", channel_stats[c]->summary.nan_pixels); break;
                 case 4:
-                default: ImGui::Text("%d", channel_stats[c]->inf_pixels); break;
+                default: ImGui::Text("%d", channel_stats[c]->summary.inf_pixels); break;
                 }
             }
         }

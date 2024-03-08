@@ -60,26 +60,32 @@ struct PixelStats
 
     struct Settings
     {
-        float      exposure;
-        AxisScale_ x_scale, y_scale;
+        float      exposure = 0.f;
+        AxisScale_ x_scale  = AxisScale_Linear;
+        AxisScale_ y_scale  = AxisScale_Linear;
 
         bool match(const Settings &other) const;
     };
 
-    float exposure   = 0.f;
-    float minimum    = std::numeric_limits<float>::infinity();
-    float maximum    = -std::numeric_limits<float>::infinity();
-    float average    = 0.0f;
-    int   nan_pixels = 0;
-    int   inf_pixels = 0;
+    Settings settings;
+
+    struct Summary
+    {
+        float minimum      = std::numeric_limits<float>::infinity();
+        float maximum      = -std::numeric_limits<float>::infinity();
+        float average      = 0.0f;
+        int   nan_pixels   = 0;
+        int   inf_pixels   = 0;
+        int   valid_pixels = 0;
+    };
+
+    Summary summary;
 
     bool computed = false; ///< Did we finish computing the stats?
 
     // histogram
-    AxisScale_ hist_x_scale       = AxisScale_Linear;
-    AxisScale_ hist_y_scale       = AxisScale_Linear;
-    float2     hist_y_limits      = {0.f, 1.f};
-    float2     hist_normalization = {0.f, 1.f};
+    float2 hist_y_limits      = {0.f, 1.f};
+    float2 hist_normalization = {0.f, 1.f};
 
     std::array<float, NUM_BINS> hist_xs{}; // {}: value-initialized to zeros
     std::array<float, NUM_BINS> hist_ys{}; // {}: value-initialized to zeros
@@ -90,15 +96,13 @@ struct PixelStats
     void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale,
                    std::atomic<bool> &canceled);
 
-    Settings settings() const { return {exposure, hist_x_scale, hist_y_scale}; }
-
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
     float &bin_x(int i) { return hist_xs[clamp_idx(i)]; }
     float &bin_y(int i) { return hist_ys[clamp_idx(i)]; }
 
     int value_to_bin(double value) const
     {
-        return int(std::floor((axis_scale_fwd_xform(value, (void *)&hist_x_scale) - hist_normalization[0]) /
+        return int(std::floor((axis_scale_fwd_xform(value, (void *)&settings.x_scale) - hist_normalization[0]) /
                               hist_normalization[1] * NUM_BINS));
     }
 
@@ -106,7 +110,7 @@ struct PixelStats
     {
         static constexpr float inv_bins = 1.f / NUM_BINS;
         return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0],
-                                    (void *)&hist_x_scale);
+                                    (void *)&settings.x_scale);
     }
 
     float2 x_limits(float exposure, AxisScale_ x_scale) const;
