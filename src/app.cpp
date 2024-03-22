@@ -1589,7 +1589,7 @@ void HDRViewApp::draw_about_dialog()
     float2          col_width    = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
     float2          display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
-    display_size = float2{window_width(), window_height()};
+    display_size = float2{(float)window_width(), (float)window_height()};
 #endif
     col_width[1] = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
                               display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
