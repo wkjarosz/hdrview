@@ -1,3 +1,6 @@
+// Based on the article and code at:
+// https://maxliani.wordpress.com/2022/07/27/anatomy-of-a-task-scheduler/
+//
 // Copyright (c) 2022 Max Liani
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +16,8 @@
 // limitations under the License.
 
 //
+//
+//
 // Modifications by Wojciech Jarosz (c) 2024, released under the same Apache License as above
 // - Added ability to run tasks in serial, bypassing the thread pool
 //   - Using num_threads == 0 doesn't create any workers, and all tasks run in serial immediately by the calling thread
@@ -25,7 +30,7 @@
 //   higher-level API and allow creating tasks with lambdas containing captures Fixed a few type inconsistencies (mixing
 //   uint32_t with int)
 // - fixed minor spelling mistakes
-// - converte to snake_casing, and added some more comments.
+// - converted to snake_casing, and added some more comments.
 //
 
 // scheduler.h
@@ -357,7 +362,7 @@ private:
         \param front Insert new tasks to the front of the queue or at the back. Typically,
                nested parallelism inserts at the front to complete as soon as possible, before
                outer parallelism is exhausted; while new outer parallelization is pushes at the
-               back of the queue, to let existing workload to complete first.
+               back of the queue, to let existing workloads complete first.
     */
     TaskTracker async(int num_units, void *data, TaskFn f, TaskFn epilogue = nullptr, int reserved_units = 0,
                       bool front = false);

@@ -122,7 +122,7 @@ static const vector<std::pair<const char *, const char *>> g_help_strings = {
     {"Scroll mouse/pinch", "Zoom in and out continuously"},
     {"Cmd+O", "Open image"},
     {"Cmd+W", "Close image"},
-    {"Cmd+Shift+W", "Close image"},
+    {"Cmd+Shift+W", "Close all images"},
     {ICON_FA_ARROW_DOWN "," ICON_FA_ARROW_UP,
      "Switch to previous (" ICON_FA_ARROW_UP ") or next (" ICON_FA_ARROW_DOWN ") image"},
     {ICON_FA_ARROW_LEFT "," ICON_FA_ARROW_RIGHT,
@@ -555,13 +555,12 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Help"))
     {
-        if (ImGui::MenuItem(ICON_FA_UP_RIGHT_FROM_SQUARE " Open HDRView github repository"))
-            ImmApp::BrowseToUrl("https://github.com/wkjarosz/hdrview");
         ImGui::MenuItem(ICON_FA_RULER " Metrics/Debugger", nullptr, &g_show_tool_metrics);
         ImGui::MenuItem(ICON_FA_TERMINAL " Debug Log", nullptr, &g_show_tool_debug_log);
-        ImGui::MenuItem(ICON_FA_DATABASE " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
+        ImGui::MenuItem(ICON_FA_ID_CARD " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
         ImGui::MenuItem(ICON_FA_SLIDERS " Style Editor", nullptr, &g_show_tool_style_editor);
         ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
+        ImGui::Separator();
         ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", nullptr, &g_show_help);
         ImGui::EndMenu();
     }

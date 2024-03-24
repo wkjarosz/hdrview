@@ -52,8 +52,8 @@ thread_local int              Scheduler::m_thread_index            = Scheduler::
 int                           Scheduler::m_next_guest_thread_index = 0;
 thread_local Scheduler::Task *Scheduler::m_thread_task             = nullptr;
 
-static Scheduler *s_singleton = nullptr;
-static std::mutex s_singleton_lock;
+static std::unique_ptr<Scheduler> s_singleton;
+static std::mutex                 s_singleton_lock;
 
 Scheduler *Scheduler::singleton()
 {
@@ -61,16 +61,16 @@ Scheduler *Scheduler::singleton()
 
     if (!s_singleton)
     {
-        s_singleton = new Scheduler();
+        s_singleton = std::make_unique<Scheduler>();
         s_singleton->start();
     }
 
-    return s_singleton;
+    return s_singleton.get();
 }
 
 Scheduler::Scheduler() {}
 
-Scheduler::~Scheduler() {}
+Scheduler::~Scheduler() { stop(); }
 
 static int get_nesting_level(const Scheduler::Task *task)
 {
@@ -319,7 +319,7 @@ void Scheduler::stop()
     if (m_workers.empty())
         return;
 
-    // Push invalid tasks, one for each thread. The invalid task will make a thread to terminate
+    // Push invalid tasks, one for each thread. The invalid task will make a thread terminate
     {
         std::unique_lock<std::mutex> lock(m_work_mutex);
         for (size_t i = 0; i < m_workers.size(); ++i)

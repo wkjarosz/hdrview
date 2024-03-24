@@ -2,6 +2,8 @@
 
 ##
 
+- [ ] sort image list
+- [ ] left vs. right align images in image list
 - [x] have spdlog output to the log window
 - [x] add image and channel list filtering
 - [x] load images asynchronously
@@ -13,10 +15,10 @@
 - [ ] figure out how to better handle channels dropdown with channel groups and arbitrary channels
 - [ ] improve statistics
   - [x] compute min/max/avg ignoring infinities, and report # of infinities
-  - [ ] compute statistics also over selection
   - [ ] account for blend mode when computing pixel hover (and statistics)
-- [ ] figure our threading while considering emscripten
+- [x] figure our threading while considering emscripten
 - [ ] selection support
+  - [ ] compute statistics also over selection
 - [ ] command palette/improved hotkey support
 - [ ] save as support for OpenEXR
 - [ ] handle multi-view EXRs better
