@@ -47,10 +47,15 @@ using std::string_view;
 #ifdef HELLOIMGUI_USE_SDL
 #include <SDL.h>
 #endif
+
 #ifdef HELLOIMGUI_USE_GLFW
-#define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3.h>
+
+#ifdef __APPLE__
+// on macOS, we need to include this to get the NS api for opening files
+#define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3native.h>
+#endif
 #endif
 
 using namespace linalg::ostream_overloads;
