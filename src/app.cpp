@@ -26,7 +26,6 @@
 
 #include <ImfThreading.h>
 
-#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -49,7 +48,9 @@ using std::string_view;
 #include <SDL.h>
 #endif
 #ifdef HELLOIMGUI_USE_GLFW
+#define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 #endif
 
 using namespace linalg::ostream_overloads;
@@ -143,19 +144,24 @@ static const vector<std::pair<const char *, const char *>> g_help_strings = {
 //         tooltip(fmt::format("{}.\nKey: {}", t->second, t->first).c_str(), wrap_width);
 // }
 
-HDRViewApp *hdrview()
+static HDRViewApp *g_hdrview = nullptr;
+
+void init_hdrview(float exposure, float gamma, bool dither, bool sRGB, bool force_sdr, const vector<string> &in_files)
 {
-    static HDRViewApp viewer;
-    return &viewer;
+    if (g_hdrview)
+    {
+        spdlog::critical("HDRView already created!");
+        exit(EXIT_FAILURE);
+    }
+
+    g_hdrview = new HDRViewApp(exposure, gamma, dither, sRGB, force_sdr, in_files);
 }
 
-HDRViewApp::HDRViewApp()
-{
-    spdlog::set_pattern("%^[%T | %5l]: %$%v");
-    spdlog::set_level(spdlog::level::trace);
-    spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
-    ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
+HDRViewApp *hdrview() { return g_hdrview; }
 
+HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool force_sdr, vector<string> in_files) :
+    m_exposure(exposure), m_gamma(gamma), m_sRGB(sRGB), m_dither(dither)
+{
 #if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     // if threading is disabled, create no threads
     unsigned threads = 0;
@@ -178,10 +184,17 @@ HDRViewApp::HDRViewApp()
     m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
 
-    m_params.rendererBackendOptions.requestFloatBuffer = HelloImGui::hasEdrSupport();
-    spdlog::info("Launching GUI with {} display support.", HelloImGui::hasEdrSupport() ? "EDR" : "SDR");
-    spdlog::info("Creating a {} framebuffer.",
-                 HelloImGui::hasEdrSupport() ? "floating-point precision" : "standard precision");
+    bool use_edr = HelloImGui::hasEdrSupport() && !force_sdr;
+
+    if (force_sdr)
+        spdlog::info("Forcing SDR display mode (display {} support EDR mode)",
+                     HelloImGui::hasEdrSupport() ? "would otherwise" : "would not anyway");
+
+    m_params.rendererBackendOptions.requestFloatBuffer = use_edr;
+    spdlog::info("Launching GUI with {} display support.", use_edr ? "EDR" : "SDR");
+    spdlog::info("Creating a {} framebuffer.", m_params.rendererBackendOptions.requestFloatBuffer
+                                                   ? "floating-point precision"
+                                                   : "standard precision");
 
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
@@ -238,8 +251,8 @@ HDRViewApp::HDRViewApp()
 
     // the file window
     HelloImGui::DockableWindow file_window;
-    file_window.label             = "File";
-    file_window.dockSpaceName     = "FileSpace";
+    file_window.label             = "Images";
+    file_window.dockSpaceName     = "ImagesSpace";
     file_window.isVisible         = true;
     file_window.rememberIsVisible = true;
     file_window.GuiFunction       = [this] { draw_file_window(); };
@@ -247,7 +260,7 @@ HDRViewApp::HDRViewApp()
     // the info window
     HelloImGui::DockableWindow info_window;
     info_window.label             = "Info";
-    info_window.dockSpaceName     = "FileSpace";
+    info_window.dockSpaceName     = "ImagesSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
     info_window.GuiFunction       = [this] { draw_info_window(); };
@@ -255,7 +268,7 @@ HDRViewApp::HDRViewApp()
     // the channels window
     HelloImGui::DockableWindow channel_window;
     channel_window.label             = "Channels";
-    channel_window.dockSpaceName     = "ChannelSpace";
+    channel_window.dockSpaceName     = "ChannelsSpace";
     channel_window.isVisible         = true;
     channel_window.rememberIsVisible = true;
     channel_window.GuiFunction       = [this] { draw_channel_window(); };
@@ -273,8 +286,8 @@ HDRViewApp::HDRViewApp()
     m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window, log_window};
     m_params.dockingParams.dockingSplits   = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-        HelloImGui::DockingSplit{"HistogramSpace", "FileSpace", ImGuiDir_Down, 0.75f},
-        HelloImGui::DockingSplit{"FileSpace", "ChannelSpace", ImGuiDir_Down, 0.25f},
+        HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
+        HelloImGui::DockingSplit{"ImagesSpace", "ChannelsSpace", ImGuiDir_Down, 0.25f},
         HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
 
     m_params.callbacks.SetupImGuiStyle = []()
@@ -287,7 +300,7 @@ HDRViewApp::HDRViewApp()
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
     {
         spdlog::trace("Registering glfw drop callback");
-        spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
+        // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
         glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
                             [](GLFWwindow *w, int count, const char **filenames)
                             {
@@ -295,6 +308,34 @@ HDRViewApp::HDRViewApp()
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
                                 hdrview()->load_images(arg);
                             });
+#ifdef __APPLE__
+        // On macOS, the mechanism for opening an application passes filenames
+        // through the NS api rather than CLI arguments, which means we need
+        // special handling of these through GLFW.
+        // There are two components to this special handling:
+        // (both of which need to happen here instead of HDRViewApp() because GLFW needs to have been initialized first)
+
+        // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
+        const char *const *opened_files = glfwGetOpenedFilenames();
+        if (opened_files)
+        {
+            spdlog::trace("Opening files passed in through the NS api...");
+            vector<string> args;
+            for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
+            load_images(args);
+        }
+
+        // 2) Register a callback on the running instance of HDRView for when the user:
+        //    a) drags a file onto the HDRView app icon in the dock, and/or
+        //    b) launches HDRView with files (either from the command line or Finder) when another instance is already
+        //       running
+        glfwSetOpenedFilenamesCallback(
+            [](const char *image_file)
+            {
+                spdlog::trace("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
+                hdrview()->load_images({string(image_file)});
+            });
+#endif
     };
 #endif
 
@@ -331,6 +372,9 @@ HDRViewApp::HDRViewApp()
             ImGui::ShowAboutWindow(&g_show_tool_about);
     };
     m_params.callbacks.CustomBackground = [this]() { draw_background(); };
+
+    // load any passed-in images
+    load_images(in_files);
 }
 
 void HDRViewApp::setup_rendering()
@@ -555,12 +599,15 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Help"))
     {
-        ImGui::MenuItem(ICON_FA_RULER " Metrics/Debugger", nullptr, &g_show_tool_metrics);
-        ImGui::MenuItem(ICON_FA_TERMINAL " Debug Log", nullptr, &g_show_tool_debug_log);
-        ImGui::MenuItem(ICON_FA_ID_CARD " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
-        ImGui::MenuItem(ICON_FA_SLIDERS " Style Editor", nullptr, &g_show_tool_style_editor);
-        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
-        ImGui::Separator();
+        if (ImGui::BeginMenu(ICON_FA_WRENCH " Dear ImGui Tools"))
+        {
+            ImGui::MenuItem(ICON_FA_RULER " Metrics/Debugger", nullptr, &g_show_tool_metrics);
+            ImGui::MenuItem(ICON_FA_TERMINAL " Debug Log", nullptr, &g_show_tool_debug_log);
+            ImGui::MenuItem(ICON_FA_ID_CARD " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
+            ImGui::MenuItem(ICON_FA_SLIDERS " Style Editor", nullptr, &g_show_tool_style_editor);
+            ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
+            ImGui::EndMenu();
+        }
         ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", nullptr, &g_show_help);
         ImGui::EndMenu();
     }
@@ -1762,71 +1809,4 @@ void HDRViewApp::draw_about_dialog()
         ImGui::ScrollWhenDraggingOnVoid(ImVec2(0.0f, -ImGui::GetIO().MouseDelta.y), ImGuiMouseButton_Left);
         ImGui::EndPopup();
     }
-}
-
-int main(int argc, char **argv)
-{
-    vector<string> args;
-    bool           help                 = false;
-    bool           error                = false;
-    bool           launched_from_finder = false;
-
-#if defined(__EMSCRIPTEN__)
-    spdlog::info("defined: __EMSCRIPTEN__");
-#endif
-
-#if defined(HELLOIMGUI_EMSCRIPTEN)
-    spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN");
-#endif
-
-#if defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-    spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN_PTHREAD");
-#endif
-
-    try
-    {
-        for (int i = 1; i < argc; ++i)
-        {
-            if (strcmp("--help", argv[i]) == 0 || strcmp("-h", argv[i]) == 0)
-                help = true;
-            else if (strncmp("-psn", argv[i], 4) == 0)
-                launched_from_finder = true;
-            else
-            {
-                if (strncmp(argv[i], "-", 1) == 0)
-                {
-                    fmt::print(stderr, "Invalid argument: \"{}\"!\n", argv[i]);
-                    help  = true;
-                    error = true;
-                }
-                args.push_back(argv[i]);
-            }
-        }
-        (void)launched_from_finder;
-    }
-    catch (const std::exception &e)
-    {
-        fmt::print(stderr, "Error: {}\n", e.what());
-        help  = true;
-        error = true;
-    }
-    if (help)
-    {
-        fmt::print(error ? stderr : stdout, R"(Syntax: {} [options]
-Options:
-   -h, --help                Display this message
-)",
-                   argv[0]);
-        return error ? EXIT_FAILURE : EXIT_SUCCESS;
-    }
-    try
-    {
-        hdrview()->run();
-    }
-    catch (const std::exception &e)
-    {
-        fmt::print(stderr, "Caught a fatal error: {}\n", e.what());
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
 }

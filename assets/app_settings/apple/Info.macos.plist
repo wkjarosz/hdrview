@@ -2,6 +2,46 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image file</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.image</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folders</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
+
+	<key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+	
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+
+	<key>CSResourcesFileMapped</key>
+    <true/>
+
     <key>CFBundleIdentifier</key>
     <string>${HELLO_IMGUI_BUNDLE_IDENTIFIER}</string>
 

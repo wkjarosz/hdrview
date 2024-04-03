@@ -28,7 +28,8 @@ using std::vector;
 class HDRViewApp
 {
 public:
-    HDRViewApp();
+    HDRViewApp(float exposure = 0.0f, float gamma = 2.2f, bool dither = true, bool sRGB = true, bool force_sdr = false,
+               vector<string> in_files = {});
     ~HDRViewApp();
 
     void run();
@@ -209,7 +210,7 @@ private:
     };
     vector<shared_ptr<PendingImages>> m_pending_images;
 
-    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.f;
+    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
 
@@ -233,6 +234,10 @@ private:
 
     map<pair<string, int>, ImFont *> m_fonts;
 };
+
+/// Create the global singleton HDRViewApp instance
+void init_hdrview(float exposure = 0.0f, float gamma = 2.2f, bool dither = true, bool sRGB = true,
+                  bool force_sdr = false, const vector<string> &in_files = {});
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();

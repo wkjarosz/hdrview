@@ -1,0 +1,148 @@
+/** \file hdrview.cpp
+    \author Wojciech Jarosz
+*/
+
+#include "app.h"
+#include "cliformatter.h"
+#include "imgui_ext.h"
+#include "version.h"
+#include <CLI/CLI.hpp>
+#include <fmt/core.h>
+#include <spdlog/spdlog.h>
+
+int main(int argc, char **argv)
+{
+    constexpr int default_verbosity = spdlog::level::info;
+    int           verbosity         = default_verbosity;
+
+    float exposure = 0.0f, gamma = 2.2f;
+    bool  dither = true, sRGB = true, force_sdr = false;
+
+    vector<string> in_files;
+
+    try
+    {
+        string version_string =
+            fmt::format("HDRView {}. (built using {} backend on {})", version(), backend(), build_timestamp());
+
+        CLI::App app{
+            R"(HDRView is a simple research-oriented tool for examining,
+comparing, and converting high-dynamic range images. HDRView
+is freely available under a 3-clause BSD license.
+)",
+            "HDRView"};
+
+        app.formatter(std::make_shared<ColorFormatter>());
+        app.get_formatter()->column_width(20);
+        app.get_formatter()->label("OPTIONS",
+                                   fmt::format(fmt::emphasis::bold | fg(fmt::color::cornflower_blue), "OPTIONS"));
+
+        app.add_option("-e,--exposure", exposure,
+                       R"(Desired power of 2 EV or exposure value (gain = 2^exposure)
+[default: 0].)")
+            ->capture_default_str()
+            ->group("Tone mapping and display");
+
+        app.add_option("-g,--gamma", gamma,
+                       R"(Desired gamma value for exposure+gamma tonemapping. An
+sRGB curve is used if gamma is not specified.)")
+            ->group("Tone mapping and display");
+
+        app.add_flag("--dither,--no-dither{false}", dither,
+                     "Enable/disable dithering when converting to LDR\n[default: on].")
+            ->group("Tone mapping and display");
+
+        app.add_flag("--sdr", force_sdr, "Force standard dynamic range (8-bit per channel) display.")
+            ->group("Tone mapping and display");
+
+        app.add_option("-v,--verbosity", verbosity,
+                       R"(Set verbosity threshold T with lower values meaning more
+verbose and higher values removing low-priority messages.
+All messages with severity >= T are displayed, where the
+severities are:
+    trace    = 0
+    debug    = 1
+    info     = 2
+    warn     = 3
+    err      = 4
+    critical = 5
+    off      = 6
+The default is 2 (info).)")
+            ->check(CLI::Range(0, 6))
+            ->option_text("INT in [0-6]")
+            ->group("Misc");
+
+        app.set_version_flag("--version", version_string, "Show the version and exit.")->group("Misc");
+
+        app.set_help_flag("-h, --help", "Print this help message and exit.")->group("Misc");
+
+        app.add_option("IMAGES", in_files, "The image files to load.")
+            ->check(CLI::ExistingPath)
+            ->option_text("PATH(existing) ...");
+
+        spdlog::set_pattern("%^[%T | %5l]: %$%v");
+        spdlog::set_level(spdlog::level::trace);
+        spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
+        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
+
+#if defined(__EMSCRIPTEN__)
+        spdlog::info("defined: __EMSCRIPTEN__");
+#endif
+
+#if defined(HELLOIMGUI_EMSCRIPTEN)
+        spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN");
+#endif
+
+#if defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+        spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN_PTHREAD");
+#endif
+
+        if (argc > 1)
+        {
+            spdlog::trace("Launching with command line arguments:");
+            for (int i = 1; i < argc; ++i) spdlog::trace("\t" + string(argv[i]));
+        }
+        else
+            spdlog::trace("Launching HDRView with no command line arguments.");
+
+        CLI11_PARSE(app, argc, argv);
+
+        // spdlog::default_logger()->set_level(spdlog::level::level_enum(verbosity));
+        spdlog::set_level(spdlog::level::level_enum(verbosity));
+        ImGui::GlobalSpdLogWindow().sink()->set_level(spdlog::level::level_enum(verbosity));
+
+        spdlog::info("Welcome to HDRView!");
+        spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
+        spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
+
+        // gamma or sRGB
+        if (app.count("--gamma"))
+        {
+            sRGB = false;
+            spdlog::info("Setting gamma correction to g={:f}.", gamma);
+        }
+        else
+            spdlog::info("Using sRGB response curve.");
+
+        // dithering
+        spdlog::info("{}", (dither) ? "Dithering" : "Not dithering");
+
+        init_hdrview(exposure, gamma, sRGB, dither, force_sdr, in_files);
+
+        hdrview()->run();
+    }
+    // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
+    catch (const spdlog::spdlog_ex &e)
+    {
+        fprintf(stderr, "Log init failed: %s\n", e.what());
+        return 1;
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::critical("Error: {}", e.what());
+        // fprintf(stderr, "%s", USAGE);
+        exit(EXIT_FAILURE);
+    }
+
+    return EXIT_SUCCESS;
+}

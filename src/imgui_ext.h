@@ -34,7 +34,7 @@ public:
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> &sink() { return m_sink; }
 
     /// set the pattern of the underlying spdlog sink.
-    /// also adds support for the custom flag %* to show the love level icon.
+    /// also adds support for the custom flag %* to show the log level icon.
     void set_pattern(const std::string &pattern);
 
     void clear();

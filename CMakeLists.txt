@@ -14,7 +14,7 @@ project(
   DESCRIPTION
     "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
   VERSION ${VERSION}
-  LANGUAGES C CXX
+  LANGUAGES C CXX OBJC
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -129,13 +129,44 @@ endif()
 include(cmake/CPM.cmake)
 
 if(APPLE AND NOT EMSCRIPTEN)
-  set(HELLOIMGUI_USE_GLFW_METAL ON)
+  # default to GLFW+Metal on macOS
+  set(HELLOIMGUI_HAS_METAL ON)
 
-  # set(HELLOIMGUI_USE_GLFW_OPENGL3 ON)
+  set(HELLOIMGUI_USE_GLFW3 ON)
 
-  # set(HELLOIMGUI_USE_SDL_OPENGL3 ON)
+  # on macOS, download a branch of glfw that allows dragging files onto app icon
+  set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
+  CPMAddPackage(
+    NAME glfw
+    GITHUB_REPOSITORY Tom94/glfw
+    GIT_TAG 71eb7036b47e2733c2f7b4c0010e2ce62557009d
+    OPTIONS "GLFW_BUILD_EXAMPLES OFF"
+            "GLFW_BUILD_TESTS OFF"
+            "GLFW_BUILD_DOCS OFF"
+            "GLFW_BUILD_INSTALL OFF"
+            "GLFW_INSTALL OFF"
+            "GLFW_USE_CHDIR OFF"
+            "BUILD_SHARED_LIBS OFF"
+  )
 
-  # set(HELLOIMGUI_USE_SDL_METAL ON)
+  if(glfw_ADDED)
+    message(STATUS "Using custom branch of glfw on macOS")
+
+    mark_as_advanced(
+      GLFW_BUILD_DOCS
+      GLFW_BUILD_EXAMPLES
+      GLFW_BUILD_INSTALL
+      GLFW_BUILD_TESTS
+      GLFW_DOCUMENT_INTERNALS
+      GLFW_INSTALL
+      GLFW_USE_CHDIR
+      GLFW_USE_MENUBAR
+      GLFW_USE_OSMESA
+      GLFW_VULKAN_STATIC
+      GLFW_USE_RETINA
+      GLFW_USE_MIR
+    )
+  endif()
 endif()
 
 # copy asset directory to the build tree file
@@ -145,7 +176,7 @@ file(
   ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.*
 )
 
-if(APPLE AND (HELLOIMGUI_USE_GLFW_METAL OR HELLOIMGUI_USE_SDL_METAL))
+if(APPLE AND HELLOIMGUI_HAS_METAL)
 
   # ~~~
   # # Precompile .metal shaders to .metallib files
@@ -262,24 +293,21 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
 )
 
-set(OPENEXR_OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF"
-                    "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
-)
-
 if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
+  set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
 else()
-  list(APPEND OPENEXR_OPTIONS "OPENEXR_ENABLE_THREADING ON")
+  set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING ON")
 endif()
 
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
   GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS ${OPENEXR_OPTIONS}
+  OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF" "BUILD_TESTING OFF"
+          "EXCLUDE_FROM_ALL YES" ${OPENEXR_THREADING_OPTIONS}
 )
 if(openexr_ADDED)
-  message(STATUS "openexr library added")
+  message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
 endif()
 
 # # this is part of Dear ImGui Bundle, so no need to add it separately
@@ -291,6 +319,17 @@ endif()
 # target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
 # 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
 # ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
+
+CPMAddPackage(
+  NAME cli11
+  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
+  DOWNLOAD_ONLY YES
+)
+if(cli11_ADDED)
+  message(STATUS "CLI11 library added")
+  add_library(cli11 INTERFACE IMPORTED)
+  target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
+endif()
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -332,6 +371,7 @@ imgui_bundle_add_app(
   src/app.cpp
   src/colorspace.cpp
   src/common.cpp
+  src/hdrview.cpp
   src/image.cpp
   src/imageio.cpp
   src/imgui_ext.cpp
@@ -366,6 +406,7 @@ target_link_libraries(
           Imath::Imath
           stb
           implot
+          cli11
 )
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
