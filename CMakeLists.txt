@@ -14,7 +14,7 @@ project(
   DESCRIPTION
     "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
   VERSION ${VERSION}
-  LANGUAGES C CXX OBJC
+  LANGUAGES C CXX
 )
 
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
@@ -134,7 +134,10 @@ if(APPLE AND NOT EMSCRIPTEN)
 
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  # on macOS, download a branch of glfw that allows dragging files onto app icon
+  # on macOS, download a branch of glfw that allows dragging files onto app icon.
+
+  # need to enable OBJC language for the custom glfw branch
+  enable_language(OBJC)
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   CPMAddPackage(
     NAME glfw
