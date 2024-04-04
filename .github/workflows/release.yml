@@ -19,7 +19,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg
+        run: brew install ninja create-dmg dylibbundler
 
       - uses: actions/checkout@v3
         with:
@@ -46,6 +46,9 @@ jobs:
       - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/HDRView.app/Contents/MacOS/HDRView --help
+
+      - name: Bundle dependencies
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/HDRView.app/Contents/libs/
 
       - name: Creating dmg
         run: |
