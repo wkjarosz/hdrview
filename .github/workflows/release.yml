@@ -15,11 +15,11 @@ env:
 jobs:
   build_macos:
     name: Build on macOS
-    runs-on: macos-latest
+    runs-on: macos-12
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler
+        run: brew install ninja create-dmg freetype dylibbundler
 
       - uses: actions/checkout@v3
         with:
@@ -38,7 +38,9 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+
+      # -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{env.BUILD_TYPE}}
@@ -55,6 +57,13 @@ jobs:
           RESULT="${{github.workspace}}/build/HDRView.dmg"
           test -f $RESULT && rm $RESULT
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts-macos-12
+          path: |
+            ${{github.workspace}}/build
 
       - name: Release
         uses: softprops/action-gh-release@v1
@@ -80,13 +89,20 @@ jobs:
 
       - name: Checking that HDRView runs
         run: |
-          "${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help"
+          "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe --help"
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts-windows-latest
+          path: |
+            "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe"
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+            ${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -116,12 +132,20 @@ jobs:
       - name: Create Build Environment
         run: cmake -E make_directory ${{github.workspace}}/build
 
+      # emcmake cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel 4
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts-emscripten
+          path: |
+            ${{github.workspace}}/build
 
       - name: Copy web app
         working-directory: ${{github.workspace}}/build
