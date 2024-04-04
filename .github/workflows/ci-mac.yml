@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg freetype
+        run: brew install ninja create-dmg freetype dylibbundler
 
       - uses: actions/checkout@v3
         with:
@@ -65,6 +65,9 @@ jobs:
       - name: Checking that HDRView runs
         run: |
           ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
+
+      - name: Bundle dependencies
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/libs/
 
       - name: Creating dmg (macOS)
         run: |
