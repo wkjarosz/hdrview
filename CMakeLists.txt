@@ -134,9 +134,9 @@ if(APPLE AND NOT EMSCRIPTEN)
 
   set(HELLOIMGUI_USE_GLFW3 ON)
 
-  # on macOS, download a branch of glfw that allows dragging files onto app icon.
+  # on macOS, download a fork of glfw that allows dragging files onto app icon.
 
-  # need to enable OBJC language for the custom glfw branch
+  # need to enable OBJC language for the custom glfw fork
   enable_language(OBJC)
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   CPMAddPackage(
@@ -153,7 +153,7 @@ if(APPLE AND NOT EMSCRIPTEN)
   )
 
   if(glfw_ADDED)
-    message(STATUS "Using custom branch of glfw on macOS")
+    message(STATUS "Using custom fork of glfw on macOS")
 
     mark_as_advanced(
       GLFW_BUILD_DOCS
@@ -223,10 +223,6 @@ endforeach()
 
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD ON)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH ON)
-# on macOS, link statically against freetype
-if(APPLE)
-  set(HELLOIMGUI_FREETYPE_STATIC ON)
-endif()
 
 CPMAddPackage(
   NAME imgui_bundle
