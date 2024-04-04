@@ -223,6 +223,10 @@ endforeach()
 
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD ON)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH ON)
+# on macOS, link statically against freetype
+if(APPLE)
+  set(HELLOIMGUI_FREETYPE_STATIC ON)
+endif()
 
 CPMAddPackage(
   NAME imgui_bundle
