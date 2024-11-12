@@ -66,7 +66,7 @@ jobs:
             ${{github.workspace}}/build
 
       - name: Release
-        uses: softprops/action-gh-release@v4
+        uses: softprops/action-gh-release@v2
         with:
           files: ${{github.workspace}}/build/HDRView.dmg
         env:
