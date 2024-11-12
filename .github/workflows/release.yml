@@ -150,7 +150,7 @@ jobs:
         working-directory: ${{github.workspace}}/build
         run: |
           mkdir deploy
-          cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png FileSaver.js deploy/
+          cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png coi-serviceworker.js FileSaver.js deploy/
           mv deploy/HDRView.html deploy/index.html
 
       - name: Publish
