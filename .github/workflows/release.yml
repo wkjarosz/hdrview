@@ -15,7 +15,7 @@ env:
 jobs:
   build_macos:
     name: Build on macOS
-    runs-on: macos-12
+    runs-on: macos-14
 
     steps:
       - name: Install dependencies
@@ -61,7 +61,7 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-macos-12
+          name: build-artifacts-macos-14
           path: |
             ${{github.workspace}}/build
 
@@ -108,7 +108,7 @@ jobs:
 
   build_emscripten:
     name: Build and deploy emscripten webapp
-    runs-on: macos-12
+    runs-on: macos-14
 
     steps:
       - name: Install dependencies
