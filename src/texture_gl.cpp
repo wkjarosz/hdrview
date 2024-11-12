@@ -52,6 +52,10 @@
 #define GL_DEPTH_COMPONENT32F 0x8CAC
 #endif
 
+#if !defined(GL_TEXTURE_2D_MULTISAMPLE)
+#define GL_TEXTURE_2D_MULTISAMPLE GL_TEXTURE_2D
+#endif
+
 static void gl_map_texture_format(Texture::PixelFormat &pixel_format, Texture::ComponentFormat &component_format,
                                   GLenum &pixel_format_gl, GLenum &component_format_gl, GLenum &internal_format_gl);
 
