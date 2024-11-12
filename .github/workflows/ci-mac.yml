@@ -27,8 +27,10 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - { name: "macOS 11", os: macos-11 }
-          - { name: "macOS 12", os: macos-12 }
+          # - { name: "macOS 11", os: macos-11 }
+          # - { name: "macOS 12", os: macos-12 }
+          - { name: "macOS 13", os: macos-13 }
+          - { name: "macOS 14", os: macos-14 }
         buildtype: [Release, Debug]
 
     steps:
