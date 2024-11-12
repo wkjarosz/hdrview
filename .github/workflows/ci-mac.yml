@@ -35,13 +35,13 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg freetype dylibbundler
+        run: brew install ninja create-dmg dylibbundler
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
@@ -78,14 +78,14 @@ jobs:
           create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app
 
       - name: Archive dmg (macOS)
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: HDRView-${{ matrix.config.os }}-${{ matrix.buildtype }}.dmg
           path: |
             ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.dmg
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |

@@ -30,11 +30,11 @@ jobs:
           brew install ninja emscripten
           python3 -m pip install Pillow
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
@@ -55,7 +55,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel 4
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: |
@@ -69,7 +69,7 @@ jobs:
       #     mv deploy/HDRView.html deploy/index.html
 
       # - name: Publish
-      #   uses: peaceiris/actions-gh-pages@v3
+      #   uses: peaceiris/actions-gh-pages@v4
       #   with:
       #     personal_token: ${{ secrets.GITHUB_TOKEN }}
       #     publish_branch: gh-pages

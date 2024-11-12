@@ -28,7 +28,7 @@ jobs:
           - { name: "Windows", os: windows-latest }
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -44,7 +44,7 @@ jobs:
           "${{github.workspace}}\build\${{ matrix.buildtype }}\HDRView.exe --help"
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
