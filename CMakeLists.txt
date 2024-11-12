@@ -276,7 +276,7 @@ if(stb_ADDED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#2ff8f8f791c0e7177b40e621ee3f758e03b31bf5")
+CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
 if(emscripten-browser-file_ADDED)
   message(STATUS "emscripten-browser-file library added")
   add_library(emscripten-browser-file INTERFACE IMPORTED)
