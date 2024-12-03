@@ -47,11 +47,11 @@ void Image::make_default_textures()
     static constexpr float s_black{0.f};
     static constexpr float s_white{1.f};
     s_black_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
-                                                Texture::InterpolationMode::Nearest,
-                                                Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
+                                                 Texture::InterpolationMode::Nearest,
+                                                 Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_white_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
-                                                Texture::InterpolationMode::Nearest,
-                                                Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
+                                                 Texture::InterpolationMode::Nearest,
+                                                 Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32,
                                                  int2{256, 256}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
@@ -264,8 +264,13 @@ Texture *Channel::get_texture()
 {
     if (texture_is_dirty || !texture)
     {
+#if defined(__EMSCRIPTEN__)
+        auto mag_mode = Texture::InterpolationMode::Nearest;
+#else
+        auto mag_mode = Texture::InterpolationMode::Trilinear;
+#endif
         texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, size(),
-                                            Texture::InterpolationMode::Trilinear, Texture::InterpolationMode::Nearest,
+                                            mag_mode, Texture::InterpolationMode::Nearest,
                                             Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead);
         if (texture->pixel_format() != Texture::PixelFormat::R)
             throw std::invalid_argument("Pixel format not supported by the hardware!");

@@ -7,6 +7,8 @@
 #include <cstring>
 #include <memory>
 
+#include <spdlog/spdlog.h>
+
 #if !defined(GL_HALF_FLOAT)
 #define GL_HALF_FLOAT 0x140B
 #endif
@@ -272,6 +274,7 @@ void Texture::resize(const int2 &size)
 
 void Texture::generate_mipmap()
 {
+    spdlog::info("Generating mipmap");
     GLenum tex_mode = m_samples > 1 ? GL_TEXTURE_2D_MULTISAMPLE : GL_TEXTURE_2D;
     CHK(glBindTexture(tex_mode, m_texture_handle));
     CHK(glGenerateMipmap(tex_mode));
