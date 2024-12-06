@@ -376,7 +376,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         if (g_show_tool_about)
             ImGui::ShowAboutWindow(&g_show_tool_about);
     };
-    m_params.callbacks.CustomBackground = [this]() { draw_background(); };
+    m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
+    m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 
     // load any passed-in images
     load_images(in_files);
@@ -699,21 +700,21 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
     {
         // convert the buffer (if any) to a string so the async thread has its own copy
         // then load from the string or filename depending on whether the buffer is empty
-        m_pending_images.emplace_back(
-            std::make_shared<PendingImages>(filename,
-                                            [buffer_str = string(buffer), filename]()
-                                            {
-                                                if (buffer_str.empty())
-                                                {
-                                                    std::ifstream is{filename, std::ios_base::binary};
-                                                    return Image::load(is, filename);
-                                                }
-                                                else
-                                                {
-                                                    std::istringstream is{buffer_str};
-                                                    return Image::load(is, filename);
-                                                }
-                                            }));
+        m_pending_images.emplace_back(std::make_shared<PendingImages>(filename,
+                                                                      [buffer_str = string(buffer), filename]()
+                                                                      {
+                                                                          if (buffer_str.empty())
+                                                                          {
+                                                                              std::ifstream is{filename,
+                                                                                               std::ios_base::binary};
+                                                                              return Image::load(is, filename);
+                                                                          }
+                                                                          else
+                                                                          {
+                                                                              std::istringstream is{buffer_str};
+                                                                              return Image::load(is, filename);
+                                                                          }
+                                                                      }));
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
@@ -1566,6 +1567,46 @@ int HDRViewApp::nth_visible_image_index(int n) const
 {
     return (int)nth_matching_index(m_images, (size_t)n,
                                    [this](size_t, const ImagePtr &img) { return is_visible(img); });
+}
+
+bool HDRViewApp::process_event(void *e)
+{
+#ifdef HELLOIMGUI_USE_SDL
+    auto &io = ImGui::GetIO();
+    if (io.WantCaptureMouse)
+        return false;
+
+    SDL_Event *event = static_cast<SDL_Event *>(e);
+    switch (event->type)
+    {
+    case SDL_QUIT: spdlog::debug("Got an SDL_QUIT event"); break;
+    case SDL_WINDOWEVENT: spdlog::debug("Got an SDL_WINDOWEVENT event"); break;
+    case SDL_MOUSEWHEEL: spdlog::debug("Got an SDL_MOUSEWHEEL event"); break;
+    case SDL_MOUSEMOTION: spdlog::debug("Got an SDL_MOUSEMOTION event"); break;
+    case SDL_MOUSEBUTTONDOWN: spdlog::debug("Got an SDL_MOUSEBUTTONDOWN event"); break;
+    case SDL_MOUSEBUTTONUP: spdlog::debug("Got an SDL_MOUSEBUTTONUP event"); break;
+    case SDL_FINGERMOTION: spdlog::debug("Got an SDL_FINGERMOTION event"); break;
+    case SDL_FINGERDOWN: spdlog::debug("Got an SDL_FINGERDOWN event"); break;
+    case SDL_MULTIGESTURE:
+    {
+        spdlog::debug("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
+                      "io.MousePosFrac: {}, {}",
+                      event->mgesture.numFingers, event->mgesture.dDist, event->mgesture.x, event->mgesture.y,
+                      io.MousePos.x, io.MousePos.y, io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
+        constexpr float cPinchZoomThreshold(0.0001f);
+        constexpr float cPinchScale(80.0f);
+        if (event->mgesture.numFingers == 2 && fabs(event->mgesture.dDist) >= cPinchZoomThreshold)
+        {
+            // Zoom in/out by positive/negative mPinch distance
+            zoom_at_vp_pos(event->mgesture.dDist * cPinchScale, vp_pos_at_app_pos(io.MousePos));
+            return true;
+        }
+    }
+    break;
+    case SDL_FINGERUP: spdlog::debug("Got an SDL_FINGERUP event"); break;
+    }
+#endif
+    return false;
 }
 
 void HDRViewApp::process_hotkeys()

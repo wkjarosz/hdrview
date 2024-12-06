@@ -179,6 +179,7 @@ private:
     void draw_menus();
     void draw_status_bar();
     void process_hotkeys();
+    bool process_event(void *event);
     void set_image_textures();
 
     void load_settings();
