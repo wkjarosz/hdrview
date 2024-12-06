@@ -68,7 +68,30 @@ EM_JS(int, screen_width, (), { return screen.width; });
 EM_JS(int, screen_height, (), { return screen.height; });
 EM_JS(int, window_width, (), { return window.innerWidth; });
 EM_JS(int, window_height, (), { return window.innerHeight; });
+EM_JS(int, getJSPlatform, (), {
+    var platform = navigator.platform.toLowerCase();
+
+    if (platform.indexOf('win') != -1)
+        return 0;
+    else if (platform.indexOf('mac') != -1)
+        return 1;
+    else if (platform.indexOf('linux') != -1)
+        return 2;
+    else // unknown
+        return -1;
+});
 #endif
+
+bool hostIsApple()
+{
+#if defined(__EMSCRIPTEN__)
+    return getJSPlatform() == 1;
+#elif defined(__APPLE__)
+    return true;
+#else
+    return false;
+#endif
+}
 
 static std::mt19937     g_rand(53);
 static constexpr float  MIN_ZOOM                  = 0.01f;
@@ -409,6 +432,8 @@ void HDRViewApp::setup_rendering()
         m_shader->set_texture("dither_texture", Image::dither_texture());
         set_image_textures();
 
+        ImGui::GetIO().ConfigMacOSXBehaviors = hostIsApple();
+
         spdlog::info("Successfully initialized graphics API!");
     }
     catch (const std::exception &e)
@@ -680,7 +705,7 @@ void HDRViewApp::open_image()
         hdrview()->load_image(filename, buffer);
     };
 
-    string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",."));
+    string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
 
     // open the browser's file selector, and pass the file to the upload handler
     spdlog::debug("Requesting file from user...");
@@ -1495,11 +1520,11 @@ void HDRViewApp::draw_background()
         m_viewport_min  = {0.f, 0.f};
         m_viewport_size = io.DisplaySize;
         if (auto id = m_params.dockingParams.dockSpaceIdFromName("MainDockSpace"))
-        {
-            auto central_node = ImGui::DockBuilderGetCentralNode(*id);
-            m_viewport_size   = central_node->Size;
-            m_viewport_min    = central_node->Pos;
-        }
+            if (auto central_node = ImGui::DockBuilderGetCentralNode(*id))
+            {
+                m_viewport_size = central_node->Size;
+                m_viewport_min  = central_node->Pos;
+            }
 
         if (!io.WantCaptureMouse)
         {
