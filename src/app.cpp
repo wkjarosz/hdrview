@@ -104,13 +104,13 @@ static bool             g_show_tool_id_stack_tool = false;
 static bool             g_show_tool_style_editor  = false;
 static bool             g_show_tool_about         = false;
 
-// static const vector<std::pair<vector<int>, string>> g_help_strings2 = {
+// static const vector<std::pair<vector<int>, const char *>> g_help_strings2 = {
 //     {{ImGuiKey_H}, "Toggle this help window"},
 //     {{ImGuiKey_MouseLeft}, "Pan image"},
 //     {{ImGuiKey_MouseWheelX}, "Zoom in and out continuously"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_O}, "Open image"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_W}, "Close image"},
-//     {{ImGuiMod_Shortcut | ImGuiMod_Shift | ImGuiKey_H}, "Close image"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_O}, "Open image"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_W}, "Close image"},
+//     {{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_H}, "Close image"},
 //     {{ImGuiKey_UpArrow}, "Switch to previous image"},
 //     {{ImGuiKey_DownArrow}, "Switch to next image"},
 //     {{ImGuiKey_LeftArrow}, "Switch to previous channel group"},
@@ -125,16 +125,16 @@ static bool             g_show_tool_about         = false;
 //     {{ImGuiKey_8}, "Go to image 8"},
 //     {{ImGuiKey_9}, "Go to image 9"},
 //     {{ImGuiKey_0}, "Go to image 10"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_1}, "Go to channel group 1"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_2}, "Go to channel group 2"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_3}, "Go to channel group 3"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_4}, "Go to channel group 4"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_5}, "Go to channel group 5"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_6}, "Go to channel group 6"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_7}, "Go to channel group 7"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_8}, "Go to channel group 8"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_9}, "Go to channel group 9"},
-//     {{ImGuiMod_Shortcut | ImGuiKey_0}, "Go to channel group 10"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_1}, "Go to channel group 1"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_2}, "Go to channel group 2"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_3}, "Go to channel group 3"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_4}, "Go to channel group 4"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_5}, "Go to channel group 5"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_6}, "Go to channel group 6"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_7}, "Go to channel group 7"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_8}, "Go to channel group 8"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_9}, "Go to channel group 9"},
+//     {{ImGuiMod_Ctrl | ImGuiKey_0}, "Go to channel group 10"},
 //     {{ImGuiKey_Equal, ImGuiMod_Shift | ImGuiKey_Equal}, "Zoom in"},
 //     {{ImGuiKey_Minus}, "Zoom out"},
 //     {{ImGuiKey_E}, "Decrease exposure"},
@@ -545,7 +545,8 @@ void HDRViewApp::draw_menus()
 {
     if (ImGui::BeginMenu("File"))
     {
-        if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Open image...", "Cmd+O"))
+        if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Open image...",
+                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_O)))
             open_image();
 
 #if !defined(__EMSCRIPTEN__)
@@ -575,7 +576,8 @@ void HDRViewApp::draw_menus()
 
         ImGui::BeginDisabled(!current_image());
 #if !defined(__EMSCRIPTEN__)
-        if (ImGui::MenuItem(ICON_FA_FLOPPY_DISK " Save as...", "Cmd+Shift+S"))
+        if (ImGui::MenuItem(ICON_FA_FLOPPY_DISK " Save as...",
+                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)))
         {
             string filename = pfd::save_file("Save as", "",
                                              {
@@ -588,7 +590,8 @@ void HDRViewApp::draw_menus()
                 save_as(filename);
         }
 #else
-        if (ImGui::BeginMenu(ICON_FA_DOWNLOAD " Download as..."))
+        if (ImGui::BeginMenu(ICON_FA_DOWNLOAD " Download as..."),
+            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S))
         {
             if (current_image())
             {
@@ -613,14 +616,17 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close", "Cmd+W", false, current_image() != nullptr))
+        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close", ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_W),
+                            false, current_image() != nullptr))
             close_image();
-        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close all", "Cmd+Shift+W", false, current_image() != nullptr))
+        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close all",
+                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W), false,
+                            current_image() != nullptr))
             close_all_images();
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem(ICON_FA_POWER_OFF " Quit"))
+        if (ImGui::MenuItem(ICON_FA_POWER_OFF " Quit", ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_Q)))
             m_params.appShallExit = true;
 
         ImGui::EndMenu();
@@ -639,7 +645,8 @@ void HDRViewApp::draw_menus()
             ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
             ImGui::EndMenu();
         }
-        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", nullptr, &g_show_help);
+        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", ImGui::GetKeyChordNameTranslated(ImGuiKey_H),
+                        &g_show_help);
         ImGui::EndMenu();
     }
 
@@ -1639,7 +1646,8 @@ void HDRViewApp::process_hotkeys()
     if (ImGui::GetIO().WantCaptureKeyboard)
         return;
 
-    if (ImGui::IsKeyChordPressed(ImGuiKey_O | ImGuiMod_Shortcut))
+    // Check global action at start of the frame
+    if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_O))
         open_image();
     else if (ImGui::IsKeyPressed(ImGuiKey_H))
         g_show_help = !g_show_help;
@@ -1652,7 +1660,7 @@ void HDRViewApp::process_hotkeys()
 
     // switch the current image using the number keys
     for (int n = 0; n <= 9; ++n)
-        if (ImGui::IsKeyChordPressed(ImGuiKey(ImGuiKey_0 + n)))
+        if (ImGui::GlobalChordPressed(ImGuiKey(ImGuiKey_0 + n)))
         {
             spdlog::trace("Selecting visible image number {}", mod(n - 1, 10));
             set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
@@ -1660,35 +1668,41 @@ void HDRViewApp::process_hotkeys()
 
     // switch the selected channel group using Ctrl + number key
     for (int n = 0; n <= std::min(9, (int)img->groups.size()); ++n)
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n)))
+        if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n)))
         {
             spdlog::trace("Selecting visible channel group number {}", mod(n - 1, 10));
             img->selected_group = mod(n - 1, 10);
         }
 
-    if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut, 0, ImGuiInputFlags_Repeat))
+    if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat))
         close_image();
-    else if (ImGui::IsKeyChordPressed(ImGuiKey_W | ImGuiMod_Shortcut | ImGuiMod_Shift))
+    else if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W))
         close_all_images();
-    else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat))
         set_current_image_index(next_visible_image_index(m_current, Forward));
-    else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat))
         set_current_image_index(next_visible_image_index(m_current, Backward));
-    else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_RightArrow, ImGuiInputFlags_Repeat))
         img->selected_group = mod(img->selected_group + 1, (int)img->groups.size());
-    else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat))
         img->selected_group = mod(img->selected_group - 1, (int)img->groups.size());
-    else if (ImGui::IsKeyPressed(ImGuiKey_Minus) || ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_Minus, ImGuiInputFlags_Repeat) ||
+             ImGui::GlobalChordPressed(ImGuiKey_KeypadSubtract, ImGuiInputFlags_Repeat))
         zoom_out();
-    else if (ImGui::IsKeyPressed(ImGuiKey_Equal) || ImGui::IsKeyPressed(ImGuiKey_KeypadAdd))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_Equal, ImGuiInputFlags_Repeat) ||
+             ImGui::GlobalChordPressed(ImGuiKey_KeypadAdd, ImGuiInputFlags_Repeat))
         zoom_in();
-    else if (ImGui::IsKeyPressed(ImGuiKey_E))
-        m_exposure_live = m_exposure += ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.25f : -0.25f;
-    else if (ImGui::IsKeyPressed(ImGuiKey_G))
-        m_gamma_live = m_gamma = std::max(0.02f, m_gamma + (ImGui::IsKeyDown(ImGuiMod_Shift) ? 0.02f : -0.02f));
-    else if (ImGui::IsKeyPressed(ImGuiKey_F))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_E, ImGuiInputFlags_Repeat))
+        m_exposure_live = m_exposure -= 0.25f;
+    else if (ImGui::GlobalChordPressed(ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat))
+        m_exposure_live = m_exposure += 0.25f;
+    else if (ImGui::GlobalChordPressed(ImGuiKey_G, ImGuiInputFlags_Repeat))
+        m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f);
+    else if (ImGui::GlobalChordPressed(ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat))
+        m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f);
+    else if (ImGui::GlobalChordPressed(ImGuiKey_F))
         fit();
-    else if (ImGui::IsKeyPressed(ImGuiKey_C))
+    else if (ImGui::GlobalChordPressed(ImGuiKey_C))
         center();
 
     set_image_textures();
@@ -1805,11 +1819,8 @@ void HDRViewApp::draw_about_dialog()
                     // {
                     //     string chords;
                     //     for (auto alias : item.first)
-                    //     {
-                    //         char key_chord_name[64];
-                    //         ImGui::GetKeyChordName(alias, key_chord_name, IM_ARRAYSIZE(key_chord_name));
-                    //         chords = chords + (chords.empty() ? "" : "; ") + key_chord_name;
-                    //     }
+                    //         chords = fmt::format("{}{}{}", chords, (chords.empty() ? "" : "; "),
+                    //                              ImGui::GetKeyChordNameTranslated(alias));
 
                     //     item_and_description(chords.c_str(), item.second);
                     // }

@@ -668,4 +668,46 @@ void HyperlinkText(const char *href, const char *fmt, ...)
     }
 }
 
+// copied from imgui.cpp
+static ImGuiKeyChord GetModForLRModKey(ImGuiKey key)
+{
+    if (key == ImGuiKey_LeftCtrl || key == ImGuiKey_RightCtrl)
+        return ImGuiMod_Ctrl;
+    if (key == ImGuiKey_LeftShift || key == ImGuiKey_RightShift)
+        return ImGuiMod_Shift;
+    if (key == ImGuiKey_LeftAlt || key == ImGuiKey_RightAlt)
+        return ImGuiMod_Alt;
+    if (key == ImGuiKey_LeftSuper || key == ImGuiKey_RightSuper)
+        return ImGuiMod_Super;
+    return ImGuiMod_None;
+}
+
+// Return translated names
+// Lifetime of return value: valid until next call to GetKeyChordNameTranslated or GetKeyChordName
+const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
+{
+    ImGuiContext &g = *GImGui;
+
+    const ImGuiKey key = (ImGuiKey)(key_chord & ~ImGuiMod_Mask_);
+    if (IsLRModKey(key))
+        key_chord &= ~GetModForLRModKey(key); // Return "Ctrl+LeftShift" instead of "Ctrl+Shift+LeftShift"
+    ImFormatString(g.TempKeychordName, IM_ARRAYSIZE(g.TempKeychordName), "%s%s%s%s%s",
+                   (key_chord & ImGuiMod_Ctrl) ? (g.IO.ConfigMacOSXBehaviors ? "Cmd+" : "Ctrl+") : "",    // avoid wrap
+                   (key_chord & ImGuiMod_Shift) ? "Shift+" : "",                                          //
+                   (key_chord & ImGuiMod_Alt) ? (g.IO.ConfigMacOSXBehaviors ? "Option+" : "Alt+") : "",   //
+                   (key_chord & ImGuiMod_Super) ? (g.IO.ConfigMacOSXBehaviors ? "Ctrl+" : "Super+") : "", //
+                   (key != ImGuiKey_None || key_chord == ImGuiKey_None) ? GetKeyName(key) : "");          //
+    size_t len;
+    if (key == ImGuiKey_None && key_chord != 0)
+        if ((len = strlen(g.TempKeychordName)) != 0) // Remove trailing '+'
+            g.TempKeychordName[len - 1] = 0;
+    return g.TempKeychordName;
+}
+
+bool GlobalChordPressed(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
+{
+    return ImGui::GetShortcutRoutingData(chord)->RoutingCurr == ImGuiKeyOwner_NoOwner &&
+           ImGui::IsKeyChordPressed(chord);
+}
+
 } // namespace ImGui
