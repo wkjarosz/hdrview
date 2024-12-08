@@ -244,6 +244,28 @@ if(imgui_bundle_ADDED)
   endif()
 endif()
 
+CPMAddPackage(
+  NAME imgui_command_palette2
+  GITHUB_REPOSITORY wkjarosz/imgui-command-palette
+  GIT_TAG 5f9300ebde243f156881ea1c18cf6c8df97f4cd3
+  DOWNLOAD_ONLY YES
+)
+
+# CPMAddPackage("gh:wkjarosz/imgui-command-palette#66124ae045c11eb153c9c3f184b1e12f4d5a0e7b")
+if(imgui_command_palette2_ADDED)
+  message(STATUS "imgui-command-palette library added")
+  add_library(
+    imgui_command_palette2
+    "${imgui_command_palette2_SOURCE_DIR}/imcmd_command_palette.h"
+    "${imgui_command_palette2_SOURCE_DIR}/imcmd_command_palette.cpp"
+    "${imgui_command_palette2_SOURCE_DIR}/imcmd_fuzzy_search.h"
+    "${imgui_command_palette2_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
+  )
+  target_compile_features(imgui_command_palette2 PUBLIC cxx_std_11)
+  target_include_directories(imgui_command_palette2 PUBLIC . ${imgui_command_palette2_SOURCE_DIR})
+  target_link_libraries(imgui_command_palette2 PUBLIC imgui)
+endif()
+
 # CPMAddPackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee") if(hello_imgui_ADDED) message(STATUS
 # "hello_imgui library added") endif()
 
@@ -410,6 +432,7 @@ target_link_libraries(
           stb
           implot
           cli11
+          imgui_command_palette2
 )
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 

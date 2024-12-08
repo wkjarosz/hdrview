@@ -17,6 +17,7 @@
 #include <string_view>
 #include <vector>
 
+using std::function;
 using std::map;
 using std::ofstream;
 using std::pair;
@@ -24,6 +25,20 @@ using std::shared_ptr;
 using std::string;
 using std::string_view;
 using std::vector;
+
+struct Action
+{
+    string           name;
+    string           icon;
+    ImGuiKeyChord    chord;
+    ImGuiInputFlags  flags;
+    function<void()> callback;
+    function<bool()> enabled    = []() { return true; };
+    bool             needs_menu = false;
+    bool            *p_selected = nullptr;
+
+    void MenuItem() const;
+};
 
 class HDRViewApp
 {
@@ -181,6 +196,7 @@ private:
     void process_hotkeys();
     bool process_event(void *event);
     void set_image_textures();
+    void draw_command_palette();
 
     void load_settings();
     void save_settings();
@@ -234,6 +250,8 @@ private:
     ImGuiTextFilter m_filter;
 
     map<pair<string, int>, ImFont *> m_fonts;
+
+    map<string, Action> m_actions;
 };
 
 /// Create the global singleton HDRViewApp instance

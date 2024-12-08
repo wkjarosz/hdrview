@@ -6,6 +6,8 @@
 
 #include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
+// #include "imgui-command-palette/imcmd_command_palette.h"
+#include "imcmd_command_palette.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "immapp/browse_to_url.h"
@@ -103,6 +105,8 @@ static bool             g_show_tool_debug_log     = false;
 static bool             g_show_tool_id_stack_tool = false;
 static bool             g_show_tool_style_editor  = false;
 static bool             g_show_tool_about         = false;
+static bool             g_show_command_palette    = false;
+static bool             g_show_demo_window        = false;
 
 // static const vector<std::pair<vector<int>, const char *>> g_help_strings2 = {
 //     {{ImGuiKey_H}, "Toggle this help window"},
@@ -172,6 +176,24 @@ static const vector<std::pair<const char *, const char *>> g_help_strings = {
 //         tooltip(fmt::format("{}.\nKey: {}", t->second, t->first).c_str(), wrap_width);
 // }
 
+void Action::MenuItem() const
+{
+    if (needs_menu)
+    {
+        if (ImGui::BeginMenu(fmt::format("{}{}{}", icon, icon.length() ? " " : "", name).c_str(), enabled()))
+        {
+            callback();
+            ImGui::EndMenu();
+        }
+    }
+    else
+    {
+        if (ImGui::MenuItem(fmt::format("{}{}{}", icon, icon.length() ? " " : "", name).c_str(),
+                            ImGui::GetKeyChordNameTranslated(chord), p_selected, enabled()))
+            callback();
+    }
+}
+
 static HDRViewApp *g_hdrview = nullptr;
 
 void init_hdrview(float exposure, float gamma, bool dither, bool sRGB, bool force_sdr, const vector<string> &in_files)
@@ -237,6 +259,141 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // Load additional font
     m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
+
+    //
+    // Actions and command palette
+    //
+    {
+        auto add_action = [this](const Action &a) { m_actions[a.name] = a; };
+        add_action({"Open image...", ICON_FA_FOLDER_OPEN, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+        add_action({"About HDRView", ICON_FA_CIRCLE_INFO, ImGuiKey_H, 0, []() { g_show_help = !g_show_help; }});
+        add_action(
+            {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+
+        add_action(
+            {"Metrics/Debugger", ICON_FA_RULER, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_metrics});
+        add_action(
+            {"Debug Log", ICON_FA_TERMINAL, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_debug_log});
+        add_action({"ID Stack Tool", ICON_FA_ID_CARD, 0, 0, []() {}, []() { return true; }, false,
+                    &g_show_tool_id_stack_tool});
+        add_action(
+            {"Style Editor", ICON_FA_SLIDERS, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_style_editor});
+        add_action(
+            {"About Dear ImGui", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_about});
+        add_action({"ImGui demo window", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false,
+                    &g_show_demo_window});
+
+        auto if_img = [this]() { return current_image() != nullptr; };
+
+        // below actions are only available if there is an image
+
+#if !defined(__EMSCRIPTEN__)
+        add_action({"Save as...", ICON_FA_FLOPPY_DISK, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+                    [this]()
+                    {
+                        string filename =
+                            pfd::save_file("Save as", "",
+                                           {
+                                               "Supported image files",
+                                               fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
+                                           })
+                                .result();
+
+                        if (!filename.empty())
+                            save_as(filename);
+                    },
+                    if_img});
+
+#else
+        add_action({"Download as...", ICON_FA_DOWNLOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+                    [this]()
+                    {
+                        if (current_image())
+                        {
+                            string filename;
+                            string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
+                            ImGui::Text("Please enter a filename. Format is deduced from the accepted extensions:");
+                            ImGui::TextUnformatted(fmt::format("\t{}", filter));
+                            ImGui::Separator();
+                            if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
+                                                         ImGuiInputTextFlags_EnterReturnsTrue))
+                            {
+                                ImGui::CloseCurrentPopup();
+
+                                if (!filename.empty())
+                                    save_as(filename);
+                            }
+                        }
+                    }},
+                   if_img, true);
+#endif
+
+        for (int n = 1; n <= 9; ++n)
+            add_action({fmt::format("Go to image {}", n), fmt::format("{}", n), ImGuiKey_0 + n, 0,
+                        [this, n]() { set_current_image_index(nth_visible_image_index(mod(n - 1, 10))); },
+                        [this, n]()
+                        {
+                            auto i = nth_visible_image_index(mod(n - 1, 10));
+                            return is_valid(i) && i != m_current;
+                        }});
+
+        // switch the selected channel group using Ctrl + number key
+        for (size_t n = 1u; n <= 9u; ++n)
+            add_action({fmt::format("Go to channel group {}", n), ICON_FA_LAYER_GROUP,
+                        ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n), 0,
+                        [this, n]() { current_image()->selected_group = mod(int(n), 10); },
+                        [this, n]() { return current_image() && current_image()->groups.size() > n; }});
+
+        add_action({"Close", ICON_FA_CIRCLE_XMARK, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
+                    [this]() { close_image(); }, if_img});
+        add_action({"Close all", ICON_FA_CIRCLE_XMARK, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
+                    [this]() { close_all_images(); }, if_img});
+
+        add_action({"Go to next image", "", ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
+                    [this]() { set_current_image_index(next_visible_image_index(m_current, Forward)); },
+                    [this]()
+                    {
+                        auto i = next_visible_image_index(m_current, Forward);
+                        return is_valid(i) && i != m_current;
+                    }});
+        add_action({"Go to previous image", "", ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
+                    [this]() { set_current_image_index(next_visible_image_index(m_current, Backward)); },
+                    [this]()
+                    {
+                        auto i = next_visible_image_index(m_current, Backward);
+                        return is_valid(i) && i != m_current;
+                    }});
+        add_action({"Go to next channel group", "", ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        auto img            = current_image();
+                        img->selected_group = mod(img->selected_group + 1, (int)img->groups.size());
+                    },
+                    [this]() { return current_image() && current_image()->groups.size() > 1; }});
+        add_action({"Go to previous channel group", "", ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        auto img            = current_image();
+                        img->selected_group = mod(img->selected_group - 1, (int)img->groups.size());
+                    },
+                    [this]() { return current_image() && current_image()->groups.size() > 1; }});
+        add_action({"Zoom out", ICON_FA_MAGNIFYING_GLASS_MINUS, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
+                    [this]() { zoom_out(); }, if_img});
+        add_action({"Zoom in", ICON_FA_MAGNIFYING_GLASS_PLUS, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
+                    [this]() { zoom_in(); }, if_img});
+
+        add_action({"Decrease exposure", "", ImGuiKey_E, ImGuiInputFlags_Repeat,
+                    [this]() { m_exposure_live = m_exposure -= 0.25f; }, if_img});
+        add_action({"Increase exposure", "", ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
+                    [this]() { m_exposure_live = m_exposure += 0.25f; }, if_img});
+        add_action({"Decrease gamma", "", ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); }, if_img});
+        add_action({"Increase gamma", "", ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); }, if_img});
+
+        add_action({"Fit to window", ICON_FA_MAXIMIZE, ImGuiKey_F, 0, [this]() { fit(); }, if_img});
+        add_action({"Center", "", ImGuiKey_C, 0, [this]() { center(); }, if_img});
+    }
 
     //
     // Menu bar
@@ -398,6 +555,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         }
         if (g_show_tool_about)
             ImGui::ShowAboutWindow(&g_show_tool_about);
+        if (g_show_demo_window)
+            ImGui::ShowDemoWindow(&g_show_demo_window);
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
@@ -545,9 +704,7 @@ void HDRViewApp::draw_menus()
 {
     if (ImGui::BeginMenu("File"))
     {
-        if (ImGui::MenuItem(ICON_FA_FOLDER_OPEN " Open image...",
-                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_O)))
-            open_image();
+        m_actions["Open image..."].MenuItem();
 
 #if !defined(__EMSCRIPTEN__)
         ImGui::BeginDisabled(m_recent_files.empty());
@@ -574,60 +731,19 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        ImGui::BeginDisabled(!current_image());
-#if !defined(__EMSCRIPTEN__)
-        if (ImGui::MenuItem(ICON_FA_FLOPPY_DISK " Save as...",
-                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S)))
-        {
-            string filename = pfd::save_file("Save as", "",
-                                             {
-                                                 "Supported image files",
-                                                 fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
-                                             })
-                                  .result();
-
-            if (!filename.empty())
-                save_as(filename);
-        }
-#else
-        if (ImGui::BeginMenu(ICON_FA_DOWNLOAD " Download as..."),
-            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S))
-        {
-            if (current_image())
-            {
-                string filename;
-                string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                ImGui::Text("Please enter a filename. Format is deduced from the accepted extensions:");
-                ImGui::TextUnformatted(fmt::format("\t{}", filter));
-                ImGui::Separator();
-                if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                             ImGuiInputTextFlags_EnterReturnsTrue))
-                {
-                    ImGui::CloseCurrentPopup();
-
-                    if (!filename.empty())
-                        save_as(filename);
-                }
-            }
-            ImGui::EndMenu();
-        }
-#endif
-        ImGui::EndDisabled();
+        if (m_actions.count("Save as..."))
+            m_actions["Save as..."].MenuItem();
+        else if (m_actions.count("Download as..."))
+            m_actions["Download as..."].MenuItem();
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close", ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_W),
-                            false, current_image() != nullptr))
-            close_image();
-        if (ImGui::MenuItem(ICON_FA_CIRCLE_XMARK " Close all",
-                            ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W), false,
-                            current_image() != nullptr))
-            close_all_images();
+        m_actions["Close"].MenuItem();
+        m_actions["Close all"].MenuItem();
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem(ICON_FA_POWER_OFF " Quit", ImGui::GetKeyChordNameTranslated(ImGuiMod_Ctrl | ImGuiKey_Q)))
-            m_params.appShallExit = true;
+        m_actions["Quit"].MenuItem();
 
         ImGui::EndMenu();
     }
@@ -638,15 +754,15 @@ void HDRViewApp::draw_menus()
     {
         if (ImGui::BeginMenu(ICON_FA_WRENCH " Dear ImGui Tools"))
         {
-            ImGui::MenuItem(ICON_FA_RULER " Metrics/Debugger", nullptr, &g_show_tool_metrics);
-            ImGui::MenuItem(ICON_FA_TERMINAL " Debug Log", nullptr, &g_show_tool_debug_log);
-            ImGui::MenuItem(ICON_FA_ID_CARD " ID Stack Tool", nullptr, &g_show_tool_id_stack_tool);
-            ImGui::MenuItem(ICON_FA_SLIDERS " Style Editor", nullptr, &g_show_tool_style_editor);
-            ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About Dear ImGui", nullptr, &g_show_tool_about);
+            m_actions["Metrics/Debugger"].MenuItem();
+            m_actions["Debug Log"].MenuItem();
+            m_actions["ID Stack Tool"].MenuItem();
+            m_actions["Style Editor"].MenuItem();
+            m_actions["About Dear ImGui"].MenuItem();
+            m_actions["ImGui demo window"].MenuItem();
             ImGui::EndMenu();
         }
-        ImGui::MenuItem(ICON_FA_CIRCLE_INFO " About HDRView", ImGui::GetKeyChordNameTranslated(ImGuiKey_H),
-                        &g_show_help);
+        m_actions["About HDRView"].MenuItem();
         ImGui::EndMenu();
     }
 
@@ -1514,6 +1630,7 @@ void HDRViewApp::draw_background()
 {
     auto &io = ImGui::GetIO();
     process_hotkeys();
+    draw_command_palette();
 
     try
     {
@@ -1641,69 +1758,113 @@ bool HDRViewApp::process_event(void *e)
     return false;
 }
 
+void HDRViewApp::draw_command_palette()
+{
+    if (ImGui::GlobalChordPressed(ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P))
+        g_show_command_palette = !g_show_command_palette;
+
+    if (g_show_command_palette)
+    {
+        // Center window horizontally, align near top vertically
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, HelloImGui::EmSize(5.0)), ImGuiCond_Once,
+                                ImVec2(0.5f, 0.0f));
+        ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size.x * 0.3f, 0.0f), ImGuiCond_Once);
+        ImGui::Begin("Command palette...", &g_show_command_palette,
+                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+
+        if (ImGui::IsWindowAppearing())
+        {
+            spdlog::trace("Creating ImCmd context");
+            ImCmd::DestroyContext();
+            ImCmd::CreateContext();
+            ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular"));
+            ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold"));
+            ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
+            // ImVec4 highlight_font_color(1.0f, 1.0f, 1.0f, 1.0f);
+            auto highlight_font_color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
+            ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::ColorConvertFloat4ToU32(highlight_font_color));
+
+            for (auto &a : m_actions)
+            {
+                if (a.second.enabled())
+                    ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
+                a.callback();
+                *a.p_selected = !*a.p_selected;} : a.second.callback, [](int){}, [](){}});
+            }
+
+            // set logging verbosity. This is a two-step command
+            ImCmd::AddCommand({"Set logging verbosity",
+                               []()
+                               {
+                                   ImCmd::Prompt(std::vector<std::string>{"0: trace", "1: debug", "2: info", "3: warn",
+                                                                          "4: err", "5: critical", "6: off"});
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                               },
+                               [](int selected_option)
+                               {
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                                   spdlog::set_level(spdlog::level::level_enum(selected_option));
+                               },
+                               []() {}});
+
+            ImCmd::SetNextCommandPaletteSearchBoxFocused();
+            ImCmd::SetNextCommandPaletteSearch("");
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
+        ImCmd::CommandPalette("Command palette");
+        ImGui::PopStyleVar();
+
+        if (ImCmd::IsAnyItemSelected() || ImGui::Shortcut(ImGuiKey_Escape) ||
+            !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+            // Close window when user selects an item, hits escape, or unfocuses the command palette window (clicking
+            // elsewhere)
+            g_show_command_palette = false;
+
+        if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
+        {
+            // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::ScopedFont sf{font("sans bold", 10)};
+
+            string txt;
+            txt = "Navigate (" ICON_FA_ARROW_UP ICON_FA_ARROW_DOWN ")";
+            ImGui::TableNextColumn();
+            ImGui::AlignCursor(txt, 0.f);
+            ImGui::TextUnformatted(txt);
+
+            ImGui::TableNextColumn();
+            txt = "Use (return)";
+            ImGui::AlignCursor(txt, 0.5f);
+            ImGui::TextUnformatted(txt);
+
+            ImGui::TableNextColumn();
+            txt = "Dismiss (esc)";
+            ImGui::AlignCursor(txt, 1.f);
+            ImGui::TextUnformatted(txt);
+
+            // ImGui::PopStyleColor();
+
+            ImGui::EndTable();
+        }
+
+        ImGui::End();
+    }
+}
+
 void HDRViewApp::process_hotkeys()
 {
+    spdlog::trace("Processing hotkeys");
     if (ImGui::GetIO().WantCaptureKeyboard)
         return;
 
-    // Check global action at start of the frame
-    if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_O))
-        open_image();
-    else if (ImGui::IsKeyPressed(ImGuiKey_H))
-        g_show_help = !g_show_help;
-
-    auto img = current_image();
-    if (!img)
-        return;
-
-    // below hotkeys only available if there is an image
-
-    // switch the current image using the number keys
-    for (int n = 0; n <= 9; ++n)
-        if (ImGui::GlobalChordPressed(ImGuiKey(ImGuiKey_0 + n)))
-        {
-            spdlog::trace("Selecting visible image number {}", mod(n - 1, 10));
-            set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
-        }
-
-    // switch the selected channel group using Ctrl + number key
-    for (int n = 0; n <= std::min(9, (int)img->groups.size()); ++n)
-        if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n)))
-        {
-            spdlog::trace("Selecting visible channel group number {}", mod(n - 1, 10));
-            img->selected_group = mod(n - 1, 10);
-        }
-
-    if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat))
-        close_image();
-    else if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W))
-        close_all_images();
-    else if (ImGui::GlobalChordPressed(ImGuiKey_DownArrow, ImGuiInputFlags_Repeat))
-        set_current_image_index(next_visible_image_index(m_current, Forward));
-    else if (ImGui::GlobalChordPressed(ImGuiKey_UpArrow, ImGuiInputFlags_Repeat))
-        set_current_image_index(next_visible_image_index(m_current, Backward));
-    else if (ImGui::GlobalChordPressed(ImGuiKey_RightArrow, ImGuiInputFlags_Repeat))
-        img->selected_group = mod(img->selected_group + 1, (int)img->groups.size());
-    else if (ImGui::GlobalChordPressed(ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat))
-        img->selected_group = mod(img->selected_group - 1, (int)img->groups.size());
-    else if (ImGui::GlobalChordPressed(ImGuiKey_Minus, ImGuiInputFlags_Repeat) ||
-             ImGui::GlobalChordPressed(ImGuiKey_KeypadSubtract, ImGuiInputFlags_Repeat))
-        zoom_out();
-    else if (ImGui::GlobalChordPressed(ImGuiKey_Equal, ImGuiInputFlags_Repeat) ||
-             ImGui::GlobalChordPressed(ImGuiKey_KeypadAdd, ImGuiInputFlags_Repeat))
-        zoom_in();
-    else if (ImGui::GlobalChordPressed(ImGuiKey_E, ImGuiInputFlags_Repeat))
-        m_exposure_live = m_exposure -= 0.25f;
-    else if (ImGui::GlobalChordPressed(ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat))
-        m_exposure_live = m_exposure += 0.25f;
-    else if (ImGui::GlobalChordPressed(ImGuiKey_G, ImGuiInputFlags_Repeat))
-        m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f);
-    else if (ImGui::GlobalChordPressed(ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat))
-        m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f);
-    else if (ImGui::GlobalChordPressed(ImGuiKey_F))
-        fit();
-    else if (ImGui::GlobalChordPressed(ImGuiKey_C))
-        center();
+    for (auto &a : m_actions)
+        if (a.second.chord)
+            if (ImGui::GlobalChordPressed(a.second.chord, ImGuiInputFlags_Repeat))
+            {
+                if (a.second.enabled())
+                    a.second.callback();
+                break;
+            }
 
     set_image_textures();
 }

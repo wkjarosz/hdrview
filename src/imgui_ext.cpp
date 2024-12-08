@@ -696,9 +696,9 @@ const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
                    (key_chord & ImGuiMod_Shift) ? "Shift+" : "",                                          //
                    (key_chord & ImGuiMod_Alt) ? (g.IO.ConfigMacOSXBehaviors ? "Option+" : "Alt+") : "",   //
                    (key_chord & ImGuiMod_Super) ? (g.IO.ConfigMacOSXBehaviors ? "Ctrl+" : "Super+") : "", //
-                   (key != ImGuiKey_None || key_chord == ImGuiKey_None) ? GetKeyName(key) : "");          //
+                   (key != ImGuiKey_None) ? GetKeyName(key) : "");                                        //
     size_t len;
-    if (key == ImGuiKey_None && key_chord != 0)
+    if (key == ImGuiKey_None)
         if ((len = strlen(g.TempKeychordName)) != 0) // Remove trailing '+'
             g.TempKeychordName[len - 1] = 0;
     return g.TempKeychordName;
@@ -707,7 +707,7 @@ const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
 bool GlobalChordPressed(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
 {
     return ImGui::GetShortcutRoutingData(chord)->RoutingCurr == ImGuiKeyOwner_NoOwner &&
-           ImGui::IsKeyChordPressed(chord);
+           ImGui::IsKeyChordPressed(chord, flags);
 }
 
 } // namespace ImGui
