@@ -324,8 +324,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                                     save_as(filename);
                             }
                         }
-                    }},
-                   if_img, true);
+                    },
+                    if_img, true});
 #endif
 
         for (int n = 1; n <= 9; ++n)
