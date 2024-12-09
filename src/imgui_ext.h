@@ -116,6 +116,12 @@ inline void AlignCursor(float width, float align)
 
 inline void AlignCursor(const std::string &text, float align) { AlignCursor(CalcTextSize(text.c_str()).x, align); }
 
+inline void TextAligned(const std::string text, float align)
+{
+    AlignCursor(text, align);
+    TextUnformatted(text.c_str());
+}
+
 void PushRowColors(bool is_current, bool is_reference);
 
 inline void WrappedTooltip(const char *text, float wrap_width = 400.f)

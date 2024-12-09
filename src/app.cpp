@@ -104,26 +104,6 @@ static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
 #define g_blank_icon ""
 
-static const vector<std::pair<const char *, const char *>> g_help_strings = {
-    {"h", "Toggle this help window"},
-    {"Left click+drag", "Pan image"},
-    {"Scroll mouse/pinch", "Zoom in and out continuously"},
-    {"Cmd+O", "Open image"},
-    {"Cmd+W", "Close image"},
-    {"Cmd+Shift+W", "Close all images"},
-    {ICON_FA_ARROW_DOWN "," ICON_FA_ARROW_UP,
-     "Switch to previous (" ICON_FA_ARROW_UP ") or next (" ICON_FA_ARROW_DOWN ") image"},
-    {ICON_FA_ARROW_LEFT "," ICON_FA_ARROW_RIGHT,
-     "Switch to previous (" ICON_FA_ARROW_LEFT ") or next (" ICON_FA_ARROW_RIGHT ") channel group"},
-    {"1, 2, ...", "Switch to image number 1, 2, ..."},
-    {ICON_FA_CHEVRON_UP "+ 1, " ICON_FA_CHEVRON_UP "+ 2, ...", "Switch to channel group number 1, 2, ..."},
-    {"- , +", "Zoom out ( - ) of or into ( + ) the image"},
-    {"e , E", "Decrease ( e ) or increase ( E ) the image exposure/gain"},
-    {"g , G", "Decrease ( g ) or increase ( G ) the gamma value"},
-    {"f", "Fit the image to the window"},
-    {"c", "Center the image in the window"},
-};
-
 void MenuItem(const Action &a)
 {
     if (a.needs_menu)
@@ -2053,30 +2033,27 @@ void HDRViewApp::draw_about_dialog()
             if (ImGui::BeginTabItem("Keybindings", nullptr))
             {
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
-                ImGui::Text("The following keyboard shortcuts are available (these are also described in tooltips over "
-                            "their respective controls).");
+
+                ImGui::PushFont(font("sans bold"));
+                ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
+                ImGui::PopFont();
+
+                ImGui::PushFont(font("mono bold", 30));
+                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(m_actions["Command palette..."].chord), 0.5f);
+                ImGui::PopFont();
+
+                ImGui::TextUnformatted("This opens the command palette, which lists every available HDRView command "
+                                       "along with its keyboard shortcuts (if any).");
+                ImGui::Spacing();
+
+                ImGui::TextUnformatted("Many commands and their keyboard shortcuts are also listed in the menu bar.");
+
+                ImGui::Text("Additonally, left-click+drag will pan the image view, and scrolling the mouse/pinching "
+                            "will zoom in and out.");
 
                 ImGui::Spacing();
                 ImGui::PopTextWrapPos();
 
-                if (ImGui::BeginTable("about_table3", 2))
-                {
-                    ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
-                    ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
-
-                    for (auto item : g_help_strings) item_and_description(item.first, item.second);
-                    // for (auto item : g_help_strings2)
-                    // {
-                    //     string chords;
-                    //     for (auto alias : item.first)
-                    //         chords = fmt::format("{}{}{}", chords, (chords.empty() ? "" : "; "),
-                    //                              ImGui::GetKeyChordNameTranslated(alias));
-
-                    //     item_and_description(chords.c_str(), item.second);
-                    // }
-
-                    ImGui::EndTable();
-                }
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Credits"))
