@@ -102,7 +102,7 @@ static constexpr size_t g_max_recent           = 15;
 static bool             g_show_help            = false;
 static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
-#define g_blank_icon "     "
+#define g_blank_icon ""
 
 static const vector<std::pair<const char *, const char *>> g_help_strings = {
     {"h", "Toggle this help window"},
@@ -309,8 +309,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
         add_action({"Show pixel grid", ICON_FA_BORDER_ALL, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {},
                     []() { return true; }, false, &m_draw_grid});
-        add_action({"Show pixel values", "", ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, []() { return true; }, false,
-                    &m_draw_pixel_info});
+        add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, []() { return true; },
+                    false, &m_draw_pixel_info});
 
         add_action({"sRGB", g_blank_icon, 0, 0, []() {}, []() { return true; }, false, &m_sRGB});
         add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
@@ -1839,7 +1839,7 @@ void HDRViewApp::draw_command_palette()
                 if (a.second.enabled())
                     ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
                 a.callback();
-                *a.p_selected = !*a.p_selected;} : a.second.callback, [](int){}, [](){}});
+                *a.p_selected = !*a.p_selected;} : a.second.callback, [](int){}, [](){}, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord)});
             }
 
             // set logging verbosity. This is a two-step command
@@ -1876,13 +1876,13 @@ void HDRViewApp::draw_command_palette()
                                    HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
                                    ImGuiTheme::ApplyTheme(theme);
                                },
-                               []() {}});
+                               []() {}, ICON_FA_PAINTBRUSH});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");
         }
 
-        ImCmd::CommandPalette("Command palette");
+        ImCmd::CommandPalette("Command palette", "Filter commands...");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::Shortcut(ImGuiKey_Escape) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
