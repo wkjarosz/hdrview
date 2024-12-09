@@ -91,6 +91,9 @@ inline bool MenuItem(const std::string &label, const std::string &shortcut, bool
     return MenuItem(label.c_str(), shortcut.c_str(), p_selected, enabled);
 }
 
+bool MenuItemEx(const std::string &label, const std::string &icon, const std::string &shortcut, bool *p_selected,
+                bool enabled = true);
+
 void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const std::string &text,
                     float2 align = float2{0.f});
 

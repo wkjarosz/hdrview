@@ -142,8 +142,7 @@ void MenuItem(const Action &a)
     }
     else
     {
-        if (ImGui::MenuItem(fmt::format("{}{}{}", a.icon, a.icon.length() ? " " : "", a.name).c_str(),
-                            ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
+        if (ImGui::MenuItemEx(a.name, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
             a.callback();
     }
 }
@@ -247,6 +246,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
             {"About Dear ImGui", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_about});
         add_action({"ImGui demo window", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false,
                     &g_show_demo_window});
+
+        add_action({"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, []() { return true; }, false,
+                    &g_show_tweak_window});
 
         add_action({"Show all windows", ICON_FA_WINDOW_MAXIMIZE, ImGuiKey_Tab, 0,
                     [this]()
@@ -469,7 +471,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     //
     // the histogram window
     HelloImGui::DockableWindow histogram_window;
-    histogram_window.label             = ICON_FA_CHART_AREA " Histogram";
+    histogram_window.label             = "Histogram";
     histogram_window.dockSpaceName     = "HistogramSpace";
     histogram_window.isVisible         = true;
     histogram_window.rememberIsVisible = true;
@@ -477,7 +479,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // the file window
     HelloImGui::DockableWindow file_window;
-    file_window.label             = ICON_FA_IMAGES " Images";
+    file_window.label             = "Images";
     file_window.dockSpaceName     = "ImagesSpace";
     file_window.isVisible         = true;
     file_window.rememberIsVisible = true;
@@ -485,7 +487,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // the info window
     HelloImGui::DockableWindow info_window;
-    info_window.label             = ICON_FA_CIRCLE_INFO " Info";
+    info_window.label             = "Info";
     info_window.dockSpaceName     = "ImagesSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
@@ -493,7 +495,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // the channels window
     HelloImGui::DockableWindow channel_window;
-    channel_window.label             = ICON_FA_LAYER_GROUP " Channels";
+    channel_window.label             = "Channels";
     channel_window.dockSpaceName     = "ChannelsSpace";
     channel_window.isVisible         = true;
     channel_window.rememberIsVisible = true;
@@ -501,7 +503,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // the window showing the spdlog messages
     HelloImGui::DockableWindow log_window;
-    log_window.label             = ICON_FA_ALIGN_LEFT " Log";
+    log_window.label             = "Log";
     log_window.dockSpaceName     = "LogSpace";
     log_window.isVisible         = false;
     log_window.rememberIsVisible = true;
@@ -582,6 +584,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_pending_images();
         if (g_show_help)
             draw_about_dialog();
+        draw_command_palette();
         if (g_show_tool_metrics)
             ImGui::ShowMetricsWindow(&g_show_tool_metrics);
         if (g_show_tool_debug_log)
@@ -760,7 +763,7 @@ void HDRViewApp::draw_menus()
 
 #if !defined(__EMSCRIPTEN__)
         ImGui::BeginDisabled(m_recent_files.empty());
-        if (ImGui::BeginMenu(ICON_FA_FOLDER_OPEN " Open recent"))
+        if (ImGui::BeginMenuEx("Open recent", ICON_FA_FOLDER_OPEN))
         {
             size_t i = m_recent_files.size() - 1;
             for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
@@ -797,11 +800,8 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    // continue view menu; the hash needs to match the one HelloImGui uses if we want to append to it
-    if (ImGui::BeginMenu("View##kdsflmkdflm"))
+    if (ImGui::BeginMenu("View"))
     {
-        // ImGui::SeparatorText("Image display");
-
         MenuItem(m_actions["Zoom in"]);
         MenuItem(m_actions["Zoom out"]);
         MenuItem(m_actions["Center"]);
@@ -828,12 +828,17 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    // HelloImGui::ShowViewMenu(m_params);
     if (ImGui::BeginMenu("Windows"))
     {
         auto &dockableWindows = m_params.dockingParams.dockableWindows;
         if (dockableWindows.empty())
             return;
+
+        if (!m_params.dockingParams.dockableWindows.empty())
+            if (ImGui::MenuItemEx("Restore default layout", ICON_FA_WINDOW_RESTORE))
+                m_params.dockingParams.layoutReset = true;
+
+        ImGui::Separator();
 
         MenuItem(m_actions["Show all windows"]);
         MenuItem(m_actions["Hide all windows"]);
@@ -853,54 +858,14 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Help"))
-    {
-        if (ImGui::BeginMenu(ICON_FA_WRENCH " Dear ImGui Tools"))
-        {
-            MenuItem(m_actions["Metrics/Debugger"]);
-            MenuItem(m_actions["Debug Log"]);
-            MenuItem(m_actions["ID Stack Tool"]);
-            MenuItem(m_actions["Style Editor"]);
-            MenuItem(m_actions["About Dear ImGui"]);
-            MenuItem(m_actions["ImGui demo window"]);
-
-            ImGui::EndMenu();
-        }
-
-        {
-            auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-
-            if (ImGui::BeginMenu(g_blank_icon "Theme"))
-            {
-                if (ImGui::MenuItem("Theme tweak window", nullptr, g_show_tweak_window))
-                    g_show_tweak_window = !g_show_tweak_window;
-                ImGui::Separator();
-                for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
-                {
-                    ImGuiTheme::ImGuiTheme_ theme    = (ImGuiTheme::ImGuiTheme_)(i);
-                    bool                    selected = (theme == tweakedTheme.Theme);
-                    if (ImGui::MenuItem(ImGuiTheme::ImGuiTheme_Name(theme), nullptr, selected))
-                    {
-                        tweakedTheme.Theme = theme;
-                        ImGuiTheme::ApplyTheme(theme);
-                    }
-                }
-                ImGui::EndMenu();
-            }
-        }
-        MenuItem(m_actions["About HDRView"]);
-        ImGui::EndMenu();
-    }
-
-    // const char *info_icon = ICON_FA_CIRCLE_INFO;
-    // auto        posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x
-    // -
-    //              ImGui::GetStyle().ItemSpacing.x);
-    // if (posX > ImGui::GetCursorPosX())
-    //     ImGui::SetCursorPosX(posX);
-    // // align_cursor(text, 1.f);
-    // if (ImGui::MenuItem(info_icon))
-    //     g_show_help = true;
+    static const char *info_icon = ICON_FA_CIRCLE_INFO;
+    auto posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x -
+                 ImGui::GetStyle().ItemSpacing.x);
+    if (posX > ImGui::GetCursorPosX())
+        ImGui::SetCursorPosX(posX);
+    // align_cursor(text, 1.f);
+    if (ImGui::MenuItem(info_icon))
+        g_show_help = true;
 }
 
 void HDRViewApp::save_as(const string &filename) const
@@ -1735,7 +1700,6 @@ void HDRViewApp::draw_background()
 {
     auto &io = ImGui::GetIO();
     process_hotkeys();
-    draw_command_palette();
 
     try
     {
@@ -1912,13 +1876,32 @@ void HDRViewApp::draw_command_palette()
                                },
                                []() {}});
 
+            // add two-step theme selection command
+            ImCmd::AddCommand({"Set theme",
+                               []()
+                               {
+                                   vector<string> theme_names;
+                                   for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
+                                       theme_names.push_back(ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)(i)));
+
+                                   {
+                                       ImCmd::Prompt(theme_names);
+                                       ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                                   }
+                               },
+                               [](int selected_option)
+                               {
+                                   ImGuiTheme::ImGuiTheme_ theme = (ImGuiTheme::ImGuiTheme_)(selected_option);
+                                   HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
+                                   ImGuiTheme::ApplyTheme(theme);
+                               },
+                               []() {}});
+
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
         ImCmd::CommandPalette("Command palette");
-        ImGui::PopStyleVar();
 
         if (ImCmd::IsAnyItemSelected() || ImGui::Shortcut(ImGuiKey_Escape) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))

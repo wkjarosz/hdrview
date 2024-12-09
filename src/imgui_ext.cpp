@@ -265,6 +265,18 @@ void AddTextAligned(ImDrawList *draw_list, float2 pos, ImU32 color, const string
     draw_list->AddText(pos - align * float2{ImGui::CalcTextSize(text.c_str())}, color, text.c_str());
 }
 
+bool MenuItemEx(const std::string &label, const std::string &icon, const std::string &shortcut, bool *p_selected,
+                bool enabled)
+{
+    if (MenuItemEx(label.c_str(), icon.c_str(), shortcut.c_str(), p_selected ? *p_selected : false, enabled))
+    {
+        if (p_selected)
+            *p_selected = !*p_selected;
+        return true;
+    }
+    return false;
+}
+
 // from https://github.com/ocornut/imgui/issues/3379#issuecomment-1678718752
 void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button)
 {
