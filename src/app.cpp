@@ -128,7 +128,7 @@ void MenuItem(const Action &a)
 {
     if (a.needs_menu)
     {
-        if (ImGui::BeginMenu(fmt::format("{}{}{}", a.icon, a.icon.length() ? " " : "", a.name).c_str(), a.enabled()))
+        if (ImGui::BeginMenuEx(a.name.c_str(), a.icon.c_str(), a.enabled()))
         {
             a.callback();
             ImGui::EndMenu();
