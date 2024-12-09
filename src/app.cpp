@@ -161,6 +161,9 @@ void init_hdrview(float exposure, float gamma, bool dither, bool sRGB, bool forc
         exit(EXIT_FAILURE);
     }
 
+    if (in_files.empty())
+        g_show_help = true;
+
     g_hdrview = new HDRViewApp(exposure, gamma, dither, sRGB, force_sdr, in_files);
 }
 
@@ -228,7 +231,12 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action(
             {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
-        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0, []() {},
+        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0,
+                    []()
+                    {
+                        ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise Key_P needs
+                                                         // to be pressed again before this chord is detected
+                    },
                     []() { return true; }, false, &g_show_command_palette});
 
         add_action({"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, []() { return true; }, false,
@@ -587,9 +595,6 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // load any passed-in images
     load_images(in_files);
-
-    if (in_files.empty())
-        g_show_help = true;
 }
 
 void HDRViewApp::setup_rendering()
@@ -1804,7 +1809,8 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    ImGui::OpenPopup("Command palette...");
+    // ImGui::OpenPopup("Command palette...");
+
     float2 display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
     display_size = float2{(float)window_width(), (float)window_height()};
@@ -1818,8 +1824,10 @@ void HDRViewApp::draw_command_palette()
                                     0},
                              ImGuiCond_Always);
 
-    if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
-                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
+    // if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
+    //                            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
+    ImGui::Begin("Command palette...", &g_show_command_palette,
+                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
     {
 
         if (ImGui::IsWindowAppearing())
@@ -1884,7 +1892,11 @@ void HDRViewApp::draw_command_palette()
 
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
-        if (ImCmd::IsAnyItemSelected() || ImGui::Shortcut(ImGuiKey_Escape) ||
+        if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat))
+            spdlog::info("Command + Period pressed");
+
+        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalChordPressed(ImGuiKey_Escape) ||
+            ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
@@ -1916,20 +1928,27 @@ void HDRViewApp::draw_command_palette()
             ImGui::EndTable();
         }
 
-        ImGui::EndPopup();
+        ImGui::End();
+        // ImGui::EndPopup();
     }
 }
 
 void HDRViewApp::process_hotkeys()
 {
-    spdlog::trace("Processing hotkeys");
     if (ImGui::GetIO().WantCaptureKeyboard)
+    {
+        spdlog::trace("Not processing hotkeys because ImGui wants to capture the keyboard (frame: {})",
+                      ImGui::GetFrameCount());
         return;
+    }
+
+    spdlog::trace("Processing hotkeys (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
         if (a.second.chord)
             if (a.second.enabled() && ImGui::GlobalChordPressed(a.second.chord, a.second.flags))
             {
+                spdlog::trace("Processing hotkey for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
                 a.second.callback();
                 if (a.second.p_selected)
                     *a.second.p_selected = !*a.second.p_selected;
