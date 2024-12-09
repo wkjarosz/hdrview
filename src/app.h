@@ -29,15 +29,13 @@ using std::vector;
 struct Action
 {
     string           name;
-    string           icon;
-    ImGuiKeyChord    chord;
-    ImGuiInputFlags  flags;
-    function<void()> callback;
+    string           icon       = "";
+    ImGuiKeyChord    chord      = ImGuiKey_None;
+    ImGuiInputFlags  flags      = ImGuiInputFlags_None;
+    function<void()> callback   = []() { return; };
     function<bool()> enabled    = []() { return true; };
     bool             needs_menu = false;
     bool            *p_selected = nullptr;
-
-    void MenuItem() const;
 };
 
 class HDRViewApp
@@ -168,8 +166,6 @@ public:
     bool       &draw_pixel_info_on() { return m_draw_pixel_info; }
     AxisScale_ &histogram_x_scale() { return m_x_scale; }
     AxisScale_ &histogram_y_scale() { return m_y_scale; }
-    void        reset_tonemapping();
-    void        normalize_exposure();
 
 private:
     void load_fonts();
