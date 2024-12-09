@@ -96,18 +96,12 @@ bool hostIsApple()
 }
 
 static std::mt19937     g_rand(53);
-static constexpr float  MIN_ZOOM                  = 0.01f;
-static constexpr float  MAX_ZOOM                  = 512.f;
-static constexpr size_t g_max_recent              = 15;
-static bool             g_show_help               = false;
-static bool             g_show_tool_metrics       = false;
-static bool             g_show_tool_debug_log     = false;
-static bool             g_show_tool_id_stack_tool = false;
-static bool             g_show_tool_style_editor  = false;
-static bool             g_show_tool_about         = false;
-static bool             g_show_command_palette    = false;
-static bool             g_show_demo_window        = false;
-static bool             g_show_tweak_window       = false;
+static constexpr float  MIN_ZOOM               = 0.01f;
+static constexpr float  MAX_ZOOM               = 512.f;
+static constexpr size_t g_max_recent           = 15;
+static bool             g_show_help            = false;
+static bool             g_show_command_palette = false;
+static bool             g_show_tweak_window    = false;
 #define g_blank_icon "     "
 
 static const vector<std::pair<const char *, const char *>> g_help_strings = {
@@ -234,18 +228,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action(
             {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
-        add_action(
-            {"Metrics/Debugger", ICON_FA_RULER, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_metrics});
-        add_action(
-            {"Debug Log", ICON_FA_TERMINAL, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_debug_log});
-        add_action({"ID Stack Tool", ICON_FA_ID_CARD, 0, 0, []() {}, []() { return true; }, false,
-                    &g_show_tool_id_stack_tool});
-        add_action(
-            {"Style Editor", ICON_FA_SLIDERS, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_style_editor});
-        add_action(
-            {"About Dear ImGui", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false, &g_show_tool_about});
-        add_action({"ImGui demo window", ICON_FA_CIRCLE_INFO, 0, 0, []() {}, []() { return true; }, false,
-                    &g_show_demo_window});
+        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0, []() {},
+                    []() { return true; }, false, &g_show_command_palette});
 
         add_action({"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, []() { return true; }, false,
                     &g_show_tweak_window});
@@ -302,7 +286,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
         add_action({"Increase exposure", ICON_FA_SUN, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure += 0.25f; }});
-        add_action({"Reset tonemapping", ICON_FA_ARROWS_ROTATE, ImGuiKey_0, 0, [this]()
+        add_action({"Reset tonemapping", ICON_FA_ARROWS_ROTATE, 0, 0, [this]()
                     {
                         m_exposure_live = m_exposure = 0.0f;
                         m_gamma_live = m_gamma = 2.2f;
@@ -379,8 +363,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     if_img, true});
 #endif
 
-        for (int n = 1; n <= 9; ++n)
-            add_action({fmt::format("Go to image {}", n), fmt::format("{}", n), ImGuiKey_0 + n, 0,
+        for (int n = 1; n <= 10; ++n)
+            add_action({fmt::format("Go to image {}", n), fmt::format("{}", n), ImGuiKey_0 + mod(n, 10), 0,
                         [this, n]() { set_current_image_index(nth_visible_image_index(mod(n - 1, 10))); },
                         [this, n]()
                         {
@@ -389,11 +373,11 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         }});
 
         // switch the selected channel group using Ctrl + number key
-        for (size_t n = 1u; n <= 9u; ++n)
+        for (size_t n = 1u; n <= 10u; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_FA_LAYER_GROUP,
-                        ImGuiMod_Ctrl | ImGuiKey(ImGuiKey_0 + n), 0,
-                        [this, n]() { current_image()->selected_group = mod(int(n), 10); },
-                        [this, n]() { return current_image() && current_image()->groups.size() > n; }});
+                        ImGuiMod_Super | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
+                        [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
+                        [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
 
         add_action({"Close", ICON_FA_CIRCLE_XMARK, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
                     [this]() { close_image(); }, if_img});
@@ -584,23 +568,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_pending_images();
         if (g_show_help)
             draw_about_dialog();
-        draw_command_palette();
-        if (g_show_tool_metrics)
-            ImGui::ShowMetricsWindow(&g_show_tool_metrics);
-        if (g_show_tool_debug_log)
-            ImGui::ShowDebugLogWindow(&g_show_tool_debug_log);
-        if (g_show_tool_id_stack_tool)
-            ImGui::ShowIDStackToolWindow(&g_show_tool_id_stack_tool);
-        if (g_show_tool_style_editor)
-        {
-            ImGui::Begin("Dear ImGui Style Editor", &g_show_tool_style_editor);
-            ImGui::ShowStyleEditor();
-            ImGui::End();
-        }
-        if (g_show_tool_about)
-            ImGui::ShowAboutWindow(&g_show_tool_about);
-        if (g_show_demo_window)
-            ImGui::ShowDemoWindow(&g_show_demo_window);
+        if (g_show_command_palette)
+            draw_command_palette();
         if (g_show_tweak_window)
         {
             auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
@@ -618,6 +587,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
     // load any passed-in images
     load_images(in_files);
+
+    if (in_files.empty())
+        g_show_help = true;
 }
 
 void HDRViewApp::setup_rendering()
@@ -834,6 +806,10 @@ void HDRViewApp::draw_menus()
         if (dockableWindows.empty())
             return;
 
+        MenuItem(m_actions["Command palette..."]);
+
+        ImGui::Separator();
+
         if (!m_params.dockingParams.dockableWindows.empty())
             if (ImGui::MenuItemEx("Restore default layout", ICON_FA_WINDOW_RESTORE))
                 m_params.dockingParams.layoutReset = true;
@@ -863,7 +839,6 @@ void HDRViewApp::draw_menus()
                  ImGui::GetStyle().ItemSpacing.x);
     if (posX > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(posX);
-    // align_cursor(text, 1.f);
     if (ImGui::MenuItem(info_icon))
         g_show_help = true;
 }
@@ -1829,17 +1804,23 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    if (ImGui::GlobalChordPressed(ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P))
-        g_show_command_palette = !g_show_command_palette;
+    ImGui::OpenPopup("Command palette...");
+    float2 display_size = ImGui::GetIO().DisplaySize;
+#ifdef __EMSCRIPTEN__
+    display_size = float2{(float)window_width(), (float)window_height()};
+#endif
+    // Center window horizontally, align near top vertically
+    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.0f));
 
-    if (g_show_command_palette)
+    ImGui::SetNextWindowSize(ImVec2{std::clamp(display_size.x * 0.3f, 20.f * HelloImGui::EmSize(),
+                                               display_size.x - 2.f * HelloImGui::EmSize()),
+                                    0},
+                             ImGuiCond_Always);
+
+    if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
     {
-        // Center window horizontally, align near top vertically
-        ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, HelloImGui::EmSize(5.0)), ImGuiCond_Once,
-                                ImVec2(0.5f, 0.0f));
-        ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size.x * 0.3f, 0.0f), ImGuiCond_Once);
-        ImGui::Begin("Command palette...", &g_show_command_palette,
-                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
         if (ImGui::IsWindowAppearing())
         {
@@ -1905,8 +1886,8 @@ void HDRViewApp::draw_command_palette()
 
         if (ImCmd::IsAnyItemSelected() || ImGui::Shortcut(ImGuiKey_Escape) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
-            // Close window when user selects an item, hits escape, or unfocuses the command palette window (clicking
-            // elsewhere)
+            // Close window when user selects an item, hits escape, or unfocuses the command palette window
+            // (clicking elsewhere)
             g_show_command_palette = false;
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
@@ -1935,7 +1916,7 @@ void HDRViewApp::draw_command_palette()
             ImGui::EndTable();
         }
 
-        ImGui::End();
+        ImGui::EndPopup();
     }
 }
 

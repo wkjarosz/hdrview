@@ -247,7 +247,7 @@ endif()
 CPMAddPackage(
   NAME imgui_command_palette2
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
-  GIT_TAG 5f9300ebde243f156881ea1c18cf6c8df97f4cd3
+  GIT_TAG 1bddd4f004e5b001f6896dfda241a68a26df4a9e
   DOWNLOAD_ONLY YES
 )
 
