@@ -716,10 +716,9 @@ const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
     return g.TempKeychordName;
 }
 
-bool GlobalChordPressed(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
+bool GlobalShortcut(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
 {
-    return ImGui::GetShortcutRoutingData(chord)->RoutingCurr == ImGuiKeyOwner_NoOwner &&
-           ImGui::IsKeyChordPressed(chord, flags);
+    return ImGui::Shortcut(chord, flags | ImGuiInputFlags_RouteGlobal);
 }
 
 } // namespace ImGui

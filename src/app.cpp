@@ -1877,8 +1877,8 @@ void HDRViewApp::draw_command_palette()
 
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
-        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalChordPressed(ImGuiKey_Escape) ||
-            ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat) ||
+        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape) ||
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
@@ -1928,7 +1928,7 @@ void HDRViewApp::process_hotkeys()
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            if (a.second.enabled() && ImGui::GlobalChordPressed(a.second.chord, a.second.flags))
+            if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
                 spdlog::trace("Processing hotkey for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
                 a.second.callback();

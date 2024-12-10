@@ -156,6 +156,6 @@ void TextWithHoverColor(ImVec4 col, const char *fmt, ...);
 // Like ImGui::GetKeyChordName, but returns the translated name of the key chord.
 const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord);
 // Used for global key chords, e.g. for menu shortcuts.
-bool GlobalChordPressed(const ImGuiKeyChord &chord, ImGuiInputFlags flags = 0);
+bool GlobalShortcut(const ImGuiKeyChord &chord, ImGuiInputFlags flags = 0);
 
 } // namespace ImGui
