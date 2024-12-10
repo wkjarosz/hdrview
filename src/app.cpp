@@ -211,12 +211,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action(
             {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
-        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0,
-                    []()
-                    {
-                        ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise Key_P needs
-                                                         // to be pressed again before this chord is detected
-                    },
+        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0, []() {},
                     []() { return true; }, false, &g_show_command_palette});
 
         add_action({"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, []() { return true; }, false,
@@ -1934,6 +1929,10 @@ void HDRViewApp::process_hotkeys()
                 a.second.callback();
                 if (a.second.p_selected)
                     *a.second.p_selected = !*a.second.p_selected;
+#ifdef __EMSCRIPTEN__
+                ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
+                                                 // modifiers) needs to be pressed before this chord is detected again
+#endif
                 break;
             }
 
