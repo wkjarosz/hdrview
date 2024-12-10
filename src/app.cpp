@@ -335,8 +335,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         {
                             string filename;
                             string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                            ImGui::Text("Please enter a filename. Format is deduced from the accepted extensions:");
-                            ImGui::TextUnformatted(fmt::format("\t{}", filter));
+                            ImGui::TextUnformatted(
+                                "Please enter a filename. Format is deduced from the accepted extensions:");
+                            ImGui::TextFmt("\t{}", filter);
                             ImGui::Separator();
                             if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
                                                          ImGuiInputTextFlags_EnterReturnsTrue))
@@ -479,7 +480,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     log_window.dockSpaceName     = "LogSpace";
     log_window.isVisible         = false;
     log_window.rememberIsVisible = true;
-    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular")); };
+    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular", 14)); };
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
@@ -1034,7 +1035,8 @@ ImFont *HDRViewApp::font(const string &name, int size) const
     }
     catch (const std::exception &e)
     {
-        throw std::runtime_error(fmt::format("Font with name '{}' and size {} was not loaded.", name, size));
+        throw std::runtime_error(
+            fmt::format("Font with name '{}' and size {} (={}) was not loaded.", name, size, ImGui::GetFontSize()));
     }
 }
 
@@ -1608,7 +1610,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::BeginDisabled(!img);
 
     ImGui::AlignTextToFramePadding();
-    ImGui::Text("EV:");
+    ImGui::TextUnformatted("EV:");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
@@ -1631,7 +1633,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::BeginDisabled(m_sRGB);
     ImGui::AlignTextToFramePadding();
-    ImGui::Text("Gamma:");
+    ImGui::TextUnformatted("Gamma:");
 
     ImGui::SameLine();
 
@@ -1668,8 +1670,11 @@ void HDRViewApp::draw_background()
         // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina screens.
         // For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
         // io.DisplayFramebufferScale to get the physical pixel size for the framebuffer.
-        int2 fbscale    = io.DisplayFramebufferScale;
-        int2 fbsize     = int2{io.DisplaySize} * fbscale;
+        float2 fbscale = io.DisplayFramebufferScale;
+        int2   fbsize  = int2{float2{io.DisplaySize} * fbscale};
+        spdlog::trace("DisplayFramebufferScale: {}, DpiWindowSizeFactor: {}, DpiFontLoadingFactor: {}",
+                      float2{io.DisplayFramebufferScale}, HelloImGui::DpiWindowSizeFactor(),
+                      HelloImGui::DpiFontLoadingFactor());
         m_viewport_min  = {0.f, 0.f};
         m_viewport_size = io.DisplaySize;
         if (auto id = m_params.dockingParams.dockSpaceIdFromName("MainDockSpace"))
@@ -1705,7 +1710,7 @@ void HDRViewApp::draw_background()
 
         // RenderPass expects things in framebuffer coordinates
         m_render_pass->resize(fbsize);
-        m_render_pass->set_viewport(int2(m_viewport_min) * fbscale, int2(m_viewport_size) * fbscale);
+        m_render_pass->set_viewport(int2(m_viewport_min * fbscale), int2(m_viewport_size * fbscale));
 
         m_render_pass->begin();
 
@@ -1757,17 +1762,17 @@ bool HDRViewApp::process_event(void *e)
     SDL_Event *event = static_cast<SDL_Event *>(e);
     switch (event->type)
     {
-    case SDL_QUIT: spdlog::debug("Got an SDL_QUIT event"); break;
-    case SDL_WINDOWEVENT: spdlog::debug("Got an SDL_WINDOWEVENT event"); break;
-    case SDL_MOUSEWHEEL: spdlog::debug("Got an SDL_MOUSEWHEEL event"); break;
-    case SDL_MOUSEMOTION: spdlog::debug("Got an SDL_MOUSEMOTION event"); break;
-    case SDL_MOUSEBUTTONDOWN: spdlog::debug("Got an SDL_MOUSEBUTTONDOWN event"); break;
-    case SDL_MOUSEBUTTONUP: spdlog::debug("Got an SDL_MOUSEBUTTONUP event"); break;
-    case SDL_FINGERMOTION: spdlog::debug("Got an SDL_FINGERMOTION event"); break;
-    case SDL_FINGERDOWN: spdlog::debug("Got an SDL_FINGERDOWN event"); break;
+    case SDL_QUIT: spdlog::trace("Got an SDL_QUIT event"); break;
+    case SDL_WINDOWEVENT: spdlog::trace("Got an SDL_WINDOWEVENT event"); break;
+    case SDL_MOUSEWHEEL: spdlog::trace("Got an SDL_MOUSEWHEEL event"); break;
+    case SDL_MOUSEMOTION: spdlog::trace("Got an SDL_MOUSEMOTION event"); break;
+    case SDL_MOUSEBUTTONDOWN: spdlog::trace("Got an SDL_MOUSEBUTTONDOWN event"); break;
+    case SDL_MOUSEBUTTONUP: spdlog::trace("Got an SDL_MOUSEBUTTONUP event"); break;
+    case SDL_FINGERMOTION: spdlog::trace("Got an SDL_FINGERMOTION event"); break;
+    case SDL_FINGERDOWN: spdlog::trace("Got an SDL_FINGERDOWN event"); break;
     case SDL_MULTIGESTURE:
     {
-        spdlog::debug("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
+        spdlog::trace("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
                       "io.MousePosFrac: {}, {}",
                       event->mgesture.numFingers, event->mgesture.dDist, event->mgesture.x, event->mgesture.y,
                       io.MousePos.x, io.MousePos.y, io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
@@ -1781,7 +1786,7 @@ bool HDRViewApp::process_event(void *e)
         }
     }
     break;
-    case SDL_FINGERUP: spdlog::debug("Got an SDL_FINGERUP event"); break;
+    case SDL_FINGERUP: spdlog::trace("Got an SDL_FINGERUP event"); break;
     }
 #endif
     return false;
@@ -1815,8 +1820,8 @@ void HDRViewApp::draw_command_palette()
             spdlog::trace("Creating ImCmd context");
             ImCmd::DestroyContext();
             ImCmd::CreateContext();
-            ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular"));
-            ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold"));
+            ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular", 14));
+            ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold", 14));
             ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
             // ImVec4 highlight_font_color(1.0f, 1.0f, 1.0f, 1.0f);
             auto highlight_font_color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
@@ -1871,9 +1876,6 @@ void HDRViewApp::draw_command_palette()
         }
 
         ImCmd::CommandPalette("Command palette", "Filter commands...");
-
-        if (ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat))
-            spdlog::info("Command + Period pressed");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::GlobalChordPressed(ImGuiKey_Escape) ||
             ImGui::GlobalChordPressed(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat) ||
@@ -1986,26 +1988,28 @@ void HDRViewApp::draw_about_dialog()
             }
 
             ImGui::PushFont(font("sans bold", 18));
-            ImGui::Text(version());
+            ImGui::TextUnformatted(version());
             ImGui::PopFont();
             ImGui::PushFont(font("sans regular", 10));
 #if defined(__EMSCRIPTEN__)
-            ImGui::Text(fmt::format("Built with emscripten using the {} backend on {}.", backend(), build_timestamp()));
+            ImGui::TextFmt("Built with emscripten using the {} backend on {}.", backend(), build_timestamp());
 #else
-            ImGui::Text(fmt::format("Built using the {} backend on {}.", backend(), build_timestamp()));
+            ImGui::TextFmt("Built using the {} backend on {}.", backend(), build_timestamp());
 #endif
             ImGui::PopFont();
 
             ImGui::Spacing();
 
             ImGui::PushFont(font("sans bold", 16));
-            ImGui::Text("HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
-                        "converting high-dynamic range images.");
+            ImGui::TextUnformatted(
+                "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
+                "converting high-dynamic range images.");
             ImGui::PopFont();
 
             ImGui::Spacing();
 
-            ImGui::Text("It is developed by Wojciech Jarosz, and is available under a 3-clause BSD license.");
+            ImGui::TextUnformatted(
+                "It is developed by Wojciech Jarosz, and is available under a 3-clause BSD license.");
 
             ImGui::PopTextWrapPos();
             ImGui::EndTable();
@@ -2034,7 +2038,7 @@ void HDRViewApp::draw_about_dialog()
             {
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
 
-                ImGui::PushFont(font("sans bold"));
+                ImGui::PushFont(font("sans bold", 14));
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
@@ -2048,8 +2052,9 @@ void HDRViewApp::draw_about_dialog()
 
                 ImGui::TextUnformatted("Many commands and their keyboard shortcuts are also listed in the menu bar.");
 
-                ImGui::Text("Additonally, left-click+drag will pan the image view, and scrolling the mouse/pinching "
-                            "will zoom in and out.");
+                ImGui::TextUnformatted(
+                    "Additonally, left-click+drag will pan the image view, and scrolling the mouse/pinching "
+                    "will zoom in and out.");
 
                 ImGui::Spacing();
                 ImGui::PopTextWrapPos();
@@ -2059,8 +2064,9 @@ void HDRViewApp::draw_about_dialog()
             if (ImGui::BeginTabItem("Credits"))
             {
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
-                ImGui::Text("HDRView additionally makes use of the following external libraries and techniques (in "
-                            "alphabetical order):\n\n");
+                ImGui::TextUnformatted(
+                    "HDRView additionally makes use of the following external libraries and techniques (in "
+                    "alphabetical order):\n\n");
                 ImGui::PopTextWrapPos();
 
                 if (ImGui::BeginTable("about_table2", 2))

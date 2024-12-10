@@ -151,8 +151,8 @@ public:
         return ret;
     }
 
-    // load font with the specified name at the specified size (if size > 0) or at the current font size (size <= 0)
-    ImFont *font(const string &name, int size = -1) const;
+    // load font with the specified name at the specified size
+    ImFont *font(const string &name, int size) const;
     ImFont *load_font(const string &name, int size, bool merge_fa6 = false);
 
     float      &gamma_live() { return m_gamma_live; }

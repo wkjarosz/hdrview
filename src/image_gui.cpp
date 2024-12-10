@@ -341,7 +341,7 @@ void Image::draw_channels_list()
                     {
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(2);
-                        ImGui::TextUnformatted(fmt::format("{} {}", ICON_FA_FOLDER_OPEN, level).c_str());
+                        ImGui::TextFmt("{} {}", ICON_FA_FOLDER_OPEN, level);
                     }
 
                     ImGui::Indent(icon_indent);
@@ -398,9 +398,9 @@ void Image::draw_info()
     // float4 hovered = hdrview()->image_pixel(hovered_pixel);
     auto &group = groups[selected_group];
 
-    auto sans_font = hdrview()->font("sans regular");
-    auto bold_font = hdrview()->font("sans bold");
-    auto mono_font = hdrview()->font("mono regular");
+    auto sans_font = hdrview()->font("sans regular", 14);
+    auto bold_font = hdrview()->font("sans bold", 14);
+    auto mono_font = hdrview()->font("mono regular", 14);
 
     auto property_name = [bold_font](const string &text)
     {

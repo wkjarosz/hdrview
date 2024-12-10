@@ -78,6 +78,14 @@ inline void Text(const std::string &text) { return Text("%s", text.c_str()); }
 
 inline void TextUnformatted(const std::string &text) { return TextUnformatted(text.c_str()); }
 
+// from: https://pastebin.com/QCnFhDMu
+template <typename T, typename... Args>
+IMGUI_API void TextFmt(T &&fmt, const Args &...args)
+{
+    std::string str = fmt::format(std::forward<T>(fmt), args...);
+    ImGui::TextUnformatted(&*str.begin(), &*str.end());
+}
+
 // return true when activated.
 inline bool MenuItem(const std::string &label, const std::string &shortcut = "", bool selected = false,
                      bool enabled = true)
