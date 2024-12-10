@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
-
-string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
-message(STATUS "Saving build timestamp: ${BUILD_TIME}")
 
 version_from_git(LOG ON TIMESTAMP "%Y-%m-%d-%H:%M:%S")
 
@@ -17,13 +14,12 @@ project(
   LANGUAGES C CXX
 )
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-  set(VERSION_LONG "${GIT_DESCRIBE} (64 bit)")
-elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
-  set(VERSION_LONG "${GIT_DESCRIBE} (32 bit)")
-endif()
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/version.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp @ONLY)
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
+  COMMAND ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
+          CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P} -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
+  COMMENT "Generating git version file"
+)
 
 include(sanitizers)
 
@@ -417,6 +413,8 @@ imgui_bundle_add_app(
 )
 
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
+# add_dependencies(HDRView gen_version_h_target) target_sources(HDRView PRIVATE
+# ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")

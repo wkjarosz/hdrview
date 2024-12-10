@@ -131,6 +131,17 @@ void IconButton(const Action &a)
         ImGui::WrappedTooltip(fmt::format("{}", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
 }
 
+void Checkbox(const Action &a)
+{
+    ImGui::Checkbox(a.name.c_str(), a.p_selected);
+    if (!a.tooltip.empty() || a.chord)
+    {
+        string parenthesized_chord = a.chord ? fmt::format("({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "";
+        string tooltip             = fmt::format("{}{}", a.tooltip, parenthesized_chord);
+        ImGui::WrappedTooltip(tooltip.c_str());
+    }
+}
+
 static HDRViewApp *g_hdrview = nullptr;
 
 void init_hdrview(float exposure, float gamma, bool dither, bool sRGB, bool force_sdr, const vector<string> &in_files)
@@ -295,7 +306,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, []() { return true; },
                     false, &m_draw_pixel_info});
 
-        add_action({"sRGB", g_blank_icon, 0, 0, []() {}, []() { return true; }, false, &m_sRGB});
+        add_action({"sRGB", g_blank_icon, 0, 0, []() {}, []() { return true; }, false, &m_sRGB,
+                    "Use the sRGB non-linear response curve (instead of gamma correction)"});
         add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
                     { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); }, [this]() { return !m_sRGB; }});
         add_action({"Increase gamma", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
@@ -776,7 +788,8 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(m_actions["Reset tonemapping"]);
-        MenuItem(m_actions["Clamp to LDR"]);
+        if (m_params.rendererBackendOptions.requestFloatBuffer)
+            MenuItem(m_actions["Clamp to LDR"]);
 
         ImGui::EndMenu();
     }
@@ -1203,8 +1216,7 @@ void HDRViewApp::draw_file_window()
             ImGui::SameLine();
 
             auto image_num_str = fmt::format("{}", visible_img_number);
-            ImGui::AlignCursor(image_num_str, 1.0f);
-            ImGui::TextUnformatted(image_num_str.c_str());
+            ImGui::TextAligned(image_num_str, 1.0f);
 
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(is_current ? ICON_FA_EYE : (is_reference ? ICON_FA_EYE_LOW_VISION : ""));
@@ -1220,8 +1232,7 @@ void HDRViewApp::draw_file_window()
                 filename = filename.substr(1);
                 ellipsis = "...";
             }
-            ImGui::AlignCursor(ellipsis + filename, 1.f);
-            ImGui::TextUnformatted(ellipsis + filename);
+            ImGui::TextAligned(ellipsis + filename, 1.f);
 
             if (show_channels && img->groups.size() > 1)
             {
@@ -1243,11 +1254,10 @@ void HDRViewApp::draw_file_window()
                             ImGui::TableNextRow();
 
                             ImGui::TableNextColumn();
-                            string hotkey = is_current && layer.groups[g] < 10
-                                                ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
-                                                : "";
-                            ImGui::AlignCursor(hotkey, 1.0f);
-                            ImGui::TextUnformatted(hotkey);
+                            string shortcut = is_current && layer.groups[g] < 10
+                                                  ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
+                                                  : "";
+                            ImGui::TextAligned(shortcut, 1.0f);
 
                             ImGui::TableNextColumn();
                             if (ImGui::Selectable(
@@ -1622,8 +1632,7 @@ void HDRViewApp::draw_top_toolbar()
     IconButton(m_actions["Reset tonemapping"]);
     ImGui::SameLine();
 
-    ImGui::Checkbox("sRGB", &m_sRGB);
-    ImGui::WrappedTooltip("Use the sRGB non-linear response curve (instead of gamma correction).");
+    Checkbox(m_actions["sRGB"]);
     ImGui::SameLine();
 
     ImGui::BeginDisabled(m_sRGB);
@@ -1642,24 +1651,25 @@ void HDRViewApp::draw_top_toolbar()
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)
     {
-        ImGui::Checkbox("Clamp to LDR", &m_clamp_to_LDR);
+        Checkbox(m_actions["Clamp to LDR"]);
         ImGui::SameLine();
     }
 
-    ImGui::Checkbox("Grid", &m_draw_grid);
+    Checkbox(m_actions["Show pixel grid"]);
     ImGui::SameLine();
 
-    ImGui::Checkbox("Pixel values", &m_draw_pixel_info);
+    Checkbox(m_actions["Show pixel values"]);
     ImGui::SameLine();
 }
 
 void HDRViewApp::draw_background()
 {
-    auto &io = ImGui::GetIO();
-    process_hotkeys();
+    process_shortcuts();
 
     try
     {
+        auto &io = ImGui::GetIO();
+
         //
         // calculate the viewport sizes
         // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina screens.
@@ -1887,18 +1897,15 @@ void HDRViewApp::draw_command_palette()
             string txt;
             txt = "Navigate (" ICON_FA_ARROW_UP ICON_FA_ARROW_DOWN ")";
             ImGui::TableNextColumn();
-            ImGui::AlignCursor(txt, 0.f);
-            ImGui::TextUnformatted(txt);
+            ImGui::TextAligned(txt, 0.f);
 
             ImGui::TableNextColumn();
             txt = "Use (return)";
-            ImGui::AlignCursor(txt, 0.5f);
-            ImGui::TextUnformatted(txt);
+            ImGui::TextAligned(txt, 0.5f);
 
             ImGui::TableNextColumn();
             txt = "Dismiss (esc)";
-            ImGui::AlignCursor(txt, 1.f);
-            ImGui::TextUnformatted(txt);
+            ImGui::TextAligned(txt, 1.f);
 
             // ImGui::PopStyleColor();
 
@@ -1910,22 +1917,22 @@ void HDRViewApp::draw_command_palette()
     }
 }
 
-void HDRViewApp::process_hotkeys()
+void HDRViewApp::process_shortcuts()
 {
     if (ImGui::GetIO().WantCaptureKeyboard)
     {
-        spdlog::trace("Not processing hotkeys because ImGui wants to capture the keyboard (frame: {})",
+        spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard (frame: {})",
                       ImGui::GetFrameCount());
         return;
     }
 
-    spdlog::trace("Processing hotkeys (frame: {})", ImGui::GetFrameCount());
+    spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
         if (a.second.chord)
             if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
-                spdlog::trace("Processing hotkey for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
                 a.second.callback();
                 if (a.second.p_selected)
                     *a.second.p_selected = !*a.second.p_selected;

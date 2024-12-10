@@ -36,6 +36,7 @@ struct Action
     function<bool()> enabled    = []() { return true; };
     bool             needs_menu = false;
     bool            *p_selected = nullptr;
+    string           tooltip    = "";
 };
 
 class HDRViewApp
@@ -189,7 +190,7 @@ private:
     void draw_top_toolbar();
     void draw_menus();
     void draw_status_bar();
-    void process_hotkeys();
+    void process_shortcuts();
     bool process_event(void *event);
     void set_image_textures();
     void draw_command_palette();
