@@ -1799,7 +1799,7 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    // ImGui::OpenPopup("Command palette...");
+    ImGui::OpenPopup("Command palette...");
 
     float2 display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
@@ -1814,10 +1814,10 @@ void HDRViewApp::draw_command_palette()
                                     0},
                              ImGuiCond_Always);
 
-    // if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
-    //                            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
-    ImGui::Begin("Command palette...", &g_show_command_palette,
-                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
+    if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
+                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
+    // ImGui::Begin("Command palette...", &g_show_command_palette,
+    //              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
     {
 
         if (ImGui::IsWindowAppearing())
@@ -1863,10 +1863,8 @@ void HDRViewApp::draw_command_palette()
                                    for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
                                        theme_names.push_back(ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)(i)));
 
-                                   {
-                                       ImCmd::Prompt(theme_names);
-                                       ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                                   }
+                                   ImCmd::Prompt(theme_names);
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [](int selected_option)
                                {
@@ -1880,10 +1878,11 @@ void HDRViewApp::draw_command_palette()
             ImCmd::SetNextCommandPaletteSearch("");
         }
 
+        ImCmd::SetNextCommandPaletteSearchBoxFocused(); // always focus the search box
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
-        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_Repeat) ||
+        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive) ||
             !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
@@ -1912,8 +1911,8 @@ void HDRViewApp::draw_command_palette()
             ImGui::EndTable();
         }
 
-        ImGui::End();
-        // ImGui::EndPopup();
+        // ImGui::End();
+        ImGui::EndPopup();
     }
 }
 
