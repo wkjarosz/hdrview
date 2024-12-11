@@ -215,18 +215,18 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     // Actions and command palette
     //
     {
-        auto add_action = [this](const Action &a) { m_actions[a.name] = a; };
+        const auto always_enabled = []() { return true; };
+        auto       add_action     = [this](const Action &a) { m_actions[a.name] = a; };
         add_action({"Open image...", ICON_FA_FOLDER_OPEN, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
-        add_action(
-            {"About HDRView", ICON_FA_CIRCLE_INFO, ImGuiKey_H, 0, []() {}, []() { return true; }, false, &g_show_help});
+        add_action({"About HDRView", ICON_FA_CIRCLE_INFO, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
         add_action(
             {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0, []() {},
-                    []() { return true; }, false, &g_show_command_palette});
+                    always_enabled, false, &g_show_command_palette});
 
-        add_action({"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, []() { return true; }, false,
-                    &g_show_tweak_window});
+        add_action(
+            {"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
         add_action({"Show all windows", ICON_FA_WINDOW_MAXIMIZE, ImGuiKey_Tab, 0,
                     [this]()
@@ -298,15 +298,15 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             m_exposure_live = m_exposure = log2(1.f / m);
                         }
                     }});
-        add_action({"Clamp to LDR", ICON_FA_ARROWS_UP_TO_LINE, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {},
-                    []() { return true; }, false, &m_clamp_to_LDR});
+        add_action({"Clamp to LDR", ICON_FA_ARROWS_UP_TO_LINE, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
+                    false, &m_clamp_to_LDR});
 
-        add_action({"Show pixel grid", ICON_FA_BORDER_ALL, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {},
-                    []() { return true; }, false, &m_draw_grid});
-        add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, []() { return true; },
-                    false, &m_draw_pixel_info});
+        add_action({"Show pixel grid", ICON_FA_BORDER_ALL, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled,
+                    false, &m_draw_grid});
+        add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, always_enabled, false,
+                    &m_draw_pixel_info});
 
-        add_action({"sRGB", g_blank_icon, 0, 0, []() {}, []() { return true; }, false, &m_sRGB,
+        add_action({"sRGB", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_sRGB,
                     "Use the sRGB non-linear response curve (instead of gamma correction)"});
         add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
                     { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); }, [this]() { return !m_sRGB; }});
@@ -565,7 +565,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         if (g_show_help)
             draw_about_dialog();
         if (g_show_command_palette)
-            draw_command_palette();
+            ImGui::OpenPopup("Command palette...");
+        draw_command_palette();
         if (g_show_tweak_window)
         {
             auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
@@ -1799,7 +1800,8 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    ImGui::OpenPopup("Command palette...");
+    // ImGui::OpenPopup("Command palette...");
+    g_show_command_palette = false;
 
     float2 display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
@@ -1814,8 +1816,10 @@ void HDRViewApp::draw_command_palette()
                                     0},
                              ImGuiCond_Always);
 
-    if (ImGui::BeginPopupModal("Command palette...", &g_show_command_palette,
-                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking))
+    if (ImGui::BeginPopup("Command palette..."
+                          // &g_show_command_palette,
+                          //    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking
+                          ))
     // ImGui::Begin("Command palette...", &g_show_command_palette,
     //              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
     {
@@ -1837,7 +1841,7 @@ void HDRViewApp::draw_command_palette()
                 if (a.second.enabled())
                     ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
                 a.callback();
-                *a.p_selected = !*a.p_selected;} : a.second.callback, [](int){}, [](){}, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord)});
+                *a.p_selected = !*a.p_selected;} : a.second.callback, nullptr, nullptr, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord), a.second.p_selected});
             }
 
             // set logging verbosity. This is a two-step command
@@ -1853,7 +1857,7 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                    spdlog::set_level(spdlog::level::level_enum(selected_option));
                                },
-                               []() {}});
+                               nullptr});
 
             // add two-step theme selection command
             ImCmd::AddCommand({"Set theme",
@@ -1872,21 +1876,22 @@ void HDRViewApp::draw_command_palette()
                                    HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
                                    ImGuiTheme::ApplyTheme(theme);
                                },
-                               []() {}, ICON_FA_PAINTBRUSH});
+                               nullptr, ICON_FA_PAINTBRUSH});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");
         }
 
-        ImCmd::SetNextCommandPaletteSearchBoxFocused(); // always focus the search box
+        // ImCmd::SetNextCommandPaletteSearchBoxFocused(); // always focus the search box
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive) ||
-            !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive)
+            // || !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)
+        )
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
-            g_show_command_palette = false;
+            ImGui::CloseCurrentPopup();
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
