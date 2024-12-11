@@ -1,6 +1,9 @@
 name: Pages deploy
 
 on:
+  push:
+    branches:
+      - "*"
   workflow_dispatch:
 
 env:
