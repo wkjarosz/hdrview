@@ -276,6 +276,10 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         return false;
                     }});
 
+        add_action({"Restore default layout", ICON_FA_WINDOW_RESTORE, 0, 0,
+                    [this]() { m_params.dockingParams.layoutReset = true; },
+                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
         add_action({"Decrease exposure", ICON_FA_MOON, ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
         add_action({"Increase exposure", ICON_FA_SUN, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
@@ -805,9 +809,7 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        if (!m_params.dockingParams.dockableWindows.empty())
-            if (ImGui::MenuItemEx("Restore default layout", ICON_FA_WINDOW_RESTORE))
-                m_params.dockingParams.layoutReset = true;
+        MenuItem(m_actions["Restore default layout"]);
 
         ImGui::Separator();
 
@@ -1842,6 +1844,14 @@ void HDRViewApp::draw_command_palette()
                     ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
                 a.callback();
                 *a.p_selected = !*a.p_selected;} : a.second.callback, nullptr, nullptr, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord), a.second.p_selected});
+            }
+
+            // items for each dockable window
+            for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
+            {
+                HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
+                ImCmd::AddCommand({fmt::format("Show {} window", w.label).c_str(), [&w]()
+                                   { w.isVisible = !w.isVisible; }, nullptr, nullptr, g_blank_icon, "", &w.isVisible});
             }
 
             // set logging verbosity. This is a two-step command
