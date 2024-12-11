@@ -272,7 +272,7 @@ if(linalg_ADDED)
   target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:fmtlib/fmt#10.1.1")
+CPMAddPackage("gh:fmtlib/fmt#11.0.2")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
