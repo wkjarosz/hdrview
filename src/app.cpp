@@ -1041,9 +1041,22 @@ void HDRViewApp::run()
 
 ImFont *HDRViewApp::font(const string &name, int size) const
 {
+    if (size < 0)
+    {
+        // Determine the non-scaled size that corresponds to the current, dpi-scaled font size
+        for (auto font_size : {14, 10, 16, 18, 30})
+        {
+            if (int(HelloImGui::DpiFontLoadingFactor() * font_size) == int(ImGui::GetFontSize()))
+            {
+                size = font_size;
+                break;
+            }
+        }
+    }
+
     try
     {
-        return m_fonts.at({name, size <= 0 ? int(ImGui::GetFontSize()) : size});
+        return m_fonts.at({name, size});
     }
     catch (const std::exception &e)
     {
