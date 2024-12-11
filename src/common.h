@@ -15,6 +15,7 @@
 #include "fwd.h"
 #include <string>
 #include <vector>
+#include <algorithm>
 
 // #include <fmt/core.h>
 #include <fmt/color.h>

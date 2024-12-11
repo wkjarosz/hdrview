@@ -37,6 +37,7 @@
 #include <random>
 #include <sstream>
 #include <utility>
+#include <filesystem>
 
 #ifdef __EMSCRIPTEN__
 #include "emscripten_browser_file.h"
@@ -917,7 +918,7 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
                                                                       {
                                                                           if (buffer_str.empty())
                                                                           {
-                                                                              std::ifstream is{filename,
+                                                                              std::ifstream is{std::filesystem::path((const char8_t*) filename.c_str()),
                                                                                                std::ios_base::binary};
                                                                               return Image::load(is, filename);
                                                                           }
