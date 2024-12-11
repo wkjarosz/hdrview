@@ -343,7 +343,7 @@ endif()
 
 CPMAddPackage(
   NAME cli11
-  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
+  URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
 )
 if(cli11_ADDED)
