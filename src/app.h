@@ -248,7 +248,10 @@ private:
 
     map<pair<string, int>, ImFont *> m_fonts;
 
-    map<string, Action> m_actions;
+    vector<Action>      m_actions;
+    map<string, size_t> m_action_map;
+
+    Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };
 
 /// Create the global singleton HDRViewApp instance

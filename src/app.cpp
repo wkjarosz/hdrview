@@ -216,8 +216,13 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     //
     {
         const auto always_enabled = []() { return true; };
-        auto       add_action     = [this](const Action &a) { m_actions[a.name] = a; };
+        auto       add_action     = [this](const Action &a)
+        {
+            m_action_map[a.name] = m_actions.size();
+            m_actions.push_back(a);
+        };
         add_action({"Open image...", ICON_FA_FOLDER_OPEN, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+
         add_action({"About HDRView", ICON_FA_CIRCLE_INFO, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
         add_action(
             {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
@@ -729,7 +734,7 @@ void HDRViewApp::draw_menus()
 {
     if (ImGui::BeginMenu("File"))
     {
-        MenuItem(m_actions["Open image..."]);
+        MenuItem(action("Open image..."));
 
 #if !defined(__EMSCRIPTEN__)
         ImGui::BeginDisabled(m_recent_files.empty());
@@ -756,45 +761,45 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Save as..."]);
+        MenuItem(action("Save as..."));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Close"]);
-        MenuItem(m_actions["Close all"]);
+        MenuItem(action("Close"));
+        MenuItem(action("Close all"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Quit"]);
+        MenuItem(action("Quit"));
 
         ImGui::EndMenu();
     }
 
     if (ImGui::BeginMenu("View"))
     {
-        MenuItem(m_actions["Zoom in"]);
-        MenuItem(m_actions["Zoom out"]);
-        MenuItem(m_actions["Center"]);
-        MenuItem(m_actions["Fit to window"]);
-        MenuItem(m_actions["100%"]);
+        MenuItem(action("Zoom in"));
+        MenuItem(action("Zoom out"));
+        MenuItem(action("Center"));
+        MenuItem(action("Fit to window"));
+        MenuItem(action("100%"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Increase exposure"]);
-        MenuItem(m_actions["Decrease exposure"]);
-        MenuItem(m_actions["Normalize exposure"]);
+        MenuItem(action("Increase exposure"));
+        MenuItem(action("Decrease exposure"));
+        MenuItem(action("Normalize exposure"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["sRGB"]);
-        MenuItem(m_actions["Increase gamma"]);
-        MenuItem(m_actions["Decrease gamma"]);
+        MenuItem(action("sRGB"));
+        MenuItem(action("Increase gamma"));
+        MenuItem(action("Decrease gamma"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Reset tonemapping"]);
+        MenuItem(action("Reset tonemapping"));
         if (m_params.rendererBackendOptions.requestFloatBuffer)
-            MenuItem(m_actions["Clamp to LDR"]);
+            MenuItem(action("Clamp to LDR"));
 
         ImGui::EndMenu();
     }
@@ -805,16 +810,16 @@ void HDRViewApp::draw_menus()
         if (dockableWindows.empty())
             return;
 
-        MenuItem(m_actions["Command palette..."]);
+        MenuItem(action("Command palette..."));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Restore default layout"]);
+        MenuItem(action("Restore default layout"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Show all windows"]);
-        MenuItem(m_actions["Hide all windows"]);
+        MenuItem(action("Show all windows"));
+        MenuItem(action("Hide all windows"));
 
         ImGui::Separator();
 
@@ -1627,15 +1632,15 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    IconButton(m_actions["Normalize exposure"]);
+    IconButton(action("Normalize exposure"));
     ImGui::EndDisabled();
 
     ImGui::SameLine();
 
-    IconButton(m_actions["Reset tonemapping"]);
+    IconButton(action("Reset tonemapping"));
     ImGui::SameLine();
 
-    Checkbox(m_actions["sRGB"]);
+    Checkbox(action("sRGB"));
     ImGui::SameLine();
 
     ImGui::BeginDisabled(m_sRGB);
@@ -1654,14 +1659,14 @@ void HDRViewApp::draw_top_toolbar()
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)
     {
-        Checkbox(m_actions["Clamp to LDR"]);
+        Checkbox(action("Clamp to LDR"));
         ImGui::SameLine();
     }
 
-    Checkbox(m_actions["Show pixel grid"]);
+    Checkbox(action("Show pixel grid"));
     ImGui::SameLine();
 
-    Checkbox(m_actions["Show pixel values"]);
+    Checkbox(action("Show pixel values"));
     ImGui::SameLine();
 }
 
@@ -1802,7 +1807,6 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    // ImGui::OpenPopup("Command palette...");
     g_show_command_palette = false;
 
     float2 display_size = ImGui::GetIO().DisplaySize;
@@ -1810,26 +1814,29 @@ void HDRViewApp::draw_command_palette()
     display_size = float2{(float)window_width(), (float)window_height()};
 #endif
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Appearing,
+    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
                             ImVec2(0.5f, 0.0f));
 
-    ImGui::SetNextWindowSize(ImVec2{std::clamp(display_size.x * 0.3f, 20.f * HelloImGui::EmSize(),
-                                               display_size.x - 2.f * HelloImGui::EmSize()),
-                                    0},
-                             ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{400, 0}, ImGuiCond_Always);
 
-    if (ImGui::BeginPopup("Command palette..."
-                          // &g_show_command_palette,
-                          //    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking
-                          ))
-    // ImGui::Begin("Command palette...", &g_show_command_palette,
-    //              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
+    float remaining_height            = ImGui::GetMainViewport()->Size.y - ImGui::GetCursorScreenPos().y;
+    float search_result_window_height = remaining_height - 2.f * HelloImGui::EmSize();
+
+    // Set constraints to allow horizontal resizing based on content
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(0, 0), ImVec2(display_size.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
+
+    if (ImGui::BeginPopup("Command palette..."))
     {
-
+        // ImGui::Text("This is very long text and it keeps going and going and going and going.");
         if (ImGui::IsWindowAppearing())
         {
             spdlog::trace("Creating ImCmd context");
-            ImCmd::DestroyContext();
+            if (ImCmd::GetCurrentContext())
+            {
+                ImCmd::RemoveAllCaches();
+                ImCmd::DestroyContext();
+            }
             ImCmd::CreateContext();
             ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular", 14));
             ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold", 14));
@@ -1840,11 +1847,36 @@ void HDRViewApp::draw_command_palette()
 
             for (auto &a : m_actions)
             {
-                if (a.second.enabled())
-                    ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
+                if (a.enabled())
+                    ImCmd::AddCommand({a.name, a.p_selected ? [&a](){
                 a.callback();
-                *a.p_selected = !*a.p_selected;} : a.second.callback, nullptr, nullptr, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord), a.second.p_selected});
+                *a.p_selected = !*a.p_selected;} : a.callback, nullptr, nullptr, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected});
             }
+
+#if !defined(__EMSCRIPTEN__)
+            // add a two-step command to list and open recent files
+            if (!m_recent_files.empty())
+                ImCmd::AddCommand({"Open recent",
+                                   [this]()
+                                   {
+                                       vector<string> short_names;
+                                       size_t         i = m_recent_files.size() - 1;
+                                       for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
+                                           short_names.push_back((f->length() < 60) ? *f
+                                                                                    : f->substr(0, 32) + "..." +
+                                                                                          f->substr(f->length() - 25));
+                                       ImCmd::Prompt(short_names);
+                                       ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                                   },
+                                   [this](int selected_option)
+                                   {
+                                       int idx = int(m_recent_files.size() - 1) - selected_option;
+                                       if (idx >= 0 && idx < int(m_recent_files.size()))
+                                           load_image(m_recent_files[idx]);
+                                   },
+                                   nullptr, ICON_FA_FOLDER_OPEN});
+
+#endif
 
             // items for each dockable window
             for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
@@ -1863,11 +1895,7 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [](int selected_option)
-                               {
-                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                                   spdlog::set_level(spdlog::level::level_enum(selected_option));
-                               },
-                               nullptr});
+                               { spdlog::set_level(spdlog::level::level_enum(selected_option)); }, nullptr});
 
             // add two-step theme selection command
             ImCmd::AddCommand({"Set theme",
@@ -1896,12 +1924,14 @@ void HDRViewApp::draw_command_palette()
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive)
-            // || !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)
-        )
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive) ||
+            !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+        {
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
             ImGui::CloseCurrentPopup();
+            g_show_command_palette = false;
+        }
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
@@ -1926,8 +1956,8 @@ void HDRViewApp::draw_command_palette()
             ImGui::EndTable();
         }
 
-        // ImGui::End();
-        ImGui::EndPopup();
+        ImGui::End();
+        // ImGui::EndPopup();
     }
 }
 
@@ -1943,13 +1973,13 @@ void HDRViewApp::process_shortcuts()
     spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
-        if (a.second.chord)
-            if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
+        if (a.chord)
+            if (a.enabled() && ImGui::GlobalShortcut(a.chord, a.flags))
             {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
-                a.second.callback();
-                if (a.second.p_selected)
-                    *a.second.p_selected = !*a.second.p_selected;
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.name, ImGui::GetFrameCount());
+                a.callback();
+                if (a.p_selected)
+                    *a.p_selected = !*a.p_selected;
 #ifdef __EMSCRIPTEN__
                 ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
                                                  // modifiers) needs to be pressed before this chord is detected again
@@ -2063,7 +2093,7 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::PopFont();
 
                 ImGui::PushFont(font("mono bold", 30));
-                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(m_actions["Command palette..."].chord), 0.5f);
+                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 
                 ImGui::TextUnformatted("This opens the command palette, which lists every available HDRView command "
