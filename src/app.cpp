@@ -70,24 +70,17 @@ EM_JS(int, screen_width, (), { return screen.width; });
 EM_JS(int, screen_height, (), { return screen.height; });
 EM_JS(int, window_width, (), { return window.innerWidth; });
 EM_JS(int, window_height, (), { return window.innerHeight; });
-EM_JS(int, getJSPlatform, (), {
-    var platform = navigator.platform.toLowerCase();
-
-    if (platform.indexOf('win') != -1)
-        return 0;
-    else if (platform.indexOf('mac') != -1)
-        return 1;
-    else if (platform.indexOf('linux') != -1)
-        return 2;
-    else // unknown
-        return -1;
+EM_JS(bool, isAppleDevice, (), {
+    const userAgent = navigator.userAgent;
+    return (userAgent.includes("Macintosh") || userAgent.includes("iPad") || userAgent.includes("iPhone") ||
+            userAgent.includes("iPod"));
 });
 #endif
 
 bool hostIsApple()
 {
 #if defined(__EMSCRIPTEN__)
-    return getJSPlatform() == 1;
+    return isAppleDevice();
 #elif defined(__APPLE__)
     return true;
 #else
