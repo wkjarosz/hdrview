@@ -307,8 +307,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             m_exposure_live = m_exposure = log2(1.f / m);
                         }
                     }});
-        add_action({"Clamp to LDR", ICON_FA_ARROWS_UP_TO_LINE, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
-                    false, &m_clamp_to_LDR});
+        if (m_params.rendererBackendOptions.requestFloatBuffer)
+            add_action({"Clamp to LDR", ICON_FA_ARROWS_UP_TO_LINE, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {},
+                        always_enabled, false, &m_clamp_to_LDR});
 
         add_action({"Show pixel grid", ICON_FA_BORDER_ALL, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled,
                     false, &m_draw_grid});
