@@ -11,7 +11,7 @@
 #include "shader.h"
 #include "texture.h"
 
-#include "IconsFontAwesome6.h"
+#include "hello_imgui/icons_font_awesome_6.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot/implot.h"

@@ -15,7 +15,7 @@
 #include "implot/implot.h"
 #include "implot/implot_internal.h"
 
-#include "IconsFontAwesome6.h"
+#include "hello_imgui/icons_font_awesome_6.h"
 
 #include "opengl_check.h"
 
@@ -202,6 +202,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
 
     // Load additional font
+    m_params.callbacks.defaultIconFont     = HelloImGui::DefaultIconFont::FontAwesome6;
     m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
     //
@@ -1059,10 +1060,15 @@ ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
 
     auto font_path = font_paths.at(name);
     if (!HelloImGui::AssetExists(font_path))
-        throw std::runtime_error(fmt::format("Cannot find the font asset '{}'!", name));
+    {
+        spdlog::error("Cannot find the font asset '{}'! Trying default font instead", name);
+        ImGui::GetIO().Fonts->AddFontDefault();
+    }
 
     auto font = HelloImGui::LoadFont(font_path, (float)size);
-    if (merge_fa6)
+
+    string iconFontFile = "fonts/Font_Awesome_6_Free-Solid-900.otf";
+    if (merge_fa6 && HelloImGui::AssetExists(iconFontFile))
     {
         HelloImGui::FontLoadingParams iconFontParams;
         iconFontParams.mergeToLastFont   = true;
@@ -1072,7 +1078,7 @@ ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
         auto icon_font_size                        = 0.8f * size;
         iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
             icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
-        HelloImGui::LoadFont("fonts/" FONT_ICON_FILE_NAME_FAS, icon_font_size,
+        HelloImGui::LoadFont(iconFontFile, icon_font_size,
                              iconFontParams); // Merge FontAwesome6 with the previous font
     }
     return m_fonts[{name, size}] = font;
@@ -1614,8 +1620,6 @@ void HDRViewApp::draw_top_toolbar()
 {
     auto img = current_image();
 
-    ImGui::BeginDisabled(!img);
-
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("EV:");
     ImGui::SameLine();
@@ -1626,6 +1630,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
+    ImGui::BeginDisabled(!img);
     IconButton(action("Normalize exposure"));
     ImGui::EndDisabled();
 

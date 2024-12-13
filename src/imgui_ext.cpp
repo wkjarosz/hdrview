@@ -1,8 +1,8 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_ext.h"
-#include "IconsFontAwesome6.h"
 #include "box.h"
 #include "colorspace.h"
+#include "hello_imgui/icons_font_awesome_6.h"
 #include "immapp/browse_to_url.h"
 #include "spdlog/pattern_formatter.h"
 
