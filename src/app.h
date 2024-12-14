@@ -154,7 +154,6 @@ public:
 
     // load font with the specified name at the specified size
     ImFont *font(const string &name, int size) const;
-    ImFont *load_font(const string &name, int size, const string &text_font, const string &icon_font = "");
 
     float      &gamma_live() { return m_gamma_live; }
     float      &gamma() { return m_gamma; }
