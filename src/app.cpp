@@ -15,6 +15,7 @@
 #include "implot/implot.h"
 #include "implot/implot_internal.h"
 
+#include "IconsMaterialSymbols.h"
 #include "hello_imgui/icons_font_awesome_6.h"
 
 #include "opengl_check.h"
@@ -1051,36 +1052,54 @@ ImFont *HDRViewApp::font(const string &name, int size) const
     }
 }
 
-ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
+ImFont *HDRViewApp::load_font(const string &name, int size, const string &text_font, const string &icon_font)
 {
-    const map<string, string> font_paths = {{"sans regular", "fonts/Roboto/Roboto-Regular.ttf"},
-                                            {"sans bold", "fonts/Roboto/Roboto-Bold.ttf"},
-                                            {"mono regular", "fonts/Roboto/RobotoMono-Regular.ttf"},
-                                            {"mono bold", "fonts/Roboto/RobotoMono-Bold.ttf"}};
+    const map<string, string> text_fonts = {
+        {"sans regular", "fonts/Roboto/Roboto-Regular.ttf"},     {"sans bold", "fonts/Roboto/Roboto-Bold.ttf"},
+        {"mono regular", "fonts/Roboto/RobotoMono-Regular.ttf"}, {"mono bold", "fonts/Roboto/RobotoMono-Bold.ttf"},
+        {"sans regular ms", "fonts/Roboto/Roboto-Regular.ttf"},  {"sans bold ms", "fonts/Roboto/Roboto-Regular.ttf"}};
 
-    auto font_path = font_paths.at(name);
+    auto font_path = text_fonts.at(text_font);
     if (!HelloImGui::AssetExists(font_path))
-    {
-        spdlog::error("Cannot find the font asset '{}'! Trying default font instead", name);
-        ImGui::GetIO().Fonts->AddFontDefault();
-    }
+        spdlog::critical("Cannot find the font asset '{}'! Trying default font instead", text_font);
 
     auto font = HelloImGui::LoadFont(font_path, (float)size);
 
-    string iconFontFile = "fonts/Font_Awesome_6_Free-Solid-900.otf";
-    if (merge_fa6 && HelloImGui::AssetExists(iconFontFile))
+    struct FontIcon
     {
-        HelloImGui::FontLoadingParams iconFontParams;
-        iconFontParams.mergeToLastFont   = true;
-        iconFontParams.useFullGlyphRange = false;
-        iconFontParams.glyphRanges.push_back({ICON_MIN_FA, ICON_MAX_16_FA});
-        iconFontParams.fontConfig.PixelSnapH       = true;
-        auto icon_font_size                        = 0.8f * size;
-        iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
-            icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
-        HelloImGui::LoadFont(iconFontFile, icon_font_size,
-                             iconFontParams); // Merge FontAwesome6 with the previous font
+        string  path;
+        ImWchar icon_min;
+        ImWchar icon_max;
+        ImWchar icon_max_16;
+    };
+
+    const map<string, FontIcon> icon_fonts = {
+        {"font awesome 6", {"fonts/Font_Awesome_6_Free-Solid-900.otf", ICON_MIN_FA, ICON_MAX_FA, ICON_MAX_16_FA}},
+        {"material symbol rounded", {"fonts/" FONT_ICON_FILE_NAME_MSR, ICON_MIN_MS, ICON_MAX_MS, ICON_MAX_16_MS}},
+        {"material symbol sharp", {"fonts/" FONT_ICON_FILE_NAME_MSS, ICON_MIN_MS, ICON_MAX_MS, ICON_MAX_16_MS}},
+        {"material symbol outline", {"fonts/" FONT_ICON_FILE_NAME_MSO, ICON_MIN_MS, ICON_MAX_MS, ICON_MAX_16_MS}}};
+
+    if (auto it = icon_fonts.find(icon_font); it != icon_fonts.end())
+    {
+        const FontIcon &icon = it->second;
+        if (HelloImGui::AssetExists(icon.path))
+        {
+            HelloImGui::FontLoadingParams iconFontParams;
+            iconFontParams.mergeToLastFont   = true;
+            iconFontParams.useFullGlyphRange = false;
+            iconFontParams.glyphRanges.push_back({icon.icon_min, icon.icon_max_16});
+            iconFontParams.fontConfig.PixelSnapH       = true;
+            auto icon_font_size                        = 0.8f * size;
+            iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
+                icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
+            // iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.10f;
+            HelloImGui::LoadFont(icon.path, icon_font_size, iconFontParams);
+        }
+        else
+            spdlog::critical("Cannot find the icon font '{}'", icon_font);
     }
+    else
+        spdlog::critical("Cannot find the icon font '{}'", icon_font);
     return m_fonts[{name, size}] = font;
 }
 
@@ -1088,10 +1107,10 @@ void HDRViewApp::load_fonts()
 {
     for (auto font_size : {14, 10, 16, 18, 30})
     {
-        load_font("sans regular", font_size, true);
-        load_font("sans bold", font_size, true);
-        load_font("mono regular", font_size, true);
-        load_font("mono bold", font_size, false);
+        load_font("sans regular", font_size, "sans regular", "font awesome 6");
+        load_font("sans bold", font_size, "sans bold", "font awesome 6");
+        load_font("mono regular", font_size, "mono regular", "font awesome 6");
+        load_font("mono bold", font_size, "mono bold", "font awesome 6");
     }
 }
 
