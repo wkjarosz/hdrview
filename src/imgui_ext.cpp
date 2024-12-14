@@ -6,7 +6,10 @@
 #include "immapp/browse_to_url.h"
 #include "spdlog/pattern_formatter.h"
 
+#include "fonts.h"
+
 #include "imgui_internal.h"
+
 #include <array>
 
 using namespace std;
@@ -34,9 +37,9 @@ enum : ImU32
     lightGray   = IM_COL32(0xc0, 0xc0, 0xc0, 0xff),
 };
 
-static const std::string s_level_icons[] = {ICON_FA_VOLUME_HIGH,          ICON_FA_BUG_SLASH,    ICON_FA_CIRCLE_INFO,
-                                            ICON_FA_TRIANGLE_EXCLAMATION, ICON_FA_CIRCLE_XMARK, ICON_FA_BOMB,
-                                            ICON_FA_VOLUME_XMARK};
+static const std::string s_level_icons[] = {
+    ICON_MY_LOG_LEVEL_TRACE, ICON_MY_LOG_LEVEL_DEBUG,    ICON_MY_LOG_LEVEL_INFO, ICON_MY_LOG_LEVEL_WARN,
+    ICON_MY_LOG_LEVEL_ERROR, ICON_MY_LOG_LEVEL_CRITICAL, ICON_MY_LOG_LEVEL_OFF};
 
 class level_icon_formatter_flag : public spdlog::custom_flag_formatter
 {
@@ -90,7 +93,7 @@ void SpdLogWindow::draw(ImFont *console_font)
     ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint(
             "##log filter",
-            ICON_FA_FILTER
+            ICON_MY_FILTER
             "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
             m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
         m_filter.Build();
@@ -99,7 +102,7 @@ void SpdLogWindow::draw(ImFont *console_font)
         ImGui::SameLine(0.f, 0.f);
 
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        if (ImGui::IconButton(ICON_FA_DELETE_LEFT))
+        if (ImGui::IconButton(ICON_MY_DELETE))
             m_filter.Clear();
     }
     ImGui::SameLine();
@@ -113,10 +116,10 @@ void SpdLogWindow::draw(ImFont *console_font)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, i < int(current_level) ? ImGui::GetColorU32(ImGuiCol_TextDisabled)
                                                                         : m_level_colors.at(i));
-            if (ImGui::Selectable((ICON_FA_GREATER_THAN_EQUAL + std::to_string(i) + ": " + s_level_icons[i] + " " +
-                                   level_names[i].data())
-                                      .c_str(),
-                                  current_level == i))
+            if (ImGui::Selectable(
+                    (ICON_MY_GREATER_EQUAL + std::to_string(i) + ": " + s_level_icons[i] + " " + level_names[i].data())
+                        .c_str(),
+                    current_level == i))
                 m_sink->set_level(spdlog::level::level_enum(i));
             ImGui::PopStyleColor();
         }
@@ -126,15 +129,15 @@ void SpdLogWindow::draw(ImFont *console_font)
     ImGui::PopStyleColor();
     ImGui::WrappedTooltip("Click to choose the verbosity level.");
     ImGui::SameLine();
-    if (ImGui::IconButton(ICON_FA_TRASH_CAN))
+    if (ImGui::IconButton(ICON_MY_TRASH_CAN))
         m_sink->clear_messages();
     ImGui::WrappedTooltip("Clear all messages.");
     ImGui::SameLine();
-    if (ImGui::IconButton(m_auto_scroll ? ICON_FA_LOCK : ICON_FA_LOCK_OPEN))
+    if (ImGui::IconButton(m_auto_scroll ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN))
         m_auto_scroll = !m_auto_scroll;
     ImGui::WrappedTooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
     ImGui::SameLine();
-    if (ImGui::IconButton(m_wrap_text ? ICON_FA_BARS_STAGGERED : ICON_FA_ALIGN_LEFT))
+    if (ImGui::IconButton(m_wrap_text ? ICON_MY_TEXT_WRAP_ON : ICON_MY_TEXT_WRAP_OFF))
         m_wrap_text = !m_wrap_text;
     ImGui::WrappedTooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
 
@@ -240,7 +243,7 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
     return m_level_colors.at(static_cast<size_t>(level));
 }
 
-ImVec2 IconSize() { return CalcTextSize(ICON_FA_VOLUME_HIGH); }
+ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }
 
 ImVec2 IconButtonSize()
 {
@@ -671,7 +674,7 @@ void HyperlinkText(const char *href, const char *fmt, ...)
         {
             PushFont(nullptr);
             SetMouseCursor(ImGuiMouseCursor_Hand);
-            SetTooltip("%s %s", ICON_FA_LINK, href);
+            SetTooltip("%s %s", ICON_MY_LINK, href);
             PopFont();
             UnderLine(LinkColor());
         }

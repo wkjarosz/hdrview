@@ -392,6 +392,7 @@ imgui_bundle_add_app(
   src/app.cpp
   src/colorspace.cpp
   src/common.cpp
+  src/fonts.cpp
   src/hdrview.cpp
   src/image.cpp
   src/imageio.cpp
