@@ -566,11 +566,11 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     m_params.callbacks.ShowGui = [this]()
     {
         add_pending_images();
-        if (g_show_help)
-            draw_about_dialog();
-        if (g_show_command_palette)
-            ImGui::OpenPopup("Command palette...");
+
+        draw_about_dialog();
+
         draw_command_palette();
+
         if (g_show_tweak_window)
         {
             auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
@@ -1806,6 +1806,9 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
+    if (g_show_command_palette)
+        ImGui::OpenPopup("Command palette...");
+
     g_show_command_palette = false;
 
     float2 display_size = ImGui::GetIO().DisplaySize;
@@ -1825,9 +1828,8 @@ void HDRViewApp::draw_command_palette()
     ImGui::SetNextWindowSizeConstraints(
         ImVec2(0, 0), ImVec2(display_size.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
 
-    if (ImGui::BeginPopup("Command palette..."))
+    if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
-        // ImGui::Text("This is very long text and it keeps going and going and going and going.");
         if (ImGui::IsWindowAppearing())
         {
             spdlog::trace("Creating ImCmd context");
@@ -1923,8 +1925,7 @@ void HDRViewApp::draw_command_palette()
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive) ||
-            !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows))
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
         {
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
@@ -1934,7 +1935,7 @@ void HDRViewApp::draw_command_palette()
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
-            // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
             ImGui::ScopedFont sf{font("sans bold", 10)};
 
             string txt;
@@ -1950,13 +1951,12 @@ void HDRViewApp::draw_command_palette()
             txt = "Dismiss (esc)";
             ImGui::TextAligned(txt, 1.f);
 
-            // ImGui::PopStyleColor();
+            ImGui::PopStyleColor();
 
             ImGui::EndTable();
         }
 
-        ImGui::End();
-        // ImGui::EndPopup();
+        ImGui::EndPopup();
     }
 }
 
@@ -1991,11 +1991,16 @@ void HDRViewApp::process_shortcuts()
 
 void HDRViewApp::draw_about_dialog()
 {
-    ImGui::OpenPopup("About");
+    if (g_show_help)
+        ImGui::OpenPopup("About");
+
+    // work around HelloImGui rendering a couple frames to figure out sizes
+    if (ImGui::GetFrameCount() > 1)
+        g_show_help = false;
 
     // Always center this window when appearing
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.65f));
     ImGui::SetNextWindowFocus();
     constexpr float icon_size    = 128.f;
     float2          col_width    = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
@@ -2009,12 +2014,9 @@ void HDRViewApp::draw_about_dialog()
 
     ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
 
-    // bool about_open = true;
-    if (ImGui::BeginPopupModal("About", &g_show_help,
-                               ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
-                                   ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_AlwaysAutoResize))
     {
-
         ImGui::Spacing();
 
         if (ImGui::BeginTable("about_table1", 2))
@@ -2162,9 +2164,8 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTabBar();
         }
 
-        if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
-            ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Space) ||
-            (!ImGui::IsWindowAppearing() && ImGui::IsKeyPressed(ImGuiKey_H)))
+        if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::Shortcut(ImGuiKey_Escape) ||
+            ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) || ImGui::Shortcut(ImGuiKey_H))
         {
             ImGui::CloseCurrentPopup();
             g_show_help = false;
