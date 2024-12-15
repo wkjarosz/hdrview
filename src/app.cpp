@@ -1597,7 +1597,9 @@ void HDRViewApp::draw_top_toolbar()
     auto img = current_image();
 
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("EV:");
+    ImGui::PushFont(font("sans regular", 18));
+    ImGui::TextUnformatted(ICON_MY_EXPOSURE);
+    ImGui::PopFont();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
@@ -1975,19 +1977,20 @@ void HDRViewApp::draw_about_dialog()
     if (ImGui::GetFrameCount() > 1)
         g_show_help = false;
 
-    // Always center this window when appearing
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.65f));
-    ImGui::SetNextWindowFocus();
-    constexpr float icon_size    = 128.f;
-    float2          col_width    = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
-    float2          display_size = ImGui::GetIO().DisplaySize;
+    float2 display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
     display_size = float2{(float)window_width(), (float)window_height()};
 #endif
-    col_width[1] = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
-                              display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
-                                  ImGui::GetStyle().ScrollbarSize - col_width[0]);
+    // Center window horizontally, align near top vertically
+    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+
+    ImGui::SetNextWindowFocus();
+    constexpr float icon_size = 128.f;
+    float2          col_width = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
+    col_width[1]              = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
+                                           display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
+                                               ImGui::GetStyle().ScrollbarSize - col_width[0]);
 
     ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
 
