@@ -718,6 +718,29 @@ const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
             g.TempKeychordName[len - 1] = 0;
     return g.TempKeychordName;
 }
+// // Return translated names
+// // Lifetime of return value: valid until next call to GetKeyChordNameTranslated or GetKeyChordName
+// const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord)
+// {
+//     ImGuiContext &g = *GImGui;
+
+//     const ImGuiKey key = (ImGuiKey)(key_chord & ~ImGuiMod_Mask_);
+//     if (IsLRModKey(key))
+//         key_chord &= ~GetModForLRModKey(key); // Return "Ctrl+LeftShift" instead of "Ctrl+Shift+LeftShift"
+//     ImFormatString(
+//         g.TempKeychordName, IM_ARRAYSIZE(g.TempKeychordName), "%s%s%s%s%s",
+//         (key_chord & ImGuiMod_Ctrl) ? (g.IO.ConfigMacOSXBehaviors ? ICON_MY_KEY_COMMAND : ICON_MY_KEY_CONTROL)
+//                                     : "",                      // avoid wrap
+//         (key_chord & ImGuiMod_Shift) ? ICON_MY_KEY_SHIFT : "", //
+//         (key_chord & ImGuiMod_Alt) ? (g.IO.ConfigMacOSXBehaviors ? ICON_MY_KEY_OPTION : ICON_MY_KEY_OPTION) : "", //
+//         (key_chord & ImGuiMod_Super) ? (g.IO.ConfigMacOSXBehaviors ? ICON_MY_KEY_CONTROL : "Super+") : "",        //
+//         (key != ImGuiKey_None) ? GetKeyName(key) : "");                                                           //
+//     size_t len;
+//     // if (key == ImGuiKey_None)
+//     //     if ((len = strlen(g.TempKeychordName)) != 0) // Remove trailing '+'
+//     //         g.TempKeychordName[len - 1] = 0;
+//     return g.TempKeychordName;
+// }
 
 bool GlobalShortcut(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
 {

@@ -202,7 +202,6 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
 
     // Load additional font
-    m_params.callbacks.defaultIconFont     = HelloImGui::DefaultIconFont::FontAwesome6;
     m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
     //
@@ -362,8 +361,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     if_img, true});
 #endif
 
+        // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Go to image {}", n), fmt::format("{}", n), ImGuiKey_0 + mod(n, 10), 0,
+            add_action({fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
                         [this, n]() { set_current_image_index(nth_visible_image_index(mod(n - 1, 10))); },
                         [this, n]()
                         {
@@ -371,7 +371,25 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             return is_valid(i) && i != m_current;
                         }});
 
-        // switch the selected channel group using Ctrl + number key
+        // select the reference image using Cmd + image number (one-based indexing)
+        for (int n = 1; n <= 10; ++n)
+            add_action({fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                        ImGuiMod_Ctrl | ImGuiKey_0 + mod(n, 10), 0,
+                        [this, n]()
+                        {
+                            auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
+                            if (m_reference == nth_visible)
+                                m_reference = -1;
+                            else
+                                set_reference_image_index(nth_visible);
+                        },
+                        [this, n]()
+                        {
+                            auto i = nth_visible_image_index(mod(n - 1, 10));
+                            return is_valid(i);
+                        }});
+
+        // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (size_t n = 1u; n <= 10u; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
                         ImGuiMod_Super | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
@@ -380,7 +398,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
         add_action({"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
                     [this]() { close_image(); }, if_img});
-        add_action({"Close all", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
+        add_action({"Close all", ICON_MY_CLOSE_ALL, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
                     [this]() { close_all_images(); }, if_img});
 
         add_action({"Go to next image", g_blank_icon, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
@@ -1182,7 +1200,10 @@ void HDRViewApp::draw_file_window()
             ImGui::TextAligned(image_num_str, 1.0f);
 
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : (is_reference ? ICON_MY_REFERENCE_IMAGE : ""));
+            auto tmp_pos = ImGui::GetCursorScreenPos();
+            ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : "");
+            ImGui::SetCursorScreenPos(tmp_pos);
+            ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
 
             // right-align the truncated file name
             string filename = img->file_and_partname();
@@ -2049,7 +2070,7 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
-                ImGui::PushFont(font("mono bold", 30));
+                ImGui::PushFont(font("sans regular", 30));
                 ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 
