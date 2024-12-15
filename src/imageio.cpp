@@ -295,14 +295,21 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         StdIStream exr_is{is, filename.c_str()};
 
         vector<ImagePtr> images;
-        // try stb library first
-        if (is_stb_image(is))
-            images = load_stb_image(is, filename);
-        // then try pfm
-        else if (is_pfm_image(is))
-            images = load_pfm_image(is, filename);
-        else if (Imf::isOpenExrFile(exr_is))
+        if (Imf::isOpenExrFile(exr_is))
+        {
+            spdlog::info("Detected EXR image.");
             images = load_exr_image(exr_is, filename);
+        }
+        else if (is_stb_image(is))
+        {
+            spdlog::info("Detected stb-compatible image. Loading via stb_image.");
+            images = load_stb_image(is, filename);
+        }
+        else if (is_pfm_image(is))
+        {
+            spdlog::info("Detected PFM image.");
+            images = load_pfm_image(is, filename);
+        }
         else
             throw invalid_argument("This doesn't seem to be a supported image file.");
 
@@ -337,7 +344,7 @@ bool Image::save(ostream &os, const string &filename, float gain, float gamma, b
     auto img = this;
     // HDRImage img_copy;
 
-    bool hdr_format = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
+    // bool hdr_format = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
 
     // // if we need to tonemap, then modify a copy of the image data
     // if (gain != 1.0f || sRGB || gamma != 1.0f)

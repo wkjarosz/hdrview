@@ -2070,7 +2070,7 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
-                ImGui::PushFont(font("sans regular", 30));
+                ImGui::PushFont(font("mono regular", 30));
                 ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 
