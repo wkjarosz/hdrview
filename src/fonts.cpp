@@ -53,7 +53,7 @@ void HDRViewApp::load_fonts()
     };
 
     // default font size gets icons
-    for (auto font_size : {14, 10, 18})
+    for (auto font_size : {14, 10})
     {
         m_fonts[{"sans regular", font_size}] = load_font("fonts/Roboto/Roboto-Regular.ttf", font_size);
         append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, ICON_MIN_MY, ICON_MAX_MY);
@@ -68,7 +68,7 @@ void HDRViewApp::load_fonts()
         append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, ICON_MIN_MY, ICON_MAX_MY);
     }
 
-    for (auto font_size : {16, 30})
+    for (auto font_size : {16, 18, 30})
     {
         m_fonts[{"sans regular", font_size}] = load_font("fonts/Roboto/Roboto-Regular.ttf", font_size);
 
