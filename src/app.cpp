@@ -1617,7 +1617,9 @@ void HDRViewApp::draw_top_toolbar()
     auto img = current_image();
 
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("EV:");
+    ImGui::PushFont(font("sans bold", 16));
+    ImGui::TextUnformatted(ICON_MY_EXPOSURE);
+    ImGui::PopFont();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
