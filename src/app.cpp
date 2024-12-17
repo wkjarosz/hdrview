@@ -397,7 +397,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 #endif
         // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (size_t n = 1u; n <= 10u; ++n)
-            add_action({fmt::format("Go to channel group {}", n), ICON_FA_LAYER_GROUP,
+            add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
                         modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
                         [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
                         [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
