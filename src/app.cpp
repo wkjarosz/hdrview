@@ -15,7 +15,7 @@
 #include "implot/implot.h"
 #include "implot/implot_internal.h"
 
-#include "IconsFontAwesome6.h"
+#include "fonts.h"
 
 #include "opengl_check.h"
 
@@ -71,24 +71,17 @@ EM_JS(int, screen_width, (), { return screen.width; });
 EM_JS(int, screen_height, (), { return screen.height; });
 EM_JS(int, window_width, (), { return window.innerWidth; });
 EM_JS(int, window_height, (), { return window.innerHeight; });
-EM_JS(int, getJSPlatform, (), {
-    var platform = navigator.platform.toLowerCase();
-
-    if (platform.indexOf('win') != -1)
-        return 0;
-    else if (platform.indexOf('mac') != -1)
-        return 1;
-    else if (platform.indexOf('linux') != -1)
-        return 2;
-    else // unknown
-        return -1;
+EM_JS(bool, isAppleDevice, (), {
+    const userAgent = navigator.userAgent;
+    return (userAgent.includes("Macintosh") || userAgent.includes("iPad") || userAgent.includes("iPhone") ||
+            userAgent.includes("iPod"));
 });
 #endif
 
 bool hostIsApple()
 {
 #if defined(__EMSCRIPTEN__)
-    return getJSPlatform() == 1;
+    return isAppleDevice();
 #elif defined(__APPLE__)
     return true;
 #else
@@ -217,19 +210,23 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     //
     {
         const auto always_enabled = []() { return true; };
-        auto       add_action     = [this](const Action &a) { m_actions[a.name] = a; };
-        add_action({"Open image...", ICON_FA_FOLDER_OPEN, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
-        add_action({"About HDRView", ICON_FA_CIRCLE_INFO, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
+        auto       add_action     = [this](const Action &a)
+        {
+            m_action_map[a.name] = m_actions.size();
+            m_actions.push_back(a);
+        };
+        add_action({"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+
+        add_action({"About HDRView", ICON_MY_ABOUT, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
+        add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+
+        add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0,
+                    []() {}, always_enabled, false, &g_show_command_palette});
+
         add_action(
-            {"Quit", ICON_FA_POWER_OFF, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+            {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
-        add_action({"Command palette...", ICON_FA_BARS, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0, []() {},
-                    always_enabled, false, &g_show_command_palette});
-
-        add_action(
-            {"Theme tweak window", ICON_FA_PAINTBRUSH, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
-
-        add_action({"Show all windows", ICON_FA_WINDOW_MAXIMIZE, ImGuiKey_Tab, 0,
+        add_action({"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
                     [this]()
                     {
                         auto &dockableWindows = m_params.dockingParams.dockableWindows;
@@ -253,7 +250,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         return false;
                     }});
 
-        add_action({"Hide all windows", ICON_FA_WINDOW_MINIMIZE, ImGuiKey_Tab, 0,
+        add_action({"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
                     [this]()
                     {
                         auto &dockableWindows = m_params.dockingParams.dockableWindows;
@@ -277,21 +274,21 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         return false;
                     }});
 
-        add_action({"Restore default layout", ICON_FA_WINDOW_RESTORE, 0, 0,
+        add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
                     [this]() { m_params.dockingParams.layoutReset = true; },
                     [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
 
-        add_action({"Decrease exposure", ICON_FA_MOON, ImGuiKey_E, ImGuiInputFlags_Repeat,
+        add_action({"Decrease exposure", ICON_MY_REDUCE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
-        add_action({"Increase exposure", ICON_FA_SUN, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
+        add_action({"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure += 0.25f; }});
-        add_action({"Reset tonemapping", ICON_FA_ARROWS_ROTATE, 0, 0, [this]()
+        add_action({"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0, [this]()
                     {
                         m_exposure_live = m_exposure = 0.0f;
                         m_gamma_live = m_gamma = 2.2f;
                         m_sRGB                 = true;
                     }});
-        add_action({"Normalize exposure", ICON_FA_WAND_MAGIC_SPARKLES, ImGuiKey_N, 0, [this]()
+        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0, [this]()
                     {
                         if (auto img = current_image())
                         {
@@ -303,11 +300,12 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             m_exposure_live = m_exposure = log2(1.f / m);
                         }
                     }});
-        add_action({"Clamp to LDR", ICON_FA_ARROWS_UP_TO_LINE, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
-                    false, &m_clamp_to_LDR});
+        if (m_params.rendererBackendOptions.requestFloatBuffer)
+            add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
+                        false, &m_clamp_to_LDR});
 
-        add_action({"Show pixel grid", ICON_FA_BORDER_ALL, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled,
-                    false, &m_draw_grid});
+        add_action({"Show pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
+                    &m_draw_grid});
         add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, always_enabled, false,
                     &m_draw_pixel_info});
 
@@ -323,7 +321,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
-        add_action({"Save as...", ICON_FA_FLOPPY_DISK, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+        add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
                     {
                         string filename =
@@ -340,7 +338,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     if_img});
 
 #else
-        add_action({"Save as...", ICON_FA_DOWNLOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+        add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
                     {
                         if (current_image())
@@ -364,8 +362,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     if_img, true});
 #endif
 
+        // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Go to image {}", n), fmt::format("{}", n), ImGuiKey_0 + mod(n, 10), 0,
+            add_action({fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
                         [this, n]() { set_current_image_index(nth_visible_image_index(mod(n - 1, 10))); },
                         [this, n]()
                         {
@@ -373,22 +372,39 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             return is_valid(i) && i != m_current;
                         }});
 
+        // select the reference image using Cmd + image number (one-based indexing)
+        for (int n = 1; n <= 10; ++n)
+            add_action({fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                        ImGuiMod_Ctrl | ImGuiKey_0 + mod(n, 10), 0,
+                        [this, n]()
+                        {
+                            auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
+                            if (m_reference == nth_visible)
+                                m_reference = -1;
+                            else
+                                set_reference_image_index(nth_visible);
+                        },
+                        [this, n]()
+                        {
+                            auto i = nth_visible_image_index(mod(n - 1, 10));
+                            return is_valid(i);
+                        }});
+
 #ifdef _WIN32
         ImGuiKey modKey = ImGuiMod_Alt;
 #else
         ImGuiKey modKey = ImGuiMod_Super;
 #endif
-
-        // switch the selected channel group using Ctrl + number key
+        // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (size_t n = 1u; n <= 10u; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_FA_LAYER_GROUP,
                         modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
                         [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
                         [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
 
-        add_action({"Close", ICON_FA_CIRCLE_XMARK, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
+        add_action({"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
                     [this]() { close_image(); }, if_img});
-        add_action({"Close all", ICON_FA_CIRCLE_XMARK, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
+        add_action({"Close all", ICON_MY_CLOSE_ALL, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
                     [this]() { close_all_images(); }, if_img});
 
         add_action({"Go to next image", g_blank_icon, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
@@ -420,13 +436,13 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     },
                     [this]() { return current_image() && current_image()->groups.size() > 1; }});
 
-        add_action({"Zoom out", ICON_FA_MAGNIFYING_GLASS_MINUS, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
-                    [this]() { zoom_out(); }, if_img});
-        add_action({"Zoom in", ICON_FA_MAGNIFYING_GLASS_PLUS, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
-                    [this]() { zoom_in(); }, if_img});
-        add_action({"100\%", ICON_FA_MAGNIFYING_GLASS, 0, 0, [this]() { set_zoom_level(0.f); }, if_img});
-        add_action({"Fit to window", ICON_FA_MAXIMIZE, ImGuiKey_F, 0, [this]() { fit(); }, if_img});
-        add_action({"Center", ICON_FA_ARROWS_TO_DOT, ImGuiKey_C, 0, [this]() { center(); }, if_img});
+        add_action(
+            {"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat, [this]() { zoom_out(); }, if_img});
+        add_action(
+            {"Zoom in", ICON_MY_ZOOM_IN, ImGuiKey_Equal, ImGuiInputFlags_Repeat, [this]() { zoom_in(); }, if_img});
+        add_action({"100\%", ICON_MY_ZOOM_100, 0, 0, [this]() { set_zoom_level(0.f); }, if_img});
+        add_action({"Fit to window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0, [this]() { fit(); }, if_img});
+        add_action({"Center", ICON_MY_CENTER, ImGuiKey_C, 0, [this]() { center(); }, if_img});
     }
 
     //
@@ -573,11 +589,11 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     m_params.callbacks.ShowGui = [this]()
     {
         add_pending_images();
-        if (g_show_help)
-            draw_about_dialog();
-        if (g_show_command_palette)
-            ImGui::OpenPopup("Command palette...");
+
+        draw_about_dialog();
+
         draw_command_palette();
+
         if (g_show_tweak_window)
         {
             auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
@@ -736,11 +752,11 @@ void HDRViewApp::draw_menus()
 {
     if (ImGui::BeginMenu("File"))
     {
-        MenuItem(m_actions["Open image..."]);
+        MenuItem(action("Open image..."));
 
 #if !defined(__EMSCRIPTEN__)
         ImGui::BeginDisabled(m_recent_files.empty());
-        if (ImGui::BeginMenuEx("Open recent", ICON_FA_FOLDER_OPEN))
+        if (ImGui::BeginMenuEx("Open recent", ICON_MY_OPEN_IMAGE))
         {
             size_t i = m_recent_files.size() - 1;
             for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
@@ -764,45 +780,45 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Save as..."]);
+        MenuItem(action("Save as..."));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Close"]);
-        MenuItem(m_actions["Close all"]);
+        MenuItem(action("Close"));
+        MenuItem(action("Close all"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Quit"]);
+        MenuItem(action("Quit"));
 
         ImGui::EndMenu();
     }
 
     if (ImGui::BeginMenu("View"))
     {
-        MenuItem(m_actions["Zoom in"]);
-        MenuItem(m_actions["Zoom out"]);
-        MenuItem(m_actions["Center"]);
-        MenuItem(m_actions["Fit to window"]);
-        MenuItem(m_actions["100%"]);
+        MenuItem(action("Zoom in"));
+        MenuItem(action("Zoom out"));
+        MenuItem(action("Center"));
+        MenuItem(action("Fit to window"));
+        MenuItem(action("100%"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Increase exposure"]);
-        MenuItem(m_actions["Decrease exposure"]);
-        MenuItem(m_actions["Normalize exposure"]);
+        MenuItem(action("Increase exposure"));
+        MenuItem(action("Decrease exposure"));
+        MenuItem(action("Normalize exposure"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["sRGB"]);
-        MenuItem(m_actions["Increase gamma"]);
-        MenuItem(m_actions["Decrease gamma"]);
+        MenuItem(action("sRGB"));
+        MenuItem(action("Increase gamma"));
+        MenuItem(action("Decrease gamma"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Reset tonemapping"]);
+        MenuItem(action("Reset tonemapping"));
         if (m_params.rendererBackendOptions.requestFloatBuffer)
-            MenuItem(m_actions["Clamp to LDR"]);
+            MenuItem(action("Clamp to LDR"));
 
         ImGui::EndMenu();
     }
@@ -813,16 +829,16 @@ void HDRViewApp::draw_menus()
         if (dockableWindows.empty())
             return;
 
-        MenuItem(m_actions["Command palette..."]);
+        MenuItem(action("Command palette..."));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Restore default layout"]);
+        MenuItem(action("Restore default layout"));
 
         ImGui::Separator();
 
-        MenuItem(m_actions["Show all windows"]);
-        MenuItem(m_actions["Hide all windows"]);
+        MenuItem(action("Show all windows"));
+        MenuItem(action("Hide all windows"));
 
         ImGui::Separator();
 
@@ -839,7 +855,7 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    static const char *info_icon = ICON_FA_CIRCLE_INFO;
+    static const char *info_icon = ICON_MY_ABOUT;
     auto posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(info_icon).x -
                  ImGui::GetStyle().ItemSpacing.x);
     if (posX > ImGui::GetCursorPosX())
@@ -1072,45 +1088,6 @@ ImFont *HDRViewApp::font(const string &name, int size) const
     }
 }
 
-ImFont *HDRViewApp::load_font(const string &name, int size, bool merge_fa6)
-{
-    const map<string, string> font_paths = {{"sans regular", "fonts/Roboto/Roboto-Regular.ttf"},
-                                            {"sans bold", "fonts/Roboto/Roboto-Bold.ttf"},
-                                            {"mono regular", "fonts/Roboto/RobotoMono-Regular.ttf"},
-                                            {"mono bold", "fonts/Roboto/RobotoMono-Bold.ttf"}};
-
-    auto font_path = font_paths.at(name);
-    if (!HelloImGui::AssetExists(font_path))
-        throw std::runtime_error(fmt::format("Cannot find the font asset '{}'!", name));
-
-    auto font = HelloImGui::LoadFont(font_path, (float)size);
-    if (merge_fa6)
-    {
-        HelloImGui::FontLoadingParams iconFontParams;
-        iconFontParams.mergeToLastFont   = true;
-        iconFontParams.useFullGlyphRange = false;
-        iconFontParams.glyphRanges.push_back({ICON_MIN_FA, ICON_MAX_16_FA});
-        iconFontParams.fontConfig.PixelSnapH       = true;
-        auto icon_font_size                        = 0.8f * size;
-        iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
-            icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
-        HelloImGui::LoadFont("fonts/" FONT_ICON_FILE_NAME_FAS, icon_font_size,
-                             iconFontParams); // Merge FontAwesome6 with the previous font
-    }
-    return m_fonts[{name, size}] = font;
-}
-
-void HDRViewApp::load_fonts()
-{
-    for (auto font_size : {14, 10, 16, 18, 30})
-    {
-        load_font("sans regular", font_size, true);
-        load_font("sans bold", font_size, true);
-        load_font("mono regular", font_size, true);
-        load_font("mono bold", font_size, false);
-    }
-}
-
 HDRViewApp::~HDRViewApp() {}
 
 void HDRViewApp::draw_info_window()
@@ -1174,7 +1151,7 @@ void HDRViewApp::draw_file_window()
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint("##file filter",
-                                 ICON_FA_FILTER " Filter list of images (format: [include|-exclude][,...]; e.g. "
+                                 ICON_MY_FILTER " Filter list of images (format: [include|-exclude][,...]; e.g. "
                                                 "\"include_this,-but_not_this,also_include_this\")",
                                  m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
         m_filter.Build();
@@ -1184,13 +1161,13 @@ void HDRViewApp::draw_file_window()
     {
         ImGui::SameLine(0.f, 0.f);
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        if (ImGui::IconButton(ICON_FA_DELETE_LEFT))
+        if (ImGui::IconButton(ICON_MY_DELETE))
             m_filter.Clear();
     }
 
     ImGui::SameLine();
     static bool show_channels = true;
-    if (ImGui::IconButton(show_channels ? ICON_FA_LAYER_GROUP : ICON_FA_IMAGES))
+    if (ImGui::IconButton(show_channels ? ICON_MY_CHANNEL_GROUP : ICON_MY_IMAGES))
         show_channels = !show_channels;
     ImGui::WrappedTooltip(show_channels ? "Click to show only images." : "Click to show images and channel groups.");
 
@@ -1201,10 +1178,10 @@ void HDRViewApp::draw_file_window()
     if (ImGui::BeginTable("ImageList", 3, table_flags))
     {
         const float icon_width = ImGui::IconSize().x;
-        ImGui::TableSetupColumn(ICON_FA_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.75f * icon_width);
-        ImGui::TableSetupColumn(ICON_FA_EYE, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                icon_width);
+        ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
+                                ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
         ImGui::TableSetupColumn(show_channels ? "File or channel group name" : "File name",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
@@ -1243,7 +1220,10 @@ void HDRViewApp::draw_file_window()
             ImGui::TextAligned(image_num_str, 1.0f);
 
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(is_current ? ICON_FA_EYE : (is_reference ? ICON_FA_EYE_LOW_VISION : ""));
+            auto tmp_pos = ImGui::GetCursorScreenPos();
+            ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : "");
+            ImGui::SetCursorScreenPos(tmp_pos);
+            ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
 
             // right-align the truncated file name
             string filename = img->file_and_partname();
@@ -1268,7 +1248,7 @@ void HDRViewApp::draw_file_window()
                     for (size_t g = 0; g < layer.groups.size(); ++g)
                     {
                         auto  &group = img->groups[layer.groups[g]];
-                        string name  = string(ICON_FA_LAYER_GROUP) + " " + layer.name + group.name;
+                        string name  = string(ICON_MY_CHANNEL_GROUP) + " " + layer.name + group.name;
 
                         bool is_selected_channel = is_current && img->selected_group == layer.groups[g];
 
@@ -1279,13 +1259,13 @@ void HDRViewApp::draw_file_window()
 
                             ImGui::TableNextColumn();
                             string shortcut = is_current && layer.groups[g] < 10
-                                                  ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10))
+                                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10))
                                                   : "";
                             ImGui::TextAligned(shortcut, 1.0f);
 
                             ImGui::TableNextColumn();
                             if (ImGui::Selectable(
-                                    fmt::format("{}##{}", is_selected_channel ? ICON_FA_EYE : "", id++).c_str(),
+                                    fmt::format("{}##{}", is_selected_channel ? ICON_MY_VISIBILITY : "", id++).c_str(),
                                     is_selected_channel, selectable_flags))
                             {
                                 img->selected_group = layer.groups[g];
@@ -1636,8 +1616,6 @@ void HDRViewApp::draw_top_toolbar()
 {
     auto img = current_image();
 
-    ImGui::BeginDisabled(!img);
-
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("EV:");
     ImGui::SameLine();
@@ -1648,15 +1626,16 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    IconButton(m_actions["Normalize exposure"]);
+    ImGui::BeginDisabled(!img);
+    IconButton(action("Normalize exposure"));
     ImGui::EndDisabled();
 
     ImGui::SameLine();
 
-    IconButton(m_actions["Reset tonemapping"]);
+    IconButton(action("Reset tonemapping"));
     ImGui::SameLine();
 
-    Checkbox(m_actions["sRGB"]);
+    Checkbox(action("sRGB"));
     ImGui::SameLine();
 
     ImGui::BeginDisabled(m_sRGB);
@@ -1675,14 +1654,14 @@ void HDRViewApp::draw_top_toolbar()
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)
     {
-        Checkbox(m_actions["Clamp to LDR"]);
+        Checkbox(action("Clamp to LDR"));
         ImGui::SameLine();
     }
 
-    Checkbox(m_actions["Show pixel grid"]);
+    Checkbox(action("Show pixel grid"));
     ImGui::SameLine();
 
-    Checkbox(m_actions["Show pixel values"]);
+    Checkbox(action("Show pixel values"));
     ImGui::SameLine();
 }
 
@@ -1823,7 +1802,9 @@ bool HDRViewApp::process_event(void *e)
 
 void HDRViewApp::draw_command_palette()
 {
-    // ImGui::OpenPopup("Command palette...");
+    if (g_show_command_palette)
+        ImGui::OpenPopup("Command palette...");
+
     g_show_command_palette = false;
 
     float2 display_size = ImGui::GetIO().DisplaySize;
@@ -1831,26 +1812,28 @@ void HDRViewApp::draw_command_palette()
     display_size = float2{(float)window_width(), (float)window_height()};
 #endif
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Appearing,
+    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
                             ImVec2(0.5f, 0.0f));
 
-    ImGui::SetNextWindowSize(ImVec2{std::clamp(display_size.x * 0.3f, 20.f * HelloImGui::EmSize(),
-                                               display_size.x - 2.f * HelloImGui::EmSize()),
-                                    0},
-                             ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{400, 0}, ImGuiCond_Always);
 
-    if (ImGui::BeginPopup("Command palette..."
-                          // &g_show_command_palette,
-                          //    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking
-                          ))
-    // ImGui::Begin("Command palette...", &g_show_command_palette,
-    //              ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoDocking);
+    float remaining_height            = ImGui::GetMainViewport()->Size.y - ImGui::GetCursorScreenPos().y;
+    float search_result_window_height = remaining_height - 2.f * HelloImGui::EmSize();
+
+    // Set constraints to allow horizontal resizing based on content
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2(0, 0), ImVec2(display_size.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
+
+    if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
-
         if (ImGui::IsWindowAppearing())
         {
             spdlog::trace("Creating ImCmd context");
-            ImCmd::DestroyContext();
+            if (ImCmd::GetCurrentContext())
+            {
+                ImCmd::RemoveAllCaches();
+                ImCmd::DestroyContext();
+            }
             ImCmd::CreateContext();
             ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular", 14));
             ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold", 14));
@@ -1861,11 +1844,36 @@ void HDRViewApp::draw_command_palette()
 
             for (auto &a : m_actions)
             {
-                if (a.second.enabled())
-                    ImCmd::AddCommand({a.first, a.second.p_selected ? [a = a.second](){
+                if (a.enabled())
+                    ImCmd::AddCommand({a.name, a.p_selected ? [&a](){
                 a.callback();
-                *a.p_selected = !*a.p_selected;} : a.second.callback, nullptr, nullptr, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord), a.second.p_selected});
+                *a.p_selected = !*a.p_selected;} : a.callback, nullptr, nullptr, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected});
             }
+
+#if !defined(__EMSCRIPTEN__)
+            // add a two-step command to list and open recent files
+            if (!m_recent_files.empty())
+                ImCmd::AddCommand({"Open recent",
+                                   [this]()
+                                   {
+                                       vector<string> short_names;
+                                       size_t         i = m_recent_files.size() - 1;
+                                       for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
+                                           short_names.push_back((f->length() < 60) ? *f
+                                                                                    : f->substr(0, 32) + "..." +
+                                                                                          f->substr(f->length() - 25));
+                                       ImCmd::Prompt(short_names);
+                                       ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                                   },
+                                   [this](int selected_option)
+                                   {
+                                       int idx = int(m_recent_files.size() - 1) - selected_option;
+                                       if (idx >= 0 && idx < int(m_recent_files.size()))
+                                           load_image(m_recent_files[idx]);
+                                   },
+                                   nullptr, ICON_MY_OPEN_IMAGE});
+
+#endif
 
             // items for each dockable window
             for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
@@ -1884,11 +1892,8 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [](int selected_option)
-                               {
-                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                                   spdlog::set_level(spdlog::level::level_enum(selected_option));
-                               },
-                               nullptr});
+                               { spdlog::set_level(spdlog::level::level_enum(selected_option)); }, nullptr,
+                               ICON_MY_LOG_LEVEL});
 
             // add two-step theme selection command
             ImCmd::AddCommand({"Set theme",
@@ -1907,7 +1912,7 @@ void HDRViewApp::draw_command_palette()
                                    HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
                                    ImGuiTheme::ApplyTheme(theme);
                                },
-                               nullptr, ICON_FA_PAINTBRUSH});
+                               nullptr, ICON_MY_THEME});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");
@@ -1917,37 +1922,37 @@ void HDRViewApp::draw_command_palette()
         ImCmd::CommandPalette("Command palette", "Filter commands...");
 
         if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive)
-            // || !ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)
-        )
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
+        {
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
             ImGui::CloseCurrentPopup();
+            g_show_command_palette = false;
+        }
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
-            // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
             ImGui::ScopedFont sf{font("sans bold", 10)};
 
             string txt;
-            txt = "Navigate (" ICON_FA_ARROW_UP ICON_FA_ARROW_DOWN ")";
+            txt = "Navigate (" ICON_MY_ARROW_UP ICON_MY_ARROW_DOWN ")";
             ImGui::TableNextColumn();
             ImGui::TextAligned(txt, 0.f);
 
             ImGui::TableNextColumn();
-            txt = "Use (return)";
+            txt = "Use (" ICON_MY_KEY_RETURN ")";
             ImGui::TextAligned(txt, 0.5f);
 
             ImGui::TableNextColumn();
-            txt = "Dismiss (esc)";
+            txt = "Dismiss (" ICON_MY_KEY_ESC ")";
             ImGui::TextAligned(txt, 1.f);
 
-            // ImGui::PopStyleColor();
+            ImGui::PopStyleColor();
 
             ImGui::EndTable();
         }
 
-        // ImGui::End();
         ImGui::EndPopup();
     }
 }
@@ -1964,13 +1969,13 @@ void HDRViewApp::process_shortcuts()
     spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
-        if (a.second.chord)
-            if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
+        if (a.chord)
+            if (a.enabled() && ImGui::GlobalShortcut(a.chord, a.flags))
             {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.first, ImGui::GetFrameCount());
-                a.second.callback();
-                if (a.second.p_selected)
-                    *a.second.p_selected = !*a.second.p_selected;
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.name, ImGui::GetFrameCount());
+                a.callback();
+                if (a.p_selected)
+                    *a.p_selected = !*a.p_selected;
 #ifdef __EMSCRIPTEN__
                 ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
                                                  // modifiers) needs to be pressed before this chord is detected again
@@ -1983,30 +1988,33 @@ void HDRViewApp::process_shortcuts()
 
 void HDRViewApp::draw_about_dialog()
 {
-    ImGui::OpenPopup("About");
+    if (g_show_help)
+        ImGui::OpenPopup("About");
 
-    // Always center this window when appearing
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowFocus();
-    constexpr float icon_size    = 128.f;
-    float2          col_width    = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
-    float2          display_size = ImGui::GetIO().DisplaySize;
+    // work around HelloImGui rendering a couple frames to figure out sizes
+    if (ImGui::GetFrameCount() > 1)
+        g_show_help = false;
+
+    float2 display_size = ImGui::GetIO().DisplaySize;
 #ifdef __EMSCRIPTEN__
     display_size = float2{(float)window_width(), (float)window_height()};
 #endif
-    col_width[1] = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
-                              display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
-                                  ImGui::GetStyle().ScrollbarSize - col_width[0]);
+    // Center window horizontally, align near top vertically
+    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+
+    ImGui::SetNextWindowFocus();
+    constexpr float icon_size = 128.f;
+    float2          col_width = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
+    col_width[1]              = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
+                                           display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
+                                               ImGui::GetStyle().ScrollbarSize - col_width[0]);
 
     ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
 
-    // bool about_open = true;
-    if (ImGui::BeginPopupModal("About", &g_show_help,
-                               ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
-                                   ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
+                                       ImGuiWindowFlags_AlwaysAutoResize))
     {
-
         ImGui::Spacing();
 
         if (ImGui::BeginTable("about_table1", 2))
@@ -2083,8 +2091,8 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
-                ImGui::PushFont(font("mono bold", 30));
-                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(m_actions["Command palette..."].chord), 0.5f);
+                ImGui::PushFont(font("mono regular", 30));
+                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 
                 ImGui::TextUnformatted("This opens the command palette, which lists every available HDRView command "
@@ -2154,9 +2162,8 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTabBar();
         }
 
-        if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
-            ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_Space) ||
-            (!ImGui::IsWindowAppearing() && ImGui::IsKeyPressed(ImGuiKey_H)))
+        if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::Shortcut(ImGuiKey_Escape) ||
+            ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) || ImGui::Shortcut(ImGuiKey_H))
         {
             ImGui::CloseCurrentPopup();
             g_show_help = false;

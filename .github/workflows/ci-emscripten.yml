@@ -20,9 +20,9 @@ env:
   CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
 
 jobs:
-  build:
-    name: Build and deploy
-    runs-on: macos-13
+  build_emscripten:
+    name: Build and deploy emscripten webapp
+    runs-on: macos-14
 
     steps:
       - name: Install dependencies
@@ -56,20 +56,20 @@ jobs:
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-emscripten
           path: |
             ${{github.workspace}}/build
 
-      # - name: Copy web app
-      #   working-directory: ${{github.workspace}}/build
-      #   run: |
-      #     mkdir deploy
-      #     cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png coi-serviceworker.js FileSaver.js deploy/
-      #     mv deploy/HDRView.html deploy/index.html
+      - name: Copy web app
+        working-directory: ${{github.workspace}}/build
+        run: |
+          mkdir deploy
+          cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png coi-serviceworker.js FileSaver.js deploy/
+          mv deploy/HDRView.html deploy/index.html
 
-      # - name: Publish
-      #   uses: peaceiris/actions-gh-pages@v4
-      #   with:
-      #     personal_token: ${{ secrets.GITHUB_TOKEN }}
-      #     publish_branch: gh-pages
-      #     publish_dir: ${{github.workspace}}/build/deploy
+      - name: Publish
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{github.workspace}}/build/deploy

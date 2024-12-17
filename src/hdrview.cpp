@@ -126,18 +126,6 @@ The default is 2 (info).)")
         spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
         ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
-#if defined(__EMSCRIPTEN__)
-        spdlog::info("defined: __EMSCRIPTEN__");
-#endif
-
-#if defined(HELLOIMGUI_EMSCRIPTEN)
-        spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN");
-#endif
-
-#if defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-        spdlog::info("defined: HELLOIMGUI_EMSCRIPTEN_PTHREAD");
-#endif
-
         if (argc > 1)
         {
             spdlog::trace("Launching with command line arguments:");

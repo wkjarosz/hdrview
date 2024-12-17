@@ -11,7 +11,7 @@
 #include "shader.h"
 #include "texture.h"
 
-#include "IconsFontAwesome6.h"
+#include "fonts.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot/implot.h"
@@ -47,8 +47,7 @@ void Image::draw_histogram()
 
         ImGui::SameLine();
 
-        if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE
-                                                             : ICON_FA_UP_DOWN_LEFT_RIGHT))
+        if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_MY_FIT_AXES : ICON_MY_MANUAL_AXES))
             plot_cond = (plot_cond == ImPlotCond_Always) ? ImPlotCond_Once : ImPlotCond_Always;
         ImGui::WrappedTooltip((plot_cond == ImPlotCond_Always)
                                   ? "Click to allow manually panning/zooming in histogram"
@@ -309,10 +308,10 @@ void Image::draw_channels_list()
         const float icon_width  = ImGui::IconSize().x;
         const float icon_indent = icon_width + ImGui::CalcTextSize(" ").x;
 
-        ImGui::TableSetupColumn(ICON_FA_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.75f * icon_width);
-        ImGui::TableSetupColumn(ICON_FA_EYE, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                icon_width);
+        ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
+                                ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
         ImGui::TableSetupColumn(tree_view ? "Layer or channel group name" : "Layer.channel group name",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
@@ -341,7 +340,7 @@ void Image::draw_channels_list()
                     {
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(2);
-                        ImGui::TextFmt("{} {}", ICON_FA_FOLDER_OPEN, level);
+                        ImGui::TextFmt("{} {}", ICON_MY_OPEN_IMAGE, level);
                     }
 
                     ImGui::Indent(icon_indent);
@@ -363,7 +362,7 @@ void Image::draw_channels_list()
 
                     ImGui::TableNextColumn();
                     auto hotkey =
-                        layer.groups[g] < 10 ? fmt::format(ICON_FA_ANGLE_UP "{}", mod(layer.groups[g] + 1, 10)) : "";
+                        layer.groups[g] < 10 ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10)) : "";
                     ImGui::AlignCursor(hotkey, 1.0f);
                     if (ImGui::Selectable(hotkey.c_str(), is_selected_channel, selectable_flags))
                     {
@@ -372,11 +371,11 @@ void Image::draw_channels_list()
                     }
 
                     ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(selected_group == layer.groups[g] ? ICON_FA_EYE : "");
+                    ImGui::TextUnformatted(selected_group == layer.groups[g] ? ICON_MY_VISIBILITY : "");
 
                     ImGui::TableNextColumn();
                     ImGui::TextUnformatted(
-                        fmt::format("{} {}", ICON_FA_LAYER_GROUP, tree_view ? group.name : layer.name + group.name)
+                        fmt::format("{} {}", ICON_MY_CHANNEL_GROUP, tree_view ? group.name : layer.name + group.name)
                             .c_str());
                 }
                 ImGui::PopStyleColor(3);
@@ -486,7 +485,7 @@ void Image::draw_info()
     // if (ImGui::BeginTable("Channel statistics", 5, table_flags))
     // {
     //     ImGui::PushFont(bold_font);
-    //     ImGui::TableSetupColumn(ICON_FA_LAYER_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
+    //     ImGui::TableSetupColumn(ICON_MY_CHANNEL_GROUP, ImGuiTableColumnFlags_WidthFixed/*,
     //                                     ImGui::CalcTextSize("channel").x*/);
     //     // ImGui::TableSetupColumn(ICON_FA_CROSSHAIRS, ImGuiTableColumnFlags_WidthStretch);
     //     ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
@@ -535,7 +534,7 @@ void Image::draw_info()
         ImGui::PushFont(bold_font);
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
         for (int c = 0; c < group.num_channels; ++c)
-            ImGui::TableSetupColumn(fmt::format("{}{}", ICON_FA_LAYER_GROUP, channel_names[c]).c_str(),
+            ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
                                     ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
         ImGui::PopFont();

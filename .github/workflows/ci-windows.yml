@@ -28,6 +28,9 @@ jobs:
           - { name: "Windows", os: windows-latest }
 
     steps:
+      - name: Install dependencies
+        run: pip install Pillow
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
