@@ -304,6 +304,8 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
 
+        add_action({"Dither", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_dither});
+
         add_action({"Show pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
                     &m_draw_grid});
         add_action({"Show pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, always_enabled, false,
