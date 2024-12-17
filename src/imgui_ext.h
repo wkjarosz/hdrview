@@ -79,7 +79,7 @@ inline void Text(const std::string &text) { return Text("%s", text.c_str()); }
 inline void TextUnformatted(const std::string &text) { return TextUnformatted(text.c_str()); }
 
 template <typename... T>
-inline void TextFmt(fmt::format_string<T...> fmt, T&&... args)
+inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
 {
     // TODO the below produces an obscure compiler message that we could decipher and resolve properly
     //      for now, we just bypass the compile-time validation
