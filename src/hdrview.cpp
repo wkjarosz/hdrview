@@ -17,9 +17,6 @@
 
 int main(int argc, char **argv)
 {
-    spdlog::info("Matrix: {}", float3x3(la::identity));
-    spdlog::info("Matrix: {}", float3(2.5f));
-    spdlog::info("Formatted: {:::> 8.5f}", float3x3(la::identity));
 #ifdef _WIN32
     // Manually get the command line arguments, since we are not compiling in console mode
     LPWSTR    cmd_line = GetCommandLineW();
