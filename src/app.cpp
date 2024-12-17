@@ -941,7 +941,7 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
             {
                 if (buffer_str.empty())
                 {
-                    std::ifstream is{std::filesystem::path((const char8_t *)filename.c_str()), std::ios_base::binary};
+                    std::ifstream is{std::filesystem::u8path(filename.c_str()), std::ios_base::binary};
                     return Image::load(is, filename);
                 }
                 else
