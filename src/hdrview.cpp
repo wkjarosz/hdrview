@@ -10,8 +10,49 @@
 #include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
+#ifdef _WIN32
+#include <shellapi.h>
+#include <windows.h>
+#endif
+
 int main(int argc, char **argv)
 {
+#ifdef _WIN32
+    // Manually get the command line arguments, since we are not compiling in console mode
+    LPWSTR    cmd_line = GetCommandLineW();
+    wchar_t **win_argv = CommandLineToArgvW(cmd_line, &argc);
+
+    std::vector<std::string> args;
+    args.reserve(static_cast<std::size_t>(argc) - 1U);
+    for (auto i = static_cast<std::size_t>(argc) - 1U; i > 0U; --i) args.emplace_back(CLI::narrow(win_argv[i]));
+
+    // This will enable console output if the app was started from a console. No extra console window is created if the
+    // app was started any other way.
+    bool consoleAvailable = AttachConsole(ATTACH_PARENT_PROCESS);
+
+#ifndef NDEBUG
+    // In Debug mode we create a console even if launched from within, e.g., Visual Studio
+    bool customConsole = false;
+    if (!consoleAvailable)
+    {
+        consoleAvailable = AllocConsole();
+        customConsole    = consoleAvailable;
+    }
+#endif
+
+    FILE *con_out = nullptr, *con_err = nullptr, *con_in = nullptr;
+    if (consoleAvailable)
+    {
+        freopen_s(&con_out, "CONOUT$", "w", stdout);
+        freopen_s(&con_err, "CONOUT$", "w", stderr);
+        freopen_s(&con_in, "CONIN$", "r", stdin);
+        std::cout.clear();
+        std::clog.clear();
+        std::cerr.clear();
+        std::cin.clear();
+    }
+#endif
+
     constexpr int default_verbosity = spdlog::level::info;
     int           verbosity         = default_verbosity;
 
@@ -88,12 +129,21 @@ The default is 2 (info).)")
         if (argc > 1)
         {
             spdlog::trace("Launching with command line arguments:");
-            for (int i = 1; i < argc; ++i) spdlog::trace("\t" + string(argv[i]));
+            for (int i = 1; i < argc; ++i)
+#ifdef _WIN32
+                spdlog::trace("\t" + string(CLI::narrow(win_argv[i])));
+#else
+                spdlog::trace("\t" + string(argv[i]));
+#endif
         }
         else
             spdlog::trace("Launching HDRView with no command line arguments.");
 
+#ifdef _WIN32
+        CLI11_PARSE(app, argc, win_argv);
+#else
         CLI11_PARSE(app, argc, argv);
+#endif
 
         // spdlog::default_logger()->set_level(spdlog::level::level_enum(verbosity));
         spdlog::set_level(spdlog::level::level_enum(verbosity));
@@ -131,6 +181,20 @@ The default is 2 (info).)")
         // fprintf(stderr, "%s", USAGE);
         exit(EXIT_FAILURE);
     }
+
+#ifdef _WIN32
+    if (consoleAvailable)
+    {
+#ifndef NDEBUG
+        if (customConsole)
+            FreeConsole();
+#endif
+
+        fclose(con_out);
+        fclose(con_err);
+        fclose(con_in);
+    }
+#endif
 
     return EXIT_SUCCESS;
 }

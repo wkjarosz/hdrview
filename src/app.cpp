@@ -31,6 +31,7 @@
 #include <spdlog/spdlog.h>
 
 #include <cmath>
+#include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
 #include <memory>
@@ -389,10 +390,15 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             return is_valid(i);
                         }});
 
+#ifdef _WIN32
+        ImGuiKey modKey = ImGuiMod_Alt;
+#else
+        ImGuiKey modKey = ImGuiMod_Super;
+#endif
         // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (size_t n = 1u; n <= 10u; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
-                        ImGuiMod_Super | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
+                        modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
                         [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
                         [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
 
@@ -759,6 +765,7 @@ void HDRViewApp::draw_menus()
                 if (ImGui::MenuItem(fmt::format("{}##File{}", short_name, i).c_str()))
                 {
                     load_image(*f);
+                    break;
                 }
             }
 
@@ -928,21 +935,21 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
     {
         // convert the buffer (if any) to a string so the async thread has its own copy
         // then load from the string or filename depending on whether the buffer is empty
-        m_pending_images.emplace_back(std::make_shared<PendingImages>(filename,
-                                                                      [buffer_str = string(buffer), filename]()
-                                                                      {
-                                                                          if (buffer_str.empty())
-                                                                          {
-                                                                              std::ifstream is{filename,
-                                                                                               std::ios_base::binary};
-                                                                              return Image::load(is, filename);
-                                                                          }
-                                                                          else
-                                                                          {
-                                                                              std::istringstream is{buffer_str};
-                                                                              return Image::load(is, filename);
-                                                                          }
-                                                                      }));
+        m_pending_images.emplace_back(std::make_shared<PendingImages>(
+            filename,
+            [buffer_str = string(buffer), filename]()
+            {
+                if (buffer_str.empty())
+                {
+                    std::ifstream is{std::filesystem::path((const char8_t *)filename.c_str()), std::ios_base::binary};
+                    return Image::load(is, filename);
+                }
+                else
+                {
+                    std::istringstream is{buffer_str};
+                    return Image::load(is, filename);
+                }
+            }));
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
@@ -1057,9 +1064,22 @@ void HDRViewApp::run()
 
 ImFont *HDRViewApp::font(const string &name, int size) const
 {
+    if (size < 0)
+    {
+        // Determine the non-scaled size that corresponds to the current, dpi-scaled font size
+        for (auto font_size : {14, 10, 16, 18, 30})
+        {
+            if (int(HelloImGui::DpiFontLoadingFactor() * font_size) == int(ImGui::GetFontSize()))
+            {
+                size = font_size;
+                break;
+            }
+        }
+    }
+
     try
     {
-        return m_fonts.at({name, size <= 0 ? int(ImGui::GetFontSize()) : size});
+        return m_fonts.at({name, size});
     }
     catch (const std::exception &e)
     {

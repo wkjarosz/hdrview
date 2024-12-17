@@ -276,7 +276,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
             data.luminance_weights = float3{&Imf::RgbaYca::computeYw(file_cr)[0]};
 
-            spdlog::debug("M_to_Rec709 =\n{}", data.M_to_Rec709);
+            spdlog::debug("M_to_Rec709 = {}", data.M_to_Rec709);
             spdlog::debug("Yw = {}", data.luminance_weights);
         }
     }

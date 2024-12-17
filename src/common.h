@@ -13,12 +13,14 @@
 #endif
 
 #include "fwd.h"
+#include <algorithm>
 #include <string>
 #include <vector>
 
 // #include <fmt/core.h>
 #include <fmt/color.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 
 #define MY_ASSERT(cond, description, ...)                                                                              \
@@ -256,92 +258,6 @@ inline T square(T value)
 {
     return value * value;
 }
-
-//
-// The code below allows us to use the fmt format/print, spdlog logging functions, and
-// standard C++ iostreams like cout with linalg vectors and matrices.
-//
-
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
-//
-// Base class for both vec and mat fmtlib formatters.
-//
-// Based on the great blog tutorial: https://wgml.pl/blog/formatting-user-defined-types-fmt.html
-//
-template <typename V, typename T, bool Newline>
-struct vecmat_formatter
-{
-    using underlying_formatter_type = fmt::formatter<T>;
-
-    template <typename ParseContext>
-    constexpr auto parse(ParseContext &ctx)
-    {
-        return underlying_formatter.parse(ctx);
-    }
-
-    template <typename FormatContext>
-    auto format(const V &v, FormatContext &ctx)
-    {
-        fmt::format_to(ctx.out(), "{{");
-        auto it = begin(v);
-        while (true)
-        {
-            ctx.advance_to(underlying_formatter.format(*it, ctx));
-            if (++it == end(v))
-            {
-                fmt::format_to(ctx.out(), "}}");
-                break;
-            }
-            else
-                fmt::format_to(ctx.out(), ",{} ", Newline ? "\n" : "");
-        }
-        return ctx.out();
-    }
-
-protected:
-    underlying_formatter_type underlying_formatter;
-};
-
-template <typename T, int N>
-struct fmt::formatter<la::vec<T, N>> : public vecmat_formatter<la::vec<T, N>, T, false>
-{
-};
-
-template <typename T, int M, int N>
-struct fmt::formatter<la::mat<T, M, N>> : public vecmat_formatter<la::mat<T, M, N>, la::vec<T, N>, true>
-{
-};
-
-#ifdef HDRVIEW_IOSTREAMS
-#include <iomanip>
-#include <iostream>
-template <class C, int N, class T>
-std::basic_ostream<C> &operator<<(std::basic_ostream<C> &out, const Vec<N, T> &v)
-{
-    std::ios_base::fmtflags oldFlags = out.flags();
-    auto                    width    = out.precision() + 2;
-
-    out.setf(std::ios_base::right);
-    if (!(out.flags() & std::ios_base::scientific))
-        out.setf(std::ios_base::fixed);
-    width += 5;
-
-    out << '{';
-    for (size_t i = 0; i < N - 1; ++i) out << std::setw(width) << v[i] << ',';
-    out << std::setw(width) << v[N - 1] << '}';
-
-    out.flags(oldFlags);
-    return out;
-}
-
-template <class C, class T>
-std::basic_ostream<C> &operator<<(std::basic_ostream<C> &s, const Mat44<T> &m)
-{
-    return s << "{" << m[0] << ",\n " << m[1] << ",\n " << m[2] << ",\n " << m[3] << "}";
-}
-#endif // HDRVIEW_IOSTREAMS
-
-#endif // DOXYGEN_SHOULD_SKIP_THIS
 
 bool        starts_with(const std::string &s, const std::string &prefix);
 bool        ends_with(const std::string &s, const std::string &suffix);

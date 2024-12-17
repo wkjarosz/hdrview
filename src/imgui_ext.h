@@ -78,12 +78,14 @@ inline void Text(const std::string &text) { return Text("%s", text.c_str()); }
 
 inline void TextUnformatted(const std::string &text) { return TextUnformatted(text.c_str()); }
 
-// from: https://pastebin.com/QCnFhDMu
-template <typename T, typename... Args>
-IMGUI_API void TextFmt(T &&fmt, const Args &...args)
+template <typename... T>
+inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
 {
-    std::string str = fmt::format(std::forward<T>(fmt), args...);
-    ImGui::TextUnformatted(&*str.begin(), &*str.end());
+    // TODO the below produces an obscure compiler message that we could decipher and resolve properly
+    //      for now, we just bypass the compile-time validation
+    // std::string str = fmt::format(fmt, fmt::make_format_args(args...));
+    std::string str = fmt::format(fmt::runtime(fmt), args...);
+    ImGui::TextUnformatted(str.c_str());
 }
 
 // return true when activated.

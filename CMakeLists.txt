@@ -272,14 +272,15 @@ if(linalg_ADDED)
   target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 endif()
 
-CPMAddPackage("gh:fmtlib/fmt#10.1.1")
+# needed the backport of this fix to emscripten. switch back to official fmt repo onces its incorporated into a release
+CPMAddPackage("gh:vibeus/fmt#2987adf1131ac9b9ee20f83d0cd085a004cf19ae")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
 
 CPMAddPackage(
   NAME spdlog
-  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.13.0.zip
+  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.15.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
 )
@@ -343,7 +344,7 @@ endif()
 
 CPMAddPackage(
   NAME cli11
-  URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip
+  URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
 )
 if(cli11_ADDED)
@@ -413,7 +414,7 @@ imgui_bundle_add_app(
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
 
-set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
+set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 20)
 # add_dependencies(HDRView gen_version_h_target) target_sources(HDRView PRIVATE
 # ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
 if(APPLE)
