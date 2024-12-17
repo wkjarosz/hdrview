@@ -11,23 +11,26 @@
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
-#include <windows.h>
 #include <shellapi.h>
+#include <windows.h>
 #endif
 
 int main(int argc, char **argv)
 {
+    spdlog::info("Matrix: {}", float3x3(la::identity));
+    spdlog::info("Matrix: {}", float3(2.5f));
+    spdlog::info("Formatted: {:::> 8.5f}", float3x3(la::identity));
 #ifdef _WIN32
     // Manually get the command line arguments, since we are not compiling in console mode
-    LPWSTR cmd_line = GetCommandLineW();
-    wchar_t** win_argv = CommandLineToArgvW(cmd_line, &argc);
+    LPWSTR    cmd_line = GetCommandLineW();
+    wchar_t **win_argv = CommandLineToArgvW(cmd_line, &argc);
 
     std::vector<std::string> args;
     args.reserve(static_cast<std::size_t>(argc) - 1U);
-    for(auto i = static_cast<std::size_t>(argc) - 1U; i > 0U; --i)
-        args.emplace_back(CLI::narrow(win_argv[i]));
+    for (auto i = static_cast<std::size_t>(argc) - 1U; i > 0U; --i) args.emplace_back(CLI::narrow(win_argv[i]));
 
-    // This will enable console output if the app was started from a console. No extra console window is created if the app was started any other way.
+    // This will enable console output if the app was started from a console. No extra console window is created if the
+    // app was started any other way.
     bool consoleAvailable = AttachConsole(ATTACH_PARENT_PROCESS);
 
 #ifndef NDEBUG
@@ -36,7 +39,7 @@ int main(int argc, char **argv)
     if (!consoleAvailable)
     {
         consoleAvailable = AllocConsole();
-        customConsole = consoleAvailable;
+        customConsole    = consoleAvailable;
     }
 #endif
 
@@ -198,7 +201,8 @@ The default is 2 (info).)")
     if (consoleAvailable)
     {
 #ifndef NDEBUG
-        if (customConsole) FreeConsole();
+        if (customConsole)
+            FreeConsole();
 #endif
 
         fclose(con_out);

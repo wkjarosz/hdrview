@@ -605,7 +605,7 @@ string Image::to_string() const
     if (M_to_Rec709 != float4x4{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
-        out += indent(fmt::format("{}{:> 8.5f}\n", l, M_to_Rec709), false, l.length());
+        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, l.length());
     }
 
     out += fmt::format("Channels ({}):\n", channels.size());

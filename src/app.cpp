@@ -31,13 +31,13 @@
 #include <spdlog/spdlog.h>
 
 #include <cmath>
+#include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
 #include <memory>
 #include <random>
 #include <sstream>
 #include <utility>
-#include <filesystem>
 
 #ifdef __EMSCRIPTEN__
 #include "emscripten_browser_file.h"
@@ -919,21 +919,21 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
     {
         // convert the buffer (if any) to a string so the async thread has its own copy
         // then load from the string or filename depending on whether the buffer is empty
-        m_pending_images.emplace_back(std::make_shared<PendingImages>(filename,
-                                                                      [buffer_str = string(buffer), filename]()
-                                                                      {
-                                                                          if (buffer_str.empty())
-                                                                          {
-                                                                              std::ifstream is{std::filesystem::path((const char8_t*) filename.c_str()),
-                                                                                               std::ios_base::binary};
-                                                                              return Image::load(is, filename);
-                                                                          }
-                                                                          else
-                                                                          {
-                                                                              std::istringstream is{buffer_str};
-                                                                              return Image::load(is, filename);
-                                                                          }
-                                                                      }));
+        m_pending_images.emplace_back(std::make_shared<PendingImages>(
+            filename,
+            [buffer_str = string(buffer), filename]()
+            {
+                if (buffer_str.empty())
+                {
+                    std::ifstream is{std::filesystem::path((const char8_t *)filename.c_str()), std::ios_base::binary};
+                    return Image::load(is, filename);
+                }
+                else
+                {
+                    std::istringstream is{buffer_str};
+                    return Image::load(is, filename);
+                }
+            }));
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
