@@ -759,6 +759,7 @@ void HDRViewApp::draw_menus()
                 if (ImGui::MenuItem(fmt::format("{}##File{}", short_name, i).c_str()))
                 {
                     load_image(*f);
+                    break;
                 }
             }
 
