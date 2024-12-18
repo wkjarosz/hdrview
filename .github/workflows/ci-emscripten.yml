@@ -1,4 +1,4 @@
-name: Emscripten build
+name: Emscripten development build
 
 on:
   pull_request:
@@ -72,4 +72,5 @@ jobs:
         with:
           personal_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
+          destination_dir: dev
           publish_dir: ${{github.workspace}}/build/deploy

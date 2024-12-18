@@ -7,62 +7,63 @@ Master branch:
 
 HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
 
-HDRView can display true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
+HDRView can display images in true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
+
+HDRView runs on macOS, Linux, Windows, and directly in your browser -- just go to [wkjarosz.github.io/hdrview/](https://wkjarosz.github.io/hdrview/) for the latest release version and [wkjarosz.github.io/hdrview/dev](https://wkjarosz.github.io/hdrview/dev) for the development version. This even works on an iPhone or iPad! Try it out.
 
 ## Example screenshots
-HDRView supports loading several images and provides exposure and gamma/sRGB tone mapping control with high-quality dithering of HDR images.
-![Screenshot](resources/screenshot1.png "Screenshot1")
+Here's a screenshot of HDRView viewing a JPEG on macOS:
+![Screenshot](resources/screenshot-mac.png "Screenshot macOS")
+
+Or, running on an iPad as a webapp, viewing a luminance-chroma EXR image stored using XYZ primaries with chroma subsampling:
+![Screenshot](resources/screenshot-ipad.jpg "Screenshot iPad")
 
 When sufficiently zoomed in, HDRView can overlay the pixel grid and numeric color values on each pixel to facilitate inspection:
-![Screenshot](resources/screenshot2.png "Screenshot2")
+![Screenshot](resources/screenshot-zoomed.png "Screenshot Zoomed-in")
 
-In addition to the menubar, HDRView features extensive keyboard shortcuts, and pressing `Cmd+Shift+P` brings up a VS Code/Atom/Sublime Text-style command palette allowing you to find any command with keyboard-based fuzzy searching:
+HDRView features extensive keyboard shortcuts, and pressing `Cmd+Shift+P` brings up a VS Code/Atom/Sublime Text-style command palette allowing you to find any command with keyboard-based fuzzy searching:
 ![Screenshot](resources/screenshot-command-palette.png "Screenshot of command palette")
 
 HDRView supports the extended dynamic range (XDR, 30 bit) capabilities of recent Macs, allowing it to use finer precision (reducing banding) and brighter whites (reducing clipping) when displaying HDR images.
 
-When displaying images on a standard dynamic range (SDR, 24 bit) display (or saving to an LDR file format), HDRView uses high-quality dithering:
-![Screenshot](resources/screenshot4.png "Screenshot4")
+When displaying images on a standard dynamic range (SDR, 24 bit) display (or saving to an LDR file format), HDRView uses blue-noise dithering:
+![Screenshot](resources/screenshot-dithered.png "Screenshot dithering on")
 
-This reduces apparent banding artifacts in smooth gradients compared to naively displaying HDR images such displays:
-![Screenshot](resources/screenshot3.png "Screenshot3")
+This reduces apparent banding artifacts in smooth gradients compared to naively displaying HDR images on such displays:
+![Screenshot](resources/screenshot-no-dither.png "Screenshot dithering off")
 
 
-## Obtaining HDRView
+## Obtaining/running HDRView
 
-If you are running a recent version of macOS or Windows, you can download the pre-built binary installer DMG or zip file from the [releases page](https://github.com/wkjarosz/hdrview/releases). For Linux, you will need to build HDRView from source for now.
+If you are running a recent version of macOS or Windows, you can download the pre-built binary installer DMG or zip file from the [releases page](https://github.com/wkjarosz/hdrview/releases). For Linux, you will need to build HDRView from source for now. Or, just run the [web app version](https://wkjarosz.github.io/hdrview/) directly in your browser.
 
 ## Compiling
 
 Compiling from scratch requires CMake and a recent version of the XCode build tools on macOS, Visual Studio on Windows, and GCC on Linux.
 
-### Linux and macOS
+Compiling should be as simple as:
+```bash
+1 ~ % git clone https://github.com/wkjarosz/hdrview.git
+2 ~ % cd hdrview
+3 ~ % mkdir build
+4 ~ % cmake -B build
+5 ~ % cmake --build build/ --parallel 4
+```
 
-On Linux and macOS, compiling should be as simple as
+On macOS and Linux you can add `-G Ninja` to line 4 (on Windows Ninja fails to build the OpenEXR dependency).
 
-    git clone https://github.com/wkjarosz/hdrview.git
-    cd hdrview
-    mkdir build
-    cmake -B build -G Ninja 
-    cmake --build build/ --parallel 4
+Alternatively, you should be able to do all this via VS Code if you have the CMake extension set up properly.
 
-### Windows
+Or, you can start via ``cmake-gui`` if you prefer. Run ``Configure`` and select your desired build system. Then click ``Generate``. Then open the solution/project/makefile in your IDE of choice.
 
-On Windows, you can run:
+## Installation
+On Windows you should be able to just copy the `HDRView.exe` to wherever you want.
 
-    git clone https://github.com/wkjarosz/hdrview.git
-    cd hdrview
-    mkdir build
-    cmake -B build
-    cmake --build build/ --parallel 4
+On macOS you can just copy the `HDRView.app` bundle to your `/Applications` folder. Recent version of macOS will complain that the app is unsigned and from an unknown developer. You will need to go to the Security and Privacy part of system Settings to allow the app to run.
 
-You can also do this through ``cmake-gui`` if you prefer. Run ``Configure`` and select your version of Visual C++ and 64bit. Then click ``Generate``.
+## Running from the terminal
 
-Open the generated file ``HDRView.sln`` and proceed building as usual from within Visual Studio.
-
-## Usage
-
-Run ``./hdrview --help`` to see the command-line options, or run ``./hdrview `` and hit the ``h`` button to see a list of keyboard shortcuts in the application.
+You can also run HDRView from the terminal. Run ``HDRView --help`` to see the command-line options. On macOS the executable is stored within the app bundle in `HDRView.app/Contents/MacOS/HDRView`. You might want to add it, or a symlink, to your path.
 
 ## License
 
