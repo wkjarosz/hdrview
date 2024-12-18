@@ -309,9 +309,10 @@ endif()
 
 CPMAddPackage(
   NAME Imath
-  VERSION 3.1.6 # the git repo is incredibly large, so we download the archived include directory
-  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
-  OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+  VERSION 3.1.12 # the git repo is incredibly large, so we download the archived include directory
+  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.12.zip
+  OPTIONS "BUILD_SHARED_LIBS OFF" "IMATH_INSTALL OFF" "IMATH_INSTALL_PKG_CONFIG OFF" "BUILD_TESTING OFF"
+          "EXCLUDE_FROM_ALL YES"
 )
 
 if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
@@ -324,8 +325,15 @@ CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
   GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF" "BUILD_TESTING OFF"
-          "EXCLUDE_FROM_ALL YES" ${OPENEXR_THREADING_OPTIONS}
+  OPTIONS "OPENEXR_BUILD_TOOLS OFF"
+          "BUILD_SHARED_LIBS OFF"
+          "OPENEXR_INSTALL OFF"
+          "OPENEXR_INSTALL_TOOLS OFF"
+          "OPENEXR_INSTALL_EXAMPLES OFF"
+          "OPENEXR_INSTALL_PKG_CONFIG OFF"
+          "BUILD_TESTING OFF"
+          "EXCLUDE_FROM_ALL YES"
+          ${OPENEXR_THREADING_OPTIONS}
 )
 if(openexr_ADDED)
   message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
@@ -475,3 +483,16 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
   endif()
 endif()
+
+set(CPACK_PACKAGE_VENDOR "Wojciech Jarosz")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/wkjarosz/hdrview")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.txt")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+
+if(APPLE)
+  set(CPACK_GENERATOR "DragNDrop")
+endif()
+
+include(CPack)
