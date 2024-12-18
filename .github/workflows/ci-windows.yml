@@ -56,4 +56,4 @@ jobs:
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
-            "${{github.workspace}}\build"
+            "${{github.workspace}}\build\deploy"
