@@ -47,7 +47,7 @@ jobs:
           "${{github.workspace}}\build\${{ matrix.buildtype }}\HDRView.exe --help"
 
       - name: Install
-        working-directory: ${{github.workspace}}/build/${{ matrix.buildtype }}
+        working-directory: ${{github.workspace}}/build
         run: |
           cmake --install .
 
@@ -56,4 +56,4 @@ jobs:
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
-            "${{github.workspace}}\build\${{ matrix.buildtype }}"
+            "${{github.workspace}}\build"
