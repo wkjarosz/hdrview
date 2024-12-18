@@ -5,7 +5,6 @@
 //
 
 #include "colorspace.h"
-#include "color.h"
 #include "common.h"
 #include <cmath>
 
@@ -28,8 +27,23 @@ const float maxLab[] = {100, 128, 128};
 
 using namespace std;
 
-float LinearToSRGB(float a) { return a < 0.0031308 ? 12.92 * a : 1.055 * pow(a, 1.0 / 2.4) - 0.055; }
-float SRGBToLinear(float a) { return a < 0.04045 ? (1.0 / 12.92) * a : pow((a + 0.055) * (1.0 / 1.055), 2.4); }
+float3 YCToRGB(float3 input, float3 Yw)
+{
+    if (input[0] == 0.0 && input[2] == 0.0)
+        //
+        // Special case -- both chroma channels are 0.  To avoid
+        // rounding errors, we explicitly set the output R, G and B
+        // channels equal to the input luminance.
+        //
+        return float3(input[1], input[1], input[1]);
+
+    float Y = input[1];
+    float r = (input[0] + 1.0) * input[1];
+    float b = (input[2] + 1.0) * input[1];
+    float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
+
+    return float3(r, g, b);
+}
 float LinearToAdobeRGB(float a) { return pow(a, 1.f / 2.19921875f); }
 float AdobeRGBToLinear(float a) { return pow(a, 2.19921875f); }
 
@@ -58,27 +72,24 @@ void LinearToAdobeRGB(float *r, float *g, float *b)
     *b = LinearToAdobeRGB(*b);
 }
 
-Color3 LinearToSRGB(const Color3 &c) { return Color3(LinearToSRGB(c.r), LinearToSRGB(c.g), LinearToSRGB(c.b)); }
-
-Color4 LinearToSRGB(const Color4 &c) { return Color4(LinearToSRGB(reinterpret_cast<const Color3 &>(c)), c.a); }
-
-Color3 SRGBToLinear(const Color3 &c) { return Color3(SRGBToLinear(c.r), SRGBToLinear(c.g), SRGBToLinear(c.b)); }
-
-Color4 SRGBToLinear(const Color4 &c) { return Color4(SRGBToLinear(reinterpret_cast<const Color3 &>(c)), c.a); }
+Color3 LinearToSRGB(const Color3 &c) { return Color3(LinearToSRGB(c.x), LinearToSRGB(c.y), LinearToSRGB(c.z)); }
+Color4 LinearToSRGB(const Color4 &c) { return Color4(LinearToSRGB(c.xyz()), c.w); }
+Color3 SRGBToLinear(const Color3 &c) { return Color3(SRGBToLinear(c.x), SRGBToLinear(c.y), SRGBToLinear(c.z)); }
+Color4 SRGBToLinear(const Color4 &c) { return Color4(SRGBToLinear(c.xyz()), c.w); }
 
 Color3 LinearToAdobeRGB(const Color3 &c)
 {
-    return Color3(LinearToAdobeRGB(c.r), LinearToAdobeRGB(c.g), LinearToAdobeRGB(c.b));
+    return Color3(LinearToAdobeRGB(c.x), LinearToAdobeRGB(c.y), LinearToAdobeRGB(c.z));
 }
 
-Color4 LinearToAdobeRGB(const Color4 &c) { return Color4(LinearToAdobeRGB(reinterpret_cast<const Color3 &>(c)), c.a); }
+Color4 LinearToAdobeRGB(const Color4 &c) { return Color4(LinearToAdobeRGB(c.xyz()), c.w); }
 
 Color3 AdobeRGBToLinear(const Color3 &c)
 {
-    return Color3(AdobeRGBToLinear(c.r), AdobeRGBToLinear(c.g), AdobeRGBToLinear(c.b));
+    return Color3(AdobeRGBToLinear(c.x), AdobeRGBToLinear(c.y), AdobeRGBToLinear(c.z));
 }
 
-Color4 AdobeRGBToLinear(const Color4 &c) { return Color4(AdobeRGBToLinear(reinterpret_cast<const Color3 &>(c)), c.a); }
+Color4 AdobeRGBToLinear(const Color4 &c) { return Color4(AdobeRGBToLinear(c.xyz()), c.w); }
 
 void XYZToLinearSRGB(float *R, float *G, float *B, float X, float Y, float Z)
 {
@@ -225,103 +236,94 @@ void xyYToXZ(float *X, float *Z, float x, float y, float Y)
     }
 }
 
-//! Convert a color in RGB colorspace to an equivalent color in HSV colorspace.
+//! Convert rgb floats ([0-1],[0-1],[0-1]) to hsv floats ([0-1],[0-1],[0-1])
 /*!
-    This is derived from sample code in:
+    Original method as described in
 
     Foley et al. Computer Graphics: Principles and Practice.
         Second edition in C. 592-596. July 1997.
+
+    Optimized approach taken from:
+        https://web.archive.org/web/20230311213057/http://lolengine.net/blog/2013/01/13/fast-rgb-to-hsv
 */
-void RGBToHSV(float *H, float *S, float *V, float R, float G, float B)
+void RGBToHSV(float *h, float *s, float *v, float r, float g, float b)
 {
-    // Calculate the max and min of red, green and blue.
-    float mx    = std::max({R, G, B});
-    float mn    = std::min({R, G, B});
-    float delta = mx - mn;
+    float K = 0.f;
 
-    // Set the saturation and value
-    *S = (mx != 0) ? (delta) / mx : 0;
-    *V = mx;
-
-    if (*S == 0.0f)
-        *H = 0.0f;
-    else
+    if (g < b)
     {
-        if (R == mx)
-            *H = (G - B) / delta;
-        else if (G == mx)
-            *H = 2 + (B - R) / delta;
-        else if (B == mx)
-            *H = 4 + (R - G) / delta;
-
-        *H /= 6.0f;
-
-        if (*H < 0.0f)
-            *H += 1.0f;
+        swap(g, b);
+        K = -1.f;
     }
+
+    if (r < g)
+    {
+        swap(r, g);
+        K = -2.f / 6.f - K;
+    }
+
+    float chroma = r - std::min(g, b);
+    *h           = fabsf(K + (g - b) / (6.f * chroma + 1e-20f));
+    *s           = chroma / (r + 1e-20f);
+    *v           = r;
 }
 
-//! Convert a color in HSV colorspace to an equivalent color in RGB colorspace.
+//! Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1])
 /*!
     This is derived from sample code in:
 
     Foley et al. Computer Graphics: Principles and Practice.
         Second edition in C. 592-596. July 1997.
 */
-void HSVToRGB(float *R, float *G, float *B, float H, float S, float V)
+void HSVToRGB(float *r, float *g, float *b, float h, float s, float v)
 {
-    if (S == 0.0f)
+    if (s == 0.0f)
     {
         // achromatic case
-        *R = *G = *B = V;
+        *r = *g = *b = v;
+        return;
     }
-    else
+
+    h       = fmodf(h, 1.0f) / (60.0f / 360.0f);
+    int   i = (int)h;
+    float f = h - (float)i;
+    float p = v * (1.0f - s);
+    float q = v * (1.0f - s * f);
+    float t = v * (1.0f - s * (1.0f - f));
+
+    switch (i)
     {
-        if (H == 1.0f)
-            H = 0.0f;
-        else
-            H *= 6.0f;
-
-        int   i = (int)floor(H);
-        float f = H - i;
-        float p = V * (1 - S);
-        float q = V * (1 - (S * f));
-        float t = V * (1 - (S * (1 - f)));
-
-        switch (i)
-        {
-        case 0:
-            *R = V;
-            *G = t;
-            *B = p;
-            break;
-        case 1:
-            *R = q;
-            *G = V;
-            *B = p;
-            break;
-        case 2:
-            *R = p;
-            *G = V;
-            *B = t;
-            break;
-        case 3:
-            *R = p;
-            *G = q;
-            *B = V;
-            break;
-        case 4:
-            *R = t;
-            *G = p;
-            *B = V;
-            break;
-        case 5:
-        default:
-            *R = V;
-            *G = p;
-            *B = q;
-            break;
-        }
+    case 0:
+        *r = v;
+        *g = t;
+        *b = p;
+        break;
+    case 1:
+        *r = q;
+        *g = v;
+        *b = p;
+        break;
+    case 2:
+        *r = p;
+        *g = v;
+        *b = t;
+        break;
+    case 3:
+        *r = p;
+        *g = q;
+        *b = v;
+        break;
+    case 4:
+        *r = t;
+        *g = p;
+        *b = v;
+        break;
+    case 5:
+    default:
+        *r = v;
+        *g = p;
+        *b = q;
+        break;
     }
 }
 
@@ -594,14 +596,14 @@ void convert_colorspace(EColorSpace dst, float *a, float *b, float *c, EColorSpa
 Color3 convert_colorspace(const Color3 &c, EColorSpace dst, EColorSpace src)
 {
     Color3 ret;
-    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.x, c.y, c.z);
     return ret;
 }
 
 Color4 convert_colorspace(const Color4 &c, EColorSpace dst, EColorSpace src)
 {
     Color4 ret = c;
-    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.r, c.g, c.b);
+    convert_colorspace(dst, &ret[0], &ret[1], &ret[2], src, c.x, c.y, c.z);
     return ret;
 }
 

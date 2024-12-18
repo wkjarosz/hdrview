@@ -6,6 +6,17 @@
 
 #pragma once
 
-bool   is_pfm_image(const char *filename) noexcept;
-bool   write_pfm_image(const char *filename, int width, int height, int numChannels, const float *data);
-float *load_pfm_image(const char *filename, int *width, int *height, int *numChannels);
+#include <istream>
+#include <memory>
+#include <string>
+
+bool is_pfm_image(std::istream &is) noexcept;
+bool is_pfm_image(const std::string &filename) noexcept;
+
+std::unique_ptr<float[]> load_pfm_image(std::istream &is, const std::string &filename, int *width, int *height,
+                                        int *num_channels);
+std::unique_ptr<float[]> load_pfm_image(const std::string &filename, int *width, int *height, int *num_channels);
+
+void write_pfm_image(const std::string &filename, int width, int height, int num_channels, const float data[]);
+void write_pfm_image(std::ostream &os, const std::string &filename, int width, int height, int num_channels,
+                     const float data[]);

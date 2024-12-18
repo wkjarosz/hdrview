@@ -1,73 +1,70 @@
-//
-// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can
-// be found in the LICENSE.txt file.
-//
+/** \file hdrview.cpp
+    \author Wojciech Jarosz
+*/
 
-#include "common.h"
-#include "hdrviewscreen.h"
-#include "json.h"
-#include <CLI/CLI.hpp>
-
-#ifdef __APPLE__
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-#endif
-
+#include "app.h"
 #include "cliformatter.h"
-#include <cstdlib>
-#include <iostream>
-#include <nlohmann/json.hpp>
-#include <spdlog/fmt/ostr.h>
+#include "imgui_ext.h"
+#include "version.h"
+#include <CLI/CLI.hpp>
+#include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
-using namespace std;
-using json = nlohmann::json;
-
-static HDRViewScreen *g_screen = nullptr;
-
-// Force usage of discrete GPU on laptops
-NANOGUI_FORCE_DISCRETE_GPU();
-
-void write_settings()
-{
-    if (g_screen)
-    {
-        g_screen->write_settings();
-    }
-}
+#ifdef _WIN32
+#include <shellapi.h>
+#include <windows.h>
+#endif
 
 int main(int argc, char **argv)
 {
-    // vector<string>             arg_vector = {argv + 1, argv + argc};
+#ifdef _WIN32
+    // Manually get the command line arguments, since we are not compiling in console mode
+    LPWSTR    cmd_line = GetCommandLineW();
+    wchar_t **win_argv = CommandLineToArgvW(cmd_line, &argc);
+
+    std::vector<std::string> args;
+    args.reserve(static_cast<std::size_t>(argc) - 1U);
+    for (auto i = static_cast<std::size_t>(argc) - 1U; i > 0U; --i) args.emplace_back(CLI::narrow(win_argv[i]));
+
+    // This will enable console output if the app was started from a console. No extra console window is created if the
+    // app was started any other way.
+    bool consoleAvailable = AttachConsole(ATTACH_PARENT_PROCESS);
+
+#ifndef NDEBUG
+    // In Debug mode we create a console even if launched from within, e.g., Visual Studio
+    bool customConsole = false;
+    if (!consoleAvailable)
+    {
+        consoleAvailable = AllocConsole();
+        customConsole    = consoleAvailable;
+    }
+#endif
+
+    FILE *con_out = nullptr, *con_err = nullptr, *con_in = nullptr;
+    if (consoleAvailable)
+    {
+        freopen_s(&con_out, "CONOUT$", "w", stdout);
+        freopen_s(&con_err, "CONOUT$", "w", stderr);
+        freopen_s(&con_in, "CONIN$", "r", stdin);
+        std::cout.clear();
+        std::clog.clear();
+        std::cerr.clear();
+        std::cin.clear();
+    }
+#endif
+
     constexpr int default_verbosity = spdlog::level::info;
     int           verbosity         = default_verbosity;
 
-    float gamma = 2.2f, exposure = 0.0f;
-    bool  dither = true, sRGB = true, sdr = false;
+    float exposure = 0.0f, gamma = 2.2f;
+    bool  dither = true, sRGB = true, force_sdr = false;
 
     vector<string> in_files;
 
     try
     {
-
-        // #if defined(__APPLE__)
-        //         bool launched_from_finder = false;
-        //         // check whether -psn is set, and remove it from the arguments
-        //         for (vector<string>::iterator i = arg_vector.begin(); i != arg_vector.end(); ++i)
-        //         {
-        //             if (strncmp("-psn", i->c_str(), 4) == 0)
-        //             {
-        //                 launched_from_finder = true;
-        //                 arg_vector.erase(i);
-        //                 break;
-        //             }
-        //         }
-        // #endif
-
-        string version_string = fmt::format("HDRView {}. (built using {} backend on {})", hdrview_version(),
-                                            HDRVIEW_BACKEND, hdrview_build_timestamp());
+        string version_string =
+            fmt::format("HDRView {}. (built using {} backend on {})", version(), backend(), build_timestamp());
 
         CLI::App app{
             R"(HDRView is a simple research-oriented tool for examining,
@@ -96,7 +93,7 @@ sRGB curve is used if gamma is not specified.)")
                      "Enable/disable dithering when converting to LDR\n[default: on].")
             ->group("Tone mapping and display");
 
-        app.add_flag("--sdr", sdr, "Force standard dynamic range (8-bit per channel) display.")
+        app.add_flag("--sdr", force_sdr, "Force standard dynamic range (8-bit per channel) display.")
             ->group("Tone mapping and display");
 
         app.add_option("-v,--verbosity", verbosity,
@@ -120,21 +117,37 @@ The default is 2 (info).)")
 
         app.set_help_flag("-h, --help", "Print this help message and exit.")->group("Misc");
 
-        app.add_option("IMAGES", in_files, "The images files to load.")
+        app.add_option("IMAGES", in_files, "The image files to load.")
             ->check(CLI::ExistingPath)
             ->option_text("PATH(existing) ...");
 
-        // Console logger with color
-        spdlog::set_pattern("%^[%l]%$ %v");
-        spdlog::set_level(spdlog::level::level_enum(default_verbosity));
+        spdlog::set_pattern("%^[%T | %5l]: %$%v");
+        spdlog::set_level(spdlog::level::trace);
+        spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
+        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
+        if (argc > 1)
+        {
+            spdlog::trace("Launching with command line arguments:");
+            for (int i = 1; i < argc; ++i)
+#ifdef _WIN32
+                spdlog::trace("\t" + string(CLI::narrow(win_argv[i])));
+#else
+                spdlog::trace("\t" + string(argv[i]));
+#endif
+        }
+        else
+            spdlog::trace("Launching HDRView with no command line arguments.");
+
+#ifdef _WIN32
+        CLI11_PARSE(app, argc, win_argv);
+#else
         CLI11_PARSE(app, argc, argv);
+#endif
 
-        auto settings = read_settings();
-        if (!app.count("--verbosity"))
-            verbosity = settings.value("verbosity", default_verbosity);
-
+        // spdlog::default_logger()->set_level(spdlog::level::level_enum(verbosity));
         spdlog::set_level(spdlog::level::level_enum(verbosity));
+        ImGui::GlobalSpdLogWindow().sink()->set_level(spdlog::level::level_enum(verbosity));
 
         spdlog::info("Welcome to HDRView!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
@@ -152,57 +165,9 @@ The default is 2 (info).)")
         // dithering
         spdlog::info("{}", (dither) ? "Dithering" : "Not dithering");
 
-        settings["image view"]["exposure"]  = exposure;
-        settings["image view"]["gamma"]     = gamma;
-        settings["image view"]["sRGB"]      = sRGB;
-        settings["image view"]["dithering"] = dither;
+        init_hdrview(exposure, gamma, sRGB, dither, force_sdr, in_files);
 
-        auto [capability_10bit, capability_EDR] = nanogui::test_10bit_edr_support();
-        if (sdr)
-        {
-            capability_10bit = false;
-            capability_EDR   = false;
-        }
-        spdlog::info("Launching GUI with {} bit color and {} display support.", capability_10bit ? 10 : 8,
-                     capability_EDR ? "EDR" : "SDR");
-        nanogui::init();
-
-        // #if defined(__APPLE__)
-        //         if (launched_from_finder)
-        //             nanogui::chdir_to_bundle_parent();
-        // #endif
-
-        {
-#ifdef __APPLE__
-            // This code adapted from tev:
-            // On macOS, the mechanism for opening an application passes filenames
-            // through the NS api rather than CLI arguments, which means we need
-            // special handling of these through GLFW.
-            // There are two components to this special handling:
-
-            // 1. The filenames that were passed to this application when it was opened.
-            if (in_files.empty())
-            {
-                // If we didn't get any command line arguments for files to open,
-                // then, on macOS, they might have been supplied through the NS api.
-                const char *const *opened_files = glfwGetOpenedFilenames();
-                if (opened_files)
-                {
-                    for (auto p = opened_files; *p; ++p) { in_files.push_back(string(*p)); }
-                }
-            }
-
-            // 2. a callback for when the same application is opened additional
-            //    times with more files.
-            glfwSetOpenedFilenamesCallback([](const char *image_file) { g_screen->drop_event({string(image_file)}); });
-#endif
-            g_screen = new HDRViewScreen(capability_10bit, capability_EDR, settings, in_files);
-            g_screen->draw_all();
-            g_screen->set_visible(true);
-            nanogui::mainloop(-1.f);
-            write_settings();
-        }
-        nanogui::shutdown();
+        hdrview()->run();
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)
     catch (const spdlog::spdlog_ex &e)
@@ -216,6 +181,20 @@ The default is 2 (info).)")
         // fprintf(stderr, "%s", USAGE);
         exit(EXIT_FAILURE);
     }
+
+#ifdef _WIN32
+    if (consoleAvailable)
+    {
+#ifndef NDEBUG
+        if (customConsole)
+            FreeConsole();
+#endif
+
+        fclose(con_out);
+        fclose(con_err);
+        fclose(con_in);
+    }
+#endif
 
     return EXIT_SUCCESS;
 }

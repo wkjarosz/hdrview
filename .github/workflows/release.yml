@@ -1,4 +1,4 @@
-name: Publish to releases
+name: Publish to releases and github.io website
 
 on:
   push:
@@ -13,95 +13,62 @@ env:
   CPM_SOURCE_CACHE: ${{ github.workspace }}/cpm_modules
 
 jobs:
-  build_macos_metal:
-    name: Build on macOS (Metal backend)
-    runs-on: macos-latest
+  build_macos:
+    name: Build on macOS
+    runs-on: macos-14
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg
+        run: brew install ninja create-dmg dylibbundler
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
 
+      # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
+          key: macos-release
 
-      - name: Configure CMake (Metal backend)
-        run: cmake -B ${{github.workspace}}/build-metal -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DNANOGUI_BACKEND=Metal
-
-      - name: Build (Metal backend)
-        run: cmake --build ${{github.workspace}}/build-metal --parallel --config ${{env.BUILD_TYPE}}
-
-      - name: Checking that HDRView and hdrbatch run
+      - name: Configure CMake
         run: |
-          ${{github.workspace}}/build-metal/hdrbatch --help
-          ${{github.workspace}}/build-metal/HDRView.app/Contents/MacOS/HDRView --help
+          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+
+      # -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{env.BUILD_TYPE}}
+
+      - name: Checking that HDRView runs
+        run: |
+          ${{github.workspace}}/build/HDRView.app/Contents/MacOS/HDRView --help
+
+      - name: Bundle dependencies
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/HDRView.app/Contents/libs/
 
       - name: Creating dmg
         run: |
-          RESULT="${{github.workspace}}/build-metal/HDRView-Metal.dmg"
+          RESULT="${{github.workspace}}/build/HDRView.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-metal/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-macos-14
+          path: |
+            ${{github.workspace}}/build
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: ${{github.workspace}}/build-metal/HDRView-Metal.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build_macos_opengl:
-    name: Build on macOS (OpenGL backend)
-    runs-on: macos-latest
-
-    steps:
-      - name: Install dependencies
-        run: brew install ninja create-dmg
-
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - uses: actions/cache@v3
-        with:
-          path: "**/cpm_modules"
-          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
-
-      - name: Configure CMake (OpenGL backend)
-        run: cmake -B ${{github.workspace}}/build-opengl -G Ninja -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DNANOGUI_BACKEND=OpenGL
-
-      - name: Build (OpenGL backend)
-        run: cmake --build ${{github.workspace}}/build-opengl --parallel --config ${{env.BUILD_TYPE}}
-
-      - name: Checking that HDRView and hdrbatch run
-        run: |
-          ${{github.workspace}}/build-opengl/hdrbatch --help
-          ${{github.workspace}}/build-opengl/HDRView.app/Contents/MacOS/HDRView --help
-
-      - name: Creating dmg
-        run: |
-          RESULT="${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg"
-          test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build-opengl/HDRView.app
-
-      - name: Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ${{github.workspace}}/build-opengl/HDRView-OpenGL.dmg
+          files: ${{github.workspace}}/build/HDRView.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -110,37 +77,85 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Fetch newer Windows SDK
-        uses: fbactions/setup-winsdk@v1.3.0
-        with:
-          winsdk-build-version: 19041
-
-      - name: Get WSL
-        uses: Vampire/setup-wsl@v1.3.2
-
-      - name: Setup MSBuild.exe
-        uses: microsoft/setup-msbuild@v1.1
 
       - name: Configure CMake
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
 
-      - name: Checking that HDRView and hdrbatch run
+      - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe --help
-          ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe --help
+          "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe --help"
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-windows-latest
+          path: |
+            "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe"
 
       - name: Release
-        uses: softprops/action-gh-release@v0.1.13
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/hdrbatch.exe
+            ${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_emscripten:
+    name: Build and deploy emscripten webapp
+    runs-on: macos-14
+
+    steps:
+      - name: Install dependencies
+        run: |
+          brew install ninja emscripten
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v4
+        with:
+          path: "**/cpm_modules"
+          key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
+
+      # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+
+      - name: Create Build Environment
+        run: cmake -E make_directory ${{github.workspace}}/build
+
+      # emcmake cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      - name: Configure CMake
+        run: |
+          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --parallel 4
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-emscripten
+          path: |
+            ${{github.workspace}}/build
+
+      - name: Copy web app
+        working-directory: ${{github.workspace}}/build
+        run: |
+          mkdir deploy
+          cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png coi-serviceworker.js FileSaver.js deploy/
+          mv deploy/HDRView.html deploy/index.html
+
+      - name: Publish
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ${{github.workspace}}/build/deploy

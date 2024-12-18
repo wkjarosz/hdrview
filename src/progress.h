@@ -69,25 +69,27 @@ public:
 using AtomicFixed16 = AtomicFixed<std::int16_t, std::int32_t, 8>;
 using AtomicFixed32 = AtomicFixed<std::int32_t, std::int64_t, 16>;
 
-/*!
- * Helper object to manage the progress display.
- * 	{
- *   	AtomicProgress p1(true);
- *   	p1.set_num_steps(10);
- *   	for (int i = 0; i < 10; ++i, ++p1)
- *   	{
- *     		// do something
- *   	}
- * 	} // end progress p1
- *
+/**
+    Helper object to manage the progress display.
+
+    \code{.cpp}
+    {
+        AtomicProgress p1(true);
+        p1.set_num_steps(10);
+        for (int i = 0; i < 10; ++i, ++p1)
+        {
+                // do something
+        }
+    } // end progress p1
+    \endcode
  */
 class AtomicProgress
 {
 public:
     using AtomicPercent32 = AtomicFixed<std::int32_t, std::int64_t, 30>;
 
-    explicit AtomicProgress(bool createState = false, float totalPercentage = 1.f);
-    AtomicProgress(const AtomicProgress &parent, float percentageOfParent = 1.f);
+    explicit AtomicProgress(bool create_state = false, float total_percentage = 1.f);
+    AtomicProgress(float percentage_of_parent, const AtomicProgress &parent);
 
     // access to the atomic internal storage
     void  reset_progress(float p = 0.f);
@@ -97,9 +99,11 @@ public:
     bool  canceled() const;
     void  cancel();
 
+    bool has_state() const { return (bool)m_state; }
+
     // access to the discrete stepping
     void            set_available_percent(float percent);
-    void            set_num_steps(int numSteps);
+    void            set_num_steps(int num_steps);
     AtomicProgress &operator+=(int steps);
     AtomicProgress &operator++() { return ((*this) += 1); }
 

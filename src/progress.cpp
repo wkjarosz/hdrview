@@ -7,24 +7,15 @@
 #include "progress.h"
 #include <iostream>
 
-AtomicProgress::AtomicProgress(bool createState, float totalPercentage) :
-    m_num_steps(1), m_percentage_of_parent(totalPercentage),
-    m_step_percent(m_num_steps == 0 ? totalPercentage : totalPercentage / m_num_steps),
-    m_state(createState ? std::make_shared<State>() : nullptr)
+AtomicProgress::AtomicProgress(bool create_state, float total_percentage) :
+    m_num_steps(1), m_percentage_of_parent(total_percentage),
+    m_step_percent(m_num_steps == 0 ? total_percentage : total_percentage / m_num_steps),
+    m_state(create_state ? std::make_shared<State>() : nullptr)
 {
 }
-//
-// AtomicProgress::AtomicProgress(AtomicPercent32 * state, float totalPercentage) :
-//	m_num_steps(1),
-//	m_percentage_of_parent(totalPercentagße),
-//	m_step_percent(m_num_steps == 0 ? totalPercentage : totalPercentage / m_num_steps),
-//	m_state(state), m_isStateOwner(false)
-//{
-//
-//}
 
-AtomicProgress::AtomicProgress(const AtomicProgress &parent, float percentageOfParent) :
-    m_num_steps(1), m_percentage_of_parent(parent.m_percentage_of_parent * percentageOfParent),
+AtomicProgress::AtomicProgress(float percentage_of_parent, const AtomicProgress &parent) :
+    m_num_steps(1), m_percentage_of_parent(parent.m_percentage_of_parent * percentage_of_parent),
     m_step_percent(m_num_steps == 0 ? m_percentage_of_parent : m_percentage_of_parent / m_num_steps),
     m_state(parent.m_state)
 {

@@ -7,24 +7,25 @@
 #pragma once
 
 #if defined(_MSC_VER)
-// Make MS cmath define M_PI
+// Make MS cmath define M_PI but not the min/max macros
 #define _USE_MATH_DEFINES
+#define NOMINMAX
 #endif
 
 #include "fwd.h"
 #include <algorithm>
-#include <cmath>
-#include <memory>
 #include <string>
 #include <vector>
 
-// Also define control key for windows/mac/linux
-#if defined(__APPLE__) || defined(DOXYGEN_DOCUMENTATION_BUILD)
-/// If on OSX, maps to ``GLFW_MOD_CONTROL``.  Otherwise, maps to ``GLFW_MOD_SUPER``.
-#define SYSTEM_CONTROL_MOD GLFW_MOD_CONTROL
-#else
-#define SYSTEM_CONTROL_MOD GLFW_MOD_SUPER
-#endif
+// #include <fmt/core.h>
+#include <fmt/color.h>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+#include <spdlog/spdlog.h>
+
+#define MY_ASSERT(cond, description, ...)                                                                              \
+    if (!(cond))                                                                                                       \
+        throw std::runtime_error{fmt::format(description, ##__VA_ARGS__)};
 
 template <typename T>
 inline T sqr(T x)
@@ -70,6 +71,15 @@ std::vector<T> linspaced(size_t num, T a, T b)
     return retVal;
 }
 
+template <size_t Num, typename T>
+std::array<T, Num> linspaced(T a, T b)
+{
+    std::array<T, Num> ret;
+    for (size_t i = 0; i < Num; ++i) ret[i] = lerp(a, b, T(i) / (Num - 1));
+
+    return ret;
+}
+
 /*!
  * @brief Inverse linear interpolation.
  *
@@ -100,7 +110,7 @@ inline T lerp_factor(T a, T b, T m)
 template <typename T>
 inline T smoothstep(T a, T b, T x)
 {
-    T t = std::clamp(lerp_factor(a, b, x), T(0), T(1));
+    T t = clamp01(lerp_factor(a, b, x));
     return t * t * (T(3) - T(2) * t);
 }
 
@@ -244,83 +254,81 @@ inline T mod(T a, T b)
 }
 
 template <typename T>
-inline T log_scale(T val)
-{
-    static const T eps    = T(0.001);
-    static const T logeps = std::log(eps);
-
-    return val > 0 ? (std::log(val + eps) - logeps) : -(std::log(-val + eps) - logeps);
-}
-
-template <typename T>
-inline T normalized_log_scale(T val, T minLog, T diffLog)
-{
-    return (log_scale(val) - minLog) / diffLog;
-}
-
-template <typename T>
-inline T normalized_log_scale(T val)
-{
-    static const T minLog  = log_scale(T(0));
-    static const T diffLog = log_scale(T(1)) - minLog;
-    return normalized_log_scale(val, minLog, diffLog);
-}
-
-template <typename T>
 inline T square(T value)
 {
     return value * value;
 }
 
+bool        starts_with(const std::string &s, const std::string &prefix);
+bool        ends_with(const std::string &s, const std::string &suffix);
 std::string get_extension(const std::string &filename);
 std::string get_basename(const std::string &filename);
-
+std::string to_lower(std::string str);
+std::string to_upper(std::string str);
+/// Run func on each line of the input string
+void process_lines(std::string_view input, std::function<void(std::string_view &)> op);
+/// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true
+std::string                     indent(std::string_view input, bool also_indent_first = false, int amount = 2);
+std::string                     add_line_numbers(std::string_view input);
 const std::vector<std::string> &channel_names();
 const std::vector<std::string> &blend_mode_names();
 std::string                     channel_to_string(EChannel channel);
 std::string                     blend_mode_to_string(EBlendMode mode);
 
-inline int code_point_length(char first)
+/**
+    @brief Finds the index of the next element matching a given criterion in a vector.
+
+    This function searches for the next element in the vector that matches the criterion
+    starting from the current index and proceeding in the specified direction.
+    If no matching element is found after the current index, the search wraps around to the
+    beginning or end of the vector based on the specified direction.
+    The function stops at the current index if no matching element is found.
+
+    \tparam T The type of elements in the vector.
+    \param vec The vector to search in.
+    \param current_index The index to start the search from.
+    \param criterion The function object that returns true if an index-element pair matches the criterion.
+        The function should take two parameters: the index of the element and a const reference to the element.
+    \param direction The direction in which to search for the next matching element.
+    \return size_t The index of the next matching element if found, or current_index if not found.
+*/
+
+template <typename T, typename UnaryPredicate>
+size_t next_matching_index(const std::vector<T> &vec, size_t current_index, UnaryPredicate criterion,
+                           EDirection direction = Forward)
 {
-    if ((first & 0xf8) == 0xf0)
-        return 4;
-    else if ((first & 0xf0) == 0xe0)
-        return 3;
-    else if ((first & 0xe0) == 0xc0)
-        return 2;
-    else
-        return 1;
+    if (vec.empty())
+        return current_index; // Return current index if vector is empty
+
+    size_t size = vec.size();
+    size_t index_increment =
+        (direction == EDirection::Forward) ? 1 : (size - 1); // Increment/decrement based on direction
+
+    for (size_t i = (current_index + index_increment) % size; i != current_index; i = (i + index_increment) % size)
+        if (criterion(i, vec[i]))
+            return i; // Found the next matching element
+
+    return current_index; // Nothing matched, return current index
 }
 
-//! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
-//! range that is unique across the strings
-std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
+/**
+    Finds the index of the nth element matching a given criterion in a vector.
 
-std::vector<std::string> split(std::string text, const std::string &delim);
-std::string              to_lower(std::string str);
-std::string              to_upper(std::string str);
-bool                     matches(std::string text, std::string filter, bool is_regex);
+    \tparam T The type of elements in the vector.
+    \param vec The vector to search in.
+    \param n The index of the element to find.
+    \param criterion The function object that returns true if an index-element pair matches the criterion.
+        The function should take two parameters: the index of the element and a const reference to the element.
+    \return size_t The index of the nth matching element if found, or vec.size() if not found.
+*/
+template <typename T, typename UnaryPredicate>
+size_t nth_matching_index(const std::vector<T> &vec, size_t n, UnaryPredicate criterion)
+{
+    size_t match_count = 0;
+    for (size_t i = 0; i < vec.size(); ++i)
+        if (criterion(i, vec[i]))
+            if (match_count++ == n)
+                return i; // Found the nth matching element
 
-/// Access binary data stored in hdrview_resources.cpp
-#define HDRVIEW_RESOURCE_STRING(name) std::string(name, name + name##_size)
-
-/// Access a shader stored in hdrview_resources.cpp
-#if defined(NANOGUI_USE_OPENGL)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gl)
-#define HDRVIEW_BACKEND      "OpenGL"
-#elif defined(NANOGUI_USE_GLES)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_gles)
-#define HDRVIEW_BACKEND      "OpenGL ES"
-#elif defined(NANOGUI_USE_METAL)
-#define HDRVIEW_SHADER(name) HDRVIEW_RESOURCE_STRING(name##_metallib)
-#define HDRVIEW_BACKEND      "Metal"
-#endif
-
-int         hdrview_version_major();
-int         hdrview_version_minor();
-int         hdrview_version_patch();
-std::string hdrview_version();
-std::string hdrview_git_hash();
-std::string hdrview_git_describe();
-std::string hdrview_build_timestamp();
-std::string config_directory();
+    return vec.size(); // Return vec.size() if the nth matching element is not found
+}

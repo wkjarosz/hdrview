@@ -1,11 +1,8 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "${CMAKE_SOURCE_DIR}/resources")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
-
-string(TIMESTAMP BUILD_TIME "%Y-%m-%d %H:%M")
-message(STATUS "Saving build timestamp: ${BUILD_TIME}")
 
 version_from_git(LOG ON TIMESTAMP "%Y-%m-%d-%H:%M:%S")
 
@@ -14,17 +11,15 @@ project(
   DESCRIPTION
     "A simple research-oriented image viewer with an emphasis on examining and comparing high-dynamic range (HDR) images."
   VERSION ${VERSION}
-  LANGUAGES C CXX)
+  LANGUAGES C CXX
+)
 
-set(HDRVIEW_VERSION "${GIT_DESCRIBE}")
-
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-  set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (64 bit)")
-elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
-  set(HDRVIEW_VERSION "${HDRVIEW_VERSION} (32 bit)")
-endif()
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/common.cpp.in ${CMAKE_CURRENT_BINARY_DIR}/common.cpp @ONLY)
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
+  COMMAND ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
+          CMAKE_SIZEOF_VOID_P=${CMAKE_SIZEOF_VOID_P} -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
+  COMMENT "Generating git version file"
+)
 
 include(sanitizers)
 
@@ -32,16 +27,19 @@ include(sanitizers)
 # versions.
 set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 
-set(USE_IWYU OFF CACHE BOOL "INCLUDE WHAT YOU USE")
-
-include(CheckCXXCompilerFlag)
-
 # ============================================================================
 # Set a default build configuration (Release)
 # ============================================================================
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  message(STATUS "Setting build type to 'Release' as none was specified.")
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  set(DEFAULT_BUILD_TYPE Release)
+  if(EMSCRIPTEN)
+    set(DEFAULT_BUILD_TYPE MinSizeRel)
+  endif()
+  message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as none was specified.")
+  set(CMAKE_BUILD_TYPE
+      ${DEFAULT_BUILD_TYPE}
+      CACHE STRING "Choose the type of build." FORCE
+  )
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 string(TOUPPER "${CMAKE_BUILD_TYPE}" U_CMAKE_BUILD_TYPE)
@@ -53,26 +51,10 @@ if(CMAKE_GENERATOR MATCHES "Visual Studio")
   set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 endif()
 
-if(APPLE)
-  set(CMAKE_MACOSX_RPATH ON)
-endif()
-
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  if("cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-    message(STATUS "Using C++17 standard")
-    set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use")
-  elseif("cxx_std_14" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-    message(STATUS "Using C++14 standard")
-    set(CMAKE_CXX_STANDARD 14 CACHE STRING "The C++ standard to use")
-  elseif("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-    message(STATUS "Using C++11 standard")
-    set(CMAKE_CXX_STANDARD 11 CACHE STRING "The C++ standard to use")
-  else()
-    message(FATAL_ERROR "Unsupported compiler -- HDRView requires at least C++11!")
-  endif()
-
   # Prefer libc++ in conjunction with Clang
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("-stdlib=libc++" HAS_LIBCPP)
     if(HAS_LIBCPP)
       set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
@@ -82,7 +64,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     else()
       message(
         WARNING
-          "libc++ is recommended in conjunction with clang. Please insteall the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu."
+          "libc++ is recommended in conjunction with clang. Please install the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu."
       )
     endif()
   endif()
@@ -128,7 +110,8 @@ if(MSVC)
       CMAKE_C_FLAGS_DEBUG
       CMAKE_C_FLAGS_RELEASE
       CMAKE_C_FLAGS_MINSIZEREL
-      CMAKE_C_FLAGS_RELWITHDEBINFO)
+      CMAKE_C_FLAGS_RELWITHDEBINFO
+  )
   foreach(CompilerFlag ${CompilerFlags})
     string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
   endforeach()
@@ -141,105 +124,232 @@ endif()
 # ============================================================================
 include(cmake/CPM.cmake)
 
-cpmaddpackage("gh:wkjarosz/filesystem#5e0eb2a6160201de38d076c085641742ee86a8f6")
-if(filesystem_ADDED)
-  add_library(filesystem INTERFACE IMPORTED)
-  target_include_directories(filesystem INTERFACE "${filesystem_SOURCE_DIR}")
+if(APPLE AND NOT EMSCRIPTEN)
+  # default to GLFW+Metal on macOS
+  set(HELLOIMGUI_HAS_METAL ON)
+
+  set(HELLOIMGUI_USE_GLFW3 ON)
+
+  # on macOS, download a fork of glfw that allows dragging files onto app icon.
+
+  # need to enable OBJC language for the custom glfw fork
+  enable_language(OBJC)
+  set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
+  CPMAddPackage(
+    NAME glfw
+    GITHUB_REPOSITORY Tom94/glfw
+    GIT_TAG 71eb7036b47e2733c2f7b4c0010e2ce62557009d
+    OPTIONS "GLFW_BUILD_EXAMPLES OFF"
+            "GLFW_BUILD_TESTS OFF"
+            "GLFW_BUILD_DOCS OFF"
+            "GLFW_BUILD_INSTALL OFF"
+            "GLFW_INSTALL OFF"
+            "GLFW_USE_CHDIR OFF"
+            "BUILD_SHARED_LIBS OFF"
+  )
+
+  if(glfw_ADDED)
+    message(STATUS "Using custom fork of glfw on macOS")
+
+    mark_as_advanced(
+      GLFW_BUILD_DOCS
+      GLFW_BUILD_EXAMPLES
+      GLFW_BUILD_INSTALL
+      GLFW_BUILD_TESTS
+      GLFW_DOCUMENT_INTERNALS
+      GLFW_INSTALL
+      GLFW_USE_CHDIR
+      GLFW_USE_MENUBAR
+      GLFW_USE_OSMESA
+      GLFW_VULKAN_STATIC
+      GLFW_USE_RETINA
+      GLFW_USE_MIR
+    )
+  endif()
 endif()
 
-cpmaddpackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+# copy asset directory to the build tree file
+file(
+  GLOB_RECURSE MY_RESOURCE_FILES
+  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} # CONFIGURE_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.*
+)
+
+if(APPLE AND HELLOIMGUI_HAS_METAL)
+
+  # ~~~
+  # # Precompile .metal shaders to .metallib files
+  # # exclude metal files from the copy (we will compile them to metallib files below)
+  # list(FILTER MY_RESOURCE_FILES EXCLUDE REGEX ".*\\.metal$")
+  # # Glob up metal shaders
+  # file(
+  #   GLOB_RECURSE metal_shaders
+  #   RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+  #   ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.metal
+  # )
+  # foreach(shader ${metal_shaders})
+  #   set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/${shader}")
+  #   set(shader_lib "${CMAKE_CURRENT_BINARY_DIR}/${shader}lib")
+  #   # message(STATUS "Compiling Metal shader \"${shader_source}\" to MLTB library \"${shader_lib}\".")
+  #   add_custom_command(
+  #     OUTPUT ${shader_lib}
+  #     DEPENDS ${shader_source}
+  #     COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3 "${shader_source}" -o "${shader_lib}"
+  #     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  #     COMMENT "Compiling Metal shader \"${shader}\" to MLTB library \"${shader}lib\"."
+  #     VERBATIM
+  #   )
+  #   set_property(
+  #     SOURCE src/app.cpp
+  #     APPEND
+  #     PROPERTY OBJECT_DEPENDS ${shader_lib}
+  #   )
+  #   list(APPEND EXTRA_SOURCES ${shader_lib})
+  # endforeach()
+  # ~~~
+
+  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
+endif()
+
+foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/${MY_RESOURCE_FILE} ${CMAKE_CURRENT_BINARY_DIR}/${MY_RESOURCE_FILE} COPYONLY
+  )
+endforeach()
+
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
+set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
+
+CPMAddPackage(
+  NAME imgui_bundle
+  GITHUB_REPOSITORY pthom/imgui_bundle
+  GIT_TAG v1.6.0
+  OPTIONS "IMGUI_BUNDLE_WITH_TEST_ENGINE OFF"
+          "IMGUI_BUNDLE_DISABLE_NANOVG ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUI_TEX_INSPECT ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUIZMO ON"
+          "IMGUI_BUNDLE_DISABLE_IMFILEDIALOG ON"
+          "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
+          # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
+          "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
+)
+if(imgui_bundle_ADDED)
+  message(STATUS "imgui_bundle library added")
+  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    add_compile_options(-pthread)
+  endif()
+endif()
+
+CPMAddPackage(
+  NAME my_imgui_command_palette
+  GITHUB_REPOSITORY wkjarosz/imgui-command-palette
+  GIT_TAG 826cd9a8802b52d190568dd10ca29a17be3320ab
+  DOWNLOAD_ONLY YES
+)
+
+# CPMAddPackage("gh:wkjarosz/imgui-command-palette#66124ae045c11eb153c9c3f184b1e12f4d5a0e7b")
+if(my_imgui_command_palette_ADDED)
+  message(STATUS "imgui-command-palette library added")
+  add_library(
+    my_imgui_command_palette
+    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.h"
+    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_command_palette.cpp"
+    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.h"
+    "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
+  )
+  target_compile_features(my_imgui_command_palette PUBLIC cxx_std_11)
+  target_include_directories(my_imgui_command_palette PUBLIC . ${my_imgui_command_palette_SOURCE_DIR})
+  target_link_libraries(my_imgui_command_palette PUBLIC imgui)
+endif()
+
+# CPMAddPackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee") if(hello_imgui_ADDED) message(STATUS
+# "hello_imgui library added") endif()
+
+CPMAddPackage("gh:sgorsten/linalg@2.2")
+if(linalg_ADDED)
+  message(STATUS "linalg library added")
+  add_library(linalg INTERFACE IMPORTED)
+  target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
+endif()
+
+CPMAddPackage("gh:fmtlib/fmt#11.0.2")
+if(fmt_ADDED)
+  message(STATUS "fmt library added")
+endif()
+
+CPMAddPackage(
+  NAME spdlog
+  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.15.0.zip
+  OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
+          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+)
+if(spdlog_ADDED)
+  message(STATUS "spdlog library added")
+endif()
+
+CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
 if(stb_ADDED)
+  message(STATUS "stb library added")
   add_library(stb INTERFACE IMPORTED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
-cpmaddpackage("gh:cxong/tinydir#9f866c1ec09e62aa4df50d7209556ed705a4dd90")
-if(tinydir_ADDED)
-  add_library(tinydir INTERFACE IMPORTED)
-  target_include_directories(tinydir INTERFACE "${tinydir_SOURCE_DIR}")
+CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
+if(emscripten-browser-file_ADDED)
+  message(STATUS "emscripten-browser-file library added")
+  add_library(emscripten-browser-file INTERFACE IMPORTED)
+  target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
 endif()
 
-cpmaddpackage(
-  NAME
-  nlohmann_json
-  VERSION
-  3.9.1 # the git repo is incredibly large, so we download the archived include directory
-  URL
-  https://github.com/nlohmann/json/releases/download/v3.9.1/include.zip
-  URL_HASH
-  SHA256=6bea5877b1541d353bd77bdfbdb2696333ae5ed8f9e8cc22df657192218cad91
-  OPTIONS
-  "JSON_MultipleHeaders ON")
-if(nlohmann_json_ADDED)
-  add_library(nlohmann_json INTERFACE IMPORTED)
-  target_include_directories(nlohmann_json INTERFACE ${nlohmann_json_SOURCE_DIR}/include)
+# # this is part of Dear ImGui Bundle, so no need to add it separately
+# CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+# if(portable-file-dialogs_ADDED) message(STATUS "portable-file-dialogs library added")
+# add_library(portable-file-dialogs INTERFACE IMPORTED) target_include_directories(portable-file-dialogs INTERFACE
+# "${portable-file-dialogs_SOURCE_DIR}") endif()
+
+CPMAddPackage(
+  NAME Imath
+  VERSION 3.1.6 # the git repo is incredibly large, so we download the archived include directory
+  URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
+  OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "EXCLUDE_FROM_ALL YES"
+)
+
+if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+  set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
+else()
+  set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING ON")
 endif()
 
-cpmaddpackage("gh:syoyo/tinydng#96eea08c8ff4b18cae2f10028acc1dcda76873a6")
-if(tinydng_ADDED)
-  add_library(tinydng INTERFACE IMPORTED)
-  target_include_directories(tinydng INTERFACE "${tinydng_SOURCE_DIR}")
+CPMAddPackage(
+  NAME openexr
+  GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
+  GIT_TAG 71bffa3d7d89e46a37108732f5e63d554c10e018
+  OPTIONS "OPENEXR_BUILD_TOOLS OFF" "BUILD_SHARED_LIBS OFF" "OPENEXR_INSTALL_EXAMPLES OFF" "BUILD_TESTING OFF"
+          "EXCLUDE_FROM_ALL YES" ${OPENEXR_THREADING_OPTIONS}
+)
+if(openexr_ADDED)
+  message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
 endif()
 
-cpmaddpackage(NAME platform_folders GITHUB_REPOSITORY sago007/PlatformFolders GIT_TAG 4.2.0)
-if(platform_folders_ADDED)
-  target_include_directories(platform_folders INTERFACE "${platform_folders_SOURCE_DIR}")
-endif()
+# # this is part of Dear ImGui Bundle, so no need to add it separately
+# CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
+# library added")
 
-cpmaddpackage(NAME cli11 URL https://github.com/CLIUtils/CLI11/archive/v2.2.0.zip DOWNLOAD_ONLY YES)
+# # implot has no CMake support, so we create our own target set( implot STATIC ${implot_SOURCE_DIR}/implot.h #
+# ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) #
+# target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
+# 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
+# ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
+
+CPMAddPackage(
+  NAME cli11
+  URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
+  DOWNLOAD_ONLY YES
+)
 if(cli11_ADDED)
+  message(STATUS "CLI11 library added")
   add_library(cli11 INTERFACE IMPORTED)
   target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
-endif()
-
-cpmaddpackage("gh:gabime/spdlog@1.9.2")
-
-cpmaddpackage(
-  NAME
-  Imath
-  VERSION
-  3.1.6 # the git repo is incredibly large, so we download the archived include directory
-  URL
-  https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.6.zip
-  OPTIONS
-  "BUILD_SHARED_LIBS OFF"
-  "BUILD_TESTING OFF"
-  "EXCLUDE_FROM_ALL YES")
-
-cpmaddpackage(
-  NAME
-  openexr
-  GITHUB_REPOSITORY
-  AcademySoftwareFoundation/openexr
-  GIT_TAG
-  71bffa3d7d89e46a37108732f5e63d554c10e018
-  OPTIONS
-  "OPENEXR_BUILD_TOOLS OFF"
-  "BUILD_SHARED_LIBS OFF"
-  "OPENEXR_INSTALL_EXAMPLES OFF"
-  "BUILD_TESTING OFF"
-  "EXCLUDE_FROM_ALL YES")
-
-cpmaddpackage(
-  NAME
-  nanogui
-  GITHUB_REPOSITORY
-  Tom94/nanogui-1
-  GIT_TAG
-  cf8baf7c2a02a0e8443379a6b80f6709139f84a0
-  OPTIONS
-  "NANOGUI_BUILD_EXAMPLES OFF"
-  "NANOGUI_BUILD_SHARED OFF"
-  "NANOGUI_BUILD_PYTHON OFF"
-  "NANOGUI_INSTALL OFF"
-  "EXCLUDE_FROM_ALL YES")
-if(nanogui_ADDED)
-  add_library(nanogui::nanogui INTERFACE IMPORTED)
-  target_include_directories(
-    nanogui::nanogui SYSTEM INTERFACE ${nanogui_SOURCE_DIR}/ext/glfw/include ${nanogui_SOURCE_DIR}/ext/nanovg/src
-                                      ${nanogui_SOURCE_DIR}/include ${NANOGUI_EXTRA_INCS})
-  target_link_libraries(nanogui::nanogui INTERFACE "nanogui")
-  target_compile_definitions(nanogui::nanogui INTERFACE "${NANOGUI_BACKEND_DEFS}")
 endif()
 
 # ============================================================================
@@ -260,319 +370,99 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR CMAKE_CXX_COMPILER_ID MATCHES "G
   endif()
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/ext/alphanum ${CMAKE_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# Resource file (icons etc.)
-set(EXTRA_SOURCE "")
-if(APPLE)
-  set(EXTRA_SOURCE "${CMAKE_SOURCE_DIR}/resources/icon.icns")
-elseif(WIN32)
-  set(EXTRA_SOURCE "${CMAKE_SOURCE_DIR}/resources/icon.rc")
-endif()
+# Now build the HDRView viewer app
+string(TIMESTAMP YEAR "%Y")
 
-if(NANOGUI_BACKEND STREQUAL "OpenGL")
-  set(RESOURCE_GLOB "resources/*.gl")
-elseif(NANOGUI_BACKEND STREQUAL "GLES 2")
-  set(RESOURCE_GLOB "resources/*.gles")
-elseif(NANOGUI_BACKEND STREQUAL "GLES 3")
-  set(RESOURCE_GLOB "resources/*.gles")
-elseif(NANOGUI_BACKEND STREQUAL "Metal")
-  set(RESOURCE_GLOB "resources/*.metal")
-endif()
+set(output_name "HDRView")
+set(HELLO_IMGUI_BUNDLE_IDENTIFIER_URL_PART "com.im.HDRView")
+set(HELLO_IMGUI_BUNDLE_IDENTIFIER_NAME_PART ${app_name})
+set(HELLO_IMGUI_ICON_DISPLAY_NAME ${output_name})
+set(HELLO_IMGUI_BUNDLE_NAME ${output_name})
+set(HELLO_IMGUI_BUNDLE_COPYRIGHT "© Wojciech Jarosz, ${YEAR}")
+set(HELLO_IMGUI_BUNDLE_EXECUTABLE ${output_name})
+set(HELLO_IMGUI_BUNDLE_VERSION ${VERSION})
+set(HELLO_IMGUI_BUNDLE_SHORT_VERSION ${VERSION})
+set(HELLO_IMGUI_BUNDLE_ICON_FILE icon.icns)
 
-# Run simple cmake converter to put shader files into the data segment
-
-# Glob up resource files
-file(GLOB resources "${RESOURCE_GLOB}")
-
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/resources")
-
-# Precompile .metal shaders to .metallib files
-foreach(fname_in IN LISTS resources)
-  if(NANOGUI_BACKEND STREQUAL "Metal" AND fname_in MATCHES "\\.metal")
-    get_filename_component(fname_out ${fname_in} NAME)
-    set(fname_out "${CMAKE_CURRENT_BINARY_DIR}/resources/${fname_out}lib")
-    add_custom_command(OUTPUT ${fname_out} DEPENDS ${fname_in} COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3
-                                                                       "${fname_in}" -o "${fname_out}" VERBATIM)
-  else()
-    set(fname_out "${fname_in}")
-  endif()
-  list(APPEND resources_processed ${fname_out})
-endforeach()
-
-file(GLOB patterns "${CMAKE_SOURCE_DIR}/resources/patterns/*.png")
-list(APPEND resources_processed ${patterns})
-
-# Concatenate resource files into a comma separated string
-string(REGEX REPLACE "([^\\]|^);" "\\1," resources_string "${resources_processed}")
-string(REGEX REPLACE "[\\](.)" "\\1" resources_string "${resources_string}")
-
-# Create command line for running bin2c cmake script
-set(bin2c_cmdline -DOUTPUT_C=hdrview_resources.cpp -DOUTPUT_H=hdrview_resources.h "-DINPUT_FILES=${resources_string}"
-                  -P "${CMAKE_SOURCE_DIR}/resources/bin2c.cmake")
-
-# Run bin2c on resource files
-add_custom_command(
-  OUTPUT hdrview_resources.cpp hdrview_resources.h
-  COMMAND ${CMAKE_COMMAND} ARGS ${bin2c_cmdline}
-  DEPENDS ${resources} ${resources_processed}
-  COMMENT "Running bin2c" PRE_BUILD
-  VERBATIM)
-
-# Needed to access generated files
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-
-if(WIN32)
-  set(HDRVIEW_DEFINITIONS ${HDRVIEW_DEFINITIONS} -DNOMINMAX)
-endif()
-
-add_definitions(${HDRVIEW_DEFINITIONS})
-
-add_executable(
+imgui_bundle_add_app(
   HDRView
-  hdrview_resources.cpp
-  src/filters/bilateral.cpp
-  src/filters/box_blur.cpp
-  src/filters/brightness_contrast.cpp
-  src/filters/canvas_size.cpp
-  src/filters/channel_mixer.cpp
-  src/filters/colorspace.cpp
-  src/filters/exposure.cpp
-  src/filters/fill.cpp
-  src/filters/filmic.cpp
-  src/filters/filters.cpp
-  src/filters/filters.h
-  src/filters/flatten.cpp
-  src/filters/free_xform.cpp
-  src/filters/gaussian.cpp
-  src/filters/hsl.cpp
-  src/filters/median.cpp
-  src/filters/remap.cpp
-  src/filters/resize.cpp
-  src/filters/shift.cpp
-  src/filters/unsharp_mask.cpp
-  src/filters/zap_gremlins.cpp
-  src/alignedlabel.cpp
-  src/alignedlabel.h
-  src/async.h
-  src/box.h
-  src/brush.cpp
-  src/brush.h
-  src/cliformatter.h
-  src/color.h
-  src/colorslider.cpp
-  src/colorslider.h
+  ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  src/app.cpp
   src/colorspace.cpp
-  src/colorspace.h
-  src/colorwheel.cpp
-  src/colorwheel.h
-  src/commandhistory.h
-  src/commandpalette.cpp
-  src/commandpalette.h
-  common.cpp
-  src/common.h
-  src/dialog.cpp
-  src/dialog.h
-  src/dithermatrix256.h
-  src/envmap.cpp
-  src/envmap.h
-  src/filmictonecurve.cpp
-  src/filmictonecurve.h
-  src/fwd.h
-  src/hdrcolorpicker.cpp
-  src/hdrcolorpicker.h
-  src/hdrimage.cpp
-  src/hdrimage.h
-  src/hdrimagedngio.cpp
-  src/hdrimageio.cpp
-  src/hdrimageraw.cpp
-  src/hdrimageraw.h
-  src/hdrimageview.cpp
-  src/hdrimageview.h
+  src/common.cpp
+  src/fonts.cpp
   src/hdrview.cpp
-  src/hdrviewscreen.cpp
-  src/hdrviewscreen.h
-  src/helpwindow.cpp
-  src/helpwindow.h
-  src/hscrollpanel.cpp
-  src/hscrollpanel.h
-  src/hslgradient.cpp
-  src/hslgradient.h
-  src/imagebutton.cpp
-  src/imagebutton.h
-  src/imagelistpanel.cpp
-  src/imagelistpanel.h
-  src/json.h
-  src/menu.cpp
-  src/menu.h
-  src/multigraph.cpp
-  src/multigraph.h
-  src/parallelfor.cpp
-  src/parallelfor.h
-  src/pfm.h
+  src/image.cpp
+  src/imageio.cpp
+  src/imgui_ext.cpp
+  src/image_gui.cpp
   src/pfm.cpp
-  src/ppm.h
-  src/ppm.cpp
-  src/progress.cpp
-  src/progress.h
-  src/range.h
-  src/rasterdraw.cpp
-  src/rasterdraw.h
-  src/timer.h
-  src/searchbox.cpp
-  src/searchbox.h
-  src/tool.cpp
-  src/tool.h
-  src/well.cpp
-  src/well.h
-  src/widgetutils.cpp
-  src/widgetutils.h
-  src/xpuimage.cpp
-  src/xpuimage.h
-  ${EXTRA_SOURCE})
-
-set_target_properties(HDRView PROPERTIES OUTPUT_NAME "HDRView")
-
-add_executable(
-  hdrbatch
-  src/cliformatter.h
-  src/color.h
-  src/colorspace.cpp
-  src/colorspace.h
-  common.cpp
-  src/common.h
-  src/envmap.cpp
-  src/envmap.h
-  src/dithermatrix256.h
-  src/fwd.h
-  src/hdrimage.cpp
-  src/hdrimage.h
-  src/hdrimagedngio.cpp
-  src/hdrimageio.cpp
-  src/hdrimageraw.cpp
-  src/hdrimageraw.h
-  src/hdrbatch.cpp
-  src/json.h
   src/parallelfor.cpp
-  src/parallelfor.h
-  src/pfm.cpp
-  src/pfm.h
-  src/ppm.cpp
-  src/ppm.h
   src/progress.cpp
-  src/progress.h
-  src/range.h
-  src/timer.h)
+  src/opengl_check.cpp
+  src/scheduler.cpp
+  src/shader.cpp
+  src/shader_gl.cpp
+  src/renderpass_gl.cpp
+  src/texture.cpp
+  src/texture_gl.cpp
+  ${EXTRA_SOURCES}
+  ASSETS_LOCATION
+  ${CMAKE_CURRENT_BINARY_DIR}/assets
+)
 
-add_executable(force-random-dither src/forced-random-dither.cpp)
-
+set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
+# add_dependencies(HDRView gen_version_h_target) target_sources(HDRView PRIVATE
+# ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+if(APPLE)
+  target_compile_options(HDRView PRIVATE "-fobjc-arc")
+  target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
+  target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+endif(APPLE)
 target_link_libraries(
   HDRView
-  PRIVATE stb
-          nanogui::nanogui
+  PRIVATE linalg
+          fmt::fmt
+          spdlog::spdlog
           OpenEXR::OpenEXR
           Imath::Imath
+          stb
+          implot
           cli11
-          platform_folders
-          filesystem
-          tinydir
-          nlohmann_json
-          tinydng
-          spdlog::spdlog)
-target_link_libraries(
-  hdrbatch
-  PRIVATE stb
-          nanogui::nanogui
-          OpenEXR::OpenEXR
-          Imath::Imath
-          cli11
-          platform_folders
-          filesystem
-          tinydir
-          nlohmann_json
-          tinydng
-          spdlog::spdlog)
-target_link_libraries(
-  force-random-dither
-  PRIVATE stb
-          nanogui::nanogui
-          filesystem
-          tinydir
-          nlohmann_json
-          tinydng
-          spdlog::spdlog)
+          my_imgui_command_palette
+)
+target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
-if(NOT ${CMAKE_VERSION} VERSION_LESS 3.3 AND USE_IWYU)
-  find_program(iwyu_path NAMES include-what-you-use iwyu)
-  message("Found iwyu: ${iwyu_path}")
-  if(iwyu_path)
-    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-    set(CMAKE_C_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-    set_property(TARGET HDRView hdrbatch force-random-dither PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${iwyu_path})
-  endif()
-endif()
-
-if(APPLE)
-  string(TIMESTAMP YEAR "%Y")
-  # Build an application bundle on OSX
-  set_target_properties(
+if(EMSCRIPTEN)
+  target_link_libraries(HDRView PRIVATE emscripten-browser-file)
+  target_link_options(
     HDRView
-    PROPERTIES MACOSX_BUNDLE TRUE
-               MACOSX_BUNDLE_BUNDLE_NAME "HDRView"
-               MACOSX_BUNDLE_BUNDLE_VERSION ${HDRVIEW_VERSION}
-               MACOSX_BUNDLE_INFO_STRING
-               "High dynamic range image viewer and comparison tool, version ${HDRVIEW_VERSION}."
-               MACOSX_BUNDLE_COPYRIGHT "Copyright ${YEAR}, Wojciech Jarosz. Freely available under the BSD license."
-               MACOSX_BUNDLE_GUI_IDENTIFIER "com.im.HDRView"
-               MACOSX_BUNDLE_ICON_FILE icon.icns
-               MACOSX_BUNDLE_SHORT_VERSION_STRING ${HDRVIEW_VERSION}
-               MACOSX_BUNDLE_LONG_VERSION_STRING ${HDRVIEW_VERSION}
-               MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/MacOSXBundleInfo.plist.in
-               RESOURCE resources/icon.icns)
-  set_source_files_properties(resources/icon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-
-  # build HDRView first so we can build the hdrbatch executable directly into the HDRView bundle on macOS
-  add_dependencies(hdrbatch HDRView)
-
-  # put the hdrbatch executable into the HDRView bundle
-  add_custom_command(
-    TARGET hdrbatch
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:hdrbatch> ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/
-    COMMENT "Adding hdrbatch into HDRView bundle")
-  # set_target_properties(hdrbatch PROPERTIES RUNTIME_OUTPUT_DIRECTORY
-  # ${PROJECT_BINARY_DIR}/HDRView.app/Contents/Resources/bin/)
-elseif(NOT WIN32)
-  # Insulate from a few types of ABI changes by statically linking against libgcc and libstdc++
-  set_target_properties(HDRView PROPERTIES LINK_FLAGS "-static-libgcc")
-  set_target_properties(hdrbatch PROPERTIES LINK_FLAGS "-static-libgcc")
+    PRIVATE
+    -fexceptions
+    -sEXPORTED_RUNTIME_METHODS=[ccall]
+    -sEXPORTED_FUNCTIONS=[_main,_malloc,_free]
+    -sNO_DISABLE_EXCEPTION_CATCHING
+    -sMAX_WEBGL_VERSION=2
+    -sMIN_WEBGL_VERSION=2
+  )
+  target_compile_options(HDRView PRIVATE -fexceptions -sNO_DISABLE_EXCEPTION_CATCHING)
+  if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+    target_link_options(HDRView PRIVATE -pthread)
+    target_link_options(HDRView PRIVATE -sPTHREAD_POOL_SIZE=3)
+  endif()
+  hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 300)
+else()
+  # target_link_libraries(HDRView PRIVATE portable-file-dialogs)
 endif()
 
 if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)
-  add_custom_command(TARGET HDRView POST_BUILD COMMAND strip $<TARGET_FILE:HDRView>)
-endif()
-
-if(APPLE)
-  install(TARGETS HDRView BUNDLE DESTINATION "/Applications")
-  install(SCRIPT cmake/osx-post-install.cmake)
-elseif(WIN32)
-  install(TARGETS HDRView RUNTIME DESTINATION "bin")
-  install(TARGETS hdrbatch RUNTIME DESTINATION "bin")
-else()
-  install(TARGETS HDRView RUNTIME DESTINATION "bin")
-  install(TARGETS hdrbatch RUNTIME DESTINATION "bin")
-  install(FILES resources/hdrview.desktop DESTINATION "/usr/share/applications")
-  install(FILES resources/icon-512.png DESTINATION "/usr/share/icons/hicolor/1024x1024/apps" RENAME hdrview.png)
-  install(FILES resources/icon-512.png DESTINATION "/usr/share/icons/hicolor/512x512/apps" RENAME hdrview.png)
-  install(FILES resources/icon-256.png DESTINATION "/usr/share/icons/hicolor/256x256/apps" RENAME hdrview.png)
-  install(FILES resources/icon-128.png DESTINATION "/usr/share/icons/hicolor/128x128/apps" RENAME hdrview.png)
-  install(FILES resources/icon-96.png DESTINATION "/usr/share/icons/hicolor/96x96/apps" RENAME hdrview.png)
-  install(FILES resources/icon-64.png DESTINATION "/usr/share/icons/hicolor/64x64/apps" RENAME hdrview.png)
-  install(FILES resources/icon-48.png DESTINATION "/usr/share/icons/hicolor/48x48/apps" RENAME hdrview.png)
-  install(FILES resources/icon-32.png DESTINATION "/usr/share/icons/hicolor/32x32/apps" RENAME hdrview.png)
-  install(FILES resources/icon-24.png DESTINATION "/usr/share/icons/hicolor/24x24/apps" RENAME hdrview.png)
-  install(FILES resources/icon-16.png DESTINATION "/usr/share/icons/hicolor/16x16/apps" RENAME hdrview.png)
+  add_custom_command(
+    TARGET HDRView
+    POST_BUILD
+    COMMAND strip $<TARGET_FILE:HDRView>
+  )
 endif()
 
 # Force colored output for the ninja generator
@@ -585,6 +475,3 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
   endif()
 endif()
-
-target_compile_features(HDRView PRIVATE cxx_std_17)
-target_compile_features(hdrbatch PRIVATE cxx_std_17)

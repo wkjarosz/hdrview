@@ -1,10 +1,11 @@
 name: macOS build
 
 on:
-  push:
+  pull_request:
     branches:
       - "*"
-    pull_request:
+  push:
+    branches:
       - "*"
     paths:
       # This action only runs on push when C++ files are changed
@@ -26,53 +27,21 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          - {
-              name: "macOS 11 - Metal",
-              os: macos-11,
-              suffix: "-metal",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-            }
-          - {
-              name: "macOS 12 - Metal",
-              os: macos-12,
-              suffix: "-metal",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=Metal -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-            }
-          - {
-              name: "macOS 11 - OpenGL",
-              os: macos-11,
-              suffix: "-opengl",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-            }
-          - {
-              name: "macOS 12 - OpenGL",
-              os: macos-12,
-              suffix: "-opengl",
-              cmake_options: '-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 -DNANOGUI_BACKEND=OpenGL -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"',
-            }
-          - {
-              name: "Ubuntu 22.04",
-              os: ubuntu-22.04,
-              suffix: "",
-              cmake_options: "",
-            }
-          - {
-              name: "Ubuntu 20.04",
-              os: ubuntu-20.04,
-              suffix: "",
-              cmake_options: "",
-            }
+          # - { name: "macOS 11", os: macos-11 }
+          # - { name: "macOS 12", os: macos-12 }
+          - { name: "macOS 13", os: macos-13 }
+          - { name: "macOS 14", os: macos-14 }
         buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
-        run: ${{ runner.os == 'macOS' && 'brew install ninja create-dmg' || 'sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build' }}
+        run: brew install ninja create-dmg dylibbundler
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: "**/cpm_modules"
           key: ${{ github.workflow }}-cpm-modules-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake') }}
@@ -88,35 +57,36 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache ${{ matrix.config.cmake_options }}
+          cmake -B ${{github.workspace}}/build/${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+
+      # -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build/${{ matrix.buildtype }} --parallel 4 --config ${{ matrix.buildtype }}
 
-      - name: Checking that HDRView and hdrbatch run
-        if: runner.os != 'Windows'
+      - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ runner.os == 'macOS' && 'HDRView.app/Contents/MacOS/HDRView' || 'HDRView' }} --help
-          ${{github.workspace}}/build/hdrbatch --help
+          ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
+
+      - name: Bundle dependencies
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app/Contents/libs/
 
       - name: Creating dmg (macOS)
-        if: runner.os == 'macOS'
         run: |
-          RESULT="${{github.workspace}}/build/HDRView${{ matrix.config.suffix }}.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.app
 
       - name: Archive dmg (macOS)
-        if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: HDRView-${{ matrix.config.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}.dmg
+          name: HDRView-${{ matrix.config.os }}-${{ matrix.buildtype }}.dmg
           path: |
-            ${{github.workspace}}/build/HDRView${{ matrix.config.suffix }}.dmg
+            ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.dmg
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}${{ matrix.config.suffix }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build
+            ${{github.workspace}}/build/${{ matrix.buildtype }}

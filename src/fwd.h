@@ -6,95 +6,52 @@
 
 #pragma once
 
+#include "linalg.h"
 #include <memory>
-#include <nanogui/vector.h>
-#include <nlohmann/json_fwd.hpp>
+using namespace linalg::aliases;
+
+// define extra conversion here before including imgui
+#define IM_VEC2_CLASS_EXTRA                                                                                            \
+    constexpr ImVec2(const float2 &f) : x(f.x), y(f.y) {}                                                              \
+    operator float2() const { return float2(x, y); }                                                                   \
+    constexpr ImVec2(const int2 &i) : x(i.x), y(i.y) {}                                                                \
+    operator int2() const { return int2((int)x, (int)y); }
+
+#define IM_VEC4_CLASS_EXTRA                                                                                            \
+    constexpr ImVec4(const float4 &f) : x(f.x), y(f.y), z(f.z), w(f.w) {}                                              \
+    operator float4() const { return float4(x, y, z, w); }
+
+// Shortname for the linalg namespace
+namespace la = linalg;
 
 // forward declarations
-template <typename Vec, typename Value = typename Vec::Value, size_t Dims = Vec::Size>
+template <typename Vec_, typename Value_ = typename linalg::scalar_t<Vec_>,
+          size_t Dims_ = linalg::detail::apply<linalg::detail::op_pos, void, Vec_>::size>
 class Box;
-class Color3;
-class Color4;
-class ImageCommandUndo;
-class FullImageUndo;
-class LambdaUndo;
-class CommandHistory;
-class XPUImage;
-class HDRImage;
-class HDRViewScreen;
-class HDRImageView;
-class ImageListPanel;
-class Timer;
-
-class Tool;
-class Brush;
-class RectangularMarquee;
-class HandTool;
-class BrushTool;
-class EraserTool;
-class CloneStampTool;
-class Eyedropper;
-class Ruler;
-class LineTool;
-
-template <typename T>
-class Range;
-
-using ConstHDRImagePtr = std::shared_ptr<const HDRImage>;
-using HDRImagePtr      = std::shared_ptr<HDRImage>;
-
-using ConstXPUImagePtr = std::shared_ptr<const XPUImage>;
-using XPUImagePtr      = std::shared_ptr<XPUImage>;
-
-NAMESPACE_BEGIN(nanogui)
-class Widget;
-class Button;
-class MenuBar;
-class Dropdown;
-class MenuItem;
-class Separator;
-class PopupMenu;
-class PopupWrapper;
-class CheckBox;
-class Label;
-class Slider;
-class VScrollPanel;
-class Window;
-class HelpWindow;
-class Dialog;
-class SimpleDialog;
-class Command;
-class CommandPalette;
-template <typename Scalar>
-class FloatBox;
-
-class AlignedLabel;
-class HDRColorPicker;
-class DualHDRColorPicker;
-class ColorWheel2;
-class ColorSlider;
-class MultiGraph;
-class Well;
-class ImageButton;
-class HSLGradient;
-NAMESPACE_END(nanogui)
+using Color3 = float3;
+using Color4 = float4;
 
 // define some common types
-using Box2i = Box<nanogui::Vector2i>;
+using Box2f = Box<float2>;
+using Box2d = Box<double2>;
+using Box2i = Box<int2>;
 
-enum ETool : int
-{
-    Tool_None = 0,
-    Tool_Rectangular_Marquee,
-    Tool_Brush,
-    Tool_Eraser,
-    Tool_Clone_Stamp,
-    Tool_Eyedropper,
-    Tool_Ruler,
-    Tool_Line,
-    Tool_Gradient,
-    Tool_Num_Tools
-};
+using Box3f = Box<float3>;
+using Box3d = Box<double3>;
+using Box3i = Box<int3>;
+
+using Box4f = Box<float4>;
+using Box4d = Box<double4>;
+using Box4i = Box<int4>;
+
+class Shader;
+class Texture;
+struct Image;
+class Texture;
+class Timer;
+
+using ConstImagePtr = std::shared_ptr<const Image>;
+using ImagePtr      = std::shared_ptr<Image>;
 
 enum EColorSpace : int
 {
@@ -157,4 +114,15 @@ enum EDirection
 {
     Forward,
     Backward,
+};
+
+using AxisScale_ = int;
+enum AxisScale : AxisScale_
+{
+    AxisScale_Linear = 0,
+    AxisScale_SRGB,
+    AxisScale_Asinh,
+    AxisScale_SymLog,
+
+    AxisScale_COUNT
 };
