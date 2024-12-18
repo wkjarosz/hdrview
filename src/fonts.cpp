@@ -86,6 +86,7 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_INCREASE_EXPOSURE);
         builder.AddText(ICON_MY_RESET_TONEMAPPING);
         builder.AddText(ICON_MY_NORMALIZE_EXPOSURE);
+        builder.AddText(ICON_MY_DITHER);
         builder.AddText(ICON_MY_CLAMP_TO_LDR);
         builder.AddText(ICON_MY_SHOW_GRID);
         builder.AddText(ICON_MY_SAVE_AS);
