@@ -43,6 +43,7 @@
 #include <deque>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /**
@@ -523,8 +524,7 @@ template <typename Int, typename Func1>
 Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func,
                                           int num_threads = Scheduler::k_all, Scheduler *scheduler = nullptr)
 {
-    return parallel_for_async(
-        range, func, [](int, int) {}, num_threads, scheduler);
+    return parallel_for_async(range, func, [](int, int) {}, num_threads, scheduler);
 }
 
 template <typename Func>

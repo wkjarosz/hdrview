@@ -46,10 +46,15 @@ jobs:
         working-directory: ${{github.workspace}}
         run: ./build/${{ matrix.buildtype }}/HDRView.exe --help
 
+      - name: Copy files for archiving
+        working-directory: ${{github.workspace}}/build
+        run: |
+          mkdir deploy
+          cp ${{ matrix.buildtype }}/HDRView.exe assets deploy/
+
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ matrix.config.os }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/${{ matrix.buildtype }}/HDRView.exe
-            ${{github.workspace}}/build/assets
+            ${{github.workspace}}/build/deploy
