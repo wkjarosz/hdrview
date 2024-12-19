@@ -49,8 +49,9 @@ jobs:
       - name: Copy files for archiving
         working-directory: ${{github.workspace}}/build
         run: |
-          mkdir deploy
-          cp ${{ matrix.buildtype }}/HDRView.exe assets deploy/
+          cmake -E make_directory deploy
+          cmake -E copy ${{ matrix.buildtype }}/HDRView.exe deploy/
+          cmake -E copy_directory assets deploy/
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
