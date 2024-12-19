@@ -42,7 +42,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView runs
-        shell: bash
+        # shell: bash
         working-directory: ${{github.workspace}}
         run: ./build/${{ matrix.buildtype }}/HDRView.exe --help
 

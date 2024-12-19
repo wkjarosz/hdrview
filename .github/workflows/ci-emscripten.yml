@@ -50,7 +50,7 @@ jobs:
           emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel 4
+        run: cmake --build ${{github.workspace}}/build --parallel
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
