@@ -50,9 +50,6 @@ jobs:
         with:
           key: ${{ matrix.config.os }}-${{ matrix.buildtype }}
 
-      - name: Create Build Environment
-        run: cmake -E make_directory ${{github.workspace}}/build
-
       - name: Configure CMake
         run: |
           cmake -B ${{github.workspace}}/build/${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DHELLOIMGUI_DOWNLOAD_FREETYPE_IF_NEEDED=ON

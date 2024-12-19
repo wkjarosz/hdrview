@@ -91,26 +91,27 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
 
       - name: Checking that HDRView runs
-        shell: bash
         working-directory: ${{github.workspace}}
+        run: ./build/${{env.BUILD_TYPE}}/HDRView.exe --help
+
+      - name: Copy files for archiving and release
+        working-directory: ${{github.workspace}}/build
         run: |
-          pwd
-          ./build/${{env.BUILD_TYPE}}/HDRView.exe --help
+          cmake -E copy_directory assets deploy/assets/
+          cmake -E copy ${{env.BUILD_TYPE}}/HDRView.exe deploy/
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-windows-latest
           path: |
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-            ${{github.workspace}}/build/assets
+            ${{github.workspace}}/build/deploy
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
-            ${{github.workspace}}/build/assets
+            ${{github.workspace}}/build/deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -135,9 +136,6 @@ jobs:
       # Setup caching of build artifacts to reduce total build time (only Linux and MacOS)
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
-
-      - name: Create Build Environment
-        run: cmake -E make_directory ${{github.workspace}}/build
 
       - name: Configure CMake
         run: |

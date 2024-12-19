@@ -42,16 +42,14 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView runs
-        # shell: bash
         working-directory: ${{github.workspace}}
         run: ./build/${{ matrix.buildtype }}/HDRView.exe --help
 
       - name: Copy files for archiving
         working-directory: ${{github.workspace}}/build
         run: |
-          cmake -E make_directory deploy
+          cmake -E copy_directory assets deploy/assets/
           cmake -E copy ${{ matrix.buildtype }}/HDRView.exe deploy/
-          cmake -E copy_directory assets deploy/
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
