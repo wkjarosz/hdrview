@@ -43,7 +43,7 @@ jobs:
       # -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel 4 --config ${{env.BUILD_TYPE}}
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}}
 
       - name: Checking that HDRView runs
         run: |
@@ -77,6 +77,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Install dependencies
+        run: pip install Pillow
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -88,21 +91,26 @@ jobs:
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
 
       - name: Checking that HDRView runs
+        shell: bash
+        working-directory: ${{github.workspace}}
         run: |
-          "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe --help"
+          pwd
+          ./build/${{env.BUILD_TYPE}}/HDRView.exe --help
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-windows-latest
           path: |
-            "${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe"
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+            ${{github.workspace}}/build/assets
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{github.workspace}}\build\${{env.BUILD_TYPE}}\HDRView.exe
+            ${{github.workspace}}/build/${{env.BUILD_TYPE}}/HDRView.exe
+            ${{github.workspace}}/build/assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -131,13 +139,12 @@ jobs:
       - name: Create Build Environment
         run: cmake -E make_directory ${{github.workspace}}/build
 
-      # emcmake cmake -B ${{github.workspace}}/build -G Ninja -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel
+          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel 4
+        run: cmake --build ${{github.workspace}}/build --parallel
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
@@ -146,11 +153,10 @@ jobs:
           path: |
             ${{github.workspace}}/build
 
-      - name: Copy web app
+      - name: CPack
         working-directory: ${{github.workspace}}/build
         run: |
-          mkdir deploy
-          cp HDRView.data HDRView.html HDRView.js HDRView.wasm HDRView_favicon.png coi-serviceworker.js FileSaver.js deploy/
+          cmake --install .
           mv deploy/HDRView.html deploy/index.html
 
       - name: Publish
