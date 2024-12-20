@@ -14,8 +14,8 @@
 #include "fonts.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
-#include "implot/implot.h"
-#include "implot/implot_internal.h"
+#include "implot.h"
+#include "implot_internal.h"
 
 #include <sstream>
 #include <stdexcept> // for runtime_error, out_of_range

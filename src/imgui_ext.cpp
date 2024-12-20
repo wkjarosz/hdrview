@@ -3,7 +3,6 @@
 #include "box.h"
 #include "colorspace.h"
 #include "hello_imgui/icons_font_awesome_6.h"
-#include "immapp/browse_to_url.h"
 #include "spdlog/pattern_formatter.h"
 
 #include "fonts.h"
@@ -11,6 +10,18 @@
 #include "imgui_internal.h"
 
 #include <array>
+
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#elif defined(_WIN32)
+#include <shellapi.h>
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+
+#include <cstdio>
+#include <cstdlib>
 
 using namespace std;
 
@@ -108,9 +119,16 @@ void SpdLogWindow::draw(ImFont *console_font)
     ImGui::SameLine();
     ImGui::SetNextItemWidth(button_size.x);
     ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(current_level));
+    // Calculate the padding needed to center the icon in a ComboBox
+    // Solve for NewPadding.x:
+    // NewPadding.x + IconWidth + NewPadding.x = button_size.x
+    // NewPadding.x + FontSize + NewPadding.x = FontSize + style.FramePadding.y * 2
+    // 2 * NewPadding.x = style.FramePadding.y * 2
+    // NewPadding.x = style.FramePadding.y
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(0.5f * ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y));
-    if (ImGui::BeginCombo("##Log level", s_level_icons[int(current_level)].data(), ImGuiComboFlags_NoArrowButton))
+                        ImVec2(ImGui::GetStyle().FramePadding.y, ImGui::GetStyle().FramePadding.y));
+    if (ImGui::BeginCombo("##Log level", s_level_icons[int(current_level)].data(),
+                          ImGuiComboFlags_NoArrowButton | ImGuiComboFlags_HeightLargest))
     {
         for (int i = 0; i < spdlog::level::n_levels; ++i)
         {
@@ -638,6 +656,37 @@ void UnderLine(ImColor c, float raise)
     ImGui::GetWindowDrawList()->AddLine(mi, ma, c, lineThickness);
 }
 
+// copied from ImGUI Bundle:
+// https://github.com/pthom/imgui_bundle/blob/a57b127c198fb7c6ab0ba0157a9a968a5ed96ffb/external/immapp/immapp/browse_to_url.cpp#L19
+//
+// The MIT License (MIT)
+// Copyright (c) 2021-2024 Pascal Thomet
+//
+// A platform specific utility to open an url in a browser
+// (especially useful with emscripten version)
+// Specific per platform includes for BrowseToUrl
+void BrowseToUrl(const char *url)
+{
+#if defined(__EMSCRIPTEN__)
+    char js_command[1024];
+    snprintf(js_command, 1024, "window.open(\"%s\");", url);
+    emscripten_run_script(js_command);
+#elif defined(_WIN32)
+    ShellExecuteA(NULL, "open", url, NULL, NULL, SW_SHOWNORMAL);
+#elif TARGET_OS_IPHONE
+    // Nothing on iOS
+#elif TARGET_OS_OSX
+    char cmd[1024];
+    snprintf(cmd, 1024, "open %s", url);
+    system(cmd);
+#elif defined(__linux__)
+    char cmd[1024];
+    snprintf(cmd, 1024, "xdg-open %s", url);
+    int r = system(cmd);
+    (void)r;
+#endif
+}
+
 // adapted from https://github.com/ocornut/imgui/issues/5280#issuecomment-1117155573
 void HyperlinkText(const char *href, const char *fmt, ...)
 {
@@ -679,7 +728,7 @@ void HyperlinkText(const char *href, const char *fmt, ...)
             UnderLine(LinkColor());
         }
         if (IsItemClicked())
-            ImmApp::BrowseToUrl(href);
+            BrowseToUrl(href);
     }
 }
 

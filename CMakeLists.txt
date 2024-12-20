@@ -220,26 +220,61 @@ endforeach()
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
 
-CPMAddPackage(
-  NAME imgui_bundle
-  GITHUB_REPOSITORY pthom/imgui_bundle
-  GIT_TAG v1.6.0
-  OPTIONS "IMGUI_BUNDLE_WITH_TEST_ENGINE OFF"
-          "IMGUI_BUNDLE_DISABLE_NANOVG ON"
-          "IMGUI_BUNDLE_DISABLE_IMGUI_TEX_INSPECT ON"
-          "IMGUI_BUNDLE_DISABLE_IMGUIZMO ON"
-          "IMGUI_BUNDLE_DISABLE_IMFILEDIALOG ON"
-          "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
-          # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
-          "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
-)
-if(imgui_bundle_ADDED)
-  message(STATUS "imgui_bundle library added")
+# cmake-format: off
+# CPMAddPackage(
+#   NAME imgui_bundle
+#   GITHUB_REPOSITORY pthom/imgui_bundle
+#   GIT_TAG v1.6.0
+#   OPTIONS "IMGUI_BUNDLE_WITH_TEST_ENGINE OFF"
+#           "IMGUI_BUNDLE_DISABLE_NANOVG ON"
+#           "IMGUI_BUNDLE_DISABLE_IMGUI_TEX_INSPECT ON"
+#           "IMGUI_BUNDLE_DISABLE_IMGUIZMO ON"
+#           "IMGUI_BUNDLE_DISABLE_IMFILEDIALOG ON"
+#           "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
+#           # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
+#           "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
+# )
+# if(imgui_bundle_ADDED)
+#   message(STATUS "imgui_bundle library added")
+#   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+#     add_compile_options(-pthread)
+#   endif()
+# endif()
+# cmake-format: on
+
+CPMAddPackage("gh:pthom/hello_imgui#v1.6.0")
+if(hello_imgui_ADDED)
+  message(STATUS "hello_imgui library added")
   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     add_compile_options(-pthread)
   endif()
 endif()
 
+CPMAddPackage("gh:epezent/implot#77674d270e851d3f3718aad00234201af2b76ac9")
+if(implot_ADDED)
+  message(STATUS "implot library added")
+
+  # implot has no CMake support, so we create our own target
+  add_library(
+    implot STATIC ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp
+                  ${implot_SOURCE_DIR}/implot_items.cpp
+  )
+  target_include_directories(implot PUBLIC ${implot_SOURCE_DIR})
+  target_link_libraries(implot PUBLIC imgui)
+  set_target_properties(implot PROPERTIES CXX_STANDARD 17)
+  list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
+       ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp
+  )
+endif()
+
+CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+if(portable-file-dialogs_ADDED)
+  message(STATUS "portable-file-dialogs library added")
+  add_library(portable-file-dialogs INTERFACE IMPORTED)
+  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
+endif()
+
+# CPMAddPackage("gh:wkjarosz/imgui-command-palette#66124ae045c11eb153c9c3f184b1e12f4d5a0e7b")
 CPMAddPackage(
   NAME my_imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
@@ -247,7 +282,6 @@ CPMAddPackage(
   DOWNLOAD_ONLY YES
 )
 
-# CPMAddPackage("gh:wkjarosz/imgui-command-palette#66124ae045c11eb153c9c3f184b1e12f4d5a0e7b")
 if(my_imgui_command_palette_ADDED)
   message(STATUS "imgui-command-palette library added")
   add_library(
@@ -261,9 +295,6 @@ if(my_imgui_command_palette_ADDED)
   target_include_directories(my_imgui_command_palette PUBLIC . ${my_imgui_command_palette_SOURCE_DIR})
   target_link_libraries(my_imgui_command_palette PUBLIC imgui)
 endif()
-
-# CPMAddPackage("gh:pthom/hello_imgui#ed91f72da875b32ba96ef36d6633b9d7c0d95bee") if(hello_imgui_ADDED) message(STATUS
-# "hello_imgui library added") endif()
 
 CPMAddPackage("gh:sgorsten/linalg@2.2")
 if(linalg_ADDED)
@@ -301,12 +332,6 @@ if(emscripten-browser-file_ADDED)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
 endif()
 
-# # this is part of Dear ImGui Bundle, so no need to add it separately
-# CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
-# if(portable-file-dialogs_ADDED) message(STATUS "portable-file-dialogs library added")
-# add_library(portable-file-dialogs INTERFACE IMPORTED) target_include_directories(portable-file-dialogs INTERFACE
-# "${portable-file-dialogs_SOURCE_DIR}") endif()
-
 CPMAddPackage(
   NAME Imath
   VERSION 3.1.12 # the git repo is incredibly large, so we download the archived include directory
@@ -339,16 +364,6 @@ CPMAddPackage(
 if(openexr_ADDED)
   message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
 endif()
-
-# # this is part of Dear ImGui Bundle, so no need to add it separately
-# CPMAddPackage("gh:epezent/implot#f156599faefe316f7dd20fe6c783bf87c8bb6fd9") if(implot_ADDED) message(STATUS "implot
-# library added")
-
-# # implot has no CMake support, so we create our own target set( implot STATIC ${implot_SOURCE_DIR}/implot.h #
-# ${implot_SOURCE_DIR}/implot_internal.h ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) #
-# target_include_directories(implot PUBLIC ${implot_SOURCE_DIR}) set_target_properties(implot PROPERTIES CXX_STANDARD #
-# 17) list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
-# ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp ) endif()
 
 CPMAddPackage(
   NAME cli11
@@ -395,7 +410,7 @@ set(HELLO_IMGUI_BUNDLE_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_SHORT_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_ICON_FILE icon.icns)
 
-imgui_bundle_add_app(
+hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/app.cpp
@@ -463,7 +478,7 @@ if(EMSCRIPTEN)
   endif()
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 300)
 else()
-  # target_link_libraries(HDRView PRIVATE portable-file-dialogs)
+  target_link_libraries(HDRView PRIVATE portable-file-dialogs)
 endif()
 
 if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)

@@ -6,14 +6,11 @@
 
 #include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
-// #include "imgui-command-palette/imcmd_command_palette.h"
 #include "imcmd_command_palette.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
-#include "immapp/browse_to_url.h"
-#include "immapp/immapp.h"
-#include "implot/implot.h"
-#include "implot/implot_internal.h"
+#include "implot.h"
+#include "implot_internal.h"
 
 #include "fonts.h"
 
@@ -44,7 +41,7 @@
 #include <string_view>
 using std::string_view;
 #else
-#include "portable_file_dialogs/portable_file_dialogs.h"
+#include "portable-file-dialogs.h"
 #endif
 
 #ifdef HELLOIMGUI_USE_SDL
@@ -206,6 +203,259 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
     //
+    // Menu bar
+    //
+    // Here, we fully customize the menu bar:
+    // by setting `showMenuBar` to true, and `showMenu_App` and `showMenu_View` to false,
+    // HelloImGui will display an empty menu bar, which we can fill with our own menu items via the callback `ShowMenus`
+    m_params.imGuiWindowParams.showMenuBar   = true;
+    m_params.imGuiWindowParams.showMenu_App  = false;
+    m_params.imGuiWindowParams.showMenu_View = false;
+    // Inside `ShowMenus`, we can call `HelloImGui::ShowViewMenu` and `HelloImGui::ShowAppMenu` if desired
+    m_params.callbacks.ShowMenus = [this]() { draw_menus(); };
+
+    //
+    // Toolbars
+    //
+    // ImGui::GetFrameHeight() * 1.4f
+    m_top_toolbar_options.sizeEm = 2.2f;
+    // HelloImGui::PixelSizeToEm(ImGui::GetFrameHeight());
+    m_top_toolbar_options.WindowPaddingEm = ImVec2(0.7f, 0.35f);
+    m_params.callbacks.AddEdgeToolbar(
+        HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+
+    //
+    // Status bar
+    //
+    // We use the default status bar of Hello ImGui
+    m_params.imGuiWindowParams.showStatusBar = true;
+    m_params.callbacks.ShowStatus            = [this]() { draw_status_bar(); };
+
+    //
+    // Dockable windows
+    //
+    // the histogram window
+    HelloImGui::DockableWindow histogram_window;
+    histogram_window.label             = "Histogram";
+    histogram_window.dockSpaceName     = "HistogramSpace";
+    histogram_window.isVisible         = true;
+    histogram_window.rememberIsVisible = true;
+    histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
+
+    // the file window
+    HelloImGui::DockableWindow file_window;
+    file_window.label             = "Images";
+    file_window.dockSpaceName     = "ImagesSpace";
+    file_window.isVisible         = true;
+    file_window.rememberIsVisible = true;
+    file_window.GuiFunction       = [this] { draw_file_window(); };
+
+    // the info window
+    HelloImGui::DockableWindow info_window;
+    info_window.label             = "Info";
+    info_window.dockSpaceName     = "ImagesSpace";
+    info_window.isVisible         = true;
+    info_window.rememberIsVisible = true;
+    info_window.GuiFunction       = [this] { draw_info_window(); };
+
+    // the channels window
+    HelloImGui::DockableWindow channel_window;
+    channel_window.label             = "Channels";
+    channel_window.dockSpaceName     = "ChannelsSpace";
+    channel_window.isVisible         = true;
+    channel_window.rememberIsVisible = true;
+    channel_window.GuiFunction       = [this] { draw_channel_window(); };
+
+    // the window showing the spdlog messages
+    HelloImGui::DockableWindow log_window;
+    log_window.label             = "Log";
+    log_window.dockSpaceName     = "LogSpace";
+    log_window.isVisible         = false;
+    log_window.rememberIsVisible = true;
+    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular", 14)); };
+
+    // docking layouts
+    m_params.dockingParams.layoutName      = "Standard";
+    m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window, log_window};
+    m_params.dockingParams.dockingSplits   = {
+        HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
+        HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
+        HelloImGui::DockingSplit{"ImagesSpace", "ChannelsSpace", ImGuiDir_Down, 0.25f},
+        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
+
+#if defined(HELLOIMGUI_USE_GLFW)
+    m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
+    {
+        spdlog::trace("Registering glfw drop callback");
+        // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
+        glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
+                            [](GLFWwindow *w, int count, const char **filenames)
+                            {
+                                vector<string> arg(count);
+                                for (int i = 0; i < count; ++i) arg[i] = filenames[i];
+                                hdrview()->load_images(arg);
+                            });
+#ifdef __APPLE__
+        // On macOS, the mechanism for opening an application passes filenames
+        // through the NS api rather than CLI arguments, which means we need
+        // special handling of these through GLFW.
+        // There are two components to this special handling:
+        // (both of which need to happen here instead of HDRViewApp() because GLFW needs to have been initialized first)
+
+        // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
+        const char *const *opened_files = glfwGetOpenedFilenames();
+        if (opened_files)
+        {
+            spdlog::trace("Opening files passed in through the NS api...");
+            vector<string> args;
+            for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
+            load_images(args);
+        }
+
+        // 2) Register a callback on the running instance of HDRView for when the user:
+        //    a) drags a file onto the HDRView app icon in the dock, and/or
+        //    b) launches HDRView with files (either from the command line or Finder) when another instance is already
+        //       running
+        glfwSetOpenedFilenamesCallback(
+            [](const char *image_file)
+            {
+                spdlog::trace("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
+                hdrview()->load_images({string(image_file)});
+            });
+#endif
+    };
+#endif
+
+    //
+    // Load user settings at `PostInit` and save them at `BeforeExit`
+    //
+    m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
+    m_params.iniFilename        = "HDRView/settings.ini";
+    m_params.callbacks.PostInit = [this]
+    {
+        load_settings();
+        setup_rendering();
+    };
+    m_params.callbacks.BeforeExit = [this] { save_settings(); };
+
+    // Change style
+    m_params.callbacks.SetupImGuiStyle = []()
+    {
+        // Apply default style
+        HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
+        // Create a tweaked theme
+        ImGuiTheme::ImGuiTweakedTheme tweakedTheme;
+        tweakedTheme.Theme           = ImGuiTheme::ImGuiTheme_DarculaDarker;
+        tweakedTheme.Tweaks.Rounding = 4.0f;
+
+        tweakedTheme.Tweaks.ValueMultiplierBg      = 0.5;
+        tweakedTheme.Tweaks.ValueMultiplierFrameBg = 0.5;
+
+        // Apply the tweaked theme
+        ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
+
+        // Then apply further modifications to ImGui style
+        ImGui::GetStyle().DisabledAlpha            = 0.5;
+        ImGui::GetStyle().WindowRounding           = 0;
+        ImGui::GetStyle().WindowBorderSize         = 1.0;
+        ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_Right;
+        ImGui::GetStyle().WindowPadding            = ImVec2(8, 8);
+        ImGui::GetStyle().FrameRounding            = 3;
+        ImGui::GetStyle().PopupRounding            = 4;
+        ImGui::GetStyle().GrabRounding             = 2;
+        ImGui::GetStyle().ScrollbarRounding        = 4;
+        ImGui::GetStyle().TabRounding              = 4;
+        ImGui::GetStyle().WindowRounding           = 6;
+        ImGui::GetStyle().DockingSeparatorSize     = 2;
+        ImGui::GetStyle().SeparatorTextBorderSize  = 1;
+        ImGui::GetStyle().TabBarBorderSize         = 2;
+        ImGui::GetStyle().FramePadding             = ImVec2(4, 4);
+
+        ImVec4 *colors                             = ImGui::GetStyle().Colors;
+        colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+        colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+        colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+        colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);
+        colors[ImGuiCol_PopupBg]                   = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+        colors[ImGuiCol_Border]                    = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+        colors[ImGuiCol_BorderShadow]              = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+        colors[ImGuiCol_FrameBg]                   = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+        colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
+        colors[ImGuiCol_FrameBgActive]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+        colors[ImGuiCol_TitleBg]                   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+        colors[ImGuiCol_TitleBgActive]             = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+        colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+        colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+        colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+        colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+        colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+        colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_CheckMark]                 = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+        colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+        colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+        colors[ImGuiCol_ButtonHovered]             = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
+        colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_Header]                    = ImVec4(0.18f, 0.34f, 0.59f, 1.00f);
+        colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_HeaderActive]              = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
+        colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+        colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+        colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
+        colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+        colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_TabHovered]                = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
+        colors[ImGuiCol_Tab]                       = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
+        colors[ImGuiCol_TabSelected]               = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+        colors[ImGuiCol_TabDimmed]                 = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
+        colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+        colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+        colors[ImGuiCol_PlotLines]                 = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
+        colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+        colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
+        colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+        colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+        colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+        colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
+        colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
+        colors[ImGuiCol_TextLink]                  = ImVec4(0.26f, 0.50f, 0.96f, 1.00f);
+        colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+        colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+        colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+        colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+    };
+
+    m_params.callbacks.ShowGui = [this]()
+    {
+        add_pending_images();
+
+        draw_about_dialog();
+
+        draw_command_palette();
+
+        if (g_show_tweak_window)
+        {
+            auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+            ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Theme Tweaks", &g_show_tweak_window))
+            {
+                if (ImGuiTheme::ShowThemeTweakGui(&tweakedTheme))
+                    ApplyTweakedTheme(tweakedTheme);
+            }
+            ImGui::End();
+        }
+    };
+    m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
+    m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
+
+    //
     // Actions and command palette
     //
     {
@@ -277,6 +527,33 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
                     [this]() { m_params.dockingParams.layoutReset = true; },
                     [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
+        for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
+        {
+            HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
+            add_action({fmt::format("Show {} window", w.label).c_str(), g_blank_icon, 0, 0, []() {},
+                        [&w]() { return w.canBeClosed; }, false, &w.isVisible});
+        }
+
+        static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
+                                 m_params.callbacks.edgesToolbars.end();
+        add_action({"Show top toolbar", g_blank_icon, 0, 0,
+                    [this]()
+                    {
+                        if (!toolbar_on)
+                            m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                        else
+                            m_params.callbacks.AddEdgeToolbar(
+                                HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); },
+                                m_top_toolbar_options);
+                    },
+                    always_enabled, false, &toolbar_on});
+        add_action({"Show menu bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+                    &m_params.imGuiWindowParams.showMenuBar});
+        add_action({"Show status bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+                    &m_params.imGuiWindowParams.showStatusBar});
+        add_action({"Show FPS in status bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+                    &m_params.imGuiWindowParams.showStatus_Fps});
 
         add_action({"Decrease exposure", ICON_MY_REDUCE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
@@ -446,260 +723,6 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action({"Fit to window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0, [this]() { fit(); }, if_img});
         add_action({"Center", ICON_MY_CENTER, ImGuiKey_C, 0, [this]() { center(); }, if_img});
     }
-
-    //
-    // Menu bar
-    //
-    // Here, we fully customize the menu bar:
-    // by setting `showMenuBar` to true, and `showMenu_App` and `showMenu_View` to false,
-    // HelloImGui will display an empty menu bar, which we can fill with our own menu items via the callback `ShowMenus`
-    m_params.imGuiWindowParams.showMenuBar   = true;
-    m_params.imGuiWindowParams.showMenu_App  = false;
-    m_params.imGuiWindowParams.showMenu_View = false;
-    // Inside `ShowMenus`, we can call `HelloImGui::ShowViewMenu` and `HelloImGui::ShowAppMenu` if desired
-    m_params.callbacks.ShowMenus = [this]() { draw_menus(); };
-
-    //
-    // Toolbars
-    //
-    HelloImGui::EdgeToolbarOptions edgeToolbarOptions;
-    edgeToolbarOptions.sizeEm          = 2.2f;
-    edgeToolbarOptions.WindowPaddingEm = ImVec2(0.7f, 0.35f);
-    m_params.callbacks.AddEdgeToolbar(
-        HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, edgeToolbarOptions);
-
-    //
-    // Status bar
-    //
-    // We use the default status bar of Hello ImGui
-    m_params.imGuiWindowParams.showStatusBar = true;
-    m_params.callbacks.ShowStatus            = [this]() { draw_status_bar(); };
-
-    //
-    // Dockable windows
-    //
-    // the histogram window
-    HelloImGui::DockableWindow histogram_window;
-    histogram_window.label             = "Histogram";
-    histogram_window.dockSpaceName     = "HistogramSpace";
-    histogram_window.isVisible         = true;
-    histogram_window.rememberIsVisible = true;
-    histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
-
-    // the file window
-    HelloImGui::DockableWindow file_window;
-    file_window.label             = "Images";
-    file_window.dockSpaceName     = "ImagesSpace";
-    file_window.isVisible         = true;
-    file_window.rememberIsVisible = true;
-    file_window.GuiFunction       = [this] { draw_file_window(); };
-
-    // the info window
-    HelloImGui::DockableWindow info_window;
-    info_window.label             = "Info";
-    info_window.dockSpaceName     = "ImagesSpace";
-    info_window.isVisible         = true;
-    info_window.rememberIsVisible = true;
-    info_window.GuiFunction       = [this] { draw_info_window(); };
-
-    // the channels window
-    HelloImGui::DockableWindow channel_window;
-    channel_window.label             = "Channels";
-    channel_window.dockSpaceName     = "ChannelsSpace";
-    channel_window.isVisible         = true;
-    channel_window.rememberIsVisible = true;
-    channel_window.GuiFunction       = [this] { draw_channel_window(); };
-
-    // the window showing the spdlog messages
-    HelloImGui::DockableWindow log_window;
-    log_window.label             = "Log";
-    log_window.dockSpaceName     = "LogSpace";
-    log_window.isVisible         = false;
-    log_window.rememberIsVisible = true;
-    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular", 14)); };
-
-    // docking layouts
-    m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window, log_window};
-    m_params.dockingParams.dockingSplits   = {
-        HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-        HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
-        HelloImGui::DockingSplit{"ImagesSpace", "ChannelsSpace", ImGuiDir_Down, 0.25f},
-        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
-
-#if defined(HELLOIMGUI_USE_GLFW)
-    m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
-    {
-        spdlog::trace("Registering glfw drop callback");
-        // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
-        glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
-                            [](GLFWwindow *w, int count, const char **filenames)
-                            {
-                                vector<string> arg(count);
-                                for (int i = 0; i < count; ++i) arg[i] = filenames[i];
-                                hdrview()->load_images(arg);
-                            });
-#ifdef __APPLE__
-        // On macOS, the mechanism for opening an application passes filenames
-        // through the NS api rather than CLI arguments, which means we need
-        // special handling of these through GLFW.
-        // There are two components to this special handling:
-        // (both of which need to happen here instead of HDRViewApp() because GLFW needs to have been initialized first)
-
-        // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
-        const char *const *opened_files = glfwGetOpenedFilenames();
-        if (opened_files)
-        {
-            spdlog::trace("Opening files passed in through the NS api...");
-            vector<string> args;
-            for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
-            load_images(args);
-        }
-
-        // 2) Register a callback on the running instance of HDRView for when the user:
-        //    a) drags a file onto the HDRView app icon in the dock, and/or
-        //    b) launches HDRView with files (either from the command line or Finder) when another instance is already
-        //       running
-        glfwSetOpenedFilenamesCallback(
-            [](const char *image_file)
-            {
-                spdlog::trace("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
-                hdrview()->load_images({string(image_file)});
-            });
-#endif
-    };
-#endif
-
-    //
-    // Load user settings at `PostInit` and save them at `BeforeExit`
-    //
-    m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
-    m_params.iniFilename        = "HDRView/settings.ini";
-    m_params.callbacks.PostInit = [this]
-    {
-        load_settings();
-        setup_rendering();
-    };
-    m_params.callbacks.BeforeExit = [this] { save_settings(); };
-
-    // Change style
-    m_params.callbacks.SetupImGuiStyle = []()
-    {
-        // Example of theme customization at App startup
-
-        // Apply default style
-        HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
-        // Create a tweaked theme
-        ImGuiTheme::ImGuiTweakedTheme tweakedTheme;
-        tweakedTheme.Theme           = ImGuiTheme::ImGuiTheme_DarculaDarker;
-        tweakedTheme.Tweaks.Rounding = 4.0f;
-
-        tweakedTheme.Tweaks.ValueMultiplierBg      = 0.5;
-        tweakedTheme.Tweaks.ValueMultiplierFrameBg = 0.5;
-
-        // Apply the tweaked theme
-        ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
-
-        // Then apply further modifications to ImGui style
-        ImGui::GetStyle().DisabledAlpha            = 0.5;
-        ImGui::GetStyle().WindowRounding           = 0;
-        ImGui::GetStyle().WindowBorderSize         = 0.2;
-        ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_Right;
-        ImGui::GetStyle().WindowPadding            = ImVec2(8, 8);
-        ImGui::GetStyle().FrameRounding            = 3;
-        ImGui::GetStyle().PopupRounding            = 4;
-        ImGui::GetStyle().TabRounding              = 4;
-        ImGui::GetStyle().DockingSeparatorSize     = 2;
-        ImGui::GetStyle().SeparatorTextBorderSize  = 1;
-        // ImGui::GetStyle().TabBarBorderSize         = 0;
-        // ImGui::GetStyle().FramePadding             = ImVec2(10, 8);
-
-        // make things like radio buttons look nice and round
-        ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
-
-        ImVec4 *colors                             = ImGui::GetStyle().Colors;
-        colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-        colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-        colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-        colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.47f);
-        colors[ImGuiCol_PopupBg]                   = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-        colors[ImGuiCol_Border]                    = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-        colors[ImGuiCol_BorderShadow]              = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
-        colors[ImGuiCol_FrameBg]                   = ImVec4(0.11f, 0.11f, 0.11f, 1.00f);
-        colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
-        colors[ImGuiCol_FrameBgActive]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
-        colors[ImGuiCol_TitleBg]                   = ImVec4(0.13f, 0.13f, 0.13f, 0.90f);
-        colors[ImGuiCol_TitleBgActive]             = ImVec4(0.16f, 0.16f, 0.16f, 0.90f);
-        colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-        colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-        colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.13f, 0.13f, 0.13f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_CheckMark]                 = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-        colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-        colors[ImGuiCol_ButtonHovered]             = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
-        colors[ImGuiCol_ButtonActive]              = ImVec4(0.14f, 0.18f, 0.26f, 1.00f);
-        colors[ImGuiCol_Header]                    = ImVec4(0.19f, 0.19f, 0.19f, 1.00f);
-        colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_HeaderActive]              = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
-        colors[ImGuiCol_Separator]                 = ImVec4(0.13f, 0.13f, 0.13f, 1.00f);
-        colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
-        colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabHovered]                = ImVec4(0.24f, 0.47f, 0.81f, 0.78f);
-        colors[ImGuiCol_Tab]                       = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-        colors[ImGuiCol_TabSelected]               = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
-        colors[ImGuiCol_TabDimmed]                 = ImVec4(0.49f, 0.49f, 0.49f, 0.08f);
-        colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
-        colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-        colors[ImGuiCol_PlotLines]                 = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
-        colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
-        colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
-        colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
-        colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.18f, 0.19f, 0.20f, 1.00f);
-        colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.30f, 0.32f, 0.34f, 1.00f);
-        colors[ImGuiCol_TableBorderLight]          = ImVec4(0.22f, 0.23f, 0.24f, 1.00f);
-        colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-        colors[ImGuiCol_TableRowBgAlt]             = ImVec4(0.98f, 0.98f, 0.98f, 0.06f);
-        colors[ImGuiCol_TextLink]                  = ImVec4(0.26f, 0.50f, 0.96f, 1.00f);
-        colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
-        colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
-        colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
-    };
-
-    m_params.callbacks.ShowGui = [this]()
-    {
-        add_pending_images();
-
-        draw_about_dialog();
-
-        draw_command_palette();
-
-        if (g_show_tweak_window)
-        {
-            auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-            ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Theme Tweaks", &g_show_tweak_window))
-            {
-                if (ImGuiTheme::ShowThemeTweakGui(&tweakedTheme))
-                    ApplyTweakedTheme(tweakedTheme);
-            }
-            ImGui::End();
-        }
-    };
-    m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
-    m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
 
     // load any passed-in images
     load_images(in_files);
@@ -919,10 +942,6 @@ void HDRViewApp::draw_menus()
 
     if (ImGui::BeginMenu("Windows"))
     {
-        auto &dockableWindows = m_params.dockingParams.dockableWindows;
-        if (dockableWindows.empty())
-            return;
-
         MenuItem(action("Command palette..."));
 
         ImGui::Separator();
@@ -941,10 +960,16 @@ void HDRViewApp::draw_menus()
             if (!dockableWindow.includeInViewMenu)
                 continue;
 
-            if (ImGui::MenuItem(dockableWindow.label.c_str(), nullptr, dockableWindow.isVisible,
-                                dockableWindow.canBeClosed))
-                dockableWindow.isVisible = !dockableWindow.isVisible;
+            MenuItem(action(fmt::format("Show {} window", dockableWindow.label)));
         }
+
+        ImGui::Separator();
+
+        MenuItem(action("Show top toolbar"));
+        MenuItem(action("Show status bar"));
+        MenuItem(action("Show FPS in status bar"));
+
+        ImGui::MenuItem("Enable Idling", nullptr, &m_params.fpsIdling.enableIdling);
 
         ImGui::EndMenu();
     }
@@ -1152,8 +1177,9 @@ void HDRViewApp::close_all_images()
 
 void HDRViewApp::run()
 {
-    ImmApp::AddOnsParams addons{/* .withImplot = */ true, /*.withMarkdown = */ false};
-    ImmApp::Run(m_params, addons);
+    ImPlot::CreateContext();
+    HelloImGui::Run(m_params);
+    ImPlot::DestroyContext();
 }
 
 ImFont *HDRViewApp::font(const string &name, int size) const
@@ -1942,8 +1968,7 @@ void HDRViewApp::draw_command_palette()
             {
                 if (a.enabled())
                     ImCmd::AddCommand({a.name, a.p_selected ? [&a](){
-                a.callback();
-                *a.p_selected = !*a.p_selected;} : a.callback, nullptr, nullptr, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected});
+                *a.p_selected = !*a.p_selected;a.callback();} : a.callback, nullptr, nullptr, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected});
             }
 
 #if !defined(__EMSCRIPTEN__)
@@ -1971,13 +1996,9 @@ void HDRViewApp::draw_command_palette()
 
 #endif
 
-            // items for each dockable window
-            for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
-            {
-                HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
-                ImCmd::AddCommand({fmt::format("Show {} window", w.label).c_str(), [&w]()
-                                   { w.isVisible = !w.isVisible; }, nullptr, nullptr, g_blank_icon, "", &w.isVisible});
-            }
+            ImCmd::AddCommand({"Enable idling",
+                               [this]() { m_params.fpsIdling.enableIdling = !m_params.fpsIdling.enableIdling; },
+                               nullptr, nullptr, g_blank_icon, "", &m_params.fpsIdling.enableIdling});
 
             // set logging verbosity. This is a two-step command
             ImCmd::AddCommand({"Set logging verbosity",
@@ -2069,9 +2090,9 @@ void HDRViewApp::process_shortcuts()
             if (a.enabled() && ImGui::GlobalShortcut(a.chord, a.flags))
             {
                 spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.name, ImGui::GetFrameCount());
-                a.callback();
                 if (a.p_selected)
                     *a.p_selected = !*a.p_selected;
+                a.callback();
 #ifdef __EMSCRIPTEN__
                 ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
                                                  // modifiers) needs to be pressed before this chord is detected again

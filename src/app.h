@@ -247,8 +247,9 @@ private:
 
     map<pair<string, int>, ImFont *> m_fonts;
 
-    vector<Action>      m_actions;
-    map<string, size_t> m_action_map;
+    vector<Action>                 m_actions;
+    map<string, size_t>            m_action_map;
+    HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
     Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };
