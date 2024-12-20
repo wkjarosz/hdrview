@@ -14,8 +14,9 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #elif defined(_WIN32)
-#include <shellapi.h>
 #include <windows.h>
+
+#include <shellapi.h>
 #elif defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
