@@ -354,6 +354,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         // Apply the tweaked theme
         ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
 
+        // make things like radio buttons look nice and round
+        ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
+
         // Then apply further modifications to ImGui style
         ImGui::GetStyle().DisabledAlpha            = 0.5;
         ImGui::GetStyle().WindowRounding           = 0;
