@@ -228,8 +228,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
     // Status bar
     //
     // We use the default status bar of Hello ImGui
-    m_params.imGuiWindowParams.showStatusBar = true;
-    m_params.callbacks.ShowStatus            = [this]() { draw_status_bar(); };
+    m_params.imGuiWindowParams.showStatusBar  = true;
+    m_params.imGuiWindowParams.showStatus_Fps = false;
+    m_params.callbacks.ShowStatus             = [this]() { draw_status_bar(); };
 
     //
     // Dockable windows
@@ -479,68 +480,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         add_action(
             {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
-        add_action({"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        auto &dockableWindows = m_params.dockingParams.dockableWindows;
-                        if (dockableWindows.empty())
-                            return;
-
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = true;
-                    },
-                    [this]()
-                    {
-                        auto &dockableWindows = m_params.dockingParams.dockableWindows;
-                        if (dockableWindows.empty())
-                            return false;
-
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu &&
-                                !dockableWindow.isVisible)
-                                return true;
-                        return false;
-                    }});
-
-        add_action({"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        auto &dockableWindows = m_params.dockingParams.dockableWindows;
-                        if (dockableWindows.empty())
-                            return;
-
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = false;
-                    },
-                    [this]()
-                    {
-                        auto &dockableWindows = m_params.dockingParams.dockableWindows;
-                        if (dockableWindows.empty())
-                            return false;
-
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu &&
-                                dockableWindow.isVisible)
-                                return true;
-                        return false;
-                    }});
-
-        add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
-                    [this]() { m_params.dockingParams.layoutReset = true; },
-                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
-
-        for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
-        {
-            HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
-            add_action({fmt::format("Show {} window", w.label).c_str(), g_blank_icon, 0, 0, []() {},
-                        [&w]() { return w.canBeClosed; }, false, &w.isVisible});
-        }
-
         static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
                                  m_params.callbacks.edgesToolbars.end();
-        add_action({"Show top toolbar", g_blank_icon, 0, 0,
+        add_action({"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
                     [this]()
                     {
                         if (!toolbar_on)
@@ -557,6 +499,85 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                     &m_params.imGuiWindowParams.showStatusBar});
         add_action({"Show FPS in status bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showStatus_Fps});
+        add_action(
+            {"Enable idling", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_params.fpsIdling.enableIdling});
+
+        auto any_window_hidden = [this]()
+        {
+            for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu && !dockableWindow.isVisible)
+                    return true;
+            return false;
+        };
+        auto any_window_visible = [this]()
+        {
+            for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu && dockableWindow.isVisible)
+                    return true;
+            return false;
+        };
+
+        add_action({"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
+                    [this]()
+                    {
+                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                                dockableWindow.isVisible = true;
+                    },
+                    any_window_hidden});
+
+        add_action({"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
+                    [this]()
+                    {
+                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                                dockableWindow.isVisible = false;
+                    },
+                    any_window_visible});
+
+        add_action({"Show entire GUI", ICON_MY_SHOW_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+                    [this]()
+                    {
+                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                                dockableWindow.isVisible = true;
+                        m_params.imGuiWindowParams.showMenuBar   = true;
+                        m_params.imGuiWindowParams.showStatusBar = true;
+                        m_params.callbacks.AddEdgeToolbar(
+                            HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+                    },
+                    [this, any_window_hidden]()
+                    {
+                        return any_window_hidden() || !m_params.imGuiWindowParams.showMenuBar ||
+                               !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
+                    }});
+
+        add_action({"Hide entire GUI", ICON_MY_HIDE_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+                    [this]()
+                    {
+                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                                dockableWindow.isVisible = false;
+                        m_params.imGuiWindowParams.showMenuBar   = false;
+                        m_params.imGuiWindowParams.showStatusBar = false;
+                        m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                    },
+                    [this, any_window_visible]()
+                    {
+                        return any_window_visible() || m_params.imGuiWindowParams.showMenuBar ||
+                               m_params.imGuiWindowParams.showStatusBar || toolbar_on;
+                    }});
+
+        add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
+                    [this]() { m_params.dockingParams.layoutReset = true; },
+                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
+        for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
+        {
+            HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
+            add_action({fmt::format("Show {} window", w.label).c_str(), g_blank_icon, 0, 0, []() {},
+                        [&w]() { return w.canBeClosed; }, false, &w.isVisible});
+        }
 
         add_action({"Decrease exposure", ICON_MY_REDUCE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
@@ -829,10 +850,10 @@ void HDRViewApp::draw_status_bar()
         float text_width = ImGui::CalcTextSize(text.c_str()).x;
         float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
 
-        ImGui::SameLine();
-        ImGui::SetCursorPos({x + align * (item_width - text_width), y});
+        ImGui::SameLine(x + align * (item_width - text_width));
+        ImGui::SetCursorPosY(y);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(text.c_str());
+        ImGui::TextUnformatted(text);
         x += item_width + spacing;
     };
 
@@ -861,8 +882,9 @@ void HDRViewApp::draw_status_bar()
         float real_zoom = m_zoom * pixel_ratio();
         int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
         int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-        x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(15.f);
-        sized_text(0.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
+        x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(11.f) -
+            (m_params.imGuiWindowParams.showStatus_Fps ? HelloImGui::EmSize(14.f) : HelloImGui::EmSize(0.f));
+        sized_text(10.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
     }
 }
 
@@ -953,6 +975,9 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
+        MenuItem(action("Show entire GUI"));
+        MenuItem(action("Hide entire GUI"));
+
         MenuItem(action("Show all windows"));
         MenuItem(action("Hide all windows"));
 
@@ -971,8 +996,6 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Show top toolbar"));
         MenuItem(action("Show status bar"));
         MenuItem(action("Show FPS in status bar"));
-
-        ImGui::MenuItem("Enable Idling", nullptr, &m_params.fpsIdling.enableIdling);
 
         ImGui::EndMenu();
     }
@@ -1998,10 +2021,6 @@ void HDRViewApp::draw_command_palette()
                                    nullptr, ICON_MY_OPEN_IMAGE});
 
 #endif
-
-            ImCmd::AddCommand({"Enable idling",
-                               [this]() { m_params.fpsIdling.enableIdling = !m_params.fpsIdling.enableIdling; },
-                               nullptr, nullptr, g_blank_icon, "", &m_params.fpsIdling.enableIdling});
 
             // set logging verbosity. This is a two-step command
             ImCmd::AddCommand({"Set logging verbosity",

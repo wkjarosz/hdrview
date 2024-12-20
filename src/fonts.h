@@ -209,6 +209,7 @@
 #define ICON_MY_TEXT_WRAP_OFF      ICON_MS_FORMAT_ALIGN_LEFT
 #define ICON_MY_WIDEST             ICON_MS_VOLUME_UP
 #define ICON_MY_LINK               ICON_MS_LINK
+#define ICON_MY_TOOLBAR            ICON_MS_TOOLBAR
 
 #elif defined(MATERIAL_DESIGN_ICONS)
 
