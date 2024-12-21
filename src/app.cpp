@@ -93,6 +93,7 @@ static constexpr size_t g_max_recent           = 15;
 static bool             g_show_help            = false;
 static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
+static bool             g_show_bg_color_picker = false;
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -443,6 +444,32 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         draw_about_dialog();
 
         draw_command_palette();
+
+        // if (g_show_bg_color_picker)
+        //     ImGui::OpenPopup("Background color");
+        // g_show_bg_color_picker = false;
+
+        // ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
+        //                         ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
+        // if (ImGui::BeginPopup("Background color"))
+        // {
+        //     ImGui::ColorPicker3("##Custom background color", (float *)&m_bg_color,
+        //                         ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+        //     ImGui::EndPopup();
+        // }
+
+        if (g_show_bg_color_picker)
+        {
+            // Center window horizontally, align near top vertically
+            ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
+                                    ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
+            if (ImGui::Begin("Choose custom background color", &g_show_bg_color_picker,
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                                 ImGuiWindowFlags_NoDocking))
+                ImGui::ColorPicker3("##Custom background color", (float *)&m_bg_color,
+                                    ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+            ImGui::End();
+        }
 
         if (g_show_tweak_window)
         {
@@ -819,7 +846,13 @@ void HDRViewApp::load_settings()
         if (bg_mode >= (int)BG_BLACK && bg_mode < (int)NUM_BG_MODES)
             m_bg_mode = (EBGMode)bg_mode;
         else
-            spdlog::error("Invalid stored background mode '{}'. Ignoring.", bg_mode);
+            spdlog::error("Failed to load background mode '{}' from settings. Ignoring.", bg_mode);
+    }
+
+    if (auto bg_color_str = HelloImGui::LoadUserPref("Background color"); !bg_color_str.empty())
+    {
+        std::istringstream ss(bg_color_str);
+        ss >> m_bg_color.x >> m_bg_color.y >> m_bg_color.z >> m_bg_color.w;
     }
 }
 
@@ -836,6 +869,7 @@ void HDRViewApp::save_settings()
     HelloImGui::SaveUserPref("Recent files", ss.str());
 
     HelloImGui::SaveUserPref("Background mode", fmt::format("{}", (int)m_bg_mode));
+    HelloImGui::SaveUserPref("Background color", fmt::format("{} {} {}", m_bg_color.x, m_bg_color.y, m_bg_color.z));
 }
 
 void HDRViewApp::draw_status_bar()
@@ -2070,17 +2104,21 @@ void HDRViewApp::draw_command_palette()
                                ICON_MY_LOG_LEVEL});
 
             // set background color. This is a two-step command
-            ImCmd::AddCommand(
-                {"Set background color",
-                 []()
-                 {
-                     ImCmd::Prompt(
-                         std::vector<std::string>{"0: black", "1: white", "2: dark checker", "3: light checker"});
-                     ImCmd::SetNextCommandPaletteSearchBoxFocused();
-                 },
-                 [this](int selected_option)
-                 { m_bg_mode = (EBGMode)std::clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 2); }, nullptr,
-                 g_blank_icon});
+            ImCmd::AddCommand({"Set background color",
+                               []()
+                               {
+                                   ImCmd::Prompt(std::vector<std::string>{"0: black", "1: white", "2: dark checker",
+                                                                          "3: light checker", "4: custom"});
+                                   ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                               },
+                               [this](int selected_option)
+                               {
+                                   m_bg_mode =
+                                       (EBGMode)std::clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 1);
+                                   if (m_bg_mode == BG_CUSTOM_COLOR)
+                                       g_show_bg_color_picker = true;
+                               },
+                               nullptr, g_blank_icon});
 
             // add two-step theme selection command
             ImCmd::AddCommand({"Set theme",
