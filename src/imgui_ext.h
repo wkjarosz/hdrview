@@ -160,4 +160,22 @@ const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord);
 // Used for global key chords, e.g. for menu shortcuts.
 bool GlobalShortcut(const ImGuiKeyChord &chord, ImGuiInputFlags flags = 0);
 
+// linalg::float3 wrapper for ImGui function
+// Convert rgb floats ([0-1],[0-1],[0-1]) to hsv floats ([0-1],[0-1],[0-1])
+inline float3 ColorConvertRGBtoHSV(const float3 &rgb)
+{
+    float3 hsv;
+    ColorConvertRGBtoHSV(rgb.x, rgb.y, rgb.z, hsv.x, hsv.y, hsv.z);
+    return hsv;
+}
+
+// linalg::float3 wrapper for ImGui function
+// Convert hsv floats ([0-1],[0-1],[0-1]) to rgb floats ([0-1],[0-1],[0-1])
+inline float3 ColorConvertHSVtoRGB(const float3 &hsv)
+{
+    float3 rgb;
+    ColorConvertHSVtoRGB(hsv.x, hsv.y, hsv.z, rgb.x, rgb.y, rgb.z);
+    return rgb;
+}
+
 } // namespace ImGui

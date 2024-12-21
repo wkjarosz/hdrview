@@ -291,40 +291,17 @@ void HSVToRGB(float *r, float *g, float *b, float h, float s, float v)
     float q = v * (1.0f - s * f);
     float t = v * (1.0f - s * (1.0f - f));
 
+    // clang-format off
     switch (i)
     {
-    case 0:
-        *r = v;
-        *g = t;
-        *b = p;
-        break;
-    case 1:
-        *r = q;
-        *g = v;
-        *b = p;
-        break;
-    case 2:
-        *r = p;
-        *g = v;
-        *b = t;
-        break;
-    case 3:
-        *r = p;
-        *g = q;
-        *b = v;
-        break;
-    case 4:
-        *r = t;
-        *g = p;
-        *b = v;
-        break;
-    case 5:
-    default:
-        *r = v;
-        *g = p;
-        *b = q;
-        break;
+    case 0: *r = v; *g = t; *b = p; break;
+    case 1: *r = q; *g = v; *b = p; break;
+    case 2: *r = p; *g = v; *b = t; break;
+    case 3: *r = p; *g = q; *b = v; break;
+    case 4: *r = t; *g = p; *b = v; break;
+    case 5: default: *r = v; *g = p; *b = q; break;
     }
+    // clang-format on
 }
 
 //! Convert a color in RGB colorspace to an equivalent color in HSL colorspace.

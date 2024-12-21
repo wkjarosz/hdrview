@@ -619,7 +619,7 @@ string Image::to_string() const
     for (size_t l = 0; l < layers.size(); ++l)
     {
         auto &layer = layers[l];
-        out += fmt::format("  {:>2d}: '{}' ({})\n", l, layer.name, layer.groups.size(), layer.groups.size());
+        out += fmt::format("  {:>2d}: '{}' ({})\n", l, layer.name, layer.groups.size());
         for (size_t g = 0; g < layer.groups.size(); ++g)
         {
             if (g > 0)

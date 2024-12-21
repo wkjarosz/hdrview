@@ -402,7 +402,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
         colors[ImGuiCol_Header]                    = ImVec4(0.18f, 0.34f, 0.59f, 1.00f);
         colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_HeaderActive]              = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
+        colors[ImGuiCol_HeaderActive]              = ImVec4(0.29f, 0.58f, 1.00f, 1.00f);
         colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
         colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
         colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
@@ -493,11 +493,11 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                                 m_top_toolbar_options);
                     },
                     always_enabled, false, &toolbar_on});
-        add_action({"Show menu bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+        add_action({"Show menu bar", ICON_MY_HIDE_ALL_WINDOWS, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showMenuBar});
-        add_action({"Show status bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+        add_action({"Show status bar", ICON_MY_STATUSBAR, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showStatusBar});
-        add_action({"Show FPS in status bar", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+        add_action({"Show FPS in status bar", ICON_MS_SPEED, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showStatus_Fps});
         add_action(
             {"Enable idling", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_params.fpsIdling.enableIdling});
@@ -506,13 +506,6 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
         {
             for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
                 if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu && !dockableWindow.isVisible)
-                    return true;
-            return false;
-        };
-        auto any_window_visible = [this]()
-        {
-            for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu && dockableWindow.isVisible)
                     return true;
             return false;
         };
@@ -533,7 +526,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                             if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
                                 dockableWindow.isVisible = false;
                     },
-                    any_window_visible});
+                    [any_window_hidden]() { return !any_window_hidden(); }});
 
         add_action({"Show entire GUI", ICON_MY_SHOW_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
                     [this]()
@@ -552,7 +545,7 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                                !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
                     }});
 
-        add_action({"Hide entire GUI", ICON_MY_HIDE_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+        add_action({"Hide entire GUI", ICON_MS_CHECK_BOX_OUTLINE_BLANK, ImGuiMod_Shift | ImGuiKey_Tab, 0,
                     [this]()
                     {
                         for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -562,9 +555,9 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
                         m_params.imGuiWindowParams.showStatusBar = false;
                         m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
                     },
-                    [this, any_window_visible]()
+                    [this, any_window_hidden]()
                     {
-                        return any_window_visible() || m_params.imGuiWindowParams.showMenuBar ||
+                        return !any_window_hidden() || m_params.imGuiWindowParams.showMenuBar ||
                                m_params.imGuiWindowParams.showStatusBar || toolbar_on;
                     }});
 
@@ -1328,12 +1321,15 @@ void HDRViewApp::draw_file_window()
                                 1.75f * icon_width);
         ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
                                 ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
-        ImGui::TableSetupColumn(show_channels ? "File or channel group name" : "File name",
+        ImGui::TableSetupColumn(show_channels ? "File/part or channel group name"
+                                              : "File/part:layer.channel group name",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
 
-        int id                 = 0;
-        int visible_img_number = 0;
+        static ImGuiOnceUponAFrame once;
+        bool                       oaf                = false; // once;
+        int                        id                 = 0;
+        int                        visible_img_number = 0;
         for (int i = 0; i < num_images(); ++i)
         {
             auto &img          = m_images[i];
@@ -1348,7 +1344,7 @@ void HDRViewApp::draw_file_window()
             ImGui::TableNextRow();
 
             ImGui::TableNextColumn();
-            ImGui::PushRowColors(is_current, is_reference);
+            ImGui::PushRowColors(is_current, (!is_current && ImGui::GetIO().KeyCtrl) || is_reference);
             if (ImGui::Selectable(fmt::format("##image_{}_selectable", i + 1).c_str(), is_current || is_reference,
                                   selectable_flags))
             {
@@ -1372,7 +1368,11 @@ void HDRViewApp::draw_file_window()
             ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
 
             // right-align the truncated file name
-            string filename = img->file_and_partname();
+            auto  &selected_group = img->groups[img->selected_group];
+            string group_name     = selected_group.name;
+            auto  &channel        = img->channels[selected_group.channels[0]];
+            string layer_path     = Channel::head(channel.name);
+            string filename       = img->file_and_partname() + (show_channels ? "" : ":" + layer_path + group_name);
 
             ImGui::TableNextColumn();
             string ellipsis    = "";
@@ -1396,11 +1396,14 @@ void HDRViewApp::draw_file_window()
                         auto  &group = img->groups[layer.groups[g]];
                         string name  = string(ICON_MY_CHANNEL_GROUP) + " " + layer.name + group.name;
 
-                        bool is_selected_channel = is_current && img->selected_group == layer.groups[g];
+                        bool is_selected_channel  = is_current && img->selected_group == layer.groups[g];
+                        bool is_reference_channel = is_reference && img->selected_group == layer.groups[g];
 
-                        ImGui::PushRowColors(is_selected_channel, false);
+                        if (oaf)
+                            spdlog::info("Image {}; Group {} is selected: {}, reference: {}", filename, group.name,
+                                         is_selected_channel, is_reference_channel);
+                        ImGui::PushRowColors(is_selected_channel, is_reference_channel);
                         {
-
                             ImGui::TableNextRow();
 
                             ImGui::TableNextColumn();
@@ -1412,10 +1415,27 @@ void HDRViewApp::draw_file_window()
                             ImGui::TableNextColumn();
                             if (ImGui::Selectable(
                                     fmt::format("{}##{}", is_selected_channel ? ICON_MY_VISIBILITY : "", id++).c_str(),
-                                    is_selected_channel, selectable_flags))
+                                    is_selected_channel || is_reference_channel, selectable_flags))
                             {
-                                img->selected_group = layer.groups[g];
-                                m_current           = i;
+                                if (ImGui::GetIO().KeyCtrl)
+                                {
+                                    // check if we are already the reference channel group
+                                    if (is_reference && img->selected_group == layer.groups[g])
+                                    {
+                                        m_reference         = -1;
+                                        img->selected_group = 0;
+                                    }
+                                    else
+                                    {
+                                        m_reference         = i;
+                                        img->selected_group = layer.groups[g];
+                                    }
+                                }
+                                else
+                                {
+                                    m_current           = i;
+                                    img->selected_group = layer.groups[g];
+                                }
                                 set_image_textures();
                             }
 
