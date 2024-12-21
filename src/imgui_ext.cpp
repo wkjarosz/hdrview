@@ -164,7 +164,7 @@ void SpdLogWindow::draw(ImFont *console_font)
                             ? ImGuiWindowFlags_AlwaysVerticalScrollbar
                             : ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar;
 
-    ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_None, window_flags);
+    ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_FrameStyle, window_flags);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
     ImGui::PushFont(console_font);
     ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
