@@ -783,6 +783,8 @@ void HDRViewApp::setup_rendering()
 
 void HDRViewApp::load_settings()
 {
+    spdlog::info("Loading user settings from '{}'", HelloImGui::IniSettingsLocation(m_params));
+
     spdlog::debug("Restoring recent file list...");
     auto               s = HelloImGui::LoadUserPref("Recent files");
     std::istringstream ss(s);
@@ -809,10 +811,21 @@ void HDRViewApp::load_settings()
 
         i++;
     }
+
+    if (auto bg_mode_str = HelloImGui::LoadUserPref("Background mode"); !bg_mode_str.empty())
+    {
+        int bg_mode = std::stoi(bg_mode_str);
+
+        if (bg_mode >= (int)BG_BLACK && bg_mode < (int)NUM_BG_MODES)
+            m_bg_mode = (EBGMode)bg_mode;
+        else
+            spdlog::error("Invalid stored background mode '{}'. Ignoring.", bg_mode);
+    }
 }
 
 void HDRViewApp::save_settings()
 {
+    spdlog::info("Saving user settings to '{}'", HelloImGui::IniSettingsLocation(m_params));
     std::stringstream ss;
     for (size_t i = 0; i < m_recent_files.size(); ++i)
     {
@@ -821,6 +834,8 @@ void HDRViewApp::save_settings()
             ss << std::endl;
     }
     HelloImGui::SaveUserPref("Recent files", ss.str());
+
+    HelloImGui::SaveUserPref("Background mode", fmt::format("{}", (int)m_bg_mode));
 }
 
 void HDRViewApp::draw_status_bar()
@@ -2053,6 +2068,19 @@ void HDRViewApp::draw_command_palette()
                                [](int selected_option)
                                { spdlog::set_level(spdlog::level::level_enum(selected_option)); }, nullptr,
                                ICON_MY_LOG_LEVEL});
+
+            // set background color. This is a two-step command
+            ImCmd::AddCommand(
+                {"Set background color",
+                 []()
+                 {
+                     ImCmd::Prompt(
+                         std::vector<std::string>{"0: black", "1: white", "2: dark checker", "3: light checker"});
+                     ImCmd::SetNextCommandPaletteSearchBoxFocused();
+                 },
+                 [this](int selected_option)
+                 { m_bg_mode = (EBGMode)std::clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 2); }, nullptr,
+                 g_blank_icon});
 
             // add two-step theme selection command
             ImCmd::AddCommand({"Set theme",
