@@ -445,19 +445,25 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
 
         draw_command_palette();
 
+        // popup version of the below; commented out because it doesn't allow right-clicking to change the color picker
+        // type
+        //
         // if (g_show_bg_color_picker)
         //     ImGui::OpenPopup("Background color");
         // g_show_bg_color_picker = false;
-
         // ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
         //                         ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
-        // if (ImGui::BeginPopup("Background color"))
+        // ImGui::SetNextWindowFocus();
+        // if (ImGui::BeginPopup("Background color", ImGuiWindowFlags_NoSavedSettings |
+        // ImGuiWindowFlags_AlwaysAutoResize))
         // {
+        //     ImGui::TextUnformatted("Choose custom background color");
         //     ImGui::ColorPicker3("##Custom background color", (float *)&m_bg_color,
         //                         ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
         //     ImGui::EndPopup();
         // }
 
+        // window version of the above
         if (g_show_bg_color_picker)
         {
             // Center window horizontally, align near top vertically
@@ -466,8 +472,24 @@ HDRViewApp::HDRViewApp(float exposure, float gamma, bool dither, bool sRGB, bool
             if (ImGui::Begin("Choose custom background color", &g_show_bg_color_picker,
                              ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
                                  ImGuiWindowFlags_NoDocking))
-                ImGui::ColorPicker3("##Custom background color", (float *)&m_bg_color,
-                                    ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+            {
+                static float4 previous_bg_color = m_bg_color;
+                if (ImGui::IsWindowAppearing())
+                    previous_bg_color = m_bg_color;
+                ImGui::ColorPicker4("##Custom background color", (float *)&m_bg_color,
+                                    ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha,
+                                    (float *)&previous_bg_color);
+
+                ImGui::Dummy(HelloImGui::EmToVec2(1.f, 0.5f));
+                if (ImGui::Button("OK", HelloImGui::EmToVec2(5.f, 0.f)))
+                    g_show_bg_color_picker = false;
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel", HelloImGui::EmToVec2(5.f, 0.f)))
+                {
+                    m_bg_color             = previous_bg_color;
+                    g_show_bg_color_picker = false;
+                }
+            }
             ImGui::End();
         }
 
@@ -2387,7 +2409,7 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTabBar();
         }
 
-        if (ImGui::Button("Dismiss", ImVec2(120, 0)) || ImGui::Shortcut(ImGuiKey_Escape) ||
+        if (ImGui::Button("Dismiss", HelloImGui::EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
             ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) || ImGui::Shortcut(ImGuiKey_H))
         {
             ImGui::CloseCurrentPopup();
