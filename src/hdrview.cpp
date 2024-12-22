@@ -56,8 +56,8 @@ int main(int argc, char **argv)
     constexpr int default_verbosity = spdlog::level::info;
     int           verbosity         = default_verbosity;
 
-    float exposure = 0.0f, gamma = 2.2f;
-    bool  dither = true, sRGB = true, force_sdr = false;
+    std::optional<float> exposure, gamma;
+    std::optional<bool>  dither, force_sdr;
 
     vector<string> in_files;
 
@@ -151,21 +151,20 @@ The default is 2 (info).)")
 
         spdlog::info("Welcome to HDRView!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);
-        spdlog::info("Setting intensity scale to {:f}", powf(2.0f, exposure));
+        if (exposure.has_value())
+            spdlog::info("Forcing exposure to {:f} (intensity scale of {:f})", *exposure, powf(2.0f, *exposure));
 
         // gamma or sRGB
-        if (app.count("--gamma"))
-        {
-            sRGB = false;
-            spdlog::info("Setting gamma correction to g={:f}.", gamma);
-        }
+        if (gamma.has_value())
+            spdlog::info("Forcing gamma correction to g={:f}.", *gamma);
         else
             spdlog::info("Using sRGB response curve.");
 
         // dithering
-        spdlog::info("{}", (dither) ? "Dithering" : "Not dithering");
+        if (dither.has_value())
+            spdlog::info("Forcing dithering {}.", (dither) ? "on" : "off");
 
-        init_hdrview(exposure, gamma, sRGB, dither, force_sdr, in_files);
+        init_hdrview(exposure, gamma, dither, force_sdr, in_files);
 
         hdrview()->run();
     }

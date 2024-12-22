@@ -7,7 +7,6 @@
 #include "app.h"
 #include "common.h"
 #include "image.h"
-#include "parallelfor.h"
 #include "shader.h"
 #include "texture.h"
 

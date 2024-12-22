@@ -46,6 +46,5 @@ void parallel_for(int begin, int end, int step, function<void(int, size_t)> body
 
 void parallel_for(int begin, int end, int step, function<void(int)> body, size_t num_threads)
 {
-    parallel_for(
-        begin, end, step, [&body](int i, size_t) { body(i); }, num_threads);
+    parallel_for(begin, end, step, [&body](int i, size_t) { body(i); }, num_threads);
 }

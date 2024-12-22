@@ -9,7 +9,6 @@
 #include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
-#include "parallelfor.h"
 #include "shader.h"
 #include "texture.h"
 #include "timer.h"

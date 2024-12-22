@@ -127,6 +127,8 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_STATUSBAR);
         builder.AddText(ICON_MY_HIDE_GUI);
         builder.AddText(ICON_MY_FPS);
+        builder.AddText(ICON_MY_DISPLAY_WINDOW);
+        builder.AddText(ICON_MY_DATA_WINDOW);
 
         // Build the final result (ordered ranges with all the unique characters submitted)
         builder.BuildRanges(&ranges);

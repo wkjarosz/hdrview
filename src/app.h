@@ -42,8 +42,8 @@ struct Action
 class HDRViewApp
 {
 public:
-    HDRViewApp(float exposure = 0.0f, float gamma = 2.2f, bool dither = true, bool sRGB = true, bool force_sdr = false,
-               vector<string> in_files = {});
+    HDRViewApp(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
+               std::optional<bool> force_sdr, vector<string> in_files = {});
     ~HDRViewApp();
 
     void run();
@@ -123,8 +123,10 @@ public:
     //-----------------------------------------------------------------------------
     /// Centers the image without affecting the scaling factor.
     void center();
-    /// Centers and scales the image so that it fits inside the widget.
-    void fit();
+    /// Centers and scales the image so that its display window fits inside the viewport.
+    void fit_display_window();
+    /// Centers and scales the image so that its data window fits inside the viewport.
+    void fit_data_window();
     /**
         Changes the zoom factor by the provided amount modified by the zoom sensitivity member variable.
         The scaling occurs such that the image pixel coordinate under focus_vp_pos remains in
@@ -225,17 +227,20 @@ private:
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
-    bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true;
+    bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
+         m_draw_data_window = true, m_draw_display_window = true;
 
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    float      m_zoom       = 1.f;                      ///< The zoom factor (image pixel size / logical pixel size)
-    float2     m_offset     = {0.f, 0.f};               ///< The panning offset of the image
-    EChannel   m_channel    = EChannel::RGB;            ///< Which channel to display
-    EBlendMode m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
-    EBGMode    m_bg_mode    = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4     m_bg_color   = {0.3, 0.3, 0.3, 1.0};     ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    bool       m_auto_fit_display = false;      ///< Continually keep the image display window fit within the viewport
+    bool       m_auto_fit_data    = false;      ///< Continually keep the image data window fit within the viewport
+    float      m_zoom             = 1.f;        ///< The zoom factor (image pixel size / logical pixel size)
+    float2     m_offset           = {0.f, 0.f}; ///< The panning offset of the image
+    EChannel   m_channel          = EChannel::RGB;            ///< Which channel to display
+    EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
+    EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
+    float4     m_bg_color = {0.3, 0.3, 0.3, 1.0};     ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     float2 m_viewport_min, m_viewport_size;
 
@@ -255,8 +260,8 @@ private:
 };
 
 /// Create the global singleton HDRViewApp instance
-void init_hdrview(float exposure = 0.0f, float gamma = 2.2f, bool dither = true, bool sRGB = true,
-                  bool force_sdr = false, const vector<string> &in_files = {});
+void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
+                  std::optional<bool> force_sdr, const vector<string> &in_files = {});
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
