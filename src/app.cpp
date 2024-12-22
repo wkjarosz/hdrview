@@ -1601,17 +1601,23 @@ void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
 
 void HDRViewApp::fit_display_window()
 {
-    m_zoom = minelem(viewport_size() / current_image()->display_window.size());
-    center();
+    if (auto img = current_image())
+    {
+        m_zoom = minelem(viewport_size() / img->display_window.size());
+        center();
+    }
 }
 
 void HDRViewApp::fit_data_window()
 {
-    m_zoom = minelem(viewport_size() / current_image()->data_window.size());
+    if (auto img = current_image())
+    {
+        m_zoom = minelem(viewport_size() / img->data_window.size());
 
-    auto center_pos   = float2(viewport_size() / 2.f);
-    auto center_pixel = Box2f(current_image()->data_window).center();
-    reposition_pixel_to_vp_pos(center_pos, center_pixel);
+        auto center_pos   = float2(viewport_size() / 2.f);
+        auto center_pixel = Box2f(current_image()->data_window).center();
+        reposition_pixel_to_vp_pos(center_pos, center_pixel);
+    }
 }
 
 float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(m_zoom_sensitivity); }
@@ -2016,33 +2022,20 @@ void HDRViewApp::draw_background()
 #if defined(__EMSCRIPTEN__)
             scroll *= 10.0f;
 #endif
-            static ImGuiOnceUponAFrame once;
-            bool                       oaf = once;
-            float2                     drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-            bool                       cancel_autofit = true;
+            float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
+            bool   cancel_autofit = true;
             if (length2(drag_delta) > 0.f && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
             {
                 reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
                 ImGui::ResetMouseDragDelta();
-
-                if (oaf)
-                    spdlog::info("Canceled auto-fit 1");
             }
             else if (length2(scroll) > 0.f)
             {
                 if (ImGui::IsKeyDown(ImGuiMod_Shift))
-                {
                     // panning
                     reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
-                    if (oaf)
-                        spdlog::info("Canceled auto-fit 2");
-                }
                 else
-                {
                     zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
-                    if (oaf)
-                        spdlog::info("Canceled auto-fit 3 {}", scroll.y);
-                }
             }
             else
                 cancel_autofit = false;
