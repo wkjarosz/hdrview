@@ -389,11 +389,10 @@ void Image::draw_channels_list()
 
 void Image::draw_info()
 {
-    auto &io = ImGui::GetIO();
-
-    auto hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
-
+    // auto &io = ImGui::GetIO();
+    // auto hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
     // float4 hovered = hdrview()->image_pixel(hovered_pixel);
+
     auto &group = groups[selected_group];
 
     auto sans_font = hdrview()->font("sans regular", 14);

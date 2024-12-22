@@ -249,6 +249,7 @@ float4x4 ChannelGroup::colors() const
     case UVorXY_Channels:
     case Z_Channel:
     case Single_Channel:
+    default:
         return float4x4{
             {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
     }

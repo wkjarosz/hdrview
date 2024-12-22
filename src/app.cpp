@@ -743,7 +743,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // select the reference image using Cmd + image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
             add_action({fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                        ImGuiMod_Ctrl | ImGuiKey_0 + mod(n, 10), 0,
+                        ImGuiMod_Ctrl | (ImGuiKey_0 + mod(n, 10)), 0,
                         [this, n]()
                         {
                             auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
