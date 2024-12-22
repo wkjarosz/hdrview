@@ -289,12 +289,116 @@ void Image::draw_histogram()
     }
 }
 
-void Image::draw_channels_list()
+/*!
+    For each channel in the image, draw a row into a 3-column imgui table.
+
+    \param i The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to set
+        HDRViewApp's current image upon clicking on the row.
+    \param id A unique integer id for imgui purposes. Is incremented for each added clickable row.
+    \param tree_view Where to list the layers as a flat list (false) of a hierarchy (true). Tree view inserts additional
+        non-clickable rows.
+    \param is_current Is this the current image in HDRViewApp?
+    \param is_reference Is this the reference image in HDRViewApp?
+*/
+void Image::draw_channel_rows(int i, int &id, bool tree_view, bool is_current, bool is_reference)
 {
-    static int                  tree_view = 1;
-    static ImGuiSelectableFlags selectable_flags =
+    static constexpr ImGuiSelectableFlags selectable_flags =
         ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-    static ImGuiTableFlags table_flags =
+    const float icon_width  = ImGui::IconSize().x;
+    const float icon_indent = icon_width + ImGui::CalcTextSize(" ").x;
+
+    std::set<string> created_levels;
+    for (size_t l = 0; l < layers.size(); ++l)
+    {
+        auto &layer = layers[l];
+
+        float total_indent = 0.f;
+        // if tree view is enabled, list the levels of the layer path and indent
+        if (tree_view)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+
+            // Split the input string by dot
+            std::istringstream iss(layer.name);
+            string             level, path;
+            // Iterate through the layer path levels
+            while (std::getline(iss, level, '.'))
+            {
+                path = (path.empty() ? "" : path + ".") + level;
+                // if this is the first time we have encountered this folder, list it
+                if (auto result = created_levels.insert(path); result.second)
+                {
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(2);
+                    ImGui::TextFmt("{} {}", ICON_MY_OPEN_IMAGE, level);
+                }
+
+                ImGui::Indent(icon_indent);
+                total_indent += icon_indent;
+            }
+            ImGui::PopStyleColor();
+        }
+
+        for (size_t g = 0; g < layer.groups.size(); ++g)
+        {
+            auto  &group = groups[layer.groups[g]];
+            string name  = string(ICON_MY_CHANNEL_GROUP) + " " + (tree_view ? group.name : layer.name + group.name);
+
+            bool is_selected_channel  = is_current && selected_group == layer.groups[g];
+            bool is_reference_channel = is_reference && selected_group == layer.groups[g];
+
+            ImGui::PushRowColors(is_selected_channel, is_reference_channel);
+            {
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                string shortcut = is_current && layer.groups[g] < 10
+                                      ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10))
+                                      : "";
+                ImGui::TextAligned(shortcut, 1.0f);
+
+                ImGui::TableNextColumn();
+                if (ImGui::Selectable(
+                        fmt::format("{}##{}", is_selected_channel ? ICON_MY_VISIBILITY : "", id++).c_str(),
+                        is_selected_channel || is_reference_channel, selectable_flags))
+                {
+                    if (ImGui::GetIO().KeyCtrl)
+                    {
+                        // check if we are already the reference channel group
+                        if (is_reference && selected_group == layer.groups[g])
+                        {
+                            hdrview()->set_reference_image_index(-1, true);
+                            selected_group = 0;
+                        }
+                        else
+                        {
+                            hdrview()->set_reference_image_index(i);
+                            selected_group = layer.groups[g];
+                        }
+                        set_as_texture(selected_group, *hdrview()->shader(), "secondary");
+                    }
+                    else
+                    {
+                        hdrview()->set_current_image_index(i);
+                        selected_group = layer.groups[g];
+                        set_as_texture(selected_group, *hdrview()->shader(), "primary");
+                    }
+                }
+
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(name);
+            }
+            ImGui::PopStyleColor(3);
+        }
+        if (total_indent != 0)
+            ImGui::Unindent(total_indent);
+    }
+}
+
+void Image::draw_channels_list(bool is_reference, bool is_current)
+{
+    static int                       tree_view = 1;
+    static constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
 
     ImGui::AlignTextToFramePadding();
@@ -304,8 +408,7 @@ void Image::draw_channels_list()
 
     if (ImGui::BeginTable("ChannelList", 3, table_flags))
     {
-        const float icon_width  = ImGui::IconSize().x;
-        const float icon_indent = icon_width + ImGui::CalcTextSize(" ").x;
+        const float icon_width = ImGui::IconSize().x;
 
         ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.75f * icon_width);
@@ -315,73 +418,8 @@ void Image::draw_channels_list()
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
 
-        std::set<string> created_levels;
-
-        for (size_t l = 0; l < layers.size(); ++l)
-        {
-            auto &layer = layers[l];
-
-            float total_indent = 0.f;
-            // if tree view is enabled, list the levels of the layer path and indent
-            if (tree_view)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-
-                // Split the input string by dot
-                std::istringstream iss(layer.name);
-                string             level, path;
-                // Iterate through the layer path levels
-                while (std::getline(iss, level, '.'))
-                {
-                    path = (path.empty() ? "" : path + ".") + level;
-                    // if this is the first time we have encountered this folder, list it
-                    if (auto result = created_levels.insert(path); result.second)
-                    {
-                        ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(2);
-                        ImGui::TextFmt("{} {}", ICON_MY_OPEN_IMAGE, level);
-                    }
-
-                    ImGui::Indent(icon_indent);
-                    total_indent += icon_indent;
-                }
-                ImGui::PopStyleColor();
-            }
-
-            for (size_t g = 0; g < layer.groups.size(); ++g)
-            {
-                auto  &group = groups[layer.groups[g]];
-                string name  = tree_view ? group.name : layer.name + group.name;
-
-                bool is_selected_channel = selected_group == layer.groups[g];
-
-                ImGui::PushRowColors(is_selected_channel, false);
-                {
-                    ImGui::TableNextRow();
-
-                    ImGui::TableNextColumn();
-                    auto hotkey =
-                        layer.groups[g] < 10 ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10)) : "";
-                    ImGui::AlignCursor(hotkey, 1.0f);
-                    if (ImGui::Selectable(hotkey.c_str(), is_selected_channel, selectable_flags))
-                    {
-                        selected_group = layer.groups[g];
-                        set_as_texture(selected_group, *hdrview()->shader(), "primary");
-                    }
-
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(selected_group == layer.groups[g] ? ICON_MY_VISIBILITY : "");
-
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(
-                        fmt::format("{} {}", ICON_MY_CHANNEL_GROUP, tree_view ? group.name : layer.name + group.name)
-                            .c_str());
-                }
-                ImGui::PopStyleColor(3);
-            }
-            if (total_indent != 0)
-                ImGui::Unindent(total_indent);
-        }
+        int id = 0;
+        draw_channel_rows(-1, id, tree_view, is_current, is_reference);
 
         ImGui::EndTable();
     }

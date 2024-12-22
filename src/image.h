@@ -257,7 +257,8 @@ public:
               bool dither = true) const;
 
     void draw_histogram();
-    void draw_channels_list();
+    void draw_channel_rows(int i, int &id, bool tree_view, bool is_current, bool is_reference);
+    void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
 };
 

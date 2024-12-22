@@ -1449,13 +1449,24 @@ void HDRViewApp::draw_file_window()
         show_channels = !show_channels;
     ImGui::WrappedTooltip(show_channels ? "Click to show only images." : "Click to show images and channel groups.");
 
-    ImGuiSelectableFlags   selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
-    static ImGuiTableFlags table_flags =
+    static int                            tree_view = 1;
+    static constexpr ImGuiSelectableFlags selectable_flags =
+        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+    static constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Show channels as a");
+    ImGui::RadioButton("tree", &tree_view, 1), ImGui::SameLine();
+    ImGui::RadioButton("flat list", &tree_view, 0);
+
+    auto regular_font = font("sans regular", 14);
+    auto bold_font    = font("sans bold", 14);
 
     if (ImGui::BeginTable("ImageList", 3, table_flags))
     {
         const float icon_width = ImGui::IconSize().x;
+
         ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.75f * icon_width);
         ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
@@ -1465,10 +1476,9 @@ void HDRViewApp::draw_file_window()
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
 
-        static ImGuiOnceUponAFrame once;
-        bool                       oaf                = false; // once;
-        int                        id                 = 0;
-        int                        visible_img_number = 0;
+        ImGui::PushFont(bold_font);
+        int id                 = 0;
+        int visible_img_number = 0;
         for (int i = 0; i < num_images(); ++i)
         {
             auto &img          = m_images[i];
@@ -1507,11 +1517,14 @@ void HDRViewApp::draw_file_window()
             ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
 
             // right-align the truncated file name
-            auto  &selected_group = img->groups[img->selected_group];
-            string group_name     = selected_group.name;
-            auto  &channel        = img->channels[selected_group.channels[0]];
-            string layer_path     = Channel::head(channel.name);
-            string filename       = img->file_and_partname() + (show_channels ? "" : ":" + layer_path + group_name);
+            string filename;
+            {
+                auto  &selected_group = img->groups[img->selected_group];
+                string group_name     = selected_group.name;
+                auto  &channel        = img->channels[selected_group.channels[0]];
+                string layer_path     = Channel::head(channel.name);
+                filename              = img->file_and_partname() + (show_channels ? "" : ":" + layer_path + group_name);
+            }
 
             ImGui::TableNextColumn();
             string ellipsis    = "";
@@ -1523,70 +1536,16 @@ void HDRViewApp::draw_file_window()
             }
             ImGui::TextAligned(ellipsis + filename, 1.f);
 
-            if (show_channels && img->groups.size() > 1)
+            if (img->groups.size() > 1)
             {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-                for (size_t l = 0; l < img->layers.size(); ++l)
-                {
-                    auto &layer = img->layers[l];
-
-                    for (size_t g = 0; g < layer.groups.size(); ++g)
-                    {
-                        auto  &group = img->groups[layer.groups[g]];
-                        string name  = string(ICON_MY_CHANNEL_GROUP) + " " + layer.name + group.name;
-
-                        bool is_selected_channel  = is_current && img->selected_group == layer.groups[g];
-                        bool is_reference_channel = is_reference && img->selected_group == layer.groups[g];
-
-                        if (oaf)
-                            spdlog::info("Image {}; Group {} is selected: {}, reference: {}", filename, group.name,
-                                         is_selected_channel, is_reference_channel);
-                        ImGui::PushRowColors(is_selected_channel, is_reference_channel);
-                        {
-                            ImGui::TableNextRow();
-
-                            ImGui::TableNextColumn();
-                            string shortcut = is_current && layer.groups[g] < 10
-                                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10))
-                                                  : "";
-                            ImGui::TextAligned(shortcut, 1.0f);
-
-                            ImGui::TableNextColumn();
-                            if (ImGui::Selectable(
-                                    fmt::format("{}##{}", is_selected_channel ? ICON_MY_VISIBILITY : "", id++).c_str(),
-                                    is_selected_channel || is_reference_channel, selectable_flags))
-                            {
-                                if (ImGui::GetIO().KeyCtrl)
-                                {
-                                    // check if we are already the reference channel group
-                                    if (is_reference && img->selected_group == layer.groups[g])
-                                    {
-                                        m_reference         = -1;
-                                        img->selected_group = 0;
-                                    }
-                                    else
-                                    {
-                                        m_reference         = i;
-                                        img->selected_group = layer.groups[g];
-                                    }
-                                }
-                                else
-                                {
-                                    m_current           = i;
-                                    img->selected_group = layer.groups[g];
-                                }
-                                set_image_textures();
-                            }
-
-                            ImGui::TableNextColumn();
-                            ImGui::TextUnformatted(name);
-                        }
-                        ImGui::PopStyleColor(3);
-                    }
-                }
-                ImGui::PopStyleColor();
+                // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+                ImGui::PushFont(regular_font);
+                img->draw_channel_rows(i, id, tree_view, is_current, is_reference);
+                ImGui::PopFont();
+                // ImGui::PopStyleColor();
             }
         }
+        ImGui::PopFont();
 
         ImGui::EndTable();
     }
@@ -1595,7 +1554,7 @@ void HDRViewApp::draw_file_window()
 void HDRViewApp::draw_channel_window()
 {
     if (auto img = current_image())
-        img->draw_channels_list();
+        img->draw_channels_list(m_reference == m_current, true);
 }
 
 void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }

@@ -77,11 +77,17 @@ public:
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
     bool          is_visible(int index) const;
     bool          is_visible(const ConstImagePtr &img) const;
-    void          set_current_image_index(int index) { m_current = is_valid(index) ? index : m_current; }
-    void          set_reference_image_index(int index) { m_reference = is_valid(index) ? index : m_reference; }
-    int           next_visible_image_index(int index, EDirection direction) const;
-    int           nth_visible_image_index(int n) const;
-    bool          nth_image_is_visible(int n) const;
+    void          set_current_image_index(int index, bool force = false)
+    {
+        m_current = force || is_valid(index) ? index : m_current;
+    }
+    void set_reference_image_index(int index, bool force = false)
+    {
+        m_reference = force || is_valid(index) ? index : m_reference;
+    }
+    int  next_visible_image_index(int index, EDirection direction) const;
+    int  nth_visible_image_index(int n) const;
+    bool nth_image_is_visible(int n) const;
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
