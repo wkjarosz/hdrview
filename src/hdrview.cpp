@@ -53,6 +53,10 @@ int main(int argc, char **argv)
     }
 #endif
 
+#ifdef ASSETS_LOCATION
+    HelloImGui::SetAssetsFolder(ASSETS_LOCATION);
+#endif
+
     constexpr int default_verbosity = spdlog::level::info;
     int           verbosity         = default_verbosity;
 

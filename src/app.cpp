@@ -18,6 +18,7 @@
 
 #include "colorspace.h"
 
+#include "json.h"
 #include "sviewstream.h"
 #include "texture.h"
 #include "timer.h"

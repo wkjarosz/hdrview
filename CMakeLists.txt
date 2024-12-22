@@ -410,6 +410,17 @@ set(HELLO_IMGUI_BUNDLE_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_SHORT_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_ICON_FILE icon.icns)
 
+# By default, we install in a portable way (i.e. assets and executable are in the same folder)
+option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
+
+if(NOT HDRVIEW_PORTABLE_INSTALL)
+  # Disable HelloImGui default install behavior
+  set(HELLOIMGUI_ADD_APP_WITH_INSTALL
+      OFF
+      CACHE BOOL "" FORCE
+  )
+endif()
+
 hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
@@ -500,7 +511,22 @@ if(CMAKE_GENERATOR STREQUAL "Ninja")
   endif()
 endif()
 
-# Packaging support
+# Install and packaging support
+
+if(NOT HDRVIEW_PORTABLE_INSTALL)
+  # If not portable, we have to - install the app manually - install the assets manually - pass the assets location to
+  # the app, and set this assets location in main() via the compile definition ASSETS_LOCATION: #ifdef ASSETS_LOCATION
+  # \n HelloImGui::SetAssetsFolder(ASSETS_LOCATION); \n #endif
+  include(GNUInstallDirs)
+  install(TARGETS HDRView DESTINATION ${CMAKE_INSTALL_BINDIR})
+  set(assets_install_dir ${CMAKE_INSTALL_DATADIR}/HDRView)
+  if(NOT IS_ABSOLUTE ${assets_install_dir})
+    set(assets_install_dir ${CMAKE_INSTALL_PREFIX}/${assets_install_dir})
+  endif()
+  install(DIRECTORY assets DESTINATION ${assets_install_dir})
+  target_compile_definitions(HDRView PRIVATE ASSETS_LOCATION="${assets_install_dir}/assets")
+endif()
+
 set(CPACK_PACKAGE_VENDOR "Wojciech Jarosz")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "${PROJECT_DESCRIPTION}")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/wkjarosz/hdrview")
