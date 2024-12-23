@@ -75,6 +75,7 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_KEY_OPTION);
         builder.AddText(ICON_MY_KEY_SHIFT);
         builder.AddText(ICON_MY_CHANNEL_GROUP);
+        builder.AddText(ICON_MY_NO_CHANNEL_GROUP);
         builder.AddText(ICON_MY_QUIT);
         builder.AddText(ICON_MY_COMMAND_PALETTE);
         builder.AddText(ICON_MY_TWEAK_THEME);
@@ -129,6 +130,8 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_FPS);
         builder.AddText(ICON_MY_DISPLAY_WINDOW);
         builder.AddText(ICON_MY_DATA_WINDOW);
+        builder.AddText(ICON_MY_LIST_VIEW);
+        builder.AddText(ICON_MY_TREE_VIEW);
 
         // Build the final result (ordered ranges with all the unique characters submitted)
         builder.BuildRanges(&ranges);

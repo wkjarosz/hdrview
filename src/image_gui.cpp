@@ -341,8 +341,9 @@ void Image::draw_channel_rows(int i, int &id, bool tree_view, bool is_current, b
 
         for (size_t g = 0; g < layer.groups.size(); ++g)
         {
-            auto  &group = groups[layer.groups[g]];
-            string name  = string(ICON_MY_CHANNEL_GROUP) + " " + (tree_view ? group.name : layer.name + group.name);
+            auto  &group      = groups[layer.groups[g]];
+            string group_name = group.num_channels == 1 || tree_view ? group.name : "(" + group.name + ")";
+            string name = string(ICON_MY_CHANNEL_GROUP) + " " + (tree_view ? group_name : layer.name + group_name);
 
             bool is_selected_channel  = is_current && selected_group == layer.groups[g];
             bool is_reference_channel = is_reference && selected_group == layer.groups[g];
@@ -411,7 +412,7 @@ void Image::draw_channels_list(bool is_reference, bool is_current)
         const float icon_width = ImGui::IconSize().x;
 
         ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                1.75f * icon_width);
+                                1.25f * icon_width);
         ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
                                 ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
         ImGui::TableSetupColumn(tree_view ? "Layer or channel group name" : "Layer.channel group name",

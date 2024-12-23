@@ -61,6 +61,25 @@ ImVec2 IconSize();
 ImVec2 IconButtonSize();
 bool   IconButton(const char *icon);
 
+inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComboFlags flags = ImGuiComboFlags_None)
+{
+    // Calculate the padding needed to center an icon in a ComboBox
+    // Solve for NewPadding.x:
+    // NewPadding.x + IconWidth + NewPadding.x = button_size.x
+    // NewPadding.x + FontSize + NewPadding.x = FontSize + style.FramePadding.y * 2
+    // 2 * NewPadding.x = style.FramePadding.y * 2
+    // NewPadding.x = style.FramePadding.y
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(ImGui::GetStyle().FramePadding.y, ImGui::GetStyle().FramePadding.y));
+    ImGui::SetNextItemWidth(IconButtonSize().x);
+    bool ret =
+        ImGui::BeginCombo(id, preview_icon, flags | ImGuiComboFlags_NoArrowButton | ImGuiComboFlags_HeightLargest);
+    ImGui::PopStyleVar();
+    return ret;
+}
+
+inline void EndComboButton() { ImGui::EndCombo(); }
+
 inline bool ToggleButton(const char *label, bool *active, const ImVec2 &size = ImVec2(0, 0))
 {
     ImGui::PushStyleColor(ImGuiCol_Button, *active ? GetColorU32(ImGuiCol_ButtonActive) : GetColorU32(ImGuiCol_Button));

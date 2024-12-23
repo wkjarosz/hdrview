@@ -205,7 +205,7 @@ public:
     Image(const Image &) = delete;
     Image(Image &&)      = default;
 
-    std::string file_and_partname() const { return partname.empty() ? filename : filename + "/" + partname; }
+    std::string file_and_partname() const { return partname.empty() ? filename : filename + ":" + partname; }
 
     bool contains(int2 p) const
     {

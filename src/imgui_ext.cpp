@@ -118,18 +118,8 @@ void SpdLogWindow::draw(ImFont *console_font)
             m_filter.Clear();
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(button_size.x);
     ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(current_level));
-    // Calculate the padding needed to center the icon in a ComboBox
-    // Solve for NewPadding.x:
-    // NewPadding.x + IconWidth + NewPadding.x = button_size.x
-    // NewPadding.x + FontSize + NewPadding.x = FontSize + style.FramePadding.y * 2
-    // 2 * NewPadding.x = style.FramePadding.y * 2
-    // NewPadding.x = style.FramePadding.y
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(ImGui::GetStyle().FramePadding.y, ImGui::GetStyle().FramePadding.y));
-    if (ImGui::BeginCombo("##Log level", s_level_icons[int(current_level)].data(),
-                          ImGuiComboFlags_NoArrowButton | ImGuiComboFlags_HeightLargest))
+    if (ImGui::BeginComboButton("##Log level", s_level_icons[int(current_level)].data()))
     {
         for (int i = 0; i < spdlog::level::n_levels; ++i)
         {
@@ -142,9 +132,8 @@ void SpdLogWindow::draw(ImFont *console_font)
                 m_sink->set_level(spdlog::level::level_enum(i));
             ImGui::PopStyleColor();
         }
-        ImGui::EndCombo();
+        ImGui::EndComboButton();
     }
-    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
     ImGui::WrappedTooltip("Click to choose the verbosity level.");
     ImGui::SameLine();
