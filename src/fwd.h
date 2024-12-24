@@ -126,3 +126,12 @@ enum AxisScale : AxisScale_
 
     AxisScale_COUNT
 };
+
+using Target_ = int;
+enum Target : Target_
+{
+    Target_Primary   = 0,
+    Target_Secondary = 1,
+
+    Target_COUNT
+};

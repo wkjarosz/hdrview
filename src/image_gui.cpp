@@ -299,7 +299,7 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
         string name       = string(ICON_MY_CHANNEL_GROUP) + " " + (short_names ? group_name : layer.name + group_name);
 
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
-        bool is_reference_channel = is_reference && selected_group == layer.groups[g];
+        bool is_reference_channel = is_reference && reference_group == layer.groups[g];
 
         ImGui::PushRowColors(is_selected_channel, is_reference_channel);
         {
@@ -325,23 +325,23 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
                 if (ImGui::GetIO().KeyCtrl)
                 {
                     // check if we are already the reference channel group
-                    if (is_reference && selected_group == layer.groups[g])
+                    if (is_reference && reference_group == layer.groups[g])
                     {
                         hdrview()->set_reference_image_index(-1, true);
-                        selected_group = 0;
+                        reference_group = 0;
                     }
                     else
                     {
                         hdrview()->set_reference_image_index(i);
-                        selected_group = layer.groups[g];
+                        reference_group = layer.groups[g];
                     }
-                    set_as_texture(selected_group, *hdrview()->shader(), "secondary");
+                    set_as_texture(Target_Secondary);
                 }
                 else
                 {
                     hdrview()->set_current_image_index(i);
                     selected_group = layer.groups[g];
-                    set_as_texture(selected_group, *hdrview()->shader(), "primary");
+                    set_as_texture(Target_Primary);
                 }
             }
         }

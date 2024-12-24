@@ -1291,14 +1291,14 @@ void HDRViewApp::set_image_textures()
         // bind the primary and secondary images, or a placehold black texture when we have no current or reference
         // image
         if (auto img = current_image())
-            img->set_as_texture(img->selected_group, *m_shader, "primary");
+            img->set_as_texture(Target_Primary);
         else
-            Image::set_null_texture(*m_shader, "primary");
+            Image::set_null_texture(Target_Primary);
 
         if (auto ref = reference_image())
-            ref->set_as_texture(ref->selected_group, *m_shader, "secondary");
+            ref->set_as_texture(Target_Secondary);
         else
-            Image::set_null_texture(*m_shader, "secondary");
+            Image::set_null_texture(Target_Secondary);
     }
     catch (const std::exception &e)
     {
@@ -1538,6 +1538,7 @@ void HDRViewApp::draw_file_window()
             string icon     = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
             string ellipsis = " ";
             {
+                // TODO: use the reference_group if is_reference
                 auto  &selected_group = img->groups[img->selected_group];
                 string group_name =
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";

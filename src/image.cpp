@@ -31,6 +31,7 @@ using namespace std;
 //
 
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
+static const char         *s_target[Target_COUNT] = {"primary", "secondary"};
 
 pair<string, string> Channel::split(const string &channel)
 {
@@ -369,38 +370,44 @@ void Channel::update_stats()
     }
 }
 
-void Image::set_null_texture(Shader &shader, const string &target)
+void Image::set_null_texture(Target target)
 {
-    shader.set_uniform(fmt::format("{}_M_to_Rec709", target), float4x4{la::identity});
-    shader.set_uniform(fmt::format("{}_channels_type", target), (int)ChannelGroup::Single_Channel);
-    shader.set_uniform(fmt::format("{}_yw", target), Rec709_luminance_weights);
+    auto s = hdrview()->shader();
+    auto t = s_target[target];
 
-    for (int c = 0; c < 4; ++c) shader.set_texture(fmt::format("{}_{}_texture", target, c), black_texture());
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
+    s->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
+    s->set_uniform(fmt::format("{}_yw", t), Rec709_luminance_weights);
+
+    for (int c = 0; c < 4; ++c) s->set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
 }
 
-void Image::set_as_texture(int group_idx, Shader &shader, const string &target)
+void Image::set_as_texture(Target target)
 {
-    const ChannelGroup &group = groups[group_idx];
+    auto                s         = hdrview()->shader();
+    auto                t         = s_target[target];
+    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    const ChannelGroup &group     = groups[group_idx];
 
-    shader.set_uniform(fmt::format("{}_M_to_Rec709", target), M_to_Rec709);
-    shader.set_uniform(fmt::format("{}_channels_type", target), (int)group.type);
-    shader.set_uniform(fmt::format("{}_yw", target), luminance_weights);
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t), M_to_Rec709);
+    s->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
+    s->set_uniform(fmt::format("{}_yw", t), luminance_weights);
 
     for (int c = 0; c < group.num_channels; ++c)
-        shader.set_texture(fmt::format("{}_{}_texture", target, c), channels[group.channels[c]].get_texture());
+        s->set_texture(fmt::format("{}_{}_texture", t, c), channels[group.channels[c]].get_texture());
 
     if (group.num_channels == 4)
         return;
 
-    shader.set_texture(fmt::format("{}_{}_texture", target, 3), Image::white_texture());
+    s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
 
     if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
     {
-        shader.set_texture(fmt::format("{}_{}_texture", target, 1), channels[group.channels[0]].get_texture());
-        shader.set_texture(fmt::format("{}_{}_texture", target, 2), channels[group.channels[0]].get_texture());
+        s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
+        s->set_texture(fmt::format("{}_{}_texture", t, 2), channels[group.channels[0]].get_texture());
     }
     else if (group.num_channels == 2) // if group has 2 channels, make third channel black
-        shader.set_texture(fmt::format("{}_{}_texture", target, 2), Image::black_texture());
+        s->set_texture(fmt::format("{}_{}_texture", t, 2), Image::black_texture());
 }
 
 Image::Image(int2 size, int num_channels)

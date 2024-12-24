@@ -206,7 +206,8 @@ public:
     std::vector<ChannelGroup> groups;
     LayerTreeNode             root;
 
-    int selected_group = 0;
+    int selected_group  = 0;
+    int reference_group = 0;
 
     float4x4 M_to_Rec709       = la::identity;
     float3   luminance_weights = Rec709_luminance_weights;
@@ -225,8 +226,8 @@ public:
     }
     int2 size() const { return data_window.size(); }
 
-    static void                set_null_texture(Shader &shader, const std::string &target = "primary");
-    void                       set_as_texture(int group_idx, Shader &shader, const std::string &target = "primary");
+    static void                set_null_texture(Target target = Target_Primary);
+    void                       set_as_texture(Target target = Target_Primary);
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void                       build_layers_and_groups();
     void                       finalize();
