@@ -164,15 +164,9 @@ inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
     }
 }
 
-void BusyBar(float fraction, const ImVec2 &size_arg = ImVec2(-FLT_MIN, 0), const char *overlay = NULL);
-
 // draw a horizontal line under the last item, raised by a factor of the current font size
 // (e.g. raise=0.5 would strikethrough the previous text)
-void   UnderLine(ImColor c, float raise = 0.05f);
-ImVec4 LinkColor();
-
-void HyperlinkText(const char *href, const char *fmt, ...);
-void TextWithHoverColor(ImVec4 col, const char *fmt, ...);
+void UnderLine(ImColor c, float raise = 0.05f);
 
 // Like ImGui::GetKeyChordName, but returns the translated name of the key chord.
 const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord);

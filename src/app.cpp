@@ -958,8 +958,8 @@ void HDRViewApp::draw_status_bar()
     if (m_pending_images.size())
     {
         ImGui::SetCursorPos({ImGui::GetStyle().ItemSpacing.x, y});
-        ImGui::BusyBar(
-            -1.f, {HelloImGui::EmSize(15.f), 0.f},
+        ImGui::ProgressBar(
+            -1.0f * (float)ImGui::GetTime(), HelloImGui::EmToVec2(15.f, 0.f),
             fmt::format("Loading {} image{}", m_pending_images.size(), m_pending_images.size() > 1 ? "s" : "").c_str());
         ImGui::SameLine();
     }
@@ -2380,7 +2380,7 @@ void HDRViewApp::draw_about_dialog()
 
             {
                 ImGui::ScopedFont sf{font("sans bold", 30)};
-                ImGui::HyperlinkText("https://github.com/wkjarosz/hdrview", "HDRView");
+                ImGui::TextLinkOpenURL("HDRView", "https://github.com/wkjarosz/hdrview");
             }
 
             ImGui::PushFont(font("sans bold", 18));
@@ -2418,7 +2418,7 @@ void HDRViewApp::draw_about_dialog()
 
             ImGui::AlignCursor(name, 1.f);
             ImGui::PushFont(font("sans bold", 14));
-            ImGui::HyperlinkText(url, name);
+            ImGui::TextLinkOpenURL(name, url);
             ImGui::PopFont();
             ImGui::TableNextColumn();
 

@@ -179,9 +179,9 @@ public:
 
 struct LayerTreeNode
 {
-    std::string                          name;
+    std::string                          name; //!< Name of just this level of the layer path (without '.')
     std::map<std::string, LayerTreeNode> children;
-    int                                  leaf_layer = -1;
+    int                                  leaf_layer = -1; //!< Index into Image::layers, or -1 if
 };
 
 struct Image
@@ -201,10 +201,22 @@ public:
     Box2i                display_window;
     std::vector<Channel> channels;
 
-    // Layers and groups are built from the loaded channels in finalize()
-    std::vector<Layer>        layers;
+    //
+    // Layers, groups, and the layer node tree are built from the loaded channels in finalize().
+    //
+    // It is sometimes useful to group channels into layers, that is, into sets of channels that logically belong
+    // together. Grouping is done using a naming convention: channel C in layer L is called L.C. Layers can also be
+    // nested, producing something akin to a folder hierarchy:
+    // For example, a channel named 'light1.specular.R' identifies the R channel in the specular sub-layer of layer
+    // light1.
+    //
+    // All the channels in the file are stored as a flat list in Image::channels.
+    // All the leaf layers of the layer hierarchy are stored as a flat list in Image::layers.
+    // The hierarchical structure of all layers and channels is represented by the Image::root.
+    //
+    std::vector<Layer>        layers; //!< All the leaf layers
     std::vector<ChannelGroup> groups;
-    LayerTreeNode             root;
+    LayerTreeNode             root; //!< The root of the layer "folder" hierarchy
 
     int selected_group  = 0;
     int reference_group = 0;
