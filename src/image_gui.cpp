@@ -62,7 +62,7 @@ void Image::draw_histogram()
 
     float2 x_limits = {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
     float2 y_limits = x_limits;
-    for (int c = 0; c < std::min(3, group.num_channels); ++c)
+    for (int c = 0; c < std::min(4, group.num_channels); ++c)
     {
         auto &channel = channels[group.channels[c]];
         // if (stats_need_update)
@@ -211,7 +211,7 @@ void Image::draw_histogram()
         // now do the actual plotting
         //
 
-        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
             ImPlot::PushStyleColor(ImPlotCol_Fill, colors[c]);
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{0.f});
@@ -223,7 +223,7 @@ void Image::draw_histogram()
                                    PixelStats::NUM_BINS, ImPlotStairsFlags_Shaded);
             ImPlot::PopStyleColor(2);
         }
-        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
             ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
@@ -236,7 +236,7 @@ void Image::draw_histogram()
             ImPlot::PopStyleColor(2);
         }
 
-        for (int c = 0; c < std::min(3, group.num_channels); ++c)
+        for (int c = 0; c < std::min(4, group.num_channels); ++c)
         {
             ImPlot::PushStyleColor(ImPlotCol_InlayText, float4{colors[c].xyz(), 1.0f});
             ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
@@ -260,7 +260,7 @@ void Image::draw_histogram()
 
         if (contains(hovered_pixel) && hdrview()->app_pos_in_viewport(ImGui::GetIO().MousePos))
         {
-            for (int c = 0; c < std::min(3, group.num_channels); ++c)
+            for (int c = 0; c < std::min(4, group.num_channels); ++c)
             {
                 ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
                 ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
@@ -590,7 +590,7 @@ void Image::draw_info()
         ImGui::TableHeadersRow();
         ImGui::PopFont();
 
-        const char   *stat_names[] = {"Min", "Avg", "Max", "# of NaNs", "# of Infs"};
+        const char   *stat_names[] = {"Min", "Avg", "Max", "# of NaNs", "# of Infs", "# valid pixels"};
         constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
         for (int s = 0; s < NUM_STATS; ++s)
         {
@@ -609,8 +609,9 @@ void Image::draw_info()
                 case 1: ImGui::Text("%-6.3g", channel_stats[c]->summary.average); break;
                 case 2: ImGui::Text("%-6.3g", channel_stats[c]->summary.maximum); break;
                 case 3: ImGui::Text("%d", channel_stats[c]->summary.nan_pixels); break;
-                case 4:
-                default: ImGui::Text("%d", channel_stats[c]->summary.inf_pixels); break;
+                case 4: ImGui::Text("%d", channel_stats[c]->summary.inf_pixels); break;
+                case 5:
+                default: ImGui::Text("%d", channel_stats[c]->summary.valid_pixels); break;
                 }
             }
         }
