@@ -206,6 +206,7 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
             part_prefix   = data.partname + "."s;
         }
 
+        // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
         data.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
         data.display_window = {{displayWindow.min.x, displayWindow.min.y},
                                {displayWindow.max.x + 1, displayWindow.max.y + 1}};

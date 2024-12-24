@@ -41,6 +41,17 @@ pair<string, string> Channel::split(const string &channel)
     return {"", channel};
 }
 
+vector<string> Channel::split_to_path(const string &str, char delimiter)
+{
+    vector<string> result;
+    istringstream  ss(str);
+    string         item;
+
+    while (std::getline(ss, item, delimiter)) result.push_back(item);
+
+    return result;
+}
+
 void Image::make_default_textures()
 {
     static constexpr float s_black{0.f};
@@ -480,6 +491,31 @@ void Image::build_layers_and_groups()
         layers.emplace_back(Layer{layer_name, {}, {}});
         auto &layer = layers.back();
 
+        LayerTreeNode *node = &root;
+        {
+            auto path = Channel::split_to_path(layer.name);
+
+            for (auto d : path)
+            {
+                auto it = node->children.find(d);
+                if (it != node->children.end())
+                {
+                    // node already contains d as a child, use that
+                    node = &it->second;
+                }
+                else
+                {
+                    // insert a new entry in child and use that
+                    node       = &node->children[d];
+                    node->name = d;
+                }
+            }
+            if (node->leaf_layer >= 0)
+                spdlog::info("node '{}' already contains a leaf layer", node->name);
+
+            node->leaf_layer = layers.size() - 1;
+        }
+
         // add all the layer's channels
         auto layer_channels = channels_in_layer(layer_name);
         spdlog::debug("Adding {} channels to layer '{}':", layer_channels.size(), layer_name);
@@ -583,6 +619,14 @@ void Image::finalize()
     // for (auto &c : channels) c.update_stats();
 }
 
+// Recursive function to traverse the LayerTreeNode hierarchy and append names to a string
+void Image::traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,
+                          int level) const
+{
+    callback(node, level);
+    for (const auto &[childName, childNode] : node->children) traverse_tree(&childNode, callback, level + 1);
+}
+
 string Image::to_string() const
 {
     string out;
@@ -614,19 +658,54 @@ string Image::to_string() const
         auto &channel = channels[c];
         out += fmt::format("  {:>2d}: '{}'\n", c, channel.name);
     }
+    out += "\n";
 
     out += fmt::format("Layers and channel groups ({}):\n", layers.size());
     for (size_t l = 0; l < layers.size(); ++l)
     {
         auto &layer = layers[l];
-        out += fmt::format("  {:>2d}: '{}' ({})\n", l, layer.name, layer.groups.size());
+        out += fmt::format("  {:>2d}: layer name '{}'; with {} child groups:\n", l, layer.name, layer.groups.size());
         for (size_t g = 0; g < layer.groups.size(); ++g)
         {
             if (g > 0)
                 out += "\n";
             auto &group = groups[layer.groups[g]];
-            out += fmt::format("    {:>2d}: '{}'", g, group.name);
+            out += fmt::format("     {:>2d}: group name '{}'", g, group.name);
         }
+        out += "\n";
     }
+    out += "\n";
+
+    // out += fmt::format("Layer paths:\n");
+    // for (size_t l = 0; l < layers.size(); ++l)
+    // {
+    //     auto &layer = layers[l];
+    //     auto  path  = Channel::split_to_path(layer.name);
+    //     out += fmt::format("Path for layer '{}':\n", layer.name);
+    //     for (auto d : path) out += fmt::format("'{}', ", d);
+    //     out += "\n";
+    // }
+    // out += "\n";
+
+    // out += fmt::format("Layer tree:\n");
+    // // Traverse the LayerTreeNode hierarchy and append names to the string
+    // auto print_node = [&out, this](const LayerTreeNode *node, int depth)
+    // {
+    //     string prefix(4 * depth, ' ');
+    //     string indent = "+" + string(3, '-');
+    //     out += fmt::format("{}'{}' (leaf index: {})\n", prefix, node->name, node->leaf_layer);
+    //     if (node->leaf_layer < 0)
+    //         return;
+
+    //     auto &layer = layers[node->leaf_layer];
+    //     for (size_t g = 0; g < layer.groups.size(); ++g)
+    //     {
+    //         auto &group = groups[layer.groups[g]];
+    //         out += fmt::format("{}{}'{}'\n", prefix, indent, group.name);
+    //     }
+    // };
+    // traverse_tree(&root, print_node);
+    // out += "\n";
+
     return out;
 }

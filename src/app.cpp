@@ -1450,18 +1450,14 @@ void HDRViewApp::draw_file_window()
     // ImGui::WrappedTooltip(show_channels ? "Click to show only filenames."
     //                                     : "Click to show filename and channel groups.");
 
-    static int                            channel_list_mode = 1; // 0: images only; 1: list; 2: tree;
-    static constexpr ImGuiSelectableFlags selectable_flags =
-        ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+    static int                       channel_list_mode = 1; // 0: images only; 1: list; 2: tree;
     static constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
 
     static const std::string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
     ImGui::SameLine();
-    // ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(current_level));
-    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[channel_list_mode].data(),
-                                ImGuiComboFlags_PopupAlignLeft))
+    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[channel_list_mode].data()))
     {
         if (ImGui::Selectable((s_view_mode_icons[0] + " Only images (do not list channel groups)").c_str(),
                               channel_list_mode == 0))
@@ -1475,25 +1471,29 @@ void HDRViewApp::draw_file_window()
 
         ImGui::EndComboButton();
     }
-    // ImGui::PopStyleColor();
     ImGui::WrappedTooltip("Choose how the images and layers are listed below");
 
     auto regular_font = font("sans regular", 14);
     auto bold_font    = font("sans bold", 14);
 
-    if (ImGui::BeginTable("ImageList", 3, table_flags))
+    if (ImGui::BeginTable("ImageList", 2, table_flags))
     {
         const float icon_width = ImGui::IconSize().x;
 
         ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
                                 1.25f * icon_width);
-        ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
-                                ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
+        // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
+        //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
         ImGui::TableSetupColumn(channel_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
 
-        ImGui::PushFont(bold_font);
+        static ImGuiTreeNodeFlags base_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen |
+                                                    ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                                                    ImGuiTreeNodeFlags_OpenOnArrow;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 0.5f * icon_width);
         int id                 = 0;
         int visible_img_number = 0;
         for (int i = 0; i < num_images(); ++i)
@@ -1507,12 +1507,54 @@ void HDRViewApp::draw_file_window()
 
             ++visible_img_number;
 
-            ImGui::TableNextRow();
+            ImGuiTreeNodeFlags node_flags = base_node_flags;
 
+            ImGui::PushFont(channel_list_mode == 0 ? regular_font : bold_font);
+
+            ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::PushRowColors(is_current, is_reference);
-            if (ImGui::Selectable(fmt::format("##image_{}_selectable", i + 1).c_str(), is_current || is_reference,
-                                  selectable_flags))
+            ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
+
+            // ImGui::TableNextColumn();
+            // auto tmp_pos = ImGui::GetCursorScreenPos();
+            // ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : "");
+            // ImGui::SetCursorScreenPos(tmp_pos);
+            // ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
+
+            ImGui::TableNextColumn();
+
+            if (is_current || is_reference)
+                node_flags |= ImGuiTreeNodeFlags_Selected;
+            if (channel_list_mode == 0)
+            {
+                node_flags |= ImGuiTreeNodeFlags_Leaf;
+                ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+            }
+
+            // right-align the truncated file name
+            string filename;
+            string icon     = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
+            string ellipsis = " ";
+            {
+                auto  &selected_group = img->groups[img->selected_group];
+                string group_name =
+                    selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
+                auto  &channel    = img->channels[selected_group.channels[0]];
+                string layer_path = Channel::head(channel.name);
+                filename          = img->file_and_partname() + (channel_list_mode ? "" : "." + layer_path + group_name);
+
+                const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
+                while (ImGui::CalcTextSize((icon + ellipsis + filename).c_str()).x > avail_width &&
+                       filename.length() > 1)
+                {
+                    filename = filename.substr(1);
+                    ellipsis = " ...";
+                }
+            }
+
+            bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", (icon + ellipsis + filename).c_str());
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
                 if (ImGui::GetIO().KeyCtrl)
                     m_reference = is_reference ? -1 : i;
@@ -1521,123 +1563,28 @@ void HDRViewApp::draw_file_window()
                 set_image_textures();
                 spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
             }
+
             ImGui::PopStyleColor(3);
-            ImGui::SameLine();
 
-            auto image_num_str = fmt::format("{}", visible_img_number);
-            ImGui::TextUnformatted(image_num_str);
-
-            ImGui::TableNextColumn();
-            auto tmp_pos = ImGui::GetCursorScreenPos();
-            ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : "");
-            ImGui::SetCursorScreenPos(tmp_pos);
-            ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
-
-            // right-align the truncated file name
-            string filename;
+            if (open) // && img->groups.size() > 1)
             {
-                auto  &selected_group = img->groups[img->selected_group];
-                string group_name =
-                    selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
-                auto  &channel    = img->channels[selected_group.channels[0]];
-                string layer_path = Channel::head(channel.name);
-                filename          = img->file_and_partname() + (channel_list_mode ? "" : "." + layer_path + group_name);
-            }
-
-            ImGui::TableNextColumn();
-            string ellipsis    = "";
-            float  avail_width = ImGui::GetContentRegionAvail().x;
-            while (ImGui::CalcTextSize((ellipsis + filename).c_str()).x > avail_width && filename.length() > 1)
-            {
-                filename = filename.substr(1);
-                ellipsis = "...";
-            }
-            ImGui::TextAligned(ellipsis + filename, 1.f);
-
-            if (channel_list_mode != 0) // && img->groups.size() > 1)
-            {
-                // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
                 ImGui::PushFont(regular_font);
-                img->draw_channel_rows(i, id, channel_list_mode == 2, is_current, is_reference);
+                if (channel_list_mode == 0)
+                    ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                else if (channel_list_mode == 1)
+                    img->draw_channel_rows(i, id, is_current, is_reference);
+                else
+                    img->draw_channel_tree(img->root, i, id, is_current, is_reference);
+
                 ImGui::PopFont();
-                // ImGui::PopStyleColor();
+
+                if (open)
+                    ImGui::TreePop();
             }
 
-            // Experiments with using Tree nodes
-            // static ImGuiTreeNodeFlags tree_node_flags =
-            //     ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen;
-
-            // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
-            // ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 10);
-
-            // {
-            //     // Simple storage to output a dummy file-system.
-            //     struct MyTreeNode
-            //     {
-            //         const char *Name;
-            //         const char *Type;
-            //         const char *Size;
-            //         int         ChildIdx;
-            //         int         ChildCount;
-            //         bool        Selected;
-            //         static void DisplayNode(const MyTreeNode *node, const MyTreeNode *all_nodes)
-            //         {
-            //             ImGui::TableNextRow();
-            //             ImGui::TableNextColumn();
-            //             const bool is_folder = (node->ChildCount > 0);
-            //             if (is_folder)
-            //             {
-            //                 ImGui::PushFont(hdrview()->font("sans regular", 14));
-            //                 // ImGui::TextDisabled("--");
-            //                 ImGui::TableNextColumn();
-            //                 ImGui::TextUnformatted(node->Type);
-            //                 ImGui::TableNextColumn();
-            //                 bool open = ImGui::TreeNodeEx(node->Name, tree_node_flags);
-            //                 ImGui::PopFont();
-            //                 if (open)
-            //                 {
-            //                     for (int child_n = 0; child_n < node->ChildCount; child_n++)
-            //                         DisplayNode(&all_nodes[node->ChildIdx + child_n], all_nodes);
-            //                     ImGui::TreePop();
-            //                 }
-            //             }
-            //             else
-            //             {
-            //                 ImGui::TextUnformatted(node->Size);
-            //                 ImGui::TableNextColumn();
-            //                 ImGui::TextUnformatted(node->Type);
-            //                 ImGui::TableNextColumn();
-            //                 ImGui::TreeNodeEx(node->Name, tree_node_flags | ImGuiTreeNodeFlags_Leaf |
-            //                                                   ImGuiTreeNodeFlags_NoTreePushOnOpen |
-            //                                                   (node->Selected ? ImGuiTreeNodeFlags_Selected
-            //                                                                   : ImGuiTreeNodeFlags_None));
-            //             }
-            //         }
-            //     };
-            //     static const MyTreeNode nodes[] = {
-            //         {ICON_MY_OPEN_IMAGE " Root", "", "", 1, 3, false},     // 0
-            //         {ICON_MY_OPEN_IMAGE " Music", "", "", 4, 2, false},    // 1
-            //         {ICON_MY_OPEN_IMAGE " Textures", "", "", 6, 3, false}, // 2
-            //         {ICON_MY_CHANNEL_GROUP " desktop.ini", ICON_MY_VISIBILITY, ICON_MY_KEY_CONTROL "1", -1, -1,
-            //          false}, // 3
-            //         {ICON_MY_CHANNEL_GROUP " File1_a.wav", ICON_MY_VISIBILITY, ICON_MY_KEY_CONTROL "2", -1, -1,
-            //          false}, // 4
-            //         {ICON_MY_CHANNEL_GROUP " File1_b.wav", ICON_MY_VISIBILITY, ICON_MY_KEY_CONTROL "3", -1, -1,
-            //          false}, // 5
-            //         {ICON_MY_CHANNEL_GROUP " Image001.png", ICON_MY_VISIBILITY, ICON_MY_KEY_CONTROL "4", -1, -1,
-            //          true}, // 6
-            //         {ICON_MY_CHANNEL_GROUP " Copy of Image001.png", ICON_MY_VISIBILITY, ICON_MY_KEY_CONTROL "5", -1,
-            //         -1,
-            //          false}, // 7
-            //         {ICON_MY_CHANNEL_GROUP " Copy of Image001 (Final2).png", "", ICON_MY_KEY_CONTROL "6", -1, -1,
-            //          false}, // 8
-            //     };
-
-            //     MyTreeNode::DisplayNode(&nodes[0], nodes);
-            // }
-            // ImGui::PopStyleVar(2);
+            ImGui::PopFont();
         }
-        ImGui::PopFont();
+        ImGui::PopStyleVar(2);
 
         ImGui::EndTable();
     }

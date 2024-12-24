@@ -120,6 +120,7 @@ struct Channel : public Array2Df
 {
 public:
     static std::pair<std::string, std::string> split(const std::string &full_name);
+    static std::vector<std::string>            split_to_path(const std::string &str, char delimiter = '.');
     static std::string                         tail(const std::string &full_name) { return split(full_name).second; }
     static std::string                         head(const std::string &full_name) { return split(full_name).first; }
 
@@ -176,6 +177,13 @@ public:
     std::vector<int> groups;
 };
 
+struct LayerTreeNode
+{
+    std::string                          name;
+    std::map<std::string, LayerTreeNode> children;
+    int                                  leaf_layer = -1;
+};
+
 struct Image
 {
 public:
@@ -187,13 +195,16 @@ public:
     static Texture              *dither_texture();
     static const float3          Rec709_luminance_weights;
 
-    std::string               filename;
-    std::string               partname;
-    Box2i                     data_window;
-    Box2i                     display_window;
-    std::vector<Channel>      channels;
+    std::string          filename;
+    std::string          partname;
+    Box2i                data_window;
+    Box2i                display_window;
+    std::vector<Channel> channels;
+
+    // Layers and groups are built from the loaded channels in finalize()
     std::vector<Layer>        layers;
     std::vector<ChannelGroup> groups;
+    LayerTreeNode             root;
 
     int selected_group = 0;
 
@@ -257,9 +268,13 @@ public:
               bool dither = true) const;
 
     void draw_histogram();
-    void draw_channel_rows(int i, int &id, bool tree_view, bool is_current, bool is_reference);
+    void draw_layer_groups(const Layer &layer, int i, int &id, bool is_current, bool is_reference, bool short_names);
+    void draw_channel_tree(const LayerTreeNode &node, int i, int &id, bool is_current, bool is_reference);
+    void draw_channel_rows(int i, int &id, bool is_current, bool is_reference);
     void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
+    void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,
+                       int level = 0) const;
 };
 
 // void draw_histogram(Image *img, float exposure);
