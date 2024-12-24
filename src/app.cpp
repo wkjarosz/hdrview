@@ -1476,6 +1476,7 @@ void HDRViewApp::draw_file_window()
     auto regular_font = font("sans regular", 14);
     auto bold_font    = font("sans bold", 14);
 
+    ImGui::BeginChild("##ChildImageList", ImVec2(0.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_None);
     if (ImGui::BeginTable("ImageList", 2, table_flags))
     {
         const float icon_width = ImGui::IconSize().x;
@@ -1588,6 +1589,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::EndTable();
     }
+    ImGui::EndChild();
 }
 
 void HDRViewApp::draw_channel_window()
