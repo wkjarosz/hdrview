@@ -322,7 +322,7 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
                               "%s", name.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
-                if (ImGui::GetIO().KeyCtrl)
+                if (ImGui::GetIO().KeyShift)
                 {
                     // check if we are already the reference channel group
                     if (is_reference && reference_group == layer.groups[g])

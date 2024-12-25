@@ -300,7 +300,7 @@ void PushRowColors(bool is_current, bool is_reference)
     float4 active   = GetStyleColorVec4(ImGuiCol_HeaderActive);
     float4 header   = GetStyleColorVec4(ImGuiCol_Header);
     float4 hovered  = GetStyleColorVec4(ImGuiCol_HeaderHovered);
-    bool   mod_held = ImGui::GetIO().KeyCtrl;
+    bool   mod_held = ImGui::GetIO().KeyShift;
 
     // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
     constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
@@ -312,8 +312,13 @@ void PushRowColors(bool is_current, bool is_reference)
     float4 hovered_avg = 0.5f * (hovered_c + hovered);
     float4 header_avg  = 0.5f * (header_c + header);
     float4 active_avg  = 0.5f * (active_c + active);
+    // constexpr float3 hsv_adjust2 = float3{0.33f, 0.f, -0.2f};
+    // float4           hovered_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(hovered.xyz()) + hsv_adjust2), hovered.w};
+    // float4           header_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust2), header.w};
+    // float4           active_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust2), active.w};
 
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, mod_held ? (is_current ? hovered_avg : hovered_c) : hovered);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+                          mod_held ? (is_current ? hovered_avg : hovered_c) : (is_reference ? hovered_avg : hovered));
     ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c) : header);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, mod_held ? (is_current ? active_avg : active_c) : active);
 }
@@ -327,6 +332,25 @@ void UnderLine(ImColor c, float raise)
 
     float lineThickness = ImGui::GetFontSize() / 14.5f;
     ImGui::GetWindowDrawList()->AddLine(mi, ma, c, lineThickness);
+}
+
+void HyperlinkText(const char *label, const char *url)
+{
+    ImGuiContext &g = *GImGui;
+    if (url == NULL)
+        url = label;
+    if (TextLink(label))
+        if (g.PlatformIO.Platform_OpenInShellFn != NULL)
+            g.PlatformIO.Platform_OpenInShellFn(&g, url);
+    PushFont(nullptr);
+    SetItemTooltip("%s '%s'", ICON_MY_LINK, url);
+    PopFont();
+    if (BeginPopupContextItem())
+    {
+        if (MenuItem(LocalizeGetMsg(ImGuiLocKey_CopyLink)))
+            SetClipboardText(url);
+        EndPopup();
+    }
 }
 
 // copied from imgui.cpp

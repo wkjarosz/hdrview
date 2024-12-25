@@ -447,7 +447,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
         colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
         colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
-        colors[ImGuiCol_TextLink]                  = ImVec4(0.26f, 0.50f, 0.96f, 1.00f);
+        colors[ImGuiCol_TextLink]                  = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
         colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
         colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
         colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
@@ -770,6 +770,16 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
                         [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
                         [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
+        // switch the reference channel group using Shift + Ctrl + number key (one-based indexing)
+        for (size_t n = 1u; n <= 10u; ++n)
+            add_action({fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                        ImGuiKey_ModShift | modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
+                        [this, n]()
+                        {
+                            m_reference                      = current_image_index();
+                            current_image()->reference_group = mod(int(n - 1), 10);
+                        },
+                        [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
 
         add_action({"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
                     [this]() { close_image(); }, if_img});
@@ -790,6 +800,22 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         auto i = next_visible_image_index(m_current, Backward);
                         return is_valid(i) && i != m_current;
                     }});
+        add_action({"Make next image the reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_DownArrow,
+                    ImGuiInputFlags_Repeat,
+                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Forward)); },
+                    [this]()
+                    {
+                        auto i = next_visible_image_index(m_reference, Forward);
+                        return is_valid(i) && i != m_reference;
+                    }});
+        add_action({"Make previous image the reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_UpArrow,
+                    ImGuiInputFlags_Repeat,
+                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Backward)); },
+                    [this]()
+                    {
+                        auto i = next_visible_image_index(m_reference, Backward);
+                        return is_valid(i) && i != m_reference;
+                    }});
         add_action({"Go to next channel group", g_blank_icon, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
                     [this]()
                     {
@@ -804,6 +830,42 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         img->selected_group = mod(img->selected_group - 1, (int)img->groups.size());
                     },
                     [this]() { return current_image() && current_image()->groups.size() > 1; }});
+        add_action({"Go to next channel group in reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_RightArrow,
+                    ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        spdlog::info("Go to next channel group in reference");
+                        // if no reference image is selected, use the current image
+                        auto img             = reference_image() ? reference_image() : current_image();
+                        img->reference_group = mod(img->reference_group + 1, (int)img->groups.size());
+                        if (!reference_image())
+                            m_reference = current_image_index();
+                    },
+                    [this]()
+                    {
+                        // must either have a reference image with enough groups, or a current image which we'll choose
+                        // instead
+                        return (reference_image() && reference_image()->groups.size() > 1) ||
+                               (current_image() && !reference_image());
+                    }});
+        add_action({"Go to previous channel group in reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_LeftArrow,
+                    ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        spdlog::info("Go to previous channel group in reference");
+                        // if no reference image is selected, use the current image
+                        auto img             = reference_image() ? reference_image() : current_image();
+                        img->reference_group = mod(img->reference_group - 1, (int)img->groups.size());
+                        if (!reference_image())
+                            m_reference = current_image_index();
+                    },
+                    [this]()
+                    {
+                        // must either have a reference image with enough groups, or a current image which we'll choose
+                        // instead
+                        return (reference_image() && reference_image()->groups.size() > 1) ||
+                               (current_image() && !reference_image());
+                    }});
 
         add_action({"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
                     [this]()
@@ -1538,8 +1600,8 @@ void HDRViewApp::draw_file_window()
             string icon     = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
             string ellipsis = " ";
             {
-                // TODO: use the reference_group if is_reference
-                auto  &selected_group = img->groups[img->selected_group];
+                auto &selected_group =
+                    img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
                 string group_name =
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
                 auto  &channel    = img->channels[selected_group.channels[0]];
@@ -1558,7 +1620,7 @@ void HDRViewApp::draw_file_window()
             bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", (icon + ellipsis + filename).c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
-                if (ImGui::GetIO().KeyCtrl)
+                if (ImGui::GetIO().KeyShift)
                     m_reference = is_reference ? -1 : i;
                 else
                     m_current = i;
@@ -2380,7 +2442,7 @@ void HDRViewApp::draw_about_dialog()
 
             {
                 ImGui::ScopedFont sf{font("sans bold", 30)};
-                ImGui::TextLinkOpenURL("HDRView", "https://github.com/wkjarosz/hdrview");
+                ImGui::HyperlinkText("HDRView", "https://github.com/wkjarosz/hdrview");
             }
 
             ImGui::PushFont(font("sans bold", 18));
@@ -2418,7 +2480,7 @@ void HDRViewApp::draw_about_dialog()
 
             ImGui::AlignCursor(name, 1.f);
             ImGui::PushFont(font("sans bold", 14));
-            ImGui::TextLinkOpenURL(name, url);
+            ImGui::HyperlinkText(name, url);
             ImGui::PopFont();
             ImGui::TableNextColumn();
 
