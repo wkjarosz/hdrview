@@ -87,7 +87,10 @@ public:
     }
     int  next_visible_image_index(int index, EDirection direction) const;
     int  nth_visible_image_index(int n) const;
-    bool nth_image_is_visible(int n) const;
+    bool pass_channel_filter(const char *text, const char *text_end = nullptr) const
+    {
+        return m_channel_filter.PassFilter(text, text_end);
+    }
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -254,7 +257,7 @@ private:
 
     vector<string> m_recent_files;
 
-    ImGuiTextFilter m_filter;
+    ImGuiTextFilter m_file_filter, m_channel_filter;
 
     map<pair<string, int>, ImFont *> m_fonts;
 

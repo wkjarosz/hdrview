@@ -96,6 +96,7 @@ static bool             g_show_help            = false;
 static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
 static bool             g_show_bg_color_picker = false;
+static char             g_filter_buffer[256]   = {0};
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -542,7 +543,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"About HDRView", ICON_MY_ABOUT, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
         add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
-        add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiKey_ModCtrl | ImGuiKey_ModShift | ImGuiKey_P, 0,
+        add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
                     []() {}, always_enabled, false, &g_show_command_palette});
 
         add_action(
@@ -765,21 +766,51 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         ImGuiKey modKey = ImGuiMod_Super;
 #endif
         // switch the selected channel group using Ctrl + number key (one-based indexing)
-        for (size_t n = 1u; n <= 10u; ++n)
+        for (int n = 1; n <= 10; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
-                        modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
-                        [this, n]() { current_image()->selected_group = mod(int(n - 1), 10); },
-                        [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
-        // switch the reference channel group using Shift + Ctrl + number key (one-based indexing)
-        for (size_t n = 1u; n <= 10u; ++n)
-            add_action({fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                        ImGuiKey_ModShift | modKey | ImGuiKey(ImGuiKey_0 + mod(int(n), 10)), 0,
+                        modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
                         [this, n]()
                         {
-                            m_reference                      = current_image_index();
-                            current_image()->reference_group = mod(int(n - 1), 10);
+                            auto img            = current_image();
+                            img->selected_group = img->nth_visible_group_index(mod(n - 1, 10));
                         },
-                        [this, n]() { return current_image() && current_image()->groups.size() > n - 1; }});
+                        [this, n]()
+                        {
+                            if (auto img = current_image())
+                            {
+                                auto i = img->nth_visible_group_index(mod(n - 1, 10));
+                                return img->is_valid_group(i) && i != img->selected_group;
+                            }
+                            return false;
+                        }});
+        // switch the reference channel group using Shift + Ctrl + number key (one-based indexing)
+        for (int n = 1; n <= 10; ++n)
+            add_action({fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                        ImGuiMod_Shift | modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
+                        [this, n]()
+                        {
+                            auto img         = current_image();
+                            auto nth_visible = img->nth_visible_group_index(mod(n - 1, 10));
+                            if (img->reference_group == nth_visible)
+                            {
+                                img->reference_group = -1;
+                                m_reference          = -1;
+                            }
+                            else
+                            {
+                                img->reference_group = nth_visible;
+                                m_reference          = m_current;
+                            }
+                        },
+                        [this, n]()
+                        {
+                            if (auto img = current_image())
+                            {
+                                auto i = img->nth_visible_group_index(mod(n - 1, 10));
+                                return img->is_valid_group(i);
+                            }
+                            return false;
+                        }});
 
         add_action({"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
                     [this]() { close_image(); }, if_img});
@@ -800,7 +831,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         auto i = next_visible_image_index(m_current, Backward);
                         return is_valid(i) && i != m_current;
                     }});
-        add_action({"Make next image the reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_DownArrow,
+        add_action({"Make next image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_DownArrow,
                     ImGuiInputFlags_Repeat,
                     [this]() { set_reference_image_index(next_visible_image_index(m_reference, Forward)); },
                     [this]()
@@ -808,7 +839,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         auto i = next_visible_image_index(m_reference, Forward);
                         return is_valid(i) && i != m_reference;
                     }});
-        add_action({"Make previous image the reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_UpArrow,
+        add_action({"Make previous image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_UpArrow,
                     ImGuiInputFlags_Repeat,
                     [this]() { set_reference_image_index(next_visible_image_index(m_reference, Backward)); },
                     [this]()
@@ -820,52 +851,39 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     [this]()
                     {
                         auto img            = current_image();
-                        img->selected_group = mod(img->selected_group + 1, (int)img->groups.size());
+                        img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
                     },
-                    [this]() { return current_image() && current_image()->groups.size() > 1; }});
+                    [this]() { return current_image() != nullptr; }});
         add_action({"Go to previous channel group", g_blank_icon, ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
                     [this]()
                     {
                         auto img            = current_image();
-                        img->selected_group = mod(img->selected_group - 1, (int)img->groups.size());
+                        img->selected_group = img->next_visible_group_index(img->selected_group, Backward);
                     },
-                    [this]() { return current_image() && current_image()->groups.size() > 1; }});
-        add_action({"Go to next channel group in reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_RightArrow,
+                    [this]() { return current_image() != nullptr; }});
+        add_action({"Go to next channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_RightArrow,
                     ImGuiInputFlags_Repeat,
                     [this]()
                     {
-                        spdlog::info("Go to next channel group in reference");
                         // if no reference image is selected, use the current image
-                        auto img             = reference_image() ? reference_image() : current_image();
-                        img->reference_group = mod(img->reference_group + 1, (int)img->groups.size());
                         if (!reference_image())
-                            m_reference = current_image_index();
+                            m_reference = m_current;
+                        auto img             = reference_image();
+                        img->reference_group = img->next_visible_group_index(img->reference_group, Forward);
                     },
-                    [this]()
-                    {
-                        // must either have a reference image with enough groups, or a current image which we'll choose
-                        // instead
-                        return (reference_image() && reference_image()->groups.size() > 1) ||
-                               (current_image() && !reference_image());
-                    }});
-        add_action({"Go to previous channel group in reference", g_blank_icon, ImGuiKey_ModShift | ImGuiKey_LeftArrow,
+                    [this]() { return reference_image() || current_image(); }});
+        add_action({"Go to previous channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_LeftArrow,
                     ImGuiInputFlags_Repeat,
                     [this]()
                     {
                         spdlog::info("Go to previous channel group in reference");
                         // if no reference image is selected, use the current image
-                        auto img             = reference_image() ? reference_image() : current_image();
-                        img->reference_group = mod(img->reference_group - 1, (int)img->groups.size());
                         if (!reference_image())
-                            m_reference = current_image_index();
+                            m_reference = m_current;
+                        auto img             = reference_image();
+                        img->reference_group = img->next_visible_group_index(img->reference_group, Backward);
                     },
-                    [this]()
-                    {
-                        // must either have a reference image with enough groups, or a current image which we'll choose
-                        // instead
-                        return (reference_image() && reference_image()->groups.size() > 1) ||
-                               (current_image() && !reference_image());
-                    }});
+                    [this]() { return reference_image() || current_image(); }});
 
         add_action({"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
                     [this]()
@@ -1487,22 +1505,79 @@ void HDRViewApp::draw_file_window()
 
     const ImVec2 button_size = ImGui::IconButtonSize();
 
-    bool show_button = m_filter.IsActive(); // save here to avoid flicker
+    auto update_visiblity = [this]()
+    {
+        // update selections based on visibility
+        if (!is_visible(m_current))
+        {
+            m_current = next_visible_image_index(m_current, Forward);
+            if (!is_visible(m_current))
+                m_current = -1;
+
+            spdlog::info("Current image was not visible; now its: {}.", m_current);
+        }
+        else
+            spdlog::info("Current image was visible; its: {}.", m_current);
+        if (is_valid(m_reference) && !is_visible(m_reference))
+            m_reference = next_visible_image_index(m_reference, Forward);
+
+        for (int i = 0; i < num_images(); ++i)
+        {
+            if (!is_visible(i))
+                continue;
+
+            auto img = image(i);
+            {
+                if (!img->group_is_visible(img->selected_group))
+                    img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
+                if (img->is_valid_group(img->reference_group) && !img->group_is_visible(img->reference_group))
+                    img->reference_group = img->next_visible_group_index(img->selected_group, Forward);
+            }
+        }
+        set_image_textures();
+    };
+
+    bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InputTextWithHint("##file filter",
-                                 ICON_MY_FILTER " Filter list of images (format: [include|-exclude][,...]; e.g. "
-                                                "\"include_this,-but_not_this,also_include_this\")",
-                                 m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
-        m_filter.Build();
+    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns[:channel patterns]'",
+                                 g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
+    {
+        // find first ':', copy everything before it into m_file_filter.InputBuf, and everything after it into
+        // m_channel_filter.InputBuf
+        if (auto colon = strchr(g_filter_buffer, ':'))
+        {
+            int file_filter_length    = colon - g_filter_buffer + 1;
+            int channel_filter_length = IM_ARRAYSIZE(g_filter_buffer) - file_filter_length;
+            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, file_filter_length);
+            ImStrncpy(m_channel_filter.InputBuf, colon + 1, channel_filter_length);
+        }
+        else
+        {
+            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, IM_ARRAYSIZE(m_file_filter.InputBuf));
+            m_channel_filter.InputBuf[0] = 0; // Clear channel filter if no colon is found
+        }
+
+        m_file_filter.Build();
+        m_channel_filter.Build();
+
+        update_visiblity();
+    }
     ImGui::WrappedTooltip(
-        "Filter open image list so that only images with a filename containing the search string will be visible.");
+        "Filter visible images and channel groups.\n\nOnly images with filenames matching the file patterns and "
+        "channels matching the channel patterns will be shown. A pattern is a comma-separated list of strings "
+        "that must be included or excluded (if prefixed with a '-').");
     if (show_button)
     {
         ImGui::SameLine(0.f, 0.f);
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
         if (ImGui::IconButton(ICON_MY_DELETE))
-            m_filter.Clear();
+        {
+            m_file_filter.Clear();
+            m_channel_filter.Clear();
+            g_filter_buffer[0] = 0;
+            update_visiblity();
+        }
     }
 
     // ImGui::SameLine();
@@ -1606,7 +1681,9 @@ void HDRViewApp::draw_file_window()
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
                 auto  &channel    = img->channels[selected_group.channels[0]];
                 string layer_path = Channel::head(channel.name);
-                filename          = img->file_and_partname() + (channel_list_mode ? "" : "." + layer_path + group_name);
+                filename =
+                    img->file_and_partname() +
+                    (channel_list_mode || img->groups.size() <= 1 ? "" : img->delimiter() + layer_path + group_name);
 
                 const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
                 while (ImGui::CalcTextSize((icon + ellipsis + filename).c_str()).x > avail_width &&
@@ -1638,7 +1715,7 @@ void HDRViewApp::draw_file_window()
                 else if (channel_list_mode == 1)
                     img->draw_channel_rows(i, id, is_current, is_reference);
                 else
-                    img->draw_channel_tree(img->root, i, id, is_current, is_reference);
+                    img->draw_channel_tree(i, id, is_current, is_reference);
 
                 ImGui::PopFont();
 
@@ -2138,13 +2215,14 @@ void HDRViewApp::draw_background()
 
 bool HDRViewApp::is_visible(const ConstImagePtr &img) const
 {
-    return m_filter.PassFilter(img->file_and_partname().c_str());
+    return m_file_filter.PassFilter(img->filename.c_str()) &&
+           (m_channel_filter.PassFilter(img->partname.c_str()) || img->any_group_is_visible());
 }
 
 bool HDRViewApp::is_visible(int index) const
 {
     if (!is_valid(index))
-        return true;
+        return false;
 
     return is_visible(image(index));
 }

@@ -124,7 +124,7 @@ public:
     static std::string                         tail(const std::string &full_name) { return split(full_name).second; }
     static std::string                         head(const std::string &full_name) { return split(full_name).first; }
 
-    std::string name;
+    std::string name; //!< The full channel name, including the layer path including periods
 
     std::unique_ptr<Texture> texture;
     bool                     texture_is_dirty = true;
@@ -149,10 +149,9 @@ private:
 struct ChannelGroup
 {
 public:
-    std::string name;
-
-    int4 channels{0};     ///< Indices into Image::channels
-    int  num_channels{0}; ///< Number of channels that are grouped together
+    std::string name;            //!< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')
+    int4        channels{0};     ///< Indices into Image::channels
+    int         num_channels{0}; ///< Number of channels that are grouped together
     enum Type : int
     {
         RGBA_Channels = 0,
@@ -172,7 +171,7 @@ public:
 struct Layer
 {
 public:
-    std::string      name;
+    std::string      name; //!< The full layer 'path', including trailing period if any, but excluding channel
     std::vector<int> channels;
     std::vector<int> groups;
 };
@@ -230,6 +229,7 @@ public:
     Image(Image &&)      = default;
 
     std::string file_and_partname() const { return partname.empty() ? filename : filename + ":" + partname; }
+    std::string delimiter() const { return partname.empty() ? ":" : "."; }
 
     bool contains(int2 p) const
     {
@@ -237,6 +237,14 @@ public:
                p.y < data_window.max.y;
     }
     int2 size() const { return data_window.size(); }
+
+    bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
+    int  next_visible_group_index(int index, EDirection direction) const;
+    int  nth_visible_group_index(int n) const;
+    bool any_child_is_visible(const LayerTreeNode &node) const;
+    bool any_group_is_visible() const;
+    bool group_is_visible(const ChannelGroup &group) const;
+    bool group_is_visible(int index) const;
 
     static void                set_null_texture(Target target = Target_Primary);
     void                       set_as_texture(Target target = Target_Primary);
@@ -281,9 +289,16 @@ public:
               bool dither = true) const;
 
     void draw_histogram();
-    void draw_layer_groups(const Layer &layer, int i, int &id, bool is_current, bool is_reference, bool short_names);
-    void draw_channel_tree(const LayerTreeNode &node, int i, int &id, bool is_current, bool is_reference);
-    void draw_channel_rows(int i, int &id, bool is_current, bool is_reference);
+    void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
+                           bool short_names, int &visible_group);
+    void draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
+                         int &visible_group);
+    void draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference)
+    {
+        int visible_group = 0;
+        draw_layer_node(root, img_idx, id, is_current, is_reference, visible_group);
+    }
+    void draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference);
     void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
     void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,

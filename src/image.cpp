@@ -716,3 +716,69 @@ string Image::to_string() const
 
     return out;
 }
+
+bool Image::group_is_visible(const ChannelGroup &group) const
+{
+    if (hdrview()->pass_channel_filter(partname.c_str()))
+        return true;
+    // check if any of the contained channels in the group pass the channel filter
+    for (int c = 0; c < group.num_channels; ++c)
+        if (hdrview()->pass_channel_filter(channels[group.channels[c]].name.c_str()))
+            return true;
+    return false;
+}
+
+bool Image::any_child_is_visible(const LayerTreeNode &node) const
+{
+    if (hdrview()->pass_channel_filter(partname.c_str()))
+        return true;
+
+    // check channels at this layer level
+    if (node.leaf_layer >= 0)
+    {
+        auto &layer = layers[node.leaf_layer];
+        for (size_t g = 0; g < layer.groups.size(); ++g)
+            if (group_is_visible(groups[layer.groups[g]]))
+                return true;
+    }
+
+    // check child nodes
+    for (const auto &[childName, childNode] : node.children)
+        if (any_child_is_visible(childNode))
+            return true;
+
+    return false;
+}
+
+bool Image::group_is_visible(int index) const
+{
+    if (!is_valid_group(index))
+        return false;
+
+    return group_is_visible(groups[index]);
+}
+
+bool Image::any_group_is_visible() const
+{
+    if (hdrview()->pass_channel_filter(partname.c_str()))
+        return true;
+    return any_child_is_visible(root);
+    // non-recursive version
+    // for (auto &g : groups)
+    //     for (int c = 0; c < g.num_channels; ++c)
+    //         if (hdrview()->pass_channel_filter(channels[g.channels[c]].name.c_str()))
+    //             return true;
+    // return false;
+}
+
+int Image::next_visible_group_index(int index, EDirection direction) const
+{
+    return next_matching_index(
+        groups, index, [this](size_t i, const ChannelGroup &g) { return group_is_visible(g); }, direction);
+}
+
+int Image::nth_visible_group_index(int n) const
+{
+    return (int)nth_matching_index(groups, (size_t)n,
+                                   [this](size_t, const ChannelGroup &g) { return group_is_visible(g); });
+}

@@ -291,21 +291,23 @@ std::string                     blend_mode_to_string(EBlendMode mode);
     \param criterion The function object that returns true if an index-element pair matches the criterion.
         The function should take two parameters: the index of the element and a const reference to the element.
     \param direction The direction in which to search for the next matching element.
-    \return size_t The index of the next matching element if found, or current_index if not found.
+    \return int The index of the next matching element if found, or current_index if not found.
 */
 
-template <typename T, typename UnaryPredicate>
-size_t next_matching_index(const std::vector<T> &vec, size_t current_index, UnaryPredicate criterion,
-                           EDirection direction = Forward)
+template <typename T, typename Criterion>
+int next_matching_index(const std::vector<T> &vec, int current_index, Criterion criterion,
+                        EDirection direction = Forward)
 {
     if (vec.empty())
         return current_index; // Return current index if vector is empty
 
-    size_t size = vec.size();
+    const size_t size = vec.size();
+
     size_t index_increment =
         (direction == EDirection::Forward) ? 1 : (size - 1); // Increment/decrement based on direction
 
-    for (size_t i = (current_index + index_increment) % size; i != current_index; i = (i + index_increment) % size)
+    for (size_t i = (current_index + index_increment) % size, count = 0; count < size;
+         i = (i + index_increment) % size, ++count)
         if (criterion(i, vec[i]))
             return i; // Found the next matching element
 
@@ -322,8 +324,8 @@ size_t next_matching_index(const std::vector<T> &vec, size_t current_index, Unar
         The function should take two parameters: the index of the element and a const reference to the element.
     \return size_t The index of the nth matching element if found, or vec.size() if not found.
 */
-template <typename T, typename UnaryPredicate>
-size_t nth_matching_index(const std::vector<T> &vec, size_t n, UnaryPredicate criterion)
+template <typename T, typename Criterion>
+size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criterion)
 {
     size_t match_count = 0;
     for (size_t i = 0; i < vec.size(); ++i)

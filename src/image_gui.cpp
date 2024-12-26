@@ -289,7 +289,8 @@ void Image::draw_histogram()
     }
 }
 
-void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_current, bool is_reference, bool short_names)
+void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
+                              bool short_names, int &visible_group)
 {
     static ImGuiTreeNodeFlags tree_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen;
     for (size_t g = 0; g < layer.groups.size(); ++g)
@@ -297,6 +298,10 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
         auto  &group      = groups[layer.groups[g]];
         string group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
         string name       = string(ICON_MY_CHANNEL_GROUP) + " " + (short_names ? group_name : layer.name + group_name);
+
+        // check if any of the contained channels pass the channel filter
+        if (!group_is_visible(group))
+            continue;
 
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
@@ -306,8 +311,8 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
             ImGui::TableNextRow();
 
             ImGui::TableNextColumn();
-            string shortcut = is_current && layer.groups[g] < 10
-                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(layer.groups[g] + 1, 10))
+            string shortcut = is_current && visible_group < 10
+                                  ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
                                   : "";
             ImGui::TextAligned(shortcut, 1.0f);
 
@@ -324,56 +329,64 @@ void Image::draw_layer_groups(const Layer &layer, int i, int &id, bool is_curren
             {
                 if (ImGui::GetIO().KeyShift)
                 {
+                    spdlog::trace("Shift-clicked on {}", name);
                     // check if we are already the reference channel group
-                    if (is_reference && reference_group == layer.groups[g])
+                    if (is_reference_channel)
                     {
+                        spdlog::trace("Clearing reference image");
                         hdrview()->set_reference_image_index(-1, true);
                         reference_group = 0;
                     }
                     else
                     {
-                        hdrview()->set_reference_image_index(i);
+                        spdlog::trace("Setting reference image to {}", img_idx);
+                        hdrview()->set_reference_image_index(img_idx);
                         reference_group = layer.groups[g];
                     }
                     set_as_texture(Target_Secondary);
                 }
                 else
                 {
-                    hdrview()->set_current_image_index(i);
+                    hdrview()->set_current_image_index(img_idx);
                     selected_group = layer.groups[g];
                     set_as_texture(Target_Primary);
                 }
             }
         }
         ImGui::PopStyleColor(3);
+        ++visible_group;
     }
 }
 
 /*!
 
 */
-void Image::draw_channel_tree(const LayerTreeNode &node, int i, int &id, bool is_current, bool is_reference)
+void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
+                            int &visible_group)
 {
     static ImGuiTreeNodeFlags tree_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen;
 
     if (node.leaf_layer >= 0)
         // draw this node's leaf channel groups
-        draw_layer_groups(layers[node.leaf_layer], i, id, is_current, is_reference, true);
+        draw_layer_groups(layers[node.leaf_layer], img_idx, id, is_current, is_reference, true, visible_group);
 
     for (auto &c : node.children)
     {
+        const LayerTreeNode &child_node = c.second;
+        if (!any_child_is_visible(child_node))
+            continue;
+
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(1);
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGuiCol_Header);
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGuiCol_Header);
-        const LayerTreeNode &child_node = c.second;
         bool open = ImGui::TreeNodeEx((void *)(intptr_t)id++, tree_node_flags, "%s %s", ICON_MY_OPEN_IMAGE,
                                       child_node.name.c_str());
         ImGui::PopStyleColor(3);
         if (open)
         {
-            draw_channel_tree(child_node, i, id, is_current, is_reference);
+            draw_layer_node(child_node, img_idx, id, is_current, is_reference, visible_group);
             ImGui::TreePop();
         }
     }
@@ -382,15 +395,17 @@ void Image::draw_channel_tree(const LayerTreeNode &node, int i, int &id, bool is
 /*!
     For each channel in the image, draw a row into a 3-column imgui table.
 
-    \param i The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to set
+    \param img_idx The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to set
         HDRViewApp's current image upon clicking on the row.
     \param id A unique integer id for imgui purposes. Is incremented for each added clickable row.
     \param is_current Is this the current image in HDRViewApp?
     \param is_reference Is this the reference image in HDRViewApp?
 */
-void Image::draw_channel_rows(int i, int &id, bool is_current, bool is_reference)
+void Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference)
 {
-    for (size_t l = 0; l < layers.size(); ++l) draw_layer_groups(layers[l], i, id, is_current, is_reference, false);
+    int visible_group = 0;
+    for (size_t l = 0; l < layers.size(); ++l)
+        draw_layer_groups(layers[l], img_idx, id, is_current, is_reference, false, visible_group);
 }
 
 void Image::draw_channels_list(bool is_reference, bool is_current)
@@ -424,13 +439,13 @@ void Image::draw_channels_list(bool is_reference, bool is_current)
         if (tree_view)
         {
             // ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-            draw_channel_tree(root, -1, id, is_current, is_reference);
+            draw_channel_tree(hdrview()->current_image_index(), id, is_current, is_reference);
             // ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
         }
         else
         {
             ImGui::Unindent(1.f * ImGui::GetTreeNodeToLabelSpacing());
-            draw_channel_rows(-1, id, is_current, is_reference);
+            draw_channel_rows(hdrview()->current_image_index(), id, is_current, is_reference);
             ImGui::Indent(1.f * ImGui::GetTreeNodeToLabelSpacing());
         }
 
