@@ -98,6 +98,7 @@ static bool             g_show_tweak_window    = false;
 static bool             g_show_bg_color_picker = false;
 static char             g_filter_buffer[256]   = {0};
 static int              g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
+static bool             g_request_sort         = false;
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -1363,6 +1364,7 @@ void HDRViewApp::add_pending_images()
 
         // now upload the textures
         set_image_textures();
+        g_request_sort = true;
     }
 }
 
@@ -1580,9 +1582,6 @@ void HDRViewApp::draw_file_window()
         }
     }
 
-    static constexpr ImGuiTableFlags table_flags =
-        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
-
     static const std::string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
     ImGui::SameLine();
@@ -1605,18 +1604,51 @@ void HDRViewApp::draw_file_window()
     auto regular_font = font("sans regular", 14);
     auto bold_font    = font("sans bold", 14);
 
-    ImGui::BeginChild("##ChildImageList", ImVec2(0.f, 0.f), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+    static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate |
+                                                   ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
+                                                   ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH |
+                                                   ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("ImageList", 2, table_flags))
     {
         const float icon_width = ImGui::IconSize().x;
 
-        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+        ImGui::TableSetupColumn(ICON_MY_LIST_OL,
+                                ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed |
+                                    ImGuiTableColumnFlags_IndentDisable,
                                 1.25f * icon_width);
         // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
         //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
         ImGui::TableSetupColumn(g_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
+        ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
         ImGui::TableHeadersRow();
+
+        if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
+            if (sort_specs->SpecsDirty || g_request_sort)
+            {
+                if (sort_specs->SpecsCount)
+                {
+                    ImGuiSortDirection direction = sort_specs->Specs[0].SortDirection;
+                    spdlog::info("Sorting {}", (int)direction);
+                    auto old_current   = current_image();
+                    auto old_reference = reference_image();
+                    std::sort(m_images.begin(), m_images.end(),
+                              [direction](const ImagePtr &a, const ImagePtr &b)
+                              {
+                                  return (direction == ImGuiSortDirection_Ascending)
+                                             ? a->file_and_partname() < b->file_and_partname()
+                                             : a->file_and_partname() > b->file_and_partname();
+                              });
+
+                    // restore selection
+                    if (old_current)
+                        m_current = std::find(m_images.begin(), m_images.end(), old_current) - m_images.begin();
+                    if (old_reference)
+                        m_reference = std::find(m_images.begin(), m_images.end(), old_reference) - m_images.begin();
+                }
+
+                sort_specs->SpecsDirty = g_request_sort = false;
+            }
 
         static ImGuiTreeNodeFlags base_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen |
                                                     ImGuiTreeNodeFlags_OpenOnDoubleClick |
@@ -1628,6 +1660,11 @@ void HDRViewApp::draw_file_window()
         int visible_img_number = 0;
         int hidden_images      = 0;
         int hidden_groups      = 0;
+        // FIXME: there is temporary (usually single-frame) ID Conflict during reordering as a same item may be
+        // submitting twice. This code was always slightly faulty but in a way which was not easily noticeable. Until we
+        // fix this, enable ImGuiItemFlags_AllowDuplicateId to disable detecting the issue.
+        ImGui::PushItemFlag(ImGuiItemFlags_AllowDuplicateId, true);
+
         for (int i = 0; i < num_images(); ++i)
         {
             auto &img          = m_images[i];
@@ -1691,6 +1728,7 @@ void HDRViewApp::draw_file_window()
                 }
             }
 
+            // auto item = m_images[i];
             bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", (icon + ellipsis + filename).c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
@@ -1700,6 +1738,37 @@ void HDRViewApp::draw_file_window()
                     m_current = i;
                 set_image_textures();
                 spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
+            }
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+            {
+                // Set payload to carry the index of our item
+                ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
+
+                // Display preview (could be anything, e.g. when dragging an image we could decide to display
+                // the filename and a small preview of the image, etc.)
+                ImGui::TextFmt("Move image {} '{}' here", i + 1, filename.c_str());
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
+                {
+                    IM_ASSERT(payload->DataSize == sizeof(int));
+                    int payload_i = *(const int *)payload->Data;
+
+                    // move image at payload_i to i, and shift all images in between
+                    if (payload_i < i)
+                        for (int j = payload_i; j < i; ++j) std::swap(m_images[j], m_images[j + 1]);
+                    else
+                        for (int j = payload_i; j > i; --j) std::swap(m_images[j], m_images[j - 1]);
+
+                    // maintain the current and reference images
+                    if (m_current == payload_i)
+                        m_current = i;
+                    if (m_reference == payload_i)
+                        m_reference = i;
+                }
+                ImGui::EndDragDropTarget();
             }
 
             ImGui::PopStyleColor(3);
@@ -1725,6 +1794,7 @@ void HDRViewApp::draw_file_window()
 
             ImGui::PopFont();
         }
+        ImGui::PopItemFlag();
 
         if (hidden_images || hidden_groups)
         {
@@ -1751,7 +1821,6 @@ void HDRViewApp::draw_file_window()
 
         ImGui::EndTable();
     }
-    ImGui::EndChild();
 }
 
 void HDRViewApp::draw_channel_window()
