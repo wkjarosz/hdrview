@@ -293,12 +293,24 @@ public:
                            bool short_names, int &visible_group);
     void draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
                          int &visible_group);
-    void draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference)
+    int  draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference)
     {
         int visible_group = 0;
         draw_layer_node(root, img_idx, id, is_current, is_reference, visible_group);
+        return visible_group;
     }
-    void draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference);
+
+    /*!
+        For each visible channel in the image, draw a row into an imgui table.
+
+        \param img_idx The index of the image in HDRViewApp's list of images (or -1). If non-negative, will be used to
+                       set HDRViewApp's current image upon clicking on the row.
+        \param id A unique integer id for imgui purposes. Is incremented for each added clickable row.
+        \param is_current Is this the current image in HDRViewApp?
+        \param is_reference Is this the reference image in HDRViewApp?
+        \returns The number of displayed channel groups.
+    */
+    int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference);
     void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
     void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,

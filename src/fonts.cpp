@@ -70,6 +70,7 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_MANUAL_AXES);
         builder.AddText(ICON_MY_LIST_OL);
         builder.AddText(ICON_MY_VISIBILITY);
+        builder.AddText(ICON_MY_VISIBILITY_OFF);
         builder.AddText(ICON_MY_KEY_CONTROL);
         builder.AddText(ICON_MY_KEY_COMMAND);
         builder.AddText(ICON_MY_KEY_OPTION);

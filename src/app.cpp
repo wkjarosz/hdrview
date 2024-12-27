@@ -877,7 +877,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     ImGuiInputFlags_Repeat,
                     [this]()
                     {
-                        spdlog::info("Go to previous channel group in reference");
                         // if no reference image is selected, use the current image
                         if (!reference_image())
                             m_reference = m_current;
@@ -1003,7 +1002,7 @@ void HDRViewApp::load_settings()
         m_sRGB                 = j.value<bool>("sRGB", m_sRGB);
         m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
         m_dither               = j.value<bool>("dither", m_dither);
-        g_file_list_mode       = j.value<bool>("file list mode", g_file_list_mode);
+        g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
     }
     catch (json::exception &e)
     {
@@ -1513,14 +1512,12 @@ void HDRViewApp::draw_file_window()
         // update selections based on visibility
         if (!is_visible(m_current))
         {
-            m_current = next_visible_image_index(m_current, Forward);
-            if (!is_visible(m_current))
+            auto old_current = m_current;
+            m_current        = next_visible_image_index(m_current, Forward);
+            if (m_current == old_current)
                 m_current = -1;
-
-            spdlog::info("Current image was not visible; now its: {}.", m_current);
         }
-        else
-            spdlog::info("Current image was visible; its: {}.", m_current);
+
         if (is_valid(m_reference) && !is_visible(m_reference))
             m_reference = next_visible_image_index(m_reference, Forward);
 
@@ -1629,6 +1626,8 @@ void HDRViewApp::draw_file_window()
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 0.5f * icon_width);
         int id                 = 0;
         int visible_img_number = 0;
+        int hidden_images      = 0;
+        int hidden_groups      = 0;
         for (int i = 0; i < num_images(); ++i)
         {
             auto &img          = m_images[i];
@@ -1636,7 +1635,10 @@ void HDRViewApp::draw_file_window()
             bool  is_reference = m_reference == i;
 
             if (!is_visible(img))
+            {
+                ++hidden_images;
                 continue;
+            }
 
             ++visible_img_number;
 
@@ -1705,12 +1707,15 @@ void HDRViewApp::draw_file_window()
             if (open) // && img->groups.size() > 1)
             {
                 ImGui::PushFont(regular_font);
+                int visible_layers = 0;
                 if (g_file_list_mode == 0)
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
                 else if (g_file_list_mode == 1)
-                    img->draw_channel_rows(i, id, is_current, is_reference);
+                    visible_layers = img->draw_channel_rows(i, id, is_current, is_reference);
                 else
-                    img->draw_channel_tree(i, id, is_current, is_reference);
+                    visible_layers = img->draw_channel_tree(i, id, is_current, is_reference);
+
+                hidden_groups += (int)img->groups.size() - visible_layers;
 
                 ImGui::PopFont();
 
@@ -1719,6 +1724,28 @@ void HDRViewApp::draw_file_window()
             }
 
             ImGui::PopFont();
+        }
+
+        if (hidden_images || hidden_groups)
+        {
+            ImGui::BeginDisabled();
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            // ImGui::TextUnformatted(ICON_MY_VISIBILITY_OFF);
+            ImGui::TableNextColumn();
+            auto images_str = hidden_images > 1 ? "s" : "";
+            auto groups_str = hidden_groups > 1 ? "s" : "";
+            if (hidden_groups)
+            {
+                if (hidden_images)
+                    ImGui::TextFmt("{} {} image{} and {} channel group{} hidden", ICON_MY_VISIBILITY_OFF, hidden_images,
+                                   images_str, hidden_groups, groups_str);
+                else
+                    ImGui::TextFmt("{} {} channel group{} hidden", ICON_MY_VISIBILITY_OFF, hidden_groups, groups_str);
+            }
+            else
+                ImGui::TextFmt("{} {} image{} hidden", ICON_MY_VISIBILITY_OFF, hidden_images, images_str);
+            ImGui::EndDisabled();
         }
         ImGui::PopStyleVar(2);
 
@@ -2226,8 +2253,7 @@ void HDRViewApp::draw_background()
 
 bool HDRViewApp::is_visible(const ConstImagePtr &img) const
 {
-    return m_file_filter.PassFilter(img->filename.c_str()) &&
-           (m_channel_filter.PassFilter(img->partname.c_str()) || img->any_group_is_visible());
+    return m_file_filter.PassFilter(img->filename.c_str()) && img->any_group_is_visible();
 }
 
 bool HDRViewApp::is_visible(int index) const

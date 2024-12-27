@@ -719,20 +719,16 @@ string Image::to_string() const
 
 bool Image::group_is_visible(const ChannelGroup &group) const
 {
-    if (hdrview()->pass_channel_filter(partname.c_str()))
-        return true;
+    const string prefix = partname + (partname.empty() ? "" : ".");
     // check if any of the contained channels in the group pass the channel filter
     for (int c = 0; c < group.num_channels; ++c)
-        if (hdrview()->pass_channel_filter(channels[group.channels[c]].name.c_str()))
+        if (hdrview()->pass_channel_filter((prefix + channels[group.channels[c]].name).c_str()))
             return true;
     return false;
 }
 
 bool Image::any_child_is_visible(const LayerTreeNode &node) const
 {
-    if (hdrview()->pass_channel_filter(partname.c_str()))
-        return true;
-
     // check channels at this layer level
     if (node.leaf_layer >= 0)
     {
@@ -760,15 +756,16 @@ bool Image::group_is_visible(int index) const
 
 bool Image::any_group_is_visible() const
 {
-    if (hdrview()->pass_channel_filter(partname.c_str()))
-        return true;
-    return any_child_is_visible(root);
+    // recursive version
+    // return any_child_is_visible(root);
+
     // non-recursive version
-    // for (auto &g : groups)
-    //     for (int c = 0; c < g.num_channels; ++c)
-    //         if (hdrview()->pass_channel_filter(channels[g.channels[c]].name.c_str()))
-    //             return true;
-    // return false;
+    const string prefix = partname + (partname.empty() ? "" : ".");
+    for (auto &g : groups)
+        for (int c = 0; c < g.num_channels; ++c)
+            if (hdrview()->pass_channel_filter((prefix + channels[g.channels[c]].name).c_str()))
+                return true;
+    return false;
 }
 
 int Image::next_visible_group_index(int index, EDirection direction) const
