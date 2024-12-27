@@ -97,6 +97,7 @@ static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
 static bool             g_show_bg_color_picker = false;
 static char             g_filter_buffer[256]   = {0};
+static int              g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -1002,6 +1003,7 @@ void HDRViewApp::load_settings()
         m_sRGB                 = j.value<bool>("sRGB", m_sRGB);
         m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
         m_dither               = j.value<bool>("dither", m_dither);
+        g_file_list_mode       = j.value<bool>("file list mode", g_file_list_mode);
     }
     catch (json::exception &e)
     {
@@ -1029,6 +1031,7 @@ void HDRViewApp::save_settings()
     j["clamp to LDR"]            = m_clamp_to_LDR;
     j["dither"]                  = m_dither;
     j["verbosity"]               = spdlog::get_level();
+    j["file list mode"]          = g_file_list_mode;
     HelloImGui::SaveUserPref("UserSettings", j.dump(4));
 }
 
@@ -1540,7 +1543,7 @@ void HDRViewApp::draw_file_window()
     bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns[:channel patterns]'",
+    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns:channel patterns'",
                                  g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
     {
         // find first ':', copy everything before it into m_file_filter.InputBuf, and everything after it into
@@ -1580,31 +1583,23 @@ void HDRViewApp::draw_file_window()
         }
     }
 
-    // ImGui::SameLine();
-    // static bool show_channels = true;
-    // if (ImGui::IconButton(show_channels ? ICON_MY_CHANNEL_GROUP : ICON_MY_NO_CHANNEL_GROUP))
-    //     show_channels = !show_channels;
-    // ImGui::WrappedTooltip(show_channels ? "Click to show only filenames."
-    //                                     : "Click to show filename and channel groups.");
-
-    static int                       channel_list_mode = 1; // 0: images only; 1: list; 2: tree;
     static constexpr ImGuiTableFlags table_flags =
         ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
 
     static const std::string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
     ImGui::SameLine();
-    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[channel_list_mode].data()))
+    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[g_file_list_mode].data()))
     {
         if (ImGui::Selectable((s_view_mode_icons[0] + " Only images (do not list channel groups)").c_str(),
-                              channel_list_mode == 0))
-            channel_list_mode = 0;
+                              g_file_list_mode == 0))
+            g_file_list_mode = 0;
         if (ImGui::Selectable((s_view_mode_icons[1] + " Flat list of layers and channels").c_str(),
-                              channel_list_mode == 1))
-            channel_list_mode = 1;
+                              g_file_list_mode == 1))
+            g_file_list_mode = 1;
         if (ImGui::Selectable((s_view_mode_icons[2] + " Tree view of layers and channels").c_str(),
-                              channel_list_mode == 2))
-            channel_list_mode = 2;
+                              g_file_list_mode == 2))
+            g_file_list_mode = 2;
 
         ImGui::EndComboButton();
     }
@@ -1622,7 +1617,7 @@ void HDRViewApp::draw_file_window()
                                 1.25f * icon_width);
         // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
         //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
-        ImGui::TableSetupColumn(channel_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
+        ImGui::TableSetupColumn(g_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableHeadersRow();
 
@@ -1647,7 +1642,7 @@ void HDRViewApp::draw_file_window()
 
             ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-            ImGui::PushFont(channel_list_mode == 0 ? regular_font : bold_font);
+            ImGui::PushFont(g_file_list_mode == 0 ? regular_font : bold_font);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -1664,7 +1659,7 @@ void HDRViewApp::draw_file_window()
 
             if (is_current || is_reference)
                 node_flags |= ImGuiTreeNodeFlags_Selected;
-            if (channel_list_mode == 0)
+            if (g_file_list_mode == 0)
             {
                 node_flags |= ImGuiTreeNodeFlags_Leaf;
                 ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
@@ -1683,7 +1678,7 @@ void HDRViewApp::draw_file_window()
                 string layer_path = Channel::head(channel.name);
                 filename =
                     img->file_and_partname() +
-                    (channel_list_mode || img->groups.size() <= 1 ? "" : img->delimiter() + layer_path + group_name);
+                    (g_file_list_mode || img->groups.size() <= 1 ? "" : img->delimiter() + layer_path + group_name);
 
                 const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
                 while (ImGui::CalcTextSize((icon + ellipsis + filename).c_str()).x > avail_width &&
@@ -1710,9 +1705,9 @@ void HDRViewApp::draw_file_window()
             if (open) // && img->groups.size() > 1)
             {
                 ImGui::PushFont(regular_font);
-                if (channel_list_mode == 0)
+                if (g_file_list_mode == 0)
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
-                else if (channel_list_mode == 1)
+                else if (g_file_list_mode == 1)
                     img->draw_channel_rows(i, id, is_current, is_reference);
                 else
                     img->draw_channel_tree(i, id, is_current, is_reference);
