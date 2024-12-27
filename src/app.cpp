@@ -1651,7 +1651,7 @@ void HDRViewApp::draw_file_window()
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::PushRowColors(is_current, is_reference);
+            ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
             ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
 
             // ImGui::TableNextColumn();
@@ -1980,18 +1980,16 @@ void HDRViewApp::draw_pixel_info() const
 
 void HDRViewApp::draw_image_border() const
 {
-    if (!current_image() || minelem(current_image()->size()) == 0)
-        return;
+    auto draw_list = ImGui::GetBackgroundDrawList();
 
-    constexpr float  thickness = 3.f;
-    constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
-    float2           pad       = HelloImGui::EmToVec2({0.25, 0.125});
-    auto             draw_list = ImGui::GetBackgroundDrawList();
-
-    auto draw_image_window =
-        [&](const Box2f &image_window, ImGuiCol col_idx, const string &text, const float2 &align, bool draw_label)
+    auto draw_image_window = [this, draw_list](ConstImagePtr img, const Box2f &image_window, ImGuiCol col_idx,
+                                               const string &text, const float2 &align, bool draw_label)
     {
-        Box2f window{app_pos_at_pixel(image_window.min), app_pos_at_pixel(image_window.max)};
+        constexpr float  thickness = 3.f;
+        constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
+        const float2     pad       = HelloImGui::EmToVec2({0.25, 0.125});
+
+        Box2f window{app_pos_at_pixel(image_window.min, img), app_pos_at_pixel(image_window.max, img)};
         draw_list->AddRect(window.min, window.max, ImGui::GetColorU32(col_idx), 0.f, ImDrawFlags_None, thickness);
 
         if (!draw_label)
@@ -2020,15 +2018,33 @@ void HDRViewApp::draw_image_border() const
     // only draw within the image viewport
     draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     {
-        bool non_trivial = current_image()->data_window != current_image()->display_window ||
-                           current_image()->data_window.min != int2{0, 0};
+        auto cimg = current_image();
+        auto rimg = reference_image();
 
-        if (m_draw_data_window)
-            draw_image_window(Box2f{current_image()->data_window}, ImGuiCol_TabActive, "Data window", {0.f, 0.f},
-                              non_trivial);
-        if (m_draw_display_window && non_trivial)
-            draw_image_window(Box2f{current_image()->display_window}, ImGuiCol_TabUnfocused, "Display window",
-                              {1.f, 1.f}, true);
+        if (cimg && minelem(cimg->size()) > 0)
+        {
+            bool non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
+            ImGui::PushRowColors(true, false);
+            if (m_draw_data_window)
+                draw_image_window(cimg, Box2f{cimg->data_window}, ImGuiCol_HeaderActive, "Data window", {0.f, 0.f},
+                                  non_trivial);
+            if (m_draw_display_window && non_trivial)
+                draw_image_window(cimg, Box2f{cimg->display_window}, ImGuiCol_Header, "Display window", {1.f, 1.f},
+                                  true);
+            ImGui::PopStyleColor(3);
+        }
+
+        if (rimg && minelem(rimg->size()) > 0)
+        {
+            ImGui::PushRowColors(false, true, true);
+            if (m_draw_data_window)
+                draw_image_window(rimg, Box2f{rimg->data_window}, ImGuiCol_HeaderActive, "Reference data window",
+                                  {1.f, 0.f}, true);
+            if (m_draw_display_window)
+                draw_image_window(rimg, Box2f{rimg->display_window}, ImGuiCol_Header, "Reference display window",
+                                  {0.f, 1.f}, true);
+            ImGui::PopStyleColor(3);
+        }
     }
     draw_list->PopClipRect();
 }

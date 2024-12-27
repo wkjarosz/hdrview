@@ -102,13 +102,25 @@ public:
     //   3) pixel (pixel): coordinates within the displayed image (origin: top-left of image)
     //-----------------------------------------------------------------------------
     /// Calculates the image pixel coordinates of the given position in the viewport
-    float2 pixel_at_vp_pos(float2 vp_pos) const { return (vp_pos - (m_offset + center_offset())) / m_zoom; }
+    float2 pixel_at_vp_pos(float2 vp_pos, ConstImagePtr img = nullptr) const
+    {
+        return (vp_pos - (m_offset + center_offset(img))) / m_zoom;
+    }
     /// Calculates the position inside the viewport for the given image pixel coordinate.
-    float2 vp_pos_at_pixel(float2 pixel) const { return m_zoom * pixel + (m_offset + center_offset()); }
+    float2 vp_pos_at_pixel(float2 pixel, ConstImagePtr img = nullptr) const
+    {
+        return m_zoom * pixel + (m_offset + center_offset(img));
+    }
     /// Calculates the app position at the given image pixel coordinate.
-    float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
+    float2 app_pos_at_pixel(float2 pixel, ConstImagePtr img = nullptr) const
+    {
+        return app_pos_at_vp_pos(vp_pos_at_pixel(pixel, img));
+    }
     /// Calculates the image pixel coordinates at the given app position.
-    float2 pixel_at_app_pos(float2 app_pos) const { return pixel_at_vp_pos(vp_pos_at_app_pos(app_pos)); }
+    float2 pixel_at_app_pos(float2 app_pos, ConstImagePtr img = nullptr) const
+    {
+        return pixel_at_vp_pos(vp_pos_at_app_pos(app_pos), img);
+    }
     /// Convert from vp_pos to app_pos (just a translation); inverse of vp_pos_at_app_pos()
     float2 app_pos_at_vp_pos(float2 vp_pos) const { return vp_pos + m_viewport_min; }
     /// Convert from vp_pos to app_pos (just a translation); inverse of app_pos_at_vp_pos()

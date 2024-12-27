@@ -151,7 +151,7 @@ inline void TextAligned(const std::string text, float align)
     TextUnformatted(text.c_str());
 }
 
-void PushRowColors(bool is_current, bool is_reference);
+void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
 
 inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
 {

@@ -306,7 +306,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
         bool is_reference_channel = is_reference && reference_group == layer.groups[g];
 
-        ImGui::PushRowColors(is_selected_channel, is_reference_channel);
+        ImGui::PushRowColors(is_selected_channel, is_reference_channel, ImGui::GetIO().KeyShift);
         {
             ImGui::TableNextRow();
 

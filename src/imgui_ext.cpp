@@ -295,12 +295,11 @@ void ScrollWhenDraggingOnVoid(const ImVec2 &delta, ImGuiMouseButton mouse_button
         ImGui::SetScrollY(window, window->Scroll.y + delta.y);
 }
 
-void PushRowColors(bool is_current, bool is_reference)
+void PushRowColors(bool is_current, bool is_reference, bool reference_mod)
 {
-    float4 active   = GetStyleColorVec4(ImGuiCol_HeaderActive);
-    float4 header   = GetStyleColorVec4(ImGuiCol_Header);
-    float4 hovered  = GetStyleColorVec4(ImGuiCol_HeaderHovered);
-    bool   mod_held = ImGui::GetIO().KeyShift;
+    float4 active  = GetStyleColorVec4(ImGuiCol_HeaderActive);
+    float4 header  = GetStyleColorVec4(ImGuiCol_Header);
+    float4 hovered = GetStyleColorVec4(ImGuiCol_HeaderHovered);
 
     // "complementary" color (for reference image/channel group) is shifted by 2/3 in hue
     constexpr float3 hsv_adjust = float3{0.67f, 0.f, -0.2f};
@@ -317,10 +316,10 @@ void PushRowColors(bool is_current, bool is_reference)
     // float4           header_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(header.xyz()) + hsv_adjust2), header.w};
     // float4           active_avg{ColorConvertHSVtoRGB(ColorConvertRGBtoHSV(active.xyz()) + hsv_adjust2), active.w};
 
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
-                          mod_held ? (is_current ? hovered_avg : hovered_c) : (is_reference ? hovered_avg : hovered));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, reference_mod ? (is_current ? hovered_avg : hovered_c)
+                                                                : (is_reference ? hovered_avg : hovered));
     ImGui::PushStyleColor(ImGuiCol_Header, is_reference ? (is_current ? header_avg : header_c) : header);
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, mod_held ? (is_current ? active_avg : active_c) : active);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, reference_mod ? (is_current ? active_avg : active_c) : active);
 }
 
 void UnderLine(ImColor c, float raise)
