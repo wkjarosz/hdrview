@@ -96,6 +96,7 @@ static bool             g_show_help            = false;
 static bool             g_show_command_palette = false;
 static bool             g_show_tweak_window    = false;
 static bool             g_show_bg_color_picker = false;
+static char             g_filter_buffer[256]   = {0};
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -1502,6 +1503,8 @@ void HDRViewApp::draw_file_window()
     if (!num_images())
         return;
 
+    const ImVec2 button_size = ImGui::IconButtonSize();
+
     auto update_visiblity = [this]()
     {
         // update selections based on visibility
@@ -1510,8 +1513,11 @@ void HDRViewApp::draw_file_window()
             m_current = next_visible_image_index(m_current, Forward);
             if (!is_visible(m_current))
                 m_current = -1;
-        }
 
+            spdlog::info("Current image was not visible; now its: {}.", m_current);
+        }
+        else
+            spdlog::info("Current image was visible; its: {}.", m_current);
         if (is_valid(m_reference) && !is_visible(m_reference))
             m_reference = next_visible_image_index(m_reference, Forward);
 
@@ -1531,40 +1537,48 @@ void HDRViewApp::draw_file_window()
         set_image_textures();
     };
 
-    const ImVec2 button_size = ImGui::IconButtonSize();
-    auto         draw_filter = [&update_visiblity, button_size](ImGuiTextFilter &filter, float width, const char *type)
+    bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SetNextItemAllowOverlap();
+    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns[:channel patterns]'",
+                                 g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
     {
-        bool show_delete_btn = filter.IsActive(); // save here to avoid flicker
-        ImGui::SetNextItemWidth(width);
-        ImGui::SetNextItemAllowOverlap();
-        if (ImGui::InputTextWithHint(fmt::format("##{} filter", type).c_str(),
-                                     fmt::format("{} Filter {}", ICON_MY_FILTER, type).c_str(), filter.InputBuf,
-                                     IM_ARRAYSIZE(filter.InputBuf)))
+        // find first ':', copy everything before it into m_file_filter.InputBuf, and everything after it into
+        // m_channel_filter.InputBuf
+        if (auto colon = strchr(g_filter_buffer, ':'))
         {
-            filter.Build();
+            int file_filter_length    = colon - g_filter_buffer + 1;
+            int channel_filter_length = IM_ARRAYSIZE(g_filter_buffer) - file_filter_length;
+            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, file_filter_length);
+            ImStrncpy(m_channel_filter.InputBuf, colon + 1, channel_filter_length);
+        }
+        else
+        {
+            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, IM_ARRAYSIZE(m_file_filter.InputBuf));
+            m_channel_filter.InputBuf[0] = 0; // Clear channel filter if no colon is found
+        }
+
+        m_file_filter.Build();
+        m_channel_filter.Build();
+
+        update_visiblity();
+    }
+    ImGui::WrappedTooltip(
+        "Filter visible images and channel groups.\n\nOnly images with filenames matching the file patterns and "
+        "channels matching the channel patterns will be shown. A pattern is a comma-separated list of strings "
+        "that must be included or excluded (if prefixed with a '-').");
+    if (show_button)
+    {
+        ImGui::SameLine(0.f, 0.f);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
+        if (ImGui::IconButton(ICON_MY_DELETE))
+        {
+            m_file_filter.Clear();
+            m_channel_filter.Clear();
+            g_filter_buffer[0] = 0;
             update_visiblity();
         }
-        ImGui::WrappedTooltip(
-            "Filter visible images and channel groups.\n\nOnly images with filenames matching the file patterns and "
-            "channels matching the channel patterns will be shown. A pattern is a comma-separated list of strings "
-            "that must be included or excluded (if prefixed with a '-').");
-        if (show_delete_btn)
-        {
-            ImGui::SameLine(0.f, 0.f);
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-            if (ImGui::IconButton(fmt::format("{}##clear {} filter", ICON_MY_DELETE, type).c_str()))
-            {
-                filter.Clear();
-                update_visiblity();
-            }
-        }
-    };
-
-    float filter_width =
-        0.5f * (ImGui::GetContentRegionAvail().x - (button_size.x + 2.f * ImGui::GetStyle().ItemSpacing.x));
-    draw_filter(m_file_filter, filter_width, "filenames");
-    ImGui::SameLine();
-    draw_filter(m_channel_filter, filter_width, "channels");
+    }
 
     // ImGui::SameLine();
     // static bool show_channels = true;
