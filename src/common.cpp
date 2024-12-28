@@ -123,3 +123,69 @@ const vector<string> &blend_mode_names()
 string channel_to_string(EChannel channel) { return channel_names()[channel]; }
 
 string blend_mode_to_string(EBlendMode mode) { return blend_mode_names()[mode]; }
+
+static inline int code_point_length(char first)
+{
+    if ((first & 0xf8) == 0xf0)
+        return 4;
+    else if ((first & 0xf0) == 0xe0)
+        return 3;
+    else if ((first & 0xe0) == 0xc0)
+        return 2;
+    else
+        return 1;
+}
+
+// This function is adapted from tev:
+// This file was developed by Thomas Müller <thomas94@gmx.net>.
+// It is published under the BSD 3-Clause License within the LICENSE file.
+pair<int, int> find_common_prefix_suffix(const vector<string> &names)
+{
+    int begin_short_offset = 0;
+    int end_short_offset   = 0;
+    if (!names.empty())
+    {
+        string first      = names.front();
+        int    first_size = (int)first.size();
+        if (first_size > 0)
+        {
+            bool all_start_with_same_char = false;
+            do {
+                int len = code_point_length(first[begin_short_offset]);
+
+                all_start_with_same_char =
+                    all_of(begin(names), end(names),
+                           [&first, begin_short_offset, len](const string &name)
+                           {
+                               if (begin_short_offset + len > (int)name.size())
+                                   return false;
+
+                               for (int i = begin_short_offset; i < begin_short_offset + len; ++i)
+                                   if (name[i] != first[i])
+                                       return false;
+
+                               return true;
+                           });
+
+                if (all_start_with_same_char)
+                    begin_short_offset += len;
+            } while (all_start_with_same_char && begin_short_offset < first_size);
+
+            bool all_end_with_same_char;
+            do {
+                char last_char         = first[first_size - end_short_offset - 1];
+                all_end_with_same_char = all_of(begin(names), end(names),
+                                                [last_char, end_short_offset](const string &name)
+                                                {
+                                                    int index = (int)name.size() - end_short_offset - 1;
+                                                    return index >= 0 && name[index] == last_char;
+                                                });
+
+                if (all_end_with_same_char)
+                    ++end_short_offset;
+            } while (all_end_with_same_char && end_short_offset < first_size);
+        }
+    }
+    return {begin_short_offset, end_short_offset};
+}
+

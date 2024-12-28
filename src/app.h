@@ -216,6 +216,7 @@ private:
     bool process_event(void *event);
     void set_image_textures();
     void draw_command_palette();
+    void update_images_display();
 
     void load_settings();
     void save_settings();

@@ -199,6 +199,8 @@ public:
     Box2i                data_window;
     Box2i                display_window;
     std::vector<Channel> channels;
+    float4x4             M_to_Rec709       = la::identity;
+    float3               luminance_weights = Rec709_luminance_weights;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().
@@ -217,11 +219,11 @@ public:
     std::vector<ChannelGroup> groups;
     LayerTreeNode             root; //!< The root of the layer "folder" hierarchy
 
-    int selected_group  = 0;
-    int reference_group = 0;
-
-    float4x4 M_to_Rec709       = la::identity;
-    float3   luminance_weights = Rec709_luminance_weights;
+    // The following are used for drawing the image in the GUI
+    bool        visible = true;
+    std::string short_name;
+    int         selected_group  = 0;
+    int         reference_group = 0;
 
     Image(int2 size, int num_channels);
     Image()              = default;

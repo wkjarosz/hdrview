@@ -15,6 +15,7 @@
 #include "fwd.h"
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/core.h>
@@ -335,3 +336,7 @@ size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criteri
 
     return vec.size(); // Return vec.size() if the nth matching element is not found
 }
+
+//! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
+//! range that is unique across the strings
+std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);

@@ -317,7 +317,8 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         for (auto i : images)
         {
             i->finalize();
-            i->filename = filename;
+            i->filename   = filename;
+            i->short_name = i->file_and_partname();
             spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
         }
         return images;

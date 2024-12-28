@@ -99,6 +99,7 @@ static bool             g_show_bg_color_picker = false;
 static char             g_filter_buffer[256]   = {0};
 static int              g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
 static bool             g_request_sort         = false;
+static bool             g_short_names          = false;
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -673,8 +674,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
         add_action({"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
                     &m_draw_grid});
-        add_action({"Draw pixel values", g_blank_icon, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {}, always_enabled, false,
-                    &m_draw_pixel_info});
+        add_action({"Draw pixel values", ICON_MY_SHOW_PIXEL_VALUES, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {},
+                    always_enabled, false, &m_draw_pixel_info});
 
         add_action({"Draw data window", ICON_MY_DATA_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_draw_data_window});
@@ -1362,8 +1363,7 @@ void HDRViewApp::add_pending_images()
 
         m_current = int(m_images.size() - 1);
 
-        // now upload the textures
-        set_image_textures();
+        update_images_display(); // this also calls set_image_textures();
         g_request_sort = true;
     }
 }
@@ -1406,7 +1406,7 @@ void HDRViewApp::close_image()
     set_current_image_index(next < m_current ? next : next - 1);
     set_reference_image_index(m_reference < m_current ? m_reference : m_reference - 1);
 
-    set_image_textures();
+    update_images_display(); // this also calls set_image_textures();
 }
 
 void HDRViewApp::close_all_images()
@@ -1414,7 +1414,7 @@ void HDRViewApp::close_all_images()
     m_images.clear();
     m_current   = -1;
     m_reference = -1;
-    set_image_textures();
+    update_images_display(); // this also calls set_image_textures();
 }
 
 void HDRViewApp::run()
@@ -1464,6 +1464,59 @@ void HDRViewApp::draw_histogram_window()
         img->draw_histogram();
 }
 
+void HDRViewApp::update_images_display()
+{
+    vector<string> active_image_names;
+    for (int i = 0; i < num_images(); ++i)
+    {
+        auto img = image(i);
+        if ((img->visible = is_visible(img)))
+            active_image_names.emplace_back(img->file_and_partname());
+    }
+    // determine common vs. unique parts of filenames
+    auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(active_image_names);
+
+    // update selections based on visibility
+    if (!is_visible(m_current))
+    {
+        auto old_current = m_current;
+        m_current        = next_visible_image_index(m_current, Forward);
+        if (m_current == old_current)
+            m_current = -1;
+    }
+
+    if (is_valid(m_reference) && !is_visible(m_reference))
+        m_reference = next_visible_image_index(m_reference, Forward);
+
+    for (int i = 0; i < num_images(); ++i)
+    {
+        if (!is_visible(i))
+            continue;
+
+        auto img = image(i);
+        {
+            auto short_begin = begin_short_offset;
+            auto short_end   = end_short_offset;
+            auto long_name   = img->file_and_partname();
+            // Extend beginning and ending of highlighted region to entire word/number
+            if (isalnum(long_name[short_begin]))
+                while (short_begin > 0 && isalnum(long_name[short_begin - 1])) --short_begin;
+            if (isalnum(long_name[short_end - 1]))
+                while (short_end < (int)long_name.size() && isalnum(long_name[short_end])) ++short_end;
+            if (short_end - short_begin == 0)
+                img->short_name = get_basename(img->file_and_partname());
+            else
+                img->short_name = img->file_and_partname().substr(short_begin, short_end - short_begin);
+
+            if (!img->group_is_visible(img->selected_group))
+                img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
+            if (img->is_valid_group(img->reference_group) && !img->group_is_visible(img->reference_group))
+                img->reference_group = img->next_visible_group_index(img->selected_group, Forward);
+        }
+    }
+    set_image_textures();
+}
+
 void HDRViewApp::draw_file_window()
 {
     ImGui::BeginDisabled(!current_image());
@@ -1509,38 +1562,8 @@ void HDRViewApp::draw_file_window()
 
     const ImVec2 button_size = ImGui::IconButtonSize();
 
-    auto update_visiblity = [this]()
-    {
-        // update selections based on visibility
-        if (!is_visible(m_current))
-        {
-            auto old_current = m_current;
-            m_current        = next_visible_image_index(m_current, Forward);
-            if (m_current == old_current)
-                m_current = -1;
-        }
-
-        if (is_valid(m_reference) && !is_visible(m_reference))
-            m_reference = next_visible_image_index(m_reference, Forward);
-
-        for (int i = 0; i < num_images(); ++i)
-        {
-            if (!is_visible(i))
-                continue;
-
-            auto img = image(i);
-            {
-                if (!img->group_is_visible(img->selected_group))
-                    img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
-                if (img->is_valid_group(img->reference_group) && !img->group_is_visible(img->reference_group))
-                    img->reference_group = img->next_visible_group_index(img->selected_group, Forward);
-            }
-        }
-        set_image_textures();
-    };
-
     bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - (button_size.x + ImGui::GetStyle().ItemSpacing.x));
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns:channel patterns'",
                                  g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
@@ -1563,7 +1586,7 @@ void HDRViewApp::draw_file_window()
         m_file_filter.Build();
         m_channel_filter.Build();
 
-        update_visiblity();
+        update_images_display();
     }
     ImGui::WrappedTooltip(
         "Filter visible images and channel groups.\n\nOnly images with filenames matching the file patterns and "
@@ -1578,9 +1601,18 @@ void HDRViewApp::draw_file_window()
             m_file_filter.Clear();
             m_channel_filter.Clear();
             g_filter_buffer[0] = 0;
-            update_visiblity();
+            update_images_display();
         }
     }
+
+    ImGui::SameLine();
+    if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES : ICON_MY_FULL_NAMES))
+    {
+        g_short_names = !g_short_names;
+        update_images_display();
+    }
+    ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
+                                        : "Click to show only the unique portion of each file name.");
 
     static const std::string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
@@ -1661,10 +1693,6 @@ void HDRViewApp::draw_file_window()
         int visible_img_number = 0;
         int hidden_images      = 0;
         int hidden_groups      = 0;
-        // FIXME: there is temporary (usually single-frame) ID Conflict during reordering as a same item may be
-        // submitting twice. This code was always slightly faulty but in a way which was not easily noticeable. Until we
-        // fix this, enable ImGuiItemFlags_AllowDuplicateId to disable detecting the issue.
-        ImGui::PushItemFlag(ImGuiItemFlags_AllowDuplicateId, true);
 
         for (int i = 0; i < num_images(); ++i)
         {
@@ -1717,7 +1745,7 @@ void HDRViewApp::draw_file_window()
                 auto  &channel    = img->channels[selected_group.channels[0]];
                 string layer_path = Channel::head(channel.name);
                 filename =
-                    img->file_and_partname() +
+                    (g_short_names ? img->short_name : img->file_and_partname()) +
                     (g_file_list_mode || img->groups.size() <= 1 ? "" : img->delimiter() + layer_path + group_name);
 
                 const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
@@ -1789,18 +1817,18 @@ void HDRViewApp::draw_file_window()
                 }
             }
 
-            if (open) // && img->groups.size() > 1)
+            if (open)
             {
                 ImGui::PushFont(regular_font);
-                int visible_layers = 0;
+                int visible_groups = 1;
                 if (g_file_list_mode == 0)
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
                 else if (g_file_list_mode == 1)
-                    visible_layers = img->draw_channel_rows(i, id, is_current, is_reference);
+                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference);
                 else
-                    visible_layers = img->draw_channel_tree(i, id, is_current, is_reference);
+                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference);
 
-                hidden_groups += (int)img->groups.size() - visible_layers;
+                hidden_groups += (int)img->groups.size() - visible_groups;
 
                 ImGui::PopFont();
 
@@ -1810,7 +1838,6 @@ void HDRViewApp::draw_file_window()
 
             ImGui::PopFont();
         }
-        ImGui::PopItemFlag();
 
         if (hidden_images || hidden_groups)
         {
