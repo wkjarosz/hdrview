@@ -1623,12 +1623,13 @@ void HDRViewApp::draw_file_window()
         ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
         ImGui::TableHeadersRow();
 
+        ImGuiSortDirection direction = ImGuiSortDirection_None;
         if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
-            if (sort_specs->SpecsDirty || g_request_sort)
+            if (sort_specs->SpecsCount)
             {
-                if (sort_specs->SpecsCount)
+                direction = sort_specs->Specs[0].SortDirection;
+                if (sort_specs->SpecsDirty || g_request_sort)
                 {
-                    ImGuiSortDirection direction = sort_specs->Specs[0].SortDirection;
                     spdlog::info("Sorting {}", (int)direction);
                     auto old_current   = current_image();
                     auto old_reference = reference_image();
@@ -1739,39 +1740,54 @@ void HDRViewApp::draw_file_window()
                 set_image_textures();
                 spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
             }
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
-            {
-                // Set payload to carry the index of our item
-                ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
-
-                // Display preview (could be anything, e.g. when dragging an image we could decide to display
-                // the filename and a small preview of the image, etc.)
-                ImGui::TextFmt("Move image {} '{}' here", i + 1, filename.c_str());
-                ImGui::EndDragDropSource();
-            }
-            if (ImGui::BeginDragDropTarget())
-            {
-                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
-                {
-                    IM_ASSERT(payload->DataSize == sizeof(int));
-                    int payload_i = *(const int *)payload->Data;
-
-                    // move image at payload_i to i, and shift all images in between
-                    if (payload_i < i)
-                        for (int j = payload_i; j < i; ++j) std::swap(m_images[j], m_images[j + 1]);
-                    else
-                        for (int j = payload_i; j > i; --j) std::swap(m_images[j], m_images[j - 1]);
-
-                    // maintain the current and reference images
-                    if (m_current == payload_i)
-                        m_current = i;
-                    if (m_reference == payload_i)
-                        m_reference = i;
-                }
-                ImGui::EndDragDropTarget();
-            }
 
             ImGui::PopStyleColor(3);
+
+            if (direction == ImGuiSortDirection_None)
+            {
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                {
+                    // Set payload to carry the index of our item
+                    ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
+
+                    // Display preview
+                    ImGui::TextUnformatted("Move here");
+                    if (ImGui::BeginTable("ImageList", 2, table_flags))
+                    {
+                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
+                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
+                        ImGui::TableNextColumn();
+                        ImGui::Text(icon + ellipsis + filename);
+                        ImGui::EndTable();
+                    }
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
+                    {
+                        IM_ASSERT(payload->DataSize == sizeof(int));
+                        int payload_i = *(const int *)payload->Data;
+
+                        // move image at payload_i to i, and shift all images in between
+                        if (payload_i < i)
+                            for (int j = payload_i; j < i; ++j) std::swap(m_images[j], m_images[j + 1]);
+                        else
+                            for (int j = payload_i; j > i; --j) std::swap(m_images[j], m_images[j - 1]);
+
+                        // maintain the current and reference images
+                        if (m_current == payload_i)
+                            m_current = i;
+                        if (m_reference == payload_i)
+                            m_reference = i;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
 
             if (open) // && img->groups.size() > 1)
             {
