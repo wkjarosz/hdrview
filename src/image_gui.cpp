@@ -78,6 +78,7 @@ void Image::draw_histogram()
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
+    ImGui::PushFont(hdrview()->font("mono regular", 10));
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
@@ -287,6 +288,7 @@ void Image::draw_histogram()
 
         ImPlot::EndPlot();
     }
+    ImGui::PopFont();
 }
 
 void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
@@ -300,7 +302,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
         string name       = string(ICON_MY_CHANNEL_GROUP) + " " + (short_names ? group_name : layer.name + group_name);
 
         // check if any of the contained channels pass the channel filter
-        if (!group_is_visible(group))
+        if (!group.visible)
             continue;
 
         bool is_selected_channel  = is_current && selected_group == layer.groups[g];
@@ -373,7 +375,7 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
     for (auto &c : node.children)
     {
         const LayerTreeNode &child_node = c.second;
-        if (!any_child_is_visible(child_node))
+        if (child_node.visible_groups == 0)
             continue;
 
         ImGui::TableNextRow();

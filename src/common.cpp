@@ -18,23 +18,30 @@ bool ends_with(const string &s, const string &suffix)
     return s.find(suffix, s.length() - suffix.length()) != string::npos;
 }
 
-string get_extension(const string &filename)
+string get_extension(const string &path)
 {
-    if (filename.find_last_of(".") != string::npos)
-        return filename.substr(filename.find_last_of(".") + 1);
+    if (auto last_dot = path.find_last_of("."); last_dot != string::npos)
+        return path.substr(last_dot + 1);
     return "";
 }
 
-string get_basename(const string &filename)
+string get_filename(const string &path)
 {
-    auto lastSlash = filename.find_last_of("/\\");
-    auto lastDot   = filename.find_last_of(".");
-    if (lastSlash == string::npos && lastDot == string::npos)
-        return filename;
+    if (auto last_slash = path.find_last_of("/\\"); last_slash != string::npos)
+        return path.substr(last_slash + 1);
+    return path;
+}
 
-    auto start  = (lastSlash != string::npos) ? lastSlash + 1 : 0;
-    auto length = (lastDot != string::npos) ? lastDot - start : filename.size() - start;
-    return filename.substr(start, length);
+string get_basename(const string &path)
+{
+    auto last_slash = path.find_last_of("/\\");
+    auto last_dot   = path.find_last_of(".");
+    if (last_slash == string::npos && last_dot == string::npos)
+        return path;
+
+    auto start  = (last_slash != string::npos) ? last_slash + 1 : 0;
+    auto length = (last_dot != string::npos) ? last_dot - start : path.size() - start;
+    return path.substr(start, length);
 }
 
 string to_lower(string str)
@@ -52,8 +59,7 @@ string to_upper(string str)
 void process_lines(string_view input, function<void(string_view)> op)
 {
     istringstream iss(input.data());
-    for (string line; getline(iss, line);)
-        op(line);
+    for (string line; getline(iss, line);) op(line);
 }
 
 string add_line_numbers(string_view input)
@@ -188,4 +194,3 @@ pair<int, int> find_common_prefix_suffix(const vector<string> &names)
     }
     return {begin_short_offset, end_short_offset};
 }
-

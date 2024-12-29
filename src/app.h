@@ -75,8 +75,6 @@ public:
     ImagePtr      reference_image() { return image(m_reference); }
     ConstImagePtr image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
-    bool          is_visible(int index) const;
-    bool          is_visible(const ConstImagePtr &img) const;
     void          set_current_image_index(int index, bool force = false)
     {
         m_current = force || is_valid(index) ? index : m_current;
@@ -87,6 +85,10 @@ public:
     }
     int  next_visible_image_index(int index, EDirection direction) const;
     int  nth_visible_image_index(int n) const;
+    bool pass_file_filter(const char *text, const char *text_end = nullptr) const
+    {
+        return m_file_filter.PassFilter(text, text_end);
+    }
     bool pass_channel_filter(const char *text, const char *text_end = nullptr) const
     {
         return m_channel_filter.PassFilter(text, text_end);

@@ -631,7 +631,7 @@ void Image::traverse_tree(const LayerTreeNode *node, std::function<void(const La
                           int level) const
 {
     callback(node, level);
-    for (const auto &[childName, childNode] : node->children) traverse_tree(&childNode, callback, level + 1);
+    for (const auto &[child_name, child_node] : node->children) traverse_tree(&child_node, callback, level + 1);
 }
 
 string Image::to_string() const
@@ -717,65 +717,57 @@ string Image::to_string() const
     return out;
 }
 
-bool Image::group_is_visible(const ChannelGroup &group) const
-{
-    const string prefix = partname + (partname.empty() ? "" : ".");
-    // check if any of the contained channels in the group pass the channel filter
-    for (int c = 0; c < group.num_channels; ++c)
-        if (hdrview()->pass_channel_filter((prefix + channels[group.channels[c]].name).c_str()))
-            return true;
-    return false;
-}
-
-bool Image::any_child_is_visible(const LayerTreeNode &node) const
-{
-    // check channels at this layer level
-    if (node.leaf_layer >= 0)
-    {
-        auto &layer = layers[node.leaf_layer];
-        for (size_t g = 0; g < layer.groups.size(); ++g)
-            if (group_is_visible(groups[layer.groups[g]]))
-                return true;
-    }
-
-    // check child nodes
-    for (const auto &[childName, childNode] : node.children)
-        if (any_child_is_visible(childNode))
-            return true;
-
-    return false;
-}
-
-bool Image::group_is_visible(int index) const
-{
-    if (!is_valid_group(index))
-        return false;
-
-    return group_is_visible(groups[index]);
-}
-
-bool Image::any_group_is_visible() const
-{
-    // recursive version
-    // return any_child_is_visible(root);
-
-    // non-recursive version
-    const string prefix = partname + (partname.empty() ? "" : ".");
-    for (auto &g : groups)
-        for (int c = 0; c < g.num_channels; ++c)
-            if (hdrview()->pass_channel_filter((prefix + channels[g.channels[c]].name).c_str()))
-                return true;
-    return false;
-}
-
 int Image::next_visible_group_index(int index, EDirection direction) const
 {
-    return next_matching_index(
-        groups, index, [this](size_t i, const ChannelGroup &g) { return group_is_visible(g); }, direction);
+    return next_matching_index(groups, index, [](size_t, const ChannelGroup &g) { return g.visible; }, direction);
 }
 
 int Image::nth_visible_group_index(int n) const
 {
-    return (int)nth_matching_index(groups, (size_t)n,
-                                   [this](size_t, const ChannelGroup &g) { return group_is_visible(g); });
+    return (int)nth_matching_index(groups, (size_t)n, [](size_t, const ChannelGroup &g) { return g.visible; });
+}
+
+static void calculate_tree_visibility(LayerTreeNode &node, Image &image)
+{
+    node.visible_groups = 0;
+    node.hidden_groups  = 0;
+    if (node.leaf_layer >= 0)
+    {
+        auto &layer = image.layers[node.leaf_layer];
+        for (size_t g = 0; g < layer.groups.size(); ++g)
+            if (image.groups[layer.groups[g]].visible)
+                ++node.visible_groups;
+            else
+                ++node.hidden_groups;
+    }
+
+    for (auto &[child_name, child_node] : node.children)
+    {
+        calculate_tree_visibility(child_node, image);
+        node.visible_groups += child_node.visible_groups;
+        node.hidden_groups += child_node.hidden_groups;
+    }
+}
+
+bool Image::compute_visibility()
+{
+    const string prefix           = partname + (partname.empty() ? "" : ".");
+    auto         group_is_visible = [&prefix, this](const ChannelGroup &group)
+    {
+        // check if any of the contained channels in the group pass the channel filter
+        for (int c = 0; c < group.num_channels; ++c)
+            if (hdrview()->pass_channel_filter((prefix + channels[group.channels[c]].name).c_str()))
+                return true;
+        return false;
+    };
+
+    // compute visibility of all groups
+    any_groups_visible = false;
+    for (size_t i = 0; i < groups.size(); ++i) any_groups_visible |= groups[i].visible = group_is_visible(groups[i]);
+
+    visible = hdrview()->pass_file_filter(filename.c_str()) && any_groups_visible;
+
+    calculate_tree_visibility(root, *this);
+
+    return visible;
 }

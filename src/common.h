@@ -263,8 +263,9 @@ inline T square(T value)
 
 bool        starts_with(const std::string &s, const std::string &prefix);
 bool        ends_with(const std::string &s, const std::string &suffix);
-std::string get_extension(const std::string &filename);
-std::string get_basename(const std::string &filename);
+std::string get_extension(const std::string &path);
+std::string get_filename(const std::string &path);
+std::string get_basename(const std::string &path);
 std::string to_lower(std::string str);
 std::string to_upper(std::string str);
 /// Run func on each line of the input string

@@ -149,9 +149,6 @@ private:
 struct ChannelGroup
 {
 public:
-    std::string name;            //!< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')
-    int4        channels{0};     ///< Indices into Image::channels
-    int         num_channels{0}; ///< Number of channels that are grouped together
     enum Type : int
     {
         RGBA_Channels = 0,
@@ -163,7 +160,13 @@ public:
         UVorXY_Channels,
         Z_Channel,
         Single_Channel
-    } type{Single_Channel};
+    };
+
+    std::string name;                 //!< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')
+    int4        channels{0};          //!< Indices into Image::channels
+    int         num_channels{0};      //!< Number of channels that are grouped together
+    Type        type{Single_Channel}; //!< Which of the predefined types of channel group
+    bool        visible{true};        //!< Whether this group is visible in the GUI
 
     float4x4 colors() const;
 };
@@ -180,7 +183,9 @@ struct LayerTreeNode
 {
     std::string                          name; //!< Name of just this level of the layer path (without '.')
     std::map<std::string, LayerTreeNode> children;
-    int                                  leaf_layer = -1; //!< Index into Image::layers, or -1 if
+    int                                  leaf_layer     = -1; //!< Index into Image::layers, or -1 if
+    int                                  visible_groups = 0;  //!< Number of visible descendant groups
+    int                                  hidden_groups  = 0;  //!< Number of hidden descendant groups
 };
 
 struct Image
@@ -220,7 +225,8 @@ public:
     LayerTreeNode             root; //!< The root of the layer "folder" hierarchy
 
     // The following are used for drawing the image in the GUI
-    bool        visible = true;
+    bool        visible            = true;
+    bool        any_groups_visible = true;
     std::string short_name;
     int         selected_group  = 0;
     int         reference_group = 0;
@@ -243,16 +249,13 @@ public:
     bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
     int  next_visible_group_index(int index, EDirection direction) const;
     int  nth_visible_group_index(int n) const;
-    bool any_child_is_visible(const LayerTreeNode &node) const;
-    bool any_group_is_visible() const;
-    bool group_is_visible(const ChannelGroup &group) const;
-    bool group_is_visible(int index) const;
 
     static void                set_null_texture(Target target = Target_Primary);
     void                       set_as_texture(Target target = Target_Primary);
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void                       build_layers_and_groups();
     void                       finalize();
+    bool                       compute_visibility();
     std::string                to_string() const;
 
     /**

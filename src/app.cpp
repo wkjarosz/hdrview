@@ -1005,6 +1005,7 @@ void HDRViewApp::load_settings()
         m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
         m_dither               = j.value<bool>("dither", m_dither);
         g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
+        g_short_names          = j.value<bool>("short names", g_short_names);
     }
     catch (json::exception &e)
     {
@@ -1033,6 +1034,7 @@ void HDRViewApp::save_settings()
     j["dither"]                  = m_dither;
     j["verbosity"]               = spdlog::get_level();
     j["file list mode"]          = g_file_list_mode;
+    j["short names"]             = g_short_names;
     HelloImGui::SaveUserPref("UserSettings", j.dump(4));
 }
 
@@ -1467,52 +1469,62 @@ void HDRViewApp::draw_histogram_window()
 void HDRViewApp::update_images_display()
 {
     vector<string> active_image_names;
-    for (int i = 0; i < num_images(); ++i)
-    {
-        auto img = image(i);
-        if ((img->visible = is_visible(img)))
+    for (auto img : m_images)
+        if (img->compute_visibility())
             active_image_names.emplace_back(img->file_and_partname());
-    }
+
     // determine common vs. unique parts of filenames
     auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(active_image_names);
 
-    // update selections based on visibility
-    if (!is_visible(m_current))
+    // go to the next visible image if the current one is hidden
+    if (!is_valid(m_current) || !m_images[m_current]->visible)
     {
-        auto old_current = m_current;
-        m_current        = next_visible_image_index(m_current, Forward);
-        if (m_current == old_current)
-            m_current = -1;
+        auto old = m_current;
+        if ((m_current = next_visible_image_index(m_current, Forward)) == old)
+            m_current = -1; // no visible images left
     }
 
-    if (is_valid(m_reference) && !is_visible(m_reference))
-        m_reference = next_visible_image_index(m_reference, Forward);
+    // if the reference is hidden, clear it
+    // TODO: keep it, but don't display it
+    if (is_valid(m_reference) && !m_images[m_reference]->visible)
+        m_reference = -1;
 
-    for (int i = 0; i < num_images(); ++i)
+    for (auto img : m_images)
     {
-        if (!is_visible(i))
+        if (!img->visible)
             continue;
 
-        auto img = image(i);
-        {
-            auto short_begin = begin_short_offset;
-            auto short_end   = end_short_offset;
-            auto long_name   = img->file_and_partname();
-            // Extend beginning and ending of highlighted region to entire word/number
-            if (isalnum(long_name[short_begin]))
-                while (short_begin > 0 && isalnum(long_name[short_begin - 1])) --short_begin;
-            if (isalnum(long_name[short_end - 1]))
-                while (short_end < (int)long_name.size() && isalnum(long_name[short_end])) ++short_end;
-            if (short_end - short_begin == 0)
-                img->short_name = get_basename(img->file_and_partname());
-            else
-                img->short_name = img->file_and_partname().substr(short_begin, short_end - short_begin);
+        auto   long_name   = img->file_and_partname();
+        size_t short_begin = begin_short_offset;
+        size_t short_end   = std::max(long_name.size() - (size_t)end_short_offset, short_begin);
 
-            if (!img->group_is_visible(img->selected_group))
-                img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
-            if (img->is_valid_group(img->reference_group) && !img->group_is_visible(img->reference_group))
-                img->reference_group = img->next_visible_group_index(img->selected_group, Forward);
+        // Extend beginning and ending of short region to entire word/number
+        if (isalnum(long_name[short_begin]))
+            while (short_begin > 0 && isalnum(long_name[short_begin - 1])) --short_begin;
+        if (isalnum(long_name[short_end - 1]))
+            while (short_end < long_name.size() && isalnum(long_name[short_end])) ++short_end;
+
+        if (short_begin == short_end)
+            img->short_name = get_filename(img->file_and_partname());
+        else
+            img->short_name = long_name.substr(short_begin, short_end - short_begin);
+
+        if (short_begin != 0)
+            img->short_name = "..." + img->short_name;
+        if (short_end != long_name.size())
+            img->short_name = img->short_name + "...";
+
+        if (img->is_valid_group(img->selected_group) && !img->groups[img->selected_group].visible)
+        {
+            auto old = img->selected_group;
+            if ((img->selected_group = img->next_visible_group_index(img->selected_group, Forward)) == old)
+                img->selected_group = -1; // no visible groups left
         }
+
+        // if the reference group is hidden, clear it
+        // TODO: keep it, but don't display it
+        if (img->is_valid_group(img->reference_group) && !img->groups[img->reference_group].visible)
+            img->reference_group = -1;
     }
     set_image_textures();
 }
@@ -1568,7 +1580,7 @@ void HDRViewApp::draw_file_window()
     if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns:channel patterns'",
                                  g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
     {
-        // find first ':', copy everything before it into m_file_filter.InputBuf, and everything after it into
+        // copy everything before first ':' into m_file_filter.InputBuf, and everything after into
         // m_channel_filter.InputBuf
         if (auto colon = strchr(g_filter_buffer, ':'))
         {
@@ -1609,7 +1621,7 @@ void HDRViewApp::draw_file_window()
     if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES : ICON_MY_FULL_NAMES))
     {
         g_short_names = !g_short_names;
-        update_images_display();
+        // update_images_display();
     }
     ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
                                         : "Click to show only the unique portion of each file name.");
@@ -1700,7 +1712,7 @@ void HDRViewApp::draw_file_window()
             bool  is_current   = m_current == i;
             bool  is_reference = m_reference == i;
 
-            if (!is_visible(img))
+            if (!img->visible)
             {
                 ++hidden_images;
                 continue;
@@ -1744,9 +1756,8 @@ void HDRViewApp::draw_file_window()
                     selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
                 auto  &channel    = img->channels[selected_group.channels[0]];
                 string layer_path = Channel::head(channel.name);
-                filename =
-                    (g_short_names ? img->short_name : img->file_and_partname()) +
-                    (g_file_list_mode || img->groups.size() <= 1 ? "" : img->delimiter() + layer_path + group_name);
+                filename          = (g_short_names ? img->short_name : img->file_and_partname()) +
+                           (g_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
                 const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
                 while (ImGui::CalcTextSize((icon + ellipsis + filename).c_str()).x > avail_width &&
@@ -1824,9 +1835,15 @@ void HDRViewApp::draw_file_window()
                 if (g_file_list_mode == 0)
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
                 else if (g_file_list_mode == 1)
+                {
                     visible_groups = img->draw_channel_rows(i, id, is_current, is_reference);
+                    MY_ASSERT(visible_groups == img->root.visible_groups, "Unexpected number of visible groups");
+                }
                 else
+                {
                     visible_groups = img->draw_channel_tree(i, id, is_current, is_reference);
+                    MY_ASSERT(visible_groups == img->root.visible_groups, "Unexpected number of visible groups");
+                }
 
                 hidden_groups += (int)img->groups.size() - visible_groups;
 
@@ -2363,29 +2380,14 @@ void HDRViewApp::draw_background()
     }
 }
 
-bool HDRViewApp::is_visible(const ConstImagePtr &img) const
-{
-    return m_file_filter.PassFilter(img->filename.c_str()) && img->any_group_is_visible();
-}
-
-bool HDRViewApp::is_visible(int index) const
-{
-    if (!is_valid(index))
-        return false;
-
-    return is_visible(image(index));
-}
-
 int HDRViewApp::next_visible_image_index(int index, EDirection direction) const
 {
-    return next_matching_index(
-        m_images, index, [this](size_t, const ImagePtr &img) { return is_visible(img); }, direction);
+    return next_matching_index(m_images, index, [](size_t, const ImagePtr &img) { return img->visible; }, direction);
 }
 
 int HDRViewApp::nth_visible_image_index(int n) const
 {
-    return (int)nth_matching_index(m_images, (size_t)n,
-                                   [this](size_t, const ImagePtr &img) { return is_visible(img); });
+    return (int)nth_matching_index(m_images, (size_t)n, [](size_t, const ImagePtr &img) { return img->visible; });
 }
 
 bool HDRViewApp::process_event(void *e)
