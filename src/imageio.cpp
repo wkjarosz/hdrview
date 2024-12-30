@@ -197,14 +197,10 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto  &data        = *images.back();
-        string part_prefix = "";
+        auto &data = *images.back();
 
         if (part.header().hasName())
-        {
             data.partname = part.header().name();
-            part_prefix   = data.partname + "."s;
-        }
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
         data.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
@@ -237,6 +233,8 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
         part.readPixels(dataWindow.min.y, dataWindow.max.y);
 
         // now up-res any subsampled channels
+        // FIXME: OpenEXR v3.3.0 and above seems to break this subsample channel loading
+        // so we are sticking with v3.2.4 for now
         int i = 0;
         for (auto c = part.header().channels().begin(); c != part.header().channels().end(); ++c, ++i)
         {
@@ -245,7 +243,8 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
             if (xs == 1 && ys == 1)
                 continue;
 
-            spdlog::warn("EXR channel '{}' is subsampled. Only rudimentary subsampling is supported.", c.name());
+            spdlog::warn("EXR channel '{}' is subsampled ({},{}). Only rudimentary subsampling is supported.", c.name(),
+                         xs, ys);
             Array2Df tmp = data.channels[i];
 
             int subsampled_width = size.x / xs;

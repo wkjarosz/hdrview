@@ -349,7 +349,8 @@ endif()
 CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
-  GIT_TAG v3.3.2
+  # FIXME: OpenEXR v3.3.0 and above seems to break our subsample channel loading
+  GIT_TAG v3.2.4
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_BUILD_TOOLS OFF"
