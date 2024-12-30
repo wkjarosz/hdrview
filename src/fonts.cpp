@@ -136,6 +136,10 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_SHORT_NAMES);
         builder.AddText(ICON_MY_FULL_NAMES);
         builder.AddText(ICON_MY_SHOW_PIXEL_VALUES);
+        builder.AddText(ICON_MY_HOVERED_PIXEL);
+        builder.AddText(ICON_MY_WATCHED_PIXEL);
+        builder.AddText(ICON_MY_ARROW_DROP_DOWN);
+        builder.AddText(ICON_MY_CURSOR_ARROW);
 
         // Build the final result (ordered ranges with all the unique characters submitted)
         builder.BuildRanges(&ranges);

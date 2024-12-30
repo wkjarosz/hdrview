@@ -452,9 +452,9 @@ void Image::draw_channels_list(bool is_reference, bool is_current)
 
 void Image::draw_info()
 {
-    // auto &io = ImGui::GetIO();
-    // auto hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
-    // float4 hovered = hdrview()->image_pixel(hovered_pixel);
+    auto  &io            = ImGui::GetIO();
+    auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
+    float4 color32       = hdrview()->image_pixel(hovered_pixel);
 
     auto &group = groups[selected_group];
 
@@ -479,7 +479,7 @@ void Image::draw_info()
         if (text_w < avail_w)
         {
             // place it on the same line as the property name
-            ImGui::TextUnformatted(text.c_str());
+            ImGui::TextUnformatted(text);
         }
         else
         {
@@ -489,7 +489,7 @@ void Image::draw_info()
             if (wrapped)
                 ImGui::TextWrapped("%s", text.c_str());
             else
-                ImGui::TextUnformatted(text.c_str());
+                ImGui::TextUnformatted(text);
             ImGui::Unindent();
         }
         ImGui::PopFont();
@@ -542,7 +542,195 @@ void Image::draw_info()
 
     static const ImGuiTableFlags table_flags =
         ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg;
+
+    bool in_viewport = hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos));
+
+    // //
+    // //
+    // ImGui::SeparatorText("Pixel info");
+
+    // ImGui::BeginGroup();
+    // {
+    //     ImGui::BeginGroup();
+    //     {
+    //         ImGui::TextUnformatted(ICON_MY_CURSOR_ARROW);
+    //         // ImGui::SameLine(ImGui::GetCursorPosX(), 0.f);
+    //         // ImGui::SetCursorPos(ImVec2{ImGui::GetCursorPosX() - 0.05f * ImGui::GetFontSize(),
+    //         //                            ImGui::GetCursorPosY() + 0.45f * ImGui::GetTextLineHeight()});
+    //         // ImGui::PushFont(hdrview()->font("sans regular", 10));
+    //         // ImGui::TextUnformatted(ICON_MY_ARROW_DROP_DOWN);
+    //         // float               sz          = ImGui::GetFrameHeight() * 0.75f;
+    //         // float4              srgb_color  = LinearToSRGB(color32);
+    //         // ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf
+    //         |
+    //         //                                   (group.num_channels < 4 ? ImGuiColorEditFlags_NoAlpha : 0);
+    //         // ImGui::ColorButton("another id", srgb_color, color_flags, ImVec2{sz, sz});
+    //         // ImGui::OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonLeft);
+    //         // if (ImGui::BeginPopup("context"))
+    //         // {
+    //         //     string buf = fmt::format("({:f}, {:f}, {:f}, {:f})", color32.x, color32.y, color32.z,
+    //         //                              (color_flags & ImGuiColorEditFlags_NoAlpha) ? 1.f : color32.w);
+    //         //     if (ImGui::Selectable(("Raw float values: " + buf).c_str()))
+    //         //         ImGui::SetClipboardText(buf.c_str());
+
+    //         //     buf = fmt::format("({:f}, {:f}, {:f}, {:f})", srgb_color.x, srgb_color.y, srgb_color.z,
+    //         //                       (color_flags & ImGuiColorEditFlags_NoAlpha) ? 1.f : srgb_color.w);
+    //         //     if (ImGui::Selectable(("sRGB float values: " + buf).c_str()))
+    //         //         ImGui::SetClipboardText(buf.c_str());
+
+    //         //     ImGui::TextUnformatted("My context popup");
+    //         //     ImGui::EndPopup();
+    //         // }
+    //         // ImGui::PopFont();
+    //         // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    //         // // float sz = ImGui::GetFrameHeight();
+    //         // ImGui::Button(ICON_MY_ARROW_DROP_DOWN); //, ImVec2(sz, sz));
+    //         // // ImGui::ArrowButton("##hovered_pixel_btn", ImGuiDir_Down);
+    //         // ImGui::PopStyleVar();
+    //     }
+    //     ImGui::EndGroup();
+
+    //     ImGui::SameLine();
+
+    //     ImGui::BeginGroup();
+    //     {
+    //         for (int c = 0; c < group.num_channels; ++c)
+    //         {
+    //             ImGui::TextFmt("{}: ", Channel::tail(channels[group.channels[c]].name));
+
+    //             if (contains(hovered_pixel) && in_viewport)
+    //             {
+    //                 ImGui::PushFont(mono_font);
+    //                 ImGui::SameLine(HelloImGui::EmSize(1.5f), 0.f);
+    //                 ImGui::TextFmt("{: < 6.3f}", color32[c]);
+    //                 ImGui::PopFont();
+    //             }
+    //             else
+    //             {
+    //                 ImGui::SameLine(HelloImGui::EmSize(1.5f), 0.f);
+    //                 ImGui::TextFmt("{:s}", "");
+    //             }
+    //         }
+    //     }
+    //     ImGui::EndGroup();
+    // }
+    // ImGui::EndGroup();
+
+    // // ImGui::SameLine(HelloImGui::EmSize(10.0f), 0.f);
+    // ImGui::SameLine();
+
+    // ImGui::BeginGroup();
+    // {
+    //     ImGui::BeginGroup();
+    //     {
+    //         ImGui::TextUnformatted(ICON_MY_HOVERED_PIXEL);
+    //         // ImGui::SameLine(ImGui::GetCursorPosX(), 0.f);
+    //     }
+    //     ImGui::EndGroup();
+
+    //     ImGui::SameLine();
+
+    //     ImGui::BeginGroup();
+    //     {
+    //         ImGui::TextUnformatted("x: ");
+    //         ImGui::SameLine(HelloImGui::EmSize(1.5f), 0.f);
+    //         ImGui::PushFont(mono_font);
+    //         ImGui::TextFmt("{: < d}", hovered_pixel.x);
+    //         ImGui::PopFont();
+
+    //         ImGui::TextUnformatted("y: ");
+    //         ImGui::SameLine(HelloImGui::EmSize(1.5f), 0.f);
+    //         ImGui::PushFont(mono_font);
+    //         ImGui::TextFmt("{: < d}", hovered_pixel.y);
+    //         ImGui::PopFont();
+    //     }
+    //     ImGui::EndGroup();
+    // }
+    // ImGui::EndGroup();
+
+    // if (ImGui::BeginTable("WatchedPixels", 4, table_flags | ImGuiTableFlags_SizingStretchProp))
+    // {
+    //     int idxToRemove = 0;
+
+    //     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
+    //     ImGui::TableSetupColumn("(x,y)");
+    //     ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+    //     ImGui::TableHeadersRow();
+
+    //     ImGui::TableNextRow();
+
+    //     // index
+    //     ImGui::TableNextColumn();
+    //     ImGui::AlignTextToFramePadding();
+    //     ImGui::TextUnformatted(ICON_MY_HOVERED_PIXEL ": ");
+
+    //     // (x,y)
+    //     ImGui::TableNextColumn();
+    //     ImGui::AlignTextToFramePadding();
+    //     ImGui::TextFmt("({},{})", hovered_pixel.x, hovered_pixel.y);
+
+    //     // Show Color Cell
+    //     ImGui::TableNextColumn();
+    //     if (in_viewport)
+    //     {
+    //         // auto  &group   = img->groups[img->selected_group];
+    //         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    //         ImGui::ColorEdit4("##hover_color", &color32.x,
+    //                           ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+    //     }
+
+    //     // // Actions
+    //     // int i = 0;
+    //     // ImGui::TableNextColumn();
+    //     // std::string lblRemove = "x##" + std::to_string(i);
+    //     // if (ImGui::IconButton(fmt::format("{}##{}", ICON_MY_CLOSE, i).c_str()))
+    //     //     idxToRemove = i;
+    //     // // ImGui::SameLine();
+
+    //     const vector<int2> watched_pixels = {{100, 20}, {30, 400}, {500, 600}};
+    //     for (size_t i = 0; i < watched_pixels.size(); ++i)
+    //     {
+    //         ImGui::PushID(i);
+    //         auto watched_pixel = watched_pixels[i];
+    //         ImGui::TableNextRow();
+
+    //         // index
+    //         ImGui::TableNextColumn();
+    //         ImGui::AlignTextToFramePadding();
+    //         ImGui::TextFmt("{} {}:", ICON_MY_WATCHED_PIXEL, i);
+
+    //         // (x,y)
+    //         ImGui::TableNextColumn();
+    //         ImGui::AlignTextToFramePadding();
+    //         ImGui::TextFmt("({},{})", watched_pixel.x, watched_pixel.y);
+
+    //         // Show Color Cell
+    //         ImGui::TableNextColumn();
+    //         if (contains(watched_pixel))
+    //         {
+    //             float4 color32 = hdrview()->image_pixel(watched_pixel);
+    //             // auto  &group   = img->groups[img->selected_group];
+    //             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+    //             ImGui::ColorEdit4("##watched_pixel", &color32.x,
+    //                               ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
+    //         }
+
+    //         // Actions
+    //         ImGui::TableNextColumn();
+    //         std::string lblRemove = "x##" + std::to_string(i);
+    //         if (ImGui::IconButton(fmt::format("{}##{}", ICON_MY_CLOSE, i).c_str()))
+    //             idxToRemove = i;
+    //         // ImGui::SameLine();
+
+    //         ImGui::PopID();
+    //     }
+    //     ImGui::EndTable();
+    // }
+
     ImGui::SeparatorText("Channel statistics");
+
+    // a transposed version of the below table
     // if (ImGui::BeginTable("Channel statistics", 5, table_flags))
     // {
     //     ImGui::PushFont(bold_font);
@@ -552,7 +740,7 @@ void Image::draw_info()
     //     ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
     //     ImGui::TableSetupColumn("Avg", ImGuiTableColumnFlags_WidthStretch);
     //     ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthStretch);
-    //     ImGui::TableSetupColumn(ICON_FA_SKULL_CROSSBONES "NaNs", ImGuiTableColumnFlags_WidthStretch);
+    //     ImGui::TableSetupColumn("NaNs", ImGuiTableColumnFlags_WidthStretch);
     //     ImGui::TableHeadersRow();
     //     ImGui::PopFont();
 
@@ -568,10 +756,10 @@ void Image::draw_info()
     //         ImGui::PopFont();
     //         // ImGui::PushFont(mono_font);
     //         // ImGui::Text("%-6.3g", hovered[c]), ImGui::TableNextColumn();
-    //         ImGui::Text("%-6.3g", stats->minimum), ImGui::TableNextColumn();
-    //         ImGui::Text("%-6.3g", stats->average), ImGui::TableNextColumn();
-    //         ImGui::Text("%-6.3g", stats->maximum), ImGui::TableNextColumn();
-    //         ImGui::Text("%d", stats->nan_pixels);
+    //         ImGui::Text("%-6.3g", stats->summary.minimum), ImGui::TableNextColumn();
+    //         ImGui::Text("%-6.3g", stats->summary.average), ImGui::TableNextColumn();
+    //         ImGui::Text("%-6.3g", stats->summary.maximum), ImGui::TableNextColumn();
+    //         ImGui::Text("%d", stats->summary.nan_pixels);
     //         // ImGui::PopFont();
     //     }
     //     ImGui::EndTable();
@@ -597,10 +785,32 @@ void Image::draw_info()
         for (int c = 0; c < group.num_channels; ++c)
             ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
                                     ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupScrollFreeze(1, 1);
         ImGui::TableHeadersRow();
         ImGui::PopFont();
 
-        const char   *stat_names[] = {"Min", "Avg", "Max", "# of NaNs", "# of Infs", "# valid pixels"};
+        // hovered pixel values
+        ImGui::PushFont(bold_font);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
+        if (in_viewport)
+            ImGui::TextFmt("({}, {})", hovered_pixel.x, hovered_pixel.y);
+        else
+            ImGui::TextUnformatted(" ");
+        ImGui::PopFont();
+        ImGui::PushFont(mono_font);
+        if (contains(hovered_pixel) && in_viewport)
+        {
+            for (int c = 0; c < group.num_channels; ++c)
+            {
+                ImGui::TableNextColumn();
+                ImGui::TextFmt("{: < 6.3f}", color32[c]);
+            }
+        }
+        ImGui::PopFont();
+
+        const char   *stat_names[] = {"Minimum", "Average", "Maximum", "# of NaNs", "# of Infs"}; //, "# valid pixels"};
         constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
         for (int s = 0; s < NUM_STATS; ++s)
         {
@@ -610,20 +820,25 @@ void Image::draw_info()
             ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
             ImGui::TextUnformatted(stat_names[s]);
             ImGui::PopFont();
+            ImGui::PushFont(mono_font);
             for (int c = 0; c < group.num_channels; ++c)
             {
                 ImGui::TableNextColumn();
                 switch (s)
                 {
-                case 0: ImGui::Text("%-6.3g", channel_stats[c]->summary.minimum); break;
-                case 1: ImGui::Text("%-6.3g", channel_stats[c]->summary.average); break;
-                case 2: ImGui::Text("%-6.3g", channel_stats[c]->summary.maximum); break;
-                case 3: ImGui::Text("%d", channel_stats[c]->summary.nan_pixels); break;
-                case 4: ImGui::Text("%d", channel_stats[c]->summary.inf_pixels); break;
-                case 5:
-                default: ImGui::Text("%d", channel_stats[c]->summary.valid_pixels); break;
+                case 0: ImGui::TextFmt("{: < 6.3f}", channel_stats[c]->summary.minimum); break;
+                case 1: ImGui::TextFmt("{: < 6.3f}", channel_stats[c]->summary.average); break;
+                case 2: ImGui::TextFmt("{: < 6.3f}", channel_stats[c]->summary.maximum); break;
+                case 3: ImGui::TextFmt("{}", channel_stats[c]->summary.nan_pixels); break;
+                case 4:
+                default:
+                    ImGui::TextFmt("{}", channel_stats[c]->summary.inf_pixels);
+                    break;
+                    // case 5:
+                    // default: ImGui::TextFmt("{:d}", channel_stats[c]->summary.valid_pixels); break;
                 }
             }
+            ImGui::PopFont();
         }
         ImGui::EndTable();
     }

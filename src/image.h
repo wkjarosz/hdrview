@@ -255,7 +255,6 @@ public:
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void                       build_layers_and_groups();
     void                       finalize();
-    bool                       compute_visibility();
     std::string                to_string() const;
 
     /**

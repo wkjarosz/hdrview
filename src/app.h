@@ -83,16 +83,8 @@ public:
     {
         m_reference = force || is_valid(index) ? index : m_reference;
     }
-    int  next_visible_image_index(int index, EDirection direction) const;
-    int  nth_visible_image_index(int n) const;
-    bool pass_file_filter(const char *text, const char *text_end = nullptr) const
-    {
-        return m_file_filter.PassFilter(text, text_end);
-    }
-    bool pass_channel_filter(const char *text, const char *text_end = nullptr) const
-    {
-        return m_channel_filter.PassFilter(text, text_end);
-    }
+    int next_visible_image_index(int index, EDirection direction) const;
+    int nth_visible_image_index(int n) const;
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -218,7 +210,7 @@ private:
     bool process_event(void *event);
     void set_image_textures();
     void draw_command_palette();
-    void update_images_display();
+    void update_visibility();
 
     void load_settings();
     void save_settings();

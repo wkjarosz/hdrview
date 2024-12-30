@@ -1365,7 +1365,7 @@ void HDRViewApp::add_pending_images()
 
         m_current = int(m_images.size() - 1);
 
-        update_images_display(); // this also calls set_image_textures();
+        update_visibility(); // this also calls set_image_textures();
         g_request_sort = true;
     }
 }
@@ -1408,7 +1408,7 @@ void HDRViewApp::close_image()
     set_current_image_index(next < m_current ? next : next - 1);
     set_reference_image_index(m_reference < m_current ? m_reference : m_reference - 1);
 
-    update_images_display(); // this also calls set_image_textures();
+    update_visibility(); // this also calls set_image_textures();
 }
 
 void HDRViewApp::close_all_images()
@@ -1416,7 +1416,7 @@ void HDRViewApp::close_all_images()
     m_images.clear();
     m_current   = -1;
     m_reference = -1;
-    update_images_display(); // this also calls set_image_textures();
+    update_visibility(); // this also calls set_image_textures();
 }
 
 void HDRViewApp::run()
@@ -1466,15 +1466,68 @@ void HDRViewApp::draw_histogram_window()
         img->draw_histogram();
 }
 
-void HDRViewApp::update_images_display()
+static void calculate_tree_visibility(LayerTreeNode &node, Image &image)
 {
-    vector<string> active_image_names;
-    for (auto img : m_images)
-        if (img->compute_visibility())
-            active_image_names.emplace_back(img->file_and_partname());
+    node.visible_groups = 0;
+    node.hidden_groups  = 0;
+    if (node.leaf_layer >= 0)
+    {
+        auto &layer = image.layers[node.leaf_layer];
+        for (size_t g = 0; g < layer.groups.size(); ++g)
+            if (image.groups[layer.groups[g]].visible)
+                ++node.visible_groups;
+            else
+                ++node.hidden_groups;
+    }
 
-    // determine common vs. unique parts of filenames
-    auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(active_image_names);
+    for (auto &[child_name, child_node] : node.children)
+    {
+        calculate_tree_visibility(child_node, image);
+        node.visible_groups += child_node.visible_groups;
+        node.hidden_groups += child_node.hidden_groups;
+    }
+}
+
+void HDRViewApp::update_visibility()
+{
+    // compute image:channel visibility and update selection indices
+    vector<string> visible_image_names;
+    for (auto img : m_images)
+    {
+        const string prefix = img->partname + (img->partname.empty() ? "" : ".");
+
+        // compute visibility of all groups
+        img->any_groups_visible = false;
+        for (auto &g : img->groups)
+        {
+            // check if any of the contained channels in the group pass the channel filter
+            g.visible = false;
+            for (int c = 0; c < g.num_channels && !g.visible; ++c)
+                g.visible |= m_channel_filter.PassFilter((prefix + img->channels[g.channels[c]].name).c_str());
+            img->any_groups_visible |= g.visible;
+        }
+
+        // an image is visible if its filename passes the file filter and it has at least one visible group
+        img->visible = m_file_filter.PassFilter(img->filename.c_str()) && img->any_groups_visible;
+
+        if (img->visible)
+            visible_image_names.emplace_back(img->file_and_partname());
+
+        calculate_tree_visibility(img->root, *img);
+
+        // if the selected group is hidden, select the next visible group
+        if (img->is_valid_group(img->selected_group) && !img->groups[img->selected_group].visible)
+        {
+            auto old = img->selected_group;
+            if ((img->selected_group = img->next_visible_group_index(img->selected_group, Forward)) == old)
+                img->selected_group = -1; // no visible groups left
+        }
+
+        // if the reference group is hidden, clear it
+        // TODO: keep it, but don't display it
+        if (img->is_valid_group(img->reference_group) && !img->groups[img->reference_group].visible)
+            img->reference_group = -1;
+    }
 
     // go to the next visible image if the current one is hidden
     if (!is_valid(m_current) || !m_images[m_current]->visible)
@@ -1489,6 +1542,16 @@ void HDRViewApp::update_images_display()
     if (is_valid(m_reference) && !m_images[m_reference]->visible)
         m_reference = -1;
 
+    //
+    // compute short (i.e. unique) names for visible images
+
+    // determine common vs. unique parts of visible filenames
+    auto [begin_short_offset, end_short_offset] = find_common_prefix_suffix(visible_image_names);
+    // we'll add ellipses, so don't shorten if we don't save much space
+    if (begin_short_offset <= 4)
+        begin_short_offset = 0;
+    if (end_short_offset <= 4)
+        end_short_offset = 0;
     for (auto img : m_images)
     {
         if (!img->visible)
@@ -1504,28 +1567,19 @@ void HDRViewApp::update_images_display()
         if (isalnum(long_name[short_end - 1]))
             while (short_end < long_name.size() && isalnum(long_name[short_end])) ++short_end;
 
+        // just use the filename if all file paths are identical
         if (short_begin == short_end)
             img->short_name = get_filename(img->file_and_partname());
         else
             img->short_name = long_name.substr(short_begin, short_end - short_begin);
 
+        // add ellipses to indicate where we shortened
         if (short_begin != 0)
             img->short_name = "..." + img->short_name;
         if (short_end != long_name.size())
             img->short_name = img->short_name + "...";
-
-        if (img->is_valid_group(img->selected_group) && !img->groups[img->selected_group].visible)
-        {
-            auto old = img->selected_group;
-            if ((img->selected_group = img->next_visible_group_index(img->selected_group, Forward)) == old)
-                img->selected_group = -1; // no visible groups left
-        }
-
-        // if the reference group is hidden, clear it
-        // TODO: keep it, but don't display it
-        if (img->is_valid_group(img->reference_group) && !img->groups[img->reference_group].visible)
-            img->reference_group = -1;
     }
+
     set_image_textures();
 }
 
@@ -1577,7 +1631,7 @@ void HDRViewApp::draw_file_window()
     bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file patterns:channel patterns'",
+    if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file pattern:channel pattern'",
                                  g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
     {
         // copy everything before first ':' into m_file_filter.InputBuf, and everything after into
@@ -1598,11 +1652,11 @@ void HDRViewApp::draw_file_window()
         m_file_filter.Build();
         m_channel_filter.Build();
 
-        update_images_display();
+        update_visibility();
     }
     ImGui::WrappedTooltip(
-        "Filter visible images and channel groups.\n\nOnly images with filenames matching the file patterns and "
-        "channels matching the channel patterns will be shown. A pattern is a comma-separated list of strings "
+        "Filter visible images and channel groups.\n\nOnly images with filenames matching the file pattern and "
+        "channels matching the channel pattern will be shown. A pattern is a comma-separated list of strings "
         "that must be included or excluded (if prefixed with a '-').");
     if (show_button)
     {
@@ -1613,16 +1667,13 @@ void HDRViewApp::draw_file_window()
             m_file_filter.Clear();
             m_channel_filter.Clear();
             g_filter_buffer[0] = 0;
-            update_images_display();
+            update_visibility();
         }
     }
 
     ImGui::SameLine();
     if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES : ICON_MY_FULL_NAMES))
-    {
         g_short_names = !g_short_names;
-        // update_images_display();
-    }
     ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
                                         : "Click to show only the unique portion of each file name.");
 
