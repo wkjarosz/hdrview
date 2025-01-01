@@ -71,6 +71,13 @@ void Image::make_default_textures()
     s_dither_texture->upload((const uint8_t *)dither_matrix256);
 }
 
+void Image::cleanup_default_textures()
+{
+    s_black_texture.reset();
+    s_white_texture.reset();
+    s_dither_texture.reset();
+}
+
 Texture *Image::black_texture() { return s_black_texture.get(); }
 Texture *Image::white_texture() { return s_white_texture.get(); }
 Texture *Image::dither_texture() { return s_dither_texture.get(); }
