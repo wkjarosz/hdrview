@@ -100,6 +100,7 @@ static char             g_filter_buffer[256]   = {0};
 static int              g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
 static bool             g_request_sort         = false;
 static bool             g_short_names          = false;
+static Box2f            g_selection_rect       = Box2f{};
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -1072,7 +1073,7 @@ void HDRViewApp::draw_status_bar()
         {
             auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
 
-            float4 color32 = image_pixel(hovered_pixel);
+            float4 color32 = img->raw_pixel(hovered_pixel);
             auto  &group   = img->groups[img->selected_group];
 
             sized_text(3, fmt::format("({:>6d},", hovered_pixel.x), 0.f);
@@ -2016,8 +2017,6 @@ void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
 
 Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
 {
-    if (!img)
-        img = current_image();
     Box2f dw = img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
     dw.min *= m_zoom;
     dw.max *= m_zoom;
@@ -2026,8 +2025,6 @@ Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
 
 Box2f HDRViewApp::scaled_data_window(ConstImagePtr img) const
 {
-    if (!img)
-        img = current_image();
     Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
     dw.min *= m_zoom;
     dw.max *= m_zoom;
@@ -2036,16 +2033,16 @@ Box2f HDRViewApp::scaled_data_window(ConstImagePtr img) const
 
 float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
 
-float2 HDRViewApp::center_offset(ConstImagePtr img) const
+float2 HDRViewApp::center_offset() const
 {
-    auto dw = scaled_display_window(img);
+    auto dw = scaled_display_window(current_image());
     return (viewport_size() - dw.size()) / 2.f - dw.min;
 }
 
 float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
     auto dw = scaled_data_window(img);
-    return (m_offset + center_offset(img) + dw.min) / viewport_size();
+    return (m_offset + center_offset() + dw.min) / viewport_size();
 }
 
 float2 HDRViewApp::image_scale(ConstImagePtr img) const
@@ -2076,8 +2073,8 @@ void HDRViewApp::draw_pixel_grid() const
         ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
         ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
 
-        auto screen_bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-        auto bounds        = screen_bounds.intersect(current_image()->data_window);
+        auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
+        // bounds = bounds.intersect(current_image()->data_window);
 
         // draw vertical lines
         for (int x = bounds.min.x; x <= bounds.max.x; ++x)
@@ -2102,7 +2099,8 @@ void HDRViewApp::draw_pixel_grid() const
 
 void HDRViewApp::draw_pixel_info() const
 {
-    if (!current_image() || !m_draw_pixel_info)
+    auto img = current_image();
+    if (!img || !m_draw_pixel_info)
         return;
 
     static constexpr float3 white     = float3{1.f};
@@ -2110,13 +2108,13 @@ void HDRViewApp::draw_pixel_info() const
     static constexpr float2 align     = {0.5f, 0.5f};
     auto                    mono_font = font("mono bold", 30);
 
-    auto  &group  = current_image()->groups[current_image()->selected_group];
+    auto  &group  = img->groups[img->selected_group];
     auto   colors = group.colors();
     string names[4];
     string longest_name;
     for (int c = 0; c < group.num_channels; ++c)
     {
-        auto &channel = current_image()->channels[group.channels[c]];
+        auto &channel = img->channels[group.channels[c]];
         names[c]      = Channel::tail(channel.name);
         if (names[c].length() > longest_name.length())
             longest_name = names[c];
@@ -2150,15 +2148,15 @@ void HDRViewApp::draw_pixel_info() const
     {
         ImGui::ScopedFont sf{mono_font};
 
-        auto screen_bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-        auto bounds        = screen_bounds.intersect(current_image()->data_window);
+        auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
+        // auto bounds        = bounds.intersect(img->data_window);
 
         for (int y = bounds.min.y; y < bounds.max.y; ++y)
         {
             for (int x = bounds.min.x; x < bounds.max.x; ++x)
             {
                 auto   pos   = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-                float4 pixel = image_pixel({x, y});
+                float4 pixel = img->raw_pixel({x, y});
                 if (alpha2 > 0.f)
                 {
                     float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
@@ -2184,67 +2182,51 @@ void HDRViewApp::draw_image_border() const
 {
     auto draw_list = ImGui::GetBackgroundDrawList();
 
-    auto draw_image_window = [this, draw_list](ConstImagePtr img, const Box2f &image_window, ImGuiCol col_idx,
-                                               const string &text, const float2 &align, bool draw_label)
-    {
-        constexpr float  thickness = 3.f;
-        constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
-        const float2     pad       = HelloImGui::EmToVec2({0.25, 0.125});
-
-        Box2f window{app_pos_at_pixel(image_window.min, img), app_pos_at_pixel(image_window.max, img)};
-        draw_list->AddRect(window.min, window.max, ImGui::GetColorU32(col_idx), 0.f, ImDrawFlags_None, thickness);
-
-        if (!draw_label)
-            return;
-
-        float2 shifted_align = (2.f * align - float2{1.f});
-        float2 text_size     = ImGui::CalcTextSize(text.c_str());
-        float2 tab_size      = text_size + pad * 2.f;
-        float  fade          = 1.f - smoothstep(0.5f * window.size().x, 1.0f * window.size().x, tab_size.x);
-        if (fade == 0.0f)
-            return;
-
-        Box2f tab_box = {float2{0.f}, tab_size};
-        tab_box.move_min_to(
-            // move to the correct corner while accounting for the tab size
-            window.min + align * (window.size() - tab_size) +
-            // shift the tab outside the window
-            shifted_align * (fudge + float2{0, tab_size.y}));
-        draw_list->AddRectFilled(tab_box.min, tab_box.max, ImGui::GetColorU32(col_idx, fade),
-                                 std::clamp(ImGui::GetStyle().TabRounding, 0.0f, tab_size.x * 0.5f - 1.0f),
-                                 shifted_align.y < 0.f ? ImDrawFlags_RoundCornersTop : ImDrawFlags_RoundCornersBottom);
-        ImGui::AddTextAligned(draw_list, tab_box.min + align * tab_box.size() - shifted_align * pad,
-                              ImGui::GetColorU32(ImGuiCol_Text, fade), text, align);
-    };
-
     // only draw within the image viewport
     draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
     {
         auto cimg = current_image();
         auto rimg = reference_image();
 
-        if (cimg && minelem(cimg->size()) > 0)
+        if (cimg && cimg->data_window.has_volume())
         {
-            bool non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
+            Box2f data_window{app_pos_at_pixel(float2{cimg->data_window.min}),
+                              app_pos_at_pixel(float2{cimg->data_window.max})};
+            Box2f display_window{app_pos_at_pixel(float2{cimg->display_window.min}),
+                                 app_pos_at_pixel(float2{cimg->display_window.max})};
+            bool  non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
             ImGui::PushRowColors(true, false);
             if (m_draw_data_window)
-                draw_image_window(cimg, Box2f{cimg->data_window}, ImGuiCol_HeaderActive, "Data window", {0.f, 0.f},
-                                  non_trivial);
+                ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window",
+                                       {0.f, 0.f}, non_trivial);
             if (m_draw_display_window && non_trivial)
-                draw_image_window(cimg, Box2f{cimg->display_window}, ImGuiCol_Header, "Display window", {1.f, 1.f},
-                                  true);
+                ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header), "Display window",
+                                       {1.f, 1.f}, true);
             ImGui::PopStyleColor(3);
         }
 
-        if (rimg && minelem(rimg->size()) > 0)
+        if (g_selection_rect.has_volume())
         {
+            Box2f crop_window{app_pos_at_pixel(g_selection_rect.min), app_pos_at_pixel(g_selection_rect.max)};
+            ImGui::PushRowColors(true, false);
+            ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
+                                   "Selection", {0.5f, 1.f}, true);
+            ImGui::PopStyleColor(3);
+        }
+
+        if (rimg && rimg->data_window.has_volume())
+        {
+            Box2f data_window{app_pos_at_pixel(float2{rimg->data_window.min}),
+                              app_pos_at_pixel(float2{rimg->data_window.max})};
+            Box2f display_window{app_pos_at_pixel(float2{rimg->display_window.min}),
+                                 app_pos_at_pixel(float2{rimg->display_window.max})};
             ImGui::PushRowColors(false, true, true);
             if (m_draw_data_window)
-                draw_image_window(rimg, Box2f{rimg->data_window}, ImGuiCol_HeaderActive, "Reference data window",
-                                  {1.f, 0.f}, true);
+                ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive),
+                                       "Reference data window", {1.f, 0.f}, true);
             if (m_draw_display_window)
-                draw_image_window(rimg, Box2f{rimg->display_window}, ImGuiCol_Header, "Reference display window",
-                                  {0.f, 1.f}, true);
+                ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header),
+                                       "Reference display window", {0.f, 1.f}, true);
             ImGui::PopStyleColor(3);
         }
     }
@@ -2260,7 +2242,7 @@ void HDRViewApp::draw_image() const
 
         m_shader->set_uniform("randomness", randomness);
         m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
-        m_shader->set_uniform("gamma", m_gamma);
+        m_shader->set_uniform("gamma", m_gamma_live);
         m_shader->set_uniform("sRGB", m_sRGB);
         m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
         m_shader->set_uniform("do_dither", m_dither);
@@ -2376,31 +2358,47 @@ void HDRViewApp::draw_background()
 
         if (!io.WantCaptureMouse)
         {
-            auto vp_mouse_pos = vp_pos_at_app_pos(io.MousePos);
-            auto scroll       = float2{io.MouseWheelH, io.MouseWheel};
-#if defined(__EMSCRIPTEN__)
-            scroll *= 10.0f;
-#endif
-            float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-            bool   cancel_autofit = true;
-            if (length2(drag_delta) > 0.f && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            // if 'M' is being held down
+            if (ImGui::IsKeyDown(ImGuiKey_M))
             {
-                reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
-                ImGui::ResetMouseDragDelta();
-            }
-            else if (length2(scroll) > 0.f)
-            {
-                if (ImGui::IsKeyDown(ImGuiMod_Shift))
-                    // panning
-                    reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
-                else
-                    zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
+                // set g_selection_rect based on dragged region
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    g_selection_rect.make_empty();
+                else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                {
+                    g_selection_rect.make_empty();
+                    g_selection_rect.enclose(pixel_at_app_pos(io.MouseClickedPos[0]));
+                    g_selection_rect.enclose(pixel_at_app_pos(io.MousePos));
+                }
             }
             else
-                cancel_autofit = false;
+            {
+                auto vp_mouse_pos = vp_pos_at_app_pos(io.MousePos);
+                auto scroll       = float2{io.MouseWheelH, io.MouseWheel};
+#if defined(__EMSCRIPTEN__)
+                scroll *= 10.0f;
+#endif
+                float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
+                bool   cancel_autofit = true;
+                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                {
+                    reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
+                    ImGui::ResetMouseDragDelta();
+                }
+                else if (length2(scroll) > 0.f)
+                {
+                    if (ImGui::IsKeyDown(ImGuiMod_Shift))
+                        // panning
+                        reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
+                    else
+                        zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
+                }
+                else
+                    cancel_autofit = false;
 
-            if (cancel_autofit)
-                m_auto_fit_display = m_auto_fit_data = false;
+                if (cancel_autofit)
+                    m_auto_fit_display = m_auto_fit_data = false;
+            }
         }
 
         //

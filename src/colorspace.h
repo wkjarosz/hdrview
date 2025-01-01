@@ -48,6 +48,18 @@ Real LinearToSRGB(Real linear)
 }
 
 template <typename Real>
+Real LinearToGamma_positive(Real linear, Real inv_gamma)
+{
+    return std::pow(linear, inv_gamma);
+}
+
+template <typename Real>
+Real LinearToGamma(Real linear, Real inv_gamma)
+{
+    return sign(linear) * LinearToGamma_positive(std::fabs(linear), inv_gamma);
+}
+
+template <typename Real>
 Real SRGBToLinear_positive(Real sRGB)
 {
     if (sRGB < Real(0.04045))
@@ -69,6 +81,8 @@ Color4 SRGBToLinear(const Color4 &c);
 void   LinearToSRGB(float *r, float *g, float *b);
 Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);
+Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
+Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma);
 float  AdobeRGBToLinear(float a);
 void   AdobeRGBToLinear(float *r, float *g, float *b);
 Color3 AdobeRGBToLinear(const Color3 &c);
@@ -110,5 +124,14 @@ void HSVToRGB(float *R, float *G, float *B, float H, float S, float V);
 void HSIAdjust(float *R, float *G, float *B, float h, float s, float i);
 void HSLAdjust(float *R, float *G, float *B, float h, float s, float l);
 void SatAdjust(float *R, float *G, float *B, float s);
+
+inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
+{
+    return sRGB ? LinearToSRGB(color) : LinearToGamma(color, Color3(1.f / gamma));
+}
+inline Color4 tonemap(const Color4 color, float gamma, bool sRGB)
+{
+    return sRGB ? LinearToSRGB(color) : LinearToGamma(color, Color3(1.f / gamma));
+}
 
 const std::vector<std::string> &colorSpaceNames();

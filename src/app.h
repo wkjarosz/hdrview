@@ -96,25 +96,13 @@ public:
     //   3) pixel (pixel): coordinates within the displayed image (origin: top-left of image)
     //-----------------------------------------------------------------------------
     /// Calculates the image pixel coordinates of the given position in the viewport
-    float2 pixel_at_vp_pos(float2 vp_pos, ConstImagePtr img = nullptr) const
-    {
-        return (vp_pos - (m_offset + center_offset(img))) / m_zoom;
-    }
+    float2 pixel_at_vp_pos(float2 vp_pos) const { return (vp_pos - (m_offset + center_offset())) / m_zoom; }
     /// Calculates the position inside the viewport for the given image pixel coordinate.
-    float2 vp_pos_at_pixel(float2 pixel, ConstImagePtr img = nullptr) const
-    {
-        return m_zoom * pixel + (m_offset + center_offset(img));
-    }
+    float2 vp_pos_at_pixel(float2 pixel) const { return m_zoom * pixel + (m_offset + center_offset()); }
     /// Calculates the app position at the given image pixel coordinate.
-    float2 app_pos_at_pixel(float2 pixel, ConstImagePtr img = nullptr) const
-    {
-        return app_pos_at_vp_pos(vp_pos_at_pixel(pixel, img));
-    }
+    float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
     /// Calculates the image pixel coordinates at the given app position.
-    float2 pixel_at_app_pos(float2 app_pos, ConstImagePtr img = nullptr) const
-    {
-        return pixel_at_vp_pos(vp_pos_at_app_pos(app_pos), img);
-    }
+    float2 pixel_at_app_pos(float2 app_pos) const { return pixel_at_vp_pos(vp_pos_at_app_pos(app_pos)); }
     /// Convert from vp_pos to app_pos (just a translation); inverse of vp_pos_at_app_pos()
     float2 app_pos_at_vp_pos(float2 vp_pos) const { return vp_pos + m_viewport_min; }
     /// Convert from vp_pos to app_pos (just a translation); inverse of app_pos_at_vp_pos()
@@ -156,17 +144,12 @@ public:
     void  set_zoom_level(float l);
     //-----------------------------------------------------------------------------
 
-    float4 image_pixel(int2 pixel) const
+    float4 image_pixel(int2 pixel, Target target = Target_Primary) const
     {
         auto img = current_image();
-        if (!img || !img->contains(pixel))
+        if (!img)
             return float4{0.f};
-
-        float4 ret{0.f};
-        for (int c = 0; c < img->groups[img->selected_group].num_channels; ++c)
-            ret[c] = img->channels[img->groups[img->selected_group].channels[c]](pixel - img->data_window.min);
-
-        return ret;
+        return img->raw_pixel(pixel, target);
     }
 
     // load font with the specified name at the specified size
@@ -187,11 +170,11 @@ public:
 private:
     void load_fonts();
 
-    float2 center_offset(ConstImagePtr img = nullptr) const;
-    Box2f  scaled_display_window(ConstImagePtr img = nullptr) const;
-    Box2f  scaled_data_window(ConstImagePtr img = nullptr) const;
-    float2 image_position(ConstImagePtr img = nullptr) const;
-    float2 image_scale(ConstImagePtr img = nullptr) const;
+    float2 center_offset() const;
+    Box2f  scaled_display_window(ConstImagePtr img) const;
+    Box2f  scaled_data_window(ConstImagePtr img) const;
+    float2 image_position(ConstImagePtr img) const;
+    float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
     void draw_histogram_window();

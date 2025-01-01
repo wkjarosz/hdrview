@@ -726,3 +726,41 @@ int Image::nth_visible_group_index(int n) const
 {
     return (int)nth_matching_index(groups, (size_t)n, [](size_t, const ChannelGroup &g) { return g.visible; });
 }
+
+float4 Image::raw_pixel(int2 p, Target target) const
+{
+    if (!contains(p))
+        return float4{0.f};
+
+    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    const ChannelGroup &group     = groups[group_idx];
+
+    float4 value{0.f};
+    for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
+
+    return value;
+}
+
+// This implements a simplified CPU version of the glsl/metal fragment shaders used to render the image
+float4 Image::shaded_pixel(int2 p, Target target, float gain, float gamma, bool sRGB) const
+{
+    if (!contains(p))
+        return float4{0.f};
+
+    int                 group_idx = target == Target_Primary ? selected_group : reference_group;
+    const ChannelGroup &group     = groups[group_idx];
+
+    float4 value{float3{0.f}, 1.f};
+    {
+        for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
+        if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
+            value[1] = value[2] = value[0];
+        else if (group.num_channels == 2) // if group has 2 channels, make third channel black
+            value[2] = 0.f;
+        if (group.type == ChannelGroup::YCA_Channels || group.type == ChannelGroup::YC_Channels)
+            value.xyz() = YCToRGB(value.xyz(), luminance_weights);
+    }
+
+    value = mul(M_to_Rec709, value);
+    return tonemap(float4{gain * value.xyz(), value.w}, gamma, sRGB);
+}

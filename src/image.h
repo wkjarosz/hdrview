@@ -250,8 +250,11 @@ public:
     int  next_visible_group_index(int index, EDirection direction) const;
     int  nth_visible_group_index(int n) const;
 
-    static void                set_null_texture(Target target = Target_Primary);
-    void                       set_as_texture(Target target = Target_Primary);
+    static void set_null_texture(Target target = Target_Primary);
+    void        set_as_texture(Target target = Target_Primary);
+    float4      raw_pixel(int2 p, Target target = Target_Primary) const;
+    float4      shaded_pixel(int2 p, Target target = Target_Primary, float gain = 1.f, float gamma = 2.4f,
+                             bool sRGB = true) const;
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void                       build_layers_and_groups();
     void                       finalize();

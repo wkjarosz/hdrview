@@ -194,4 +194,9 @@ inline float3 ColorConvertHSVtoRGB(const float3 &hsv)
     return rgb;
 }
 
+// draws a rectangle into draw_list with a tab-like label positioned according to align if draw_label is true
+// rect is in ImGui absolute coordinates
+void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const std::string &text, const float2 &align,
+                     bool draw_label);
+
 } // namespace ImGui

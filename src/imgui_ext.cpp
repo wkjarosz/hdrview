@@ -416,4 +416,36 @@ bool GlobalShortcut(const ImGuiKeyChord &chord, ImGuiInputFlags flags)
     return ImGui::Shortcut(chord, flags | ImGuiInputFlags_RouteGlobal);
 }
 
+void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const string &text, const float2 &align,
+                     bool draw_label)
+{
+    constexpr float  thickness = 3.f;
+    constexpr float2 fudge     = float2{thickness * 0.5f - 0.5f, -(thickness * 0.5f - 0.5f)};
+    const float2     pad       = float2{0.25, 0.125} * ImGui::GetFontSize();
+
+    draw_list->AddRect(rect.min, rect.max, col, 0.f, ImDrawFlags_None, thickness);
+
+    if (!draw_label)
+        return;
+
+    float2 shifted_align = (2.f * align - float2{1.f});
+    float2 text_size     = ImGui::CalcTextSize(text.c_str());
+    float2 tab_size      = text_size + pad * 2.f;
+    float  fade          = 1.f - smoothstep(0.5f * rect.size().x, 1.0f * rect.size().x, tab_size.x);
+    if (fade == 0.0f)
+        return;
+
+    Box2f tab_box = {float2{0.f}, tab_size};
+    tab_box.move_min_to(
+        // move to the correct corner while accounting for the tab size
+        rect.min + align * (rect.size() - tab_size) +
+        // shift the tab outside the rectangle
+        shifted_align * (fudge + float2{0, tab_size.y}));
+    draw_list->AddRectFilled(tab_box.min, tab_box.max, ImGui::GetColorU32(col, fade),
+                             std::clamp(ImGui::GetStyle().TabRounding, 0.0f, tab_size.x * 0.5f - 1.0f),
+                             shifted_align.y < 0.f ? ImDrawFlags_RoundCornersTop : ImDrawFlags_RoundCornersBottom);
+    ImGui::AddTextAligned(draw_list, tab_box.min + align * tab_box.size() - shifted_align * pad,
+                          ImGui::GetColorU32(ImGuiCol_Text, fade), text, align);
+}
+
 } // namespace ImGui
