@@ -194,6 +194,7 @@ public:
     static std::set<std::string> loadable_formats(); /// Set of supported formats for image loading
     static std::set<std::string> savable_formats();  /// Set of supported formats for image saving
     static void                  make_default_textures();
+    static void                  cleanup_default_textures();
     static Texture              *black_texture();
     static Texture              *white_texture();
     static Texture              *dither_texture();

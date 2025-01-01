@@ -361,7 +361,11 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
         setup_rendering();
     };
-    m_params.callbacks.BeforeExit = [this] { save_settings(); };
+    m_params.callbacks.BeforeExit = [this]
+    {
+        Image::cleanup_default_textures();
+        save_settings();
+    };
 
     // Change style
     m_params.callbacks.SetupImGuiStyle = []()
