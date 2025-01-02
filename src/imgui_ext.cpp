@@ -246,13 +246,14 @@ ImVec2 IconButtonSize()
     // return {IconSize().x + 2 * ImGui::GetStyle().ItemInnerSpacing.x, 0.f};
 }
 
-bool IconButton(const char *icon)
+bool IconButton(const char *icon, const ImVec2 &size)
 {
+    auto sz = (size.x == 0 && size.y == 0) ? IconButtonSize() : size;
     // Remove frame padding and spacing
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
     // ImGui::PushID(icon);
-    bool ret = ImGui::Button(icon, IconButtonSize());
+    bool ret = ImGui::Button(icon, sz);
     ImGui::PopStyleVar(2);
     // ImGui::PopID();
     return ret;
@@ -446,6 +447,18 @@ void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const 
                              shifted_align.y < 0.f ? ImDrawFlags_RoundCornersTop : ImDrawFlags_RoundCornersBottom);
     ImGui::AddTextAligned(draw_list, tab_box.min + align * tab_box.size() - shifted_align * pad,
                           ImGui::GetColorU32(ImGuiCol_Text, fade), text, align);
+}
+
+void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subscript)
+{
+    ImGui::AddTextAligned(draw_list, pos + int2{1, 1}, IM_COL32_BLACK, ICON_MY_WATCHED_PIXEL, {0.5f, 0.5f});
+    ImGui::AddTextAligned(draw_list, pos, IM_COL32_WHITE, ICON_MY_WATCHED_PIXEL, {0.5f, 0.5f});
+
+    if (subscript.length() == 0)
+        return;
+
+    ImGui::AddTextAligned(draw_list, pos + int2{1, 1}, IM_COL32_BLACK, subscript.c_str(), {-0.15f, -0.15f});
+    ImGui::AddTextAligned(draw_list, pos, IM_COL32_WHITE, subscript.c_str(), {-0.15f, -0.15f});
 }
 
 } // namespace ImGui

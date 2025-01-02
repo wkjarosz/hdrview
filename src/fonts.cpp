@@ -141,6 +141,8 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_ARROW_DROP_DOWN);
         builder.AddText(ICON_MY_CURSOR_ARROW);
         builder.AddText(ICON_MY_TIMES);
+        builder.AddText(ICON_MY_SELECT);
+        builder.AddText(ICON_MY_PAN_ZOOM_TOOL);
 
         // Build the final result (ordered ranges with all the unique characters submitted)
         builder.BuildRanges(&ranges);

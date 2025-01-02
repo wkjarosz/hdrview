@@ -135,3 +135,13 @@ enum Target : Target_
 
     Target_COUNT
 };
+
+using MouseMode_ = int;
+enum MouseMode : MouseMode_
+{
+    MouseMode_PanZoom = 0,
+    MouseMode_ColorInspector,
+    MouseMode_RectangularSelection,
+
+    MouseMode_COUNT
+};

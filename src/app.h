@@ -177,15 +177,16 @@ private:
     float2 image_scale(ConstImagePtr img) const;
 
     void draw_background();
-    void draw_histogram_window();
+    void draw_channel_stats_window();
     void draw_info_window();
+    void draw_pixel_inspector_window();
     void draw_about_dialog();
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
+    void draw_watched_pixels() const;
     void draw_image() const;
     void draw_image_border() const;
     void draw_file_window();
-    void draw_channel_window();
     void draw_top_toolbar();
     void draw_menus();
     void draw_status_bar();
@@ -227,7 +228,7 @@ private:
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_data_window = true, m_draw_display_window = true;
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true;
 
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;

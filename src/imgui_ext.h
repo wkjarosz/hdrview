@@ -59,7 +59,7 @@ SpdLogWindow &GlobalSpdLogWindow();
 
 ImVec2 IconSize();
 ImVec2 IconButtonSize();
-bool   IconButton(const char *icon);
+bool   IconButton(const char *icon, const ImVec2 &size = ImVec2(0, 0));
 
 inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComboFlags flags = ImGuiComboFlags_None)
 {
@@ -198,5 +198,8 @@ inline float3 ColorConvertHSVtoRGB(const float3 &hsv)
 // rect is in ImGui absolute coordinates
 void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const std::string &text, const float2 &align,
                      bool draw_label);
+
+// draw a crosshair icon with an optional subscript at the ImGui absolute coordinates pos
+void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const std::string &subscript = "");
 
 } // namespace ImGui

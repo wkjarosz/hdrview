@@ -88,19 +88,37 @@ bool hostIsApple()
 #endif
 }
 
+#if defined(__EMSCRIPTEN__)
+static float g_scroll_multiplier = 10.0f;
+#else
+static float g_scroll_multiplier = 1.0f;
+#endif
+
+struct WatchedPixel
+{
+    int2 pixel;
+    int  color_mode_current   = 0;
+    int  color_mode_reference = 0;
+};
+
+static vector<WatchedPixel> g_watched_pixels;
+
 static std::mt19937     g_rand(53);
-static constexpr float  MIN_ZOOM               = 0.01f;
-static constexpr float  MAX_ZOOM               = 512.f;
-static constexpr size_t g_max_recent           = 15;
-static bool             g_show_help            = false;
-static bool             g_show_command_palette = false;
-static bool             g_show_tweak_window    = false;
-static bool             g_show_bg_color_picker = false;
-static char             g_filter_buffer[256]   = {0};
-static int              g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
-static bool             g_request_sort         = false;
-static bool             g_short_names          = false;
-static Box2f            g_selection_rect       = Box2f{};
+static constexpr float  MIN_ZOOM                              = 0.01f;
+static constexpr float  MAX_ZOOM                              = 512.f;
+static constexpr size_t g_max_recent                          = 15;
+static bool             g_show_help                           = false;
+static bool             g_show_command_palette                = false;
+static bool             g_show_tweak_window                   = false;
+static bool             g_show_bg_color_picker                = false;
+static char             g_filter_buffer[256]                  = {0};
+static int              g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
+static bool             g_request_sort                        = false;
+static bool             g_short_names                         = false;
+static Box2f            g_selection_rect                      = Box2f{};
+static MouseMode_       g_mouse_mode                          = MouseMode_PanZoom;
+static bool             g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+
 #define g_blank_icon ""
 
 void MenuItem(const Action &a)
@@ -185,9 +203,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
 #if defined(__APPLE__)
-    // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may look
-    // blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp fonts on the
-    // retina screen, at the cost of more jagged fonts on screen set to a non-retina resolution.
+    // if there is a screen with a non-retina resolution connected to an otherwise retina mac, the fonts may
+    // look blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp
+    // fonts on the retina screen, at the cost of more jagged fonts on screen set to a non-retina resolution.
     m_params.dpiAwareParams.dpiWindowSizeFactor = 1.f;
     m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
@@ -209,8 +227,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     m_params.appWindowParams.windowTitle             = "HDRView";
     m_params.appWindowParams.restorePreviousGeometry = false;
 
-    // Setting this to true allows multiple viewports where you can drag windows outside out the main window in order to
-    // put their content into new native windows
+    // Setting this to true allows multiple viewports where you can drag windows outside out the main window in
+    // order to put their content into new native windows
     m_params.imGuiWindowParams.enableViewports        = false;
     m_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
     // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
@@ -223,7 +241,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     //
     // Here, we fully customize the menu bar:
     // by setting `showMenuBar` to true, and `showMenu_App` and `showMenu_View` to false,
-    // HelloImGui will display an empty menu bar, which we can fill with our own menu items via the callback `ShowMenus`
+    // HelloImGui will display an empty menu bar, which we can fill with our own menu items via the callback
+    // `ShowMenus`
     m_params.imGuiWindowParams.showMenuBar   = true;
     m_params.imGuiWindowParams.showMenu_App  = false;
     m_params.imGuiWindowParams.showMenu_View = false;
@@ -251,15 +270,29 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     //
     // Dockable windows
     //
-    // the histogram window
+
     HelloImGui::DockableWindow histogram_window;
     histogram_window.label             = "Histogram";
     histogram_window.dockSpaceName     = "HistogramSpace";
     histogram_window.isVisible         = true;
     histogram_window.rememberIsVisible = true;
-    histogram_window.GuiFunction       = [this] { draw_histogram_window(); };
+    histogram_window.GuiFunction       = [this]
+    {
+        if (auto img = current_image())
+            img->draw_histogram();
+    };
 
-    // the file window
+    HelloImGui::DockableWindow channel_stats_window;
+    channel_stats_window.label             = "Channel statistics";
+    channel_stats_window.dockSpaceName     = "HistogramSpace";
+    channel_stats_window.isVisible         = true;
+    channel_stats_window.rememberIsVisible = true;
+    channel_stats_window.GuiFunction       = [this]
+    {
+        if (auto img = current_image())
+            return img->draw_channel_stats();
+    };
+
     HelloImGui::DockableWindow file_window;
     file_window.label             = "Images";
     file_window.dockSpaceName     = "ImagesSpace";
@@ -267,21 +300,34 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     file_window.rememberIsVisible = true;
     file_window.GuiFunction       = [this] { draw_file_window(); };
 
-    // the info window
     HelloImGui::DockableWindow info_window;
     info_window.label             = "Info";
-    info_window.dockSpaceName     = "ImagesSpace";
+    info_window.dockSpaceName     = "RightSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
-    info_window.GuiFunction       = [this] { draw_info_window(); };
+    info_window.GuiFunction       = [this]
+    {
+        if (auto img = current_image())
+            return img->draw_info();
+    };
 
-    // the channels window
+    HelloImGui::DockableWindow pixel_inspector_window;
+    pixel_inspector_window.label             = "Pixel inspector";
+    pixel_inspector_window.dockSpaceName     = "RightBottomSpace";
+    pixel_inspector_window.isVisible         = true;
+    pixel_inspector_window.rememberIsVisible = true;
+    pixel_inspector_window.GuiFunction       = [this] { draw_pixel_inspector_window(); };
+
     HelloImGui::DockableWindow channel_window;
     channel_window.label             = "Channels";
-    channel_window.dockSpaceName     = "ChannelsSpace";
+    channel_window.dockSpaceName     = "ImagesSpace";
     channel_window.isVisible         = true;
     channel_window.rememberIsVisible = true;
-    channel_window.GuiFunction       = [this] { draw_channel_window(); };
+    channel_window.GuiFunction       = [this]
+    {
+        if (auto img = current_image())
+            img->draw_channels_list(m_reference == m_current, true);
+    };
 
     // the window showing the spdlog messages
     HelloImGui::DockableWindow log_window;
@@ -293,12 +339,14 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window, file_window, info_window, channel_window, log_window};
+    m_params.dockingParams.dockableWindows = {histogram_window,       channel_stats_window, file_window, info_window,
+                                              pixel_inspector_window, channel_window,       log_window};
     m_params.dockingParams.dockingSplits   = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
-        HelloImGui::DockingSplit{"ImagesSpace", "ChannelsSpace", ImGuiDir_Down, 0.25f},
-        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f}};
+        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+        HelloImGui::DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+        HelloImGui::DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
 
 #if defined(HELLOIMGUI_USE_GLFW)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
@@ -317,7 +365,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // through the NS api rather than CLI arguments, which means we need
         // special handling of these through GLFW.
         // There are two components to this special handling:
-        // (both of which need to happen here instead of HDRViewApp() because GLFW needs to have been initialized first)
+        // (both of which need to happen here instead of HDRViewApp() because GLFW needs to have been
+        // initialized first)
 
         // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
         const char *const *opened_files = glfwGetOpenedFilenames();
@@ -331,7 +380,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
         // 2) Register a callback on the running instance of HDRView for when the user:
         //    a) drags a file onto the HDRView app icon in the dock, and/or
-        //    b) launches HDRView with files (either from the command line or Finder) when another instance is already
+        //    b) launches HDRView with files (either from the command line or Finder) when another instance is
+        //    already
         //       running
         glfwSetOpenedFilenamesCallback(
             [](const char *image_file)
@@ -473,8 +523,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
         draw_command_palette();
 
-        // popup version of the below; commented out because it doesn't allow right-clicking to change the color picker
-        // type
+        // popup version of the below; commented out because it doesn't allow right-clicking to change the color
+        // picker type
         //
         // if (g_show_bg_color_picker)
         //     ImGui::OpenPopup("Background color");
@@ -693,6 +743,31 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); }, [this]() { return !m_sRGB; }});
         add_action({"Increase gamma", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
                     { m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); }, [this]() { return !m_sRGB; }});
+
+        add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_Space, 0,
+                    []()
+                    {
+                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
+                        g_mouse_mode                            = MouseMode_PanZoom;
+                        g_mouse_mode_enabled[MouseMode_PanZoom] = true;
+                    },
+                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_PanZoom]});
+        add_action({"Rectangular select", ICON_MY_SELECT, ImGuiKey_M, 0,
+                    []()
+                    {
+                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
+                        g_mouse_mode                                         = MouseMode_RectangularSelection;
+                        g_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
+                    },
+                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_RectangularSelection]});
+        add_action({"Pixel/color inspector", ICON_MY_WATCHED_PIXEL, ImGuiKey_I, 0,
+                    []()
+                    {
+                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
+                        g_mouse_mode                                   = MouseMode_ColorInspector;
+                        g_mouse_mode_enabled[MouseMode_ColorInspector] = true;
+                    },
+                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_ColorInspector]});
 
         auto if_img = [this]() { return current_image() != nullptr; };
 
@@ -1188,6 +1263,15 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
+    if (ImGui::BeginMenu("Tools"))
+    {
+        MenuItem(action("Pan and zoom"));
+        MenuItem(action("Rectangular select"));
+        MenuItem(action("Pixel/color inspector"));
+
+        ImGui::EndMenu();
+    }
+
     if (ImGui::BeginMenu("Windows"))
     {
         MenuItem(action("Command palette..."));
@@ -1379,8 +1463,8 @@ void HDRViewApp::set_image_textures()
 {
     try
     {
-        // bind the primary and secondary images, or a placehold black texture when we have no current or reference
-        // image
+        // bind the primary and secondary images, or a placehold black texture when we have no current or
+        // reference image
         if (auto img = current_image())
             img->set_as_texture(Target_Primary);
         else
@@ -1465,10 +1549,237 @@ void HDRViewApp::draw_info_window()
         return img->draw_info();
 }
 
-void HDRViewApp::draw_histogram_window()
+static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mode, Target target,
+                             bool allow_copy = false)
 {
-    if (auto img = current_image())
-        img->draw_histogram();
+    auto sans_font = hdrview()->font("sans regular", 14);
+    // auto bold_font = hdrview()->font("sans bold", 14);
+    auto mono_font = hdrview()->font("mono regular", 14);
+
+    if (!img)
+        return;
+
+    ImGui::BeginGroup();
+    {
+        bool in_viewport = hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_pixel(float2{pixel}));
+
+        int    group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
+        auto  &group           = img->groups[group_idx];
+        float4 color32         = img->raw_pixel(pixel, target);
+        float4 displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
+                                                   hdrview()->gamma_live(), hdrview()->sRGB());
+        int4   ldr_color =
+            int4{float4{ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color))} * 255.f};
+
+        float column_2_start = HelloImGui::EmSize(2.0f);
+
+        ImGui::BeginGroup();
+        {
+            float sz = ImGui::GetFontSize();
+
+            ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf |
+                                              (group.num_channels < 4 ? ImGuiColorEditFlags_NoAlpha : 0);
+            if (ImGui::ColorButton("colorbutton", displayed_color, color_flags, ImVec2{sz, sz}))
+                ImGui::OpenPopup("dropdown");
+
+            ImGui::PushFont(sans_font);
+            if (ImGui::BeginPopup("dropdown"))
+            {
+                if (allow_copy && ImGui::Selectable("Copy to clipboard"))
+                {
+                    string buf;
+                    if (color_mode == 0)
+                    {
+                        if (group.num_channels == 4)
+                            buf = fmt::format("({:f}, {:f}, {:f}, {:f})", color32.x, color32.y, color32.z, color32.w);
+                        else if (group.num_channels == 3)
+                            buf = fmt::format("({:f}, {:f}, {:f})", color32.x, color32.y, color32.z);
+                        else if (group.num_channels == 2)
+                            buf = fmt::format("({:f}, {:f})", color32.x, color32.y);
+                        else
+                            buf = fmt::format("{:f}", color32.x);
+                    }
+                    else if (color_mode == 1)
+                        buf = fmt::format("({:f}, {:f}, {:f}, {:f})", displayed_color.x, displayed_color.y,
+                                          displayed_color.z, displayed_color.w);
+                    else if (color_mode == 2)
+                        buf =
+                            fmt::format("({:d}, {:d}, {:d}, {:d})", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
+                    else if (color_mode == 3)
+                        buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z,
+                                          ldr_color.w);
+                    ImGui::SetClipboardText(buf.c_str());
+                }
+                // if (allow_copy && ImGui::Selectable(ICON_MY_TRASH_CAN " Delete watched pixel"))
+                // {
+                //     ImGui::SetClipboardText(buf.c_str());
+                // }
+                ImGui::SeparatorText("Display as:");
+                if (ImGui::Selectable("Raw values", color_mode == 0))
+                    color_mode = 0;
+                if (ImGui::Selectable("Displayed color (32-bit)", color_mode == 1))
+                    color_mode = 1;
+                if (ImGui::Selectable("Displayed color (8-bit)", color_mode == 2))
+                    color_mode = 2;
+                if (ImGui::Selectable("Displayed color (hex)", color_mode == 3))
+                    color_mode = 3;
+
+                ImGui::EndPopup();
+            }
+            ImGui::PopFont();
+        }
+        ImGui::EndGroup();
+
+        ImGui::SameLine(column_2_start, 0.f);
+
+        ImGui::PushFont(mono_font);
+        ImGui::BeginGroup();
+        {
+            float em_w = ImGui::CalcTextSize("m").x;
+            if (color_mode == 0)
+            {
+                int max_channel_len = 0;
+                ImGui::BeginGroup();
+                {
+                    // ImGui::PushFont(sans_font);
+                    // ImGui::Text("Raw values");
+                    // ImGui::PopFont();
+                    for (int c = 0; c < group.num_channels; ++c)
+                    {
+                        auto name       = Channel::tail(img->channels[group.channels[c]].name);
+                        max_channel_len = std::max(max_channel_len, int(name.size()));
+                        ImGui::TextFmt("{}:", name);
+                    }
+                }
+                ImGui::EndGroup();
+
+                ImGui::SameLine(em_w * (max_channel_len + 1.f), 0.f);
+
+                ImGui::BeginDisabled(!img->contains(pixel));
+                ImGui::BeginGroup();
+                {
+                    // ImGui::NewLine();
+                    if (in_viewport)
+                        for (int c = 0; c < group.num_channels; ++c) ImGui::TextFmt("{: > 6.3f}", color32[c]);
+                }
+                ImGui::EndGroup();
+                ImGui::EndDisabled();
+            }
+            else if (color_mode == 1 || color_mode == 2)
+            {
+                int num_displayed_channels = 4; // std::max(3, group.num_channels);
+                ImGui::BeginGroup();
+                {
+                    // ImGui::PushFont(sans_font);
+                    // ImGui::Text("Displayed color");
+                    // ImGui::PopFont();
+                    for (int c = 0; c < num_displayed_channels; ++c)
+                    {
+                        static const char *display_channel_names[] = {"R", "G", "B", "A"};
+                        ImGui::TextFmt("{}:", display_channel_names[c]);
+                    }
+                }
+                ImGui::EndGroup();
+
+                ImGui::SameLine(2.f * em_w, 0.f);
+
+                ImGui::BeginDisabled(!img->contains(pixel));
+                ImGui::BeginGroup();
+                {
+                    if (in_viewport)
+                    {
+                        // ImGui::NewLine();
+                        for (int c = 0; c < num_displayed_channels; ++c)
+                        {
+                            if (color_mode == 1)
+                                ImGui::TextFmt("{: < 6.3f}", displayed_color[c]);
+                            else
+                                ImGui::TextFmt("{: >6d}", ldr_color[c]);
+                        }
+                    }
+                }
+
+                // ImGui::SameLine(8.f * em_w, 0.f);
+                // ImGui::TextUnformatted(""); // hack: force this group to detect its size
+                ImGui::EndGroup();
+                ImGui::EndDisabled();
+            }
+            else if (color_mode == 3)
+            {
+                ImGui::BeginDisabled(!img->contains(pixel));
+                ImGui::TextFmt("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine(12.f * em_w, 0.f);
+            ImGui::TextUnformatted(""); // hack: force this group to detect its size
+        }
+        ImGui::EndGroup();
+        ImGui::PopFont();
+    }
+    ImGui::EndGroup();
+}
+
+void HDRViewApp::draw_pixel_inspector_window()
+{
+    if (!current_image())
+        return;
+
+    auto &io = ImGui::GetIO();
+
+    ImGui::SeparatorText("Hovered pixel:");
+    auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+    ImGui::TextFmt("{} ({:>5d},{:>5d})", ICON_MY_CURSOR_ARROW, hovered_pixel.x, hovered_pixel.y);
+
+    static int2 color_mode = {0, 0};
+    ImGui::PushID("Current");
+    draw_pixel_color(current_image(), hovered_pixel, color_mode.x, Target_Primary);
+    ImGui::PopID();
+    if (auto rimg = reference_image())
+    {
+        ImGui::PushID("Reference");
+        ImGui::SameLine();
+        draw_pixel_color(rimg, hovered_pixel, color_mode.y, Target_Secondary);
+        ImGui::PopID();
+    }
+
+    // ImGui::Spacing();
+    ImGui::SeparatorText("Watched pixels:");
+    // ImGui::Spacing();
+
+    ImGui::Checkbox("Draw watched pixels on image", &m_draw_watched_pixels);
+
+    int delete_idx = -1;
+    for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
+    {
+        if (i > 0)
+        {
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
+        auto &wp = g_watched_pixels[i];
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextFmt("{} #{} ({:>5d},{:>5d})", ICON_MY_WATCHED_PIXEL, i + 1, wp.pixel.x, wp.pixel.y);
+        ImGui::SameLine();
+        ImGui::AlignCursor(ImGui::IconButtonSize().x, 1.f);
+        if (ImGui::IconButton(fmt::format("{}##{}", ICON_MY_TRASH_CAN, i).c_str()))
+            delete_idx = i;
+
+        ImGui::PushID(2 * i + 0);
+        draw_pixel_color(hdrview()->current_image(), wp.pixel, wp.color_mode_current, Target_Primary, true);
+        ImGui::PopID();
+        if (auto rimg = hdrview()->reference_image())
+        {
+            ImGui::PushID(2 * i + 1);
+            ImGui::SameLine();
+            draw_pixel_color(rimg, wp.pixel, wp.color_mode_reference, Target_Secondary, true);
+            ImGui::PopID();
+        }
+    }
+    if (delete_idx >= 0)
+        g_watched_pixels.erase(g_watched_pixels.begin() + delete_idx);
 }
 
 static void calculate_tree_visibility(LayerTreeNode &node, Image &image)
@@ -1717,7 +2028,8 @@ void HDRViewApp::draw_file_window()
                                     ImGuiTableColumnFlags_IndentDisable,
                                 1.25f * icon_width);
         // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
-        //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
+        //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
+        //                         icon_width);
         ImGui::TableSetupColumn(g_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
@@ -1939,12 +2251,6 @@ void HDRViewApp::draw_file_window()
     }
 }
 
-void HDRViewApp::draw_channel_window()
-{
-    if (auto img = current_image())
-        img->draw_channels_list(m_reference == m_current, true);
-}
-
 void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
 
 void HDRViewApp::fit_display_window()
@@ -2068,37 +2374,34 @@ void HDRViewApp::draw_pixel_grid() const
     float factor = std::clamp((m_zoom - s_grid_threshold) / (2 * s_grid_threshold), 0.f, 1.f);
     float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
 
+    if (alpha <= 0.0f)
+        return;
+
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
-    // only draw within the image viewport
-    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
-    if (alpha > 0.0f)
-    {
-        ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
-        ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
+    ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
+    ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
 
-        auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-        // bounds = bounds.intersect(current_image()->data_window);
+    auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
+    // bounds = bounds.intersect(current_image()->data_window);
 
-        // draw vertical lines
-        for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-            draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)),
-                               col_bg, 4.f);
+    // draw vertical lines
+    for (int x = bounds.min.x; x <= bounds.max.x; ++x)
+        draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)), col_bg,
+                           4.f);
 
-        // draw horizontal lines
-        for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-            draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)),
-                               col_bg, 4.f);
+    // draw horizontal lines
+    for (int y = bounds.min.y; y <= bounds.max.y; ++y)
+        draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)), col_bg,
+                           4.f);
 
-        // and now again with the foreground color
-        for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-            draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)),
-                               col_fg, 2.f);
-        for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-            draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)),
-                               col_fg, 2.f);
-    }
-    draw_list->PopClipRect();
+    // and now again with the foreground color
+    for (int x = bounds.min.x; x <= bounds.max.x; ++x)
+        draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)), col_fg,
+                           2.f);
+    for (int y = bounds.min.y; y <= bounds.max.y; ++y)
+        draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)), col_fg,
+                           2.f);
 }
 
 void HDRViewApp::draw_pixel_info() const
@@ -2107,8 +2410,6 @@ void HDRViewApp::draw_pixel_info() const
     if (!img || !m_draw_pixel_info)
         return;
 
-    static constexpr float3 white     = float3{1.f};
-    static constexpr float3 black     = float3{0.f};
     static constexpr float2 align     = {0.5f, 0.5f};
     auto                    mono_font = font("mono bold", 30);
 
@@ -2140,101 +2441,109 @@ void HDRViewApp::draw_pixel_info() const
     float factor = std::clamp((m_zoom - channel_threshold) / (1.25f * channel_threshold), 0.f, 1.f);
     float alpha  = smoothstep(0.0f, 1.0f, factor);
 
+    if (alpha <= 0.0f)
+        return;
+
     // fade value for the (x,y) coordinates shown at further zoom
     float factor2 = std::clamp((m_zoom - coord_threshold) / (1.25f * coord_threshold), 0.f, 1.f);
     float alpha2  = smoothstep(0.0f, 1.0f, factor2);
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
-    // only draw within the image viewport
-    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
-    if (alpha > 0.0f)
+    ImGui::ScopedFont sf{mono_font};
+
+    auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
+    // auto bounds        = bounds.intersect(img->data_window);
+
+    for (int y = bounds.min.y; y < bounds.max.y; ++y)
     {
-        ImGui::ScopedFont sf{mono_font};
-
-        auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-        // auto bounds        = bounds.intersect(img->data_window);
-
-        for (int y = bounds.min.y; y < bounds.max.y; ++y)
+        for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
-            for (int x = bounds.min.x; x < bounds.max.x; ++x)
+            auto   pos   = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
+            float4 pixel = img->raw_pixel({x, y});
+            if (alpha2 > 0.f)
             {
-                auto   pos   = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-                float4 pixel = img->raw_pixel({x, y});
-                if (alpha2 > 0.f)
-                {
-                    float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
-                    auto   text  = fmt::format("({},{})", x, y);
-                    ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImColor{float4{black, alpha2}}, text, align);
-                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{white, alpha2}}, text, align);
-                }
+                float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
+                auto   text  = fmt::format("({},{})", x, y);
+                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha2), text,
+                                      align);
+                ImGui::AddTextAligned(draw_list, c_pos, ImGui::GetColorU32(IM_COL32_WHITE, alpha2), text, align);
+            }
 
-                for (int c = 0; c < group.num_channels; ++c)
-                {
-                    float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
-                    auto   text  = fmt::format("{:>2s}:{: > 7.3f}", names[c], pixel[c]);
-                    ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImColor{float4{black, alpha2}}, text, align);
-                    ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{colors[c].xyz(), alpha}}, text, align);
-                }
+            for (int c = 0; c < group.num_channels; ++c)
+            {
+                float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
+                auto   text  = fmt::format("{:>2s}:{: > 7.3f}", names[c], pixel[c]);
+                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha2), text,
+                                      align);
+                ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{colors[c].xyz(), alpha}}, text, align);
             }
         }
     }
-    draw_list->PopClipRect();
 }
 
 void HDRViewApp::draw_image_border() const
 {
     auto draw_list = ImGui::GetBackgroundDrawList();
 
-    // only draw within the image viewport
-    draw_list->PushClipRect(app_pos_at_vp_pos({0.f, 0.f}), app_pos_at_vp_pos(viewport_size()), true);
+    auto cimg = current_image();
+    auto rimg = reference_image();
+
+    if (!cimg && !rimg)
+        return;
+
+    if (cimg && cimg->data_window.has_volume())
     {
-        auto cimg = current_image();
-        auto rimg = reference_image();
-
-        if (cimg && cimg->data_window.has_volume())
-        {
-            Box2f data_window{app_pos_at_pixel(float2{cimg->data_window.min}),
-                              app_pos_at_pixel(float2{cimg->data_window.max})};
-            Box2f display_window{app_pos_at_pixel(float2{cimg->display_window.min}),
-                                 app_pos_at_pixel(float2{cimg->display_window.max})};
-            bool  non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
-            ImGui::PushRowColors(true, false);
-            if (m_draw_data_window)
-                ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window",
-                                       {0.f, 0.f}, non_trivial);
-            if (m_draw_display_window && non_trivial)
-                ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header), "Display window",
-                                       {1.f, 1.f}, true);
-            ImGui::PopStyleColor(3);
-        }
-
-        if (g_selection_rect.has_volume())
-        {
-            Box2f crop_window{app_pos_at_pixel(g_selection_rect.min), app_pos_at_pixel(g_selection_rect.max)};
-            ImGui::PushRowColors(true, false);
-            ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
-                                   "Selection", {0.5f, 1.f}, true);
-            ImGui::PopStyleColor(3);
-        }
-
-        if (rimg && rimg->data_window.has_volume())
-        {
-            Box2f data_window{app_pos_at_pixel(float2{rimg->data_window.min}),
-                              app_pos_at_pixel(float2{rimg->data_window.max})};
-            Box2f display_window{app_pos_at_pixel(float2{rimg->display_window.min}),
-                                 app_pos_at_pixel(float2{rimg->display_window.max})};
-            ImGui::PushRowColors(false, true, true);
-            if (m_draw_data_window)
-                ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive),
-                                       "Reference data window", {1.f, 0.f}, true);
-            if (m_draw_display_window)
-                ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header),
-                                       "Reference display window", {0.f, 1.f}, true);
-            ImGui::PopStyleColor(3);
-        }
+        Box2f data_window{app_pos_at_pixel(float2{cimg->data_window.min}),
+                          app_pos_at_pixel(float2{cimg->data_window.max})};
+        Box2f display_window{app_pos_at_pixel(float2{cimg->display_window.min}),
+                             app_pos_at_pixel(float2{cimg->display_window.max})};
+        bool  non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
+        ImGui::PushRowColors(true, false);
+        if (m_draw_data_window)
+            ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window",
+                                   {0.f, 0.f}, non_trivial);
+        if (m_draw_display_window && non_trivial)
+            ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header), "Display window",
+                                   {1.f, 1.f}, true);
+        ImGui::PopStyleColor(3);
     }
-    draw_list->PopClipRect();
+
+    if (rimg && rimg->data_window.has_volume())
+    {
+        Box2f data_window{app_pos_at_pixel(float2{rimg->data_window.min}),
+                          app_pos_at_pixel(float2{rimg->data_window.max})};
+        Box2f display_window{app_pos_at_pixel(float2{rimg->display_window.min}),
+                             app_pos_at_pixel(float2{rimg->display_window.max})};
+        ImGui::PushRowColors(false, true, true);
+        if (m_draw_data_window)
+            ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive),
+                                   "Reference data window", {1.f, 0.f}, true);
+        if (m_draw_display_window)
+            ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header),
+                                   "Reference display window", {0.f, 1.f}, true);
+        ImGui::PopStyleColor(3);
+    }
+
+    if (g_selection_rect.has_volume())
+    {
+        Box2f crop_window{app_pos_at_pixel(g_selection_rect.min), app_pos_at_pixel(g_selection_rect.max)};
+        ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
+                               "Selection", {0.5f, 1.f}, true);
+    }
+}
+
+void HDRViewApp::draw_watched_pixels() const
+{
+    if (!current_image() || !m_draw_watched_pixels)
+        return;
+
+    auto draw_list = ImGui::GetBackgroundDrawList();
+
+    ImGui::PushFont(font("sans bold", 14));
+    for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
+        ImGui::DrawCrosshairs(draw_list, app_pos_at_pixel(g_watched_pixels[i].pixel + 0.5f), fmt::format(" {}", i + 1));
+    ImGui::PopFont();
 }
 
 void HDRViewApp::draw_image() const
@@ -2343,8 +2652,8 @@ void HDRViewApp::draw_background()
 
         //
         // calculate the viewport sizes
-        // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina screens.
-        // For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
+        // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina
+        // screens. For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
         // io.DisplayFramebufferScale to get the physical pixel size for the framebuffer.
         float2 fbscale = io.DisplayFramebufferScale;
         int2   fbsize  = int2{float2{io.DisplaySize} * fbscale};
@@ -2360,10 +2669,23 @@ void HDRViewApp::draw_background()
                 m_viewport_min  = central_node->Pos;
             }
 
-        if (!io.WantCaptureMouse)
+        if (!io.WantCaptureMouse && current_image())
         {
-            // if 'M' is being held down
-            if (ImGui::IsKeyDown(ImGuiKey_M))
+            auto vp_mouse_pos   = vp_pos_at_app_pos(io.MousePos);
+            bool cancel_autofit = false;
+            auto scroll         = float2{io.MouseWheelH, io.MouseWheel} * g_scroll_multiplier;
+
+            if (length2(scroll) > 0.f)
+            {
+                cancel_autofit = true;
+                if (ImGui::IsKeyDown(ImGuiMod_Shift))
+                    // panning
+                    reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
+                else
+                    zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
+            }
+
+            if (g_mouse_mode == MouseMode_RectangularSelection)
             {
                 // set g_selection_rect based on dragged region
                 if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
@@ -2375,34 +2697,30 @@ void HDRViewApp::draw_background()
                     g_selection_rect.enclose(pixel_at_app_pos(io.MousePos));
                 }
             }
+            else if (g_mouse_mode == MouseMode_ColorInspector)
+            {
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                    // add watched pixel
+                    g_watched_pixels.emplace_back(WatchedPixel{int2{pixel_at_app_pos(io.MousePos)}, 0, 0});
+                else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                {
+                    if (g_watched_pixels.size())
+                        g_watched_pixels.back().pixel = int2{pixel_at_app_pos(io.MousePos)};
+                }
+            }
             else
             {
-                auto vp_mouse_pos = vp_pos_at_app_pos(io.MousePos);
-                auto scroll       = float2{io.MouseWheelH, io.MouseWheel};
-#if defined(__EMSCRIPTEN__)
-                scroll *= 10.0f;
-#endif
                 float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-                bool   cancel_autofit = true;
                 if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
+                    cancel_autofit = true;
                     reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
                     ImGui::ResetMouseDragDelta();
                 }
-                else if (length2(scroll) > 0.f)
-                {
-                    if (ImGui::IsKeyDown(ImGuiMod_Shift))
-                        // panning
-                        reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
-                    else
-                        zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
-                }
-                else
-                    cancel_autofit = false;
-
-                if (cancel_autofit)
-                    m_auto_fit_display = m_auto_fit_data = false;
             }
+
+            if (cancel_autofit)
+                m_auto_fit_display = m_auto_fit_data = false;
         }
 
         //
@@ -2419,13 +2737,41 @@ void HDRViewApp::draw_background()
             fit_data_window();
 
         m_render_pass->begin();
-
         draw_image();
+        m_render_pass->end();
+
         draw_pixel_info();
         draw_pixel_grid();
         draw_image_border();
+        draw_watched_pixels();
 
-        m_render_pass->end();
+        if (current_image())
+        {
+            ImGui::PushFont(font("sans bold", 18));
+            auto   draw_list = ImGui::GetBackgroundDrawList();
+            float2 pos       = ImGui::GetIO().MousePos;
+            if (g_mouse_mode == MouseMode_RectangularSelection)
+            {
+                // draw selection indicator
+                ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_SELECT,
+                                      {0.5f, 0.5f});
+                ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_SELECT, {0.5f, 0.5f});
+            }
+            else if (g_mouse_mode == MouseMode_ColorInspector)
+            {
+                // draw pixel watcher indicator
+                ImGui::DrawCrosshairs(draw_list, pos + int2{18}, " +");
+            }
+            // else if (g_mouse_mode == MouseMode_PanZoom)
+            // {
+            //     // draw pixel watcher indicator
+            //     ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_PAN_ZOOM_TOOL,
+            //                           {0.5f, 0.5f});
+            //     ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_PAN_ZOOM_TOOL, {0.5f,
+            //     0.5f});
+            // }
+            ImGui::PopFont();
+        }
     }
     catch (const std::exception &e)
     {
