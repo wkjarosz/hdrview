@@ -461,4 +461,72 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
     ImGui::AddTextAligned(draw_list, pos, IM_COL32_WHITE, subscript.c_str(), {-0.15f, -0.15f});
 }
 
+// bool DragInt4(const char *label, int *p_data, const char *formats[], ImGuiSliderFlags flags)
+// {
+//     ImGuiWindow *window = GetCurrentWindow();
+//     if (window->SkipItems)
+//         return false;
+
+//     ImGuiContext &g             = *GImGui;
+//     bool          value_changed = false;
+//     BeginGroup();
+//     PushID(label);
+//     PushMultiItemsWidths(4, CalcItemWidth());
+//     for (int i = 0; i < 4; i++)
+//     {
+//         PushID(i);
+//         if (i > 0)
+//             SameLine(0, g.Style.ItemInnerSpacing.x);
+//         value_changed |= DragInt("", p_data, 1.f, 0, 0, formats[i], flags);
+//         PopID();
+//         PopItemWidth();
+//         ++p_data;
+//     }
+//     PopID();
+
+//     const char *label_end = FindRenderedTextEnd(label);
+//     if (label != label_end)
+//     {
+//         SameLine(0, g.Style.ItemInnerSpacing.x);
+//         TextEx(label, label_end);
+//     }
+
+//     EndGroup();
+//     return value_changed;
+// }
+
+// bool InputFloat4(const char *label, float *p_data, const char *formats[], ImGuiSliderFlags flags)
+// {
+//     ImGuiWindow *window = GetCurrentWindow();
+//     if (window->SkipItems)
+//         return false;
+
+//     ImGuiContext &g             = *GImGui;
+//     bool          value_changed = false;
+//     BeginGroup();
+//     PushID(label);
+//     PushMultiItemsWidths(4, CalcItemWidth());
+//     for (int i = 0; i < 4; i++)
+//     {
+//         PushID(i);
+//         if (i > 0)
+//             SameLine(0, g.Style.ItemInnerSpacing.x);
+//         value_changed |= InputFloat("", p_data, 0.f, 0.f, formats[i], flags);
+//         PopID();
+//         PopItemWidth();
+//         ++p_data;
+//     }
+//     PopID();
+
+//     const char *label_end = FindRenderedTextEnd(label);
+//     if (label != label_end)
+//     {
+//         SameLine(0, g.Style.ItemInnerSpacing.x);
+//         TextEx(label, label_end);
+//     }
+
+//     EndGroup();
+//     return value_changed;
+// }
+
 } // namespace ImGui

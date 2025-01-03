@@ -201,6 +201,12 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
         if (part.header().hasName())
             data.partname = part.header().name();
+        if (auto owner = part.header().findTypedAttribute<Imf::StringAttribute>("owner"))
+            data.owner = owner->value();
+        if (auto comments = part.header().findTypedAttribute<Imf::StringAttribute>("comments"))
+            data.comments = comments->value();
+        if (auto capture_date = part.header().findTypedAttribute<Imf::StringAttribute>("capDate"))
+            data.capture_date = capture_date->value();
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
         data.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};

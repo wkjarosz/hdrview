@@ -202,4 +202,8 @@ void DrawLabeledRect(ImDrawList *draw_list, const Box2f &rect, ImU32 col, const 
 // draw a crosshair icon with an optional subscript at the ImGui absolute coordinates pos
 void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const std::string &subscript = "");
 
+// bool DragInt4(const char *label, int *values, const char *formats[], ImGuiSliderFlags flags = 0);
+
+// bool InputFloat4(const char *label, float *values, const char *formats[], ImGuiSliderFlags flags = 0);
+
 } // namespace ImGui

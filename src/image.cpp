@@ -116,7 +116,7 @@ float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 }
 
 void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale,
-                           std::atomic<bool> &canceled)
+                           const Box2i &new_roi, std::atomic<bool> &canceled)
 {
     try
     {
@@ -127,20 +127,33 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         settings.exposure = new_exposure;
         settings.x_scale  = new_x_scale;
         settings.y_scale  = new_y_scale;
+        settings.roi      = new_roi;
+
+        Box2i roi{int2{0}, img.size()};
+        if (new_roi.has_volume())
+            roi = roi.intersect(new_roi);
+
+        auto index_to_2d = [size_x = roi.size().x, offset = roi.min](int index)
+        {
+            int y = index / size_x;
+            int x = index % size_x;
+            return int2{x, y} + offset;
+        };
 
         //
         // compute pixel summary statistics
 
         Timer timer;
         {
-            size_t       block_size  = 1024 * 1024;
-            const size_t num_threads = estimate_threads(img.num_elements(), block_size, *Scheduler::singleton());
+            size_t               block_size  = 1024 * 1024;
+            const size_t         num_threads = estimate_threads(roi.volume(), block_size, *Scheduler::singleton());
             std::vector<Summary> partials(max<size_t>(1, num_threads));
+
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<int>(0, img.num_elements(), block_size),
-                [&img, &partials, &canceled](int begin, int end, int unit_index, int thread_index)
+                blocked_range<int>(0, roi.volume(), block_size),
+                [&img, &partials, &canceled, &index_to_2d](int begin, int end, int unit_index, int thread_index)
                 {
                     Summary partial = partials[unit_index]; //< compute over local symbols.
 
@@ -150,7 +163,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                             throw std::runtime_error("canceling summary stats");
 
                         // computation
-                        float val = img(i);
+                        float val = img(index_to_2d(i));
 
                         if (isnan(val))
                             ++partial.nan_pixels;
@@ -203,11 +216,11 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
 
         // accumulate bin counts
-        for (int i = 0; i < img.num_elements(); ++i)
+        for (int i = 0; i < roi.volume(); ++i)
         {
             if (canceled)
                 throw std::runtime_error("Canceling histogram accumulation");
-            bin_y(value_to_bin(img(i))) += 1;
+            bin_y(value_to_bin(img(index_to_2d(i)))) += 1;
         }
 
         // normalize histogram density by dividing bin counts by bin sizes
@@ -303,8 +316,9 @@ Texture *Channel::get_texture()
 
 bool PixelStats::Settings::match(const Settings &other) const
 {
-    return (other.x_scale == x_scale && other.exposure == exposure) ||
-           (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh));
+    return other.roi == roi &&
+           ((other.x_scale == x_scale && other.exposure == exposure) ||
+            (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh)));
 }
 
 PixelStats *Channel::get_stats()
@@ -322,12 +336,16 @@ PixelStats *Channel::get_stats()
     return cached_stats.get();
 }
 
-void Channel::update_stats()
+void Channel::update_stats(const Image *img)
 {
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
+    // calculate the roi in data window-relative coordinates
+    Box2i data_roi = hdrview()->roi();
+    data_roi.min -= img->data_window.min;
+    data_roi.max -= img->data_window.min;
     PixelStats::Settings desired_settings{hdrview()->exposure(), hdrview()->histogram_x_scale(),
-                                          hdrview()->histogram_y_scale()};
+                                          hdrview()->histogram_y_scale(), data_roi};
 
     auto recompute_async_stats = [this, desired_settings]()
     {
@@ -343,9 +361,9 @@ void Channel::update_stats()
         async_tracker  = do_async(
             [this, desired_settings, canceled = async_canceled]()
             {
-                spdlog::trace("Starting a new stats computation");
+                spdlog::info("Starting a new stats computation");
                 async_stats->calculate(*this, desired_settings.exposure, desired_settings.x_scale,
-                                        desired_settings.y_scale, *canceled);
+                                        desired_settings.y_scale, desired_settings.roi, *canceled);
             });
         async_settings = desired_settings;
     };

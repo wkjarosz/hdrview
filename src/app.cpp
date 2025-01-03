@@ -115,7 +115,6 @@ static char             g_filter_buffer[256]                  = {0};
 static int              g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
 static bool             g_request_sort                        = false;
 static bool             g_short_names                         = false;
-static Box2f            g_selection_rect                      = Box2f{};
 static MouseMode_       g_mouse_mode                          = MouseMode_PanZoom;
 static bool             g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
@@ -1552,172 +1551,131 @@ void HDRViewApp::draw_info_window()
 static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mode, Target target,
                              bool allow_copy = false)
 {
-    auto sans_font = hdrview()->font("sans regular", 14);
-    // auto bold_font = hdrview()->font("sans bold", 14);
-    auto mono_font = hdrview()->font("mono regular", 14);
-
     if (!img)
         return;
 
-    ImGui::BeginGroup();
+    int    group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
+    auto  &group           = img->groups[group_idx];
+    float4 color32         = img->raw_pixel(pixel, target);
+    float4 displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
+                                               hdrview()->gamma_live(), hdrview()->sRGB());
+    int4   ldr_color =
+        int4{float4{ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color))} * 255.f};
+    ImU32 hex = ImColor{float4{ldr_color}};
+
+    ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
+    if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))
+        ImGui::OpenPopup("dropdown");
+    ImGui::SetItemTooltip("Click to change value format%s", allow_copy ? " or copy to clipboard." : ".");
+
+    // ImGui::PushFont(sans_font);
+    if (ImGui::BeginPopup("dropdown"))
     {
-        bool in_viewport = hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_pixel(float2{pixel}));
-
-        int    group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
-        auto  &group           = img->groups[group_idx];
-        float4 color32         = img->raw_pixel(pixel, target);
-        float4 displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
-                                                   hdrview()->gamma_live(), hdrview()->sRGB());
-        int4   ldr_color =
-            int4{float4{ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color))} * 255.f};
-
-        float column_2_start = HelloImGui::EmSize(2.0f);
-
-        ImGui::BeginGroup();
+        if (allow_copy && ImGui::Selectable("Copy to clipboard"))
         {
-            float sz = ImGui::GetFontSize();
-
-            ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf |
-                                              (group.num_channels < 4 ? ImGuiColorEditFlags_NoAlpha : 0);
-            if (ImGui::ColorButton("colorbutton", displayed_color, color_flags, ImVec2{sz, sz}))
-                ImGui::OpenPopup("dropdown");
-
-            ImGui::PushFont(sans_font);
-            if (ImGui::BeginPopup("dropdown"))
-            {
-                if (allow_copy && ImGui::Selectable("Copy to clipboard"))
-                {
-                    string buf;
-                    if (color_mode == 0)
-                    {
-                        if (group.num_channels == 4)
-                            buf = fmt::format("({:f}, {:f}, {:f}, {:f})", color32.x, color32.y, color32.z, color32.w);
-                        else if (group.num_channels == 3)
-                            buf = fmt::format("({:f}, {:f}, {:f})", color32.x, color32.y, color32.z);
-                        else if (group.num_channels == 2)
-                            buf = fmt::format("({:f}, {:f})", color32.x, color32.y);
-                        else
-                            buf = fmt::format("{:f}", color32.x);
-                    }
-                    else if (color_mode == 1)
-                        buf = fmt::format("({:f}, {:f}, {:f}, {:f})", displayed_color.x, displayed_color.y,
-                                          displayed_color.z, displayed_color.w);
-                    else if (color_mode == 2)
-                        buf =
-                            fmt::format("({:d}, {:d}, {:d}, {:d})", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-                    else if (color_mode == 3)
-                        buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z,
-                                          ldr_color.w);
-                    ImGui::SetClipboardText(buf.c_str());
-                }
-                // if (allow_copy && ImGui::Selectable(ICON_MY_TRASH_CAN " Delete watched pixel"))
-                // {
-                //     ImGui::SetClipboardText(buf.c_str());
-                // }
-                ImGui::SeparatorText("Display as:");
-                if (ImGui::Selectable("Raw values", color_mode == 0))
-                    color_mode = 0;
-                if (ImGui::Selectable("Displayed color (32-bit)", color_mode == 1))
-                    color_mode = 1;
-                if (ImGui::Selectable("Displayed color (8-bit)", color_mode == 2))
-                    color_mode = 2;
-                if (ImGui::Selectable("Displayed color (hex)", color_mode == 3))
-                    color_mode = 3;
-
-                ImGui::EndPopup();
-            }
-            ImGui::PopFont();
-        }
-        ImGui::EndGroup();
-
-        ImGui::SameLine(column_2_start, 0.f);
-
-        ImGui::PushFont(mono_font);
-        ImGui::BeginGroup();
-        {
-            float em_w = ImGui::CalcTextSize("m").x;
+            string buf;
             if (color_mode == 0)
             {
-                int max_channel_len = 0;
-                ImGui::BeginGroup();
-                {
-                    // ImGui::PushFont(sans_font);
-                    // ImGui::Text("Raw values");
-                    // ImGui::PopFont();
-                    for (int c = 0; c < group.num_channels; ++c)
-                    {
-                        auto name       = Channel::tail(img->channels[group.channels[c]].name);
-                        max_channel_len = std::max(max_channel_len, int(name.size()));
-                        ImGui::TextFmt("{}:", name);
-                    }
-                }
-                ImGui::EndGroup();
-
-                ImGui::SameLine(em_w * (max_channel_len + 1.f), 0.f);
-
-                ImGui::BeginDisabled(!img->contains(pixel));
-                ImGui::BeginGroup();
-                {
-                    // ImGui::NewLine();
-                    if (in_viewport)
-                        for (int c = 0; c < group.num_channels; ++c) ImGui::TextFmt("{: > 6.3f}", color32[c]);
-                }
-                ImGui::EndGroup();
-                ImGui::EndDisabled();
+                if (group.num_channels == 4)
+                    buf = fmt::format("({:g}, {:g}, {:g}, {:g})", color32.x, color32.y, color32.z, color32.w);
+                else if (group.num_channels == 3)
+                    buf = fmt::format("({:g}, {:g}, {:g})", color32.x, color32.y, color32.z);
+                else if (group.num_channels == 2)
+                    buf = fmt::format("({:g}, {:g})", color32.x, color32.y);
+                else
+                    buf = fmt::format("{:g}", color32.x);
             }
-            else if (color_mode == 1 || color_mode == 2)
-            {
-                int num_displayed_channels = 4; // std::max(3, group.num_channels);
-                ImGui::BeginGroup();
-                {
-                    // ImGui::PushFont(sans_font);
-                    // ImGui::Text("Displayed color");
-                    // ImGui::PopFont();
-                    for (int c = 0; c < num_displayed_channels; ++c)
-                    {
-                        static const char *display_channel_names[] = {"R", "G", "B", "A"};
-                        ImGui::TextFmt("{}:", display_channel_names[c]);
-                    }
-                }
-                ImGui::EndGroup();
-
-                ImGui::SameLine(2.f * em_w, 0.f);
-
-                ImGui::BeginDisabled(!img->contains(pixel));
-                ImGui::BeginGroup();
-                {
-                    if (in_viewport)
-                    {
-                        // ImGui::NewLine();
-                        for (int c = 0; c < num_displayed_channels; ++c)
-                        {
-                            if (color_mode == 1)
-                                ImGui::TextFmt("{: < 6.3f}", displayed_color[c]);
-                            else
-                                ImGui::TextFmt("{: >6d}", ldr_color[c]);
-                        }
-                    }
-                }
-
-                // ImGui::SameLine(8.f * em_w, 0.f);
-                // ImGui::TextUnformatted(""); // hack: force this group to detect its size
-                ImGui::EndGroup();
-                ImGui::EndDisabled();
-            }
+            else if (color_mode == 1)
+                buf = fmt::format("({:g}, {:g}, {:g}, {:g})", displayed_color.x, displayed_color.y, displayed_color.z,
+                                  displayed_color.w);
+            else if (color_mode == 2)
+                buf = fmt::format("({:d}, {:d}, {:d}, {:d})", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
             else if (color_mode == 3)
-            {
-                ImGui::BeginDisabled(!img->contains(pixel));
-                ImGui::TextFmt("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
-                ImGui::EndDisabled();
-            }
-
-            ImGui::SameLine(12.f * em_w, 0.f);
-            ImGui::TextUnformatted(""); // hack: force this group to detect its size
+                buf = fmt::format("#{:02X}{:02X}{:02X}{:02X}", ldr_color.x, ldr_color.y, ldr_color.z, ldr_color.w);
+            ImGui::SetClipboardText(buf.c_str());
         }
-        ImGui::EndGroup();
-        ImGui::PopFont();
+        ImGui::SeparatorText("Display as:");
+        if (ImGui::Selectable("Raw values", color_mode == 0))
+            color_mode = 0;
+        if (ImGui::Selectable("Displayed color (32-bit)", color_mode == 1))
+            color_mode = 1;
+        if (ImGui::Selectable("Displayed color (8-bit)", color_mode == 2))
+            color_mode = 2;
+        if (ImGui::Selectable("Displayed color (hex)", color_mode == 3))
+            color_mode = 3;
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+    // static const char *rgba          = "R,G,B,A";
+    static const char *rgba_names[4] = {"R", "G", "B", "A"};
+    float              w_full        = ImGui::GetContentRegionAvail().x;
+    // width available to all items (without spacing)
+    int   components = color_mode == 0 ? group.num_channels : 4;
+    float w_items    = w_full - ImGui::GetStyle().ItemInnerSpacing.x * (components - 1);
+    float prev_split = w_items;
+    // distributes the available width without jitter during resize
+    auto set_item_width = [&prev_split, w_items, components](int c)
+    {
+        float next_split = ImMax(IM_TRUNC(w_items * (components - 1 - c) / components), 1.f);
+        ImGui::SetNextItemWidth(ImMax(prev_split - next_split, 1.0f));
+        prev_split = next_split;
+    };
+
+    ImGui::BeginDisabled(!img->contains(pixel));
+    ImGui::BeginGroup();
+    if (color_mode == 0)
+    {
+        // ImGui::InputScalarN(group.name.c_str(), ImGuiDataType_Float, &color32, group.num_channels, NULL, NULL, "%-g",
+        //                     ImGuiInputTextFlags_ReadOnly);
+        for (int c = 0; c < components; ++c)
+        {
+            if (c > 0)
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+            set_item_width(c);
+            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &color32[c], 0.f, 0.f,
+                              fmt::format("{}: %g", Channel::tail(img->channels[group.channels[c]].name)).c_str(),
+                              ImGuiInputTextFlags_ReadOnly);
+        }
+    }
+    else if (color_mode == 1)
+    {
+        // ImGui::InputScalarN(rgba, ImGuiDataType_Float, &displayed_color, 4, NULL, NULL, "%-g",
+        //                     ImGuiInputTextFlags_ReadOnly);
+        for (int c = 0; c < components; ++c)
+        {
+            if (c > 0)
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+            set_item_width(c);
+            ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &displayed_color[c], 0.f, 0.f,
+                              fmt::format("{}: %g", rgba_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
+        }
+    }
+    else if (color_mode == 2)
+    {
+        // ImGui::InputScalarN(rgba, ImGuiDataType_S32, &ldr_color, 4, NULL, NULL, "%-d", ImGuiInputTextFlags_ReadOnly);
+        for (int c = 0; c < components; ++c)
+        {
+            if (c > 0)
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+            set_item_width(c);
+            ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, NULL,
+                                NULL, fmt::format("{}: %d", rgba_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
+        }
+    }
+    else if (color_mode == 3)
+    {
+        // ImGui::InputScalar(rgba, ImGuiDataType_S32, &hex, NULL, NULL, "#%-08X", ImGuiInputTextFlags_ReadOnly);
+        ImGui::SetNextItemWidth(IM_TRUNC(w_full));
+        ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, NULL, NULL, "#%08X", ImGuiInputTextFlags_ReadOnly);
     }
     ImGui::EndGroup();
+    ImGui::EndDisabled();
 }
 
 void HDRViewApp::draw_pixel_inspector_window()
@@ -1725,58 +1683,84 @@ void HDRViewApp::draw_pixel_inspector_window()
     if (!current_image())
         return;
 
+    auto PixelHeader = [](const string &title, int2 &pixel, bool *p_visible = nullptr)
+    {
+        bool open = ImGui::CollapsingHeader(title.c_str(), p_visible, ImGuiTreeNodeFlags_DefaultOpen);
+
+        ImGuiInputTextFlags_ flags = p_visible ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
+        // slightly convoluted process to show the coordinates as drag elements within the header
+        ImGui::SameLine();
+        auto  fpy = ImGui::GetStyle().FramePadding.y;
+        float drag_size =
+            0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
+        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fpy);
+        ImGui::SetNextItemWidth(drag_size);
+        ImGui::DragInt("##pixel x coordinates", &pixel.x, 1.f, 0, 0, "X: %d", flags);
+        ImGui::SameLine();
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fpy);
+        ImGui::SetNextItemWidth(drag_size);
+        ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
+        ImGui::PopStyleVar();
+
+        return open;
+    };
+
     auto &io = ImGui::GetIO();
 
-    ImGui::SeparatorText("Hovered pixel:");
-    auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
-    ImGui::TextFmt("{} ({:>5d},{:>5d})", ICON_MY_CURSOR_ARROW, hovered_pixel.x, hovered_pixel.y);
+    ImGui::SeparatorText("Selection:");
+    // float sz = ImGui::GetContentRegionAvail().x * 0.65f + ImGui::GetFrameHeight();
+    ImGui::SetNextItemWidth(-ImGui::CalcTextSize(" Min,Max ").x);
+    ImGui::DragInt4("Min,Max", &m_roi_live.min.x);
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        m_roi = m_roi_live;
+    ImGui::SetItemTooltip("W x H: (%d x %d)", m_roi_live.size().x, m_roi_live.size().y);
 
-    static int2 color_mode = {0, 0};
-    ImGui::PushID("Current");
-    draw_pixel_color(current_image(), hovered_pixel, color_mode.x, Target_Primary);
-    ImGui::PopID();
-    if (auto rimg = reference_image())
+    ImGui::SeparatorText("Watched pixels:");
+
+    auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
+    if (PixelHeader(ICON_MY_CURSOR_ARROW, hovered_pixel))
     {
-        ImGui::PushID("Reference");
-        ImGui::SameLine();
-        draw_pixel_color(rimg, hovered_pixel, color_mode.y, Target_Secondary);
+        static int2 color_mode = {0, 0};
+        ImGui::PushID("Current");
+        draw_pixel_color(current_image(), hovered_pixel, color_mode.x, Target_Primary);
+        ImGui::SetItemTooltip("Hovered pixel values in current channel.");
         ImGui::PopID();
+        ImGui::PushID("Reference");
+        draw_pixel_color(reference_image(), hovered_pixel, color_mode.y, Target_Secondary);
+        ImGui::SetItemTooltip("Hovered pixel values in reference channel.");
+        ImGui::PopID();
+
+        ImGui::Spacing();
     }
 
-    // ImGui::Spacing();
-    ImGui::SeparatorText("Watched pixels:");
-    // ImGui::Spacing();
-
-    ImGui::Checkbox("Draw watched pixels on image", &m_draw_watched_pixels);
+    ImGui::Checkbox("Show " ICON_MY_WATCHED_PIXEL "s in viewport", &m_draw_watched_pixels);
 
     int delete_idx = -1;
     for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
     {
-        if (i > 0)
-        {
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-        }
         auto &wp = g_watched_pixels[i];
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextFmt("{} #{} ({:>5d},{:>5d})", ICON_MY_WATCHED_PIXEL, i + 1, wp.pixel.x, wp.pixel.y);
-        ImGui::SameLine();
-        ImGui::AlignCursor(ImGui::IconButtonSize().x, 1.f);
-        if (ImGui::IconButton(fmt::format("{}##{}", ICON_MY_TRASH_CAN, i).c_str()))
-            delete_idx = i;
-
-        ImGui::PushID(2 * i + 0);
-        draw_pixel_color(hdrview()->current_image(), wp.pixel, wp.color_mode_current, Target_Primary, true);
-        ImGui::PopID();
-        if (auto rimg = hdrview()->reference_image())
+        ImGui::PushID(i);
+        bool visible = true;
+        if (PixelHeader(fmt::format("{}{}", ICON_MY_WATCHED_PIXEL, i + 1), wp.pixel, &visible))
         {
-            ImGui::PushID(2 * i + 1);
-            ImGui::SameLine();
-            draw_pixel_color(rimg, wp.pixel, wp.color_mode_reference, Target_Secondary, true);
+            ImGui::PushID("Current");
+            draw_pixel_color(current_image(), wp.pixel, wp.color_mode_current, Target_Primary, true);
+            ImGui::SetItemTooltip("Pixel %s%d values in current channel.", ICON_MY_WATCHED_PIXEL, i + 1);
             ImGui::PopID();
+
+            ImGui::PushID("Reference");
+            draw_pixel_color(reference_image(), wp.pixel, wp.color_mode_reference, Target_Secondary, true);
+            ImGui::SetItemTooltip("Pixel %s%d values in reference channel.", ICON_MY_WATCHED_PIXEL, i + 1);
+            ImGui::PopID();
+
+            ImGui::Spacing();
         }
+        ImGui::PopID();
+
+        if (!visible)
+            delete_idx = i;
     }
     if (delete_idx >= 0)
         g_watched_pixels.erase(g_watched_pixels.begin() + delete_idx);
@@ -2525,9 +2509,9 @@ void HDRViewApp::draw_image_border() const
         ImGui::PopStyleColor(3);
     }
 
-    if (g_selection_rect.has_volume())
+    if (m_roi_live.has_volume())
     {
-        Box2f crop_window{app_pos_at_pixel(g_selection_rect.min), app_pos_at_pixel(g_selection_rect.max)};
+        Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
         ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
                                "Selection", {0.5f, 1.f}, true);
     }
@@ -2687,15 +2671,17 @@ void HDRViewApp::draw_background()
 
             if (g_mouse_mode == MouseMode_RectangularSelection)
             {
-                // set g_selection_rect based on dragged region
+                // set m_roi based on dragged region
                 if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-                    g_selection_rect.make_empty();
+                    m_roi_live = Box2i{int2{0}};
                 else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
-                    g_selection_rect.make_empty();
-                    g_selection_rect.enclose(pixel_at_app_pos(io.MouseClickedPos[0]));
-                    g_selection_rect.enclose(pixel_at_app_pos(io.MousePos));
+                    m_roi_live.make_empty();
+                    m_roi_live.enclose(int2{pixel_at_app_pos(io.MouseClickedPos[0])});
+                    m_roi_live.enclose(int2{pixel_at_app_pos(io.MousePos)});
                 }
+                else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                    m_roi = m_roi_live;
             }
             else if (g_mouse_mode == MouseMode_ColorInspector)
             {

@@ -66,7 +66,7 @@ void Image::draw_histogram()
     {
         auto &channel = channels[group.channels[c]];
         // if (stats_need_update)
-        channel.update_stats();
+        channel.update_stats(this);
         stats[c]    = channel.get_stats();
         y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[0]);
         y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[1]);
@@ -495,6 +495,22 @@ void Image::draw_info()
     property_name("Part name:");
     property_value(partname.empty() ? "<none>" : partname, sans_font, true);
 
+    if (!owner.empty())
+    {
+        property_name("Owner:");
+        property_value(owner, sans_font, true);
+    }
+    if (!comments.empty())
+    {
+        property_name("Comments:");
+        property_value(comments, sans_font, true);
+    }
+    if (!capture_date.empty())
+    {
+        property_name("Capture date:");
+        property_value(capture_date, sans_font, true);
+    }
+
     property_name("Resolution:");
     property_value(fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y), sans_font);
 
@@ -554,7 +570,8 @@ void Image::draw_channel_stats()
             string      channel_names[4];
             for (int c = 0; c < group.num_channels; ++c)
             {
-                auto &channel    = channels[group.channels[c]];
+                auto &channel = channels[group.channels[c]];
+                channel.update_stats(this);
                 channel_stats[c] = channel.get_stats();
                 channel_names[c] = Channel::tail(channel.name);
             }

@@ -63,6 +63,7 @@ struct PixelStats
         float      exposure = 0.f;
         AxisScale_ x_scale  = AxisScale_Linear;
         AxisScale_ y_scale  = AxisScale_Linear;
+        Box2i      roi      = Box2i{int2{0}};
 
         bool match(const Settings &other) const;
     };
@@ -93,7 +94,7 @@ struct PixelStats
     PixelStats() = default;
 
     /// Populate the statistics from the provided img and settings
-    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale,
+    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale, const Box2i &new_roi,
                    std::atomic<bool> &canceled);
 
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
@@ -135,7 +136,7 @@ public:
     Texture *get_texture();
 
     PixelStats *get_stats();
-    void        update_stats();
+    void        update_stats(const Image *img);
 
 private:
     PixelStats::Ptr                    cached_stats;
@@ -202,6 +203,9 @@ public:
 
     std::string          filename;
     std::string          partname;
+    std::string          owner;
+    std::string          comments;
+    std::string          capture_date;
     Box2i                data_window;
     Box2i                display_window;
     std::vector<Channel> channels;
