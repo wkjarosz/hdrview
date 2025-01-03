@@ -500,15 +500,15 @@ void Image::draw_info()
         property_name("Owner:");
         property_value(owner, sans_font, true);
     }
-    if (!comments.empty())
-    {
-        property_name("Comments:");
-        property_value(comments, sans_font, true);
-    }
     if (!capture_date.empty())
     {
         property_name("Capture date:");
         property_value(capture_date, sans_font, true);
+    }
+    if (!comments.empty())
+    {
+        property_name("Comments:");
+        property_value(comments, sans_font, true);
     }
 
     property_name("Resolution:");

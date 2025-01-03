@@ -1697,7 +1697,7 @@ void HDRViewApp::draw_pixel_inspector_window()
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fpy);
         ImGui::SetNextItemWidth(drag_size);
         ImGui::DragInt("##pixel x coordinates", &pixel.x, 1.f, 0, 0, "X: %d", flags);
-        ImGui::SameLine();
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + fpy);
         ImGui::SetNextItemWidth(drag_size);
         ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
