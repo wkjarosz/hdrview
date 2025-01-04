@@ -246,109 +246,84 @@ static bool is_uhdr_image(std::istream &is)
     return ret;
 }
 
-// static vector<ImagePtr> load_uhdr_image(std::istream &is, const string &filename)
-// {
-//     uhdr_compressed_image_t image{};
-//     if (is.good())
-//     {
-//         is.seekg(0, std::ios::end);
-//         auto size = is.tellg();
-//         if (size <= 0)
-//             throw invalid_argument{fmt::format("File '{}' is empty", filename)};
+static vector<ImagePtr> load_uhdr_image(std::istream &is, const string &filename)
+{
+    uhdr_compressed_image_t compressed_image{};
+    if (is.good())
+    {
+        is.seekg(0, std::ios::end);
+        auto size = is.tellg();
+        if (size <= 0)
+            throw invalid_argument{fmt::format("File '{}' is empty", filename)};
 
-//         image.capacity = size;
-//         image.data_sz  = size;
-//         image.data     = nullptr;
-//         image.cg       = UHDR_CG_UNSPECIFIED;
-//         image.ct       = UHDR_CT_UNSPECIFIED;
-//         image.range    = UHDR_CR_UNSPECIFIED;
-//         is.seekg(0, std::ios::beg);
-//         image.data = malloc(size);
-//         if (image.data == nullptr)
-//             throw invalid_argument{fmt::format("Failed to allocate memory to store contents of file : {}",
-//             filename)};
+        compressed_image.capacity = size;
+        compressed_image.data_sz  = size;
+        compressed_image.data     = nullptr;
+        compressed_image.cg       = UHDR_CG_UNSPECIFIED;
+        compressed_image.ct       = UHDR_CT_UNSPECIFIED;
+        compressed_image.range    = UHDR_CR_UNSPECIFIED;
+        is.seekg(0, std::ios::beg);
+        compressed_image.data = malloc(size);
+        if (compressed_image.data == nullptr)
+            throw invalid_argument{fmt::format("Failed to allocate memory to store contents of file : {}", filename)};
 
-//         is.read(static_cast<char *>(image.data), (size));
-//         if (is.gcount() != size)
-//             throw invalid_argument{fmt::format("Failed to read : {} bytes, read : {} bytes", size, is.gcount()};
-//     }
-//     else
-//         throw invalid_argument("Could not load ultra hdr image.");
+        is.read(static_cast<char *>(compressed_image.data), (size));
+        if (is.gcount() != size)
+            throw invalid_argument{
+                fmt::format("Failed to read : {} bytes, read : {} bytes", (int)size, (int)is.gcount())};
+    }
+    else
+        throw invalid_argument("Could not load ultra hdr image.");
 
-// #define RET_IF_ERR(x)                                                                                                  \
-//     {                                                                                                                  \
-//         uhdr_error_info_t status = (x);                                                                                \
-//         if (status.error_code != UHDR_CODEC_OK)                                                                        \
-//         {                                                                                                              \
-//             if (status.has_detail)                                                                                     \
-//             {                                                                                                          \
-//                 std::cerr << status.detail << std::endl;                                                               \
-//             }                                                                                                          \
-//             uhdr_release_decoder(handle);                                                                              \
-//             throw invalid_argument("Could not load ultra hdr image.");                                                 \
-//         }                                                                                                              \
-//     }
+    uhdr_codec_private_t *handle         = uhdr_create_decoder();
+    auto                  throw_if_error = [handle, &compressed_image](uhdr_error_info_t status)
+    {
+        if (status.error_code != UHDR_CODEC_OK)
+        {
+            if (status.has_detail)
+                std::cerr << status.detail << std::endl;
+            uhdr_release_decoder(handle);
+            if (compressed_image.data)
+                free(compressed_image.data);
+            throw invalid_argument("Could not load ultra hdr image.");
+        }
+    };
 
-//     uhdr_codec_private_t *handle = uhdr_create_decoder();
-//     RET_IF_ERR(uhdr_dec_set_image(handle, &image))
-//     if (image.data)
-//         free(image.data);
-//     RET_IF_ERR(uhdr_dec_set_out_color_transfer(handle, UHDR_CT_LINEAR))
-//     RET_IF_ERR(uhdr_dec_set_out_img_format(handle, UHDR_IMG_FMT_64bppRGBAHalfFloat))
-//     // if (mEnableGLES)
-//     // {
-//     //     RET_IF_ERR(uhdr_enable_gpu_acceleration(handle, mEnableGLES))
-//     // }
-//     RET_IF_ERR(uhdr_dec_probe(handle))
-//     // if (mGainMapMetadataCfgFile != nullptr)
-//     // {
-//     //     uhdr_gainmap_metadata_t *metadata = uhdr_dec_get_gainmap_metadata(handle);
-//     //     if (!writeGainMapMetadataToFile(metadata))
-//     //     {
-//     //         std::cerr << "failed to write gainmap metadata to file: " << mGainMapMetadataCfgFile << std::endl;
-//     //     }
-//     // }
+    throw_if_error(uhdr_dec_set_image(handle, &compressed_image));
+    throw_if_error(uhdr_dec_set_out_color_transfer(handle, UHDR_CT_LINEAR));
+    throw_if_error(uhdr_dec_set_out_img_format(handle, UHDR_IMG_FMT_64bppRGBAHalfFloat));
+    throw_if_error(uhdr_dec_probe(handle));
+    throw_if_error(uhdr_decode(handle));
 
-//     RET_IF_ERR(uhdr_decode(handle))
+    uhdr_raw_image_t *output = uhdr_get_decoded_image(handle);
 
-// #undef RET_IF_ERR
+    if (!output)
+        throw invalid_argument{"Could not decode ultra hdr image."};
 
-//     uhdr_raw_image_t *output = uhdr_get_decoded_image(handle);
+    auto image      = make_shared<Image>(int2{output->w, output->h}, 4);
+    image->filename = filename;
 
-//     uhdr_raw_image_t mDecodedUhdrRgbImage{};
+    char        *data   = static_cast<char *>(output->planes[UHDR_PLANE_PACKED]);
+    const size_t bpp    = output->fmt == UHDR_IMG_FMT_64bppRGBAHalfFloat ? 8 : 4;
+    const size_t stride = output->stride[UHDR_PLANE_PACKED] * bpp;
+    for (unsigned i = 0; i < output->h; i++, data += stride)
+    {
+        auto scanline = reinterpret_cast<::half *>(data);
+        //
+        // data is a scanline of RGBA half-float values
+        // put them into each of the separate R, G, B, A channels in image
+        for (unsigned j = 0; j < output->w; j++)
+        {
+            image->channels[0](j, i) = scanline[j * 4 + 0];
+            image->channels[1](j, i) = scanline[j * 4 + 1];
+            image->channels[2](j, i) = scanline[j * 4 + 2];
+            image->channels[3](j, i) = scanline[j * 4 + 3];
+        }
+    }
+    uhdr_release_decoder(handle);
 
-//     mDecodedUhdrRgbImage.fmt                       = output->fmt;
-//     mDecodedUhdrRgbImage.cg                        = output->cg;
-//     mDecodedUhdrRgbImage.ct                        = output->ct;
-//     mDecodedUhdrRgbImage.range                     = output->range;
-//     mDecodedUhdrRgbImage.w                         = output->w;
-//     mDecodedUhdrRgbImage.h                         = output->h;
-//     size_t bpp                                     = (output->fmt == UHDR_IMG_FMT_64bppRGBAHalfFloat) ? 8 : 4;
-//     mDecodedUhdrRgbImage.planes[UHDR_PLANE_PACKED] = malloc(bpp * output->w * output->h);
-//     char        *inData                            = static_cast<char *>(output->planes[UHDR_PLANE_PACKED]);
-//     char        *outData   = static_cast<char *>(mDecodedUhdrRgbImage.planes[UHDR_PLANE_PACKED]);
-//     const size_t inStride  = output->stride[UHDR_PLANE_PACKED] * bpp;
-//     const size_t outStride = output->w * bpp;
-//     mDecodedUhdrRgbImage.stride[UHDR_PLANE_PACKED] = output->w;
-//     const size_t length                            = output->w * bpp;
-//     for (unsigned i = 0; i < output->h; i++, inData += inStride, outData += outStride)
-//     {
-//         memcpy(outData, inData, length);
-//     }
-//     uhdr_release_decoder(handle);
-
-//     char* data = static_cast<char*>(mDecodedUhdrRgbImage.planes[UHDR_PLANE_PACKED]);
-//     const size_t bpp = mDecodedUhdrRgbImage.fmt == UHDR_IMG_FMT_64bppRGBAHalfFloat ? 8 : 4;
-//     const size_t stride = mDecodedUhdrRgbImage.stride[UHDR_PLANE_PACKED] * bpp;
-//     const size_t length = mDecodedUhdrRgbImage.w * bpp;
-//     for (unsigned i = 0; i < mDecodedUhdrRgbImage.h; i++, data += stride) {
-//         ofd.write(data, length);
-//     }
-//     return true;
-
-//     // now convert the raw image into a 32-bit float image
-//     auto half_data = reinterpret_cast<const ::half *>(mData.data());
-// }
+    return {image};
+}
 
 static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 {
@@ -478,12 +453,16 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         StdIStream exr_is{is, filename.c_str()};
 
         vector<ImagePtr> images;
-        spdlog::info("UltraHDR image: {}", is_uhdr_image(is));
 
         if (Imf::isOpenExrFile(exr_is))
         {
             spdlog::info("Detected EXR image.");
             images = load_exr_image(exr_is, filename);
+        }
+        else if (is_uhdr_image(is))
+        {
+            spdlog::info("Detected ultra hdr-compatible image. Loading via libultrahdr.");
+            images = load_uhdr_image(is, filename);
         }
         else if (is_stb_image(is))
         {

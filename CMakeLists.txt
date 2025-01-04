@@ -369,13 +369,13 @@ endif()
 CPMAddPackage(
   NAME libultrahdr
   GITHUB_REPOSITORY google/libultrahdr
-  GIT_TAG v1.3.0
+  GIT_TAG ea518da3a839c59f88ffc6c4020920c944251fd2
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "UHDR_BUILD_EXAMPLES OFF"
           "UHDR_BUILD_TESTS OFF"
           "UHDR_BUILD_BENCHMARK OFF"
           "UHDR_BUILD_FUZZERS OFF"
-          "UHDR_BUILD_DEPS OFF"
+          "UHDR_BUILD_DEPS ON"
           "UHDR_ENABLE_INSTALL OFF"
 )
 if(libultrahdr_ADDED)
