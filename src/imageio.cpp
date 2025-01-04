@@ -300,7 +300,7 @@ static vector<ImagePtr> load_uhdr_image(std::istream &is, const string &filename
     if (!output)
         throw invalid_argument{"Could not decode ultra hdr image."};
 
-    auto image      = make_shared<Image>(int2{output->w, output->h}, 4);
+    auto image      = make_shared<Image>(int2(output->w, output->h), 4);
     image->filename = filename;
 
     char        *data   = static_cast<char *>(output->planes[UHDR_PLANE_PACKED]);
