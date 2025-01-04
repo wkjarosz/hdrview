@@ -367,6 +367,23 @@ if(openexr_ADDED)
 endif()
 
 CPMAddPackage(
+  NAME libultrahdr
+  GITHUB_REPOSITORY google/libultrahdr
+  GIT_TAG v1.3.0
+  OPTIONS "BUILD_SHARED_LIBS OFF"
+          "UHDR_BUILD_EXAMPLES OFF"
+          "UHDR_BUILD_TESTS OFF"
+          "UHDR_BUILD_BENCHMARK OFF"
+          "UHDR_BUILD_FUZZERS OFF"
+          "UHDR_BUILD_DEPS OFF"
+          "UHDR_ENABLE_INSTALL OFF"
+)
+if(libultrahdr_ADDED)
+  message(STATUS "libultrahdr library added")
+  # target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
+endif()
+
+CPMAddPackage(
   NAME cli11
   URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
@@ -468,6 +485,7 @@ target_link_libraries(
           implot
           cli11
           my_imgui_command_palette
+          core
 )
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
