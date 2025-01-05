@@ -16,6 +16,7 @@
 #include <ImfHeader.h>
 #include <ImfInputPart.h>
 #include <ImfMultiPartInputFile.h>
+#include <ImfOutputFile.h>
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
@@ -162,4 +163,48 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
     }
     return images;
+}
+
+bool save_exr_image(const Image &img, ostream &os_, const string &filename)
+{
+    try
+    {
+        // OpenEXR expects the display window to be inclusive, while our images are exclusive
+        auto displayWindow = Imath::Box2i(Imath::V2i(img.display_window.min.x, img.display_window.min.y),
+                                          Imath::V2i(img.display_window.max.x - 1, img.display_window.max.y - 1));
+        auto dataWindow    = Imath::Box2i(Imath::V2i(img.data_window.min.x, img.data_window.min.y),
+                                          Imath::V2i(img.data_window.max.x - 1, img.data_window.max.y - 1));
+
+        Imf::Header      header{displayWindow, dataWindow};
+        Imf::FrameBuffer frameBuffer;
+
+        for (int g = 0; g < (int)img.groups.size(); ++g)
+        {
+            auto &group = img.groups[g];
+            if (!group.visible)
+                continue;
+
+            for (int c = 0; c < group.num_channels; ++c)
+            {
+                auto &channel = img.channels[group.channels[c]];
+                header.channels().insert(channel.name, Imf::Channel(Imf::FLOAT));
+
+                // OpenEXR expects the base address to point to the display window origin, while our channels only store
+                // pixels for the data_window. The Slice::Make function below does the heavy lifting of computing the
+                // base pointer for a slice
+                frameBuffer.insert(channel.name, Imf::Slice::Make(Imf::FLOAT, channel.data(), dataWindow));
+            }
+        }
+
+        auto            os = StdOStream{os_, filename.c_str()};
+        Imf::OutputFile file{os, header};
+        file.setFrameBuffer(frameBuffer);
+        file.writePixels(img.data_window.size().y);
+        return true;
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("Unable to write exr image file \"{}\": {}", filename, e.what());
+        return false;
+    }
 }

@@ -75,16 +75,68 @@ vector<ImagePtr> Image::load(const string &filename)
     return load(is, filename);
 }
 
+unique_ptr<uint8_t[]> Image::as_ldr(int *w, int *h, int *n, float gain, float gamma, bool sRGB, bool dither) const
+{
+    // convert floating-point image to 8-bit per channel with dithering
+    *w = size().x;
+    *h = size().y;
+    *n = groups[selected_group].num_channels;
+    std::unique_ptr<uint8_t[]> data(new uint8_t[(*w) * (*h) * (*n)]);
+
+    gamma = 1.f / gamma;
+    Timer timer;
+    // convert channel data into n-channel interleaved format expected by stb_image
+    parallel_for(blocked_range<int>(0, *h),
+                 [this, &data, gain, gamma, sRGB, dither, w, n](int y, int, int, int)
+                 {
+                     for (int x = 0; x < *w; ++x)
+                     {
+                         float d = dither ? (tent_dither(x, y)) / 255.0f : 0.f;
+
+                         for (int c = 0; c < *n; ++c)
+                         {
+                             const Channel &chan = channels[groups[selected_group].channels[c]];
+                             float          v    = gain * chan(x, y);
+                             if (sRGB)
+                                 v = LinearToSRGB(v);
+                             else if (gamma != 1.0f)
+                                 v = pow(v, gamma);
+
+                             // unpremultiply
+                             if (*n > 3 && c < 3)
+                             {
+                                 float a = channels[groups[selected_group].channels[3]](x, y);
+                                 if (a != 0.f)
+                                     v /= a;
+                             }
+
+                             if (c < 3)
+                                 v += d;
+
+                             // convert to [0-255] range
+                             v                                    = clamp(v * 255.0f, 0.0f, 255.0f);
+                             data[(*n) * x + (*n) * y * (*w) + c] = (uint8_t)v;
+                         }
+                     }
+                 });
+    spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
+    return data;
+}
+
 bool Image::save(ostream &os, const string &filename, float gain, float gamma, bool sRGB, bool dither) const
 {
-    return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
+    string extension = to_lower(get_extension(filename));
+    if (extension == "exr")
+        return save_exr_image(*this, os, filename);
+    else
+        return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
 
     // static const auto ostream_write_func = [](void *context, void *data, int size)
     // { reinterpret_cast<ostream *>(context)->write(reinterpret_cast<char *>(data), size); };
 
     // string extension = to_lower(get_extension(filename));
 
-    // auto img = this;
+    // auto     img = this;
     // HDRImage img_copy;
 
     // bool hdr_format = (extension == "hdr") || (extension == "pfm") || (extension == "exr");
@@ -112,9 +164,10 @@ bool Image::save(ostream &os, const string &filename, float gain, float gamma, b
     // }
 
     // if (extension == "hdr")
-    //     return stbi_write_hdr(filename.c_str(), width(), height(), 4, (const float *)img->data()) != 0;
+    //     return stbi_write_hdr_to_func(stream_write_func, &os, width(), height(), 4, (const float *)img->data()) != 0;
     // else if (extension == "pfm")
-    //     return write_pfm_image(filename.c_str(), width(), height(), 4, (const float *)img->data()) != 0;
+    //     return write_pfm_image_to_func(stream_write_func, &os, width(), height(), 4, (const float *)img->data()) !=
+    //     0;
     // else if (extension == "exr")
     // {
     //     try

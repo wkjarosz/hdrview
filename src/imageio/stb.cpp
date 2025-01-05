@@ -133,61 +133,20 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
 
     string extension = to_lower(get_extension(filename));
 
-    // convert floating-point image to 8-bit per channel with dithering
-    int             n = img.groups[img.selected_group].num_channels;
-    int             w = img.size().x;
-    int             h = img.size().y;
-    vector<uint8_t> data(w * h * n, 0);
-
-    gamma = 1.f / gamma;
-    Timer timer;
-    // convert channel data into n-channel interleaved format expected by stb_image
-    parallel_for(blocked_range<int>(0, h),
-                 [&img, &data, gain, gamma, sRGB, dither, w, n](int y, int, int, int)
-                 {
-                     for (int x = 0; x < w; ++x)
-                     {
-                         float d = dither ? (tent_dither(x, y)) / 255.0f : 0.f;
-
-                         for (int c = 0; c < n; ++c)
-                         {
-                             const Channel &chan = img.channels[img.groups[img.selected_group].channels[c]];
-                             float          v    = gain * chan(x, y);
-                             if (sRGB)
-                                 v = LinearToSRGB(v);
-                             else if (gamma != 1.0f)
-                                 v = pow(v, gamma);
-
-                             // unpremultiply
-                             if (n > 3 && c < 3)
-                             {
-                                 float a = img.channels[img.groups[img.selected_group].channels[3]](x, y);
-                                 if (a != 0.f)
-                                     v /= a;
-                             }
-
-                             if (c < 3)
-                                 v += d;
-
-                             // convert to [0-255] range
-                             v                           = clamp(v * 255.0f, 0.0f, 255.0f);
-                             data[n * x + n * y * w + c] = (uint8_t)v;
-                         }
-                     }
-                 });
-    spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
+    int  w, h, n;
+    auto pixels = img.as_ldr(&w, &h, &n, gain, gamma, sRGB, dither);
 
     // if (extension == "ppm")
     //     return write_ppm_image(filename.c_str(), width(), height(), 3, &data[0]);
     // else
     if (extension == "png")
-        return stbi_write_png_to_func(ostream_write_func, &os, w, h, n, &data[0], 0) != 0;
+        return stbi_write_png_to_func(ostream_write_func, &os, w, h, n, &pixels.get()[0], 0) != 0;
     else if (extension == "bmp")
-        return stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, &data[0]) != 0;
+        return stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, &pixels.get()[0]) != 0;
     else if (extension == "tga")
-        return stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, &data[0]) != 0;
+        return stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, &pixels.get()[0]) != 0;
     else if (extension == "jpg" || extension == "jpeg")
-        return stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, &data[0], 100) != 0;
+        return stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, &pixels.get()[0], 100) != 0;
     else
         throw invalid_argument(fmt::format("Could not determine desired file type from extension \"{}\".", extension));
 }

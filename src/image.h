@@ -326,6 +326,11 @@ public:
     /// This is just a wrapper, it opens a file stream and loads the image using the stream-based load function above.
     static std::vector<ImagePtr> load(const std::string &filename);
 
+    /// Output the selected group of channels as an LDR image and store the width, height and number of channels in the
+    /// w, h, n pointers
+    std::unique_ptr<uint8_t[]> as_ldr(int *w, int *h, int *n, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
+                                      bool dither = true) const;
+
     /**
         Write the image to the output stream.
 

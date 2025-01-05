@@ -14,5 +14,4 @@
 
 bool                  is_exr_image(std::istream &is, const std::string &filename) noexcept;
 std::vector<ImagePtr> load_exr_image(std::istream &is, const std::string &filename);
-bool                  save_exr_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f,
-                                     float gamma = 2.2f, bool sRGB = true, bool dither = true);
+bool                  save_exr_image(const Image &img, std::ostream &os, const std::string &filename);
