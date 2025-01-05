@@ -14,10 +14,13 @@
 #include "fwd.h"
 #include "scheduler.h"
 #include <cfloat>
+#include <half.h>
 #include <map>
 #include <set>
 #include <string>
 #include <vector>
+
+#include "dithermatrix256.h"
 
 inline double axis_scale_fwd_xform(double value, void *user_data)
 {
@@ -133,19 +136,53 @@ public:
     Channel() = delete;
     Channel(const std::string &name, int2 size);
 
+    static float dequantize(float v, int x, int y, bool linearize = true, bool dither = true)
+    {
+        int   xmod = x % g_dither_matrix_w;
+        int   ymod = y % g_dither_matrix_w;
+        float d    = dither ? (g_dither_matrix[xmod + ymod * g_dither_matrix_w] + 0.5f) * g_dither_matrix_f : 0.5f;
+        // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
+        float dithered = ((v * 255.f) + d) / 256.0f;
+        return linearize ? SRGBToLinear(dithered) : dithered;
+    }
+
+    template <typename Func>
+    void apply(Func &&func)
+    {
+        size_t block_size = std::max(1u, 1024u * 1024u / width());
+        parallel_for(blocked_range<int>(0, height(), block_size),
+                     [this, &func](int begin_y, int end_y, int unit_index, int thread_index)
+                     {
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < width(); ++x)
+                                 this->operator()(x, y) = func(this->operator()(x, y), x, y);
+                     });
+    }
+
     /*!
         Copy the data from the provided float array into this channel.
 
-        \param data The float array to copy from, with each value in [0.f,255.f]
-        \param w The width of the data
-        \param h The height of the data
-        \param n The number of channels in the data
-        \param c The channel index to copy from the data
-        \param linearize Whether the data is in sRGB format and should be linearize while copying
-        \param dither Whether to add dithering noise to the data while copying
+        \tparam         T The type of the data array
+        \param data     The array to copy from
+        \param w        The width of the data
+        \param h        The height of the data
+        \param n        The number of channels in the data
+        \param c        The channel index to copy from the data
+        \param func     A function that converts the data to a float
+        \param y_stride The stride between rows in the data array. If 0, it is assumed to be equal to w * n
     */
-    void copy_from_interleaved(const float data[], int w, int h, int n, int c, bool linearize = false,
-                               bool dither = true);
+    template <typename T, typename Func>
+    void copy_from_interleaved(const T data[], int w, int h, int n, int c, Func &&func, int y_stride = 0)
+    {
+        y_stride          = y_stride == 0 ? w * n : y_stride;
+        size_t block_size = std::max(1u, 1024u * 1024u / w);
+        parallel_for(blocked_range<int>(0, h, block_size),
+                     [this, n, c, w, &func, &data, y_stride](int begin_y, int end_y, int unit_index, int thread_index)
+                     {
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < w; ++x) this->operator()(x, y) = func(data[n * x + c + y * y_stride]);
+                     });
+    }
 
     Texture *get_texture();
 

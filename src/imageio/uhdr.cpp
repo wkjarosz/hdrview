@@ -161,24 +161,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     auto image      = make_shared<Image>(size, 4);
     image->filename = filename;
 
-    size_t block_size = std::max(1u, 1024u * 1024u / decoded_image->w);
-    parallel_for(blocked_range<int>(0, decoded_image->h, block_size),
-                 [&image, decoded_image](int begin_y, int end_y, int unit_index, int thread_index)
-                 {
-                     auto data = reinterpret_cast<char *>(decoded_image->planes[UHDR_PLANE_PACKED]);
-                     for (int y = begin_y; y < end_y; ++y)
-                     {
-                         auto scanline =
-                             reinterpret_cast<half *>(data + y * decoded_image->stride[UHDR_PLANE_PACKED] * 8);
-                         for (unsigned x = 0; x < decoded_image->w; ++x)
-                         {
-                             image->channels[0](x, y) = scanline[x * 4 + 0];
-                             image->channels[1](x, y) = scanline[x * 4 + 1];
-                             image->channels[2](x, y) = scanline[x * 4 + 2];
-                             image->channels[3](x, y) = scanline[x * 4 + 3];
-                         }
-                     }
-                 });
+    {
+        auto  half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]);
+        int   stride_y  = decoded_image->stride[UHDR_PLANE_PACKED] * 4;
+        Timer timer;
+        for (int c = 0; c < 4; ++c)
+        {
+            image->channels[c].copy_from_interleaved(
+                half_data, decoded_image->w, decoded_image->h, 4, c, [](half v) { return (float)v; }, stride_y);
+            image->channels[c].apply([](float v, int x, int y) { return Channel::dequantize(v, x, y, false, true); });
+        }
+        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+    }
 
     // HDRView assumes the Rec 709 primaries/gamut. Set the matrix to convert to it
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
@@ -220,26 +214,19 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     if (num_components == 4)
         image->channels.emplace_back("gainmap.A", size);
 
-    block_size = std::max(1u, 1024u * 1024u / gainmap->w);
-    parallel_for(blocked_range<int>(0, gainmap->h, block_size),
-                 [&image, gainmap, num_components](int begin_y, int end_y, int unit_index, int thread_index)
-                 {
-                     // gainmap->planes contains interleaved, 8bit grainmap channels
-                     auto data = reinterpret_cast<uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
-                     // Copy a block of values into each of the separate channels in image
-                     for (int y = begin_y; y < end_y; ++y)
-                     {
-                         auto scanline = reinterpret_cast<uint8_t *>(data + y * gainmap->stride[UHDR_PLANE_PACKED] *
-                                                                                num_components);
-                         for (unsigned x = 0; x < gainmap->w; ++x)
-                             for (int c = 0; c < num_components; ++c)
-                             {
-                                 uint8_t v                    = scanline[x * num_components + c];
-                                 float   d                    = 0.5f;
-                                 image->channels[4 + c](x, y) = SRGBToLinear((v + d) / 256.0f);
-                             }
-                     }
-                 });
+    {
+        auto  byte_data = reinterpret_cast<uint8_t *>(gainmap->planes[UHDR_PLANE_PACKED]);
+        int   stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
+        Timer timer;
+        for (int c = 0; c < num_components; ++c)
+        {
+            image->channels[4 + c].copy_from_interleaved(
+                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return v / 255.f; }, stride_y);
+            image->channels[4 + c].apply([](float v, int x, int y)
+                                         { return Channel::dequantize(v, x, y, true, true); });
+        }
+        spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
+    }
 
     // resize the data in the channels if necessary
     if (gainmap_size.x < size.x && gainmap_size.y < size.y)

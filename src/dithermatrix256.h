@@ -8,7 +8,7 @@
 #pragma once
 
 static constexpr int   g_dither_matrix_w = 256;
-static constexpr int   g_dither_matrix_f = 1.f / (g_dither_matrix_w * g_dither_matrix_w);
+static constexpr float g_dither_matrix_f = 1.f / (g_dither_matrix_w * g_dither_matrix_w);
 static constexpr float g_dither_matrix[g_dither_matrix_w * g_dither_matrix_w] = {
     23095, 38725, 19697, 43107, 30053, 36034, 21940, 42128, 29348, 37954, 19282, 41252, 58370, 24633, 53615, 18619,
     38935, 14950, 44634, 23276, 37482, 2973,  51925, 9846,  39682, 8095,  59905, 12610, 53310, 25724, 42248, 19216,

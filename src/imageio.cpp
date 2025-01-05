@@ -25,8 +25,6 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 
-#include "dithermatrix256.h"
-
 #include "imageio/pfm.h"
 #include "imageio/stb.h"
 #include "imageio/uhdr.h"
@@ -163,26 +161,6 @@ static vector<ImagePtr> load_exr_image(StdIStream &is, const string &filename)
 
 //
 // end static location functions
-
-void Channel::copy_from_interleaved(const float data[], int w, int h, int n, int c, bool linearize, bool dither)
-{
-    parallel_for(blocked_range<int>(0, h),
-                 [this, n, c, w, &data, linearize, dither](int y, int, int, int)
-                 {
-                     for (int x = 0; x < w; ++x)
-                     {
-                         int   xmod = x % 256;
-                         int   ymod = y % 256;
-                         float d    = dither
-                                          ? (g_dither_matrix[xmod + ymod * g_dither_matrix_w] + 0.5f) * g_dither_matrix_f
-                                          : 0.5f;
-                         int   i    = x + y * w;
-                         float v    = data[n * i + c];
-                         // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
-                         this->data()[i] = linearize ? SRGBToLinear(((v * 255.f) + d) / 256.0f) : v;
-                     }
-                 });
-}
 
 vector<ImagePtr> Image::load(istream &is, const string &filename)
 {

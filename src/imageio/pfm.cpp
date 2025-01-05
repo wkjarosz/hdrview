@@ -146,7 +146,8 @@ vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
 
         Timer timer;
         for (int c = 0; c < size.z; ++c)
-            image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c, false);
+            image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
+                                                     [](float v) { return v; });
         spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
         return {image};
     }
