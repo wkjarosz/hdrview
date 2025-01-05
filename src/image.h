@@ -1,5 +1,5 @@
 //
-// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
@@ -132,6 +132,20 @@ public:
 
     Channel() = delete;
     Channel(const std::string &name, int2 size);
+
+    /*!
+        Copy the data from the provided float array into this channel.
+
+        \param data The float array to copy from, with each value in [0.f,255.f]
+        \param w The width of the data
+        \param h The height of the data
+        \param n The number of channels in the data
+        \param c The channel index to copy from the data
+        \param linearize Whether the data is in sRGB format and should be linearize while copying
+        \param dither Whether to add dithering noise to the data while copying
+    */
+    void copy_from_interleaved(const float data[], int w, int h, int n, int c, bool linearize = false,
+                               bool dither = true);
 
     Texture *get_texture();
 

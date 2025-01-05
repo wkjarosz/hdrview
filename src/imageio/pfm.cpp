@@ -1,10 +1,13 @@
 //
-// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
 
 #include "pfm.h"
+#include "image.h"
+#include "texture.h"
+#include "timer.h"
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -108,8 +111,7 @@ unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *wid
 
         // skip last newline at the end of the header.
         char c;
-        while (is.get(c) && c != '\r' && c != '\n')
-            ;
+        while (is.get(c) && c != '\r' && c != '\n');
 
         // Read the rest of the file
         is.read(reinterpret_cast<char *>(data.get()), num_bytes);
@@ -118,8 +120,7 @@ unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *wid
                 fmt::format("load_pfm_image: Expected {} bytes, but could only read {} bytes", is.gcount(), num_bytes)};
 
         // multiply data by scale factor
-        for (size_t i = 0; i < num_floats; ++i)
-            data[i] = scale * reinterpret_as_host_endian(data[i], big_endian);
+        for (size_t i = 0; i < num_floats; ++i) data[i] = scale * reinterpret_as_host_endian(data[i], big_endian);
 
         return data;
     }
@@ -133,6 +134,24 @@ unique_ptr<float[]> load_pfm_image(const string &filename, int *width, int *heig
 {
     std::ifstream is{filename, std::ios_base::binary};
     return load_pfm_image(is, filename, width, height, num_channels);
+}
+
+vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
+{
+    int3 size;
+    if (auto float_data = load_pfm_image(is, filename, &size.x, &size.y, &size.z))
+    {
+        auto image      = make_shared<Image>(size.xy(), size.z);
+        image->filename = filename;
+
+        Timer timer;
+        for (int c = 0; c < size.z; ++c)
+            image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c, false);
+        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+        return {image};
+    }
+    else
+        throw invalid_argument("Could not load PFM image.");
 }
 
 void write_pfm_image(ostream &os, const string &filename, int width, int height, int num_channels, const float data[])

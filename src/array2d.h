@@ -1,5 +1,5 @@
 //
-// Copyright (C) Wojciech Jarosz <wjarosz@gmail.com>. All rights reserved.
+// Copyright (C) Wojciech Jarosz. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can
 // be found in the LICENSE.txt file.
 //
@@ -99,8 +99,7 @@ inline void Array2D<T>::resize(int2 size, const T &value)
 template <typename T>
 inline void Array2D<T>::reset(const T &value)
 {
-    for (int i = 0; i < num_elements(); ++i)
-        m_data[i] = value;
+    for (int i = 0; i < num_elements(); ++i) m_data[i] = value;
 }
 
 template <typename T>

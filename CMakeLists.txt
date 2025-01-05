@@ -443,6 +443,9 @@ endif()
 hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  src/imageio/pfm.cpp
+  src/imageio/stb.cpp
+  src/imageio/uhdr.cpp
   src/app.cpp
   src/colorspace.cpp
   src/common.cpp
@@ -452,8 +455,6 @@ hello_imgui_add_app(
   src/imageio.cpp
   src/imgui_ext.cpp
   src/image_gui.cpp
-  src/pfm.cpp
-  src/parallelfor.cpp
   src/progress.cpp
   src/opengl_check.cpp
   src/scheduler.cpp
@@ -466,7 +467,7 @@ hello_imgui_add_app(
   ASSETS_LOCATION
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
-
+target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 # add_dependencies(HDRView gen_version_h_target) target_sources(HDRView PRIVATE
 # ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
