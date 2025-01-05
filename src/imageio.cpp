@@ -346,7 +346,7 @@ static vector<ImagePtr> load_uhdr_image(std::istream &is, const string &filename
     }
 
     uhdr_raw_image_t *gainmap = uhdr_get_decoded_gainmap_image(decoder.get()); // freed by decoder destructor
-    int2              gainmap_size{gainmap->w, gainmap->h};
+    int2              gainmap_size(gainmap->w, gainmap->h);
 
     spdlog::debug("UltraHDR: gainmap image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", gainmap->w, gainmap->h,
                   gainmap->stride[UHDR_PLANE_PACKED], (int)gainmap->cg, (int)gainmap->ct, (int)gainmap->range);
