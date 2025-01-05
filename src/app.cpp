@@ -3173,8 +3173,7 @@ void HDRViewApp::draw_about_dialog()
                                          "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
                                          "https://github.com/samhocevar/portable-file-dialogs");
 #endif
-                    item_and_description("stb_image/write/resize",
-                                         "Single-Header libraries for loading/writing/resizing images.",
+                    item_and_description("stb_image/write", "Single-Header libraries for loading/writing images.",
                                          "https://github.com/nothings/stb");
                     item_and_description("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");

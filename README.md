@@ -5,7 +5,7 @@ Master branch:
 [![Linux build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-linux.yml)
 [![Windows build](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml/badge.svg?branch=master)](https://github.com/wkjarosz/hdrview/actions/workflows/ci-windows.yml)
 
-HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images. HDRView currently supports reading EXR, PNG, TGA, BMP, HDR, JPG, GIF, PNM, PFM, and PSD images and writing EXR, HDR, PNG, TGA, PPM, PFM, and BMP images.
+HDRView is a simple research-oriented high-dynamic range image viewer with an emphasis on examining and comparing images. HDRView currently supports reading (EXR, HDR, PFM, and Ultra HDR JPEG) and writing (EXR, HDR, PFM) several HDR image formats, as well as reading (PNG, TGA, BMP, JPG, GIF, PNM, and PSD) and writing (PNG, TGA, PPM, PFM, and BMP) standard LDR images.
 
 HDRView can display images in true HDR on Apple extended dynamic range (EDR) and 10-bit displays.
 
@@ -52,14 +52,18 @@ Compiling should be as simple as:
 
 On macOS and Linux you can add `-G Ninja` to line 4 (on Windows Ninja fails to build the OpenEXR dependency).
 
+To support Ultra HDE JPEG images, you will either need to have libjpeg-turbo installed, or pass the option `DHDRVIEW_BUILD_UHDR_DEPS=ON` in line 4.
+
 Alternatively, you should be able to do all this via VS Code if you have the CMake extension set up properly.
 
 Or, you can start via ``cmake-gui`` if you prefer. Run ``Configure`` and select your desired build system. Then click ``Generate``. Then open the solution/project/makefile in your IDE of choice.
 
 ## Installation
-On Windows you should be able to just copy the `HDRView.exe` to wherever you want.
+On macOS you can just copy the `HDRView.app` bundle to your `/Applications` folder. 
 
-On macOS you can just copy the `HDRView.app` bundle to your `/Applications` folder. Recent version of macOS will complain that the app is unsigned and from an unknown developer. You will need to go to the Security and Privacy part of system Settings to allow the app to run.
+On Windows you'll need to copy `HDRView.exe` together with the accompanying `assets` folder to your desired installation location.
+
+Recent version of macOS will complain that the app is unsigned and from an unknown developer. You will need to go to the Security and Privacy part of system Settings to allow the app to run.
 
 ## Running from the terminal
 

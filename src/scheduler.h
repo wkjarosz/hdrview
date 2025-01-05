@@ -27,10 +27,10 @@
 // - Tasks now store an exception which is re-thrown in TaskTracker::wait()
 // - Added ready() function to TaskTracker
 // - Added various wrapper/utility templates (parallel_for, blocked_range, do_async) which provide a simpler,
-//   higher-level API and allow creating tasks with lambdas containing captures Fixed a few type inconsistencies (mixing
-//   uint32_t with int)
-// - fixed minor spelling mistakes
-// - converted to snake_casing, and added some more comments.
+//   higher-level API and allow creating tasks with lambdas containing captures.
+// - Fixed a few type inconsistencies (mixing uint32_t with int)
+// - Fixed minor spelling mistakes
+// - Converted to snake_casing, and added some more comments.
 //
 
 // scheduler.h

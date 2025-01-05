@@ -14,6 +14,11 @@ project(
   LANGUAGES C CXX
 )
 
+# By default, we install in a portable way (i.e. assets and executable are in the same folder)
+option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
+
+option(HDRVIEW_BUILD_UHDR_DEPS "Build the dependencies for libultrahdr" OFF)
+
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
   COMMAND ${CMAKE_COMMAND} -D SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}/src -D BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}/src -D
@@ -375,12 +380,11 @@ CPMAddPackage(
           "UHDR_BUILD_TESTS OFF"
           "UHDR_BUILD_BENCHMARK OFF"
           "UHDR_BUILD_FUZZERS OFF"
-          "UHDR_BUILD_DEPS ON"
+          "UHDR_BUILD_DEPS ${HDRVIEW_BUILD_UHDR_DEPS}"
           "UHDR_ENABLE_INSTALL OFF"
 )
 if(libultrahdr_ADDED)
-  message(STATUS "libultrahdr library added")
-  # target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
+  message(STATUS "libultrahdr library added with UHDR_BUILD_DEPS=${HDRVIEW_BUILD_UHDR_DEPS}")
 endif()
 
 CPMAddPackage(
@@ -427,9 +431,6 @@ set(HELLO_IMGUI_BUNDLE_EXECUTABLE ${output_name})
 set(HELLO_IMGUI_BUNDLE_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_SHORT_VERSION ${VERSION})
 set(HELLO_IMGUI_BUNDLE_ICON_FILE icon.icns)
-
-# By default, we install in a portable way (i.e. assets and executable are in the same folder)
-option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 
 if(NOT HDRVIEW_PORTABLE_INSTALL)
   # Disable HelloImGui default install behavior
