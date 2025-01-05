@@ -7,8 +7,7 @@
 
 #pragma once
 
-static constexpr int   g_dither_matrix_w = 256;
-static constexpr float g_dither_matrix_f = 1.f / (g_dither_matrix_w * g_dither_matrix_w);
+static constexpr int   g_dither_matrix_w                                      = 256;
 static constexpr float g_dither_matrix[g_dither_matrix_w * g_dither_matrix_w] = {
     23095, 38725, 19697, 43107, 30053, 36034, 21940, 42128, 29348, 37954, 19282, 41252, 58370, 24633, 53615, 18619,
     38935, 14950, 44634, 23276, 37482, 2973,  51925, 9846,  39682, 8095,  59905, 12610, 53310, 25724, 42248, 19216,
@@ -4106,3 +4105,21 @@ static constexpr float g_dither_matrix[g_dither_matrix_w * g_dither_matrix_w] = 
     29683, 64950, 17621, 55169, 30200, 58522, 24607, 42537, 60723, 13246, 53042, 7762,  21424, 37336, 28017, 51435,
     1983,  39849, 54857, 25126, 3365,  63593, 31499, 57445, 27704, 33480, 50201, 29665, 53652, 23291, 55564, 28896,
     59909, 17693, 56824, 21346, 2122,  64927, 44829, 13439, 52048, 1139,  58122, 14319, 65331, 3297,  56517, 9169};
+
+/// Zero-mean dither uniformly distributed in range [-0.5, 0.5]
+inline float box_dither(int x, int y)
+{
+    static constexpr float dither_matrix_f = 1.f / (g_dither_matrix_w * g_dither_matrix_w);
+    int                    xmod            = x % g_dither_matrix_w;
+    int                    ymod            = y % g_dither_matrix_w;
+    return g_dither_matrix[xmod + ymod * g_dither_matrix_w] * dither_matrix_f - 0.5f;
+}
+
+/// Zero-mean dither with a triangle-shaped distribution in range [-1.0,1.0]
+inline float tent_dither(int x, int y)
+{
+    float r = box_dither(x, y);
+
+    // Convert uniform distribution into triangle-shaped distribution
+    return (r < 0.0) ? sqrtf(2.f * r + 1.f) - 1.f : sqrtf(2.f * r);
+}

@@ -80,9 +80,6 @@ vec4 tonemap(vec4 color)
     return vec4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma)), color.a);
 }
 
-// note: uniformly distributed, normalized rand, [0;1[
-float nrand(vec2 n) { return fract(sin(dot(n.xy, vec2(12.9898, 78.233))) * 43758.5453); }
-
 float rand_box(vec2 xy)
 {
     // Result is in range [-0.5, 0.5]

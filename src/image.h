@@ -138,9 +138,7 @@ public:
 
     static float dequantize(float v, int x, int y, bool linearize = true, bool dither = true)
     {
-        int   xmod = x % g_dither_matrix_w;
-        int   ymod = y % g_dither_matrix_w;
-        float d    = dither ? (g_dither_matrix[xmod + ymod * g_dither_matrix_w] + 0.5f) * g_dither_matrix_f : 0.5f;
+        float d = dither ? tent_dither(x, y) + 0.5f : 0.5f;
         // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
         float dithered = ((v * 255.f) + d) / 256.0f;
         return linearize ? SRGBToLinear(dithered) : dithered;

@@ -147,12 +147,7 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
                  {
                      for (int x = 0; x < w; ++x)
                      {
-                         int   xmod = x % 256;
-                         int   ymod = y % 256;
-                         float d    = dither
-                                          ? (g_dither_matrix[xmod + ymod * g_dither_matrix_w] * g_dither_matrix_f - 0.5f) /
-                                             255.0f
-                                          : 0.f;
+                         float d = dither ? (tent_dither(x, y)) / 255.0f : 0.f;
 
                          for (int c = 0; c < n; ++c)
                          {

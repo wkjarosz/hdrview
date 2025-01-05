@@ -64,7 +64,7 @@ void Image::make_default_textures()
                                                  Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32,
-                                                 int2{256, 256}, Texture::InterpolationMode::Nearest,
+                                                 int2{g_dither_matrix_w}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
