@@ -173,7 +173,9 @@ void Channel::copy_from_interleaved(const float data[], int w, int h, int n, int
                      {
                          int   xmod = x % 256;
                          int   ymod = y % 256;
-                         float d    = dither ? (dither_matrix256[xmod + ymod * 256] + 0.5f) / 65536.f : 0.5f;
+                         float d    = dither
+                                          ? (g_dither_matrix[xmod + ymod * g_dither_matrix_w] + 0.5f) * g_dither_matrix_f
+                                          : 0.5f;
                          int   i    = x + y * w;
                          float v    = data[n * i + c];
                          // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/

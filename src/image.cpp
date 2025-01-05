@@ -68,7 +68,7 @@ void Image::make_default_textures()
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
-    s_dither_texture->upload((const uint8_t *)dither_matrix256);
+    s_dither_texture->upload((const uint8_t *)g_dither_matrix);
 }
 
 void Image::cleanup_default_textures()
