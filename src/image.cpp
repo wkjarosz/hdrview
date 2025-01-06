@@ -18,6 +18,7 @@
 
 #include <ImfChromaticities.h>
 #include <ImfRgbaYca.h>
+#include <ImfStandardAttributes.h>
 
 #include "Imath_to_linalg.h"
 
@@ -630,6 +631,24 @@ void Image::finalize()
             throw runtime_error{
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
+
+    // get color correction info from the header
+    if (Imf::hasChromaticities(header))
+    {
+        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
+        spdlog::debug("Yw = {}", luminance_weights);
+    }
+
+    static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
+    Imath::M44f                      M;
+    if (color_conversion_matrix(M, header, rec709_cr))
+    {
+        M_to_Rec709 = to_linalg(M);
+        // img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(rec709_cr));
+        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
+        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
+        spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
+    }
 
     build_layers_and_groups();
 

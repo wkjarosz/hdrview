@@ -522,6 +522,16 @@ void Image::draw_info()
                                display_window.min.y, display_window.max.y),
                    sans_font);
 
+    if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
+    {
+        auto &chr = attrib->value();
+        property_name("Chromaticities:");
+        string chr_text = fmt::format(
+            "R primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, {})\nWhitepoint: ({}, {})", chr.red.x, chr.red.y,
+            chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
+        property_value(chr_text, mono_font);
+    }
+
     property_name("Luminance weights:");
     if (luminance_weights != Image::Rec709_luminance_weights)
         property_value(

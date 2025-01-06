@@ -12,13 +12,11 @@
 #include "timer.h"
 #include <ImfChannelList.h>
 #include <ImfChannelListAttribute.h>
-#include <ImfChromaticities.h>
 #include <ImfFrameBuffer.h>
 #include <ImfHeader.h>
 #include <ImfInputPart.h>
 #include <ImfMultiPartInputFile.h>
 #include <ImfOutputFile.h>
-#include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <fstream>
@@ -117,23 +115,6 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
             int subsampled_width = size.x / xs;
             for (int y = 0; y < size.y; ++y)
                 for (int x = 0; x < size.x; ++x) img.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
-        }
-
-        if (Imf::hasChromaticities(img.header))
-        {
-            img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(img.header)));
-            spdlog::debug("Yw = {}", img.luminance_weights);
-        }
-
-        static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
-        Imath::M44f                      M;
-        if (color_conversion_matrix(M, img.header, rec709_cr))
-        {
-            img.M_to_Rec709 = to_linalg(M);
-            // img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(rec709_cr));
-            img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(img.header)));
-            spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
-            spdlog::debug("M_to_Rec709 = {}", img.M_to_Rec709);
         }
     }
     return images;

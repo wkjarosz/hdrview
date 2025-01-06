@@ -18,6 +18,10 @@
 #include <iostream>
 #include <stdexcept>
 
+#include <ImfHeader.h>
+#include <ImfRgbaYca.h>
+#include <ImfStandardAttributes.h>
+
 #include "ultrahdr_api.h"
 
 using namespace std;
@@ -27,15 +31,33 @@ using namespace std;
 // Sample, See,
 // https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html#_bt_709_bt_2020_primary_conversion_example
 
-static constexpr float4x4 kP3ToBt709{{1.22494f, -0.042057f, -0.019638f, 0.f},
-                                     {-0.22494f, 1.042057f, -0.078636f, 0.f},
-                                     {0.0f, 0.0f, 1.098274f, 0.f},
-                                     {0.0f, 0.0f, 0.f, 1.f}};
+static const Imf::Chromaticities BT_709_chr{};
+static const Imf::Chromaticities Display_P3_chr{
+    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
+static const Imf::Chromaticities BT_2100_chr{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
 
-static constexpr float4x4 kBt2100ToBt709{{1.660491f, -0.124551f, -0.018151f, 0.f},
-                                         {-0.587641f, 1.1329f, -0.100579f, 0.f},
-                                         {-0.07285f, -0.008349f, 1.11873f, 0.f},
-                                         {0.0f, 0.0f, 0.f, 1.f}};
+static const Imath::M44f Display_P3_to_BT_709 = Imf::RGBtoXYZ(Display_P3_chr, 1) * Imf::XYZtoRGB(BT_709_chr, 1);
+static const Imath::M44f BT_2100_to_BT_709    = Imf::RGBtoXYZ(BT_2100_chr, 1) * Imf::XYZtoRGB(BT_709_chr, 1);
+
+static const Imath::V3f BT_709_luminance     = Imf::RgbaYca::computeYw(BT_709_chr);
+static const Imath::V3f Display_P3_luminance = Imf::RgbaYca::computeYw(Display_P3_chr);
+static const Imath::V3f BT2100_luminance     = Imf::RgbaYca::computeYw(BT_2100_chr);
+
+static uhdr_color_gamut cg_from_chr(const Imf::Header &header)
+{
+    if (auto a = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
+    {
+        auto chr = a->value();
+        if (chr == BT_709_chr)
+            return UHDR_CG_BT_709;
+        if (chr == Display_P3_chr)
+            return UHDR_CG_DISPLAY_P3;
+        if (chr == BT_2100_chr)
+            return UHDR_CG_BT_2100;
+    }
+
+    return UHDR_CG_UNSPECIFIED;
+}
 
 bool is_uhdr_image(istream &is)
 {
@@ -176,17 +198,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     // HDRView assumes the Rec 709 primaries/gamut. Set the matrix to convert to it
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
     {
-        image->M_to_Rec709 = kP3ToBt709;
+        Imf::addChromaticities(image->header, Display_P3_chr);
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Display P3.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_2100)
     {
-        image->M_to_Rec709 = kBt2100ToBt709;
+        Imf::addChromaticities(image->header, BT_2100_chr);
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Rec. 2100.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_709)
     {
-        // no conversion necessary
+        // insert into the header, but no conversion necessary since HDRView uses BT 709 internally
+        Imf::addChromaticities(image->header, BT_709_chr);
     }
     else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)
         spdlog::warn("No color gamut specified. Assuming Rec. 709/sRGB primaries and whitepoint.");
@@ -263,9 +286,6 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
 
-    const Channel *R = &img.channels[group.channels[0]];
-    const Channel *G = &img.channels[group.channels[1]];
-    const Channel *B = &img.channels[group.channels[2]];
     const Channel *A = n > 3 ? &img.channels[group.channels[3]] : nullptr;
 
     // get interleaved HDR pixel data
@@ -278,21 +298,15 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
         // could just rewrite as a manual loop over the 3-4 channels
         for (int c = 0; c < 3; ++c)
         {
-            img.channels[group.channels[c]].copy_to_interleaved(
-                pixels.get(), n, c,
-                [R, G, B, A, c, M = img.M_to_Rec709](float v, int x, int y)
-                {
-                    float4 value{(*R)(x, y), (*G)(x, y), (*B)(x, y), 1.f};
-                    if (A)
-                        value.w = (*A)(x, y);
+            img.channels[group.channels[c]].copy_to_interleaved(pixels.get(), n, c,
+                                                                [A](float v, int x, int y)
+                                                                {
+                                                                    // unpremultiply
+                                                                    if (A && (*A)(x, y) != 0.f)
+                                                                        v /= (*A)(x, y);
 
-                    v = mul(M, value)[c];
-
-                    // unpremultiply
-                    if (value.w != 0.f)
-                        v /= value.w;
-                    return (half)v;
-                });
+                                                                    return (half)v;
+                                                                });
         }
         // copy the alpha channel straight through
         if (A)
@@ -312,7 +326,7 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
 
     uhdr_raw_image_t raw_image{
         UHDR_IMG_FMT_64bppRGBAHalfFloat,  /**< Image Format */
-        UHDR_CG_BT_709,                   /**< Color Gamut */
+        cg_from_chr(img.header),          /**< Color Gamut */
         UHDR_CT_LINEAR,                   /**< Color Transfer */
         UHDR_CR_FULL_RANGE,               /**< Color Range */
         (unsigned)w,                      /**< Stored image width */
