@@ -11,6 +11,24 @@
 #include <string>
 #include <vector>
 
+#include <ImathMatrix.h>
+#include <ImfHeader.h>
+
+/*!
+    Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
+
+    Adapted from AcesInputFile::Data::initColorConversion.
+    See also http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
+
+    \param[out] M   Conversion matrix
+    \param      src Source file header
+    \param      dst Destination chromaticities
+    \param bradford Whether to include Bradford adaptation in the matrix
+    \returns        True if color conversion is needed, in which case M will contain the conversion matrix.
+*/
+bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst,
+                             bool bradford = false);
+
 /*!
  * @brief		Generic color space conversion
  *

@@ -8,6 +8,10 @@
 #include "common.h"
 #include <cmath>
 
+#include <ImfChromaticities.h>
+#include <ImfRgbaYca.h>
+#include <ImfStandardAttributes.h>
+
 namespace
 {
 const float eps   = 216.0f / 24389.0f;
@@ -26,6 +30,90 @@ const float maxLab[] = {100, 128, 128};
 } // namespace
 
 using namespace std;
+
+bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst, bool bradford)
+{
+    using namespace Imath;
+    using namespace Imf;
+    Chromaticities src_chr;
+
+    if (hasChromaticities(src))
+        src_chr = chromaticities(src);
+
+    V2f src_neutral = src_chr.white;
+
+    if (hasAdoptedNeutral(src))
+    {
+        src_neutral   = adoptedNeutral(src);
+        src_chr.white = src_neutral; // for RGBtoXYZ() purposes.
+    }
+
+    V2f dst_neutral = dst.white;
+
+    if (src_chr == dst)
+    {
+        // The file already contains data in the target colorspace.
+        // color conversion is not necessary.
+        M = M44f{};
+        return false;
+    }
+
+    //
+    // Create a matrix that transforms colors from the
+    // RGB space of the input file into the target space
+    // using a color adaptation transform to move the
+    // white point.
+    //
+
+    M44f bradford_trans{};
+    if (bradford)
+    {
+
+        //
+        // We'll need the Bradford cone primary matrix and its inverse
+        //
+
+        static constexpr M44f bradford_CPM{0.895100f,  -0.750200f, 0.038900f,  0.000000f, //
+                                           0.266400f,  1.713500f,  -0.068500f, 0.000000f, //
+                                           -0.161400f, 0.036700f,  1.029600f,  0.000000f, //
+                                           0.000000f,  0.000000f,  0.000000f,  1.000000f};
+
+        static constexpr M44f inv_bradford_CPM{0.986993f,  0.432305f, -0.008529f, 0.000000f, //
+                                               -0.147054f, 0.518360f, 0.040043f,  0.000000f, //
+                                               0.159963f,  0.049291f, 0.968487f,  0.000000f, //
+                                               0.000000f,  0.000000f, 0.000000f,  1.000000f};
+
+        //
+        // Convert the white points of the two RGB spaces to XYZ
+        //
+
+        float fx = src_neutral.x;
+        float fy = src_neutral.y;
+        V3f   src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
+
+        float ax = dst_neutral.x;
+        float ay = dst_neutral.y;
+        V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
+
+        //
+        // Compute the Bradford transformation matrix
+        //
+
+        V3f ratio((dst_neutral_XYZ * bradford_CPM) / (src_neutral_XYZ * bradford_CPM));
+
+        M44f ratio_mat(ratio[0], 0, 0, 0, 0, ratio[1], 0, 0, 0, 0, ratio[2], 0, 0, 0, 0, 1);
+
+        bradford_trans = bradford_CPM * ratio_mat * inv_bradford_CPM;
+    }
+
+    //
+    // Build a combined file-RGB-to-target-RGB conversion matrix
+    //
+
+    M = RGBtoXYZ(src_chr, 1) * bradford_trans * XYZtoRGB(dst, 1);
+
+    return true;
+}
 
 float3 YCToRGB(float3 input, float3 Yw)
 {

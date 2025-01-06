@@ -60,38 +60,38 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto &data  = *images.back();
-        data.header = part.header();
+        auto &img  = *images.back();
+        img.header = part.header();
 
-        for (auto a = begin(data.header); a != end(data.header); ++a) spdlog::debug("Attribute: {}", a.name());
+        for (auto a = begin(img.header); a != end(img.header); ++a) spdlog::debug("Attribute: {}", a.name());
 
-        if (part.header().hasName())
-            data.partname = part.header().name();
+        if (img.header.hasName())
+            img.partname = img.header.name();
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
-        data.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
-        data.display_window = {{displayWindow.min.x, displayWindow.min.y},
-                               {displayWindow.max.x + 1, displayWindow.max.y + 1}};
+        img.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
+        img.display_window = {{displayWindow.min.x, displayWindow.min.y},
+                              {displayWindow.max.x + 1, displayWindow.max.y + 1}};
 
-        if (data.data_window.is_empty())
+        if (img.data_window.is_empty())
             throw invalid_argument{fmt::format("EXR image has invalid data window: [{},{}] - [{},{}]",
-                                               data.data_window.min.x, data.data_window.min.y, data.data_window.max.x,
-                                               data.data_window.max.y)};
+                                               img.data_window.min.x, img.data_window.min.y, img.data_window.max.x,
+                                               img.data_window.max.y)};
 
-        if (data.display_window.is_empty())
+        if (img.display_window.is_empty())
             throw invalid_argument{fmt::format("EXR image has invalid display window: [{},{}] - [{},{}]",
-                                               data.display_window.min.x, data.display_window.min.y,
-                                               data.display_window.max.x, data.display_window.max.y)};
+                                               img.display_window.min.x, img.display_window.min.y,
+                                               img.display_window.max.x, img.display_window.max.y)};
 
-        const auto &channels = part.header().channels();
+        const auto &channels = img.header.channels();
 
         Imf::FrameBuffer framebuffer;
         for (auto c = channels.begin(); c != channels.end(); ++c)
         {
             string name = c.name();
 
-            data.channels.emplace_back(name, size);
-            framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, data.channels.back().data(), dataWindow, 0, 0,
+            img.channels.emplace_back(name, size);
+            framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img.channels.back().data(), dataWindow, 0, 0,
                                                           c.channel().xSampling, c.channel().ySampling));
         }
 
@@ -103,7 +103,7 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         // see https://github.com/AcademySoftwareFoundation/openexr/issues/1949
         // Until that is fixed in the next release, we are sticking with v3.2.4
         int i = 0;
-        for (auto c = part.header().channels().begin(); c != part.header().channels().end(); ++c, ++i)
+        for (auto c = img.header.channels().begin(); c != img.header.channels().end(); ++c, ++i)
         {
             int xs = c.channel().xSampling;
             int ys = c.channel().ySampling;
@@ -112,36 +112,28 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
 
             spdlog::warn("EXR channel '{}' is subsampled ({},{}). Only rudimentary subsampling is supported.", c.name(),
                          xs, ys);
-            Array2Df tmp = data.channels[i];
+            Array2Df tmp = img.channels[i];
 
             int subsampled_width = size.x / xs;
             for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) data.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
+                for (int x = 0; x < size.x; ++x) img.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
         }
 
-        if (Imf::hasWhiteLuminance(part.header()))
-            spdlog::debug("File has white luminance info.");
-        else
-            spdlog::debug("File does NOT have white luminance info.");
-
-        // If the file specifies a chromaticity attribute, we'll need to convert to sRGB/Rec709.
-        if (Imf::hasChromaticities(part.header()))
+        if (Imf::hasChromaticities(img.header))
         {
-            Imf::Chromaticities rec709_cr; // default rec709 (sRGB) primaries
-            Imf::Chromaticities file_cr = Imf::chromaticities(part.header());
+            img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(img.header)));
+            spdlog::debug("Yw = {}", img.luminance_weights);
+        }
 
-            if (file_cr != rec709_cr)
-            {
-                // This transforms from the file's RGB to Rec.709 RGB (via XYZ)
-                // Imath::M44f M    = Imf::RGBtoXYZ(file_cr, 1) * Imf::XYZtoRGB(rec709_cr, 1);
-                data.M_to_Rec709 = mul(to_linalg(Imf::XYZtoRGB(rec709_cr, 1)), to_linalg(Imf::RGBtoXYZ(file_cr, 1)));
-                spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
-            }
-
-            data.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(file_cr));
-
-            spdlog::debug("M_to_Rec709 = {}", data.M_to_Rec709);
-            spdlog::debug("Yw = {}", data.luminance_weights);
+        static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
+        Imath::M44f                      M;
+        if (color_conversion_matrix(M, img.header, rec709_cr))
+        {
+            img.M_to_Rec709 = to_linalg(M);
+            // img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(rec709_cr));
+            img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(img.header)));
+            spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
+            spdlog::debug("M_to_Rec709 = {}", img.M_to_Rec709);
         }
     }
     return images;
