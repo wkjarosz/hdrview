@@ -73,15 +73,15 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::
         // We'll need the Bradford cone primary matrix and its inverse
         //
 
-        static constexpr M44f bradford_CPM{0.895100f,  -0.750200f, 0.038900f,  0.000000f, //
-                                           0.266400f,  1.713500f,  -0.068500f, 0.000000f, //
-                                           -0.161400f, 0.036700f,  1.029600f,  0.000000f, //
-                                           0.000000f,  0.000000f,  0.000000f,  1.000000f};
+        static const M44f bradford_CPM{0.895100f,  -0.750200f, 0.038900f,  0.000000f, //
+                                       0.266400f,  1.713500f,  -0.068500f, 0.000000f, //
+                                       -0.161400f, 0.036700f,  1.029600f,  0.000000f, //
+                                       0.000000f,  0.000000f,  0.000000f,  1.000000f};
 
-        static constexpr M44f inv_bradford_CPM{0.986993f,  0.432305f, -0.008529f, 0.000000f, //
-                                               -0.147054f, 0.518360f, 0.040043f,  0.000000f, //
-                                               0.159963f,  0.049291f, 0.968487f,  0.000000f, //
-                                               0.000000f,  0.000000f, 0.000000f,  1.000000f};
+        static const M44f inv_bradford_CPM{0.986993f,  0.432305f, -0.008529f, 0.000000f, //
+                                           -0.147054f, 0.518360f, 0.040043f,  0.000000f, //
+                                           0.159963f,  0.049291f, 0.968487f,  0.000000f, //
+                                           0.000000f,  0.000000f, 0.000000f,  1.000000f};
 
         //
         // Convert the white points of the two RGB spaces to XYZ
