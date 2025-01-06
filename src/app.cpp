@@ -24,6 +24,7 @@
 #include "timer.h"
 #include "version.h"
 
+#include <ImfHeader.h>
 #include <ImfThreading.h>
 
 #include <spdlog/spdlog.h>
@@ -198,6 +199,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 #endif
 
     spdlog::debug("Setting global OpenEXR thread count to {}", threads);
+    Imf::staticInitialize();
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 
@@ -1559,9 +1561,9 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
     float4 color32         = img->raw_pixel(pixel, target);
     float4 displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
                                                hdrview()->gamma_live(), hdrview()->sRGB());
-    int4   ldr_color =
-        int4{float4{ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color))} * 255.f};
-    ImU32 hex = ImColor{float4{ldr_color}};
+    ImU32  hex =
+        ImGui::ColorConvertFloat4ToU32(ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color)));
+    int4 ldr_color = int4{float4{ImGui::ColorConvertU32ToFloat4(hex)} * 255.f};
 
     ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
     if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))

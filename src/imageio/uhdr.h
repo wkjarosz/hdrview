@@ -14,3 +14,4 @@
 
 bool                  is_uhdr_image(std::istream &is);
 std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filename);
+bool                  save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename);

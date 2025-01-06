@@ -175,7 +175,17 @@ bool save_exr_image(const Image &img, ostream &os_, const string &filename)
         auto dataWindow    = Imath::Box2i(Imath::V2i(img.data_window.min.x, img.data_window.min.y),
                                           Imath::V2i(img.data_window.max.x - 1, img.data_window.max.y - 1));
 
-        Imf::Header      header{displayWindow, dataWindow};
+        Imf::Header header{displayWindow, dataWindow};
+
+        header.setName(img.partname);
+
+        if (!img.comments.empty())
+            header.insert("comments", Imf::StringAttribute(img.comments));
+        if (!img.owner.empty())
+            header.insert("owner", Imf::StringAttribute(img.owner));
+        if (!img.capture_date.empty())
+            header.insert("capDate", Imf::StringAttribute(img.capture_date));
+
         Imf::FrameBuffer frameBuffer;
 
         for (int g = 0; g < (int)img.groups.size(); ++g)

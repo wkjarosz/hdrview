@@ -174,8 +174,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         background.rgb = float3(1.0);
     else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
     {
-        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.00630957 : 0.21763764;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.02899119 : 0.26840952;
         float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
         background.rgb = float3(checkerboard);
     }
@@ -211,8 +211,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = dither(tonemap(choose_channel(value, channel) * float4(float3(gain), 1.0), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
-    float4 blended = foreground + background*(1-foreground.a);
+    float4 foreground = choose_channel(value, channel) * float4(float3(gain), 1.0);
+    float4 blended = dither(tonemap(foreground + background*(1-foreground.a), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
     blended = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     return float4(blended.rgb, 1.0);
 }

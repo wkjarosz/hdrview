@@ -169,7 +169,6 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         {
             image->channels[c].copy_from_interleaved(
                 half_data, decoded_image->w, decoded_image->h, 4, c, [](half v) { return (float)v; }, stride_y);
-            image->channels[c].apply([](float v, int x, int y) { return Channel::dequantize(v, x, y, false, true); });
         }
         spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
     }
@@ -185,6 +184,12 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         image->M_to_Rec709 = kBt2100ToBt709;
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Rec. 2100.");
     }
+    else if (decoded_image->cg == UHDR_CG_BT_709)
+    {
+        // no conversion necessary
+    }
+    else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)
+        spdlog::warn("No color gamut specified. Assuming Rec. 709/sRGB primaries and whitepoint.");
 
     uhdr_raw_image_t *gainmap = uhdr_get_decoded_gainmap_image(decoder.get()); // freed by decoder destructor
     int2              gainmap_size(gainmap->w, gainmap->h);
@@ -222,8 +227,8 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         {
             image->channels[4 + c].copy_from_interleaved(
                 byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return v / 255.f; }, stride_y);
-            image->channels[4 + c].apply([](float v, int x, int y)
-                                         { return Channel::dequantize(v, x, y, true, true); });
+            image->channels[4 + c].apply([c](float v, int x, int y)
+                                         { return Channel::dequantize(v, x, y, c != 3, c != 3); });
         }
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
     }
@@ -245,4 +250,89 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     }
 
     return {image};
+}
+
+bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
+{
+    auto &group = img.groups[img.selected_group];
+
+    int w = img.size().x;
+    int h = img.size().y;
+    int n = group.num_channels;
+
+    if (n != 3 && n != 4)
+        throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
+
+    const Channel *R = &img.channels[group.channels[0]];
+    const Channel *G = &img.channels[group.channels[1]];
+    const Channel *B = &img.channels[group.channels[2]];
+    const Channel *A = n > 3 ? &img.channels[group.channels[3]] : nullptr;
+
+    // get interleaved HDR pixel data
+    std::unique_ptr<half[]> pixels(new half[w * h * n]);
+    {
+        Timer timer;
+
+        // unpremultiply and copy the color channels
+        // this code is a bit silly since it repeats the matrix multiply for each color channel
+        // could just rewrite as a manual loop over the 3-4 channels
+        for (int c = 0; c < 3; ++c)
+        {
+            img.channels[group.channels[c]].copy_to_interleaved(
+                pixels.get(), n, c,
+                [R, G, B, A, c, M = img.M_to_Rec709](float v, int x, int y)
+                {
+                    float4 value{(*R)(x, y), (*G)(x, y), (*B)(x, y), 1.f};
+                    if (A)
+                        value.w = (*A)(x, y);
+
+                    v = mul(M, value)[c];
+
+                    // unpremultiply
+                    if (value.w != 0.f)
+                        v /= value.w;
+                    return (half)v;
+                });
+        }
+        // copy the alpha channel straight through
+        if (A)
+            A->copy_to_interleaved(pixels.get(), n, 3, [](float v, int x, int y) { return v; });
+
+        spdlog::debug("Interleaving pixels took: {} seconds.", (timer.elapsed() / 1000.f));
+    }
+
+    auto throw_if_error = [](uhdr_error_info_t status)
+    {
+        if (status.error_code != UHDR_CODEC_OK)
+            throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
+    };
+
+    using Encoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
+    auto encoder  = Encoder{uhdr_create_encoder(), uhdr_release_encoder};
+
+    uhdr_raw_image_t raw_image{
+        UHDR_IMG_FMT_64bppRGBAHalfFloat,  /**< Image Format */
+        UHDR_CG_BT_709,                   /**< Color Gamut */
+        UHDR_CT_LINEAR,                   /**< Color Transfer */
+        UHDR_CR_FULL_RANGE,               /**< Color Range */
+        (unsigned)w,                      /**< Stored image width */
+        (unsigned)h,                      /**< Stored image height */
+        {pixels.get(), nullptr, nullptr}, /**< pointer to the top left pixel for each plane */
+        {(unsigned)w, 0u, 0u}             /**< stride in pixels between rows for each plane */
+    };
+
+    throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &raw_image, UHDR_HDR_IMG));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), 95, UHDR_BASE_IMG));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), 95, UHDR_GAIN_MAP_IMG));
+    throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), false));
+    throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), 1));
+    throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), 1.0f));
+    throw_if_error(uhdr_enc_set_preset(encoder.get(), UHDR_USAGE_BEST_QUALITY));
+
+    throw_if_error(uhdr_encode(encoder.get()));
+
+    auto output = uhdr_get_encoded_stream(encoder.get()); // freed by decoder destructor
+
+    os.write(static_cast<char *>(output->data), output->data_sz);
+    return true;
 }

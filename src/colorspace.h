@@ -131,7 +131,7 @@ inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
 }
 inline Color4 tonemap(const Color4 color, float gamma, bool sRGB)
 {
-    return sRGB ? LinearToSRGB(color) : LinearToGamma(color, Color3(1.f / gamma));
+    return Color4(sRGB ? LinearToSRGB(color.xyz()) : LinearToGamma(color.xyz(), Color3(1.f / gamma)), color.w);
 }
 
 const std::vector<std::string> &colorSpaceNames();

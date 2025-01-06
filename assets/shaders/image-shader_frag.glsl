@@ -159,8 +159,8 @@ void main()
         background.rgb = vec3(1.0);
     else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
     {
-        float dark_gray  = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float dark_gray  = (bg_mode == BG_DARK_CHECKER) ? 0.00630957 : 0.21763764;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.02899119 : 0.26840952;
         float checkerboard =
             mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
         background.rgb = vec3(checkerboard);
@@ -199,8 +199,8 @@ void main()
         value = blend(value, reference_val);
     }
 
-    vec4 foreground = dither(tonemap(choose_channel(value) * vec4(vec3(gain), 1.0)));
-    vec4 blended    = foreground + background * (1.0 - foreground.a);
+    vec4 foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
+    vec4 blended    = dither(tonemap(foreground + background * (1.0 - foreground.a)));
     blended         = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     frag_color      = vec4(blended.rgb, 1.0);
 }

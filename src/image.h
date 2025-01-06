@@ -182,6 +182,30 @@ public:
                      });
     }
 
+    /*!
+        Copy the channel values into a data array where multiple channels are interleaved one after the other.
+
+        \tparam         T The type of the data array
+        \param data     The array to copy to
+        \param n        The total number of channels in the data array
+        \param c        Which channel index we are copying into
+        \param func     A function that converts a float value to type T
+        \param y_stride The stride between rows in the data array. If 0, it is assumed to be equal to width() * n
+    */
+    template <typename T, typename Func>
+    void copy_to_interleaved(T data[], int n, int c, Func &&func, int y_stride = 0) const
+    {
+        y_stride          = y_stride == 0 ? width() * n : y_stride;
+        size_t block_size = std::max(1u, 1024u * 1024u / width());
+        parallel_for(blocked_range<int>(0, height(), block_size),
+                     [this, n, c, &func, &data, y_stride](int begin_y, int end_y, int unit_index, int thread_index)
+                     {
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < width(); ++x)
+                                 data[n * x + c + y * y_stride] = func(this->operator()(x, y), x, y);
+                     });
+    }
+
     Texture *get_texture();
 
     PixelStats *get_stats();
@@ -325,11 +349,6 @@ public:
 
     /// This is just a wrapper, it opens a file stream and loads the image using the stream-based load function above.
     static std::vector<ImagePtr> load(const std::string &filename);
-
-    /// Output the selected group of channels as an LDR image and store the width, height and number of channels in the
-    /// w, h, n pointers
-    std::unique_ptr<uint8_t[]> as_ldr(int *w, int *h, int *n, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
-                                      bool dither = true) const;
 
     /**
         Write the image to the output stream.
