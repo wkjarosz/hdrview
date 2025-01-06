@@ -52,7 +52,7 @@ Compiling should be as simple as:
 
 On macOS and Linux you can add `-G Ninja` to line 4 (on Windows Ninja fails to build the OpenEXR dependency).
 
-To support Ultra HDE JPEG images, you will either need to have libjpeg-turbo installed, or pass the option `DHDRVIEW_BUILD_UHDR_DEPS=ON` in line 4.
+To support UltraHDR JPEG images, you will either need to have `libultrahdr` installed, or pass the option `-DHDRVIEW_BUILD_UHDR_DEPS=ON` in line 4.
 
 Alternatively, you should be able to do all this via VS Code if you have the CMake extension set up properly.
 
