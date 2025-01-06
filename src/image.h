@@ -20,6 +20,8 @@
 #include <string>
 #include <vector>
 
+#include <ImfHeader.h>
+
 #include "dithermatrix256.h"
 
 inline double axis_scale_fwd_xform(double value, void *user_data)
@@ -274,11 +276,13 @@ public:
     static Texture              *dither_texture();
     static const float3          Rec709_luminance_weights;
 
+    // We retain the Imf::Header for all attributes.
+    // We also use this as a common representation of meta data when loading non-EXR images.
+    Imf::Header header;
+
+    // But create our own versios of some which we need access to often
     std::string          filename;
     std::string          partname;
-    std::string          owner;
-    std::string          comments;
-    std::string          capture_date;
     Box2i                data_window;
     Box2i                display_window;
     std::vector<Channel> channels;

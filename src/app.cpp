@@ -199,7 +199,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 #endif
 
     spdlog::debug("Setting global OpenEXR thread count to {}", threads);
-    Imf::staticInitialize();
     Imf::setGlobalThreadCount(threads);
     spdlog::debug("OpenEXR reports global thread count as {}", Imf::globalThreadCount());
 

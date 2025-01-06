@@ -11,6 +11,7 @@
 #include "texture.h"
 #include "timer.h"
 #include <ImfChannelList.h>
+#include <ImfChannelListAttribute.h>
 #include <ImfChromaticities.h>
 #include <ImfFrameBuffer.h>
 #include <ImfHeader.h>
@@ -23,22 +24,9 @@
 #include <fstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
-#include <spdlog/spdlog.h>
-#include <spdlog/stopwatch.h>
-
-#include "imageio/pfm.h"
-#include "imageio/stb.h"
-#include "imageio/uhdr.h"
+#include "Imath_to_linalg.h"
 
 using namespace std;
-
-// static methods and member definitions
-//
-
-const float3 Image::Rec709_luminance_weights = float3{&Imf::RgbaYca::computeYw(Imf::Chromaticities{})[0]};
-
-//
-// end static methods and member definitions
 
 bool is_exr_image(istream &is_, const string &filename) noexcept
 {
@@ -72,16 +60,13 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto &data = *images.back();
+        auto &data  = *images.back();
+        data.header = part.header();
+
+        for (auto a = begin(data.header); a != end(data.header); ++a) spdlog::debug("Attribute: {}", a.name());
 
         if (part.header().hasName())
             data.partname = part.header().name();
-        if (auto owner = part.header().findTypedAttribute<Imf::StringAttribute>("owner"))
-            data.owner = owner->value();
-        if (auto comments = part.header().findTypedAttribute<Imf::StringAttribute>("comments"))
-            data.comments = comments->value();
-        if (auto capture_date = part.header().findTypedAttribute<Imf::StringAttribute>("capDate"))
-            data.capture_date = capture_date->value();
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
         data.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
@@ -144,19 +129,16 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         {
             Imf::Chromaticities rec709_cr; // default rec709 (sRGB) primaries
             Imf::Chromaticities file_cr = Imf::chromaticities(part.header());
+
             if (file_cr != rec709_cr)
             {
-                // Imath matrices multiply row vectors to their left, so are read from left-to-right.
                 // This transforms from the file's RGB to Rec.709 RGB (via XYZ)
-                Imath::M44f M = Imf::RGBtoXYZ(file_cr, 1) * Imf::XYZtoRGB(rec709_cr, 1);
-
-                for (int m = 0; m < 4; ++m)
-                    for (int n = 0; n < 4; ++n) data.M_to_Rec709[m][n] = M.x[m][n];
-
+                // Imath::M44f M    = Imf::RGBtoXYZ(file_cr, 1) * Imf::XYZtoRGB(rec709_cr, 1);
+                data.M_to_Rec709 = mul(to_linalg(Imf::XYZtoRGB(rec709_cr, 1)), to_linalg(Imf::RGBtoXYZ(file_cr, 1)));
                 spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
             }
 
-            data.luminance_weights = float3{&Imf::RgbaYca::computeYw(file_cr)[0]};
+            data.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(file_cr));
 
             spdlog::debug("M_to_Rec709 = {}", data.M_to_Rec709);
             spdlog::debug("Yw = {}", data.luminance_weights);
@@ -175,16 +157,11 @@ bool save_exr_image(const Image &img, ostream &os_, const string &filename)
         auto dataWindow    = Imath::Box2i(Imath::V2i(img.data_window.min.x, img.data_window.min.y),
                                           Imath::V2i(img.data_window.max.x - 1, img.data_window.max.y - 1));
 
-        Imf::Header header{displayWindow, dataWindow};
-
-        header.setName(img.partname);
-
-        if (!img.comments.empty())
-            header.insert("comments", Imf::StringAttribute(img.comments));
-        if (!img.owner.empty())
-            header.insert("owner", Imf::StringAttribute(img.owner));
-        if (!img.capture_date.empty())
-            header.insert("capDate", Imf::StringAttribute(img.capture_date));
+        // start with the header we have from reading in the file
+        Imf::Header header = img.header;
+        header.insert("channels", Imf::ChannelListAttribute());
+        header.displayWindow() = displayWindow;
+        header.dataWindow()    = dataWindow;
 
         Imf::FrameBuffer frameBuffer;
 

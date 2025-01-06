@@ -16,6 +16,11 @@
 #include <numeric>
 #include <sstream>
 
+#include <ImfChromaticities.h>
+#include <ImfRgbaYca.h>
+
+#include "Imath_to_linalg.h"
+
 #include <spdlog/spdlog.h>
 
 #include <stdexcept> // for runtime_error, out_of_range
@@ -32,6 +37,8 @@ using namespace std;
 
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
 static const char         *s_target[Target_COUNT] = {"primary", "secondary"};
+
+const float3 Image::Rec709_luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::Chromaticities{}));
 
 pair<string, string> Channel::split(const string &channel)
 {

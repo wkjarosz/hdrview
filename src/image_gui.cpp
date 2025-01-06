@@ -16,6 +16,8 @@
 #include "implot.h"
 #include "implot_internal.h"
 
+#include <ImfStandardAttributes.h>
+
 #include <sstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
@@ -495,20 +497,16 @@ void Image::draw_info()
     property_name("Part name:");
     property_value(partname.empty() ? "<none>" : partname, sans_font, true);
 
-    if (!owner.empty())
+    vector<pair<string, string>> attrib_names = {
+        {"owner", "Owner"}, {"comments", "Comments"}, {"capDate", "Capture date"}};
+
+    for (auto a : attrib_names)
     {
-        property_name("Owner:");
-        property_value(owner, sans_font, true);
-    }
-    if (!capture_date.empty())
-    {
-        property_name("Capture date:");
-        property_value(capture_date, sans_font, true);
-    }
-    if (!comments.empty())
-    {
-        property_name("Comments:");
-        property_value(comments, sans_font, true);
+        if (auto attrib = header.findTypedAttribute<Imf::StringAttribute>(a.first))
+        {
+            property_name(a.second + ":");
+            property_value(attrib->value(), sans_font, true);
+        }
     }
 
     property_name("Resolution:");
