@@ -53,7 +53,9 @@ const Imath::V2f &white_point(const std::string &name);
 inline const std::vector<std::string> &color_space_names()
 {
     // clang-format off
-    static const std::vector<std::string> names = {"Adobe RGB (1998)",
+    static const std::vector<std::string> names = {"ACES 2065-1 (Academy Color Encoding System, AP0)",
+                                                   "ACEScg (Academy Color Encoding System, AP1)",
+                                                   "Adobe RGB (1998)",
                                                    "Apple RGB",
                                                    "Best RGB",
                                                    "Beta RGB",

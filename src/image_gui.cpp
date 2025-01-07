@@ -524,9 +524,10 @@ void Image::draw_info()
 
     auto csn = color_space_names();
     auto open_combo =
-        ImGui::BeginCombo("Chromaticities", named_color_space < 0 ? "Unknown" : csn[named_color_space].c_str(),
+        ImGui::BeginCombo("Color profile", named_color_space < 0 ? "Unknown" : csn[named_color_space].c_str(),
                           ImGuiComboFlags_HeightLargest);
-    ImGui::WrappedTooltip("Click to override the file's detected chromaticities with those of a common colorspace.");
+    ImGui::WrappedTooltip(
+        "Interpret the values stored in the file using the chromaticities of a common color profile.");
     if (open_combo)
     {
         for (int n = 0; n < (int)csn.size(); ++n)

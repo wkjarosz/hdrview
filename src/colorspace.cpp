@@ -39,8 +39,12 @@ const std::map<string, Imath::V2f> referenceWhites = {{"C", {0.31006f, 0.31616f}
 //  https://en.wikipedia.org/wiki/Standard_illuminant
 //  https://en.wikipedia.org/wiki/RGB_color_spaces
 //  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
-// Chromaticity data common color spaces
+// Chromaticity data for common color spaces
 const std::map<string, Imf::Chromaticities> chromaticitiesMap = {
+    {"ACES 2065-1 (Academy Color Encoding System, AP0)",
+     {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, {0.32168f, 0.33767f}}},
+    {"ACEScg (Academy Color Encoding System, AP1)",
+     {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, {0.32168f, 0.33767f}}},
     {"Adobe RGB (1998)", {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
     {"Apple RGB", {{0.6250f, 0.3400f}, {0.2800f, 0.5950f}, {0.1550f, 0.0700f}, referenceWhites.at("D65")}},
     {"Best RGB", {{0.7347f, 0.2653f}, {0.2150f, 0.7750f}, {0.1300f, 0.0350f}, referenceWhites.at("D50")}},
