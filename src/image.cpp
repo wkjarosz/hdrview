@@ -619,14 +619,39 @@ void Image::compute_color_transform()
                                                        : Image::Rec709_luminance_weights;
     spdlog::debug("Yw = {}", luminance_weights);
 
-    static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
+    Imf::Chromaticities file_chr{};
+    if (Imf::hasChromaticities(header))
+        file_chr = Imf::chromaticities(header);
+
+    Imath::V2f src_neutral = file_chr.white;
+    if (Imf::hasAdoptedNeutral(header))
+        file_chr.white = Imf::adoptedNeutral(header);
+
+    static const Imf::Chromaticities rec709_chr{}; // default rec709 (sRGB) primaries
     Imath::M44f                      M;
-    if (color_conversion_matrix(M, header, rec709_cr, 1))
+    if (color_conversion_matrix(M, file_chr, rec709_chr))
     {
         M_to_Rec709       = to_linalg(M);
         luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
         spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
+    }
+
+    // determine if this is (close to) one of the named color spaces
+    if (Imf::hasChromaticities(header))
+    {
+        const auto &cs_chrs = color_space_chromaticities();
+        for (int i = 0; i < (int)color_space_names().size(); ++i)
+        {
+            auto &cs_name = color_space_names()[i];
+            auto &cs_chr  = cs_chrs.at(cs_name);
+            if (approx_equal(cs_chr, file_chr))
+            {
+                spdlog::info("Detected color space: '{}'", cs_name);
+                named_color_space = i;
+                break;
+            }
+        }
     }
 }
 

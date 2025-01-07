@@ -5,6 +5,7 @@
 //
 
 #include "uhdr.h"
+#include "colorspace.h"
 #include "image.h"
 #include "texture.h"
 #include "timer.h"
@@ -26,33 +27,16 @@
 
 using namespace std;
 
-////////////////////////////////////////////////////////////////////////////////
-// Color space conversions
-// Sample, See,
-// https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.html#_bt_709_bt_2020_primary_conversion_example
-
-static const Imf::Chromaticities BT_709_chr{};
-static const Imf::Chromaticities Display_P3_chr{
-    {0.680f, 0.320f}, {0.265f, 0.690f}, {0.150f, 0.060f}, {0.3127f, 0.3290f}};
-static const Imf::Chromaticities BT_2100_chr{{0.708f, 0.292f}, {0.170f, 0.797f}, {0.131f, 0.046f}, {0.3127f, 0.3290f}};
-
-static const Imath::M44f Display_P3_to_BT_709 = Imf::RGBtoXYZ(Display_P3_chr, 1) * Imf::XYZtoRGB(BT_709_chr, 1);
-static const Imath::M44f BT_2100_to_BT_709    = Imf::RGBtoXYZ(BT_2100_chr, 1) * Imf::XYZtoRGB(BT_709_chr, 1);
-
-static const Imath::V3f BT_709_luminance     = Imf::RgbaYca::computeYw(BT_709_chr);
-static const Imath::V3f Display_P3_luminance = Imf::RgbaYca::computeYw(Display_P3_chr);
-static const Imath::V3f BT2100_luminance     = Imf::RgbaYca::computeYw(BT_2100_chr);
-
 static uhdr_color_gamut cg_from_chr(const Imf::Header &header)
 {
     if (auto a = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
     {
         auto chr = a->value();
-        if (chr == BT_709_chr)
+        if (approx_equal(chr, color_space_chromaticity("sRGB/BT 709")))
             return UHDR_CG_BT_709;
-        if (chr == Display_P3_chr)
+        if (approx_equal(chr, color_space_chromaticity("Display P3")))
             return UHDR_CG_DISPLAY_P3;
-        if (chr == BT_2100_chr)
+        if (approx_equal(chr, color_space_chromaticity("BT 2020/2100")))
             return UHDR_CG_BT_2100;
     }
 
@@ -198,18 +182,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     // HDRView assumes the Rec 709 primaries/gamut. Set the matrix to convert to it
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
     {
-        Imf::addChromaticities(image->header, Display_P3_chr);
+        Imf::addChromaticities(image->header, color_space_chromaticity("Display P3"));
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Display P3.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_2100)
     {
-        Imf::addChromaticities(image->header, BT_2100_chr);
+        Imf::addChromaticities(image->header, color_space_chromaticity("BT 2020/BT 2100"));
         spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Rec. 2100.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_709)
     {
         // insert into the header, but no conversion necessary since HDRView uses BT 709 internally
-        Imf::addChromaticities(image->header, BT_709_chr);
+        Imf::addChromaticities(image->header, color_space_chromaticity("sRGB/BT 709"));
     }
     else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)
         spdlog::warn("No color gamut specified. Assuming Rec. 709/sRGB primaries and whitepoint.");

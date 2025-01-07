@@ -12,6 +12,8 @@
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
 
+using namespace std;
+
 namespace
 {
 const float eps   = 216.0f / 24389.0f;
@@ -27,30 +29,55 @@ const float refV  = 9.0f / (refX + 15.0f + 3.0f * refZ);
 const float minLab[] = {0, -128, -128};
 const float maxLab[] = {100, 128, 128};
 
+// Reference whites used in the common color spaces below
+const std::map<string, Imath::V2f> referenceWhites = {{"C", {0.31006f, 0.31616f}},
+                                                      {"D50", {0.34567f, 0.35850f}},
+                                                      {"D65", {0.31271f, 0.32902f}},
+                                                      {"E", {0.33333f, 0.33333f}}};
+
+// data from:
+//  https://en.wikipedia.org/wiki/Standard_illuminant
+//  https://en.wikipedia.org/wiki/RGB_color_spaces
+//  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
+// Chromaticity data common color spaces
+const std::map<string, Imf::Chromaticities> chromaticitiesMap = {
+    {"Adobe RGB (1998)", {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
+    {"Apple RGB", {{0.6250f, 0.3400f}, {0.2800f, 0.5950f}, {0.1550f, 0.0700f}, referenceWhites.at("D65")}},
+    {"Best RGB", {{0.7347f, 0.2653f}, {0.2150f, 0.7750f}, {0.1300f, 0.0350f}, referenceWhites.at("D50")}},
+    {"Beta RGB", {{0.6888f, 0.3112f}, {0.1986f, 0.7551f}, {0.1265f, 0.0352f}, referenceWhites.at("D50")}},
+    {"Bruce RGB", {{0.6400f, 0.3300f}, {0.2800f, 0.6500f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
+    {"BT 2020/2100", {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, referenceWhites.at("D65")}},
+    {"CIE RGB", {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, referenceWhites.at("E")}},
+    {"CIE XYZ", {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, referenceWhites.at("E")}},
+    {"ColorMatch RGB", {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1500f, 0.0750f}, referenceWhites.at("D50")}},
+    {"Display P3", {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
+    {"Don RGB 4", {{0.6960f, 0.3000f}, {0.2150f, 0.7650f}, {0.1300f, 0.0350f}, referenceWhites.at("D50")}},
+    {"ECI RGB v2", {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, referenceWhites.at("D50")}},
+    {"Ekta Space PS5", {{0.6950f, 0.3050f}, {0.2600f, 0.7000f}, {0.1100f, 0.0050f}, referenceWhites.at("D50")}},
+    {"NTSC RGB", {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, referenceWhites.at("C")}},
+    {"PAL/SECAM RGB", {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
+    {"ProPhoto RGB", {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, referenceWhites.at("D50")}},
+    {"SMPTE-C RGB", {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, referenceWhites.at("D65")}},
+    {"sRGB/BT 709", {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
+    {"Wide Gamut RGB", {{0.7350f, 0.2650f}, {0.1150f, 0.8260f}, {0.1570f, 0.0180f}, referenceWhites.at("D50")}}};
+
 } // namespace
 
-using namespace std;
+const std::map<string, Imf::Chromaticities> &color_space_chromaticities() { return chromaticitiesMap; }
 
-bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst, int CAT_method)
+const Imf::Chromaticities &color_space_chromaticity(const string &name) { return chromaticitiesMap.at(name); }
+
+const std::map<string, Imath::V2f> &white_points() { return referenceWhites; }
+
+const Imath::V2f &white_point(const string &name) { return referenceWhites.at(name); }
+
+bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
+                             int CAT_method)
 {
     using namespace Imath;
     using namespace Imf;
-    Chromaticities src_chr;
 
-    if (hasChromaticities(src))
-        src_chr = chromaticities(src);
-
-    V2f src_neutral = src_chr.white;
-
-    if (hasAdoptedNeutral(src))
-    {
-        src_neutral   = adoptedNeutral(src);
-        src_chr.white = src_neutral; // for RGBtoXYZ() purposes.
-    }
-
-    V2f dst_neutral = dst.white;
-
-    if (src_chr == dst)
+    if (src == dst)
     {
         // The file already contains data in the target colorspace.
         // color conversion is not necessary.
@@ -97,12 +124,12 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::
         // Convert the white points of the two RGB spaces to XYZ
         //
 
-        float fx = src_neutral.x;
-        float fy = src_neutral.y;
+        float fx = src.white.x;
+        float fy = src.white.y;
         V3f   src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
 
-        float ax = dst_neutral.x;
-        float ay = dst_neutral.y;
+        float ax = dst.white.x;
+        float ay = dst.white.y;
         V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
 
         //
@@ -120,7 +147,7 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::
     // Build a combined file-RGB-to-target-RGB conversion matrix
     //
 
-    M = RGBtoXYZ(src_chr, 1) * CAT * XYZtoRGB(dst, 1);
+    M = RGBtoXYZ(src, 1) * CAT * XYZtoRGB(dst, 1);
 
     return true;
 }

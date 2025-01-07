@@ -288,6 +288,7 @@ public:
     std::vector<Channel> channels;
     float4x4             M_to_Rec709       = la::identity;
     float3               luminance_weights = Rec709_luminance_weights;
+    int                  named_color_space = -1;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().

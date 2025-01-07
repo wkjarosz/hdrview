@@ -12,7 +12,10 @@
 #include <vector>
 
 #include <ImathMatrix.h>
+#include <ImfChromaticities.h>
 #include <ImfHeader.h>
+#include <map>
+#include <string>
 
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
@@ -32,8 +35,60 @@
     \returns
         True if color conversion is needed, in which case M will contain the conversion matrix.
 */
-bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst,
+bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method = 0);
+
+// return a map of common color spaces, indexed by name
+const std::map<std::string, Imf::Chromaticities> &color_space_chromaticities();
+
+// return a pointer to the chromaticities of a named color space, or nullptr if not found
+const Imf::Chromaticities &color_space_chromaticity(const std::string &name);
+
+// return a map of common white points, indexed by name
+const std::map<std::string, Imath::V2f> &white_points();
+
+// return a pointer to a named white point, or nullptr if not found
+const Imath::V2f &white_point(const std::string &name);
+
+inline const std::vector<std::string> &color_space_names()
+{
+    // clang-format off
+    static const std::vector<std::string> names = {"Adobe RGB (1998)",
+                                                   "Apple RGB",
+                                                   "Best RGB",
+                                                   "Beta RGB",
+                                                   "Bruce RGB",
+                                                   "BT 2020/2100",
+                                                   "CIE RGB",
+                                                   "CIE XYZ",
+                                                   "ColorMatch RGB",
+                                                   "Display P3",
+                                                   "Don RGB 4",
+                                                   "ECI RGB v2",
+                                                   "Ekta Space PS5",
+                                                   "NTSC RGB",
+                                                   "PAL/SECAM RGB",
+                                                   "ProPhoto RGB",
+                                                   "SMPTE-C RGB",
+                                                   "sRGB/BT 709",
+                                                   "Wide Gamut RGB"};
+    // clang-format on
+    return names;
+}
+
+inline const std::vector<std::string> &white_point_names()
+{
+    static const std::vector<std::string> names = {"C", "D50", "D65", "E"};
+    return names;
+}
+
+// approximate equality comparison for Imf::Chromaticities
+inline bool approx_equal(const Imf::Chromaticities &a, const Imf::Chromaticities &b)
+{
+    return (a.red - b.red).length2() + (a.green - b.green).length2() + (a.blue - b.blue).length2() +
+               (a.white - b.white).length2() <
+           1e-6f;
+};
 
 /*!
  * @brief		Generic color space conversion

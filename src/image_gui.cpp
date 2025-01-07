@@ -522,10 +522,35 @@ void Image::draw_info()
                                display_window.min.y, display_window.max.y),
                    sans_font);
 
+    auto csn = color_space_names();
+    auto open_combo =
+        ImGui::BeginCombo("Chromaticities", named_color_space < 0 ? "Unknown" : csn[named_color_space].c_str(),
+                          ImGuiComboFlags_HeightLargest);
+    ImGui::WrappedTooltip("Click to override the file's detected chromaticities with those of a common colorspace.");
+    if (open_combo)
+    {
+        for (int n = 0; n < (int)csn.size(); ++n)
+        {
+            const bool is_selected = (named_color_space == n);
+            if (ImGui::Selectable(csn[n].c_str(), is_selected))
+            {
+                named_color_space = n;
+                spdlog::debug("Switching to color space {}.", n);
+                Imf::addChromaticities(header, color_space_chromaticity(csn[n]));
+                compute_color_transform();
+            }
+
+            // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
     if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
     {
         auto &chr = attrib->value();
-        property_name("Chromaticities:");
+        // property_name("Chromaticities:");
         property_value(
             fmt::format("R primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, {})\nWhitepoint: ({}, {})",
                         chr.red.x, chr.red.y, chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x,
@@ -535,12 +560,14 @@ void Image::draw_info()
     else
     {
         Imf::Chromaticities chr{};
-        property_name("Chromaticities:");
-        property_value(fmt::format("<Default Rec. 709>\nR primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, "
+        // property_name("Chromaticities:");
+        ImGui::BeginDisabled();
+        property_value(fmt::format("<Assuming BT 709>\nR primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, "
                                    "{})\nWhitepoint: ({}, {})",
                                    chr.red.x, chr.red.y, chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x,
                                    chr.white.y),
                        mono_font);
+        ImGui::EndDisabled();
     }
 
     if (auto attrib = header.findTypedAttribute<Imf::V2fAttribute>("adoptedNeutral"))
@@ -550,30 +577,20 @@ void Image::draw_info()
     }
 
     property_name("Luminance weights:");
-    if (luminance_weights != Image::Rec709_luminance_weights)
-        property_value(
-            fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y, luminance_weights.z),
-            mono_font);
-    else
-        property_value(fmt::format("<Default Rec. 709 weights>\n{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x,
-                                   luminance_weights.y, luminance_weights.z),
-                       mono_font);
+    property_value(
+        fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y, luminance_weights.z),
+        mono_font);
 
-    property_name("To Rec 709 RGB:");
-    if (M_to_Rec709 != float4x4{la::identity})
-    {
-        string mat_text = fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                                      "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}",
-                                      M_to_Rec709[0][1], M_to_Rec709[0][1], M_to_Rec709[0][2], M_to_Rec709[0][3],
-                                      M_to_Rec709[1][1], M_to_Rec709[1][1], M_to_Rec709[1][2], M_to_Rec709[1][3],
-                                      M_to_Rec709[2][1], M_to_Rec709[2][1], M_to_Rec709[2][2], M_to_Rec709[2][3],
-                                      M_to_Rec709[3][1], M_to_Rec709[3][1], M_to_Rec709[3][2], M_to_Rec709[3][3]);
-        property_value(mat_text, mono_font);
-    }
-    else
-        property_value("<Identity matrix>", mono_font);
+    property_name("Color transform matrix:");
+    property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}",
+                               M_to_Rec709[0][1], M_to_Rec709[0][1], M_to_Rec709[0][2], M_to_Rec709[0][3],
+                               M_to_Rec709[1][1], M_to_Rec709[1][1], M_to_Rec709[1][2], M_to_Rec709[1][3],
+                               M_to_Rec709[2][1], M_to_Rec709[2][1], M_to_Rec709[2][2], M_to_Rec709[2][3],
+                               M_to_Rec709[3][1], M_to_Rec709[3][1], M_to_Rec709[3][2], M_to_Rec709[3][3]),
+                   mono_font);
 }
 
 void Image::draw_channel_stats()
