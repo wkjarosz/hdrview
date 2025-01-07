@@ -31,7 +31,7 @@ const float maxLab[] = {100, 128, 128};
 
 using namespace std;
 
-bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst, bool bradford)
+bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst, int CAT_method)
 {
     using namespace Imath;
     using namespace Imf;
@@ -65,24 +65,34 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::
     // white point.
     //
 
-    M44f bradford_trans{};
-    if (bradford)
+    M44f CAT{}; // chromatic adaptation matrix
+    if (CAT_method > 0 && CAT_method <= 3)
     {
-
-        //
-        // We'll need the Bradford cone primary matrix and its inverse
-        //
-
-        static const M44f bradford_CPM{0.895100f,  -0.750200f, 0.038900f,  0.000000f, //
-                                       0.266400f,  1.713500f,  -0.068500f, 0.000000f, //
-                                       -0.161400f, 0.036700f,  1.029600f,  0.000000f, //
-                                       0.000000f,  0.000000f,  0.000000f,  1.000000f};
-
-        static const M44f inv_bradford_CPM{0.986993f,  0.432305f, -0.008529f, 0.000000f, //
-                                           -0.147054f, 0.518360f, 0.040043f,  0.000000f, //
-                                           0.159963f,  0.049291f, 0.968487f,  0.000000f, //
-                                           0.000000f,  0.000000f, 0.000000f,  1.000000f};
-
+        // the cone primary respons matrices (and their inverses) for 3 different methods
+        static const M44f CPM[3] = {{1.f, 0.f, 0.f, 0.f, // XYZ scaling
+                                     0.f, 1.f, 0.f, 0.f, //
+                                     0.f, 0.f, 1.f, 0.f, //
+                                     0.f, 0.f, 0.f, 1.f},
+                                    {0.895100f, -0.750200f, 0.038900f, 0.000000f, // Bradford
+                                     0.266400f, 1.713500f, -0.068500f, 0.000000f, //
+                                     -0.161400f, 0.036700f, 1.029600f, 0.000000f, //
+                                     0.000000f, 0.000000f, 0.000000f, 1.000000f},
+                                    {0.4002400f, -0.2263000f, 0.0000000f, 0.000000f, // Von Kries
+                                     0.7076000f, 1.1653200f, 0.0000000f, 0.000000f,  //
+                                     -0.0808100f, 0.0457000f, 0.9182200f, 0.000000f, //
+                                     0.000000f, 0.000000f, 0.000000f, 1.000000f}};
+        static const M44f invCPM[3]{{1.f, 0.f, 0.f, 0.f, //
+                                     0.f, 1.f, 0.f, 0.f, //
+                                     0.f, 0.f, 1.f, 0.f, //
+                                     0.f, 0.f, 0.f, 1.f},
+                                    {0.986993f, 0.432305f, -0.008529f, 0.000000f, //
+                                     -0.147054f, 0.518360f, 0.040043f, 0.000000f, //
+                                     0.159963f, 0.049291f, 0.968487f, 0.000000f,  //
+                                     0.000000f, 0.000000f, 0.000000f, 1.000000f},
+                                    {1.8599364f, 0.3611914f, 0.0000000f, 0.0000000f,  //
+                                     -1.1293816f, 0.6388125f, 0.0000000f, 0.0000000f, //
+                                     0.2198974f, -0.0000064f, 1.0890636f, 0.0000000f, //
+                                     0.0000000f, 0.0000000f, 0.0000000f, 1.0000000f}};
         //
         // Convert the white points of the two RGB spaces to XYZ
         //
@@ -96,21 +106,21 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::
         V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
 
         //
-        // Compute the Bradford transformation matrix
+        // Compute the CAT
         //
 
-        V3f ratio((dst_neutral_XYZ * bradford_CPM) / (src_neutral_XYZ * bradford_CPM));
+        V3f ratio((dst_neutral_XYZ * CPM[CAT_method - 1]) / (src_neutral_XYZ * CPM[CAT_method - 1]));
 
         M44f ratio_mat(ratio[0], 0, 0, 0, 0, ratio[1], 0, 0, 0, 0, ratio[2], 0, 0, 0, 0, 1);
 
-        bradford_trans = bradford_CPM * ratio_mat * inv_bradford_CPM;
+        CAT = CPM[CAT_method - 1] * ratio_mat * invCPM[CAT_method - 1];
     }
 
     //
     // Build a combined file-RGB-to-target-RGB conversion matrix
     //
 
-    M = RGBtoXYZ(src_chr, 1) * bradford_trans * XYZtoRGB(dst, 1);
+    M = RGBtoXYZ(src_chr, 1) * CAT * XYZtoRGB(dst, 1);
 
     return true;
 }

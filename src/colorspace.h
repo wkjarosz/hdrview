@@ -20,14 +20,20 @@
     Adapted from AcesInputFile::Data::initColorConversion.
     See also http://www.brucelindbloom.com/index.html?Eqn_ChromAdapt.html
 
-    \param[out] M   Conversion matrix
-    \param      src Source file header
-    \param      dst Destination chromaticities
-    \param bradford Whether to include Bradford adaptation in the matrix
-    \returns        True if color conversion is needed, in which case M will contain the conversion matrix.
+    \param[out] M
+        Conversion matrix
+    \param src
+        Source file header
+    \param dst
+        Destination chromaticities
+    \param CAT_method
+        Method for chromatic adaptation transform (1: XYZ scaling, 2: Bradford, 3: Von Kries; all other values use an
+        identity CAT)
+    \returns
+        True if color conversion is needed, in which case M will contain the conversion matrix.
 */
 bool color_conversion_matrix(Imath::M44f &M, const Imf::Header &src, const Imf::Chromaticities &dst,
-                             bool bradford = false);
+                             int CAT_method = 0);
 
 /*!
  * @brief		Generic color space conversion

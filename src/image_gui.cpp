@@ -526,10 +526,27 @@ void Image::draw_info()
     {
         auto &chr = attrib->value();
         property_name("Chromaticities:");
-        string chr_text = fmt::format(
-            "R primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, {})\nWhitepoint: ({}, {})", chr.red.x, chr.red.y,
-            chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
-        property_value(chr_text, mono_font);
+        property_value(
+            fmt::format("R primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, {})\nWhitepoint: ({}, {})",
+                        chr.red.x, chr.red.y, chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x,
+                        chr.white.y),
+            mono_font);
+    }
+    else
+    {
+        Imf::Chromaticities chr{};
+        property_name("Chromaticities:");
+        property_value(fmt::format("<Default Rec. 709>\nR primary: ({}, {})\nG primary: ({}, {})\nB primary: ({}, "
+                                   "{})\nWhitepoint: ({}, {})",
+                                   chr.red.x, chr.red.y, chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x,
+                                   chr.white.y),
+                       mono_font);
+    }
+
+    if (auto attrib = header.findTypedAttribute<Imf::V2fAttribute>("adoptedNeutral"))
+    {
+        property_name("Adopted neutral:");
+        property_value(fmt::format("({}, {})", attrib->value().x, attrib->value().y), mono_font);
     }
 
     property_name("Luminance weights:");

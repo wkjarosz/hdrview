@@ -1689,6 +1689,7 @@ void HDRViewApp::draw_pixel_inspector_window()
         bool open = ImGui::CollapsingHeader(title.c_str(), p_visible, ImGuiTreeNodeFlags_DefaultOpen);
 
         ImGuiInputTextFlags_ flags = p_visible ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
+        ImGui::BeginDisabled(p_visible == nullptr);
         // slightly convoluted process to show the coordinates as drag elements within the header
         ImGui::SameLine();
         auto  fpy = ImGui::GetStyle().FramePadding.y;
@@ -1703,6 +1704,7 @@ void HDRViewApp::draw_pixel_inspector_window()
         ImGui::SetNextItemWidth(drag_size);
         ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
         ImGui::PopStyleVar();
+        ImGui::EndDisabled();
 
         return open;
     };

@@ -612,6 +612,24 @@ void Image::build_layers_and_groups()
     }
 }
 
+void Image::compute_color_transform()
+{
+    // get color correction info from the header
+    luminance_weights = Imf::hasChromaticities(header) ? to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)))
+                                                       : Image::Rec709_luminance_weights;
+    spdlog::debug("Yw = {}", luminance_weights);
+
+    static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
+    Imath::M44f                      M;
+    if (color_conversion_matrix(M, header, rec709_cr, 1))
+    {
+        M_to_Rec709       = to_linalg(M);
+        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
+        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
+        spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
+    }
+}
+
 void Image::finalize()
 {
     // check that there is at least 1 channel
@@ -632,23 +650,7 @@ void Image::finalize()
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
-    // get color correction info from the header
-    if (Imf::hasChromaticities(header))
-    {
-        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
-        spdlog::debug("Yw = {}", luminance_weights);
-    }
-
-    static const Imf::Chromaticities rec709_cr{}; // default rec709 (sRGB) primaries
-    Imath::M44f                      M;
-    if (color_conversion_matrix(M, header, rec709_cr))
-    {
-        M_to_Rec709 = to_linalg(M);
-        // img.luminance_weights = to_linalg(Imf::RgbaYca::computeYw(rec709_cr));
-        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
-        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
-        spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
-    }
+    compute_color_transform();
 
     build_layers_and_groups();
 
