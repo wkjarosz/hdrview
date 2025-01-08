@@ -17,6 +17,7 @@ project(
 # By default, we install in a portable way (i.e. assets and executable are in the same folder)
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 
+option(HDRVIEW_NO_UHDR "Do not build with libultrahdr support" OFF)
 option(HDRVIEW_BUILD_UHDR_DEPS "Build the dependencies for libultrahdr" OFF)
 
 add_custom_command(
@@ -358,6 +359,7 @@ CPMAddPackage(
   GIT_TAG v3.2.4
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
+          "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
           "OPENEXR_BUILD_TOOLS OFF"
           "OPENEXR_BUILD_EXAMPLES OFF"
           "OPENEXR_INSTALL OFF"
@@ -371,20 +373,24 @@ if(openexr_ADDED)
   message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
 endif()
 
-CPMAddPackage(
-  NAME libultrahdr
-  GITHUB_REPOSITORY google/libultrahdr
-  GIT_TAG ea518da3a839c59f88ffc6c4020920c944251fd2
-  OPTIONS "BUILD_SHARED_LIBS OFF"
-          "UHDR_BUILD_EXAMPLES OFF"
-          "UHDR_BUILD_TESTS OFF"
-          "UHDR_BUILD_BENCHMARK OFF"
-          "UHDR_BUILD_FUZZERS OFF"
-          "UHDR_BUILD_DEPS ${HDRVIEW_BUILD_UHDR_DEPS}"
-          "UHDR_ENABLE_INSTALL OFF"
-)
-if(libultrahdr_ADDED)
-  message(STATUS "libultrahdr library added with UHDR_BUILD_DEPS=${HDRVIEW_BUILD_UHDR_DEPS}")
+if(NOT HDRVIEW_NO_UHDR)
+  CPMAddPackage(
+    NAME libultrahdr
+    GITHUB_REPOSITORY google/libultrahdr
+    GIT_TAG ea518da3a839c59f88ffc6c4020920c944251fd2
+    OPTIONS "BUILD_SHARED_LIBS OFF"
+            "UHDR_BUILD_EXAMPLES OFF"
+            "UHDR_BUILD_TESTS OFF"
+            "UHDR_BUILD_BENCHMARK OFF"
+            "UHDR_BUILD_FUZZERS OFF"
+            "UHDR_BUILD_DEPS ${HDRVIEW_BUILD_UHDR_DEPS}"
+            "UHDR_ENABLE_INSTALL OFF"
+            "UHDR_ENABLE_INTRINSICS OFF"
+  )
+  if(libultrahdr_ADDED)
+    message(STATUS "libultrahdr library added with UHDR_BUILD_DEPS=${HDRVIEW_BUILD_UHDR_DEPS}")
+  endif()
+
 endif()
 
 CPMAddPackage(
@@ -488,8 +494,12 @@ target_link_libraries(
           implot
           cli11
           my_imgui_command_palette
-          core
 )
+if(NOT HDRVIEW_NO_UHDR)
+  target_link_libraries(HDRView PRIVATE core)
+else()
+  target_compile_definitions(HDRView PRIVATE HDRVIEW_NO_UHDR)
+endif()
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
 if(EMSCRIPTEN)

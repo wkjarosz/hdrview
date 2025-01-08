@@ -19,6 +19,22 @@
 #include <iostream>
 #include <stdexcept>
 
+#ifdef HDRVIEW_NO_UHDR
+
+bool is_uhdr_image(std::istream &is) { return false; }
+
+std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filename)
+{
+    throw std::runtime_error("UltraHDR support not enabled in this build.");
+}
+
+bool save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename)
+{
+    throw std::runtime_error("UltraHDR support not enabled in this build.");
+}
+
+#else
+
 #include <ImfHeader.h>
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
@@ -334,3 +350,5 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
     os.write(static_cast<char *>(output->data), output->data_sz);
     return true;
 }
+
+#endif
