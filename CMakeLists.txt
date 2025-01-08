@@ -19,6 +19,11 @@ option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 
 option(HDRVIEW_NO_UHDR "Do not build with libultrahdr support" OFF)
 option(HDRVIEW_BUILD_UHDR_DEPS "Build the dependencies for libultrahdr" OFF)
+option(HDRVIEW_IGNORE_BREW_PORTS "Ignore Homebrew and MacPorts directories" OFF)
+
+if(HDRVIEW_IGNORE_BREW_PORTS)
+  set(CMAKE_IGNORE_PATH "/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin")
+endif()
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
@@ -284,7 +289,7 @@ endif()
 CPMAddPackage(
   NAME my_imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
-  GIT_TAG 826cd9a8802b52d190568dd10ca29a17be3320ab
+  GIT_TAG 5699254a9de9a6448360844696fb501bc5141353
   DOWNLOAD_ONLY YES
 )
 
