@@ -21,27 +21,23 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.config.name }} (${{ matrix.arch.name }}; ${{ matrix.buildtype }})
+    name: ${{ matrix.config.name }} (${{ matrix.buildtype }})
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
       matrix:
         config:
-          - { name: "macOS 13", os: macos-13 }
-          - { name: "macOS 14", os: macos-14 }
-        buildtype: [Release, Debug]
-        arch:
-          - { name: "Apple Silicon", dir: "arm64", flags: "" }
+          # macos-13 is an intel x86_64 runner
+          # macos-14 is an arm64 runner
+          - { name: "macOS 13", os: macos-13, dir: "x86_64", flags: "" }
           - {
-              name: "Intel",
-              dir: "x86_64",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
-            }
-          - {
-              name: "Universal",
+              name: "macOS 13 universal",
+              os: macos-13,
               dir: "universal",
               flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
+          - { name: "macOS 14 arm64", os: macos-14, dir: "arm64", flags: "" }
+        buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
@@ -60,38 +56,38 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.config.os }}-${{ matrix.arch.dir }}-${{ matrix.buildtype }}
+          key: ${{ matrix.config.os }}-${{ matrix.config.dir }}-${{ matrix.buildtype }}
 
       - name: Configure CMake
         run: |
-          cmake -B ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${{ matrix.arch.flags }}
+          cmake -B ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${{ matrix.config.flags }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}  --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}  --parallel 4 --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView runs
         run: |
-          ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
+          ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView --help
 
       - name: Bundle dependencies
-        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/libs/
+        run: dylibbundler -od -b -x ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/MacOS/HDRView -d ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.app/Contents/libs/
 
       - name: Creating dmg (macOS)
         run: |
-          RESULT="${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.dmg"
+          RESULT="${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.dmg"
           test -f $RESULT && rm $RESULT
-          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.app
+          create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.app
 
       - name: Archive dmg (macOS)
         uses: actions/upload-artifact@v4
         with:
-          name: HDRView-${{ matrix.config.os }}-${{ matrix.arch.dir }}-${{ matrix.buildtype }}.dmg
+          name: HDRView-${{ matrix.config.os }}-${{ matrix.config.dir }}-${{ matrix.buildtype }}.dmg
           path: |
-            ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}/HDRView.dmg
+            ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}/HDRView.dmg
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.arch.dir }}-${{ matrix.buildtype }}
+          name: build-artifacts-${{ matrix.config.os }}-${{ matrix.config.dir }}-${{ matrix.buildtype }}
           path: |
-            ${{github.workspace}}/build/${{ matrix.arch.dir }}-${{ matrix.buildtype }}
+            ${{github.workspace}}/build/${{ matrix.config.dir }}-${{ matrix.buildtype }}
