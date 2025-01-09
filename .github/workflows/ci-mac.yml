@@ -31,20 +31,16 @@ jobs:
           - { name: "macOS 14", os: macos-14 }
         buildtype: [Release, Debug]
         arch:
-          - {
-              name: "Apple Silicon",
-              dir: "arm64",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64"',
-            }
+          - { name: "Apple Silicon", dir: "arm64", flags: "" }
           - {
               name: "Intel",
               dir: "x86_64",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_IGNORE_PATH="/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+              flags: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_IGNORE_PATH="/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
           - {
               name: "Universal",
               dir: "universal",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
 
     steps:
