@@ -29,7 +29,12 @@ jobs:
         config:
           # macos-13 is an intel x86_64 runner
           # macos-14 is an arm64 runner
-          - { name: "macOS 13", os: macos-13, dir: "x86_64", flags: "" }
+          - {
+              name: "macOS 14 universal",
+              os: macos-14,
+              dir: "universal",
+              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+            }
           - {
               name: "macOS 13 universal",
               os: macos-13,
@@ -37,12 +42,8 @@ jobs:
               flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
           - { name: "macOS 14 arm64", os: macos-14, dir: "arm64", flags: "" }
-          - {
-              name: "macOS 14 universal",
-              os: macos-14,
-              dir: "universal",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
-            }
+          - { name: "macOS 13", os: macos-13, dir: "x86_64", flags: "" }
+
         buildtype: [Release, Debug]
 
     steps:
