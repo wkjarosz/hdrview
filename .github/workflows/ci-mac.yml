@@ -35,12 +35,12 @@ jobs:
           - {
               name: "Intel",
               dir: "x86_64",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_IGNORE_PATH="/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+              flags: '-DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_IGNORE_PATH="/usr/local/bin/;/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/local/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
           - {
               name: "Universal",
               dir: "universal",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/bin/;/usr/local/Cellar/harfbuzz/10.1.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/opt/homebrew/Cellar/harfbuzz/10.1.0/include/;/opt/homebrew/Cellar/harfbuzz/10.1.0/lib/;/usr/local;/usr/local/lib/;/usr/local/Cellar/;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/local/bin;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
 
     steps:
