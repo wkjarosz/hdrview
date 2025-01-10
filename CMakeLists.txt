@@ -273,9 +273,6 @@ if(implot_ADDED)
   target_include_directories(implot PUBLIC ${implot_SOURCE_DIR})
   target_link_libraries(implot PUBLIC imgui)
   set_target_properties(implot PROPERTIES CXX_STANDARD 17)
-  list(APPEND EXTRA_SOURCES ${implot_SOURCE_DIR}/implot.h ${implot_SOURCE_DIR}/implot_internal.h
-       ${implot_SOURCE_DIR}/implot.cpp ${implot_SOURCE_DIR}/implot_items.cpp
-  )
 endif()
 
 CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
