@@ -624,7 +624,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     &m_params.imGuiWindowParams.showMenuBar});
         add_action({"Show status bar", ICON_MY_STATUSBAR, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showStatusBar});
-        add_action({"Show FPS in status bar", ICON_MS_SPEED, 0, 0, []() {}, always_enabled, false,
+        add_action({"Show FPS in status bar", ICON_MY_FPS, 0, 0, []() {}, always_enabled, false,
                     &m_params.imGuiWindowParams.showStatus_Fps});
         add_action(
             {"Enable idling", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_params.fpsIdling.enableIdling});
@@ -672,7 +672,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                                !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
                     }});
 
-        add_action({"Hide entire GUI", ICON_MS_CHECK_BOX_OUTLINE_BLANK, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+        add_action({"Hide entire GUI", ICON_MY_HIDE_GUI, ImGuiMod_Shift | ImGuiKey_Tab, 0,
                     [this]()
                     {
                         for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
@@ -1722,7 +1722,7 @@ void HDRViewApp::draw_pixel_inspector_window()
     ImGui::SeparatorText("Watched pixels:");
 
     auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
-    if (PixelHeader(ICON_MY_CURSOR_ARROW, hovered_pixel))
+    if (PixelHeader(ICON_MY_CURSOR_ARROW "##hovered pixel", hovered_pixel))
     {
         static int2 color_mode = {0, 0};
         ImGui::PushID("Current");
@@ -1975,7 +1975,8 @@ void HDRViewApp::draw_file_window()
     }
 
     ImGui::SameLine();
-    if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES : ICON_MY_FULL_NAMES))
+    if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES "##short names button"
+                                        : ICON_MY_FULL_NAMES "##short names button"))
         g_short_names = !g_short_names;
     ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
                                         : "Click to show only the unique portion of each file name.");
