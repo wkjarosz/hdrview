@@ -4121,5 +4121,5 @@ inline float tent_dither(int x, int y)
     float r = box_dither(x, y);
 
     // Convert uniform distribution into triangle-shaped distribution
-    return (r < 0.0) ? sqrtf(2.f * r + 1.f) - 1.f : sqrtf(2.f * r);
+    return (r < 0.0) ? std::sqrt(2.f * r + 1.f) - 1.f : std::sqrt(2.f * r);
 }

@@ -356,6 +356,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
                             [](GLFWwindow *w, int count, const char **filenames)
                             {
+                                spdlog::debug("Received glfw drop event");
                                 vector<string> arg(count);
                                 for (int i = 0; i < count; ++i) arg[i] = filenames[i];
                                 hdrview()->load_images(arg);
@@ -386,7 +387,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         glfwSetOpenedFilenamesCallback(
             [](const char *image_file)
             {
-                spdlog::trace("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
+                spdlog::debug("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
                 hdrview()->load_images({string(image_file)});
             });
 #endif
@@ -1353,7 +1354,7 @@ void HDRViewApp::load_images(const vector<string> &filenames)
         if (formats.find(get_extension(f)) != formats.end())
             load_image(f);
         else
-            spdlog::debug("Skipping unsupported file '{}'", f);
+            spdlog::warn("Skipping unsupported file '{}'", f);
     }
 }
 

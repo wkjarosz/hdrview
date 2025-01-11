@@ -327,6 +327,13 @@ if(stb_ADDED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
 
+CPMAddPackage("gh:phoboslab/qoi#b0b926ee70108b0113dd2718d13d2207c474ed2e")
+if(qoi_ADDED)
+  message(STATUS "qoi library added")
+  add_library(qoi INTERFACE IMPORTED)
+  target_include_directories(qoi INTERFACE "${qoi_SOURCE_DIR}")
+endif()
+
 CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
 if(emscripten-browser-file_ADDED)
   message(STATUS "emscripten-browser-file library added")
@@ -448,6 +455,7 @@ hello_imgui_add_app(
   src/imageio/exr.cpp
   src/imageio/pfm.cpp
   src/imageio/stb.cpp
+  src/imageio/qoi.cpp
   src/imageio/uhdr.cpp
   src/app.cpp
   src/colorspace.cpp
@@ -487,6 +495,7 @@ target_link_libraries(
           OpenEXR::OpenEXR
           Imath::Imath
           stb
+          qoi
           implot
           cli11
           my_imgui_command_palette

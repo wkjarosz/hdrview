@@ -17,6 +17,7 @@
 
 #include "imageio/exr.h"
 #include "imageio/pfm.h"
+#include "imageio/qoi.h"
 #include "imageio/stb.h"
 #include "imageio/uhdr.h"
 
@@ -39,6 +40,11 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         {
             spdlog::info("Detected UltraHDR JPEG image. Loading via libultrahdr.");
             images = load_uhdr_image(is, filename);
+        }
+        else if (is_qoi_image(is))
+        {
+            spdlog::info("Detected QOI image.");
+            images = load_qoi_image(is, filename);
         }
         else if (is_stb_image(is))
         {
@@ -82,6 +88,8 @@ bool Image::save(ostream &os, const string &filename, float gain, float gamma, b
         return save_exr_image(*this, os, filename);
     else if (extension == "jpg" || extension == "jpeg")
         return save_uhdr_image(*this, os, filename);
+    else if (extension == "qoi")
+        return save_qoi_image(*this, os, filename);
     else
         return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
 }

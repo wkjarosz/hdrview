@@ -294,8 +294,6 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
         Timer timer;
 
         // unpremultiply and copy the color channels
-        // this code is a bit silly since it repeats the matrix multiply for each color channel
-        // could just rewrite as a manual loop over the 3-4 channels
         for (int c = 0; c < 3; ++c)
         {
             img.channels[group.channels[c]].copy_to_interleaved(pixels.get(), n, c,

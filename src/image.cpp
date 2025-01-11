@@ -92,12 +92,12 @@ Texture *Image::dither_texture() { return s_dither_texture.get(); }
 
 std::set<std::string> Image::loadable_formats()
 {
-    return {"dng", "jpg", "jpeg", "png", "bmp", "psd", "pfm", "tga", "gif", "hdr", "pic", "ppm", "pgm", "exr"};
+    return {"dng", "jpg", "jpeg", "png", "bmp", "psd", "pfm", "tga", "gif", "hdr", "pic", "ppm", "pgm", "exr", "qoi"};
 }
 
 std::set<std::string> Image::savable_formats()
 {
-    return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga"};
+    return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga", "qoi"};
 }
 
 //

@@ -182,16 +182,17 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
         // get interleaved LDR pixel data
         std::unique_ptr<uint8_t[]> pixels(new uint8_t[w * h * n]);
         {
-            Timer          timer;
-            const Channel *alpha = n > 3 ? &img.channels[img.groups[img.selected_group].channels[3]] : nullptr;
+            Timer timer;
 
             // unpremultiply, tonemap, and dither the color channels
-            for (int c = 0; c < min(n, 3); ++c)
+            // TODO: this code is essentially the same as in qoi.cpp; reuse it
+            for (int c = 0; c < n; ++c)
                 img.channels[img.groups[img.selected_group].channels[c]].copy_to_interleaved(
                     pixels.get(), n, c,
                     [gain, g = 1.f / gamma, sRGB, c, dither, alpha](float v, int x, int y)
                     {
-                        // only gamma correct and premultiply RGB channels
+                        // only gamma correct and premultiply the RGB channels.
+                        // alpha channel gets stored linearly.
                         if (c < 3)
                         {
                             v *= gain;
@@ -212,12 +213,6 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
 
                         return (uint8_t)clamp(v * 255.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
                     });
-
-            // alpha channel gets stored linearly
-            if (alpha)
-                alpha->copy_to_interleaved(
-                    pixels.get(), n, 3, [dither](float v, int x, int y)
-                    { return (uint8_t)clamp(v * 255.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f); });
 
             spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
         }
