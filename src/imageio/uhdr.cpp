@@ -249,7 +249,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         for (int c = 0; c < num_components; ++c)
         {
             image->channels[4 + c].copy_from_interleaved(
-                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return v / 255.f; }, stride_y);
+                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return v; }, stride_y);
             image->channels[4 + c].apply([c](float v, int x, int y)
                                          { return Channel::dequantize(v, x, y, c != 3, c != 3); });
         }

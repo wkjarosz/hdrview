@@ -61,8 +61,8 @@ float4 tonemap(const float4 color, const float gamma, const bool sRGB)
 
 float rand_box(float2 xy, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
 {
-    // Result is in range [-0.5, 0.5]
-    return dither_texture.sample(dither_sampler, xy/float2(256,256)).r/65536 - 0.5;
+    // Result is in range (-0.5, 0.5)
+    return (dither_texture.sample(dither_sampler, xy/float2(256,256)).r+0.5)/65536 - 0.5;
 }
 
 float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
@@ -70,10 +70,10 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
     float r = rand_box(xy, dither_texture, dither_sampler);
 
     // Convert uniform distribution into triangle-shaped distribution
-    // Result is in range [-1.0,1.0]
+    // Result is in range (-0.5,0.5)
     float rp = sqrt(2*r);       // positive triangle
     float rn = sqrt(2*r+1)-1;   // negative triangle
-    return (r < 0) ? rn : rp;
+    return 0.5 * ((r < 0) ? rn : rp);
 }
 
 float4 choose_channel(float4 rgba, int channel)
@@ -121,7 +121,7 @@ float4 dither(float4 color, float2 xy, const float2 randomness, const bool do_di
     if (!do_dither)
 		return color;
 
-    return color + float4(float3(rand_tent(xy + randomness, dither_texture, dither_sampler)/255.0), 0.0);
+    return color + float4(float3(rand_tent(xy + randomness, dither_texture, dither_sampler)/256.0), 0.0);
 }
 
 float sample_channel(texture2d<float, access::sample> texture, sampler the_sampler, float2 uv, bool within_image)

@@ -102,33 +102,29 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     using FloatBuffer = std::unique_ptr<float[], void (*)(void *)>;
     auto float_data =
         FloatBuffer{stbi_loadf_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0), stbi_image_free};
-    if (float_data)
-    {
-        auto image      = make_shared<Image>(size.xy(), size.z);
-        image->filename = filename;
-
-        bool linearize = !stbi_is_hdr(filename.c_str());
-
-        Timer timer;
-        for (int c = 0; c < size.z; ++c)
-        {
-            image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
-                                                     [](float v) { return v; });
-            if (c < 3 && linearize)
-                image->channels[c].apply([linearize](float v, int x, int y)
-                                         { return Channel::dequantize(v, x, y, linearize, true); });
-        }
-        // if we have an alpha channel, premultiply the other channels by it
-        // this needs to be done after the values have been made linear
-        if (size.z > 3)
-            for (int c = 0; c < 3; ++c)
-                image->channels[c].apply([&alpha = image->channels[3]](float v, int x, int y)
-                                         { return alpha(x, y) * v; });
-        spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
-        return {image};
-    }
-    else
+    if (!float_data)
         throw invalid_argument(stbi_failure_reason());
+
+    auto image      = make_shared<Image>(size.xy(), size.z);
+    image->filename = filename;
+
+    bool linearize = !stbi_is_hdr(filename.c_str());
+
+    Timer timer;
+    for (int c = 0; c < size.z; ++c)
+    {
+        image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
+                                                 [](float v) { return 255.f * v; });
+        image->channels[c].apply([linearize, c](float v, int x, int y)
+                                 { return Channel::dequantize(v, x, y, linearize, c != 3); });
+    }
+    // if we have an alpha channel, premultiply the other channels by it
+    // this needs to be done after the values have been made linear
+    if (size.z > 3)
+        for (int c = 0; c < 3; ++c)
+            image->channels[c].apply([&alpha = image->channels[3]](float v, int x, int y) { return alpha(x, y) * v; });
+    spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
+    return {image};
 }
 
 bool save_stb_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
@@ -211,7 +207,7 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
                                 v = pow(v, g);
                         }
 
-                        return (uint8_t)clamp(v * 255.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
+                        return (uint8_t)clamp(v * 256.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
                     });
 
             spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));

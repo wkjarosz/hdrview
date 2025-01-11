@@ -138,11 +138,12 @@ public:
     Channel() = delete;
     Channel(const std::string &name, int2 size);
 
+    // assumes values in float channel are in byte range: [0, 255]
     static float dequantize(float v, int x, int y, bool linearize = true, bool dither = true)
     {
         float d = dither ? tent_dither(x, y) + 0.5f : 0.5f;
         // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
-        float dithered = ((v * 255.f) + d) / 256.0f;
+        float dithered = (v + d) / 256.0f;
         return linearize ? SRGBToLinear(dithered) : dithered;
     }
 

@@ -4106,20 +4106,20 @@ static constexpr float g_dither_matrix[g_dither_matrix_w * g_dither_matrix_w] = 
     1983,  39849, 54857, 25126, 3365,  63593, 31499, 57445, 27704, 33480, 50201, 29665, 53652, 23291, 55564, 28896,
     59909, 17693, 56824, 21346, 2122,  64927, 44829, 13439, 52048, 1139,  58122, 14319, 65331, 3297,  56517, 9169};
 
-/// Zero-mean dither uniformly distributed in range [-0.5, 0.5]
+/// Zero-mean dither uniformly distributed in range (-0.5, 0.5)
 inline float box_dither(int x, int y)
 {
     static constexpr float dither_matrix_f = 1.f / (g_dither_matrix_w * g_dither_matrix_w);
     int                    xmod            = x % g_dither_matrix_w;
     int                    ymod            = y % g_dither_matrix_w;
-    return g_dither_matrix[xmod + ymod * g_dither_matrix_w] * dither_matrix_f - 0.5f;
+    return (g_dither_matrix[xmod + ymod * g_dither_matrix_w] + 0.5f) * dither_matrix_f - 0.5f;
 }
 
-/// Zero-mean dither with a triangle-shaped distribution in range [-1.0,1.0]
+/// Zero-mean dither with a triangle-shaped distribution in range (-0.5,0.5)
 inline float tent_dither(int x, int y)
 {
     float r = box_dither(x, y);
 
     // Convert uniform distribution into triangle-shaped distribution
-    return (r < 0.0) ? std::sqrt(2.f * r + 1.f) - 1.f : std::sqrt(2.f * r);
+    return 0.5f * ((r < 0.0) ? std::sqrt(2.f * r + 1.f) - 1.f : std::sqrt(2.f * r));
 }

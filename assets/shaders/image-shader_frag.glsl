@@ -82,8 +82,8 @@ vec4 tonemap(vec4 color)
 
 float rand_box(vec2 xy)
 {
-    // Result is in range [-0.5, 0.5]
-    return texture(dither_texture, xy / vec2(256, 256)).r / 65536.0 - 0.5;
+    // Result is in range (-0.5, 0.5)
+    return (texture(dither_texture, xy / vec2(256, 256)).r + 0.5) / 65536.0 - 0.5;
 }
 
 float rand_tent(vec2 xy)
@@ -91,10 +91,10 @@ float rand_tent(vec2 xy)
     float r = rand_box(xy);
 
     // Convert uniform distribution into triangle-shaped distribution
-    // Result is in range [-1.0,1.0]
+    // Result is in range (-0.5,0.5)
     float rp = sqrt(2.0 * r);             // positive triangle
     float rn = sqrt(2.0 * r + 1.0) - 1.0; // negative triangle
-    return (r < 0.0) ? rn : rp;
+    return (r < 0.0) ? 0.5 * rn : 0.5 * rp;
 }
 
 vec4 choose_channel(vec4 rgba)
@@ -142,7 +142,7 @@ vec4 dither(vec4 color)
     if (!do_dither)
         return color;
 
-    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + randomness) / 255.0), 0.0);
+    return color + vec4(vec3(rand_tent(gl_FragCoord.xy + randomness) / 256.0), 0.0);
 }
 
 float sample_channel(sampler2D sampler, vec2 uv, bool within_image)

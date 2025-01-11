@@ -84,10 +84,9 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     for (int c = 0; c < size.z; ++c)
     {
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
-                                                 size.z, c, [](uint8_t v) { return v / 255.f; });
-        if (c < 3 && linearize)
-            image->channels[c].apply([linearize, c](float v, int x, int y)
-                                     { return Channel::dequantize(v, x, y, linearize, c != 3); });
+                                                 size.z, c, [](uint8_t v) { return v; });
+        image->channels[c].apply([linearize, c](float v, int x, int y)
+                                 { return Channel::dequantize(v, x, y, linearize, c != 3); });
     }
     // if we have an alpha channel, premultiply the other channels by it
     // this needs to be done after the values have been made linear
@@ -144,7 +143,7 @@ bool save_qoi_image(const Image &img, ostream &os, const string &filename, float
                             v = LinearToSRGB(v);
                     }
 
-                    return (uint8_t)clamp(v * 255.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
+                    return (uint8_t)clamp(v * 256.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
                 });
 
         spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
