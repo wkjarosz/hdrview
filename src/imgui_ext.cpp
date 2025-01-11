@@ -2,7 +2,6 @@
 #include "imgui_ext.h"
 #include "box.h"
 #include "colorspace.h"
-#include "hello_imgui/icons_font_awesome_6.h"
 #include "spdlog/pattern_formatter.h"
 
 #include "fonts.h"

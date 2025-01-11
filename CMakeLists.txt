@@ -20,10 +20,75 @@ option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 option(HDRVIEW_NO_UHDR "Do not build with libultrahdr support" OFF)
 option(HDRVIEW_BUILD_UHDR_DEPS "Build the dependencies for libultrahdr" OFF)
 option(HDRVIEW_IGNORE_BREW_PORTS "Ignore Homebrew and MacPorts directories" OFF)
-
 if(HDRVIEW_IGNORE_BREW_PORTS)
   set(CMAKE_IGNORE_PATH "/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin")
 endif()
+
+# cmake-format: off
+set(HDRVIEW_ICONSET
+    "HDRVIEW_ICONSET_MS"
+    CACHE
+      STRING
+      "Choose the icon set: HDRVIEW_ICONSET_FA6, HDRVIEW_ICONSET_LC, HDRVIEW_ICONSET_MS, HDRVIEW_ICONSET_MD, HDRVIEW_ICONSET_MDI"
+)
+
+# Ensure the icon set is one of the allowed values
+set(ALLOWED_ICONSETS "HDRVIEW_ICONSET_FA6" "HDRVIEW_ICONSET_LC" "HDRVIEW_ICONSET_MS" "HDRVIEW_ICONSET_MD"
+                     "HDRVIEW_ICONSET_MDI"
+)
+list(FIND ALLOWED_ICONSETS ${HDRVIEW_ICONSET} ICONSET_INDEX)
+if(ICONSET_INDEX EQUAL -1)
+  message(FATAL_ERROR "Invalid icon set: ${HDRVIEW_ICONSET}. Allowed values are: ${ALLOWED_ICONSETS}")
+endif()
+# cmake-format: on
+
+# copy assets to the build directory
+set(MY_RESOURCE_FILES "assets/app_settings/icon.png")
+if(EMSCRIPTEN)
+  file(
+    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.*
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/emscripten/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
+  )
+  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
+elseif(APPLE)
+  file(
+    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/apple/**.*
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.metal
+  )
+  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
+elseif(WIN32)
+  file(
+    GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
+  )
+  list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
+endif()
+
+# add our chosen icon font
+if(HDRVIEW_ICONSET STREQUAL "HDRVIEW_ICONSET_FA6")
+  # this file is included by hello imgui
+  #
+  # list(APPEND MY_RESOURCE_FILES "assets/fonts/Font_Awesome_6_Free-Solid-900.otf")
+elseif(HDRVIEW_ICONSET STREQUAL "HDRVIEW_ICONSET_LC")
+  list(APPEND MY_RESOURCE_FILES "assets/fonts/lucide.ttf")
+elseif(HDRVIEW_ICONSET STREQUAL "HDRVIEW_ICONSET_MS")
+  list(APPEND MY_RESOURCE_FILES "assets/fonts/MaterialSymbolsRounded_Filled-Regular.ttf")
+elseif(HDRVIEW_ICONSET STREQUAL "HDRVIEW_ICONSET_MD")
+  list(APPEND MY_RESOURCE_FILES "assets/fonts/MaterialIcons-Regular.ttf")
+elseif(HDRVIEW_ICONSET STREQUAL "HDRVIEW_ICONSET_MDI")
+  list(APPEND MY_RESOURCE_FILES "assets/fonts/materialdesignicons-webfont.ttf")
+endif()
+
+foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/${MY_RESOURCE_FILE} ${CMAKE_CURRENT_BINARY_DIR}/${MY_RESOURCE_FILE} COPYONLY
+  )
+endforeach()
 
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp ${CMAKE_CURRENT_BINARY_DIR}/src/_version.cpp
@@ -138,8 +203,9 @@ include(cmake/CPM.cmake)
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
   set(HELLOIMGUI_HAS_METAL ON)
-
   set(HELLOIMGUI_USE_GLFW3 ON)
+
+  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
 
   # on macOS, download a fork of glfw that allows dragging files onto app icon.
 
@@ -179,47 +245,8 @@ if(APPLE AND NOT EMSCRIPTEN)
   endif()
 endif()
 
-# copy asset directory to the build tree file
-file(
-  GLOB_RECURSE MY_RESOURCE_FILES
-  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} # CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.*
-)
-
-if(APPLE AND HELLOIMGUI_HAS_METAL)
-  list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
-endif()
-
-foreach(MY_RESOURCE_FILE ${MY_RESOURCE_FILES})
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/${MY_RESOURCE_FILE} ${CMAKE_CURRENT_BINARY_DIR}/${MY_RESOURCE_FILE} COPYONLY
-  )
-endforeach()
-
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
-
-# cmake-format: off
-# CPMAddPackage(
-#   NAME imgui_bundle
-#   GITHUB_REPOSITORY pthom/imgui_bundle
-#   GIT_TAG v1.6.0
-#   OPTIONS "IMGUI_BUNDLE_WITH_TEST_ENGINE OFF"
-#           "IMGUI_BUNDLE_DISABLE_NANOVG ON"
-#           "IMGUI_BUNDLE_DISABLE_IMGUI_TEX_INSPECT ON"
-#           "IMGUI_BUNDLE_DISABLE_IMGUIZMO ON"
-#           "IMGUI_BUNDLE_DISABLE_IMFILEDIALOG ON"
-#           "IMGUI_BUNDLE_DISABLE_IMGUI_NODE_EDITOR ON"
-#           # "IMGUI_BUNDLE_DISABLE_IMPLOT ON"
-#           "IMGUI_BUNDLE_DISABLE_IMMVISION ON"
-# )
-# if(imgui_bundle_ADDED)
-#   message(STATUS "imgui_bundle library added")
-#   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
-#     add_compile_options(-pthread)
-#   endif()
-# endif()
-# cmake-format: on
 
 CPMAddPackage("gh:pthom/hello_imgui#v1.6.0")
 if(hello_imgui_ADDED)
@@ -257,7 +284,6 @@ CPMAddPackage(
   GIT_TAG 5699254a9de9a6448360844696fb501bc5141353
   DOWNLOAD_ONLY YES
 )
-
 if(my_imgui_command_palette_ADDED)
   message(STATUS "imgui-command-palette library added")
   add_library(
@@ -446,8 +472,8 @@ hello_imgui_add_app(
 )
 target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
-# add_dependencies(HDRView gen_version_h_target) target_sources(HDRView PRIVATE
-# ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp)
+target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
+
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
@@ -516,9 +542,13 @@ endif()
 # Install and packaging support
 
 if(NOT HDRVIEW_PORTABLE_INSTALL)
-  # If not portable, we have to - install the app manually - install the assets manually - pass the assets location to
-  # the app, and set this assets location in main() via the compile definition ASSETS_LOCATION: #ifdef ASSETS_LOCATION
-  # \n HelloImGui::SetAssetsFolder(ASSETS_LOCATION); \n #endif
+  # cmake-format: off
+  # If not portable, we have to
+  # - install the app manually
+  # - install the assets manually
+  # - pass the assets location to the app, and set this assets location in main() via the compile definition ASSETS_LOCATION:
+  #     #ifdef ASSETS_LOCATION \n HelloImGui::SetAssetsFolder(ASSETS_LOCATION); \n #endif
+  # cmake-format: on
   include(GNUInstallDirs)
   install(TARGETS HDRView DESTINATION ${CMAKE_INSTALL_BINDIR})
   set(assets_install_dir ${CMAKE_INSTALL_DATADIR}/HDRView)

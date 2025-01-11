@@ -26,24 +26,24 @@ void HDRViewApp::load_fonts()
             iconFontParams.useFullGlyphRange     = false;
             iconFontParams.glyphRanges           = glyphRanges;
 
-#if defined(FONT_AWESOME_6_ICONS)
+#if defined(HDRVIEW_ICONSET_FA6)
             auto icon_font_size                        = 0.85f * size;
             iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
                 icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
             iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.05f;
-#elif defined(LUCIDE_ICONS)
+#elif defined(HDRVIEW_ICONSET_LC)
             auto icon_font_size                     = size;
             iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.03f;
             iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.20f;
-#elif defined(MATERIAL_SYMBOLS_ICONS)
+#elif defined(HDRVIEW_ICONSET_MS)
             auto icon_font_size                     = 1.28571429f * size;
             iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.01f;
             iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.2f;
-#elif defined(MATERIAL_DESIGN_ICONS)
+#elif defined(HDRVIEW_ICONSET_MD)
             auto icon_font_size                     = size;
             iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.01f;
             iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.2f;
-#elif defined(MATERIAL_DESIGN_ICONS_ICONS)
+#elif defined(HDRVIEW_ICONSET_MDI)
             auto icon_font_size = size;
             iconFontParams.fontConfig.GlyphOffset =
                 icon_font_size * HelloImGui::DpiFontLoadingFactor() * float2{0.02f, 0.1f};

@@ -21,10 +21,10 @@ string git_describe() { return string("@GIT_DESCRIBE@"); }
 string build_timestamp() { return string("@BUILD_TIME@"); }
 string backend()
 {
-#if defined(HELLOIMGUI_USE_GLFW)
-    return "GLFW";
-#elif defined(HELLOIMGUI_USE_SDL)
-    return "SDL";
+#if defined(HELLOIMGUI_USE_GLFW3)
+    return "GLFW 3";
+#elif defined(HELLOIMGUI_USE_SDL2)
+    return "SDL 2";
 #endif
 }
 // clang-format on

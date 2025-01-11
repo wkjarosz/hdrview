@@ -46,11 +46,11 @@ using std::string_view;
 #include "portable-file-dialogs.h"
 #endif
 
-#ifdef HELLOIMGUI_USE_SDL
+#ifdef HELLOIMGUI_USE_SDL2
 #include <SDL.h>
 #endif
 
-#ifdef HELLOIMGUI_USE_GLFW
+#ifdef HELLOIMGUI_USE_GLFW3
 #include <GLFW/glfw3.h>
 
 #ifdef __APPLE__
@@ -348,7 +348,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         HelloImGui::DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
         HelloImGui::DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
 
-#if defined(HELLOIMGUI_USE_GLFW)
+#if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
     {
         spdlog::trace("Registering glfw drop callback");
@@ -2781,7 +2781,7 @@ int HDRViewApp::nth_visible_image_index(int n) const
 
 bool HDRViewApp::process_event(void *e)
 {
-#ifdef HELLOIMGUI_USE_SDL
+#ifdef HELLOIMGUI_USE_SDL2
     auto &io = ImGui::GetIO();
     if (io.WantCaptureMouse)
         return false;

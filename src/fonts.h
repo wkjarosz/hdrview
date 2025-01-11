@@ -2,13 +2,21 @@
 
 #include "fwd.h"
 
-// #define FONT_AWESOME_6_ICONS
-// #define LUCIDE_ICONS
-#define MATERIAL_SYMBOLS_ICONS
-// #define MATERIAL_DESIGN_ICONS
-// #define MATERIAL_DESIGN_ICONS_ICONS
+// ensure that at most one the icon sets is selected
+#if defined(HDRVIEW_ICONSET_FA6) + defined(HDRVIEW_ICONSET_LC) + defined(HDRVIEW_ICONSET_MS) +                         \
+        defined(HDRVIEW_ICONSET_MD) + defined(HDRVIEW_ICONSET_MDI) >                                                   \
+    1
+#error                                                                                                                 \
+    "At most one of HDRVIEW_ICONSET_FA6, HDRVIEW_ICONSET_LC, HDRVIEW_ICONSET_MS, HDRVIEW_ICONSET_MD, or HDRVIEW_ICONSET_MDI must be defined."
+#endif
 
-#if defined(FONT_AWESOME_6_ICONS)
+// default to Material Symbol Icons if none are defined
+#if !defined(HDRVIEW_ICONSET_FA6) && !defined(HDRVIEW_ICONSET_LC) && !defined(HDRVIEW_ICONSET_MS) &&                   \
+    !defined(HDRVIEW_ICONSET_MD) && !defined(HDRVIEW_ICONSET_MDI)
+#define HDRVIEW_ICONSET_MS
+#endif
+
+#if defined(HDRVIEW_ICONSET_FA6)
 #include "hello_imgui/icons_font_awesome_6.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/Font_Awesome_6_Free-Solid-900.otf"
 #define ICON_MIN_MY            ICON_MIN_FA
@@ -96,7 +104,7 @@
 #define ICON_MY_CURSOR_ARROW      ICON_FA_ARROW_POINTER
 #define ICON_MY_TIMES             ICON_FA_XMARK
 
-#elif defined(LUCIDE_ICONS)
+#elif defined(HDRVIEW_ICONSET_LC)
 #include "IconsLucide.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/lucide.ttf"
 #define ICON_MIN_MY            ICON_MIN_LC
@@ -184,7 +192,7 @@
 #define ICON_MY_CURSOR_ARROW      ICON_LC_MOUSE_POINTER
 #define ICON_MY_TIMES             ICON_LC_X
 
-#elif defined(MATERIAL_SYMBOLS_ICONS)
+#elif defined(HDRVIEW_ICONSET_MS)
 #include "IconsMaterialSymbols.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialSymbolsRounded_Filled-Regular.ttf"
 #define ICON_MIN_MY            ICON_MIN_MS
@@ -273,7 +281,7 @@
 #define ICON_MY_SELECT             ICON_MS_CHECK_BOX_OUTLINE_BLANK
 #define ICON_MY_PAN_ZOOM_TOOL      ICON_MS_PAN_TOOL
 
-#elif defined(MATERIAL_DESIGN_ICONS)
+#elif defined(HDRVIEW_ICONSET_MD)
 
 #include "IconsMaterialDesign.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialIcons-Regular.ttf"
@@ -362,7 +370,7 @@
 #define ICON_MY_CURSOR_ARROW      ICON_MD_MOUSE
 #define ICON_MY_TIMES             ICON_MD_CLOSE
 
-#elif defined(MATERIAL_DESIGN_ICONS_ICONS)
+#elif defined(HDRVIEW_ICONSET_MDI)
 
 #include "IconsMaterialDesignIcons.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/materialdesignicons-webfont.ttf"
