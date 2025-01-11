@@ -105,7 +105,7 @@
 #define ICON_MY_TIMES             ICON_FA_XMARK
 
 #elif defined(HDRVIEW_ICONSET_LC)
-#include "IconsLucide.h"
+#include "icons/IconsLucide.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/lucide.ttf"
 #define ICON_MIN_MY            ICON_MIN_LC
 #define ICON_MAX_16_MY         ICON_MAX_16_LC
@@ -193,7 +193,7 @@
 #define ICON_MY_TIMES             ICON_LC_X
 
 #elif defined(HDRVIEW_ICONSET_MS)
-#include "IconsMaterialSymbols.h"
+#include "icons/IconsMaterialSymbols.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialSymbolsRounded_Filled-Regular.ttf"
 #define ICON_MIN_MY            ICON_MIN_MS
 #define ICON_MAX_16_MY         ICON_MAX_16_MS
@@ -283,7 +283,7 @@
 
 #elif defined(HDRVIEW_ICONSET_MD)
 
-#include "IconsMaterialDesign.h"
+#include "icons/IconsMaterialDesign.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialIcons-Regular.ttf"
 #define ICON_MIN_MY            ICON_MIN_MD
 #define ICON_MAX_16_MY         ICON_MAX_16_MD
@@ -372,7 +372,7 @@
 
 #elif defined(HDRVIEW_ICONSET_MDI)
 
-#include "IconsMaterialDesignIcons.h"
+#include "icons/IconsMaterialDesignIcons.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/materialdesignicons-webfont.ttf"
 #define ICON_MIN_MY            ICON_MIN_MDI
 #define ICON_MAX_16_MY         ICON_MAX_16_MDI
