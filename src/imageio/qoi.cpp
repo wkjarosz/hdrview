@@ -80,13 +80,15 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
 
     bool linearize = desc.colorspace != QOI_LINEAR;
 
+    if (linearize)
+        spdlog::info("QOI image is sRGB encoded, linearizing.");
+
     Timer timer;
     for (int c = 0; c < size.z; ++c)
     {
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
                                                  size.z, c, [](uint8_t v) { return v; });
-        image->channels[c].apply([linearize, c](float v, int x, int y)
-                                 { return Channel::dequantize(v, x, y, linearize, c != 3); });
+        image->channels[c].apply([linearize](float v, int x, int y) { return byte_to_f32(v, linearize); });
     }
     // if we have an alpha channel, premultiply the other channels by it
     // this needs to be done after the values have been made linear
@@ -138,12 +140,9 @@ bool save_qoi_image(const Image &img, ostream &os, const string &filename, float
                             if (a != 0.f)
                                 v /= a;
                         }
-
-                        if (sRGB)
-                            v = LinearToSRGB(v);
                     }
 
-                    return (uint8_t)clamp(v * 256.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
+                    return f32_to_byte(v, x, y, sRGB && c < 3, dither);
                 });
 
         spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
@@ -158,6 +157,7 @@ bool save_qoi_image(const Image &img, ostream &os, const string &filename, float
     };
     int encoded_size = 0;
 
+    spdlog::info("Saving {}-channel, {}x{} pixels {} QOI image.", n, w, h, sRGB ? "sRGB" : "linear");
     std::unique_ptr<void, decltype(std::free) *> encoded_data{qoi_encode(pixels.get(), &desc, &encoded_size),
                                                               std::free};
 

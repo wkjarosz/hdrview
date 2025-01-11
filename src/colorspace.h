@@ -30,8 +30,8 @@
     \param dst
         Destination chromaticities
     \param CAT_method
-        Method for chromatic adaptation transform (1: XYZ scaling, 2: Bradford, 3: Von Kries; all other values use an
-        identity CAT)
+        Method for chromatic adaptation transform (1: XYZ scaling, 2: Bradford, 3: Von Kries; all other values use
+   an identity CAT)
     \returns
         True if color conversion is needed, in which case M will contain the conversion matrix.
 */
@@ -216,3 +216,13 @@ inline Color4 tonemap(const Color4 color, float gamma, bool sRGB)
 }
 
 const std::vector<std::string> &colorSpaceNames();
+
+// assumes values of v are in byte range: [0, 255]
+inline float byte_to_f32(float v, bool linearize = true)
+{
+    // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
+    float u8 = (v + 0.f) / 255.0f;
+    return linearize ? SRGBToLinear(u8) : u8;
+}
+
+uint8_t f32_to_byte(float v, int x, int y, bool sRGB = true, bool dither = true);

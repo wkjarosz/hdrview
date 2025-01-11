@@ -115,8 +115,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     {
         image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
                                                  [](float v) { return 255.f * v; });
-        image->channels[c].apply([linearize, c](float v, int x, int y)
-                                 { return Channel::dequantize(v, x, y, linearize, c != 3); });
+        image->channels[c].apply([linearize](float v, int, int) { return byte_to_f32(v, linearize); });
     }
     // if we have an alpha channel, premultiply the other channels by it
     // this needs to be done after the values have been made linear
@@ -207,7 +206,7 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
                                 v = pow(v, g);
                         }
 
-                        return (uint8_t)clamp(v * 256.0f + (dither ? tent_dither(x, y) : 0.f), 0.0f, 255.0f);
+                        return f32_to_byte(v, x, y, false, dither);
                     });
 
             spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));

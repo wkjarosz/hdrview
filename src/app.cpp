@@ -725,8 +725,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
-        else
-            add_action({"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
+        add_action({"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
 
         add_action({"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
                     &m_draw_grid});
@@ -1258,8 +1257,7 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Reset tonemapping"));
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             MenuItem(action("Clamp to LDR"));
-        else
-            MenuItem(action("Dither"));
+        MenuItem(action("Dither"));
 
         ImGui::EndMenu();
     }
@@ -1323,10 +1321,10 @@ void HDRViewApp::save_as(const string &filename) const
     {
 #if !defined(__EMSCRIPTEN__)
         std::ofstream os{filename, std::ios_base::binary};
-        current_image()->save(os, filename);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_sRGB, m_dither);
 #else
         std::ostringstream os;
-        current_image()->save(os, filename);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_sRGB, m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
             filename,                                    // the default filename for the browser to save.

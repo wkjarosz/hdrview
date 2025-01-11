@@ -8,6 +8,8 @@
 #include "common.h"
 #include <cmath>
 
+#include "dithermatrix256.h"
+
 #include <ImfChromaticities.h>
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
@@ -728,4 +730,10 @@ const vector<string> &colorSpaceNames()
                                          "CIE XYZ",     "CIE L*a*b*",   "CIE L*u*v*",
                                          "CIE xyY",     "HSL",          "HSV"};
     return names;
+}
+
+uint8_t f32_to_byte(float v, int x, int y, bool sRGB, bool dither)
+{
+    return (uint8_t)clamp((sRGB ? LinearToSRGB(v) : v) * 255.0f + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f,
+                          255.0f);
 }

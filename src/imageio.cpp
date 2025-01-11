@@ -89,7 +89,7 @@ bool Image::save(ostream &os, const string &filename, float gain, float gamma, b
     else if (extension == "jpg" || extension == "jpeg")
         return save_uhdr_image(*this, os, filename);
     else if (extension == "qoi")
-        return save_qoi_image(*this, os, filename);
+        return save_qoi_image(*this, os, filename, gain, gamma, sRGB, dither);
     else
         return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
 }
