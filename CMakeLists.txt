@@ -187,38 +187,6 @@ file(
 )
 
 if(APPLE AND HELLOIMGUI_HAS_METAL)
-
-  # ~~~
-  # # Precompile .metal shaders to .metallib files
-  # # exclude metal files from the copy (we will compile them to metallib files below)
-  # list(FILTER MY_RESOURCE_FILES EXCLUDE REGEX ".*\\.metal$")
-  # # Glob up metal shaders
-  # file(
-  #   GLOB_RECURSE metal_shaders
-  #   RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-  #   ${CMAKE_CURRENT_SOURCE_DIR}/assets/**.metal
-  # )
-  # foreach(shader ${metal_shaders})
-  #   set(shader_source "${CMAKE_CURRENT_SOURCE_DIR}/${shader}")
-  #   set(shader_lib "${CMAKE_CURRENT_BINARY_DIR}/${shader}lib")
-  #   # message(STATUS "Compiling Metal shader \"${shader_source}\" to MLTB library \"${shader_lib}\".")
-  #   add_custom_command(
-  #     OUTPUT ${shader_lib}
-  #     DEPENDS ${shader_source}
-  #     COMMAND xcrun -sdk macosx metal -std=osx-metal2.0 -O3 "${shader_source}" -o "${shader_lib}"
-  #     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-  #     COMMENT "Compiling Metal shader \"${shader}\" to MLTB library \"${shader}lib\"."
-  #     VERBATIM
-  #   )
-  #   set_property(
-  #     SOURCE src/app.cpp
-  #     APPEND
-  #     PROPERTY OBJECT_DEPENDS ${shader_lib}
-  #   )
-  #   list(APPEND EXTRA_SOURCES ${shader_lib})
-  # endforeach()
-  # ~~~
-
   list(APPEND EXTRA_SOURCES src/renderpass_metal.mm src/shader_metal.mm src/texture_metal.mm)
 endif()
 
