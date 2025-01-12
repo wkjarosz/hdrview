@@ -278,9 +278,10 @@ public:
     Box2i                data_window;
     Box2i                display_window;
     std::vector<Channel> channels;
-    float4x4             M_to_Rec709       = la::identity;
-    float3               luminance_weights = Rec709_luminance_weights;
-    int                  named_color_space = -1;
+    float4x4             M_to_Rec709             = la::identity;
+    float3               luminance_weights       = Rec709_luminance_weights;
+    int                  named_color_space       = -1;
+    bool                 file_has_straight_alpha = false;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().
@@ -370,6 +371,11 @@ public:
     /// This is just a wrapper, it opens a file stream and saves the image using the stream-based function above
     bool save(const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
               bool dither = true) const;
+
+    std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,
+                                                    bool dither) const;
+    std::unique_ptr<float[]>   as_interleaved_floats(int *w, int *h, int *n, float gain) const;
+    std::unique_ptr<half[]>    as_interleaved_halves(int *w, int *h, int *n, float gain) const;
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,

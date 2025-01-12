@@ -675,6 +675,12 @@ void Image::finalize()
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
+    // if we have an alpha channel, premultiply the other channels by it.
+    // this needs to be done after the values have been made linear
+    if (channels.size() > 3 && file_has_straight_alpha)
+        for (int c = 0; c < 3; ++c)
+            channels[c].apply([&alpha = channels[3]](float v, int x, int y) { return alpha(x, y) * v; });
+
     compute_color_transform();
 
     build_layers_and_groups();

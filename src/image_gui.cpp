@@ -592,6 +592,9 @@ void Image::draw_info()
                                M_to_Rec709[2][1], M_to_Rec709[2][1], M_to_Rec709[2][2], M_to_Rec709[2][3],
                                M_to_Rec709[3][1], M_to_Rec709[3][1], M_to_Rec709[3][2], M_to_Rec709[3][3]),
                    mono_font);
+
+    property_name("File had straight alpha:");
+    property_value(fmt::format("{}", file_has_straight_alpha), sans_font);
 }
 
 void Image::draw_channel_stats()

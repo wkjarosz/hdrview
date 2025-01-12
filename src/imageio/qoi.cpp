@@ -75,8 +75,9 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
-    auto image      = make_shared<Image>(size.xy(), size.z);
-    image->filename = filename;
+    auto image                     = make_shared<Image>(size.xy(), size.z);
+    image->filename                = filename;
+    image->file_has_straight_alpha = true;
 
     bool linearize = desc.colorspace != QOI_LINEAR;
 
@@ -85,20 +86,11 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
 
     Timer timer;
     for (int c = 0; c < size.z; ++c)
-    {
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
-                                                 size.z, c, [](uint8_t v) { return v; });
-        image->channels[c].apply([linearize](float v, int x, int y) { return byte_to_f32(v, linearize); });
-    }
-    // if we have an alpha channel, premultiply the other channels by it
-    // this needs to be done after the values have been made linear
-    if (size.z > 3)
-        for (int c = 0; c < 3; ++c)
-            image->channels[c].apply([&alpha = image->channels[3]](float v, int x, int y) { return alpha(x, y) * v; });
-    spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
+                                                 size.z, c, [linearize, c](uint8_t v)
+                                                 { return byte_to_f32(v, linearize && c != 3); });
 
-    // insert into the header, but no conversion necessary since HDRView uses BT 709 internally
-    Imf::addChromaticities(image->header, color_space_chromaticity("sRGB/BT 709"));
+    spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
     return {image};
 }
@@ -106,47 +98,14 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
 bool save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
                     bool dither)
 {
-    const int w = img.size().x;
-    const int h = img.size().y;
-    const int n = img.groups[img.selected_group].num_channels;
+    // get interleaved LDR pixel data
+    int  w = 0, h = 0, n = 0;
+    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
 
-    // The QOI image format expects nChannels to be either 3 for RGB data or 4 for RGBA.
+    // The QOI image format only supports RGB or RGBA data.
     if (n != 4 && n != 3)
         throw invalid_argument{
             fmt::format("Invalid number of channels {}. QOI format expects either 3 or 4 channels.", n)};
-
-    // get interleaved LDR pixel data
-    std::unique_ptr<uint8_t[]> pixels(new uint8_t[w * h * n]);
-    {
-        Timer          timer;
-        const Channel *alpha = n > 3 ? &img.channels[img.groups[img.selected_group].channels[3]] : nullptr;
-
-        // unpremultiply, tonemap, and dither the color channels
-        for (int c = 0; c < n; ++c)
-            img.channels[img.groups[img.selected_group].channels[c]].copy_to_interleaved(
-                pixels.get(), n, c,
-                [gain, sRGB, c, dither, alpha](float v, int x, int y)
-                {
-                    // only gamma correct and premultiply the RGB channels.
-                    // alpha channel gets stored linearly.
-                    if (c < 3)
-                    {
-                        v *= gain;
-
-                        // unpremultiply
-                        if (alpha)
-                        {
-                            float a = (*alpha)(x, y);
-                            if (a != 0.f)
-                                v /= a;
-                        }
-                    }
-
-                    return f32_to_byte(v, x, y, sRGB && c < 3, dither);
-                });
-
-        spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
-    }
 
     // write the data
     const qoi_desc desc{

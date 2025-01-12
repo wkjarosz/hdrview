@@ -28,7 +28,7 @@ std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filen
     throw std::runtime_error("UltraHDR support not enabled in this build.");
 }
 
-bool save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename)
+bool save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename, float gain)
 {
     throw std::runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -165,14 +165,14 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         spdlog::debug("UltraHDR: base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),
                       uhdr_dec_get_image_height(decoder.get()));
         throw_if_error(uhdr_decode(decoder.get()));
-        // going out of scope deallocate contents of data
+        // going out of scope deallocates contents of data
     }
 
     uhdr_raw_image_t *decoded_image = uhdr_get_decoded_image(decoder.get()); // freed by decoder destructor
     if (!decoded_image)
         throw invalid_argument{"UltraHDR: Decode image failed."};
     if (decoded_image->fmt != UHDR_IMG_FMT_64bppRGBAHalfFloat)
-        throw invalid_argument{"UltraHDR: Unexpected output format."};
+        throw invalid_argument{"UltraHDR: Unexpected pixel format."};
 
     spdlog::debug("UltraHDR: base image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", decoded_image->w,
                   decoded_image->h, decoded_image->stride[UHDR_PLANE_PACKED], (int)decoded_image->cg,
@@ -180,18 +180,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
 
     int2 size = int2(decoded_image->w, decoded_image->h);
 
-    auto image      = make_shared<Image>(size, 4);
-    image->filename = filename;
+    auto image                     = make_shared<Image>(size, 4);
+    image->filename                = filename;
+    image->file_has_straight_alpha = true;
 
     {
         auto  half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]);
         int   stride_y  = decoded_image->stride[UHDR_PLANE_PACKED] * 4;
         Timer timer;
         for (int c = 0; c < 4; ++c)
-        {
             image->channels[c].copy_from_interleaved(
                 half_data, decoded_image->w, decoded_image->h, 4, c, [](half v) { return (float)v; }, stride_y);
-        }
+
         spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
     }
 
@@ -247,11 +247,10 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         int   stride_y  = gainmap->stride[UHDR_PLANE_PACKED] * num_components;
         Timer timer;
         for (int c = 0; c < num_components; ++c)
-        {
             image->channels[4 + c].copy_from_interleaved(
-                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return v; }, stride_y);
-            image->channels[4 + c].apply([c](float v, int x, int y) { return byte_to_f32(v, c != 3); });
-        }
+                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return byte_to_f32(v); },
+                stride_y);
+
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));
     }
 
@@ -274,45 +273,17 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     return {image};
 }
 
-bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
+bool save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
 {
-    auto &group = img.groups[img.selected_group];
-
-    int w = img.size().x;
-    int h = img.size().y;
-    int n = group.num_channels;
+    // get interleaved HDR pixel data
+    int  w = 0, h = 0, n = 0;
+    auto pixels = img.as_interleaved_halves(&w, &h, &n, gain);
 
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
 
-    const Channel *A = n > 3 ? &img.channels[group.channels[3]] : nullptr;
-
-    // get interleaved HDR pixel data
-    std::unique_ptr<half[]> pixels(new half[w * h * n]);
-    {
-        Timer timer;
-
-        // unpremultiply and copy the color channels
-        for (int c = 0; c < 3; ++c)
-        {
-            img.channels[group.channels[c]].copy_to_interleaved(pixels.get(), n, c,
-                                                                [A](float v, int x, int y)
-                                                                {
-                                                                    // unpremultiply
-                                                                    if (A && (*A)(x, y) != 0.f)
-                                                                        v /= (*A)(x, y);
-
-                                                                    return (half)v;
-                                                                });
-        }
-        // copy the alpha channel straight through
-        if (A)
-            A->copy_to_interleaved(pixels.get(), n, 3, [](float v, int x, int y) { return v; });
-
-        spdlog::debug("Interleaving pixels took: {} seconds.", (timer.elapsed() / 1000.f));
-    }
-
-    auto throw_if_error = [](uhdr_error_info_t status)
+    Timer timer;
+    auto  throw_if_error = [](uhdr_error_info_t status)
     {
         if (status.error_code != UHDR_CODEC_OK)
             throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
@@ -345,6 +316,7 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename)
     auto output = uhdr_get_encoded_stream(encoder.get()); // freed by decoder destructor
 
     os.write(static_cast<char *>(output->data), output->data_sz);
+    spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
     return true;
 }
 

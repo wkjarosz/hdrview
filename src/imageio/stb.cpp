@@ -105,24 +105,25 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     if (!float_data)
         throw invalid_argument(stbi_failure_reason());
 
-    auto image      = make_shared<Image>(size.xy(), size.z);
-    image->filename = filename;
+    if (product(size) == 0)
+        throw invalid_argument{"Image has zero pixels."};
+
+    auto image                     = make_shared<Image>(size.xy(), size.z);
+    image->filename                = filename;
+    image->file_has_straight_alpha = true;
 
     bool linearize = !stbi_is_hdr(filename.c_str());
 
+    if (linearize)
+        spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
+
     Timer timer;
     for (int c = 0; c < size.z; ++c)
-    {
-        image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
-                                                 [](float v) { return 255.f * v; });
-        image->channels[c].apply([linearize](float v, int, int) { return byte_to_f32(v, linearize); });
-    }
-    // if we have an alpha channel, premultiply the other channels by it
-    // this needs to be done after the values have been made linear
-    if (size.z > 3)
-        for (int c = 0; c < 3; ++c)
-            image->channels[c].apply([&alpha = image->channels[3]](float v, int x, int y) { return alpha(x, y) * v; });
+        image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c, [linearize, c](float v)
+                                                 { return linearize && c != 3 ? SRGBToLinear(v) : v; });
+
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
+
     return {image};
 }
 
@@ -134,94 +135,37 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
 
     string extension = to_lower(get_extension(filename));
 
-    int            w     = img.size().x;
-    int            h     = img.size().y;
-    int            n     = img.groups[img.selected_group].num_channels;
-    const Channel *alpha = n > 3 ? &img.channels[img.groups[img.selected_group].channels[3]] : nullptr;
-
     if (extension == "hdr")
     {
         // get interleaved HDR pixel data
-        std::unique_ptr<float[]> pixels(new float[w * h * n]);
-        {
-            Timer timer;
-
-            // unpremultiply and copy the color channels
-            for (int c = 0; c < min(n, 3); ++c)
-                img.channels[img.groups[img.selected_group].channels[c]].copy_to_interleaved(
-                    pixels.get(), n, c,
-                    [gain, alpha](float v, int x, int y)
-                    {
-                        v *= gain;
-
-                        // unpremultiply
-                        if (alpha)
-                        {
-                            float a = (*alpha)(x, y);
-                            if (a != 0.f)
-                                v /= a;
-                        }
-                        return v;
-                    });
-            // copy the alpha channel straight through
-            if (alpha)
-                alpha->copy_to_interleaved(pixels.get(), n, 3, [](float v, int x, int y) { return v; });
-
-            spdlog::debug("Interleaving pixels took: {} seconds.", (timer.elapsed() / 1000.f));
-        }
-
-        return stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+        int   w = 0, h = 0, n = 0;
+        auto  pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+        Timer timer;
+        bool  ret = stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+        spdlog::info("Writing HDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
+        return ret;
     }
     else
     {
         // get interleaved LDR pixel data
-        std::unique_ptr<uint8_t[]> pixels(new uint8_t[w * h * n]);
-        {
-            Timer timer;
+        int  w = 0, h = 0, n = 0;
+        auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
 
-            // unpremultiply, tonemap, and dither the color channels
-            // TODO: this code is essentially the same as in qoi.cpp; reuse it
-            for (int c = 0; c < n; ++c)
-                img.channels[img.groups[img.selected_group].channels[c]].copy_to_interleaved(
-                    pixels.get(), n, c,
-                    [gain, g = 1.f / gamma, sRGB, c, dither, alpha](float v, int x, int y)
-                    {
-                        // only gamma correct and premultiply the RGB channels.
-                        // alpha channel gets stored linearly.
-                        if (c < 3)
-                        {
-                            v *= gain;
-
-                            // unpremultiply
-                            if (alpha)
-                            {
-                                float a = (*alpha)(x, y);
-                                if (a != 0.f)
-                                    v /= a;
-                            }
-
-                            if (sRGB)
-                                v = LinearToSRGB(v);
-                            else if (g != 1.0f)
-                                v = pow(v, g);
-                        }
-
-                        return f32_to_byte(v, x, y, false, dither);
-                    });
-
-            spdlog::debug("Tonemapping to 8bit took: {} seconds.", (timer.elapsed() / 1000.f));
-        }
-
+        Timer timer;
+        bool  ret = false;
         if (extension == "png")
-            return stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
+            ret = stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
         else if (extension == "bmp")
-            return stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+            ret = stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
         else if (extension == "tga")
-            return stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+            ret = stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
         else if (extension == "jpg" || extension == "jpeg")
-            return stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 100) != 0;
+            ret = stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 100) != 0;
         else
             throw invalid_argument(
                 fmt::format("Could not determine desired file type from extension \"{}\".", extension));
+        spdlog::info("Writing {} image to \"{}\" took: {} seconds.", to_upper(extension), filename,
+                     (timer.elapsed() / 1000.f));
+        return ret;
     }
 }
