@@ -127,9 +127,10 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     return {image};
 }
 
-bool save_stb_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
+void save_stb_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
                     bool dither)
 {
+    Timer             timer;
     static const auto ostream_write_func = [](void *context, void *data, int size)
     { reinterpret_cast<ostream *>(context)->write(reinterpret_cast<char *>(data), size); };
 
@@ -138,12 +139,11 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
     if (extension == "hdr")
     {
         // get interleaved HDR pixel data
-        int   w = 0, h = 0, n = 0;
-        auto  pixels = img.as_interleaved_floats(&w, &h, &n, gain);
-        Timer timer;
-        bool  ret = stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
-        spdlog::info("Writing HDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
-        return ret;
+        int  w = 0, h = 0, n = 0;
+        auto pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+        if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0)
+            throw runtime_error("Failed to write HDR image via stb.");
+        spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
     }
     else
     {
@@ -151,8 +151,7 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
         int  w = 0, h = 0, n = 0;
         auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
 
-        Timer timer;
-        bool  ret = false;
+        bool ret = false;
         if (extension == "png")
             ret = stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
         else if (extension == "bmp")
@@ -164,8 +163,10 @@ bool save_stb_image(const Image &img, ostream &os, const string &filename, float
         else
             throw invalid_argument(
                 fmt::format("Could not determine desired file type from extension \"{}\".", extension));
-        spdlog::info("Writing {} image to \"{}\" took: {} seconds.", to_upper(extension), filename,
-                     (timer.elapsed() / 1000.f));
-        return ret;
+        if (ret)
+            spdlog::info("Saved {} image via stb to '{}' in {} seconds.", to_upper(extension), filename,
+                         (timer.elapsed() / 1000.f));
+        else
+            throw runtime_error(fmt::format("Failed to write {} image via stb.", to_upper(extension)));
     }
 }

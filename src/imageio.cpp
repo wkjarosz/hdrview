@@ -70,28 +70,24 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     }
     catch (const exception &e)
     {
-        spdlog::error("Unable to read image file \"{}\":\n\t{}", filename, e.what());
+        spdlog::error("Unable to load image file \"{}\":\n\t{}", filename, e.what());
     }
     return {};
 }
 
-bool Image::save(ostream &os, const string &filename, float gain, float gamma, bool sRGB, bool dither) const
+void Image::save(ostream &os, const string &filename, float gain, float gamma, bool sRGB, bool dither) const
 {
     string extension = to_lower(get_extension(filename));
     if (extension == "exr")
         return save_exr_image(*this, os, filename);
     else if (extension == "jpg" || extension == "jpeg")
         return save_uhdr_image(*this, os, filename, gain);
+    else if (extension == "pfm")
+        return save_pfm_image(*this, os, filename, gain);
     else if (extension == "qoi")
         return save_qoi_image(*this, os, filename, gain, gamma, sRGB, dither);
     else
         return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
-}
-
-bool Image::save(const string &filename, float gain, float gamma, bool sRGB, bool dither) const
-{
-    std::ofstream os{filename, std::ios_base::binary};
-    return save(os, filename, gain, gamma, sRGB, dither);
 }
 
 std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,

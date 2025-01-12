@@ -346,9 +346,6 @@ public:
     */
     static std::vector<ImagePtr> load(std::istream &is, const std::string &filename);
 
-    /// This is just a wrapper, it opens a file stream and loads the image using the stream-based load function above.
-    // static std::vector<ImagePtr> load(const std::string &filename);
-
     /**
         Write the image to the output stream.
 
@@ -363,13 +360,9 @@ public:
         \param gamma     If not saving to an HDR format, tonemap the image to sRGB
         \param sRGB      If not saving to an HDR format, tonemap the image using this gamma value
         \param dither    If not saving to an HDR format, dither when tonemapping down to 8-bit
-        \return          True if writing was successful
+        \return          Returns nothing. Throws on error.
     */
-    bool save(std::ostream &os, const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
-              bool dither = true) const;
-
-    /// This is just a wrapper, it opens a file stream and saves the image using the stream-based function above
-    bool save(const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
+    void save(std::ostream &os, const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
               bool dither = true) const;
 
     std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,

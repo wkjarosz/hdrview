@@ -12,7 +12,10 @@
 
 #include "fwd.h"
 
-bool                  is_qoi_image(std::istream &is) noexcept;
+// should not throw
+bool is_qoi_image(std::istream &is) noexcept;
+// throws on error
 std::vector<ImagePtr> load_qoi_image(std::istream &is, const std::string &filename);
-bool                  save_qoi_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f,
-                                     float gamma = 2.2f, bool sRGB = true, bool dither = true);
+/// throws on error
+void save_qoi_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f,
+                    float gamma = 2.2f, bool sRGB = true, bool dither = true);

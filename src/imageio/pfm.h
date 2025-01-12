@@ -12,14 +12,13 @@
 
 #include "fwd.h"
 
+// should not throw
 bool is_pfm_image(std::istream &is) noexcept;
-bool is_pfm_image(const std::string &filename) noexcept;
 
 std::vector<ImagePtr>    load_pfm_image(std::istream &is, const std::string &filename);
 std::unique_ptr<float[]> load_pfm_image(std::istream &is, const std::string &filename, int *width, int *height,
                                         int *num_channels);
-std::unique_ptr<float[]> load_pfm_image(const std::string &filename, int *width, int *height, int *num_channels);
-
-void write_pfm_image(const std::string &filename, int width, int height, int num_channels, const float data[]);
+// throws on error
 void write_pfm_image(std::ostream &os, const std::string &filename, int width, int height, int num_channels,
                      const float data[]);
+void save_pfm_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f);

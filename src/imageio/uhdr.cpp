@@ -59,7 +59,7 @@ static uhdr_color_gamut cg_from_chr(const Imf::Header &header)
     return UHDR_CG_UNSPECIFIED;
 }
 
-bool is_uhdr_image(istream &is)
+bool is_uhdr_image(istream &is) noexcept
 {
     if (!is.good())
         return false;
@@ -273,8 +273,9 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     return {image};
 }
 
-bool save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
 {
+    Timer timer;
     // get interleaved HDR pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved_halves(&w, &h, &n, gain);
@@ -282,8 +283,7 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename, floa
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
 
-    Timer timer;
-    auto  throw_if_error = [](uhdr_error_info_t status)
+    auto throw_if_error = [](uhdr_error_info_t status)
     {
         if (status.error_code != UHDR_CODEC_OK)
             throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
@@ -317,7 +317,6 @@ bool save_uhdr_image(const Image &img, ostream &os, const string &filename, floa
 
     os.write(static_cast<char *>(output->data), output->data_sz);
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
-    return true;
 }
 
 #endif

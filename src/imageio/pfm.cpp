@@ -42,12 +42,11 @@ float reinterpret_as_host_endian(float f, bool big_endian)
 
 bool is_pfm_image(istream &is) noexcept
 {
-    auto start = is.tellg();
-
     if (!is.good())
         return false;
 
-    bool ret = false;
+    auto start = is.tellg();
+    bool ret   = false;
 
     try
     {
@@ -70,16 +69,11 @@ bool is_pfm_image(istream &is) noexcept
     return ret;
 }
 
-bool is_pfm_image(const string &filename) noexcept
-{
-    std::ifstream is{filename, std::ios_base::binary};
-    return is_pfm_image(is);
-}
-
 unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *width, int *height, int *num_channels)
 {
     try
     {
+        Timer  timer;
         string magic;
         float  scale;
 
@@ -122,37 +116,29 @@ unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *wid
         // multiply data by scale factor
         for (size_t i = 0; i < num_floats; ++i) data[i] = scale * reinterpret_as_host_endian(data[i], big_endian);
 
+        spdlog::debug("Reading PFM image '{}' took: {} seconds.", filename, (timer.elapsed() / 1000.f));
+
         return data;
     }
     catch (const exception &e)
     {
-        throw invalid_argument(string(e.what()) + " in file '" + filename + "'");
+        throw invalid_argument{fmt::format("{} in file '{}'", e.what(), filename)};
     }
-}
-
-unique_ptr<float[]> load_pfm_image(const string &filename, int *width, int *height, int *num_channels)
-{
-    std::ifstream is{filename, std::ios_base::binary};
-    return load_pfm_image(is, filename, width, height, num_channels);
 }
 
 vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
 {
     int3 size;
-    if (auto float_data = load_pfm_image(is, filename, &size.x, &size.y, &size.z))
-    {
-        auto image      = make_shared<Image>(size.xy(), size.z);
-        image->filename = filename;
+    auto float_data = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
+    auto image      = make_shared<Image>(size.xy(), size.z);
+    image->filename = filename;
 
-        Timer timer;
-        for (int c = 0; c < size.z; ++c)
-            image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
-                                                     [](float v) { return v; });
-        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
-        return {image};
-    }
-    else
-        throw invalid_argument("Could not load PFM image.");
+    Timer timer;
+    for (int c = 0; c < size.z; ++c)
+        image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
+                                                 [](float v) { return v; });
+    spdlog::debug("Copying image data for took: {} seconds.", (timer.elapsed() / 1000.f));
+    return {image};
 }
 
 void write_pfm_image(ostream &os, const string &filename, int width, int height, int num_channels, const float data[])
@@ -172,7 +158,6 @@ void write_pfm_image(ostream &os, const string &filename, int width, int height,
         throw invalid_argument(fmt::format("write_pfm_image: Unsupported number of channels {} when writing file "
                                            "\"{}\". PFM format only supports 1, 3, or 4 channels.",
                                            num_channels, filename));
-
     os << magic << "\n";
     os << width << " " << height << "\n";
 
@@ -190,8 +175,12 @@ void write_pfm_image(ostream &os, const string &filename, int width, int height,
     os.write((const char *)data, width * height * sizeof(float) * num_channels);
 }
 
-void write_pfm_image(const string &filename, int width, int height, int num_channels, const float data[])
+void save_pfm_image(const Image &img, ostream &os, const string &filename, float gain)
 {
-    std::ofstream os{filename, std::ios_base::binary};
-    return write_pfm_image(os, filename, width, height, num_channels, data);
+    Timer timer;
+    // get interleaved LDR pixel data
+    int  w = 0, h = 0, n = 0;
+    auto pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+    write_pfm_image(os, filename, w, h, n, pixels.get());
+    spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }

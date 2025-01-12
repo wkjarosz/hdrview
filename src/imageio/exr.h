@@ -12,6 +12,9 @@
 
 #include "fwd.h"
 
-bool                  is_exr_image(std::istream &is, const std::string &filename) noexcept;
+// does not throw
+bool is_exr_image(std::istream &is, const std::string &filename) noexcept;
+// throws on error
 std::vector<ImagePtr> load_exr_image(std::istream &is, const std::string &filename);
-bool                  save_exr_image(const Image &img, std::ostream &os, const std::string &filename);
+// throws on error
+void save_exr_image(const Image &img, std::ostream &os, const std::string &filename);

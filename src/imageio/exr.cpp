@@ -120,10 +120,11 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
     return images;
 }
 
-bool save_exr_image(const Image &img, ostream &os_, const string &filename)
+void save_exr_image(const Image &img, ostream &os_, const string &filename)
 {
     try
     {
+        Timer timer;
         // OpenEXR expects the display window to be inclusive, while our images are exclusive
         auto displayWindow = Imath::Box2i(Imath::V2i(img.display_window.min.x, img.display_window.min.y),
                                           Imath::V2i(img.display_window.max.x - 1, img.display_window.max.y - 1));
@@ -160,11 +161,10 @@ bool save_exr_image(const Image &img, ostream &os_, const string &filename)
         Imf::OutputFile file{os, header};
         file.setFrameBuffer(frameBuffer);
         file.writePixels(img.data_window.size().y);
-        return true;
+        spdlog::info("Saved EXR image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
     }
     catch (const exception &e)
     {
-        spdlog::error("Unable to write exr image file \"{}\": {}", filename, e.what());
-        return false;
+        throw runtime_error{fmt::format("Failed to write EXR image \"{}\" failed: {}", filename, e.what())};
     }
 }

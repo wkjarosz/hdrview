@@ -95,9 +95,10 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     return {image};
 }
 
-bool save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
+void save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
                     bool dither)
 {
+    Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
@@ -124,6 +125,5 @@ bool save_qoi_image(const Image &img, ostream &os, const string &filename, float
         throw invalid_argument{"Failed to encode data into the QOI format."};
 
     os.write(reinterpret_cast<char *>(encoded_data.get()), encoded_size);
-
-    return true;
+    spdlog::info("Saved QOI image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
