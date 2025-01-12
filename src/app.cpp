@@ -1362,8 +1362,14 @@ void HDRViewApp::open_image()
     auto handle_upload_file =
         [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
     {
-        spdlog::trace("Loading uploaded file with filename '{}'", filename);
-        hdrview()->load_image(filename, buffer);
+        if (buffer.empty())
+            spdlog::debug("User canceled upload.");
+        else
+        {
+            auto [size, unit] = human_readable_size(buffer.size());
+            spdlog::debug("User uploaded a {:.0f} {} file with filename '{}'", size, unit, filename);
+            hdrview()->load_image(filename, buffer);
+        }
     };
 
     string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
@@ -1384,7 +1390,7 @@ void HDRViewApp::load_image(const string filename, string_view buffer)
     spdlog::debug("Loading file '{}'...", filename);
     try
     {
-        // convert the buffer (if any) to a string so the async thread has its own copy
+        // convert the buffer (if any) to a string so the async thread has its own copy,
         // then load from the string or filename depending on whether the buffer is empty
         m_pending_images.emplace_back(std::make_shared<PendingImages>(
             filename,

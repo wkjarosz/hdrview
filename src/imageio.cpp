@@ -75,12 +75,6 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     return {};
 }
 
-vector<ImagePtr> Image::load(const string &filename)
-{
-    std::ifstream is{filename, std::ios_base::binary};
-    return load(is, filename);
-}
-
 bool Image::save(ostream &os, const string &filename, float gain, float gamma, bool sRGB, bool dither) const
 {
     string extension = to_lower(get_extension(filename));

@@ -347,7 +347,7 @@ public:
     static std::vector<ImagePtr> load(std::istream &is, const std::string &filename);
 
     /// This is just a wrapper, it opens a file stream and loads the image using the stream-based load function above.
-    static std::vector<ImagePtr> load(const std::string &filename);
+    // static std::vector<ImagePtr> load(const std::string &filename);
 
     /**
         Write the image to the output stream.

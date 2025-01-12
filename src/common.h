@@ -261,13 +261,14 @@ inline T square(T value)
     return value * value;
 }
 
-bool        starts_with(const std::string &s, const std::string &prefix);
-bool        ends_with(const std::string &s, const std::string &suffix);
-std::string get_extension(const std::string &path);
-std::string get_filename(const std::string &path);
-std::string get_basename(const std::string &path);
-std::string to_lower(std::string str);
-std::string to_upper(std::string str);
+bool                          starts_with(const std::string &s, const std::string &prefix);
+bool                          ends_with(const std::string &s, const std::string &suffix);
+std::string                   get_extension(const std::string &path);
+std::string                   get_filename(const std::string &path);
+std::string                   get_basename(const std::string &path);
+std::string                   to_lower(std::string str);
+std::string                   to_upper(std::string str);
+std::pair<float, std::string> human_readable_size(size_t bytes);
 /// Run func on each line of the input string
 void process_lines(std::string_view input, std::function<void(std::string_view &)> op);
 /// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true

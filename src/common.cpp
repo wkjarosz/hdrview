@@ -194,3 +194,18 @@ pair<int, int> find_common_prefix_suffix(const vector<string> &names)
     }
     return {begin_short_offset, end_short_offset};
 }
+
+pair<float, std::string> human_readable_size(size_t bytes)
+{
+    float              size       = static_cast<float>(bytes);
+    static const char *units[]    = {"B", "kB", "MiB", "GiB", "TiB", "PiB"};
+    int                unit_index = 0;
+
+    while (size >= 1024 && unit_index < 5)
+    {
+        size /= 1024;
+        ++unit_index;
+    }
+
+    return {size, units[unit_index]};
+}
