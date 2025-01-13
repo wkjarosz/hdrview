@@ -34,36 +34,21 @@
             -ms-interpolation-mode: nearest-neighbor;
         }
     </style>
-
-    <script src="FileSaver.js" type='text/javascript'> </script>
-    <script type='text/javascript'>
-        // This function copied from geomgram, BSD 3-Clause License; Copyright (c) 2000-2022 Inria
-        function saveFileFromMemoryFSToDisk(name) {
-            var data = FS.readFile(name);
-            var blob;
-            var isSafari = /^((?!chrome|android).)*safari/i.test(
-                navigator.userAgent
-            );
-            if (isSafari) {
-                blob = new Blob([data.buffer], { type: "application/octet-stream" });
-            } else {
-                blob = new Blob([data.buffer], { type: "application/octet-binary" });
-            }
-            saveAs(blob, name);
-        }
-    </script>
 </head>
 
 <body>
     <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
-
-    <!-- Call coi-serviceworker at startup -->
-    <script src="coi-serviceworker.js"></script>
-
     <script type='text/javascript'>
         var Module = {
             preRun: [],
-            postRun: [],
+            postRun: [
+                function () {
+                    initDragAndDrop();
+                },
+                function () {
+                    disableDefaultShortcuts();
+                }
+            ],
             print: (function () {
                 return function (text) {
                     text = Array.prototype.slice.call(arguments).join(' ');
@@ -106,6 +91,85 @@
         window.onerror = function () {
             console.log("onerror: " + event);
         };
+
+        function disableDefaultShortcuts() {
+            document.addEventListener("keydown", function (e) {
+                if (e.metaKey && (e.key == 'o' || e.key == 's' || e.key == 'w')) {
+                    e.preventDefault();
+                    console.log('Shortcut disabled');
+                }
+            });
+        }
+
+        // drag-n-drop functions
+        function initDragAndDrop() {
+            // add a drag'n'drop handler to the WebGL canvas
+            var canvas = document.getElementById('canvas');
+            canvas.addEventListener('dragenter', load_dragenter, false);
+            canvas.addEventListener('dragleave', load_dragleave, false);
+            canvas.addEventListener('dragover', load_dragover, false);
+            canvas.addEventListener('drop', load_drop, false);
+        }
+
+        function load_dragenter(e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+
+        function load_dragleave(e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+
+        function load_dragover(e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+
+        function load_drop(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            load_file(e.dataTransfer.files);
+        }
+
+        function load_file(files) {
+            // iterate over all dropped files
+            for (var i = 0; i < files.length; i++) {
+                var file = files[i];
+                console.log('--- load file:');
+                console.log('  name: ' + file.name);
+                console.log('  type: ' + file.type);
+                console.log('  size: ' + file.size);
+
+                // load the file content (ignore big files)
+                if (file.size < 256000000) {
+                    var reader = new FileReader();
+                    reader.onload = function (loadEvent) {
+                        console.log('file loaded!')
+                        var content = loadEvent.target.result;
+                        if (content) {
+                            console.log('content length: ' + content.byteLength);
+                            var uint8Array = new Uint8Array(content);
+                            var buf = Module._malloc(uint8Array.length * uint8Array.BYTES_PER_ELEMENT);
+                            Module.HEAPU8.set(uint8Array, buf);
+                            var res = Module.ccall('hdrview_loadfile',  // C function name
+                                'int',
+                                ['string', 'number', 'number'],  // name, data, size
+                                [file.name, buf, uint8Array.length]);
+                            Module._free(buf);
+                            if (res != 0)
+                                console.warn('hdrview_loadfile() failed!');
+                        }
+                        else {
+                            console.warn('load result empty!');
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+                else
+                    console.warn('ignoring dropped file because it is too big')
+            }
+        }
     </script>
     {{{ SCRIPT }}}
 </body>

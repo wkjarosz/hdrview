@@ -39,6 +39,8 @@
 #include <utility>
 
 #ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+
 #include "emscripten_browser_file.h"
 #include <string_view>
 using std::string_view;
@@ -1384,7 +1386,7 @@ void HDRViewApp::open_image()
 #endif
 }
 
-void HDRViewApp::load_image(const string filename, string_view buffer)
+void HDRViewApp::load_image(const string filename, const string_view buffer)
 {
     // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
     spdlog::debug("Loading file '{}'...", filename);
@@ -3204,3 +3206,31 @@ void HDRViewApp::draw_about_dialog()
         ImGui::EndPopup();
     }
 }
+
+#if defined(__EMSCRIPTEN__)
+//------------------------------------------------------------------------------
+//  Javascript interface functions
+//
+extern "C"
+{
+
+    EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size)
+    {
+        auto [size, unit] = human_readable_size(buffer_size);
+        spdlog::info("User dropped a {:.0f} {} file with filename '{}'", size, unit, filename);
+
+        if (!buffer || buffer_size == 0)
+        {
+            spdlog::warn("Empty file, skipping...");
+            return 1;
+        }
+        else
+        {
+            hdrview()->load_image(filename, {buffer, buffer_size});
+            return 0;
+        }
+    }
+
+} // extern "C"
+
+#endif
