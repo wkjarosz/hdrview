@@ -21,7 +21,7 @@
 
 #ifdef HDRVIEW_NO_UHDR
 
-bool is_uhdr_image(std::istream &is) { return false; }
+bool is_uhdr_image(std::istream &is) noexcept { return false; }
 
 std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filename)
 {
