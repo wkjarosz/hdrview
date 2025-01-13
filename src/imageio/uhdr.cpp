@@ -19,18 +19,20 @@
 #include <iostream>
 #include <stdexcept>
 
+using namespace std;
+
 #ifdef HDRVIEW_NO_UHDR
 
-bool is_uhdr_image(std::istream &is) noexcept { return false; }
+bool is_uhdr_image(istream &is) noexcept { return false; }
 
-std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filename)
+vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
 {
-    throw std::runtime_error("UltraHDR support not enabled in this build.");
+    throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-bool save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
 {
-    throw std::runtime_error("UltraHDR support not enabled in this build.");
+    throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
 #else
@@ -40,8 +42,6 @@ bool save_uhdr_image(const Image &img, std::ostream &os, const std::string &file
 #include <ImfStandardAttributes.h>
 
 #include "ultrahdr_api.h"
-
-using namespace std;
 
 static uhdr_color_gamut cg_from_chr(const Imf::Header &header)
 {
