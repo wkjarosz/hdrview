@@ -115,7 +115,11 @@ void SpdLogWindow::draw(ImFont *console_font)
                     (ICON_MY_GREATER_EQUAL + std::to_string(i) + ": " + s_level_icons[i] + " " + level_names[i].data())
                         .c_str(),
                     current_level == i))
+            {
                 m_sink->set_level(spdlog::level::level_enum(i));
+                // spdlog::set_level(spdlog::level::level_enum(i));
+                spdlog::info("Setting verbosity threshold to level {:d}.", i);
+            }
             ImGui::PopStyleColor();
         }
         ImGui::EndComboButton();

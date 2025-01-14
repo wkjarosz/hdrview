@@ -57,8 +57,8 @@ int main(int argc, char **argv)
     HelloImGui::SetAssetsFolder(ASSETS_LOCATION);
 #endif
 
-    constexpr int default_verbosity = spdlog::level::info;
-    int           verbosity         = default_verbosity;
+    constexpr spdlog::level::level_enum default_verbosity = spdlog::level::info;
+    int                                 verbosity         = default_verbosity;
 
     std::optional<float> exposure, gamma;
     std::optional<bool>  dither, force_sdr;
@@ -125,23 +125,16 @@ The default is 2 (info).)")
             ->check(CLI::ExistingPath)
             ->option_text("PATH(existing) ...");
 
-        spdlog::set_pattern("%^[%T | %5l]: %$%v");
+        // enable all log messages globally, and for the default logger
         spdlog::set_level(spdlog::level::trace);
-        spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
-        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
+        spdlog::default_logger()->set_level(spdlog::level::trace);
+        spdlog::set_pattern("%^[%T | %5l]: %$%v");
 
-        if (argc > 1)
-        {
-            spdlog::trace("Launching with command line arguments:");
-            for (int i = 1; i < argc; ++i)
-#ifdef _WIN32
-                spdlog::trace("\t" + string(CLI::narrow(win_argv[i])));
-#else
-                spdlog::trace("\t" + string(argv[i]));
-#endif
-        }
-        else
-            spdlog::trace("Launching HDRView with no command line arguments.");
+        // create a new sink.
+        // new sinks default to allowing all levels (that are propagated by the parent logger)
+        spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
+        // spdlog::info("There are {} sinks", spdlog::default_logger()->sinks().size());
+        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
 #ifdef _WIN32
         CLI11_PARSE(app, argc, win_argv);
@@ -149,9 +142,21 @@ The default is 2 (info).)")
         CLI11_PARSE(app, argc, argv);
 #endif
 
-        // spdlog::default_logger()->set_level(spdlog::level::level_enum(verbosity));
-        spdlog::set_level(spdlog::level::level_enum(verbosity));
+        spdlog::default_logger()->sinks().front()->set_level(spdlog::level::level_enum(verbosity));
         ImGui::GlobalSpdLogWindow().sink()->set_level(spdlog::level::level_enum(verbosity));
+
+        if (argc > 1)
+        {
+            spdlog::debug("Launching with command line arguments:");
+            for (int i = 1; i < argc; ++i)
+#ifdef _WIN32
+                spdlog::debug("\t" + string(CLI::narrow(win_argv[i])));
+#else
+                spdlog::debug("\t" + string(argv[i]));
+#endif
+        }
+        else
+            spdlog::debug("Launching HDRView with no command line arguments.");
 
         spdlog::info("Welcome to HDRView!");
         spdlog::info("Verbosity threshold set to level {:d}.", verbosity);

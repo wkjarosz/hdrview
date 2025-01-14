@@ -199,20 +199,21 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
     {
         Imf::addChromaticities(image->header, color_space_chromaticity("Display P3"));
-        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Display P3.");
+        spdlog::info("File uses Display P3 primaries and whitepoint.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_2100)
     {
         Imf::addChromaticities(image->header, color_space_chromaticity("BT 2020/BT 2100"));
-        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint from Rec. 2100.");
+        spdlog::info("File uses Rec. 2100 primaries and whitepoint.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_709)
     {
         // insert into the header, but no conversion necessary since HDRView uses BT 709 internally
         Imf::addChromaticities(image->header, color_space_chromaticity("sRGB/BT 709"));
+        spdlog::info("File uses Rec. 709/sRGB primaries and whitepoint.");
     }
     else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)
-        spdlog::warn("No color gamut specified. Assuming Rec. 709/sRGB primaries and whitepoint.");
+        spdlog::warn("File does not specify a color gamut. Assuming Rec. 709/sRGB primaries and whitepoint.");
 
     uhdr_raw_image_t *gainmap = uhdr_get_decoded_gainmap_image(decoder.get()); // freed by decoder destructor
     int2              gainmap_size(gainmap->w, gainmap->h);

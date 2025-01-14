@@ -601,7 +601,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         };
         add_action({"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
-        add_action({"About HDRView", ICON_MY_ABOUT, ImGuiKey_H, 0, []() {}, always_enabled, false, &g_show_help});
+        add_action(
+            {"Help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false, &g_show_help});
         add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
@@ -2909,8 +2910,12 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [](int selected_option)
-                               { spdlog::set_level(spdlog::level::level_enum(selected_option)); }, nullptr,
-                               ICON_MY_LOG_LEVEL});
+                               {
+                                   ImGui::GlobalSpdLogWindow().sink()->set_level(
+                                       spdlog::level::level_enum(selected_option));
+                                   spdlog::info("Setting verbosity threshold to level {:d}.", selected_option);
+                               },
+                               nullptr, ICON_MY_LOG_LEVEL});
 
             // set background color. This is a two-step command
             ImCmd::AddCommand({"Set background color",
@@ -3196,7 +3201,8 @@ void HDRViewApp::draw_about_dialog()
         }
 
         if (ImGui::Button("Dismiss", HelloImGui::EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
-            ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) || ImGui::Shortcut(ImGuiKey_H))
+            ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) ||
+            ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Slash))
         {
             ImGui::CloseCurrentPopup();
             g_show_help = false;
