@@ -57,6 +57,7 @@ public:
     void open_image();
     void load_images(const std::vector<std::string> &filenames);
     void load_image(const string filename, const std::string_view buffer = std::string_view{});
+    void load_url(const string_view url);
     void save_as(const string &filename) const;
     void close_image();
     void close_all_images();

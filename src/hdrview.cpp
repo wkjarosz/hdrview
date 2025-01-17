@@ -62,6 +62,7 @@ int main(int argc, char **argv)
 
     std::optional<float> exposure, gamma;
     std::optional<bool>  dither, force_sdr;
+    string               url;
 
     vector<string> in_files;
 
@@ -124,6 +125,9 @@ The default is 2 (info).)")
         app.add_option("IMAGES", in_files, "The image files to load.")
             ->check(CLI::ExistingPath)
             ->option_text("PATH(existing) ...");
+#if defined(__EMSCRIPTEN__)
+        app.add_option("--url", url, "URL of an image to download and open");
+#endif
 
         // enable all log messages globally, and for the default logger
         spdlog::set_level(spdlog::level::trace);
@@ -174,7 +178,7 @@ The default is 2 (info).)")
             spdlog::info("Forcing dithering {}.", (dither) ? "on" : "off");
 
         init_hdrview(exposure, gamma, dither, force_sdr, in_files);
-
+        hdrview()->load_url(url);
         hdrview()->run();
     }
     // Exceptions will only be thrown upon failed logger or sink construction (not during logging)

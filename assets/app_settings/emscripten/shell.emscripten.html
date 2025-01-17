@@ -45,8 +45,20 @@
     <!-- <script src="coi-serviceworker.js"></script> -->
 
     <script type='text/javascript'>
+        // Function to get all URL parameters and add them to Module['arguments']
+        function addUrlParametersToModuleArguments() {
+            var urlParams = new URLSearchParams(window.location.search);
+            urlParams.forEach(function (value, key) {
+                Module['arguments'].push(`--${key}=${value}`);
+            });
+        }
+
         var Module = {
-            preRun: [],
+            arguments: [],
+            preRun: [
+                function () {
+                    addUrlParametersToModuleArguments();
+                }],
             postRun: [
                 function () {
                     initDragAndDrop();

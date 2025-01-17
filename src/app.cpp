@@ -601,6 +601,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         };
         add_action({"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
+#if defined(__EMSCRIPTEN__)
+        add_action({"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
+                    [this]()
+                    {
+                        string url;
+                        if (ImGui::InputTextWithHint("##URL", "Enter an image URL and press <return>", &url,
+                                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                        {
+                            ImGui::CloseCurrentPopup();
+                            load_url(url);
+                        }
+                    },
+                    always_enabled, true});
+#endif
+
         add_action(
             {"Help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false, &g_show_help});
         add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
@@ -1185,7 +1200,10 @@ void HDRViewApp::draw_menus()
     {
         MenuItem(action("Open image..."));
 
-#if !defined(__EMSCRIPTEN__)
+#if defined(__EMSCRIPTEN__)
+        MenuItem(action("Open URL..."));
+#else
+
         ImGui::BeginDisabled(m_recent_files.empty());
         if (ImGui::BeginMenuEx("Open recent", ICON_MY_OPEN_IMAGE))
         {
@@ -1419,6 +1437,38 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
         spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
         return;
     }
+}
+
+void HDRViewApp::load_url(const string_view url)
+{
+    if (url.empty())
+        return;
+
+#if defined(__EMSCRIPTEN__)
+    spdlog::info("Entered URL: {}", url);
+
+    string *data = new string(url);
+
+    emscripten_async_wget_data(
+        data->c_str(), data,
+        (em_async_wget_onload_func)[](void *data, void *buffer, int buffer_size) {
+            auto   str_data = reinterpret_cast<string *>(data);
+            string url      = *str_data; // copy the url
+            delete str_data;
+
+            auto filename    = get_filename(url);
+            auto char_buffer = reinterpret_cast<const char *>(buffer);
+            spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
+            hdrview()->load_image(url, {char_buffer, (size_t)buffer_size});
+        },
+        (em_arg_callback_func)[](void *data) {
+            auto   str_data = reinterpret_cast<string *>(data);
+            string url      = *str_data; // copy the url
+            delete str_data;
+
+            spdlog::error("Downloading the file '{}' failed.", url);
+        });
+#endif
 }
 
 void HDRViewApp::add_pending_images()
