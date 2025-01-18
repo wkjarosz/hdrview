@@ -74,10 +74,13 @@ EM_JS(int, screen_width, (), { return screen.width; });
 EM_JS(int, screen_height, (), { return screen.height; });
 EM_JS(int, window_width, (), { return window.innerWidth; });
 EM_JS(int, window_height, (), { return window.innerHeight; });
+EM_JS(bool, isSafari, (), {
+    var is_safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    return is_safari;
+});
 EM_JS(bool, isAppleDevice, (), {
-    const userAgent = navigator.userAgent;
-    return (userAgent.includes("Macintosh") || userAgent.includes("iPad") || userAgent.includes("iPhone") ||
-            userAgent.includes("iPod"));
+    const ua = navigator.userAgent;
+    return (ua.includes("Macintosh") || ua.includes("iPad") || ua.includes("iPhone") || ua.includes("iPod"));
 });
 
 static std::string g_clipboard_content; // this stores the content for our internal clipboard
@@ -96,7 +99,6 @@ static void set_clipboard_from_imgui(ImGuiContext *user_data [[maybe_unused]], c
     spdlog::info("ImGui setting clipboard content to '{}'", g_clipboard_content);
     emscripten_browser_clipboard::copy(g_clipboard_content); // send clipboard data to the browser
 }
-
 #endif
 
 bool hostIsApple()
@@ -105,6 +107,14 @@ bool hostIsApple()
     return isAppleDevice();
 #elif defined(__APPLE__)
     return true;
+#else
+    return false;
+#endif
+}
+bool hostIsSafari()
+{
+#if defined(__EMSCRIPTEN__)
+    return isSafari();
 #else
     return false;
 #endif
@@ -1096,7 +1106,12 @@ void HDRViewApp::setup_rendering()
         m_shader->set_texture("dither_texture", Image::dither_texture());
         set_image_textures();
 
-        ImGui::GetIO().ConfigMacOSXBehaviors = hostIsApple();
+        auto is_safari = hostIsSafari();
+        auto is_apple  = hostIsApple();
+        spdlog::info("Host is Apple: {}", is_apple);
+        spdlog::info("Running in Safari: {}", is_safari);
+
+        ImGui::GetIO().ConfigMacOSXBehaviors = is_apple;
 
         spdlog::info("Successfully initialized graphics API!");
     }
@@ -1413,24 +1428,25 @@ void HDRViewApp::load_images(const vector<string> &filenames)
 void HDRViewApp::open_image()
 {
 #if defined(__EMSCRIPTEN__)
-    auto handle_upload_file =
-        [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
-    {
-        if (buffer.empty())
-            spdlog::debug("User canceled upload.");
-        else
-        {
-            auto [size, unit] = human_readable_size(buffer.size());
-            spdlog::debug("User uploaded a {:.0f} {} file with filename '{}'", size, unit, filename);
-            hdrview()->load_image(filename, buffer);
-        }
-    };
-
-    string extensions = fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
+    string extensions =
+        hostIsSafari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
 
     // open the browser's file selector, and pass the file to the upload handler
     spdlog::debug("Requesting file from user...");
-    emscripten_browser_file::upload(extensions, handle_upload_file, this);
+    emscripten_browser_file::upload(
+        extensions,
+        [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
+        {
+            if (buffer.empty())
+                spdlog::debug("User canceled upload.");
+            else
+            {
+                auto [size, unit] = human_readable_size(buffer.size());
+                spdlog::debug("User uploaded a {:.0f} {} file with filename '{}' of mime-type '{}'", size, unit,
+                              filename, mime_type);
+                hdrview()->load_image(filename, buffer);
+            }
+        });
 #else
     string extensions = fmt::format("*.{}", fmt::join(Image::loadable_formats(), " *."));
 
