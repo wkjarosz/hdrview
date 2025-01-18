@@ -341,6 +341,13 @@ if(emscripten-browser-file_ADDED)
   target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
 endif()
 
+CPMAddPackage("gh:Armchair-Software/emscripten-browser-clipboard#bcba48fee22551b458fe5e1e513f6402c810d886")
+if(emscripten-browser-clipboard_ADDED)
+  message(STATUS "emscripten-browser-clipboard library added")
+  add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
+  target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
+endif()
+
 CPMAddPackage(
   NAME Imath
   VERSION 3.1.12 # the git repo is incredibly large, so we download the archived include directory
@@ -508,7 +515,7 @@ endif()
 target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
 
 if(EMSCRIPTEN)
-  target_link_libraries(HDRView PRIVATE emscripten-browser-file)
+  target_link_libraries(HDRView PRIVATE emscripten-browser-file emscripten-browser-clipboard)
   target_link_options(
     HDRView
     PRIVATE

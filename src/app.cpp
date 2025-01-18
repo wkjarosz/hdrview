@@ -41,7 +41,8 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 
-#include "emscripten_browser_file.h"
+#include <emscripten_browser_clipboard.h>
+#include <emscripten_browser_file.h>
 #include <string_view>
 using std::string_view;
 #else
@@ -78,6 +79,24 @@ EM_JS(bool, isAppleDevice, (), {
     return (userAgent.includes("Macintosh") || userAgent.includes("iPad") || userAgent.includes("iPhone") ||
             userAgent.includes("iPod"));
 });
+
+static std::string g_clipboard_content; // this stores the content for our internal clipboard
+
+static char const *get_clipboard_for_imgui(ImGuiContext *user_data [[maybe_unused]])
+{
+    /// Callback for imgui, to return clipboard content
+    spdlog::info("ImGui requested clipboard content, returning '{}'", g_clipboard_content);
+    return g_clipboard_content.c_str();
+}
+
+static void set_clipboard_from_imgui(ImGuiContext *user_data [[maybe_unused]], char const *text)
+{
+    /// Callback for imgui, to set clipboard content
+    g_clipboard_content = text;
+    spdlog::info("ImGui setting clipboard content to '{}'", g_clipboard_content);
+    emscripten_browser_clipboard::copy(g_clipboard_content); // send clipboard data to the browser
+}
+
 #endif
 
 bool hostIsApple()
@@ -403,6 +422,20 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither]
     {
+#if defined(__EMSCRIPTEN__)
+        spdlog::info("Setting up paste callback");
+        emscripten_browser_clipboard::paste(
+            [](std::string &&paste_data, void *)
+            {
+                /// Callback to handle clipboard paste from browser
+                spdlog::info("Browser pasted: '{}'", paste_data);
+                g_clipboard_content = std::move(paste_data);
+            });
+
+        auto &io                       = ImGui::GetPlatformIO();
+        io.Platform_SetClipboardTextFn = set_clipboard_from_imgui;
+        io.Platform_GetClipboardTextFn = get_clipboard_for_imgui;
+#endif
         load_settings();
         if (force_exposure.has_value())
             m_exposure_live = m_exposure = *force_exposure;
