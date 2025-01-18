@@ -1428,6 +1428,9 @@ void HDRViewApp::load_images(const vector<string> &filenames)
 void HDRViewApp::open_image()
 {
 #if defined(__EMSCRIPTEN__)
+
+    // due to this bug, we just allow all file types on safari:
+    // https://stackoverflow.com/questions/72013027/safari-cannot-upload-file-w-unknown-mime-type-shows-tempimage,
     string extensions =
         hostIsSafari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
 
