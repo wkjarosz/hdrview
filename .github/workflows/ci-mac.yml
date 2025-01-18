@@ -33,7 +33,7 @@ jobs:
               name: "macOS 14 universal",
               os: macos-14,
               arch: "universal",
-              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/opt/homebrew/Cellar/harfbuzz/10.2.0/include/;/opt/homebrew/Cellar/harfbuzz/10.2.0/lib/;/usr/local/Cellar/harfbuzz/10.2.0/lib/;/usr/local/Cellar/harfbuzz/10.1.0/;/opt/homebrew/Cellar/brotli/1.1.0/include;/opt/homebrew/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
+              flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/opt/homebrew/Cellar/harfbuzz/10.2.0/include/;/opt/homebrew/Cellar/harfbuzz/10.2.0/lib/;/usr/local/Cellar/harfbuzz/10.2.0/lib/;/usr/local/Cellar/harfbuzz/10.2.0/;/opt/homebrew/Cellar/brotli/1.1.0/include;/opt/homebrew/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar" -DHDRVIEW_NO_UHDR=ON -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
           - {
               name: "macOS 13 universal",
