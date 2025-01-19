@@ -296,14 +296,12 @@ if (typeof window === 'undefined') {
                     initDragAndDrop();
                 }
             ],
-            print: (function () {
-                return function (text) {
-                    text = Array.prototype.slice.call(arguments).join(' ');
-                    console.log(text);
-                };
-            })(),
+            print: function (text) {
+                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                console.log(text);
+            },
             printErr: function (text) {
-                text = Array.prototype.slice.call(arguments).join(' ');
+                if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
                 console.error(text);
             },
             canvas: (function () {
