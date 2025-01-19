@@ -433,14 +433,14 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither]
     {
 #if defined(__EMSCRIPTEN__)
-        spdlog::info("Setting up paste callback");
-        emscripten_browser_clipboard::paste(
-            [](std::string &&paste_data, void *)
-            {
-                /// Callback to handle clipboard paste from browser
-                spdlog::info("Browser pasted: '{}'", paste_data);
-                g_clipboard_content = std::move(paste_data);
-            });
+        // spdlog::info("Setting up paste callback");
+        // emscripten_browser_clipboard::paste(
+        //     [](std::string &&paste_data, void *)
+        //     {
+        //         /// Callback to handle clipboard paste from browser
+        //         spdlog::info("Browser pasted: '{}'", paste_data);
+        //         g_clipboard_content = std::move(paste_data);
+        //     });
 
         auto &io                       = ImGui::GetPlatformIO();
         io.Platform_SetClipboardTextFn = set_clipboard_from_imgui;
@@ -1195,6 +1195,12 @@ void HDRViewApp::draw_status_bar()
             fmt::format("Loading {} image{}", m_pending_images.size(), m_pending_images.size() > 1 ? "s" : "").c_str());
         ImGui::SameLine();
     }
+    else if (m_remaining_download > 0)
+    {
+        ImGui::SetCursorPos({ImGui::GetStyle().ItemSpacing.x, y});
+        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, HelloImGui::EmToVec2(15.f, 0.f), "Downloading image");
+        ImGui::SameLine();
+    }
 
     float x = ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x;
 
@@ -1496,30 +1502,64 @@ void HDRViewApp::load_url(const string_view url)
     if (url.empty())
         return;
 
-#if defined(__EMSCRIPTEN__)
+#if !defined(__EMSCRIPTEN__)
+    spdlog::error("load_url only supported via emscripten");
+#else
     spdlog::info("Entered URL: {}", url);
 
-    string *data = new string(url);
+    struct Payload
+    {
+        string      url;
+        HDRViewApp *hdrview;
+    };
+    auto data = new Payload{string(url), this};
 
-    emscripten_async_wget_data(
-        data->c_str(), data,
-        (em_async_wget_onload_func)[](void *data, void *buffer, int buffer_size) {
-            auto   str_data = reinterpret_cast<string *>(data);
-            string url      = *str_data; // copy the url
-            delete str_data;
+    m_remaining_download = 100;
+    emscripten_async_wget2_data(
+        data->url.c_str(), "GET", nullptr, data, true,
+        (em_async_wget2_data_onload_func)[](unsigned, void *data, void *buffer, unsigned buffer_size) {
+            auto   payload = reinterpret_cast<Payload *>(data);
+            string url     = payload->url; // copy the url
+            delete payload;
 
             auto filename    = get_filename(url);
             auto char_buffer = reinterpret_cast<const char *>(buffer);
             spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
             hdrview()->load_image(url, {char_buffer, (size_t)buffer_size});
         },
-        (em_arg_callback_func)[](void *data) {
-            auto   str_data = reinterpret_cast<string *>(data);
-            string url      = *str_data; // copy the url
-            delete str_data;
+        (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
+            auto   payload                         = reinterpret_cast<Payload *>(data);
+            string url                             = payload->url; // copy the url
+            payload->hdrview->m_remaining_download = 0;
+            delete payload;
 
-            spdlog::error("Downloading the file '{}' failed.", url);
+            spdlog::error("Downloading the file '{}' failed; {}: '{}'.", url, err, desc);
+        },
+        (em_async_wget2_data_onprogress_func)[](unsigned, void *data, int bytes_loaded, int total_bytes) {
+            auto payload = reinterpret_cast<Payload *>(data);
+
+            payload->hdrview->m_remaining_download = (total_bytes - bytes_loaded) / total_bytes;
         });
+
+    // emscripten_async_wget_data(
+    //     data->url.c_str(), data,
+    //     (em_async_wget_onload_func)[](void *data, void *buffer, int buffer_size) {
+    //         auto   payload = reinterpret_cast<Payload *>(data);
+    //         string url     = payload->url; // copy the url
+    //         delete payload;
+
+    //         auto filename    = get_filename(url);
+    //         auto char_buffer = reinterpret_cast<const char *>(buffer);
+    //         spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
+    //         hdrview()->load_image(url, {char_buffer, (size_t)buffer_size});
+    //     },
+    //     (em_arg_callback_func)[](void *data) {
+    //         auto   payload = reinterpret_cast<Payload *>(data);
+    //         string url     = payload->url; // copy the url
+    //         delete payload;
+
+    //         spdlog::error("Downloading the file '{}' failed.", url);
+    //     });
 #endif
 }
 

@@ -145,13 +145,15 @@ void SpdLogWindow::draw(ImFont *console_font)
 
     ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_FrameStyle, window_flags);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
+    auto default_font = ImGui::GetFont();
     ImGui::PushFont(console_font);
     ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
 
     int  item_num = 0;
     bool did_copy = false;
     m_sink->iterate(
-        [this, &item_num, &did_copy](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
+        [this, &item_num, &did_copy,
+         default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
         {
             ++item_num;
             if (!m_sink->should_log(msg.level) ||
@@ -180,6 +182,9 @@ void SpdLogWindow::draw(ImFont *console_font)
                 ImGui::SetClipboardText(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end));
             }
             ImGui::PopID();
+            ImGui::PushFont(default_font);
+            ImGui::SetItemTooltip("Click to copy to clipboard");
+            ImGui::PopFont();
             ImGui::SameLine(ImGui::GetStyle().ItemInnerSpacing.x);
 
             // if color range not specified or not valid, just draw all the text with default color

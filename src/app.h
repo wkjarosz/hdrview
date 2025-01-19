@@ -227,6 +227,7 @@ private:
         }
     };
     vector<shared_ptr<PendingImages>> m_pending_images;
+    int                               m_remaining_download = 0;
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
