@@ -537,4 +537,44 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 //     return value_changed;
 // }
 
+void MenuItem(const Action &a)
+{
+    if (a.needs_menu)
+    {
+        if (ImGui::BeginMenuEx(a.name.c_str(), a.icon.c_str(), a.enabled()))
+        {
+            a.callback();
+            ImGui::EndMenu();
+        }
+    }
+    else
+    {
+        if (ImGui::MenuItemEx(a.name, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
+            a.callback();
+        if (!a.tooltip.empty())
+            ImGui::WrappedTooltip(a.tooltip.c_str());
+    }
+}
+
+void IconButton(const Action &a)
+{
+    if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
+        a.callback();
+    if (a.chord)
+        ImGui::WrappedTooltip(fmt::format("{} ({})", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
+    else
+        ImGui::WrappedTooltip(fmt::format("{}", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
+}
+
+void Checkbox(const Action &a)
+{
+    ImGui::Checkbox(a.name.c_str(), a.p_selected);
+    if (!a.tooltip.empty() || a.chord)
+    {
+        string parenthesized_chord = a.chord ? fmt::format("({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "";
+        string tooltip             = fmt::format("{}{}", a.tooltip, parenthesized_chord);
+        ImGui::WrappedTooltip(tooltip.c_str());
+    }
+}
+
 } // namespace ImGui

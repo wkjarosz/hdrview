@@ -7,10 +7,8 @@
 #include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
 #include "imcmd_command_palette.h"
-#include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot.h"
-#include "implot_internal.h"
 
 #include "fonts.h"
 
@@ -19,7 +17,6 @@
 #include "colorspace.h"
 
 #include "json.h"
-#include "sviewstream.h"
 #include "texture.h"
 #include "timer.h"
 #include "version.h"
@@ -38,13 +35,11 @@
 #include <sstream>
 #include <utility>
 
+#include "emscripten_utils.h"
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-
-#include <emscripten_browser_clipboard.h>
 #include <emscripten_browser_file.h>
-#include <string_view>
-using std::string_view;
 #else
 #include "portable-file-dialogs.h"
 #endif
@@ -68,57 +63,6 @@ using namespace linalg::ostream_overloads;
 using std::to_string;
 using std::unique_ptr;
 using json = nlohmann::json;
-
-#ifdef __EMSCRIPTEN__
-EM_JS(int, screen_width, (), { return screen.width; });
-EM_JS(int, screen_height, (), { return screen.height; });
-EM_JS(int, window_width, (), { return window.innerWidth; });
-EM_JS(int, window_height, (), { return window.innerHeight; });
-EM_JS(bool, isSafari, (), {
-    var is_safari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    return is_safari;
-});
-EM_JS(bool, isAppleDevice, (), {
-    const ua = navigator.userAgent;
-    return (ua.includes("Macintosh") || ua.includes("iPad") || ua.includes("iPhone") || ua.includes("iPod"));
-});
-
-static std::string g_clipboard_content; // this stores the content for our internal clipboard
-
-static char const *get_clipboard_for_imgui(ImGuiContext *user_data [[maybe_unused]])
-{
-    /// Callback for imgui, to return clipboard content
-    spdlog::info("ImGui requested clipboard content, returning '{}'", g_clipboard_content);
-    return g_clipboard_content.c_str();
-}
-
-static void set_clipboard_from_imgui(ImGuiContext *user_data [[maybe_unused]], char const *text)
-{
-    /// Callback for imgui, to set clipboard content
-    g_clipboard_content = text;
-    spdlog::info("ImGui setting clipboard content to '{}'", g_clipboard_content);
-    emscripten_browser_clipboard::copy(g_clipboard_content); // send clipboard data to the browser
-}
-#endif
-
-bool hostIsApple()
-{
-#if defined(__EMSCRIPTEN__)
-    return isAppleDevice();
-#elif defined(__APPLE__)
-    return true;
-#else
-    return false;
-#endif
-}
-bool hostIsSafari()
-{
-#if defined(__EMSCRIPTEN__)
-    return isSafari();
-#else
-    return false;
-#endif
-}
 
 #if defined(__EMSCRIPTEN__)
 static float g_scroll_multiplier = 10.0f;
@@ -151,46 +95,6 @@ static MouseMode_       g_mouse_mode                          = MouseMode_PanZoo
 static bool             g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
 #define g_blank_icon ""
-
-void MenuItem(const Action &a)
-{
-    if (a.needs_menu)
-    {
-        if (ImGui::BeginMenuEx(a.name.c_str(), a.icon.c_str(), a.enabled()))
-        {
-            a.callback();
-            ImGui::EndMenu();
-        }
-    }
-    else
-    {
-        if (ImGui::MenuItemEx(a.name, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
-            a.callback();
-        if (!a.tooltip.empty())
-            ImGui::WrappedTooltip(a.tooltip.c_str());
-    }
-}
-
-void IconButton(const Action &a)
-{
-    if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
-        a.callback();
-    if (a.chord)
-        ImGui::WrappedTooltip(fmt::format("{} ({})", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
-    else
-        ImGui::WrappedTooltip(fmt::format("{}", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
-}
-
-void Checkbox(const Action &a)
-{
-    ImGui::Checkbox(a.name.c_str(), a.p_selected);
-    if (!a.tooltip.empty() || a.chord)
-    {
-        string parenthesized_chord = a.chord ? fmt::format("({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "";
-        string tooltip             = fmt::format("{}{}", a.tooltip, parenthesized_chord);
-        ImGui::WrappedTooltip(tooltip.c_str());
-    }
-}
 
 static HDRViewApp *g_hdrview = nullptr;
 
@@ -432,20 +336,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither]
     {
-#if defined(__EMSCRIPTEN__)
-        // spdlog::info("Setting up paste callback");
-        // emscripten_browser_clipboard::paste(
-        //     [](std::string &&paste_data, void *)
-        //     {
-        //         /// Callback to handle clipboard paste from browser
-        //         spdlog::info("Browser pasted: '{}'", paste_data);
-        //         g_clipboard_content = std::move(paste_data);
-        //     });
-
-        auto &io                       = ImGui::GetPlatformIO();
-        io.Platform_SetClipboardTextFn = set_clipboard_from_imgui;
-        io.Platform_GetClipboardTextFn = get_clipboard_for_imgui;
-#endif
+        setup_imgui_clipboard();
         load_settings();
         if (force_exposure.has_value())
             m_exposure_live = m_exposure = *force_exposure;
@@ -637,7 +528,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     //
     {
         const auto always_enabled = []() { return true; };
-        auto       add_action     = [this](const Action &a)
+        auto       add_action     = [this](const ImGui::Action &a)
         {
             m_action_map[a.name] = m_actions.size();
             m_actions.push_back(a);
@@ -1106,8 +997,8 @@ void HDRViewApp::setup_rendering()
         m_shader->set_texture("dither_texture", Image::dither_texture());
         set_image_textures();
 
-        auto is_safari = hostIsSafari();
-        auto is_apple  = hostIsApple();
+        auto is_safari = host_is_safari();
+        auto is_apple  = host_is_apple();
         spdlog::info("Host is Apple: {}", is_apple);
         spdlog::info("Running in Safari: {}", is_safari);
 
@@ -1438,7 +1329,7 @@ void HDRViewApp::open_image()
     // due to this bug, we just allow all file types on safari:
     // https://stackoverflow.com/questions/72013027/safari-cannot-upload-file-w-unknown-mime-type-shows-tempimage,
     string extensions =
-        hostIsSafari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
+        host_is_safari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
 
     // open the browser's file selector, and pass the file to the upload handler
     spdlog::debug("Requesting file from user...");
@@ -2976,12 +2867,10 @@ void HDRViewApp::draw_command_palette()
 
     g_show_command_palette = false;
 
-    float2 display_size = ImGui::GetIO().DisplaySize;
-#ifdef __EMSCRIPTEN__
-    display_size = float2{(float)window_width(), (float)window_height()};
-#endif
+    auto &io = ImGui::GetIO();
+
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
                             ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowSize(ImVec2{400, 0}, ImGuiCond_Always);
@@ -2991,7 +2880,7 @@ void HDRViewApp::draw_command_palette()
 
     // Set constraints to allow horizontal resizing based on content
     ImGui::SetNextWindowSizeConstraints(
-        ImVec2(0, 0), ImVec2(display_size.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
+        ImVec2(0, 0), ImVec2(io.DisplaySize.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
 
     if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -3176,20 +3065,18 @@ void HDRViewApp::draw_about_dialog()
     if (ImGui::GetFrameCount() > 1)
         g_show_help = false;
 
-    float2 display_size = ImGui::GetIO().DisplaySize;
-#ifdef __EMSCRIPTEN__
-    display_size = float2{(float)window_width(), (float)window_height()};
-#endif
+    auto &io = ImGui::GetIO();
+
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(display_size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
                             ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowFocus();
     constexpr float icon_size = 128.f;
     float2          col_width = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
     col_width[1]              = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
-                                           display_size.x - ImGui::GetStyle().WindowPadding.x - 2 * ImGui::GetStyle().ItemSpacing.x -
-                                               ImGui::GetStyle().ScrollbarSize - col_width[0]);
+                                           io.DisplaySize.x - ImGui::GetStyle().WindowPadding.x -
+                                               2 * ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().ScrollbarSize - col_width[0]);
 
     ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
 
@@ -3354,31 +3241,3 @@ void HDRViewApp::draw_about_dialog()
         ImGui::EndPopup();
     }
 }
-
-#if defined(__EMSCRIPTEN__)
-//------------------------------------------------------------------------------
-//  Javascript interface functions
-//
-extern "C"
-{
-
-    EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size)
-    {
-        auto [size, unit] = human_readable_size(buffer_size);
-        spdlog::info("User dropped a {:.0f} {} file with filename '{}'", size, unit, filename);
-
-        if (!buffer || buffer_size == 0)
-        {
-            spdlog::warn("Empty file, skipping...");
-            return 1;
-        }
-        else
-        {
-            hdrview()->load_image(filename, {buffer, buffer_size});
-            return 0;
-        }
-    }
-
-} // extern "C"
-
-#endif

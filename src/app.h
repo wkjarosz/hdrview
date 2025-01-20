@@ -8,6 +8,7 @@
 #include "image.h"
 
 #include "hello_imgui/hello_imgui.h"
+#include "imgui_ext.h"
 #include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
 #include "shader.h"
@@ -25,19 +26,6 @@ using std::shared_ptr;
 using std::string;
 using std::string_view;
 using std::vector;
-
-struct Action
-{
-    string           name;
-    string           icon       = "";
-    ImGuiKeyChord    chord      = ImGuiKey_None;
-    ImGuiInputFlags  flags      = ImGuiInputFlags_None;
-    function<void()> callback   = []() { return; };
-    function<bool()> enabled    = []() { return true; };
-    bool             needs_menu = false;
-    bool            *p_selected = nullptr;
-    string           tooltip    = "";
-};
 
 class HDRViewApp
 {
@@ -257,11 +245,11 @@ private:
 
     map<pair<string, int>, ImFont *> m_fonts;
 
-    vector<Action>                 m_actions;
+    vector<ImGui::Action>          m_actions;
     map<string, size_t>            m_action_map;
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
-    Action &action(const string &name) { return m_actions[m_action_map[name]]; }
+    ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };
 
 /// Create the global singleton HDRViewApp instance

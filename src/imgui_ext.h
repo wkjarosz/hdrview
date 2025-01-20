@@ -61,6 +61,24 @@ ImVec2 IconSize();
 ImVec2 IconButtonSize();
 bool   IconButton(const char *icon, const ImVec2 &size = ImVec2(0, 0));
 
+//! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
+struct Action
+{
+    std::string           name;
+    std::string           icon       = "";
+    ImGuiKeyChord         chord      = ImGuiKey_None;
+    ImGuiInputFlags       flags      = ImGuiInputFlags_None;
+    std::function<void()> callback   = []() { return; };
+    std::function<bool()> enabled    = []() { return true; };
+    bool                  needs_menu = false;
+    bool                 *p_selected = nullptr;
+    std::string           tooltip    = "";
+};
+
+void MenuItem(const Action &a);
+void IconButton(const Action &a);
+void Checkbox(const Action &a);
+
 inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComboFlags flags = ImGuiComboFlags_None)
 {
     // Calculate the padding needed to center an icon in a ComboBox
