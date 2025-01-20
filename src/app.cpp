@@ -58,8 +58,6 @@
 #endif
 #endif
 
-using namespace linalg::ostream_overloads;
-
 using std::to_string;
 using std::unique_ptr;
 using json = nlohmann::json;

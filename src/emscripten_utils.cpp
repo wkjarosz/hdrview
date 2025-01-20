@@ -1,5 +1,10 @@
 
 #include "emscripten_utils.h"
+#include "app.h"
+#include "common.h"
+#include "imgui.h"
+
+#include <spdlog/spdlog.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten_browser_clipboard.h>
