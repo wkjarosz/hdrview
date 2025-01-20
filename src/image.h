@@ -24,6 +24,12 @@
 
 #include "dithermatrix256.h"
 
+// A very small value to avoid divisions by zero when converting to unpremultiplied alpha. The technical introduction to
+// OpenEXR (https://openexr.com/en/latest/TechnicalIntroduction.html#premultiplied-vs-un-premultiplied-color-channels)
+// recommends "a power of two" that is "less than half of the smallest positive 16-bit floating-point value". That
+// smallest value happens to be the denormal number 2^-24, so 2^-26 should be a good choice.
+static constexpr float k_small_alpha = 1.f / (1u << 26u);
+
 inline double axis_scale_fwd_xform(double value, void *user_data)
 {
     static constexpr double eps     = 0.0001;

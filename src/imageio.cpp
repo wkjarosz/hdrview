@@ -114,11 +114,7 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
 
     //                 // unpremultiply
     //                 if (alpha)
-    //                 {
-    //                     float a = (*alpha)(x, y);
-    //                     if (a != 0.f)
-    //                         v /= a;
-    //                 }
+    //                     v /= std::max(k_small_alpha, (*alpha)(x, y));
 
     //                 if (sRGB)
     //                     v = LinearToSRGB(v);
@@ -151,11 +147,7 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
 
                                      // unpremultiply
                                      if (alpha)
-                                     {
-                                         float a = (*alpha)(x, y);
-                                         if (a != 0.f)
-                                             v /= a;
-                                     }
+                                         v /= std::max(k_small_alpha, (*alpha)(x, y));
 
                                      if (sRGB)
                                          v = LinearToSRGB(v);
@@ -190,11 +182,8 @@ std::unique_ptr<float[]> Image::as_interleaved_floats(int *w, int *h, int *n, fl
 
     //                                                                          // unpremultiply
     //                                                                          if (alpha)
-    //                                                                          {
-    //                                                                              float a = (*alpha)(x, y);
-    //                                                                              if (a != 0.f)
-    //                                                                                  v /= a;
-    //                                                                          }
+    //                                                                            v /= std::max(k_small_alpha,
+    //                                                                            (*alpha)(x, y));
     //                                                                          return v;
     //                                                                      });
 
@@ -216,11 +205,8 @@ std::unique_ptr<float[]> Image::as_interleaved_floats(int *w, int *h, int *n, fl
 
                                  // unpremultiply
                                  if (alpha)
-                                 {
-                                     float a = (*alpha)(x, y);
-                                     if (a != 0.f)
-                                         v /= a;
-                                 }
+                                     v /= std::max(k_small_alpha, (*alpha)(x, y));
+
                                  rgba_pixel[c] = v;
                              }
                          }
