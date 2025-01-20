@@ -61,7 +61,7 @@ int main(int argc, char **argv)
     int                                 verbosity         = default_verbosity;
 
     std::optional<float> exposure, gamma;
-    std::optional<bool>  dither, force_sdr;
+    std::optional<bool>  dither, force_sdr, apple_keys;
     string               url;
 
     vector<string> in_files;
@@ -71,12 +71,11 @@ int main(int argc, char **argv)
         string version_string =
             fmt::format("HDRView {}. (built using {} backend on {})", version(), backend(), build_timestamp());
 
-        CLI::App app{
-            R"(HDRView is a simple research-oriented tool for examining,
+        CLI::App app{R"(HDRView is a simple research-oriented tool for examining,
 comparing, and converting high-dynamic range images. HDRView
 is freely available under a 3-clause BSD license.
 )",
-            "HDRView"};
+                     "HDRView"};
 
         app.formatter(std::make_shared<ColorFormatter>());
         app.get_formatter()->column_width(20);
@@ -116,6 +115,10 @@ severities are:
 The default is 2 (info).)")
             ->check(CLI::Range(0, 6))
             ->option_text("INT in [0-6]")
+            ->group("Misc");
+
+        app.add_flag("--apple-keys,--non-apple-keys{false}", apple_keys,
+                     "Apple-style keyboard behavior (Cmd key instead of Ctrl, etc.)")
             ->group("Misc");
 
         app.set_version_flag("--version", version_string, "Show the version and exit.")->group("Misc");
@@ -175,9 +178,12 @@ The default is 2 (info).)")
 
         // dithering
         if (dither.has_value())
-            spdlog::info("Forcing dithering {}.", (dither) ? "on" : "off");
+            spdlog::info("Forcing dithering {}.", *dither ? "ON" : "OFF");
 
-        init_hdrview(exposure, gamma, dither, force_sdr, in_files);
+        if (apple_keys.has_value())
+            spdlog::info("Turning Apple-style keyboard behavior {}.", *apple_keys ? "ON" : "OFF");
+
+        init_hdrview(exposure, gamma, dither, force_sdr, apple_keys, in_files);
         hdrview()->load_url(url);
         hdrview()->run();
     }

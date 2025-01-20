@@ -17,8 +17,6 @@
 #include "colorspace.h"
 
 #include "json.h"
-#include "texture.h"
-#include "timer.h"
 #include "version.h"
 
 #include <ImfHeader.h>
@@ -50,7 +48,6 @@
 
 #ifdef HELLOIMGUI_USE_GLFW3
 #include <GLFW/glfw3.h>
-
 #ifdef __APPLE__
 // on macOS, we need to include this to get the NS api for opening files
 #define GLFW_EXPOSE_NATIVE_COCOA
@@ -97,7 +94,7 @@ static bool             g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, fa
 static HDRViewApp *g_hdrview = nullptr;
 
 void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-                  std::optional<bool> force_sdr, const vector<string> &in_files)
+                  std::optional<bool> force_sdr, std::optional<bool> apple_keys, const vector<string> &in_files)
 {
     if (g_hdrview)
     {
@@ -112,14 +109,16 @@ void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std
     spdlog::info("Overriding gamma: {}", gamma.has_value());
     spdlog::info("Overriding dither: {}", dither.has_value());
     spdlog::info("Forcing SDR: {}", force_sdr.has_value());
+    spdlog::info("Overriding Apple-keyboard behavior: {}", apple_keys.has_value());
 
-    g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, in_files);
+    g_hdrview = new HDRViewApp(exposure, gamma, dither, force_sdr, apple_keys, in_files);
 }
 
 HDRViewApp *hdrview() { return g_hdrview; }
 
 HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float> force_gamma,
-                       std::optional<bool> force_dither, std::optional<bool> force_sdr, vector<string> in_files)
+                       std::optional<bool> force_dither, std::optional<bool> force_sdr,
+                       std::optional<bool> force_apple_keys, vector<string> in_files)
 {
 #if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     // if threading is disabled, create no threads
@@ -332,10 +331,12 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     //
     m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
     m_params.iniFilename        = "HDRView/settings.ini";
-    m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither]
+    m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
         setup_imgui_clipboard();
         load_settings();
+        setup_rendering();
+
         if (force_exposure.has_value())
             m_exposure_live = m_exposure = *force_exposure;
         if (force_gamma.has_value())
@@ -345,7 +346,17 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         if (force_dither.has_value())
             m_dither = *force_dither;
 
-        setup_rendering();
+        auto is_safari = host_is_safari();
+        auto is_apple  = host_is_apple();
+        spdlog::info("Host is Apple: {}", is_apple);
+        spdlog::info("Running in Safari: {}", is_safari);
+
+        ImGui::GetIO().ConfigMacOSXBehaviors = is_apple;
+        if (force_apple_keys.has_value())
+            ImGui::GetIO().ConfigMacOSXBehaviors = *force_apple_keys;
+
+        spdlog::info("Using {}-style keyboard behavior",
+                     ImGui::GetIO().ConfigMacOSXBehaviors ? "Apple" : "Windows/Linux");
     };
     m_params.callbacks.BeforeExit = [this]
     {
@@ -994,14 +1005,6 @@ void HDRViewApp::setup_rendering()
 
         m_shader->set_texture("dither_texture", Image::dither_texture());
         set_image_textures();
-
-        auto is_safari = host_is_safari();
-        auto is_apple  = host_is_apple();
-        spdlog::info("Host is Apple: {}", is_apple);
-        spdlog::info("Running in Safari: {}", is_safari);
-
-        ImGui::GetIO().ConfigMacOSXBehaviors = is_apple;
-
         spdlog::info("Successfully initialized graphics API!");
     }
     catch (const std::exception &e)

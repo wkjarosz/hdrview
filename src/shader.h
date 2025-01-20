@@ -49,7 +49,7 @@ public:
         Returns a text string with the source (or precompiled binary) of a shader found in the app's assets directory.
 
         We assume Metal shaders use `.metallib` for binary, and `.metal` for source, and GLSL(ES) shader sources use one
-       of a handful of common extensions like `.glsl` or `.fs` (see \ref shader.cpp for details).
+        of a handful of common extensions like `.glsl` or `.fs` (see \ref shader.cpp for details).
 
         \param [in] basename
             The base filename (without extension) relative to the app's assets directory

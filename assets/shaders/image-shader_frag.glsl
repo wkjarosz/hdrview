@@ -79,6 +79,10 @@ vec4 tonemap(vec4 color)
 {
     return vec4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma)), color.a);
 }
+vec4 inv_tonemap(vec4 color)
+{
+    return vec4(sRGB ? sRGBToLinear(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(gamma)), color.a);
+}
 
 float rand_box(vec2 xy)
 {
@@ -159,12 +163,14 @@ void main()
         background.rgb = vec3(1.0);
     else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
     {
-        float dark_gray  = (bg_mode == BG_DARK_CHECKER) ? 0.00630957 : 0.21763764;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.02899119 : 0.26840952;
+        float dark_gray  = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
         float checkerboard =
             mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
         background.rgb = vec3(checkerboard);
     }
+    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
+    background = inv_tonemap(background);
 
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
     bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;

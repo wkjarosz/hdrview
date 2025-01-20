@@ -59,6 +59,11 @@ float4 tonemap(const float4 color, const float gamma, const bool sRGB)
     return float4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma)), color.a);
 }
 
+float4 inv_tonemap(const float4 color, const float gamma, const bool sRGB)
+{
+    return float4(sRGB ? sRGBToLinear(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), float3(gamma)), color.a);
+}
+
 float rand_box(float2 xy, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
 {
     // Result is in range (-0.5, 0.5)
@@ -174,11 +179,13 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         background.rgb = float3(1.0);
     else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
     {
-        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.00630957 : 0.21763764;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.02899119 : 0.26840952;
+        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
         float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
         background.rgb = float3(checkerboard);
     }
+    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
+    background = inv_tonemap(background, gamma, sRGB);
 
     bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
     bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);

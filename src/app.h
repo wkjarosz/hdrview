@@ -12,7 +12,6 @@
 #include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
 #include "shader.h"
-#include "texture.h"
 #include <map>
 #include <string>
 #include <string_view>
@@ -31,7 +30,7 @@ class HDRViewApp
 {
 public:
     HDRViewApp(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-               std::optional<bool> force_sdr, vector<string> in_files = {});
+               std::optional<bool> force_sdr, std::optional<bool> force_apple_keys, vector<string> in_files = {});
     ~HDRViewApp();
 
     void run();
@@ -254,7 +253,7 @@ private:
 
 /// Create the global singleton HDRViewApp instance
 void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-                  std::optional<bool> force_sdr, const vector<string> &in_files = {});
+                  std::optional<bool> force_sdr, std::optional<bool> apple_keys, const vector<string> &in_files = {});
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
