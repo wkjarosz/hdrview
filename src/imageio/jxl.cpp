@@ -56,11 +56,18 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 //     cmsHTRANSFORM transform;
 // };
 
-static constexpr JxlColorEncoding linear = {.color_space       = JXL_COLOR_SPACE_RGB,
-                                            .white_point       = JXL_WHITE_POINT_D65,
-                                            .primaries         = JXL_PRIMARIES_SRGB,
-                                            .transfer_function = JXL_TRANSFER_FUNCTION_LINEAR,
-                                            .rendering_intent  = JXL_RENDERING_INTENT_PERCEPTUAL};
+static constexpr JxlColorEncoding linear = {
+    JXL_COLOR_SPACE_RGB,            // color_space
+    JXL_WHITE_POINT_D65,            // white_point
+    {},                             // white_point_xy
+    JXL_PRIMARIES_SRGB,             // primaries
+    {},                             // primaries_red_xy
+    {},                             // primaries_green_xy
+    {},                             // primaries_blue_xy
+    JXL_TRANSFER_FUNCTION_LINEAR,   // transfer_function
+    1.0,                            // gamma
+    JXL_RENDERING_INTENT_PERCEPTUAL // rendering_intent
+};
 
 // static void *CmsInit(void *data, size_t num_threads, size_t pixels_per_thread, const JxlColorProfile *input_profile,
 //                      const JxlColorProfile *output_profile, float intensity_target)

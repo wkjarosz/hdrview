@@ -553,17 +553,17 @@ target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
 
-if(APPLE)
-  target_compile_options(HDRView PRIVATE "-fobjc-arc")
-  target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
-  target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
-endif(APPLE)
-
 message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
 message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
+
+if(APPLE)
+  target_compile_options(HDRView PRIVATE "-fobjc-arc")
+  target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
+  target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
+endif(APPLE)
 
 if(EMSCRIPTEN)
   target_link_options(
