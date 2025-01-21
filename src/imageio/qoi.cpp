@@ -29,7 +29,6 @@ using namespace std;
 
 bool is_qoi_image(istream &is) noexcept
 {
-
     bool ret = false;
     try
     {

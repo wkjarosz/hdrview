@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules" "${CMAKE_SOURCE_DIR}/cmake/")
 
 include(VersionFromGit)
 
@@ -17,14 +17,13 @@ project(
 # By default, we install in a portable way (i.e. assets and executable are in the same folder)
 option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 
-option(HDRVIEW_NO_UHDR "Do not build with libultrahdr support" OFF)
-option(HDRVIEW_BUILD_UHDR_DEPS "Build the dependencies for libultrahdr" OFF)
 option(HDRVIEW_IGNORE_BREW_PORTS "Ignore Homebrew and MacPorts directories" OFF)
 if(HDRVIEW_IGNORE_BREW_PORTS)
   set(CMAKE_IGNORE_PATH "/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin")
 endif()
 
 # cmake-format: off
+set(HDRVIEW_DEFINITIONS HELLOIMGUI_NO_FONT_AWESOME4)
 set(HDRVIEW_ICONSET
     "HDRVIEW_ICONSET_MS"
     CACHE
@@ -193,6 +192,8 @@ if(MSVC)
   endforeach()
 endif()
 
+include(FindPkgConfig)
+
 # ============================================================================
 # Add dependencies via CPM (cmake/tools.cmake includes cmake/CPM.cmake)
 #
@@ -269,15 +270,8 @@ if(implot_ADDED)
   target_link_libraries(implot PUBLIC imgui)
   set_target_properties(implot PROPERTIES CXX_STANDARD 17)
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "implot")
 
-CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
-if(portable-file-dialogs_ADDED)
-  message(STATUS "portable-file-dialogs library added")
-  add_library(portable-file-dialogs INTERFACE IMPORTED)
-  target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
-endif()
-
-# CPMAddPackage("gh:wkjarosz/imgui-command-palette#66124ae045c11eb153c9c3f184b1e12f4d5a0e7b")
 CPMAddPackage(
   NAME my_imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
@@ -297,6 +291,7 @@ if(my_imgui_command_palette_ADDED)
   target_include_directories(my_imgui_command_palette PUBLIC . ${my_imgui_command_palette_SOURCE_DIR})
   target_link_libraries(my_imgui_command_palette PUBLIC imgui)
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
 
 CPMAddPackage("gh:sgorsten/linalg@2.2")
 if(linalg_ADDED)
@@ -304,11 +299,13 @@ if(linalg_ADDED)
   add_library(linalg INTERFACE IMPORTED)
   target_include_directories(linalg INTERFACE "${linalg_SOURCE_DIR}")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage("gh:fmtlib/fmt#11.0.2")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
   NAME spdlog
@@ -319,6 +316,7 @@ CPMAddPackage(
 if(spdlog_ADDED)
   message(STATUS "spdlog library added")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
 CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
 if(stb_ADDED)
@@ -326,6 +324,7 @@ if(stb_ADDED)
   add_library(stb INTERFACE IMPORTED)
   target_include_directories(stb INTERFACE "${stb_SOURCE_DIR}")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "stb")
 
 CPMAddPackage("gh:phoboslab/qoi#b0b926ee70108b0113dd2718d13d2207c474ed2e")
 if(qoi_ADDED)
@@ -333,19 +332,36 @@ if(qoi_ADDED)
   add_library(qoi INTERFACE IMPORTED)
   target_include_directories(qoi INTERFACE "${qoi_SOURCE_DIR}")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "qoi")
 
-CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
-if(emscripten-browser-file_ADDED)
-  message(STATUS "emscripten-browser-file library added")
-  add_library(emscripten-browser-file INTERFACE IMPORTED)
-  target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
-endif()
+if(EMSCRIPTEN)
 
-CPMAddPackage("gh:Armchair-Software/emscripten-browser-clipboard#bcba48fee22551b458fe5e1e513f6402c810d886")
-if(emscripten-browser-clipboard_ADDED)
-  message(STATUS "emscripten-browser-clipboard library added")
-  add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
-  target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
+  CPMAddPackage("gh:Armchair-Software/emscripten-browser-file#d21dec772050d581c02aa9820e4d877fdb060dc8")
+  if(emscripten-browser-file_ADDED)
+    message(STATUS "emscripten-browser-file library added")
+    add_library(emscripten-browser-file INTERFACE IMPORTED)
+    target_include_directories(emscripten-browser-file INTERFACE "${emscripten-browser-file_SOURCE_DIR}")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-file")
+
+  CPMAddPackage("gh:Armchair-Software/emscripten-browser-clipboard#bcba48fee22551b458fe5e1e513f6402c810d886")
+  if(emscripten-browser-clipboard_ADDED)
+    message(STATUS "emscripten-browser-clipboard library added")
+    add_library(emscripten-browser-clipboard INTERFACE IMPORTED)
+    target_include_directories(emscripten-browser-clipboard INTERFACE "${emscripten-browser-clipboard_SOURCE_DIR}")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "emscripten-browser-clipboard")
+
+else()
+
+  CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+  if(portable-file-dialogs_ADDED)
+    message(STATUS "portable-file-dialogs library added")
+    add_library(portable-file-dialogs INTERFACE IMPORTED)
+    target_include_directories(portable-file-dialogs INTERFACE "${portable-file-dialogs_SOURCE_DIR}")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "portable-file-dialogs")
+
 endif()
 
 CPMAddPackage(
@@ -355,6 +371,7 @@ CPMAddPackage(
   OPTIONS "BUILD_SHARED_LIBS OFF" "IMATH_INSTALL OFF" "IMATH_INSTALL_PKG_CONFIG OFF" "BUILD_TESTING OFF"
           "EXCLUDE_FROM_ALL YES"
 )
+list(APPEND HDRVIEW_DEPENDENCIES "Imath::Imath")
 
 if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
   set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
@@ -366,7 +383,9 @@ CPMAddPackage(
   NAME openexr
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
   # FIXME: OpenEXR v3.3.0 and above seems to break our subsample channel loading
-  GIT_TAG v3.2.4
+  FIND_PACKAGE_ARGUMENTS "REQUIRED"
+  VERSION 3.2.4
+  # GIT_TAG v3.2.4
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
@@ -380,39 +399,82 @@ CPMAddPackage(
           ${OPENEXR_THREADING_OPTIONS}
 )
 if(openexr_ADDED)
-  message(STATUS "openexr library added with threading options: ${OPENEXR_THREADING_OPTIONS}")
+  message(STATUS "Building OpenEXR library with threading options: ${OPENEXR_THREADING_OPTIONS}")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "OpenEXR::OpenEXR")
 
-if(NOT HDRVIEW_NO_UHDR)
+option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
+if(HDRVIEW_ENABLE_UHDR)
   CPMAddPackage(
-    NAME libultrahdr
+    NAME libuhdr
     GITHUB_REPOSITORY google/libultrahdr
-    GIT_TAG ea518da3a839c59f88ffc6c4020920c944251fd2
+    VERSION 1.4.0
+    # GIT_TAG ea518da3a839c59f88ffc6c4020920c944251fd2
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "UHDR_BUILD_EXAMPLES OFF"
             "UHDR_BUILD_TESTS OFF"
             "UHDR_BUILD_BENCHMARK OFF"
             "UHDR_BUILD_FUZZERS OFF"
-            "UHDR_BUILD_DEPS ${HDRVIEW_BUILD_UHDR_DEPS}"
             "UHDR_ENABLE_INSTALL OFF"
             "UHDR_ENABLE_INTRINSICS OFF"
   )
-  if(libultrahdr_ADDED)
-    message(STATUS "libultrahdr library added with UHDR_BUILD_DEPS=${HDRVIEW_BUILD_UHDR_DEPS}")
+  if(libuhdr_ADDED)
+    message(STATUS "Will build uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
+  elseif(TARGET uhdr)
+    message(STATUS "Using local uhdr library")
+  else()
+    message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "core")
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
+endif()
 
+option(HDRVIEW_ENABLE_JPEGXL "Enable JPEG-XL support" ON)
+if(HDRVIEW_ENABLE_JPEGXL)
+  CPMAddPackage(
+    NAME JXL
+    GITHUB_REPOSITORY libjxl/libjxl
+    VERSION 0.11.1
+    OPTIONS "BUILD_SHARED_LIBS OFF"
+            "BUILD_TESTING OFF"
+            "JPEGXL_ENABLE_TOOLS OFF"
+            "JPEGXL_ENABLE_BENCHMARK OFF"
+            "JPEGXL_ENABLE_EXAMPLES OFF"
+            "JPEGXL_ENABLE_JNI OFF"
+            "JPEGXL_ENABLE_OPENEXR OFF"
+            "JPEGXL_ENABLE_DOXYGEN OFF"
+            "JPEGXL_ENABLE_MANPAGES OFF"
+            "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
+            # "JPEGXL_ENABLE_SKCMS OFF"
+            "EXCLUDE_FROM_ALL YES"
+  )
+  if(JXL_ADDED)
+    message(STATUS "Will build JPEG-XL library")
+  elseif(TARGET jxl)
+    message(STATUS "Using local JPEG-XL library")
+  else()
+    message(FATAL_ERROR "JPEG-XL library not found. Please install it or turn off HDRVIEW_ENABLE_JPEGXL.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads" "jxl_cms")
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
 endif()
 
 CPMAddPackage(
-  NAME cli11
+  NAME CLI11
+  VERSION 2.4.2
   URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
 )
-if(cli11_ADDED)
-  message(STATUS "CLI11 library added")
-  add_library(cli11 INTERFACE IMPORTED)
-  target_include_directories(cli11 INTERFACE "${cli11_SOURCE_DIR}/include")
+if(CLI11_ADDED)
+  message(STATUS "Will build CLI11 library")
+  add_library(CLI11::CLI11 INTERFACE IMPORTED)
+  target_include_directories(CLI11::CLI11 INTERFACE "${CLI11_SOURCE_DIR}/include")
+elseif(TARGET CLI11::CLI11)
+  message(STATUS "Using local CLI11 library")
+else()
+  message(FATAL_ERROR "CLI11 library not found. Please install it.")
 endif()
+list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -460,6 +522,7 @@ hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/imageio/exr.cpp
+  src/imageio/jxl.cpp
   src/imageio/pfm.cpp
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
@@ -495,28 +558,14 @@ if(APPLE)
   target_link_libraries(HDRView PRIVATE "-framework ApplicationServices")
   target_compile_definitions(HDRView PRIVATE IMGUI_ENABLE_OSX_DEFAULT_CLIPBOARD_FUNCTIONS)
 endif(APPLE)
-target_link_libraries(
-  HDRView
-  PRIVATE linalg
-          fmt::fmt
-          spdlog::spdlog
-          OpenEXR::OpenEXR
-          Imath::Imath
-          stb
-          qoi
-          implot
-          cli11
-          my_imgui_command_palette
-)
-if(NOT HDRVIEW_NO_UHDR)
-  target_link_libraries(HDRView PRIVATE core)
-else()
-  target_compile_definitions(HDRView PRIVATE HDRVIEW_NO_UHDR)
-endif()
-target_compile_definitions(HDRView PRIVATE HELLOIMGUI_NO_FONT_AWESOME4)
+
+message(STATUS "HDRView build dependencies: ${HDRVIEW_DEPENDENCIES}")
+message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
+
+target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
+target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
 
 if(EMSCRIPTEN)
-  target_link_libraries(HDRView PRIVATE emscripten-browser-file emscripten-browser-clipboard)
   target_link_options(
     HDRView
     PRIVATE
@@ -533,8 +582,6 @@ if(EMSCRIPTEN)
     target_link_options(HDRView PRIVATE -sPTHREAD_POOL_SIZE=3)
   endif()
   hello_imgui_set_emscripten_target_initial_memory_megabytes(HDRView 120)
-else()
-  target_link_libraries(HDRView PRIVATE portable-file-dialogs)
 endif()
 
 if(UNIX AND NOT ${U_CMAKE_BUILD_TYPE} MATCHES DEBUG)

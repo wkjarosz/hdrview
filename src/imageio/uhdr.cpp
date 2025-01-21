@@ -21,7 +21,7 @@
 
 using namespace std;
 
-#ifdef HDRVIEW_NO_UHDR
+#ifndef HDRVIEW_ENABLE_UHDR
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
