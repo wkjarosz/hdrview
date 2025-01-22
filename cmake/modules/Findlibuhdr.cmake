@@ -28,7 +28,7 @@ find_package_handle_standard_args(libuhdr REQUIRED_VARS LIBUHDR_INCLUDES LIBUHDR
 if(libuhdr_FOUND)
   add_library(core SHARED IMPORTED)
   set_target_properties(
-    uhdr
+    core
     PROPERTIES CXX_STANDARD 17
                INTERFACE_INCLUDE_DIRECTORIES "${LIBUHDR_INCLUDES}"
                INTERFACE_LINK_LIBRARIES "${LIBUHDR_LIBRARY}"
