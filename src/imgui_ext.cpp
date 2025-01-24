@@ -117,7 +117,7 @@ void SpdLogWindow::draw(ImFont *console_font)
                     current_level == i))
             {
                 m_sink->set_level(spdlog::level::level_enum(i));
-                // spdlog::set_level(spdlog::level::level_enum(i));
+                spdlog::set_level(spdlog::level::level_enum(i));
                 spdlog::info("Setting verbosity threshold to level {:d}.", i);
             }
             ImGui::PopStyleColor();

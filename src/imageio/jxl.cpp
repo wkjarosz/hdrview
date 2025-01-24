@@ -202,7 +202,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         // if (JXL_DEC_SUCCESS != JxlDecoderSetCms(dec.get(), cmsInterface))
         //     throw invalid_argument{"Failed to set CMS."};
 
-        JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
+        // JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
 
         JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size());
         JxlDecoderCloseInput(dec.get());
@@ -234,10 +234,9 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             }
             else if (status == JXL_DEC_COLOR_ENCODING)
             {
-                // if (JXL_DEC_SUCCESS != JxlDecoderSetOutputColorProfile(dec.get(), nullptr, nullptr, 0))
-                //     throw invalid_argument{"Failed to set color space."};
-                if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
-                    throw invalid_argument{"Failed to set color space."};
+                // if (JXL_DEC_SUCCESS != JxlDecoderSetOutputColorProfile(dec.get(), &linear, nullptr, 0))
+                // if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
+                // throw invalid_argument{"Failed to set output color space."};
 
                 // Get the ICC color profile of the pixel data
                 size_t icc_size;
@@ -250,10 +249,6 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL,
                                                                       jxl_profile.data(), jxl_profile.size()))
                     throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
-
-                // if (JXL_DEC_SUCCESS != JxlDecoderSetOutputColorProfile(dec.get(), &linear, nullptr, 0))
-                //     // if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
-                //     throw invalid_argument{"JxlDecoderSetPreferredColorProfile failed"};
 
                 if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
                     throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
@@ -268,14 +263,13 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 // {
                 //     spdlog::info("JPEG XL file has an encoded color profile");
 
-                //     // Imf::Chromaticities chromaticities;
-                //     // chromaticities.red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
-                //     // chromaticities.green = Imath::V2f(file_enc.primaries_green_xy[0],
-                //     // file_enc.primaries_green_xy[1]); chromaticities.blue  =
-                //     Imath::V2f(file_enc.primaries_blue_xy[0],
-                //     // file_enc.primaries_blue_xy[1]); chromaticities.white = Imath::V2f(file_enc.white_point_xy[0],
-                //     // file_enc.white_point_xy[1]); Imf::addChromaticities(image->header, chromaticities);
-                //     // Imf::addWhiteLuminance(image->header, info.intensity_target);
+                //     Imf::Chromaticities chromaticities;
+                //     chromaticities.red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
+                //     chromaticities.green = Imath::V2f(file_enc.primaries_green_xy[0],
+                //     file_enc.primaries_green_xy[1]); chromaticities.blue  = Imath::V2f(file_enc.primaries_blue_xy[0],
+                //     file_enc.primaries_blue_xy[1]); chromaticities.white = Imath::V2f(file_enc.white_point_xy[0],
+                //     file_enc.white_point_xy[1]); Imf::addChromaticities(image->header, chromaticities);
+                //     Imf::addWhiteLuminance(image->header, info.intensity_target);
                 // }
                 // else
                 //     spdlog::warn("JPEG XL file has no encoded color profile. Colors distortions may occur.");

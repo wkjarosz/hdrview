@@ -147,7 +147,7 @@ public:
     template <typename Func>
     void apply(Func &&func)
     {
-        size_t block_size = std::max(1u, 1024u * 1024u / width());
+        int block_size = std::max(1, 1024 * 1024 / width());
         parallel_for(blocked_range<int>(0, height(), block_size),
                      [this, &func](int begin_y, int end_y, int unit_index, int thread_index)
                      {
@@ -231,6 +231,7 @@ public:
         XYZ_Channels,
         YCA_Channels,
         YC_Channels,
+        YA_Channels,
         UVorXY_Channels,
         Z_Channel,
         Single_Channel

@@ -92,11 +92,14 @@ Texture *Image::dither_texture() { return s_dither_texture.get(); }
 
 std::set<std::string> Image::loadable_formats()
 {
-    return {"dng", "jpg", "jpeg",
+    return {"dng",  "jpg",  "jpeg",
 #ifdef HDRVIEW_ENABLE_JPEGXL
             "jxl",
 #endif
-            "png", "bmp", "psd",  "pfm", "tga", "gif", "hdr", "pic", "ppm", "pgm", "exr", "qoi"};
+#ifdef HDRVIEW_ENABLE_HEIF
+            "heic", "heif", "avif", "avifs",
+#endif
+            "png",  "bmp",  "psd",  "pfm",   "tga", "gif", "hdr", "pic", "ppm", "pgm", "exr", "qoi"};
 }
 
 std::set<std::string> Image::savable_formats()
@@ -288,6 +291,7 @@ float4x4 ChannelGroup::colors() const
     case YC_Channels:
         return float4x4{
             {1, 0.35133642, 0.5, 0.5f}, {1.f, 1.f, 1.f, 0.5f}, {0.5, 0.44952777, 1, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
+    case YA_Channels:
     case XYZA_Channels:
     case XYZ_Channels:
     case UVorXY_Channels:
@@ -436,15 +440,31 @@ void Image::set_as_texture(Target target)
     if (group.num_channels == 4)
         return;
 
-    s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
-
-    if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
+    if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB, and set A=1
     {
         s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
         s->set_texture(fmt::format("{}_{}_texture", t, 2), channels[group.channels[0]].get_texture());
+        s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
     }
-    else if (group.num_channels == 2) // if group has 2 channels, make third channel black
-        s->set_texture(fmt::format("{}_{}_texture", t, 2), Image::black_texture());
+    else if (group.num_channels == 2) // if group has 2 channels, depends on the type
+    {
+        if (group.type == ChannelGroup::YA_Channels)
+        {
+            // if group is YA, replicate the Y channel across RGB, and put A in the 4th channel
+            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
+            s->set_texture(fmt::format("{}_{}_texture", t, 2), channels[group.channels[0]].get_texture());
+            s->set_texture(fmt::format("{}_{}_texture", t, 3), channels[group.channels[1]].get_texture());
+        }
+        else
+        {
+            // for other x-channel groups, set 3rd channel to black, and set A=1
+            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
+            s->set_texture(fmt::format("{}_{}_texture", t, 2), Image::black_texture());
+            s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
+        }
+    }
+    else if (group.num_channels == 3) // if group has 3 channels, set A=1
+        s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
 }
 
 Image::Image(int2 size, int num_channels)
@@ -497,6 +517,9 @@ void Image::build_layers_and_groups()
         {ChannelGroup::YCA_Channels, {"ry", "y", "by", "a"}},
         {ChannelGroup::YC_Channels, {"RY", "Y", "BY"}},
         {ChannelGroup::YC_Channels, {"ry", "y", "by"}},
+        // monochrome images with alpha
+        {ChannelGroup::YA_Channels, {"Y", "A"}},
+        {ChannelGroup::YA_Channels, {"y", "a"}},
         // 2D (uv or xy) coordinates
         {ChannelGroup::UVorXY_Channels, {"U", "V"}},
         {ChannelGroup::UVorXY_Channels, {"u", "v"}},
@@ -681,10 +704,21 @@ void Image::finalize()
 
     // if we have a straight alpha channel, premultiply the other channels by it.
     // this needs to be done after the values have been made linear
-    if (channels.size() > 3 && file_has_straight_alpha)
-        for (int c = 0; c < 3; ++c)
-            channels[c].apply([&alpha = channels[3]](float v, int x, int y)
+    // FIXME: this currently only works for the first few channels; not if we have multiple groups of channels each with
+    // their own alpha channel
+    if (file_has_straight_alpha)
+    {
+        if (channels.size() == 2)
+            channels[0].apply([&alpha = channels[1]](float v, int x, int y)
                               { return std::max(k_small_alpha, alpha(x, y)) * v; });
+        else if (channels.size() == 4)
+            for (int c = 0; c < 3; ++c)
+                channels[c].apply([&alpha = channels[3]](float v, int x, int y)
+                                  { return std::max(k_small_alpha, alpha(x, y)) * v; });
+        else
+            spdlog::warn("File has straight alpha, but we don't know how to handle it for {} channels",
+                         channels.size());
+    }
 
     compute_color_transform();
 

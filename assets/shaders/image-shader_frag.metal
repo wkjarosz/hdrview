@@ -41,9 +41,10 @@ using namespace metal;
 #define XYZ_Channels 3
 #define YCA_Channels 4
 #define YC_Channels 5
-#define UVorXY_Channels 6
-#define Z_Channel 7
-#define Single_Channel 8
+#define YA_Channels     6
+#define UVorXY_Channels 7
+#define Z_Channel 8
+#define Single_Channel 9
     
 
 
@@ -199,6 +200,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                           sample_channel(primary_3_texture, primary_3_sampler, vert.primary_uv, in_img));
 
     if (primary_channels_type == YCA_Channels || primary_channels_type == YC_Channels)
+        value.xyz = YCToRGB(value.xyz, primary_yw);
+    else if (primary_channels_type == YA_Channels)
         value.xyz = YCToRGB(value.xyz, primary_yw);
 
     value = primary_M_to_Rec709 * value;

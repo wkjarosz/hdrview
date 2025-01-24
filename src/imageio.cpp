@@ -16,6 +16,7 @@
 #include <spdlog/stopwatch.h>
 
 #include "imageio/exr.h"
+#include "imageio/heif.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
 #include "imageio/qoi.h"
@@ -51,6 +52,11 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         {
             spdlog::info("Detected JPEG XL image. Loading via libjxl.");
             images = load_jxl_image(is, filename);
+        }
+        else if (is_heif_image(is))
+        {
+            spdlog::info("Detected HEIF image.");
+            images = load_heif_image(is, filename);
         }
         else if (is_stb_image(is))
         {

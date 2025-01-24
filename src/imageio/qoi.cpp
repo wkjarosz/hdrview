@@ -32,9 +32,9 @@ bool is_qoi_image(istream &is) noexcept
     bool ret = false;
     try
     {
-        char b[4];
-        is.read(b, sizeof(b));
-        ret = !!is && is.gcount() == sizeof(b) && string(b, sizeof(b)) == "qoif";
+        char magic[4];
+        is.read(magic, sizeof(magic));
+        ret = !!is && is.gcount() == sizeof(magic) && string(magic, sizeof(magic)) == "qoif";
     }
     catch (...)
     {
@@ -48,11 +48,8 @@ bool is_qoi_image(istream &is) noexcept
 
 vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
 {
-    char magic[4];
-    is.read(magic, 4);
-    string magic_string(magic, 4);
-    if (magic_string != "qoif")
-        throw invalid_argument{fmt::format("QOI: invalid magic string '{}'", magic_string)};
+    if (!is_qoi_image(is))
+        throw invalid_argument{"QOI: invalid magic string"};
 
     // calculate size of stream
     is.clear();
@@ -63,6 +60,9 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     // read in the whole stream
     vector<char> raw_data(raw_size);
     is.read(raw_data.data(), raw_size);
+    if ((size_t)is.gcount() != raw_size)
+        throw invalid_argument{
+            fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
 
     qoi_desc                                     desc;
     std::unique_ptr<void, decltype(std::free) *> decoded_data{

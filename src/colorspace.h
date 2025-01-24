@@ -155,6 +155,122 @@ Real SRGBToLinear(Real sRGB)
     return sign(sRGB) * SRGBToLinear_positive(std::fabs(sRGB));
 }
 
+/*! Defines Recommendation ITU-R BT.2100-2 Reference PQ electro-optical transfer function (EOTF).
+
+    \param E_p Denotes a non-linear color value R', G', B' in PQ space.
+
+    \returns Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2/
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_PQ
+*/
+template <typename Real>
+inline Real EOTF_PQ(Real E_p)
+{
+    constexpr Real m1inv = Real(16384) / Real(2610);
+    constexpr Real m2inv = Real(4096) / Real(2523 * 128);
+    constexpr Real c1    = Real(3424) / Real(4096);      // 0.8359375f;
+    constexpr Real c2    = Real(2413) / Real(4096 * 32); // 18.8515625f;
+    constexpr Real c3    = Real(2392) / Real(4096 * 32); // 18.6875f;
+
+    const auto E_pm2 = std::pow(std::max(E_p, Real(0)), m2inv);
+    return Real(10000) * std::pow(std::max(Real(0), E_pm2 - c1) / (c2 - c3 * E_pm2), m1inv);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF).
+
+    \param x A non-linear color value R', G', B' in HLG space in the range of [0,1]
+
+    \returns The R_S, G_S, B_S color component of linear scene light, normalized to [0,1]
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
+*/
+template <typename Real>
+inline Real OETF_inverse_HLG(Real x)
+{
+    // Constants defined by the HLG standard
+    constexpr Real a = Real(0.17883277);
+    constexpr Real b = Real(0.28466892); // 1 - 4*a;
+    constexpr Real c = Real(0.55991073); // 0.5 - a * std::log(4 * a)
+
+    return (x < Real(0.5)) ? (x * x) / Real(3) : (std::exp((x - c) / a) + b) / Real(12);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF).
+
+    \param E_s   Signal for a color component R_s, G_s, B_s proportional to scene linear light normalized to the range
+                 [0,1].
+    \param Y_s   Normalized scene luminance, defined as: 0.2627 × R_s + 0.6780 × G_s + 0.0593 × B_s
+    \param alpha Adjustable user gain (display “contrast”) representing L_W, the nominal peak luminance of achromatic
+                 pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns  Luminance of a displayed linear component {R_d, G_d, or B_d}, in cd/m^2.
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
+*/
+template <typename Real>
+inline Real OOTF_HLG(Real E_s, Real Y_s, Real alpha, Real gamma = Real(1.2))
+{
+    return (alpha * std::pow(Y_s, gamma - Real(1)) * E_s);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
+
+    \param E_p Denotes a non-linear color value R', G', B' in HLG space.
+    \param L_B Display luminance for black in cd/m^2.
+    \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns Luminance of a displayed linear component {R_d, G_d, or B_d} in cd/m^2/.
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
+*/
+template <typename Real>
+inline Real EOTF_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
+{
+    const Real alpha = L_W - L_B;
+    const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
+    auto       E_s   = OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p + beta));
+    return OOTF_HLG(E_s, E_s, alpha, gamma);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
+
+    \param E_p A non-linear color value {R', G', B'} in HLG space.
+    \param L_B Display luminance for black in cd/m^2.
+    \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns Displayed linear color {R_d, G_d, B_d} in cd/m^2.
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
+*/
+template <typename Real>
+inline la::vec<Real, 3> EOTF_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0), Real L_W = Real(1000),
+                                 Real gamma = Real(1.2))
+{
+    const Real alpha = L_W - L_B;
+    const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
+
+    la::vec<Real, 3> E_s{OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[0] + beta)),
+                         OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[1] + beta)),
+                         OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[2] + beta))};
+    Real             Y_s = dot(la::vec<Real, 3>(0.2627, 0.6780, 0.0593), E_s);
+
+    return {OOTF_HLG(E_s[0], Y_s, alpha, gamma), OOTF_HLG(E_s[1], Y_s, alpha, gamma),
+            OOTF_HLG(E_s[2], Y_s, alpha, gamma)};
+}
+
 float3 YCToRGB(float3 input, float3 Yw);
 void   SRGBToLinear(float *r, float *g, float *b);
 Color3 SRGBToLinear(const Color3 &c);

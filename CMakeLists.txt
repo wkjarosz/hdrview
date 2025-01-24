@@ -194,11 +194,9 @@ endif()
 
 include(FindPkgConfig)
 
-# ============================================================================
-# Add dependencies via CPM (cmake/tools.cmake includes cmake/CPM.cmake)
-#
-# see https://github.com/TheLartians/CPM.cmake for more info
-# ============================================================================
+# =====================================================================================
+# Add dependencies via CPM (see https://github.com/TheLartians/CPM.cmake for more info)
+# =====================================================================================
 include(cmake/CPM.cmake)
 
 if(APPLE AND NOT EMSCRIPTEN)
@@ -437,6 +435,8 @@ if(HDRVIEW_ENABLE_JPEGXL)
     VERSION 0.11.1
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
+            "JPEGXL_ENABLE_FUZZERS OFF"
+            "JPEGXL_ENABLE_DEVTOOLS OFF"
             "JPEGXL_ENABLE_TOOLS OFF"
             "JPEGXL_ENABLE_BENCHMARK OFF"
             "JPEGXL_ENABLE_EXAMPLES OFF"
@@ -457,6 +457,26 @@ if(HDRVIEW_ENABLE_JPEGXL)
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads" "jxl_cms")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
+endif()
+
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ON)
+if(HDRVIEW_ENABLE_HEIF)
+  CPMAddPackage(
+    NAME Libheif
+    GITHUB_REPOSITORY strukturag/libheif
+    VERSION 1.19.5
+    OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "WITH_EXAMPLES OFF" "WITH_GDK_PIXBUF OFF"
+            "CMAKE_COMPILE_WARNING_AS_ERROR OFF" "EXCLUDE_FROM_ALL YES"
+  )
+  if(Libheif_ADDED)
+    message(STATUS "Will build libheif library")
+  elseif(TARGET heif)
+    message(STATUS "Using local libheif library")
+  else()
+    message(FATAL_ERROR "libheif not found. Please install it or turn off HDRVIEW_ENABLE_HEIF.")
+  endif()
+  list(APPEND HDRVIEW_DEPENDENCIES "heif")
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
 CPMAddPackage(
@@ -522,6 +542,7 @@ hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/imageio/exr.cpp
+  src/imageio/heif.cpp
   src/imageio/jxl.cpp
   src/imageio/pfm.cpp
   src/imageio/stb.cpp
