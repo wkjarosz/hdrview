@@ -286,7 +286,7 @@ if(my_imgui_command_palette_ADDED)
     "${my_imgui_command_palette_SOURCE_DIR}/imcmd_fuzzy_search.cpp"
   )
   target_compile_features(my_imgui_command_palette PUBLIC cxx_std_11)
-  target_include_directories(my_imgui_command_palette PUBLIC . ${my_imgui_command_palette_SOURCE_DIR})
+  target_include_directories(my_imgui_command_palette PUBLIC ${my_imgui_command_palette_SOURCE_DIR})
   target_link_libraries(my_imgui_command_palette PUBLIC imgui)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
@@ -459,7 +459,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
 endif()
 
-option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ON)
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
@@ -483,29 +483,22 @@ if(HDRVIEW_ENABLE_HEIF)
 endif()
 
 # cmake-format: off
-# CPMAddPackage(
-#   NAME nanocolor
-#   GITHUB_REPOSITORY meshula/Nanocolor
-#   GIT_TAG d1282fc26e5e18ed9a67b7a2bf72627dcffcd7d4
-#   DOWNLOAD_ONLY YES
-# )
-# if(nanocolor_ADDED)
-#   message(STATUS "nanocolor library added")
-#   add_library(
-#     nanocolor "${nanocolor_SOURCE_DIR}/nanocolor.h" "${nanocolor_SOURCE_DIR}/nanocolor.c"
-#               "${nanocolor_SOURCE_DIR}/nanocolorUtils.c"
-#   )
+CPMAddPackage(
+  NAME nanocolor
+  GITHUB_REPOSITORY wkjarosz/Nanocolor
+  GIT_TAG 4cb0342ee18ae6449f7eb3607b68ca4c6daab90c
+  DOWNLOAD_ONLY YES
+)
+if(nanocolor_ADDED)
+  message(STATUS "nanocolor library added")
+  add_library(
+    nanocolor "${nanocolor_SOURCE_DIR}/nanocolor.c" "${nanocolor_SOURCE_DIR}/nanocolorUtils.c"
+  )
 
-#   # Set the language to C for the nanocolor target
-#   set_target_properties(nanocolor PROPERTIES LINKER_LANGUAGE C)
-
-#   # Specify the C standard
-#   target_compile_features(nanocolor PUBLIC c_std_90)
-
-#   target_compile_definitions(nanocolor PUBLIC NCNAMESPACE=nc_1_0_)
-#   target_include_directories(nanocolor PUBLIC . ${nanocolor_SOURCE_DIR})
-# endif()
-# list(APPEND HDRVIEW_DEPENDENCIES "nanocolor")
+  target_compile_definitions(nanocolor PUBLIC NCNAMESPACE=hdrview_)
+  target_include_directories(nanocolor INTERFACE ${nanocolor_SOURCE_DIR})
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "nanocolor")
 # cmake-format: on
 
 CPMAddPackage(
