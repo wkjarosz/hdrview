@@ -26343,9 +26343,10 @@ vec3 positiveNegative(vec3 col)
 #define XYZ_Channels    3
 #define YCA_Channels    4
 #define YC_Channels     5
-#define UVorXY_Channels 6
-#define Z_Channel       7
-#define Single_Channel  8
+#define YA_Channels     6
+#define UVorXY_Channels 7
+#define Z_Channel       8
+#define Single_Channel  9
 
 in vec2 primary_uv;
 in vec2 secondary_uv;
