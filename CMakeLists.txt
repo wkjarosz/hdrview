@@ -470,6 +470,9 @@ if(HDRVIEW_ENABLE_HEIF)
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
+    target_include_directories(
+      heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/> $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
+    )
   elseif(TARGET heif)
     message(STATUS "Using local libheif library")
   else()
@@ -478,6 +481,32 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEPENDENCIES "heif")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
+
+# cmake-format: off
+# CPMAddPackage(
+#   NAME nanocolor
+#   GITHUB_REPOSITORY meshula/Nanocolor
+#   GIT_TAG d1282fc26e5e18ed9a67b7a2bf72627dcffcd7d4
+#   DOWNLOAD_ONLY YES
+# )
+# if(nanocolor_ADDED)
+#   message(STATUS "nanocolor library added")
+#   add_library(
+#     nanocolor "${nanocolor_SOURCE_DIR}/nanocolor.h" "${nanocolor_SOURCE_DIR}/nanocolor.c"
+#               "${nanocolor_SOURCE_DIR}/nanocolorUtils.c"
+#   )
+
+#   # Set the language to C for the nanocolor target
+#   set_target_properties(nanocolor PROPERTIES LINKER_LANGUAGE C)
+
+#   # Specify the C standard
+#   target_compile_features(nanocolor PUBLIC c_std_90)
+
+#   target_compile_definitions(nanocolor PUBLIC NCNAMESPACE=nc_1_0_)
+#   target_include_directories(nanocolor PUBLIC . ${nanocolor_SOURCE_DIR})
+# endif()
+# list(APPEND HDRVIEW_DEPENDENCIES "nanocolor")
+# cmake-format: on
 
 CPMAddPackage(
   NAME CLI11
