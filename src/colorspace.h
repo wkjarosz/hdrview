@@ -171,8 +171,8 @@ inline Real EOTF_PQ(Real E_p)
     constexpr Real m1inv = Real(16384) / Real(2610);
     constexpr Real m2inv = Real(4096) / Real(2523 * 128);
     constexpr Real c1    = Real(3424) / Real(4096);      // 0.8359375f;
-    constexpr Real c2    = Real(2413) / Real(4096 * 32); // 18.8515625f;
-    constexpr Real c3    = Real(2392) / Real(4096 * 32); // 18.6875f;
+    constexpr Real c2    = Real(2413) / Real(4096) * 32; // 18.8515625f;
+    constexpr Real c3    = Real(2392) / Real(4096) * 32; // 18.6875f;
 
     const auto E_pm2 = std::pow(std::max(E_p, Real(0)), m2inv);
     return Real(10000) * std::pow(std::max(Real(0), E_pm2 - c1) / (c2 - c3 * E_pm2), m1inv);

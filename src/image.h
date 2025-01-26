@@ -172,8 +172,8 @@ public:
     template <typename T, typename Func>
     void copy_from_interleaved(const T data[], int w, int h, int n, int c, Func &&func, int y_stride = 0)
     {
-        y_stride          = y_stride == 0 ? w * n : y_stride;
-        size_t block_size = std::max(1u, 1024u * 1024u / w);
+        y_stride       = y_stride == 0 ? w * n : y_stride;
+        int block_size = std::max(1, 1024 * 1024 / w);
         parallel_for(blocked_range<int>(0, h, block_size),
                      [this, n, c, w, &func, &data, y_stride](int begin_y, int end_y, int unit_index, int thread_index)
                      {
@@ -195,8 +195,8 @@ public:
     template <typename T, typename Func>
     void copy_to_interleaved(T data[], int n, int c, Func &&func, int y_stride = 0) const
     {
-        y_stride          = y_stride == 0 ? width() * n : y_stride;
-        size_t block_size = std::max(1u, 1024u * 1024u / width());
+        y_stride       = y_stride == 0 ? width() * n : y_stride;
+        int block_size = std::max(1, 1024 * 1024 / width());
         parallel_for(blocked_range<int>(0, height(), block_size),
                      [this, n, c, &func, &data, y_stride](int begin_y, int end_y, int unit_index, int thread_index)
                      {

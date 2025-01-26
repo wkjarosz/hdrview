@@ -36,6 +36,30 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
 
+#ifdef HDRVIEW_ENABLE_LCMS2
+#include <lcms2.h>
+
+static cmsHPROFILE cmsCreate_linear_sRGBProfile()
+{
+    cmsCIExyY       D65             = {0.3127, 0.3290, 1.0};
+    cmsCIExyYTRIPLE Rec709Primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
+    cmsToneCurve   *linearCurve[3];
+    cmsHPROFILE     hsRGB;
+
+    linearCurve[0] = linearCurve[1] = linearCurve[2] = cmsBuildGamma(nullptr, 1.0);
+    if (linearCurve[0] == NULL)
+        return NULL;
+
+    hsRGB = cmsCreateRGBProfile(&D65, &Rec709Primaries, linearCurve);
+    cmsFreeToneCurve(linearCurve[0]);
+    if (hsRGB == NULL)
+        return NULL;
+
+    return hsRGB;
+}
+
+#endif // HDRVIEW_ENABLE_LCMS2
+
 vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 {
     // calculate size of stream
@@ -77,20 +101,31 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
         for (int subimage = 0; subimage < num_subimages; ++subimage)
         {
             spdlog::info("HEIF: Loading subimage {}...", subimage);
-            auto id          = (subimage == 0) ? primary_id : item_ids[subimage - 1];
-            auto ihandle     = ctx->get_image_handle(id);
-            auto raw_ihandle = ihandle.get_raw_image_handle();
+            auto                     id          = (subimage == 0) ? primary_id : item_ids[subimage - 1];
+            auto                     ihandle     = ctx->get_image_handle(id);
+            auto                     raw_ihandle = ihandle.get_raw_image_handle();
+            heif_color_profile_nclx *nclx        = nullptr;
+            std::vector<uint8_t>     icc_profile;
 
             if (ihandle.empty() || !raw_ihandle)
                 continue;
 
-            heif_color_profile_nclx *nclx = nullptr;
-            auto                     err  = heif_image_handle_get_nclx_color_profile(raw_ihandle, &nclx);
-            if (err.code == heif_error_Color_profile_does_not_exist)
+            auto err = heif_image_handle_get_nclx_color_profile(raw_ihandle, &nclx);
+            if (err.code != heif_error_Ok)
                 spdlog::info("HEIF: No handle-level nclx color profile found");
 
-            if (heif_image_handle_get_raw_color_profile_size(raw_ihandle) != 0)
-                spdlog::warn("HEIF: File contains an ICC profile, but this is not supported; Ignoring.");
+            if (size_t icc_size = heif_image_handle_get_raw_color_profile_size(raw_ihandle); icc_size != 0)
+            {
+                spdlog::info("HEIF: File contains a handle-level ICC profile.");
+                icc_profile.resize(icc_size);
+                err =
+                    heif_image_handle_get_raw_color_profile(raw_ihandle, reinterpret_cast<void *>(icc_profile.data()));
+                if (err.code != heif_error_Ok)
+                {
+                    spdlog::info("HEIF: Could not read handle-level ICC profile.");
+                    icc_profile.clear();
+                }
+            }
 
             heif_colorspace preferred_colorspace;
             heif_chroma     preferred_chroma;
@@ -143,122 +178,218 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 size.y = himage.get_height(out_planes[0]);
             }
 
+            spdlog::info("Decoded colorspace: {}, chroma: {}", (int)himage.get_colorspace(),
+                         (int)himage.get_chroma_format());
+
+            // A tricky bit is that the C++ API doesn't give us a direct way to get the image ptr, we need to resort
+            // to some casting trickery, with knowledge that the C++ heif::Image class consists solely of a
+            // std::shared_ptr to a heif_image.
+            const heif_image *raw_image = reinterpret_cast<std::shared_ptr<heif_image> *>(&himage)->get();
+
+            // is this needed or will the handle-level functions return a profile even if its at the image level?
             if (!nclx)
             {
-                // Try to get the raw nclx color profile from the image. A tricky bit is that
-                // the C++ API doesn't give us a direct way to get the image ptr, we
-                // need to resort to some casting trickery, with knowledge that the C++
-                // heif::Image class consists solely of a std::shared_ptr to a
-                // heif_image.
-                const heif_image *raw_image = reinterpret_cast<std::shared_ptr<heif_image> *>(&himage)->get();
-                err                         = heif_image_get_nclx_color_profile(raw_image, &nclx);
+                err = heif_image_get_nclx_color_profile(raw_image, &nclx);
                 if (err.code == heif_error_Color_profile_does_not_exist)
                     spdlog::warn(
                         "HEIF: No image-level nclx color profile found. Will assume sRGB/IEC 61966-2-1 colorspace.");
             }
-
-            if (nclx)
+            if (icc_profile.empty())
             {
-                switch (nclx->transfer_characteristics)
+                if (size_t icc_size = heif_image_get_raw_color_profile_size(raw_image); icc_size != 0)
                 {
-                case heif_transfer_characteristic_unspecified:
-                    spdlog::warn("HEIF: Doesn't specify a transfer function; assuming sRGB");
-                    break;
-                case heif_transfer_characteristic_IEC_61966_2_1:
-                    spdlog::info("HEIF: Applying sRGB/IEC 61966-2-1 transfer function");
-                    break;
-                case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
-                    spdlog::info("HEIF: Applying PQ transfer function");
-                    break;
-                case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
-                    spdlog::info("HEIF: Applying HLG transfer function");
-                    break;
-                default:
-                    spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying sRGB/IEC 61966-2-1 "
-                                  "transfer function instead.",
-                                  (int)nclx->transfer_characteristics);
-                    break;
+                    spdlog::info("HEIF: File contains an image-level ICC profile.");
+                    icc_profile.resize(icc_size);
+                    err = heif_image_get_raw_color_profile(raw_image, reinterpret_cast<void *>(icc_profile.data()));
+                    if (err.code != heif_error_Ok)
+                    {
+                        spdlog::info("HEIF: Could not read image-level ICC profile");
+                        icc_profile.clear();
+                    }
                 }
-
-                spdlog::info("Adding chromaticities to image header...");
-                Imf::addChromaticities(image->header, {{nclx->color_primary_red_x, nclx->color_primary_red_y},
-                                                       {nclx->color_primary_green_x, nclx->color_primary_green_y},
-                                                       {nclx->color_primary_blue_x, nclx->color_primary_blue_y},
-                                                       {nclx->color_primary_white_x, nclx->color_primary_white_y}});
             }
-            else
-                spdlog::warn("HEIF: No color profile found, assuming Rec. 709/sRGB primaries and whitepoint.");
 
             spdlog::info("Copying image channels...");
             Timer timer;
             // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
             for (int p = 0; p < num_planes; ++p)
             {
-                int  bytes_per_line = 0;
-                auto pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
-                int  bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
-                int  bpp            = himage.get_bits_per_pixel_range(out_planes[p]);
-                spdlog::debug("Bits per pixel: {} {}", bpp, bpp_storage);
-                spdlog::debug("Bytes per line: {}", bytes_per_line);
+                int            bytes_per_line = 0;
+                const uint8_t *pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
+                int            bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
+                int            bpp            = himage.get_bits_per_pixel_range(out_planes[p]);
+                spdlog::info("Bits per pixel: {} {}", bpp, bpp_storage);
+                spdlog::info("Bytes per line: {}", bytes_per_line);
+                if (bpp_storage != cpp * 16)
+                    throw runtime_error(
+                        fmt::format("HEIF: Got {} bits per pixel, but expected {}", bpp_storage, cpp * 16));
 
                 float bppDiv = 1.f / ((1 << bpp) - 1);
 
-                // iterate over the channels in the plane
-                for (int c = 0; c < cpp; ++c)
-                    if (bpp_storage <= 8)
-                        image->channels[p * cpp + c].copy_from_interleaved(
-                            reinterpret_cast<uint8_t *>(pixels), size.x, size.y, cpp, c,
-                            [bppDiv](uint8_t v) { return v * bppDiv; }, bytes_per_line / sizeof(uint8_t));
-                    else
-                        image->channels[p * cpp + c].copy_from_interleaved(
-                            reinterpret_cast<uint16_t *>(pixels), size.x, size.y, cpp, c,
-                            [bppDiv](uint16_t v) { return v * bppDiv; }, bytes_per_line / sizeof(uint16_t));
+                // copy pixels into a contiguous float buffer and normalize values to [0,1]
+                vector<float> float_pixels(size.x * size.y * cpp);
+                for (int y = 0; y < size.y; ++y)
+                {
+                    auto row = reinterpret_cast<const uint16_t *>(pixels + y * bytes_per_line);
+                    for (int x = 0; x < size.x; ++x)
+                        for (int c = 0; c < cpp; ++c)
+                            float_pixels[(y * size.x + x) * cpp + c] = row[cpp * x + c] * bppDiv;
+                }
 
-                // apply transfer function
-                if (image->channels.size() <= 2)
+#ifdef HDRVIEW_ENABLE_LCMS2
+                // transform the interleaved data using the icc profile
+                if (!icc_profile.empty() &&
+                    !(nclx && nclx->transfer_characteristics != heif_transfer_characteristic_unspecified))
                 {
-                    if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
-                        image->channels[0].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-                    else if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
-                        image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
+                    spdlog::info("Transforming to Rec709 using image's ICC color profile.");
+
+                    cmsUInt32Number format;
+                    spdlog::info("HEIF: bpp_storage: {}", bpp_storage);
+                    switch (cpp)
+                    {
+                    case 1:
+                        format = TYPE_GRAY_FLT;
+                        spdlog::info("HEIF: grayscale");
+                        break;
+                    case 2:
+                        format = TYPE_GRAY_FLT;
+                        spdlog::info("HEIF: grayscale + alpha");
+                        break;
+                    case 3:
+                        format = TYPE_RGB_FLT;
+                        spdlog::info("HEIF: RGB");
+                        break;
+                    case 4:
+                    default:
+                        format = TYPE_RGBA_FLT;
+                        spdlog::info("HEIF: RGBA");
+                        break;
+                    }
+
+                    using profilePtr   = unique_ptr<void, decltype(&cmsCloseProfile)>;
+                    using transformPtr = unique_ptr<void, decltype(&cmsDeleteTransform)>;
+                    auto profile_in =
+                        profilePtr{cmsOpenProfileFromMem(icc_profile.data(), icc_profile.size()), cmsCloseProfile};
+                    auto profile_out = profilePtr{cmsCreate_linear_sRGBProfile(), cmsCloseProfile};
+                    if (profile_in && profile_out)
+                    {
+                        auto desc =
+                            reinterpret_cast<const cmsMLU *>(cmsReadTag(profile_in.get(), cmsSigProfileDescriptionTag));
+                        if (desc)
+                        {
+
+                            int               size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
+                            std::vector<char> desc_str(size);
+                            cmsMLUgetASCII(desc, "en", "US", desc_str.data(), desc_str.size());
+                            spdlog::info("HEIF: ICC profile description: {}", desc_str.data());
+                        }
+
+                        if (auto xform =
+                                transformPtr{cmsCreateTransform(profile_in.get(), format, profile_out.get(), format,
+                                                                INTENT_PERCEPTUAL, cpp == 4 ? cmsFLAGS_COPY_ALPHA : 0),
+                                             cmsDeleteTransform})
+                        {
+                            cmsDoTransform(xform.get(), float_pixels.data(), float_pixels.data(), size.x * size.y);
+                        }
+                        else
+                            spdlog::error("HEIF: Could not create color transformation.");
+                    }
                     else
-                        image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+                        spdlog::error("HEIF: Could not create ICC profile for color transformation.");
                 }
-                else if (image->channels.size() == 3 || image->channels.size() == 4)
+#endif // HDRVIEW_ENABLE_LCMS2
+
+                // copy the float pixels into the channels
+                for (int c = 0; c < cpp; ++c)
+                    image->channels[p * cpp + c].copy_from_interleaved(float_pixels.data(), size.x, size.y, cpp, c,
+                                                                       [](float v) { return v; });
+
+                // now check the nclx profile and apply the transfer function
+                if (icc_profile.empty() && nclx)
                 {
-                    // HLG needs to operate on all three channels at once
-                    if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
+                    spdlog::info("HEIF: Applying chromaticities stored in image's NCLX profile.");
+                    spdlog::info("HEIF: Red primary: ({}, {})", nclx->color_primary_red_x, nclx->color_primary_red_y);
+                    spdlog::info("HEIF: Green primary: ({}, {})", nclx->color_primary_green_x,
+                                 nclx->color_primary_green_y);
+                    spdlog::info("HEIF: Blue primary: ({}, {})", nclx->color_primary_blue_x,
+                                 nclx->color_primary_blue_y);
+                    spdlog::info("HEIF: White point: ({}, {})", nclx->color_primary_white_x,
+                                 nclx->color_primary_white_y);
+
+                    Imf::addChromaticities(image->header, {{nclx->color_primary_red_x, nclx->color_primary_red_y},
+                                                           {nclx->color_primary_green_x, nclx->color_primary_green_y},
+                                                           {nclx->color_primary_blue_x, nclx->color_primary_blue_y},
+                                                           {nclx->color_primary_white_x, nclx->color_primary_white_y}});
+
+                    switch (nclx->transfer_characteristics)
                     {
-                        int block_size = std::max(1, 1024 * 1024 / size.x);
-                        parallel_for(blocked_range<int>(0, size.y, block_size),
-                                     [r = &image->channels[0], g = &image->channels[1],
-                                      b = &image->channels[2]](int begin_y, int end_y, int unit_index, int thread_index)
-                                     {
-                                         for (int y = begin_y; y < end_y; ++y)
-                                             for (int x = 0; x < r->width(); ++x)
-                                             {
-                                                 auto E_p   = float3{(*r)(x, y), (*g)(x, y), (*b)(x, y)};
-                                                 auto E     = EOTF_HLG(E_p) / 255.f;
-                                                 (*r)(x, y) = E[0];
-                                                 (*g)(x, y) = E[1];
-                                                 (*b)(x, y) = E[2];
-                                             }
-                                     });
+                    case heif_transfer_characteristic_unspecified:
+                        spdlog::warn("HEIF: Doesn't specify a transfer function; assuming sRGB");
+                        break;
+                    case heif_transfer_characteristic_IEC_61966_2_1:
+                        spdlog::info("HEIF: Applying sRGB/IEC 61966-2-1 transfer function");
+                        break;
+                    case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
+                        spdlog::info("HEIF: Applying PQ transfer function");
+                        break;
+                    case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
+                        spdlog::info("HEIF: Applying HLG transfer function");
+                        break;
+                    default:
+                        spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying sRGB/IEC 61966-2-1 "
+                                      "transfer function instead.",
+                                      (int)nclx->transfer_characteristics);
+                        break;
                     }
-                    // PQ and sRGB operate independently on color channels
+
+                    // apply transfer function
+                    if (image->channels.size() <= 2)
+                    {
+                        if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
+                            image->channels[0].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
+                        else if (nclx &&
+                                 nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
+                            image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
+                        else if (nclx)
+                            image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+                    }
+                    else if (image->channels.size() == 3 || image->channels.size() == 4)
+                    {
+                        // HLG needs to operate on all three channels at once
+                        if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
+                        {
+                            int block_size = std::max(1, 1024 * 1024 / size.x);
+                            parallel_for(blocked_range<int>(0, size.y, block_size),
+                                         [r = &image->channels[0], g = &image->channels[1], b = &image->channels[2]](
+                                             int begin_y, int end_y, int unit_index, int thread_index)
+                                         {
+                                             for (int y = begin_y; y < end_y; ++y)
+                                                 for (int x = 0; x < r->width(); ++x)
+                                                 {
+                                                     auto E_p   = float3{(*r)(x, y), (*g)(x, y), (*b)(x, y)};
+                                                     auto E     = EOTF_HLG(E_p) / 255.f;
+                                                     (*r)(x, y) = E[0];
+                                                     (*g)(x, y) = E[1];
+                                                     (*b)(x, y) = E[2];
+                                                 }
+                                         });
+                        }
+                        // PQ and sRGB operate independently on color channels
+                        else
+                        {
+                            for (int c = 0; c < 3; ++c)
+                                if (nclx &&
+                                    nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
+                                    image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
+                                else if (nclx &&
+                                         nclx->transfer_characteristics == heif_transfer_characteristic_IEC_61966_2_1)
+                                    image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+                        }
+                    }
                     else
-                    {
-                        for (int c = 0; c < 3; ++c)
-                            if (nclx &&
-                                nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
-                                image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-                            else
-                                image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });
-                    }
+                        spdlog::warn("HEIF: Don't know how to apply transfer function to {} channels",
+                                     image->channels.size());
                 }
-                else
-                    spdlog::warn("HEIF: Don't know how to apply transfer function to {} channels",
-                                 image->channels.size());
             }
 
             spdlog::info("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 
 using namespace std;
 
@@ -41,20 +42,8 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 #include "colorspace.h"
 #include "timer.h"
 
-// #include <lcms2.h>
-
-// typedef void *cmsHPROFILE;
-// typedef void *cmsHTRANSFORM;
-
-// struct CmsData
-// {
-//     std::vector<float *> srcBuf;
-//     std::vector<float *> dstBuf;
-
-//     cmsHPROFILE   profileIn;
-//     cmsHPROFILE   profileOut;
-//     cmsHTRANSFORM transform;
-// };
+#ifdef HDRVIEW_ENABLE_LCMS2
+#include <lcms2.h>
 
 static constexpr JxlColorEncoding linear = {
     JXL_COLOR_SPACE_RGB,            // color_space
@@ -69,62 +58,58 @@ static constexpr JxlColorEncoding linear = {
     JXL_RENDERING_INTENT_PERCEPTUAL // rendering_intent
 };
 
-// static void *CmsInit(void *data, size_t num_threads, size_t pixels_per_thread, const JxlColorProfile *input_profile,
-//                      const JxlColorProfile *output_profile, float intensity_target)
-// {
-//     spdlog::info("CmsInit");
-//     auto cms = (CmsData *)data;
+static cmsHPROFILE cmsCreate_linear_sRGBProfile()
+{
+    cmsCIExyY       D65             = {0.3127, 0.3290, 1.0};
+    cmsCIExyYTRIPLE Rec709Primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
+    cmsToneCurve   *linearCurve[3];
+    cmsHPROFILE     hsRGB;
 
-//     cms->srcBuf.resize(num_threads);
-//     cms->dstBuf.resize(num_threads);
+    linearCurve[0] = linearCurve[1] = linearCurve[2] = cmsBuildGamma(nullptr, 1.0);
+    if (linearCurve[0] == NULL)
+        return NULL;
 
-//     for (size_t i = 0; i < num_threads; i++)
-//     {
-//         cms->srcBuf[i] = new float[pixels_per_thread * 3];
-//         cms->dstBuf[i] = new float[pixels_per_thread * 3];
-//     }
+    hsRGB = cmsCreateRGBProfile(&D65, &Rec709Primaries, linearCurve);
+    cmsFreeToneCurve(linearCurve[0]);
+    if (hsRGB == NULL)
+        return NULL;
 
-//     cms->profileIn  = cmsOpenProfileFromMem(input_profile->icc.data, input_profile->icc.size);
-//     cms->profileOut = cmsOpenProfileFromMem(output_profile->icc.data, output_profile->icc.size);
-//     cms->transform =
-//         cmsCreateTransform(cms->profileIn, TYPE_RGB_FLT, cms->profileOut, TYPE_RGB_FLT, INTENT_PERCEPTUAL, 0);
+    return hsRGB;
+}
 
-//     return cms;
-// }
+#endif // HDRVIEW_ENABLE_LCMS2
 
-// static float *CmsGetSrcBuffer(void *data, size_t thread)
-// {
-//     spdlog::info("CmsGetSrcBuffer");
-//     auto cms = (CmsData *)data;
-//     return cms->srcBuf[thread];
-// }
+static void print_color_encoding_info(const JxlColorEncoding &enc)
+{
+    spdlog::info("White point xy: {} {}", enc.white_point_xy[0], enc.white_point_xy[1]);
+    spdlog::info("Red primary xy: {} {}", enc.primaries_red_xy[0], enc.primaries_red_xy[1]);
+    spdlog::info("Green primary xy: {} {}", enc.primaries_green_xy[0], enc.primaries_green_xy[1]);
+    spdlog::info("Blue primary xy: {} {}", enc.primaries_blue_xy[0], enc.primaries_blue_xy[1]);
 
-// static float *CmsGetDstBuffer(void *data, size_t thread)
-// {
-//     spdlog::info("CmsGetDstBuffer");
-//     auto cms = (CmsData *)data;
-//     return cms->dstBuf[thread];
-// }
+    // Print out the name of the transfer function in human readable form
+    switch (enc.transfer_function)
+    {
+    case JXL_TRANSFER_FUNCTION_709: spdlog::info("Transfer function: 709"); break;
+    case JXL_TRANSFER_FUNCTION_SRGB: spdlog::info("Transfer function: sRGB"); break;
+    case JXL_TRANSFER_FUNCTION_GAMMA: spdlog::info("Transfer function: gamma: {}", enc.gamma); break;
+    case JXL_TRANSFER_FUNCTION_LINEAR: spdlog::info("Transfer function: linear"); break;
+    case JXL_TRANSFER_FUNCTION_PQ: spdlog::info("Transfer function: PQ"); break;
+    case JXL_TRANSFER_FUNCTION_HLG: spdlog::info("Transfer function: HLG"); break;
+    case JXL_TRANSFER_FUNCTION_DCI: spdlog::info("Transfer function: DCI"); break;
+    case JXL_TRANSFER_FUNCTION_UNKNOWN:
+    default: spdlog::info("Transfer function: unknown"); break;
+    }
 
-// static JXL_BOOL CmsRun(void *data, size_t thread, const float *input, float *output, size_t num_pixels)
-// {
-//     spdlog::info("CmsRun");
-//     auto cms = (CmsData *)data;
-//     cmsDoTransform(cms->transform, input, output, num_pixels);
-//     return true;
-// }
-
-// static void CmsDestroy(void *data)
-// {
-//     auto cms = (CmsData *)data;
-
-//     cmsDeleteTransform(cms->transform);
-//     cmsCloseProfile(cms->profileOut);
-//     cmsCloseProfile(cms->profileIn);
-
-//     for (auto &buf : cms->srcBuf) delete[] buf;
-//     for (auto &buf : cms->dstBuf) delete[] buf;
-// }
+    // print out the rendering intent in human readible form as a switch statement
+    switch (enc.rendering_intent)
+    {
+    case JXL_RENDERING_INTENT_PERCEPTUAL: spdlog::info("Rendering intent: perceptual"); break;
+    case JXL_RENDERING_INTENT_RELATIVE: spdlog::info("Rendering intent: relative"); break;
+    case JXL_RENDERING_INTENT_SATURATION: spdlog::info("Rendering intent: saturation"); break;
+    case JXL_RENDERING_INTENT_ABSOLUTE: spdlog::info("Rendering intent: absolute"); break;
+    default: spdlog::info("Rendering intent: unknown"); break;
+    }
+}
 
 bool is_jxl_image(istream &is) noexcept
 {
@@ -173,8 +158,10 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     int3                 size{0, 0, 0};
     std::vector<float>   pixels;
     JxlColorEncoding     file_enc;
+    JxlColorEncoding     target_enc;
     JxlBasicInfo         info;
-    std::vector<uint8_t> jxl_profile, target_profile;
+    std::vector<uint8_t> icc_profile, target_profile;
+    bool                 has_encoded_profile = false;
 
     // CmsData m_cms;
 
@@ -202,7 +189,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         // if (JXL_DEC_SUCCESS != JxlDecoderSetCms(dec.get(), cmsInterface))
         //     throw invalid_argument{"Failed to set CMS."};
 
-        // JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
+        JxlDecoderSetCms(dec.get(), *JxlGetDefaultCms());
 
         JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size());
         JxlDecoderCloseInput(dec.get());
@@ -226,7 +213,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 
                 image                          = make_shared<Image>(size.xy(), size.z);
                 image->filename                = filename;
-                image->file_has_straight_alpha = !info.alpha_premultiplied;
+                image->file_has_straight_alpha = size.z > 3 && !info.alpha_premultiplied;
 
                 format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
                 JxlResizableParallelRunnerSetThreads(runner.get(),
@@ -235,8 +222,8 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             else if (status == JXL_DEC_COLOR_ENCODING)
             {
                 // if (JXL_DEC_SUCCESS != JxlDecoderSetOutputColorProfile(dec.get(), &linear, nullptr, 0))
-                // if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
-                // throw invalid_argument{"Failed to set output color space."};
+                //     // if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
+                //     throw invalid_argument{"Failed to set output color space."};
 
                 // Get the ICC color profile of the pixel data
                 size_t icc_size;
@@ -245,10 +232,12 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                     JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &icc_size))
                     throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
 
-                jxl_profile.resize(icc_size);
+                icc_profile.resize(icc_size);
                 if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL,
-                                                                      jxl_profile.data(), jxl_profile.size()))
+                                                                      icc_profile.data(), icc_profile.size()))
                     throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
+                else
+                    spdlog::info("JPEG XL file has an ICC color profile");
 
                 if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
                     throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
@@ -258,21 +247,24 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                                                                       target_profile.data(), target_profile.size()))
                     throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
 
-                // if (JXL_DEC_SUCCESS ==
-                //     JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &file_enc))
-                // {
-                //     spdlog::info("JPEG XL file has an encoded color profile");
+                if (JXL_DEC_SUCCESS ==
+                    JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &file_enc))
+                {
+                    has_encoded_profile = true;
+                    spdlog::info("JPEG XL file has an encoded color profile:");
+                    print_color_encoding_info(file_enc);
+                }
+                else
+                    spdlog::warn("JPEG XL file has no encoded color profile. Colors distortions may occur.");
 
-                //     Imf::Chromaticities chromaticities;
-                //     chromaticities.red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
-                //     chromaticities.green = Imath::V2f(file_enc.primaries_green_xy[0],
-                //     file_enc.primaries_green_xy[1]); chromaticities.blue  = Imath::V2f(file_enc.primaries_blue_xy[0],
-                //     file_enc.primaries_blue_xy[1]); chromaticities.white = Imath::V2f(file_enc.white_point_xy[0],
-                //     file_enc.white_point_xy[1]); Imf::addChromaticities(image->header, chromaticities);
-                //     Imf::addWhiteLuminance(image->header, info.intensity_target);
-                // }
-                // else
-                //     spdlog::warn("JPEG XL file has no encoded color profile. Colors distortions may occur.");
+                if (JXL_DEC_SUCCESS ==
+                    JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &target_enc))
+                {
+                    spdlog::info("libJXL understands that we set a target color encoding:");
+                    print_color_encoding_info(target_enc);
+                }
+                else
+                    spdlog::warn("libJXL does NOT understand that we set a target color encoding");
             }
             else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
             {
@@ -315,22 +307,89 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
-    // std::vector<float> pixels2 = pixels;
-    // m_cms.profileIn            = cmsOpenProfileFromMem(jxl_profile.data(), jxl_profile.size());
-    // m_cms.profileOut           = cmsCreate_sRGBProfile();
-    // // m_cms.profileOut = cmsOpenProfileFromMem(target_profile.data(), target_profile.size());
-    // cmsUInt32Number format = TYPE_GRAY_FLT;
-    // if (size.z == 3)
-    //     format = TYPE_RGB_FLT;
-    // else if (size.z = 4)
-    //     format = TYPE_RGBA_FLT;
-    // m_cms.transform = cmsCreateTransform(m_cms.profileIn, format, m_cms.profileOut, format, INTENT_PERCEPTUAL, 0);
-    // cmsDoTransform(m_cms.transform, pixels2.data(), pixels.data(), pixels.size() / size.z);
+#ifdef HDRVIEW_ENABLE_LCMS2
+    // transform the interleaved data using the icc profile
+    if (!icc_profile.empty())
+    {
+        spdlog::info("Transforming to Rec709 using image's ICC color profile.");
+        using profilePtr   = unique_ptr<void, cmsBool (&)(void *)>;
+        using transformPtr = unique_ptr<void, void (&)(void *)>;
+
+        std::vector<float> pixels2 = pixels;
+        auto profileIn  = profilePtr{cmsOpenProfileFromMem(icc_profile.data(), icc_profile.size()), cmsCloseProfile};
+        auto profileOut = profilePtr{cmsCreate_linear_sRGBProfile(), cmsCloseProfile};
+        cmsUInt32Number format = TYPE_GRAY_FLT;
+        if (size.z == 3)
+            format = TYPE_RGB_FLT;
+        else if (size.z == 4)
+            format = TYPE_RGBA_FLT;
+        auto transform =
+            transformPtr{cmsCreateTransform(profileIn.get(), format, profileOut.get(), format, INTENT_PERCEPTUAL, 0),
+                         cmsDeleteTransform};
+        cmsDoTransform(transform.get(), pixels2.data(), pixels.data(), pixels.size() / size.z);
+    }
+#endif // HDRVIEW_ENABLE_LCMS2
 
     Timer timer;
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c, [](float v) { return v; });
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
+
+    if (icc_profile.empty() && has_encoded_profile)
+    {
+        spdlog::info("Transforming to Rec709 using encoded profile.");
+        Imf::Chromaticities chromaticities;
+        chromaticities.red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
+        chromaticities.green = Imath::V2f(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
+        chromaticities.blue  = Imath::V2f(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
+        chromaticities.white = Imath::V2f(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
+        Imf::addChromaticities(image->header, chromaticities);
+        Imf::addWhiteLuminance(image->header, info.intensity_target);
+
+        // apply transfer function
+        if (image->channels.size() <= 2)
+        {
+            if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_PQ)
+                image->channels[0].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
+            else if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_HLG)
+                image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
+            else
+                image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+        }
+        else if (image->channels.size() == 3 || image->channels.size() == 4)
+        {
+            // HLG needs to operate on all three channels at once
+            if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_HLG)
+            {
+                int block_size = std::max(1, 1024 * 1024 / size.x);
+                parallel_for(blocked_range<int>(0, size.y, block_size),
+                             [r = &image->channels[0], g = &image->channels[1],
+                              b = &image->channels[2]](int begin_y, int end_y, int unit_index, int thread_index)
+                             {
+                                 for (int y = begin_y; y < end_y; ++y)
+                                     for (int x = 0; x < r->width(); ++x)
+                                     {
+                                         auto E_p   = float3{(*r)(x, y), (*g)(x, y), (*b)(x, y)};
+                                         auto E     = EOTF_HLG(E_p) / 255.f;
+                                         (*r)(x, y) = E[0];
+                                         (*g)(x, y) = E[1];
+                                         (*b)(x, y) = E[2];
+                                     }
+                             });
+            }
+            // PQ and sRGB operate independently on color channels
+            else
+            {
+                for (int c = 0; c < 3; ++c)
+                    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_PQ)
+                        image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
+                    else
+                        image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+            }
+        }
+        else
+            spdlog::warn("HEIF: Don't know how to apply transfer function to {} channels", image->channels.size());
+    }
 
     return {image};
 }

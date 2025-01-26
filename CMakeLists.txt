@@ -445,7 +445,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
             "JPEGXL_ENABLE_DOXYGEN OFF"
             "JPEGXL_ENABLE_MANPAGES OFF"
             "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
-            # "JPEGXL_ENABLE_SKCMS OFF"
+            "JPEGXL_ENABLE_SKCMS OFF"
             "EXCLUDE_FROM_ALL YES"
   )
   if(JXL_ADDED)
@@ -457,6 +457,14 @@ if(HDRVIEW_ENABLE_JPEGXL)
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads" "jxl_cms")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
+endif()
+
+if(TARGET lcms2)
+  message(STATUS "Using local lcms2 library")
+  list(APPEND HDRVIEW_DEPENDENCIES "lcms2")
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LCMS2)
+else()
+  message(STATUS "lcms2 library not found.")
 endif()
 
 option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
