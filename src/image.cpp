@@ -416,7 +416,7 @@ void Image::set_null_texture(Target target)
     auto s = hdrview()->shader();
     auto t = s_target[target];
 
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float3x3{la::identity});
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
     s->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
     s->set_uniform(fmt::format("{}_yw", t), Rec709_luminance_weights);
 
@@ -430,7 +430,10 @@ void Image::set_as_texture(Target target)
     int                 group_idx = target == Target_Primary ? selected_group : reference_group;
     const ChannelGroup &group     = groups[group_idx];
 
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float3x3{la::identity});
+    // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL. resulted in
+    // rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t),
+                   float4x4{{M_to_Rec709[0], 0.f}, {M_to_Rec709[1], 0.f}, {M_to_Rec709[2], 0.f}, {0.f, 0.f, 0.f, 1.f}});
     s->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
     s->set_uniform(fmt::format("{}_yw", t), luminance_weights);
 
@@ -658,8 +661,7 @@ void Image::compute_color_transform()
     Imath::M33f                      M;
     if (color_conversion_matrix(M, file_chr, rec709_chr))
     {
-        M_to_Rec709       = to_linalg(M);
-        luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
+        M_to_Rec709 = to_linalg(M);
         spdlog::info("Will transform pixel values to Rec. 709/sRGB primaries and whitepoint on display.");
         spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
     }

@@ -82,10 +82,6 @@ bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, con
 {
     using namespace Imath;
     using namespace Imf;
-    M = M33f{1.f, 0.f, 0.f, //
-             0.f, 1.f, 0.f, //
-             0.f, 0.f, 1.f};
-    return true;
 
     if (src == dst)
     {
