@@ -47,18 +47,7 @@ float sToLinear(float a)
 vec3 sRGBToLinear(vec3 color) { return vec3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b)); }
 
 // returns the luminance of a linear rgb color
-vec3 RGBToLuminance(vec3 rgb)
-{
-    const vec3 RGB2Y = vec3(0.212671, 0.715160, 0.072169);
-    return vec3(dot(RGB2Y, rgb));
-}
-
-// returns the monochrome version of a linear rgb color
-vec3 RGBToGray(vec3 rgb)
-{
-    const vec3 RGB2Y = vec3(1. / 3.);
-    return vec3(dot(RGB2Y, rgb));
-}
+float RGBToY(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
 
 // Converts a color from linear RGB to XYZ space
 vec3 RGBToXYZ(vec3 rgb)
@@ -73,59 +62,6 @@ vec3 XYZToRGB(vec3 xyz)
     const mat3 XYZ2RGB =
         mat3(3.240479, -0.969256, 0.055648, -1.537150, 1.875992, -0.204043, -0.498535, 0.041556, 1.057311);
     return XYZ2RGB * xyz;
-}
-
-float labf(float t)
-{
-    const float c1 = 0.008856451679; // pow(6.0/29.0, 3.0);
-    const float c2 = 7.787037037;    // pow(29.0/6.0, 2.0)/3;
-    const float c3 = 0.1379310345;   // 16.0/116.0
-    return (t > c1) ? pow(t, 1.0 / 3.0) : (c2 * t) + c3;
-}
-
-vec3 XYZToLab(vec3 xyz)
-{
-    // normalize for D65 white point
-    xyz /= Lab_d65_wts;
-
-    vec3 v = vec3(labf(xyz.x), labf(xyz.y), labf(xyz.z));
-    return vec3((116.0 * v.y) - 16.0, 500.0 * (v.x - v.y), 200.0 * (v.y - v.z));
-}
-
-vec3 LabToXYZ(vec3 lab)
-{
-    const float eps   = 216.0 / 24389.0;
-    const float kappa = 24389.0 / 27.0;
-    float       yr    = (lab.x > kappa * eps) ? pow((lab.x + 16.0) / 116.0, 3.) : lab.x / kappa;
-    float       fy    = (yr > eps) ? (lab.x + 16.0) / 116.0 : (kappa * yr + 16.0) / 116.0;
-    float       fx    = lab.y / 500.0 + fy;
-    float       fz    = fy - lab.z / 200.0;
-
-    float fx3 = pow(fx, 3.);
-    float fz3 = pow(fz, 3.);
-
-    vec3 xyz =
-        vec3((fx3 > eps) ? fx3 : (116.0 * fx - 16.0) / kappa, yr, (fz3 > eps) ? fz3 : (116.0 * fz - 16.0) / kappa);
-
-    // unnormalize for D65 white point
-    xyz *= Lab_d65_wts;
-    return xyz;
-}
-
-vec3 RGBToLab(vec3 rgb)
-{
-    vec3 lab = XYZToLab(RGBToXYZ(rgb));
-
-    // renormalize
-    return (lab - min_Lab) / range_Lab;
-}
-
-vec3 LabToRGB(vec3 lab)
-{
-    // unnormalize
-    lab = lab * range_Lab + min_Lab;
-
-    return XYZToRGB(LabToXYZ(lab));
 }
 
 vec3 jetFalseColor(float x)

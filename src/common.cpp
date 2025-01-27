@@ -102,19 +102,8 @@ string indent(string_view input, bool also_indent_first, int amount)
 
 const vector<string> &channel_names()
 {
-    static const vector<string> names{"RGB",
-                                      "Red",
-                                      "Green",
-                                      "Blue",
-                                      "Alpha",
-                                      "Luminance",
-                                      "Gray",
-                                      "CIE L*",
-                                      "CIE a*",
-                                      "CIE b*",
-                                      "CIE chromaticity",
-                                      "False color",
-                                      "Negative-positive"};
+    static const vector<string> names{"RGB",   "Red",       "Green",       "Blue",
+                                      "Alpha", "Luminance", "False color", "Negative-positive"};
     return names;
 }
 

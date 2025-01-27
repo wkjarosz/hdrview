@@ -1,18 +1,14 @@
 precision mediump float;
 
+// These need to stay in sync with EChannel in fwd.h
 #define CHANNEL_RGB               0
 #define CHANNEL_RED               1
 #define CHANNEL_GREEN             2
 #define CHANNEL_BLUE              3
 #define CHANNEL_ALPHA             4
-#define CHANNEL_LUMINANCE         5
-#define CHANNEL_GRAY              6
-#define CHANNEL_CIE_L             7
-#define CHANNEL_CIE_a             8
-#define CHANNEL_CIE_b             9
-#define CHANNEL_CIE_CHROMATICITY  10
-#define CHANNEL_FALSE_COLOR       11
-#define CHANNEL_POSITIVE_NEGATIVE 12
+#define CHANNEL_Y                 5
+#define CHANNEL_FALSE_COLOR       6
+#define CHANNEL_POSITIVE_NEGATIVE 7
 
 #define NORMAL_BLEND              0
 #define MULTIPLY_BLEND            1
@@ -111,14 +107,8 @@ vec4 choose_channel(vec4 rgba)
     case CHANNEL_GREEN: return vec4(rgba.ggg, 1.0);
     case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
     case CHANNEL_ALPHA: return vec4(rgba.aaa, 1.0);
-    case CHANNEL_LUMINANCE: return vec4(RGBToLuminance(rgba.rgb), 1.0);
-    case CHANNEL_GRAY: return vec4(RGBToGray(rgba.rgb), 1.0);
-    case CHANNEL_CIE_L: return vec4(RGBToLab(rgba.rgb).xxx, 1.0);
-    case CHANNEL_CIE_a: return vec4(RGBToLab(rgba.rgb).yyy, 1.0);
-    case CHANNEL_CIE_b: return vec4(RGBToLab(rgba.rgb).zzz, 1.0);
-    case CHANNEL_CIE_CHROMATICITY: return vec4(LabToRGB(vec3(0.5, RGBToLab(rgba.rgb).yz)), 1.0);
-    // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-    case CHANNEL_FALSE_COLOR: return vec4(inferno(saturate(RGBToLuminance(rgba.rgb).r)), 1.0);
+    case CHANNEL_Y: return vec4(vec3(RGBToY(rgba.rgb, primary_yw)), 1.0);
+    case CHANNEL_FALSE_COLOR: return vec4(inferno(saturate(RGBToY(rgba.rgb, primary_yw))), 1.0);
     case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(rgba.rgb), 1.0);
     }
     return rgba;

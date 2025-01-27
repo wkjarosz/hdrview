@@ -53,19 +53,6 @@ class Timer;
 using ConstImagePtr = std::shared_ptr<const Image>;
 using ImagePtr      = std::shared_ptr<Image>;
 
-enum EColorSpace : int
-{
-    LinearSRGB_CS = 0,
-    LinearSGray_CS,
-    LinearAdobeRGB_CS,
-    CIEXYZ_CS,
-    CIELab_CS,
-    CIELuv_CS,
-    CIExyY_CS,
-    HLS_CS,
-    HSV_CS
-};
-
 enum EChannel : int
 {
     RGB = 0,
@@ -73,12 +60,7 @@ enum EChannel : int
     GREEN,
     BLUE,
     ALPHA,
-    LUMINANCE,
-    GRAY,
-    CIE_L,
-    CIE_a,
-    CIE_b,
-    CIE_CHROMATICITY,
+    Y,
     FALSE_COLOR,
     POSITIVE_NEGATIVE,
 

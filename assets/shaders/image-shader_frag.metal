@@ -6,19 +6,15 @@
 
 using namespace metal;
 
+// These need to stay in sync with EChannel in fwd.h
 #define CHANNEL_RGB 0
 #define CHANNEL_RED 1
 #define CHANNEL_GREEN 2
 #define CHANNEL_BLUE 3
 #define CHANNEL_ALPHA 4
-#define CHANNEL_LUMINANCE 5
-#define CHANNEL_GRAY 6
-#define CHANNEL_CIE_L 7
-#define CHANNEL_CIE_a 8
-#define CHANNEL_CIE_b 9
-#define CHANNEL_CIE_CHROMATICITY 10
-#define CHANNEL_FALSE_COLOR 11
-#define CHANNEL_POSITIVE_NEGATIVE 12
+#define CHANNEL_Y 5
+#define CHANNEL_FALSE_COLOR 6
+#define CHANNEL_POSITIVE_NEGATIVE 7
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -82,7 +78,7 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
     return 0.5 * ((r < 0) ? rn : rp);
 }
 
-float4 choose_channel(float4 rgba, int channel)
+float4 choose_channel(float4 rgba, int channel, const float3 yw)
 {
     switch (channel)
     {
@@ -91,14 +87,8 @@ float4 choose_channel(float4 rgba, int channel)
         case CHANNEL_GREEN:             return float4(rgba.ggg, 1.0);
         case CHANNEL_BLUE:              return float4(rgba.bbb, 1.0);
         case CHANNEL_ALPHA:             return float4(rgba.aaa, 1.0);
-        case CHANNEL_LUMINANCE:         return float4(RGBToLuminance(rgba.rgb), 1.0);
-        case CHANNEL_GRAY:              return float4(RGBToGray(rgba.rgb), 1.0);
-        case CHANNEL_CIE_L:             return float4(RGBToLab(rgba.rgb).xxx, 1.0);
-        case CHANNEL_CIE_a:             return float4(RGBToLab(rgba.rgb).yyy, 1.0);
-        case CHANNEL_CIE_b:             return float4(RGBToLab(rgba.rgb).zzz, 1.0);
-        case CHANNEL_CIE_CHROMATICITY:  return float4(LabToRGB(float3(0.5, RGBToLab(rgba.rgb).yz)), 1.0);
-        // case CHANNEL_FALSE_COLOR:       return jetFalseColor(saturate(RGBToLuminance(col).r));
-        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(RGBToLuminance(rgba.rgb).r)), 1.0);
+        case CHANNEL_Y:                 return float4(float3(RGBToY(rgba.rgb, yw)), 1.0);
+        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(RGBToY(rgba.rgb, yw))), 1.0);
         case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(rgba.rgb), 1.0);
     }
     return rgba;
@@ -221,7 +211,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = choose_channel(value, channel) * float4(float3(gain), 1.0);
+    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0);
     float4 blended = dither(tonemap(foreground + background*(1-foreground.a), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
     blended = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     return float4(blended.rgb, 1.0);
