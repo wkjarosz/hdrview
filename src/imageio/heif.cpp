@@ -28,6 +28,7 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 
 #else
 
+#include "cms.h"
 #include "colorspace.h"
 #include "heif.h"
 #include "libheif/heif.h"
@@ -35,30 +36,6 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 #include "timer.h"
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
-
-#ifdef HDRVIEW_ENABLE_LCMS2
-#include <lcms2.h>
-
-static cmsHPROFILE cmsCreate_linear_sRGBProfile()
-{
-    cmsCIExyY       D65             = {0.3127, 0.3290, 1.0};
-    cmsCIExyYTRIPLE Rec709Primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    cmsToneCurve   *linearCurve[3];
-    cmsHPROFILE     hsRGB;
-
-    linearCurve[0] = linearCurve[1] = linearCurve[2] = cmsBuildGamma(nullptr, 1.0);
-    if (linearCurve[0] == NULL)
-        return NULL;
-
-    hsRGB = cmsCreateRGBProfile(&D65, &Rec709Primaries, linearCurve);
-    cmsFreeToneCurve(linearCurve[0]);
-    if (hsRGB == NULL)
-        return NULL;
-
-    return hsRGB;
-}
-
-#endif // HDRVIEW_ENABLE_LCMS2
 
 vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 {
@@ -236,25 +213,23 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                             float_pixels[(y * size.x + x) * cpp + c] = row[cpp * x + c] * bppDiv;
                 }
 
+                bool colors_linearized = false;
+
 #ifdef HDRVIEW_ENABLE_LCMS2
                 // transform the interleaved data using the icc profile
                 if (!icc_profile.empty() &&
                     !(nclx && nclx->transfer_characteristics != heif_transfer_characteristic_unspecified))
                 {
-                    spdlog::info("Transforming to Rec709 using image's ICC color profile.");
+                    spdlog::info("Linearizing pixel values using image's ICC color profile.");
 
                     cmsUInt32Number format;
-                    spdlog::info("HEIF: bpp_storage: {}", bpp_storage);
                     switch (cpp)
                     {
                     case 1:
                         format = TYPE_GRAY_FLT;
                         spdlog::info("HEIF: grayscale");
                         break;
-                    case 2:
-                        format = TYPE_GRAY_FLT;
-                        spdlog::info("HEIF: grayscale + alpha");
-                        break;
+                    case 2: spdlog::error("HEIF: unexpected channels per plane: 2"); break;
                     case 3:
                         format = TYPE_RGB_FLT;
                         spdlog::info("HEIF: RGB");
@@ -266,30 +241,33 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                         break;
                     }
 
-                    using profilePtr   = unique_ptr<void, decltype(&cmsCloseProfile)>;
-                    using transformPtr = unique_ptr<void, decltype(&cmsDeleteTransform)>;
-                    auto profile_in =
-                        profilePtr{cmsOpenProfileFromMem(icc_profile.data(), icc_profile.size()), cmsCloseProfile};
-                    auto profile_out = profilePtr{cmsCreate_linear_sRGBProfile(), cmsCloseProfile};
+                    auto profile_in = cms::open_profile_from_mem(icc_profile);
+
+                    cmsCIExyY       whitepoint;
+                    cmsCIExyYTRIPLE primaries;
+                    cms::extract_chromaticities(profile_in, primaries, whitepoint);
+                    // print out the chromaticities
+                    spdlog::info("HEIF: Applying chromaticities deduced from image's ICC profile:");
+                    spdlog::info("    Red primary: ({}, {})", primaries.Red.x, primaries.Red.y);
+                    spdlog::info("    Green primary: ({}, {})", primaries.Green.x, primaries.Green.y);
+                    spdlog::info("    Blue primary: ({}, {})", primaries.Blue.x, primaries.Blue.y);
+                    spdlog::info("    White point: ({}, {})", whitepoint.x, whitepoint.y);
+                    Imf::addChromaticities(image->header, {Imath::V2f(primaries.Red.x, primaries.Red.y),
+                                                           Imath::V2f(primaries.Green.x, primaries.Green.y),
+                                                           Imath::V2f(primaries.Blue.x, primaries.Blue.y),
+                                                           Imath::V2f(whitepoint.x, whitepoint.y)});
+
+                    auto profile_out = cms::create_linear_RGB_profile(whitepoint, primaries);
+
                     if (profile_in && profile_out)
                     {
-                        auto desc =
-                            reinterpret_cast<const cmsMLU *>(cmsReadTag(profile_in.get(), cmsSigProfileDescriptionTag));
-                        if (desc)
-                        {
-
-                            int               size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
-                            std::vector<char> desc_str(size);
-                            cmsMLUgetASCII(desc, "en", "US", desc_str.data(), desc_str.size());
-                            spdlog::info("HEIF: ICC profile description: {}", desc_str.data());
-                        }
-
-                        if (auto xform =
-                                transformPtr{cmsCreateTransform(profile_in.get(), format, profile_out.get(), format,
-                                                                INTENT_PERCEPTUAL, cpp == 4 ? cmsFLAGS_COPY_ALPHA : 0),
-                                             cmsDeleteTransform})
+                        spdlog::info("HEIF: ICC profile description: '{}'", cms::profile_description(profile_in));
+                        if (auto xform = cms::Transform{cmsCreateTransform(profile_in.get(), format, profile_out.get(),
+                                                                           format, INTENT_ABSOLUTE_COLORIMETRIC,
+                                                                           cpp == 4 ? cmsFLAGS_COPY_ALPHA : 0)})
                         {
                             cmsDoTransform(xform.get(), float_pixels.data(), float_pixels.data(), size.x * size.y);
+                            colors_linearized = true;
                         }
                         else
                             spdlog::error("HEIF: Could not create color transformation.");
@@ -299,22 +277,20 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 }
 #endif // HDRVIEW_ENABLE_LCMS2
 
-                // copy the float pixels into the channels
+                // copy the interleaved float pixels into the channels
                 for (int c = 0; c < cpp; ++c)
                     image->channels[p * cpp + c].copy_from_interleaved(float_pixels.data(), size.x, size.y, cpp, c,
                                                                        [](float v) { return v; });
 
                 // now check the nclx profile and apply the transfer function
-                if (icc_profile.empty() && nclx)
+                if (nclx && !colors_linearized)
                 {
                     spdlog::info("HEIF: Applying chromaticities stored in image's NCLX profile.");
-                    spdlog::info("HEIF: Red primary: ({}, {})", nclx->color_primary_red_x, nclx->color_primary_red_y);
-                    spdlog::info("HEIF: Green primary: ({}, {})", nclx->color_primary_green_x,
+                    spdlog::info("    Red primary: ({}, {})", nclx->color_primary_red_x, nclx->color_primary_red_y);
+                    spdlog::info("    Green primary: ({}, {})", nclx->color_primary_green_x,
                                  nclx->color_primary_green_y);
-                    spdlog::info("HEIF: Blue primary: ({}, {})", nclx->color_primary_blue_x,
-                                 nclx->color_primary_blue_y);
-                    spdlog::info("HEIF: White point: ({}, {})", nclx->color_primary_white_x,
-                                 nclx->color_primary_white_y);
+                    spdlog::info("    Blue primary: ({}, {})", nclx->color_primary_blue_x, nclx->color_primary_blue_y);
+                    spdlog::info("    White point: ({}, {})", nclx->color_primary_white_x, nclx->color_primary_white_y);
 
                     Imf::addChromaticities(image->header, {{nclx->color_primary_red_x, nclx->color_primary_red_y},
                                                            {nclx->color_primary_green_x, nclx->color_primary_green_y},

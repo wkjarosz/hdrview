@@ -39,45 +39,9 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 #include <jxl/resizable_parallel_runner_cxx.h>
 #include <jxl/types.h>
 
+#include "cms.h"
 #include "colorspace.h"
 #include "timer.h"
-
-#ifdef HDRVIEW_ENABLE_LCMS2
-#include <lcms2.h>
-
-static constexpr JxlColorEncoding linear = {
-    JXL_COLOR_SPACE_RGB,            // color_space
-    JXL_WHITE_POINT_D65,            // white_point
-    {},                             // white_point_xy
-    JXL_PRIMARIES_SRGB,             // primaries
-    {},                             // primaries_red_xy
-    {},                             // primaries_green_xy
-    {},                             // primaries_blue_xy
-    JXL_TRANSFER_FUNCTION_LINEAR,   // transfer_function
-    1.0,                            // gamma
-    JXL_RENDERING_INTENT_PERCEPTUAL // rendering_intent
-};
-
-static cmsHPROFILE cmsCreate_linear_sRGBProfile()
-{
-    cmsCIExyY       D65             = {0.3127, 0.3290, 1.0};
-    cmsCIExyYTRIPLE Rec709Primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    cmsToneCurve   *linearCurve[3];
-    cmsHPROFILE     hsRGB;
-
-    linearCurve[0] = linearCurve[1] = linearCurve[2] = cmsBuildGamma(nullptr, 1.0);
-    if (linearCurve[0] == NULL)
-        return NULL;
-
-    hsRGB = cmsCreateRGBProfile(&D65, &Rec709Primaries, linearCurve);
-    cmsFreeToneCurve(linearCurve[0]);
-    if (hsRGB == NULL)
-        return NULL;
-
-    return hsRGB;
-}
-
-#endif // HDRVIEW_ENABLE_LCMS2
 
 static void print_color_encoding_info(const JxlColorEncoding &enc)
 {
@@ -221,6 +185,19 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             }
             else if (status == JXL_DEC_COLOR_ENCODING)
             {
+                // static constexpr JxlColorEncoding linear = {
+                //     JXL_COLOR_SPACE_RGB,            // color_space
+                //     JXL_WHITE_POINT_D65,            // white_point
+                //     {},                             // white_point_xy
+                //     JXL_PRIMARIES_SRGB,             // primaries
+                //     {},                             // primaries_red_xy
+                //     {},                             // primaries_green_xy
+                //     {},                             // primaries_blue_xy
+                //     JXL_TRANSFER_FUNCTION_LINEAR,   // transfer_function
+                //     1.0,                            // gamma
+                //     JXL_RENDERING_INTENT_PERCEPTUAL // rendering_intent
+                // };
+
                 // if (JXL_DEC_SUCCESS != JxlDecoderSetOutputColorProfile(dec.get(), &linear, nullptr, 0))
                 //     // if (JXL_DEC_SUCCESS != JxlDecoderSetPreferredColorProfile(dec.get(), &linear))
                 //     throw invalid_argument{"Failed to set output color space."};
@@ -307,26 +284,44 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
+    bool colors_linearized = false;
 #ifdef HDRVIEW_ENABLE_LCMS2
     // transform the interleaved data using the icc profile
-    if (!icc_profile.empty())
+    if (!icc_profile.empty() && !has_encoded_profile)
     {
-        spdlog::info("Transforming to Rec709 using image's ICC color profile.");
-        using profilePtr   = unique_ptr<void, cmsBool (&)(void *)>;
-        using transformPtr = unique_ptr<void, void (&)(void *)>;
+        spdlog::info("JPEG-XL: Linearizing pixel values using image's ICC color profile.");
 
-        std::vector<float> pixels2 = pixels;
-        auto profileIn  = profilePtr{cmsOpenProfileFromMem(icc_profile.data(), icc_profile.size()), cmsCloseProfile};
-        auto profileOut = profilePtr{cmsCreate_linear_sRGBProfile(), cmsCloseProfile};
-        cmsUInt32Number format = TYPE_GRAY_FLT;
+        auto            profile_in = cms::open_profile_from_mem(icc_profile);
+        cmsCIExyY       whitepoint;
+        cmsCIExyYTRIPLE primaries;
+        cms::extract_chromaticities(profile_in, primaries, whitepoint);
+        // print out the chromaticities
+        spdlog::info("JPEG-XL: Applying chromaticities deduced from image's ICC profile:");
+        spdlog::info("    Red primary: ({}, {})", primaries.Red.x, primaries.Red.y);
+        spdlog::info("    Green primary: ({}, {})", primaries.Green.x, primaries.Green.y);
+        spdlog::info("    Blue primary: ({}, {})", primaries.Blue.x, primaries.Blue.y);
+        spdlog::info("    White point: ({}, {})", whitepoint.x, whitepoint.y);
+        Imf::addChromaticities(image->header, {Imath::V2f(primaries.Red.x, primaries.Red.y),
+                                               Imath::V2f(primaries.Green.x, primaries.Green.y),
+                                               Imath::V2f(primaries.Blue.x, primaries.Blue.y),
+                                               Imath::V2f(whitepoint.x, whitepoint.y)});
+
+        auto            profile_out = cms::create_linear_RGB_profile(whitepoint, primaries);
+        cmsUInt32Number format      = TYPE_GRAY_FLT;
         if (size.z == 3)
             format = TYPE_RGB_FLT;
         else if (size.z == 4)
             format = TYPE_RGBA_FLT;
-        auto transform =
-            transformPtr{cmsCreateTransform(profileIn.get(), format, profileOut.get(), format, INTENT_PERCEPTUAL, 0),
-                         cmsDeleteTransform};
-        cmsDoTransform(transform.get(), pixels2.data(), pixels.data(), pixels.size() / size.z);
+        if (auto xform =
+                cms::Transform{cmsCreateTransform(profile_in.get(), format, profile_out.get(), format,
+                                                  INTENT_ABSOLUTE_COLORIMETRIC, size.z == 4 ? cmsFLAGS_COPY_ALPHA : 0)})
+        {
+            spdlog::info("JPEG-XL: ICC profile description: '{}'", cms::profile_description(profile_in));
+            cmsDoTransform(xform.get(), pixels.data(), pixels.data(), pixels.size() / size.z);
+            colors_linearized = true;
+        }
+        else
+            spdlog::error("JPEG-XL: Could not create color transform.");
     }
 #endif // HDRVIEW_ENABLE_LCMS2
 
@@ -335,9 +330,9 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c, [](float v) { return v; });
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
-    if (icc_profile.empty() && has_encoded_profile)
+    if (has_encoded_profile && !colors_linearized)
     {
-        spdlog::info("Transforming to Rec709 using encoded profile.");
+        spdlog::info("JPEG-XL: Linearizing pixel values using encoded profile.");
         Imf::Chromaticities chromaticities;
         chromaticities.red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
         chromaticities.green = Imath::V2f(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);

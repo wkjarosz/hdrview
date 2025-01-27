@@ -571,6 +571,7 @@ endif()
 hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  src/imageio/cms.cpp
   src/imageio/exr.cpp
   src/imageio/heif.cpp
   src/imageio/jxl.cpp
