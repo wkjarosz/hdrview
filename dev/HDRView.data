@@ -26372,7 +26372,7 @@ uniform sampler2D primary_2_texture;
 uniform sampler2D primary_3_texture;
 uniform vec3      primary_yw;
 uniform int       primary_channels_type;
-uniform mat4      primary_M_to_Rec709;
+uniform mat3      primary_M_to_Rec709;
 
 uniform sampler2D secondary_0_texture;
 uniform sampler2D secondary_1_texture;
@@ -26380,7 +26380,7 @@ uniform sampler2D secondary_2_texture;
 uniform sampler2D secondary_3_texture;
 uniform vec3      secondary_yw;
 uniform int       secondary_channels_type;
-uniform mat4      secondary_M_to_Rec709;
+uniform mat3      secondary_M_to_Rec709;
 
 out vec4 frag_color;
 
@@ -26497,7 +26497,7 @@ void main()
     if (primary_channels_type == YCA_Channels || primary_channels_type == YC_Channels)
         value.xyz = YCToRGB(value.xyz, primary_yw);
 
-    value = primary_M_to_Rec709 * value;
+    value.xyz = primary_M_to_Rec709 * value.xyz;
 
     if (has_reference)
     {
@@ -26509,7 +26509,7 @@ void main()
         if (secondary_channels_type == YCA_Channels || secondary_channels_type == YC_Channels)
             reference_val.xyz = YCToRGB(reference_val.xyz, secondary_yw);
 
-        reference_val = secondary_M_to_Rec709 * reference_val;
+        reference_val.xyz = secondary_M_to_Rec709 * reference_val.xyz;
 
         value = blend(value, reference_val);
     }
