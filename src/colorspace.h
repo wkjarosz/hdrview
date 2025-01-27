@@ -35,7 +35,7 @@
     \returns
         True if color conversion is needed, in which case M will contain the conversion matrix.
 */
-bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
+bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method = 0);
 
 // return a map of common color spaces, indexed by name

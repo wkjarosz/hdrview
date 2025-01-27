@@ -8,6 +8,7 @@
 #include <lcms2.h>
 #include <memory>
 #include <string>
+#include <vector>
 
 //
 // Some minimal wrappers around just the Little CMS 2 functionality we need

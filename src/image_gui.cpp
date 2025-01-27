@@ -583,14 +583,12 @@ void Image::draw_info()
         mono_font);
 
     property_name("Color transform matrix:");
-    property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                               "{:+8.2e}, {:+8.2e}, {:+8.2e}, {:+8.2e}",
-                               M_to_Rec709[0][1], M_to_Rec709[0][1], M_to_Rec709[0][2], M_to_Rec709[0][3],
-                               M_to_Rec709[1][1], M_to_Rec709[1][1], M_to_Rec709[1][2], M_to_Rec709[1][3],
-                               M_to_Rec709[2][1], M_to_Rec709[2][1], M_to_Rec709[2][2], M_to_Rec709[2][3],
-                               M_to_Rec709[3][1], M_to_Rec709[3][1], M_to_Rec709[3][2], M_to_Rec709[3][3]),
+    property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                               "{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+                               "{:+8.2e}, {:+8.2e}, {:+8.2e}",
+                               M_to_Rec709[0][0], M_to_Rec709[0][1], M_to_Rec709[0][2], // prevent wrap
+                               M_to_Rec709[1][0], M_to_Rec709[1][1], M_to_Rec709[1][2], //
+                               M_to_Rec709[2][0], M_to_Rec709[2][1], M_to_Rec709[2][2]),
                    mono_font);
 
     property_name("File had straight alpha:");

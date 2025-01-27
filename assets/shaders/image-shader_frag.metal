@@ -159,7 +159,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               sampler primary_3_sampler,
                               const constant float3 &primary_yw,
                               const constant int &primary_channels_type,
-                              const constant float4x4 &primary_M_to_Rec709,
+                              const constant float3x3 &primary_M_to_Rec709,
                               texture2d<float, access::sample> secondary_0_texture,
                               texture2d<float, access::sample> secondary_1_texture,
                               texture2d<float, access::sample> secondary_2_texture,
@@ -170,7 +170,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               sampler secondary_3_sampler,
                               const constant float3 &secondary_yw,
                               const constant int &secondary_channels_type,
-                              const constant float4x4 &secondary_M_to_Rec709
+                              const constant float3x3 &secondary_M_to_Rec709
                             )
 {
     float4 background(bg_color.rgb, 1.0);
@@ -204,7 +204,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     else if (primary_channels_type == YA_Channels)
         value.xyz = YCToRGB(value.xyz, primary_yw);
 
-    value = primary_M_to_Rec709 * value;
+    value.xyz = primary_M_to_Rec709 * value.xyz;
 
     if (has_reference)
     {
@@ -214,9 +214,9 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                                       sample_channel(secondary_3_texture, secondary_3_sampler, vert.secondary_uv, in_ref));
 
         if (secondary_channels_type == YCA_Channels || secondary_channels_type == YC_Channels)
-            reference_val.xyz = YCToRGB(reference_val.xyz, primary_yw);
+            reference_val.xyz = YCToRGB(reference_val.xyz, secondary_yw);
 
-        reference_val = secondary_M_to_Rec709 * reference_val;
+        reference_val.xyz = secondary_M_to_Rec709 * reference_val.xyz;
 
         value = blend(value, reference_val, blend_mode);
     }

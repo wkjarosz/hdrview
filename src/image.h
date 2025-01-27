@@ -285,7 +285,7 @@ public:
     Box2i                data_window;
     Box2i                display_window;
     std::vector<Channel> channels;
-    float4x4             M_to_Rec709             = la::identity;
+    float3x3             M_to_Rec709             = la::identity;
     float3               luminance_weights       = Rec709_luminance_weights;
     int                  named_color_space       = -1;
     bool                 file_has_straight_alpha = false;

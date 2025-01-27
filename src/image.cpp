@@ -416,7 +416,7 @@ void Image::set_null_texture(Target target)
     auto s = hdrview()->shader();
     auto t = s_target[target];
 
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float3x3{la::identity});
     s->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
     s->set_uniform(fmt::format("{}_yw", t), Rec709_luminance_weights);
 
@@ -430,7 +430,7 @@ void Image::set_as_texture(Target target)
     int                 group_idx = target == Target_Primary ? selected_group : reference_group;
     const ChannelGroup &group     = groups[group_idx];
 
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t), M_to_Rec709);
+    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float3x3{la::identity});
     s->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
     s->set_uniform(fmt::format("{}_yw", t), luminance_weights);
 
@@ -655,12 +655,12 @@ void Image::compute_color_transform()
         file_chr.white = Imf::adoptedNeutral(header);
 
     static const Imf::Chromaticities rec709_chr{}; // default rec709 (sRGB) primaries
-    Imath::M44f                      M;
+    Imath::M33f                      M;
     if (color_conversion_matrix(M, file_chr, rec709_chr))
     {
         M_to_Rec709       = to_linalg(M);
         luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::chromaticities(header)));
-        spdlog::info("Converting pixel values to Rec. 709/sRGB primaries and whitepoint.");
+        spdlog::info("Will transform pixel values to Rec. 709/sRGB primaries and whitepoint on display.");
         spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
     }
 
@@ -776,7 +776,7 @@ string Image::to_string() const
     if (luminance_weights != Image::Rec709_luminance_weights)
         out += fmt::format("Luminance weights: {}\n", luminance_weights);
 
-    if (M_to_Rec709 != float4x4{la::identity})
+    if (M_to_Rec709 != float3x3{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
         out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, l.length());
@@ -884,6 +884,6 @@ float4 Image::shaded_pixel(int2 p, Target target, float gain, float gamma, bool 
             value.xyz() = YCToRGB(value.xyz(), luminance_weights);
     }
 
-    value = mul(M_to_Rec709, value);
-    return tonemap(float4{gain * value.xyz(), value.w}, gamma, sRGB);
+    value.xyz() = mul(M_to_Rec709, value.xyz());
+    return tonemap(float4{gain * value.xyz(), 1.f}, gamma, sRGB);
 }

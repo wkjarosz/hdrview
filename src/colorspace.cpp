@@ -18,18 +18,18 @@ using namespace std;
 
 namespace
 {
-const float eps   = 216.0f / 24389.0f;
-const float kappa = 24389.0f / 27.0f;
-const float refX  = 0.950456f;
-const float refZ  = 1.08875f;
-const float refU  = (4.0f * refX) / (refX + 15.0f + 3.0f * refZ);
-const float refV  = 9.0f / (refX + 15.0f + 3.0f * refZ);
+constexpr float eps   = 216.0f / 24389.0f;
+constexpr float kappa = 24389.0f / 27.0f;
+constexpr float refX  = 0.950456f;
+constexpr float refZ  = 1.08875f;
+constexpr float refU  = (4.0f * refX) / (refX + 15.0f + 3.0f * refZ);
+constexpr float refV  = 9.0f / (refX + 15.0f + 3.0f * refZ);
 // const float minLab[] = {0, -86.1846, -107.864};
 // const float maxLab[] = {100, 98.2542, 94.4825};
 // use symmetric range so that scaling contrast of chromaticity
 // channels to 0 results in neutral gray
-const float minLab[] = {0, -128, -128};
-const float maxLab[] = {100, 128, 128};
+constexpr float minLab[] = {0, -128, -128};
+constexpr float maxLab[] = {100, 128, 128};
 
 // Reference whites used in the common color spaces below
 const std::map<string, Imath::V2f> referenceWhites = {{"C", {0.31006f, 0.31616f}},
@@ -77,17 +77,21 @@ const std::map<string, Imath::V2f> &white_points() { return referenceWhites; }
 
 const Imath::V2f &white_point(const string &name) { return referenceWhites.at(name); }
 
-bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
+bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method)
 {
     using namespace Imath;
     using namespace Imf;
+    M = M33f{1.f, 0.f, 0.f, //
+             0.f, 1.f, 0.f, //
+             0.f, 0.f, 1.f};
+    return true;
 
     if (src == dst)
     {
         // The file already contains data in the target colorspace.
         // color conversion is not necessary.
-        M = M44f{};
+        M = M33f{};
         return false;
     }
 
@@ -98,34 +102,28 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, con
     // white point.
     //
 
-    M44f CAT{}; // chromatic adaptation matrix
+    M33f CAT{}; // chromatic adaptation matrix
     if (CAT_method > 0 && CAT_method <= 3)
     {
         // the cone primary respons matrices (and their inverses) for 3 different methods
-        static const M44f CPM[3] = {{1.f, 0.f, 0.f, 0.f, // XYZ scaling
-                                     0.f, 1.f, 0.f, 0.f, //
-                                     0.f, 0.f, 1.f, 0.f, //
-                                     0.f, 0.f, 0.f, 1.f},
-                                    {0.895100f, -0.750200f, 0.038900f, 0.000000f, // Bradford
-                                     0.266400f, 1.713500f, -0.068500f, 0.000000f, //
-                                     -0.161400f, 0.036700f, 1.029600f, 0.000000f, //
-                                     0.000000f, 0.000000f, 0.000000f, 1.000000f},
-                                    {0.4002400f, -0.2263000f, 0.0000000f, 0.000000f, // Von Kries
-                                     0.7076000f, 1.1653200f, 0.0000000f, 0.000000f,  //
-                                     -0.0808100f, 0.0457000f, 0.9182200f, 0.000000f, //
-                                     0.000000f, 0.000000f, 0.000000f, 1.000000f}};
-        static const M44f invCPM[3]{{1.f, 0.f, 0.f, 0.f, //
-                                     0.f, 1.f, 0.f, 0.f, //
-                                     0.f, 0.f, 1.f, 0.f, //
-                                     0.f, 0.f, 0.f, 1.f},
-                                    {0.986993f, 0.432305f, -0.008529f, 0.000000f, //
-                                     -0.147054f, 0.518360f, 0.040043f, 0.000000f, //
-                                     0.159963f, 0.049291f, 0.968487f, 0.000000f,  //
-                                     0.000000f, 0.000000f, 0.000000f, 1.000000f},
-                                    {1.8599364f, 0.3611914f, 0.0000000f, 0.0000000f,  //
-                                     -1.1293816f, 0.6388125f, 0.0000000f, 0.0000000f, //
-                                     0.2198974f, -0.0000064f, 1.0890636f, 0.0000000f, //
-                                     0.0000000f, 0.0000000f, 0.0000000f, 1.0000000f}};
+        static const M33f CPM[3] = {{1.f, 0.f, 0.f, // XYZ scaling
+                                     0.f, 1.f, 0.f, //
+                                     0.f, 0.f, 1.f},
+                                    {0.895100f, -0.750200f, 0.038900f, // Bradford
+                                     0.266400f, 1.713500f, -0.068500f, //
+                                     -0.161400f, 0.036700f, 1.029600f},
+                                    {0.4002400f, -0.2263000f, 0.0000000f, // Von Kries
+                                     0.7076000f, 1.1653200f, 0.0000000f,  //
+                                     -0.0808100f, 0.0457000f, 0.9182200f}};
+        static const M33f invCPM[3]{{1.f, 0.f, 0.f, //
+                                     0.f, 1.f, 0.f, //
+                                     0.f, 0.f, 1.f},
+                                    {0.986993f, 0.432305f, -0.008529f, //
+                                     -0.147054f, 0.518360f, 0.040043f, //
+                                     0.159963f, 0.049291f, 0.968487f},
+                                    {1.8599364f, 0.3611914f, 0.0000000f,  //
+                                     -1.1293816f, 0.6388125f, 0.0000000f, //
+                                     0.2198974f, -0.0000064f, 1.0890636f}};
         //
         // Convert the white points of the two RGB spaces to XYZ
         //
@@ -144,7 +142,7 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, con
 
         V3f ratio((dst_neutral_XYZ * CPM[CAT_method - 1]) / (src_neutral_XYZ * CPM[CAT_method - 1]));
 
-        M44f ratio_mat(ratio[0], 0, 0, 0, 0, ratio[1], 0, 0, 0, 0, ratio[2], 0, 0, 0, 0, 1);
+        M33f ratio_mat(ratio[0], 0, 0, 0, ratio[1], 0, 0, 0, ratio[2]);
 
         CAT = CPM[CAT_method - 1] * ratio_mat * invCPM[CAT_method - 1];
     }
@@ -153,7 +151,19 @@ bool color_conversion_matrix(Imath::M44f &M, const Imf::Chromaticities &src, con
     // Build a combined file-RGB-to-target-RGB conversion matrix
     //
 
-    M = RGBtoXYZ(src, 1) * CAT * XYZtoRGB(dst, 1);
+    auto m1 = RGBtoXYZ(src, 1);
+    // extract the upper left 3x3 of m1 as an M33f
+    M33f src_to_XYZ(m1[0][0], m1[0][1], m1[0][2], //
+                    m1[1][0], m1[1][1], m1[1][2], //
+                    m1[2][0], m1[2][1], m1[2][2]);
+
+    m1 = XYZtoRGB(dst, 1);
+    // extract the upper left 3x3 of m1 as an M33f
+    M33f XYZ_to_dst(m1[0][0], m1[0][1], m1[0][2], //
+                    m1[1][0], m1[1][1], m1[1][2], //
+                    m1[2][0], m1[2][1], m1[2][2]);
+
+    M = src_to_XYZ * CAT * XYZ_to_dst;
 
     return true;
 }
