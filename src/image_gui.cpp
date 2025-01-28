@@ -529,7 +529,6 @@ void Image::draw_info()
         "Interpret the values stored in the file using the chromaticities of a common color profile.");
     if (open_combo)
     {
-        // for (int n = 0; n < (int)csn.size(); ++n)
         for (int n = 0; csn[n]; ++n)
         {
             const bool is_selected = (named_color_space == n);

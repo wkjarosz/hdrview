@@ -3196,6 +3196,21 @@ void HDRViewApp::draw_about_dialog()
                                          "https://www.shadertoy.com/view/3lBXR3");
                     item_and_description("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
+#ifdef HDRVIEW_ENABLE_UHDR
+                    item_and_description("libuhdr", "For loading Ultra HDR JPEG files.",
+                                         "https://github.com/google/libultrahdr");
+#endif
+#ifdef HDRVIEW_ENABLE_JPEGXL
+                    item_and_description("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
+#endif
+#ifdef HDRVIEW_ENABLE_HEIF
+                    item_and_description("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
+                                         "https://github.com/strukturag/libheif");
+#endif
+#ifdef HDRVIEW_ENABLE_LCMS2
+                    item_and_description("LCMS2", "LittleCMS color management engine.",
+                                         "https://github.com/mm2/Little-CMS");
+#endif
 #ifdef __EMSCRIPTEN__
                     item_and_description("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.",
                                          "https://github.com/emscripten-core/emscripten");
