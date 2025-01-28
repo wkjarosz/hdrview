@@ -522,22 +522,22 @@ void Image::draw_info()
                                display_window.min.y, display_window.max.y),
                    sans_font);
 
-    auto csn = color_space_names();
-    auto open_combo =
-        ImGui::BeginCombo("Color profile", named_color_space < 0 ? "Unknown" : csn[named_color_space].c_str(),
-                          ImGuiComboFlags_HeightLargest);
+    auto csn        = color_gamut_names();
+    auto open_combo = ImGui::BeginCombo("Color gamut", named_color_space < 0 ? "Unknown" : csn[named_color_space],
+                                        ImGuiComboFlags_HeightLargest);
     ImGui::WrappedTooltip(
         "Interpret the values stored in the file using the chromaticities of a common color profile.");
     if (open_combo)
     {
-        for (int n = 0; n < (int)csn.size(); ++n)
+        // for (int n = 0; n < (int)csn.size(); ++n)
+        for (int n = 0; csn[n]; ++n)
         {
             const bool is_selected = (named_color_space == n);
-            if (ImGui::Selectable(csn[n].c_str(), is_selected))
+            if (ImGui::Selectable(csn[n], is_selected))
             {
                 named_color_space = n;
                 spdlog::debug("Switching to color space {}.", n);
-                Imf::addChromaticities(header, color_space_chromaticity(csn[n]));
+                Imf::addChromaticities(header, gamut_chromaticities(csn[n]));
                 compute_color_transform();
             }
 

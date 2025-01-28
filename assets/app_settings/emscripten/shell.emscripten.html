@@ -297,26 +297,28 @@
                 // load the file content (ignore big files)
                 if (file.size < 256000000) {
                     var reader = new FileReader();
-                    reader.onload = function (loadEvent) {
-                        console.log('file loaded!')
-                        var content = loadEvent.target.result;
-                        if (content) {
-                            console.log('content length: ' + content.byteLength);
-                            var uint8Array = new Uint8Array(content);
-                            var buf = Module._malloc(uint8Array.length * uint8Array.BYTES_PER_ELEMENT);
-                            Module.HEAPU8.set(uint8Array, buf);
-                            var res = Module.ccall('hdrview_loadfile',  // C function name
-                                'int',
-                                ['string', 'number', 'number'],  // name, data, size
-                                [file.name, buf, uint8Array.length]);
-                            Module._free(buf);
-                            if (res != 0)
-                                console.warn('hdrview_loadfile() failed!');
-                        }
-                        else {
-                            console.warn('load result empty!');
-                        }
-                    };
+                    reader.onload = (function (file) {
+                        // IIFE captures the current file variable from the loop
+                        return function (loadEvent) {
+                            console.log('file loaded!');
+                            var content = loadEvent.target.result;
+                            if (content) {
+                                console.log('content length: ' + content.byteLength);
+                                var uint8Array = new Uint8Array(content);
+                                var buf = Module._malloc(uint8Array.length * uint8Array.BYTES_PER_ELEMENT);
+                                Module.HEAPU8.set(uint8Array, buf);
+                                var res = Module.ccall('hdrview_loadfile',  // C function name
+                                    'int',
+                                    ['string', 'number', 'number'],  // name, data, size
+                                    [file.name, buf, uint8Array.length]);
+                                Module._free(buf);
+                                if (res != 0)
+                                    console.warn('hdrview_loadfile() failed!');
+                            } else {
+                                console.warn('load result empty!');
+                            }
+                        };
+                    })(file);
                     reader.readAsArrayBuffer(file);
                 }
                 else

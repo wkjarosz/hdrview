@@ -1,4 +1,4 @@
-
+#ifdef HDRVIEW_ENABLE_LCMS2
 #include "cms.h"
 #include <spdlog/spdlog.h>
 
@@ -142,3 +142,5 @@ string profile_description(const Profile &profile)
 }
 
 } // namespace cms
+
+#endif // HDRVIEW_ENABLE_LCMS2

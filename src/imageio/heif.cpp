@@ -214,11 +214,14 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 }
 
                 bool colors_linearized = false;
+                // only prefer the nclx if it exists and it specifies an HDR transfer function
+                bool prefer_icc =
+                    !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                              nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
 
 #ifdef HDRVIEW_ENABLE_LCMS2
                 // transform the interleaved data using the icc profile
-                if (!icc_profile.empty() &&
-                    !(nclx && nclx->transfer_characteristics != heif_transfer_characteristic_unspecified))
+                if (!icc_profile.empty() && prefer_icc)
                 {
                     spdlog::info("Linearizing pixel values using image's ICC color profile.");
 
@@ -311,6 +314,9 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                     case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
                         spdlog::info("HEIF: Applying HLG transfer function");
                         break;
+                    case heif_transfer_characteristic_ITU_R_BT_709_5:
+                        spdlog::info("HEIF: Applying BT.709 transfer function");
+                        break;
                     default:
                         spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying sRGB/IEC 61966-2-1 "
                                       "transfer function instead.",
@@ -326,6 +332,8 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                         else if (nclx &&
                                  nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
                             image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
+                        else if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_709_5)
+                            image->channels[0].apply([](float v, int x, int y) { return Rec2020ToLinear(v); });
                         else if (nclx)
                             image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
                     }
@@ -350,13 +358,16 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                                                  }
                                          });
                         }
-                        // PQ and sRGB operate independently on color channels
+                        // The other transfer functions operate independently on color channels
                         else
                         {
                             for (int c = 0; c < 3; ++c)
                                 if (nclx &&
                                     nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
                                     image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
+                                else if (nclx &&
+                                         nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_709_5)
+                                    image->channels[c].apply([](float v, int x, int y) { return Rec2020ToLinear(v); });
                                 else if (nclx &&
                                          nclx->transfer_characteristics == heif_transfer_characteristic_IEC_61966_2_1)
                                     image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });

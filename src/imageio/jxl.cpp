@@ -285,9 +285,12 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         throw invalid_argument{"Image has zero pixels."};
 
     bool colors_linearized = false;
+    // only prefer the encoded profile if it exists and it specifies an HDR transfer function
+    bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
+                                               file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG);
 #ifdef HDRVIEW_ENABLE_LCMS2
     // transform the interleaved data using the icc profile
-    if (!icc_profile.empty() && !has_encoded_profile)
+    if (!icc_profile.empty() && prefer_icc)
     {
         spdlog::info("JPEG-XL: Linearizing pixel values using image's ICC color profile.");
 

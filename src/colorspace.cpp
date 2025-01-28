@@ -17,54 +17,84 @@
 
 using namespace std;
 
-namespace
-{
-
 // Reference whites used in the common color spaces below
-const std::map<string, Imath::V2f> referenceWhites = {{"C", {0.31006f, 0.31616f}},
-                                                      {"D50", {0.34567f, 0.35850f}},
-                                                      {"D65", {0.31271f, 0.32902f}},
-                                                      {"E", {0.33333f, 0.33333f}}};
+static const Imath::V2f _wp_ACES{0.32168f, 0.33767f};
+// static const Imath::V2f _wp_C{0.31006f, 0.31616f};
+static const Imath::V2f _wp_D50{0.34567f, 0.35850f};
+static const Imath::V2f _wp_D65{0.31271f, 0.32902f};
+static const Imath::V2f _wp_E{0.33333f, 0.33333f};
+
+// static const char _lin_ap0[]          = "lin_ap0";
+// static const char _lin_ap1_acescg[]   = "lin_ap1/acescg";
+// static const char _lin_adobergb[]     = "lin_adobergb";
+// static const char _lin_cie1931xyz[]   = "lin_cie1931xyz";
+// static const char _lin_displayp3[]    = "lin_displayp3";
+// static const char _lin_prophotorgb[]  = "lin_prophotorgb";
+// static const char _lin_rec2020_2100[] = "lin_rec2020/rec2100";
+// static const char _lin_srgb_rec709[]  = "lin_srgb/rec709";
+static const char _lin_ap0[]          = "ACES AP0";
+static const char _lin_ap1_acescg[]   = "ACEScg AP1";
+static const char _lin_adobergb[]     = "Adobe RGB";
+static const char _lin_cie1931xyz[]   = "CIE 1931 XYZ";
+static const char _lin_displayp3[]    = "Display P3";
+static const char _lin_prophotorgb[]  = "ProPhoto RGB";
+static const char _lin_rec2020_2100[] = "Rec2020/Rec2100";
+static const char _lin_srgb_rec709[]  = "sRGB/Rec709";
+
+const char *lin_ap0_gamut          = _lin_ap0;
+const char *lin_ap1_acescg_gamut   = _lin_ap1_acescg;
+const char *lin_adobergb_gamut     = _lin_adobergb;
+const char *lin_cie1931xyz_gamut   = _lin_cie1931xyz;
+const char *lin_displayp3_gamut    = _lin_displayp3;
+const char *lin_prophotorgb_gamut  = _lin_prophotorgb;
+const char *lin_rec2020_2100_gamut = _lin_rec2020_2100;
+const char *lin_srgb_rec709_gamut  = _lin_srgb_rec709;
+
+// clang-format off
+static const char* _color_gammut_names[] = {
+    _lin_ap0,
+    _lin_ap1_acescg,
+    _lin_adobergb,
+    _lin_cie1931xyz,
+    _lin_displayp3,
+    _lin_prophotorgb,
+    _lin_rec2020_2100,
+    _lin_srgb_rec709,
+    nullptr
+};
+// clang-format on
 
 // data from:
 //  https://en.wikipedia.org/wiki/Standard_illuminant
 //  https://en.wikipedia.org/wiki/RGB_color_spaces
 //  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
 // Chromaticity data for common color spaces
-const std::map<string, Imf::Chromaticities> chromaticitiesMap = {
-    {"ACES 2065-1 (Academy Color Encoding System, AP0)",
-     {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, {0.32168f, 0.33767f}}},
-    {"ACEScg (Academy Color Encoding System, AP1)",
-     {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, {0.32168f, 0.33767f}}},
-    {"Adobe RGB (1998)", {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
-    {"Apple RGB", {{0.6250f, 0.3400f}, {0.2800f, 0.5950f}, {0.1550f, 0.0700f}, referenceWhites.at("D65")}},
-    {"Best RGB", {{0.7347f, 0.2653f}, {0.2150f, 0.7750f}, {0.1300f, 0.0350f}, referenceWhites.at("D50")}},
-    {"Beta RGB", {{0.6888f, 0.3112f}, {0.1986f, 0.7551f}, {0.1265f, 0.0352f}, referenceWhites.at("D50")}},
-    {"Bruce RGB", {{0.6400f, 0.3300f}, {0.2800f, 0.6500f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
-    {"BT 2020/2100", {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, referenceWhites.at("D65")}},
-    {"CIE RGB", {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, referenceWhites.at("E")}},
-    {"CIE XYZ", {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, referenceWhites.at("E")}},
-    {"ColorMatch RGB", {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1500f, 0.0750f}, referenceWhites.at("D50")}},
-    {"Display P3", {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
-    {"Don RGB 4", {{0.6960f, 0.3000f}, {0.2150f, 0.7650f}, {0.1300f, 0.0350f}, referenceWhites.at("D50")}},
-    {"ECI RGB v2", {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, referenceWhites.at("D50")}},
-    {"Ekta Space PS5", {{0.6950f, 0.3050f}, {0.2600f, 0.7000f}, {0.1100f, 0.0050f}, referenceWhites.at("D50")}},
-    {"NTSC RGB", {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, referenceWhites.at("C")}},
-    {"PAL/SECAM RGB", {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
-    {"ProPhoto RGB", {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, referenceWhites.at("D50")}},
-    {"SMPTE-C RGB", {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, referenceWhites.at("D65")}},
-    {"sRGB/BT 709", {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, referenceWhites.at("D65")}},
-    {"Wide Gamut RGB", {{0.7350f, 0.2650f}, {0.1150f, 0.8260f}, {0.1570f, 0.0180f}, referenceWhites.at("D50")}}};
+static const std::map<const char *, Imf::Chromaticities> _chromaticities_map = {
+    {_lin_ap0, {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, _wp_ACES}},
+    {_lin_ap1_acescg, {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, _wp_ACES}},
+    {_lin_adobergb, {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, _wp_D65}},
+    {_lin_displayp3, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_D65}},
+    {_lin_rec2020_2100, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}},
+    {_lin_cie1931xyz, {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, _wp_E}},
+    {_lin_prophotorgb, {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, _wp_D50}},
+    {_lin_srgb_rec709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}};
 
-} // namespace
+static const std::map<const char *, const char *> _gamut_descriptions = {
+    {_lin_ap0, "AP0 primaries, Academy Color Encoding System white point"},
+    {_lin_ap1_acescg, "AP1 primaries, Academy Color Encoding System white point"},
+    {_lin_adobergb, "Adobe RGB (1998) gamut, D65"},
+    {_lin_displayp3, "Display-P3 gamut, D65"},
+    {_lin_rec2020_2100, "Rec2020/Rec2100 gamut, D65"},
+    {_lin_cie1931xyz, "CIE (1931) XYZ primaries, E white point"},
+    {_lin_prophotorgb, "ProPhoto RGB gamut, D50"},
+    {_lin_srgb_rec709, "sRGB/Rec709 gamut, D65"}};
 
-const std::map<string, Imf::Chromaticities> &color_space_chromaticities() { return chromaticitiesMap; }
+const char **color_gamut_names() { return _color_gammut_names; }
+const char  *color_gamut_description(const char *name) { return _gamut_descriptions.at(name); }
 
-const Imf::Chromaticities &color_space_chromaticity(const string &name) { return chromaticitiesMap.at(name); }
+const std::map<const char *, Imf::Chromaticities> &color_gamuts() { return _chromaticities_map; }
 
-const std::map<string, Imath::V2f> &white_points() { return referenceWhites; }
-
-const Imath::V2f &white_point(const string &name) { return referenceWhites.at(name); }
+const Imf::Chromaticities &gamut_chromaticities(const char *name) { return _chromaticities_map.at(name); }
 
 bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method)
@@ -235,20 +265,6 @@ Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma)
 Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma)
 {
     return Color4(LinearToGamma(c.xyz(), inv_gamma), c.w);
-}
-
-void XYZToLinearSRGB(float *R, float *G, float *B, float X, float Y, float Z)
-{
-    *R = 3.240479f * X - 1.537150f * Y - 0.498535f * Z;
-    *G = -0.969256f * X + 1.875992f * Y + 0.041556f * Z;
-    *B = 0.055648f * X - 0.204043f * Y + 1.057311f * Z;
-}
-
-void LinearSRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B)
-{
-    *X = 0.412453f * R + 0.357580f * G + 0.180423f * B;
-    *Y = 0.212671f * R + 0.715160f * G + 0.072169f * B;
-    *Z = 0.019334f * R + 0.119193f * G + 0.950227f * B;
 }
 
 void xyYToXZ(float *X, float *Z, float x, float y, float Y)

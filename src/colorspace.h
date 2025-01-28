@@ -8,6 +8,9 @@
 
 #include "common.h"
 #include "fwd.h"
+#include <nanocolor.h>
+#include <nanocolorProcessing.h>
+#include <nanocolorUtils.h>
 #include <string>
 #include <vector>
 
@@ -16,6 +19,71 @@
 #include <ImfHeader.h>
 #include <map>
 #include <string>
+
+namespace Nc
+{
+// deleter for unique_ptr<NcColorSpace>
+struct ColorSpaceDeleter
+{
+    void operator()(const NcColorSpace *cs) { NcFreeColorSpace(cs); }
+};
+using ColorSpace = std::unique_ptr<const NcColorSpace, ColorSpaceDeleter>;
+} // namespace Nc
+
+// linalg and Nanocolor use the same memory layout, so we can convert via linalg's pointer constructors
+inline float2 to_linalg(const NcChromaticity &v) { return float2(reinterpret_cast<const float *>(&v)); }
+inline float3 to_linalg(const NcXYZ &v) { return float3(reinterpret_cast<const float *>(&v)); }
+inline float3 to_linalg(const NcYxy &v) { return float3(reinterpret_cast<const float *>(&v)); }
+inline float3 to_linalg(const NcRGB &v) { return float3(reinterpret_cast<const float *>(&v)); }
+// Nanocolor's 3x3 matrices are row-major, so we need to transpose them
+inline float3x3 to_linalg(const NcM33f &m) { return transpose(float3x3(reinterpret_cast<const float *>(&m))); }
+
+// Function to deduce chromaticities and white point
+inline void deduce_chromaticities_and_whitepoint(NcM33f matrix, NcChromaticity *red, NcChromaticity *green,
+                                                 NcChromaticity *blue, NcChromaticity *whitepoint)
+{
+    // Extract the columns
+    NcXYZ redXYZ{matrix.m[0], matrix.m[1], matrix.m[2]};
+    NcXYZ greenXYZ{matrix.m[3], matrix.m[4], matrix.m[5]};
+    NcXYZ blueXYZ{matrix.m[6], matrix.m[7], matrix.m[8]};
+
+    // Convert to chromaticities
+    auto redSum   = redXYZ.x + redXYZ.y + redXYZ.z;
+    auto greenSum = greenXYZ.x + greenXYZ.y + greenXYZ.z;
+    auto blueSum  = blueXYZ.x + blueXYZ.y + blueXYZ.z;
+    *red          = NcChromaticity{redXYZ.x / redSum, redXYZ.y / redSum};
+    *green        = NcChromaticity{greenXYZ.x / greenSum, greenXYZ.y / greenSum};
+    *blue         = NcChromaticity{blueXYZ.x / blueSum, blueXYZ.y / blueSum};
+
+    // Calculate the white point
+    NcXYZ wpXYZ{redXYZ.x + greenXYZ.x + blueXYZ.x, redXYZ.y + greenXYZ.y + blueXYZ.y,
+                redXYZ.z + greenXYZ.z + blueXYZ.z};
+    auto  wpSum = wpXYZ.x + wpXYZ.y + wpXYZ.z;
+    *whitepoint = NcChromaticity{wpXYZ.x / wpSum, wpXYZ.y / wpSum};
+}
+
+// convert between a NcColorSpace and an Imf::Chromaticities
+inline Imf::Chromaticities to_Chromaticities(const NcColorSpace *cs)
+{
+    Imf::Chromaticities out;
+    if (NcColorSpaceDescriptor desc; NcGetColorSpaceDescriptor(cs, &desc))
+    {
+        out.red   = {desc.redPrimary.x, desc.redPrimary.y};
+        out.green = {desc.greenPrimary.x, desc.greenPrimary.y};
+        out.blue  = {desc.bluePrimary.x, desc.bluePrimary.y};
+        out.white = {desc.whitePoint.x, desc.whitePoint.y};
+    }
+    else if (NcColorSpaceM33Descriptor desc_m33; NcGetColorSpaceM33Descriptor(cs, &desc_m33))
+    {
+        NcChromaticity red, green, blue, white;
+        deduce_chromaticities_and_whitepoint(desc_m33.rgbToXYZ, &red, &green, &blue, &white);
+        out.red   = {red.x, red.y};
+        out.green = {green.x, green.y};
+        out.blue  = {blue.x, blue.y};
+        out.white = {white.x, white.y};
+    }
+    return out;
+}
 
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
@@ -38,59 +106,34 @@
 bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method = 0);
 
-// return a map of common color spaces, indexed by name
-const std::map<std::string, Imf::Chromaticities> &color_space_chromaticities();
+// names of the predefined linear color gamuts
+extern const char *lin_ap0_gamut;
+extern const char *lin_ap1_acescg_gamut;
+extern const char *lin_adobergb_gamut;
+extern const char *lin_cie1931xyz_gamut;
+extern const char *lin_displayp3_gamut;
+extern const char *lin_prophotorgb_gamut;
+extern const char *lin_rec2020_2100_gamut;
+extern const char *lin_srgb_rec709_gamut;
 
-// return a pointer to the chromaticities of a named color space, or nullptr if not found
-const Imf::Chromaticities &color_space_chromaticity(const std::string &name);
+// return a map of common color spaces, indexed by name
+const std::map<const char *, Imf::Chromaticities> &color_gamuts();
+
+// return a reference to the chromaticities of a named color gamut, or throw if not found
+const Imf::Chromaticities &gamut_chromaticities(const char *name);
 
 // return a map of common white points, indexed by name
-const std::map<std::string, Imath::V2f> &white_points();
+const std::map<const char *, Imath::V2f> &white_points();
 
-// return a pointer to a named white point, or nullptr if not found
-const Imath::V2f &white_point(const std::string &name);
-
-inline const std::vector<std::string> &color_space_names()
-{
-    // clang-format off
-    static const std::vector<std::string> names = {"ACES 2065-1 (Academy Color Encoding System, AP0)",
-                                                   "ACEScg (Academy Color Encoding System, AP1)",
-                                                   "Adobe RGB (1998)",
-                                                   "Apple RGB",
-                                                   "Best RGB",
-                                                   "Beta RGB",
-                                                   "Bruce RGB",
-                                                   "BT 2020/2100",
-                                                   "CIE RGB",
-                                                   "CIE XYZ",
-                                                   "ColorMatch RGB",
-                                                   "Display P3",
-                                                   "Don RGB 4",
-                                                   "ECI RGB v2",
-                                                   "Ekta Space PS5",
-                                                   "NTSC RGB",
-                                                   "PAL/SECAM RGB",
-                                                   "ProPhoto RGB",
-                                                   "SMPTE-C RGB",
-                                                   "sRGB/BT 709",
-                                                   "Wide Gamut RGB"};
-    // clang-format on
-    return names;
-}
-
-inline const std::vector<std::string> &white_point_names()
-{
-    static const std::vector<std::string> names = {"C", "D50", "D65", "E"};
-    return names;
-}
+const char **color_gamut_names();
+const char  *color_gamut_description(const char *name);
 
 // approximate equality comparison for Imf::Chromaticities
-inline bool approx_equal(const Imf::Chromaticities &a, const Imf::Chromaticities &b)
+inline bool approx_equal(const Imf::Chromaticities &a, const Imf::Chromaticities &b, float tol = 1e-4f)
 {
-    return (a.red - b.red).length2() + (a.green - b.green).length2() + (a.blue - b.blue).length2() +
-               (a.white - b.white).length2() <
-           1e-6f;
-};
+    return a.red.equalWithAbsError(b.red, tol) && a.green.equalWithAbsError(b.green, tol) &&
+           a.blue.equalWithAbsError(b.blue, tol) && a.white.equalWithAbsError(b.white, tol);
+}
 
 template <typename Real>
 Real LinearToSRGB_positive(Real linear)
@@ -134,6 +177,30 @@ template <typename Real>
 Real SRGBToLinear(Real sRGB)
 {
     return sign(sRGB) * SRGBToLinear_positive(std::fabs(sRGB));
+}
+
+template <typename Real>
+Real Rec2020ToLinear(Real rec2020)
+{
+    constexpr Real alpha   = Real(1.09929682680944);
+    constexpr Real alpham1 = alpha - Real(1.0);
+    constexpr Real gamma   = Real(0.081242858298635); // alpha * pow(beta, 0.45) - (alpha-1)
+
+    if (rec2020 < gamma)
+        return rec2020 / Real(4.5);
+    else
+        return std::pow((rec2020 + alpham1) / alpha, Real(1.0 / 0.45));
+}
+
+template <typename Real>
+Real LinearToRec2020(Real linear)
+{
+    constexpr Real alpha = Real(1.09929682680944);
+    constexpr Real beta  = Real(0.018053968510807);
+    if (linear < beta)
+        return Real(4.5) * linear;
+    else
+        return alpha * std::pow(linear, Real(0.45)) - Real(alpha - 1.0);
 }
 
 /*! Defines Recommendation ITU-R BT.2100-2 Reference PQ electro-optical transfer function (EOTF).
@@ -253,7 +320,7 @@ inline la::vec<Real, 3> EOTF_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0)
 }
 
 float3 YCToRGB(float3 input, float3 Yw);
-// float3 RGBToYC(float3 input, float3 Yw);
+float3 RGBToYC(float3 input, float3 Yw);
 void   SRGBToLinear(float *r, float *g, float *b);
 Color3 SRGBToLinear(const Color3 &c);
 Color4 SRGBToLinear(const Color4 &c);
@@ -262,10 +329,6 @@ Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);
 Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma);
-
-// to and from XYZ
-void XYZToLinearSRGB(float *R, float *G, float *B, float X, float Y, float z);
-void LinearSRGBToXYZ(float *X, float *Y, float *Z, float R, float G, float B);
 
 inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
 {
