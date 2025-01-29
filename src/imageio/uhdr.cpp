@@ -183,6 +183,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     auto image                     = make_shared<Image>(size, 4);
     image->filename                = filename;
     image->file_has_straight_alpha = true;
+    image->metadata["loader"]      = "libuhdr";
 
     {
         auto  half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]);

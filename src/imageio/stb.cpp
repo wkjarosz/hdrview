@@ -68,27 +68,50 @@ static const stbi_io_callbacks stbi_callbacks = {
     [](void *user) { return (int)reinterpret_cast<istream *>(user)->eof(); },
 };
 
-bool is_stb_image(istream &is) noexcept
+static bool supported_format(istream &is, json &j) noexcept
 {
-    bool ret = false;
+    is.clear();
+    is.seekg(0);
     try
     {
         stbi__context s;
         stbi__start_callbacks(&s, (stbi_io_callbacks *)&stbi_callbacks, &is);
 
-        ret = stbi__jpeg_test(&s) || stbi__png_test(&s) || stbi__bmp_test(&s) || stbi__gif_test(&s) ||
-              stbi__psd_test(&s) || stbi__pic_test(&s) || stbi__pnm_test(&s) || stbi__hdr_test(&s) ||
-              stbi__tga_test(&s);
+        // these are ordered like stbi__load_main does for speed an reliability
+        if (stbi__png_test(&s))
+            j["format"] = "png";
+        else if (stbi__bmp_test(&s))
+            j["format"] = "bmp";
+        else if (stbi__gif_test(&s))
+            j["format"] = "gif";
+        else if (stbi__psd_test(&s))
+            j["format"] = "psd";
+        else if (stbi__pic_test(&s))
+            j["format"] = "pic";
+        else if (stbi__jpeg_test(&s))
+            j["format"] = "jpeg";
+        else if (stbi__pnm_test(&s))
+            j["format"] = "pnm";
+        else if (stbi__hdr_test(&s))
+            j["format"] = "hdr";
+        else if (stbi__tga_test(&s))
+            j["format"] = "tga";
     }
     catch (...)
     {
         //
     }
-
+    // shouldn't be necessary, but just in case:
     // rewind
     is.clear();
     is.seekg(0);
-    return ret;
+    return j.contains("format");
+}
+
+bool is_stb_image(istream &is) noexcept
+{
+    json j;
+    return supported_format(is, j);
 }
 
 vector<ImagePtr> load_stb_image(istream &is, const string &filename)
@@ -103,16 +126,29 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     auto float_data =
         FloatBuffer{stbi_loadf_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0), stbi_image_free};
     if (!float_data)
-        throw invalid_argument(stbi_failure_reason());
+        throw invalid_argument{fmt::format("STB1: {}", stbi_failure_reason())};
 
     if (product(size) == 0)
-        throw invalid_argument{"Image has zero pixels."};
+        throw invalid_argument{"STB: Image has zero pixels."};
 
     auto image                     = make_shared<Image>(size.xy(), size.z);
     image->filename                = filename;
     image->file_has_straight_alpha = true;
+    json j;
+    if (supported_format(is, j))
+        image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
+    else
+        throw runtime_error{
+            "STB: loaded the image, but then couldn't figure out the format (this should never happen)."};
+    bool linearize = j["format"] != "hdr";
+    if (linearize)
+        image->metadata["bit depth"] = "8:8:8:8 rgbe";
+    else if (stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is))
+        image->metadata["bit depth"] = "16 bpp";
+    else
+        image->metadata["bit depth"] = "8 bpc";
 
-    bool linearize = !stbi_is_hdr(filename.c_str());
+    image->metadata["transfer function"] = linearize ? srgb_tf : linear_tf;
 
     if (linearize)
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");

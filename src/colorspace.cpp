@@ -64,6 +64,25 @@ static const char* _color_gammut_names[] = {
 };
 // clang-format on
 
+const char *linear_tf      = "Linear";
+const char *gamma_tf       = "Gamma";
+const char *srgb_tf        = "sRGB (IEC 61966-2-1)";
+const char *rec709_2020_tf = "Rec709/2020";
+const char *pq_tf          = "Rec2100 PQ";
+const char *hlg_tf         = "Rec2100 HLG";
+
+// clang-format off
+static const char* _tf_names[] = {
+    linear_tf,
+    gamma_tf,
+    srgb_tf,
+    rec709_2020_tf,
+    pq_tf,
+    hlg_tf,
+    nullptr
+};
+// clang-format on
+
 // data from:
 //  https://en.wikipedia.org/wiki/Standard_illuminant
 //  https://en.wikipedia.org/wiki/RGB_color_spaces
@@ -91,6 +110,8 @@ static const std::map<const char *, const char *> _gamut_descriptions = {
 
 const char **color_gamut_names() { return _color_gammut_names; }
 const char  *color_gamut_description(const char *name) { return _gamut_descriptions.at(name); }
+
+const char **transfer_function_names() { return _tf_names; }
 
 const std::map<const char *, Imf::Chromaticities> &color_gamuts() { return _chromaticities_map; }
 

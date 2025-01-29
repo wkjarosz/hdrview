@@ -129,9 +129,11 @@ unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *wid
 vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
 {
     int3 size;
-    auto float_data = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
-    auto image      = make_shared<Image>(size.xy(), size.z);
-    image->filename = filename;
+    auto float_data                      = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
+    auto image                           = make_shared<Image>(size.xy(), size.z);
+    image->filename                      = filename;
+    image->metadata["bit depth"]         = fmt::format("{}-bit (32 bpc)", size.z * 32);
+    image->metadata["transfer function"] = linear_tf;
 
     Timer timer;
     for (int c = 0; c < size.z; ++c)

@@ -57,7 +57,6 @@
 
 using std::to_string;
 using std::unique_ptr;
-using json = nlohmann::json;
 
 #if defined(__EMSCRIPTEN__)
 static float g_scroll_multiplier = 10.0f;
@@ -1316,7 +1315,7 @@ void HDRViewApp::load_images(const vector<string> &filenames)
     for (auto f : filenames)
     {
         auto formats = Image::loadable_formats();
-        if (formats.find(get_extension(f)) != formats.end())
+        if (formats.find(to_lower(get_extension(f))) != formats.end())
             load_image(f);
         else
             spdlog::warn("Skipping unsupported file '{}'", f);

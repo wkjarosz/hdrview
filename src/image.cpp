@@ -99,7 +99,7 @@ std::set<std::string> Image::loadable_formats()
 #ifdef HDRVIEW_ENABLE_HEIF
             "heic", "heif", "avif", "avifs",
 #endif
-            "png",  "bmp",  "psd",  "pfm",   "tga", "gif", "hdr", "pic", "ppm", "pgm", "exr", "qoi"};
+            "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "psd", "pfm", "tga", "gif", "hdr", "exr", "qoi"};
 }
 
 std::set<std::string> Image::savable_formats()
@@ -668,15 +668,6 @@ void Image::compute_color_transform()
 
     static const Imf::Chromaticities rec709_chr{}; // default rec709 (sRGB) primaries
     Imath::M33f                      M;
-    auto                             dst = NcGetNamedColorSpace("lin_rec709");
-    NcColorSpaceDescriptor           dst_desc;
-    NcGetColorSpaceDescriptor(dst, &dst_desc);
-    auto src_desc         = dst_desc;
-    src_desc.redPrimary   = NcChromaticity{file_chr.red.x, file_chr.red.y};
-    src_desc.greenPrimary = NcChromaticity{file_chr.green.x, file_chr.green.y};
-    src_desc.bluePrimary  = NcChromaticity{file_chr.blue.x, file_chr.blue.y};
-    src_desc.whitePoint   = NcChromaticity{file_chr.white.x, file_chr.white.y};
-    auto src              = Nc::ColorSpace{NcCreateColorSpace(&src_desc)};
     if (color_conversion_matrix(M, file_chr, rec709_chr))
     {
         // M_to_Rec709 = to_linalg(NcGetRGBToRGBMatrix(src.get(), dst));
@@ -751,7 +742,8 @@ void Image::finalize()
             for (int c = 0; c < 3; ++c)
                 channels[c].apply([&alpha = channels[3]](float v, int x, int y)
                                   { return std::max(k_small_alpha, alpha(x, y)) * v; });
-        else
+        else if (channels.size() != 1 && channels.size() != 3)
+            // ignore 1 and 3 channel images, as they don't have alpha
             spdlog::warn("File has straight alpha, but we don't know how to handle it for {} channels",
                          channels.size());
     }

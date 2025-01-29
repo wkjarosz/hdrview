@@ -490,25 +490,6 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
-# cmake-format: off
-CPMAddPackage(
-  NAME nanocolor
-  GITHUB_REPOSITORY wkjarosz/Nanocolor
-  GIT_TAG 4cb0342ee18ae6449f7eb3607b68ca4c6daab90c
-  DOWNLOAD_ONLY YES
-)
-if(nanocolor_ADDED)
-  message(STATUS "nanocolor library added")
-  add_library(
-    nanocolor "${nanocolor_SOURCE_DIR}/nanocolor.c" "${nanocolor_SOURCE_DIR}/nanocolorUtils.c"
-  )
-
-  target_compile_definitions(nanocolor PUBLIC NCNAMESPACE=hdrview_)
-  target_include_directories(nanocolor INTERFACE ${nanocolor_SOURCE_DIR})
-endif()
-list(APPEND HDRVIEW_DEPENDENCIES "nanocolor")
-# cmake-format: on
-
 CPMAddPackage(
   NAME CLI11
   VERSION 2.4.2

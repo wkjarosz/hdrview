@@ -143,6 +143,7 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
             image->filename                = filename;
             image->partname                = subimage != 0 ? fmt::format("{:d}", id) : "";
             image->file_has_straight_alpha = has_alpha && !ihandle.is_premultiplied_alpha();
+            image->metadata["loader"]      = "libheif";
 
             spdlog::info("Decoding heif image...");
             auto himage = ihandle.decode_image(out_colorspace, out_chroma);
@@ -200,6 +201,8 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 if (bpp_storage != cpp * 16)
                     throw runtime_error(
                         fmt::format("HEIF: Got {} bits per pixel, but expected {}", bpp_storage, cpp * 16));
+                if (p == 0)
+                    image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * bpp, bpp);
 
                 float bppDiv = 1.f / ((1 << bpp) - 1);
 
@@ -214,12 +217,12 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 }
 
                 bool colors_linearized = false;
+
+#ifdef HDRVIEW_ENABLE_LCMS2
                 // only prefer the nclx if it exists and it specifies an HDR transfer function
                 bool prefer_icc =
                     !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
-
-#ifdef HDRVIEW_ENABLE_LCMS2
                 // transform the interleaved data using the icc profile
                 if (!icc_profile.empty() && prefer_icc)
                 {
@@ -264,13 +267,16 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 
                     if (profile_in && profile_out)
                     {
-                        spdlog::info("HEIF: ICC profile description: '{}'", cms::profile_description(profile_in));
+                        auto desc = cms::profile_description(profile_in);
+                        spdlog::info("HEIF: ICC profile description: '{}'", desc);
                         if (auto xform = cms::Transform{cmsCreateTransform(profile_in.get(), format, profile_out.get(),
                                                                            format, INTENT_ABSOLUTE_COLORIMETRIC,
                                                                            cpp == 4 ? cmsFLAGS_COPY_ALPHA : 0)})
                         {
                             cmsDoTransform(xform.get(), float_pixels.data(), float_pixels.data(), size.x * size.y);
                             colors_linearized = true;
+                            image->metadata["transfer function"] =
+                                fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
                         }
                         else
                             spdlog::error("HEIF: Could not create color transformation.");
@@ -300,47 +306,50 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                                                            {nclx->color_primary_blue_x, nclx->color_primary_blue_y},
                                                            {nclx->color_primary_white_x, nclx->color_primary_white_y}});
 
+                    TransferFunction tf;
                     switch (nclx->transfer_characteristics)
                     {
-                    case heif_transfer_characteristic_unspecified:
-                        spdlog::warn("HEIF: Doesn't specify a transfer function; assuming sRGB");
-                        break;
-                    case heif_transfer_characteristic_IEC_61966_2_1:
-                        spdlog::info("HEIF: Applying sRGB/IEC 61966-2-1 transfer function");
-                        break;
                     case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
-                        spdlog::info("HEIF: Applying PQ transfer function");
+                        spdlog::info("HEIF: Applying {} transfer function", pq_tf);
+                        image->metadata["transfer function"] = pq_tf;
+                        tf                                   = TransferFunction_Rec2100_PQ;
                         break;
                     case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
-                        spdlog::info("HEIF: Applying HLG transfer function");
+                        spdlog::info("HEIF: Applying {} transfer function", hlg_tf);
+                        image->metadata["transfer function"] = hlg_tf;
+                        tf                                   = TransferFunction_Rec2100_HLG;
                         break;
                     case heif_transfer_characteristic_ITU_R_BT_709_5:
-                        spdlog::info("HEIF: Applying BT.709 transfer function");
+                        spdlog::info("HEIF: Applying {} transfer function", rec709_2020_tf);
+                        image->metadata["transfer function"] = rec709_2020_tf;
+                        tf                                   = TransferFunction_Rec709_2020;
+                        break;
+                    case heif_transfer_characteristic_unspecified:
+                        spdlog::warn("HEIF: Doesn't specify a transfer function; assuming {}", srgb_tf);
+                        image->metadata["transfer function"] = srgb_tf;
+                        tf                                   = TransferFunction_sRGB;
+                        break;
+                    case heif_transfer_characteristic_IEC_61966_2_1:
+                        spdlog::info("HEIF: Applying {} transfer function", srgb_tf);
+                        image->metadata["transfer function"] = srgb_tf;
+                        tf                                   = TransferFunction_sRGB;
                         break;
                     default:
-                        spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying sRGB/IEC 61966-2-1 "
+                        spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying {} "
                                       "transfer function instead.",
-                                      (int)nclx->transfer_characteristics);
+                                      (int)nclx->transfer_characteristics, srgb_tf);
+                        image->metadata["transfer function"] = srgb_tf;
+                        tf                                   = TransferFunction_sRGB;
                         break;
                     }
 
                     // apply transfer function
                     if (image->channels.size() <= 2)
-                    {
-                        if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
-                            image->channels[0].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-                        else if (nclx &&
-                                 nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
-                            image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
-                        else if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_709_5)
-                            image->channels[0].apply([](float v, int x, int y) { return Rec2020ToLinear(v); });
-                        else if (nclx)
-                            image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
-                    }
+                        image->channels[0].apply([tf](float v, int, int) { return to_linear(v, tf); });
                     else if (image->channels.size() == 3 || image->channels.size() == 4)
                     {
                         // HLG needs to operate on all three channels at once
-                        if (nclx && nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_HLG)
+                        if (tf == TransferFunction_Rec2100_HLG)
                         {
                             int block_size = std::max(1, 1024 * 1024 / size.x);
                             parallel_for(blocked_range<int>(0, size.y, block_size),
@@ -362,15 +371,7 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                         else
                         {
                             for (int c = 0; c < 3; ++c)
-                                if (nclx &&
-                                    nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_2100_0_PQ)
-                                    image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-                                else if (nclx &&
-                                         nclx->transfer_characteristics == heif_transfer_characteristic_ITU_R_BT_709_5)
-                                    image->channels[c].apply([](float v, int x, int y) { return Rec2020ToLinear(v); });
-                                else if (nclx &&
-                                         nclx->transfer_characteristics == heif_transfer_characteristic_IEC_61966_2_1)
-                                    image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+                                image->channels[c].apply([tf](float v, int, int) { return to_linear(v, tf); });
                         }
                     }
                     else

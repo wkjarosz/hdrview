@@ -64,7 +64,7 @@ static void print_color_encoding_info(const JxlColorEncoding &enc)
     default: spdlog::info("Transfer function: unknown"); break;
     }
 
-    // print out the rendering intent in human readible form as a switch statement
+    // print out the rendering intent in human readible form
     switch (enc.rendering_intent)
     {
     case JXL_RENDERING_INTENT_PERCEPTUAL: spdlog::info("Rendering intent: perceptual"); break;
@@ -178,6 +178,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 image                          = make_shared<Image>(size.xy(), size.z);
                 image->filename                = filename;
                 image->file_has_straight_alpha = size.z > 3 && !info.alpha_premultiplied;
+                image->metadata["loader"]      = "libjxl";
 
                 format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
                 JxlResizableParallelRunnerSetThreads(runner.get(),
@@ -285,10 +286,11 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         throw invalid_argument{"Image has zero pixels."};
 
     bool colors_linearized = false;
+
+#ifdef HDRVIEW_ENABLE_LCMS2
     // only prefer the encoded profile if it exists and it specifies an HDR transfer function
     bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
                                                file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG);
-#ifdef HDRVIEW_ENABLE_LCMS2
     // transform the interleaved data using the icc profile
     if (!icc_profile.empty() && prefer_icc)
     {
@@ -319,9 +321,11 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 cms::Transform{cmsCreateTransform(profile_in.get(), format, profile_out.get(), format,
                                                   INTENT_ABSOLUTE_COLORIMETRIC, size.z == 4 ? cmsFLAGS_COPY_ALPHA : 0)})
         {
-            spdlog::info("JPEG-XL: ICC profile description: '{}'", cms::profile_description(profile_in));
+            auto desc = cms::profile_description(profile_in);
+            spdlog::info("JPEG-XL: ICC profile description: '{}'", desc);
             cmsDoTransform(xform.get(), pixels.data(), pixels.data(), pixels.size() / size.z);
-            colors_linearized = true;
+            colors_linearized                    = true;
+            image->metadata["transfer function"] = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
         }
         else
             spdlog::error("JPEG-XL: Could not create color transform.");
@@ -344,20 +348,41 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         Imf::addChromaticities(image->header, chromaticities);
         Imf::addWhiteLuminance(image->header, info.intensity_target);
 
+        float            gamma = file_enc.gamma;
+        TransferFunction tf;
+        switch (file_enc.transfer_function)
+        {
+        case JXL_TRANSFER_FUNCTION_709:
+            image->metadata["transfer function"] = rec709_2020_tf;
+            tf                                   = TransferFunction_Rec709_2020;
+            break;
+        case JXL_TRANSFER_FUNCTION_PQ:
+            image->metadata["transfer function"] = pq_tf;
+            tf                                   = TransferFunction_Rec2100_PQ;
+            break;
+        case JXL_TRANSFER_FUNCTION_HLG:
+            image->metadata["transfer function"] = hlg_tf;
+            tf                                   = TransferFunction_Rec2100_HLG;
+            break;
+        case JXL_TRANSFER_FUNCTION_LINEAR:
+            image->metadata["transfer function"] = linear_tf;
+            tf                                   = TransferFunction_Linear;
+            break;
+        case JXL_TRANSFER_FUNCTION_GAMMA:
+            image->metadata["transfer function"] = fmt::format("{} ({})", gamma_tf, gamma);
+            tf                                   = TransferFunction_Gamma;
+            break;
+        case JXL_TRANSFER_FUNCTION_SRGB: [[fallthrough]];
+        default: image->metadata["transfer function"] = srgb_tf; tf = TransferFunction_sRGB;
+        }
+
         // apply transfer function
         if (image->channels.size() <= 2)
-        {
-            if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_PQ)
-                image->channels[0].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-            else if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_HLG)
-                image->channels[0].apply([](float v, int x, int y) { return EOTF_HLG(v, v) / 255.f; });
-            else
-                image->channels[0].apply([](float v, int x, int y) { return SRGBToLinear(v); });
-        }
+            image->channels[0].apply([tf, gamma](float v, int, int) { return to_linear(v, tf, gamma); });
         else if (image->channels.size() == 3 || image->channels.size() == 4)
         {
             // HLG needs to operate on all three channels at once
-            if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_HLG)
+            if (tf == TransferFunction_Rec2100_HLG)
             {
                 int block_size = std::max(1, 1024 * 1024 / size.x);
                 parallel_for(blocked_range<int>(0, size.y, block_size),
@@ -379,10 +404,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             else
             {
                 for (int c = 0; c < 3; ++c)
-                    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_PQ)
-                        image->channels[c].apply([](float v, int x, int y) { return EOTF_PQ(v) / 255.f; });
-                    else
-                        image->channels[c].apply([](float v, int x, int y) { return SRGBToLinear(v); });
+                    image->channels[c].apply([tf, gamma](float v, int, int) { return to_linear(v, tf, gamma); });
             }
         }
         else

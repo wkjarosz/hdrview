@@ -497,6 +497,16 @@ void Image::draw_info()
     property_name("Part name:");
     property_value(partname.empty() ? "<none>" : partname, sans_font, true);
 
+    property_name("Loader:");
+    property_value(metadata.value<string>("loader", "unknown"), sans_font, true);
+
+    property_name("File's bit depth:");
+    property_value(metadata.value<string>("bit depth", "unknown"), sans_font, true);
+
+    property_name("Linearization function:");
+    ImGui::WrappedTooltip("The transfer function applied at load time to make the values linear.");
+    property_value(metadata.value<string>("transfer function", "linear"), sans_font, true);
+
     vector<pair<string, string>> attrib_names = {
         {"owner", "Owner"}, {"comments", "Comments"}, {"capDate", "Capture date"}};
 

@@ -8,9 +8,6 @@
 
 #include "common.h"
 #include "fwd.h"
-#include <nanocolor.h>
-#include <nanocolorProcessing.h>
-#include <nanocolorUtils.h>
 #include <string>
 #include <vector>
 
@@ -20,69 +17,21 @@
 #include <map>
 #include <string>
 
-namespace Nc
+// Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
+inline void primaries_from_matrix(const float3x3 &rgb_to_XYZ, float2 *red, float2 *green, float2 *blue, float2 *white)
 {
-// deleter for unique_ptr<NcColorSpace>
-struct ColorSpaceDeleter
-{
-    void operator()(const NcColorSpace *cs) { NcFreeColorSpace(cs); }
-};
-using ColorSpace = std::unique_ptr<const NcColorSpace, ColorSpaceDeleter>;
-} // namespace Nc
+    // Multiplying the matrix by [1,0,0], [0,1,0], or [0,0,1] gives the XYZ values of the primaries.
+    // Hence, the columns of the matrix are XYZ values of the primaries.
+    // Divide each by its sum to get corresponding chromaticities.
+    *red   = rgb_to_XYZ.x.xy() / sum(rgb_to_XYZ.x);
+    *green = rgb_to_XYZ.y.xy() / sum(rgb_to_XYZ.y);
+    *blue  = rgb_to_XYZ.z.xy() / sum(rgb_to_XYZ.z);
 
-// linalg and Nanocolor use the same memory layout, so we can convert via linalg's pointer constructors
-inline float2 to_linalg(const NcChromaticity &v) { return float2(reinterpret_cast<const float *>(&v)); }
-inline float3 to_linalg(const NcXYZ &v) { return float3(reinterpret_cast<const float *>(&v)); }
-inline float3 to_linalg(const NcYxy &v) { return float3(reinterpret_cast<const float *>(&v)); }
-inline float3 to_linalg(const NcRGB &v) { return float3(reinterpret_cast<const float *>(&v)); }
-// Nanocolor's 3x3 matrices are row-major, so we need to transpose them
-inline float3x3 to_linalg(const NcM33f &m) { return transpose(float3x3(reinterpret_cast<const float *>(&m))); }
-
-// Function to deduce chromaticities and white point
-inline void deduce_chromaticities_and_whitepoint(NcM33f matrix, NcChromaticity *red, NcChromaticity *green,
-                                                 NcChromaticity *blue, NcChromaticity *whitepoint)
-{
-    // Extract the columns
-    NcXYZ redXYZ{matrix.m[0], matrix.m[1], matrix.m[2]};
-    NcXYZ greenXYZ{matrix.m[3], matrix.m[4], matrix.m[5]};
-    NcXYZ blueXYZ{matrix.m[6], matrix.m[7], matrix.m[8]};
-
-    // Convert to chromaticities
-    auto redSum   = redXYZ.x + redXYZ.y + redXYZ.z;
-    auto greenSum = greenXYZ.x + greenXYZ.y + greenXYZ.z;
-    auto blueSum  = blueXYZ.x + blueXYZ.y + blueXYZ.z;
-    *red          = NcChromaticity{redXYZ.x / redSum, redXYZ.y / redSum};
-    *green        = NcChromaticity{greenXYZ.x / greenSum, greenXYZ.y / greenSum};
-    *blue         = NcChromaticity{blueXYZ.x / blueSum, blueXYZ.y / blueSum};
-
-    // Calculate the white point
-    NcXYZ wpXYZ{redXYZ.x + greenXYZ.x + blueXYZ.x, redXYZ.y + greenXYZ.y + blueXYZ.y,
-                redXYZ.z + greenXYZ.z + blueXYZ.z};
-    auto  wpSum = wpXYZ.x + wpXYZ.y + wpXYZ.z;
-    *whitepoint = NcChromaticity{wpXYZ.x / wpSum, wpXYZ.y / wpSum};
-}
-
-// convert between a NcColorSpace and an Imf::Chromaticities
-inline Imf::Chromaticities to_Chromaticities(const NcColorSpace *cs)
-{
-    Imf::Chromaticities out;
-    if (NcColorSpaceDescriptor desc; NcGetColorSpaceDescriptor(cs, &desc))
-    {
-        out.red   = {desc.redPrimary.x, desc.redPrimary.y};
-        out.green = {desc.greenPrimary.x, desc.greenPrimary.y};
-        out.blue  = {desc.bluePrimary.x, desc.bluePrimary.y};
-        out.white = {desc.whitePoint.x, desc.whitePoint.y};
-    }
-    else if (NcColorSpaceM33Descriptor desc_m33; NcGetColorSpaceM33Descriptor(cs, &desc_m33))
-    {
-        NcChromaticity red, green, blue, white;
-        deduce_chromaticities_and_whitepoint(desc_m33.rgbToXYZ, &red, &green, &blue, &white);
-        out.red   = {red.x, red.y};
-        out.green = {green.x, green.y};
-        out.blue  = {blue.x, blue.y};
-        out.white = {white.x, white.y};
-    }
-    return out;
+    // Multiplying the matrix by full-intensity for each primary [1,1,1] gives us XYZ of white.
+    // Hence, the sum of the columns is the XYZ of white.
+    // Divide that by the sum of its components to get its chromaticity;
+    float3 wpXYZ = rgb_to_XYZ.x + rgb_to_XYZ.y + rgb_to_XYZ.z;
+    *white       = wpXYZ.xy() / sum(wpXYZ);
 }
 
 /*!
@@ -134,6 +83,30 @@ inline bool approx_equal(const Imf::Chromaticities &a, const Imf::Chromaticities
     return a.red.equalWithAbsError(b.red, tol) && a.green.equalWithAbsError(b.green, tol) &&
            a.blue.equalWithAbsError(b.blue, tol) && a.white.equalWithAbsError(b.white, tol);
 }
+
+using TransferFunction_ = int;
+enum TransferFunction : TransferFunction_
+{
+    TransferFunction_Linear = 0,
+    TransferFunction_Gamma,
+    TransferFunction_sRGB,
+    TransferFunction_Rec709_2020, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and and SMPTE 170M
+    TransferFunction_Rec2100_PQ,
+    TransferFunction_Rec2100_HLG,
+    // DCI_P3, // TODO
+
+    TransferFunction_COUNT
+};
+
+// names of the predefined transfer functions
+extern const char *linear_tf;
+extern const char *gamma_tf;
+extern const char *srgb_tf;
+extern const char *rec709_2020_tf;
+extern const char *pq_tf;
+extern const char *hlg_tf;
+
+const char **transfer_function_names();
 
 template <typename Real>
 Real LinearToSRGB_positive(Real linear)
@@ -329,6 +302,35 @@ Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);
 Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma);
+
+inline float to_linear(const float encoded, const TransferFunction tf, const float gamma = 2.2f)
+{
+    switch (tf)
+    {
+    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_sRGB: return SRGBToLinear(encoded);
+    case TransferFunction_Rec709_2020: return Rec2020ToLinear(encoded);
+    case TransferFunction_Rec2100_PQ: return EOTF_PQ(encoded) / 255.f;
+    case TransferFunction_Rec2100_HLG: return EOTF_HLG(encoded) / 255.f;
+    case TransferFunction_Linear: [[fallthrough]];
+    default: return encoded;
+    }
+}
+
+inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const float3 &gamma = float3(2.2f))
+{
+    switch (tf)
+    {
+    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_sRGB: return SRGBToLinear(encoded);
+    case TransferFunction_Rec709_2020:
+        return float3{Rec2020ToLinear(encoded.x), Rec2020ToLinear(encoded.y), Rec2020ToLinear(encoded.z)};
+    case TransferFunction_Rec2100_PQ: return float3{EOTF_PQ(encoded.x), EOTF_PQ(encoded.y), EOTF_PQ(encoded.z)} / 255.f;
+    case TransferFunction_Rec2100_HLG: return EOTF_HLG(encoded) / 255.f;
+    case TransferFunction_Linear: [[fallthrough]];
+    default: return encoded;
+    }
+}
 
 inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
 {

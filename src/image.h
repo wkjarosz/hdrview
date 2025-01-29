@@ -12,6 +12,7 @@
 #include "colorspace.h"
 #include "common.h"
 #include "fwd.h"
+#include "json.h"
 #include "scheduler.h"
 #include <cfloat>
 #include <half.h>
@@ -278,6 +279,8 @@ public:
     // We retain the Imf::Header for all attributes.
     // We also use this as a common representation of meta data when loading non-EXR images.
     Imf::Header header;
+
+    json metadata;
 
     // But create our own versios of some which we need access to often
     std::string          filename;
