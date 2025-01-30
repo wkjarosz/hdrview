@@ -679,21 +679,6 @@ void Image::compute_color_transform()
     // determine if this is (close to) one of the named color spaces
     if (Imf::hasChromaticities(header))
     {
-        // auto cs_name = NcMatchLinearColorSpace(src_desc.redPrimary, src_desc.greenPrimary, src_desc.bluePrimary,
-        //                                        src_desc.whitePoint, 1e-4f);
-        // if (cs_name)
-        // {
-        //     spdlog::info("Detected color space: '{}'", cs_name);
-        //     auto names = NcRegisteredColorSpaceNames();
-        //     for (int i = 0; names[i] != NULL; ++i)
-        //     {
-        //         if (strcmp(names[i], cs_name) == 0)
-        //         {
-        //             named_color_space = i;
-        //             break;
-        //         }
-        //     }
-        // }
         const auto &cs_chrs = color_gamuts();
         for (int i = 0; color_gamut_names()[i]; ++i)
         {
@@ -729,27 +714,6 @@ void Image::finalize()
                 fmt::format("All channels must have the same size as the data window. ({}:{}x{} != {}x{})", c.name,
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
-    // if we have a straight alpha channel, premultiply the other channels by it.
-    // this needs to be done after the values have been made linear
-    // FIXME: this currently only works for the first few channels; not if we have multiple groups of channels each with
-    // their own alpha channel
-    if (file_has_straight_alpha)
-    {
-        if (channels.size() == 2)
-            channels[0].apply([&alpha = channels[1]](float v, int x, int y)
-                              { return std::max(k_small_alpha, alpha(x, y)) * v; });
-        else if (channels.size() == 4)
-            for (int c = 0; c < 3; ++c)
-                channels[c].apply([&alpha = channels[3]](float v, int x, int y)
-                                  { return std::max(k_small_alpha, alpha(x, y)) * v; });
-        else if (channels.size() != 1 && channels.size() != 3)
-            // ignore 1 and 3 channel images, as they don't have alpha
-            spdlog::warn("File has straight alpha, but we don't know how to handle it for {} channels",
-                         channels.size());
-    }
-
-    compute_color_transform();
-
     build_layers_and_groups();
 
     // sanity check layers, channels, and channel groups
@@ -772,6 +736,29 @@ void Image::finalize()
                 "Number of channels in Part '{}' doesn't match number of channels in its layers: {} vs. {}.", partname,
                 channels.size(), num_channels)};
     }
+
+    // if we have a straight alpha channel, premultiply the other channels by it.
+    // this needs to be done after the values have been made linear
+    if (file_has_straight_alpha)
+    {
+        for (auto &g : groups)
+        {
+            bool has_alpha =
+                g.num_channels > 1 && (g.type == ChannelGroup::RGBA_Channels || g.type == ChannelGroup::YA_Channels ||
+                                       g.type == ChannelGroup::YCA_Channels || g.type == ChannelGroup::XYZA_Channels);
+            if (!has_alpha)
+                continue;
+
+            for (int c = 0; c < g.num_channels - 1; ++c)
+            {
+                spdlog::debug("Premultiplying channel {}", g.channels[c]);
+                channels[g.channels[c]].apply([&alpha = channels[g.channels[g.num_channels - 1]]](float v, int x, int y)
+                                              { return std::max(k_small_alpha, alpha(x, y)) * v; });
+            }
+        }
+    }
+
+    compute_color_transform();
 
     // update the stats/histograms for all channels
     // for (auto &c : channels) c.update_stats();

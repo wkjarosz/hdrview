@@ -141,7 +141,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
         throw runtime_error{
             "STB: loaded the image, but then couldn't figure out the format (this should never happen)."};
     bool linearize = j["format"] != "hdr";
-    if (linearize)
+    if (!linearize)
         image->metadata["bit depth"] = "8:8:8:8 rgbe";
     else if (stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is))
         image->metadata["bit depth"] = "16 bpp";

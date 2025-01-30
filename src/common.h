@@ -29,6 +29,13 @@
     if (!(cond))                                                                                                       \
         throw std::runtime_error{fmt::format(description, ##__VA_ARGS__)};
 
+// From: https://github.com/fmtlib/fmt/issues/1260#issuecomment-1404324163
+template <typename... Args>
+std::string format_indented(int indent, fmt::format_string<Args...> format_str, Args &&...args)
+{
+    return fmt::format("{:{}}", "", indent) + fmt::format(format_str, std::forward<Args>(args)...);
+}
+
 template <typename T>
 inline T sqr(T x)
 {

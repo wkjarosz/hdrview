@@ -120,88 +120,95 @@ const Imf::Chromaticities &gamut_chromaticities(const char *name) { return _chro
 bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
                              int CAT_method)
 {
-    using namespace Imath;
-    using namespace Imf;
-
-    if (src == dst)
+    try
     {
-        // The file already contains data in the target colorspace.
-        // color conversion is not necessary.
-        M = M33f{};
+        using namespace Imath;
+        using namespace Imf;
+
+        if (src == dst)
+        {
+            // The file already contains data in the target colorspace.
+            // color conversion is not necessary.
+            M = M33f{};
+            return false;
+        }
+
+        //
+        // Create a matrix that transforms colors from the
+        // RGB space of the input file into the target space
+        // using a color adaptation transform to move the
+        // white point.
+        //
+
+        M33f CAT{}; // chromatic adaptation matrix
+        if (CAT_method > 0 && CAT_method <= 3)
+        {
+            // the cone primary respons matrices (and their inverses) for 3 different methods
+            static const M33f CPM[3] = {{1.f, 0.f, 0.f, // XYZ scaling
+                                         0.f, 1.f, 0.f, //
+                                         0.f, 0.f, 1.f},
+                                        {0.895100f, -0.750200f, 0.038900f, // Bradford
+                                         0.266400f, 1.713500f, -0.068500f, //
+                                         -0.161400f, 0.036700f, 1.029600f},
+                                        {0.4002400f, -0.2263000f, 0.0000000f, // Von Kries
+                                         0.7076000f, 1.1653200f, 0.0000000f,  //
+                                         -0.0808100f, 0.0457000f, 0.9182200f}};
+            static const M33f invCPM[3]{{1.f, 0.f, 0.f, //
+                                         0.f, 1.f, 0.f, //
+                                         0.f, 0.f, 1.f},
+                                        {0.986993f, 0.432305f, -0.008529f, //
+                                         -0.147054f, 0.518360f, 0.040043f, //
+                                         0.159963f, 0.049291f, 0.968487f},
+                                        {1.8599364f, 0.3611914f, 0.0000000f,  //
+                                         -1.1293816f, 0.6388125f, 0.0000000f, //
+                                         0.2198974f, -0.0000064f, 1.0890636f}};
+            //
+            // Convert the white points of the two RGB spaces to XYZ
+            //
+
+            float fx = src.white.x;
+            float fy = src.white.y;
+            V3f   src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
+
+            float ax = dst.white.x;
+            float ay = dst.white.y;
+            V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
+
+            //
+            // Compute the CAT
+            //
+
+            V3f ratio((dst_neutral_XYZ * CPM[CAT_method - 1]) / (src_neutral_XYZ * CPM[CAT_method - 1]));
+
+            M33f ratio_mat(ratio[0], 0, 0, 0, ratio[1], 0, 0, 0, ratio[2]);
+
+            CAT = CPM[CAT_method - 1] * ratio_mat * invCPM[CAT_method - 1];
+        }
+
+        //
+        // Build a combined file-RGB-to-target-RGB conversion matrix
+        //
+
+        auto m1 = RGBtoXYZ(src, 1);
+        // extract the upper left 3x3 of m1 as an M33f
+        M33f src_to_XYZ(m1[0][0], m1[0][1], m1[0][2], //
+                        m1[1][0], m1[1][1], m1[1][2], //
+                        m1[2][0], m1[2][1], m1[2][2]);
+
+        m1 = XYZtoRGB(dst, 1);
+        // extract the upper left 3x3 of m1 as an M33f
+        M33f XYZ_to_dst(m1[0][0], m1[0][1], m1[0][2], //
+                        m1[1][0], m1[1][1], m1[1][2], //
+                        m1[2][0], m1[2][1], m1[2][2]);
+
+        M = src_to_XYZ * CAT * XYZ_to_dst;
+
+        return true;
+    }
+    catch (...)
+    {
         return false;
     }
-
-    //
-    // Create a matrix that transforms colors from the
-    // RGB space of the input file into the target space
-    // using a color adaptation transform to move the
-    // white point.
-    //
-
-    M33f CAT{}; // chromatic adaptation matrix
-    if (CAT_method > 0 && CAT_method <= 3)
-    {
-        // the cone primary respons matrices (and their inverses) for 3 different methods
-        static const M33f CPM[3] = {{1.f, 0.f, 0.f, // XYZ scaling
-                                     0.f, 1.f, 0.f, //
-                                     0.f, 0.f, 1.f},
-                                    {0.895100f, -0.750200f, 0.038900f, // Bradford
-                                     0.266400f, 1.713500f, -0.068500f, //
-                                     -0.161400f, 0.036700f, 1.029600f},
-                                    {0.4002400f, -0.2263000f, 0.0000000f, // Von Kries
-                                     0.7076000f, 1.1653200f, 0.0000000f,  //
-                                     -0.0808100f, 0.0457000f, 0.9182200f}};
-        static const M33f invCPM[3]{{1.f, 0.f, 0.f, //
-                                     0.f, 1.f, 0.f, //
-                                     0.f, 0.f, 1.f},
-                                    {0.986993f, 0.432305f, -0.008529f, //
-                                     -0.147054f, 0.518360f, 0.040043f, //
-                                     0.159963f, 0.049291f, 0.968487f},
-                                    {1.8599364f, 0.3611914f, 0.0000000f,  //
-                                     -1.1293816f, 0.6388125f, 0.0000000f, //
-                                     0.2198974f, -0.0000064f, 1.0890636f}};
-        //
-        // Convert the white points of the two RGB spaces to XYZ
-        //
-
-        float fx = src.white.x;
-        float fy = src.white.y;
-        V3f   src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
-
-        float ax = dst.white.x;
-        float ay = dst.white.y;
-        V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
-
-        //
-        // Compute the CAT
-        //
-
-        V3f ratio((dst_neutral_XYZ * CPM[CAT_method - 1]) / (src_neutral_XYZ * CPM[CAT_method - 1]));
-
-        M33f ratio_mat(ratio[0], 0, 0, 0, ratio[1], 0, 0, 0, ratio[2]);
-
-        CAT = CPM[CAT_method - 1] * ratio_mat * invCPM[CAT_method - 1];
-    }
-
-    //
-    // Build a combined file-RGB-to-target-RGB conversion matrix
-    //
-
-    auto m1 = RGBtoXYZ(src, 1);
-    // extract the upper left 3x3 of m1 as an M33f
-    M33f src_to_XYZ(m1[0][0], m1[0][1], m1[0][2], //
-                    m1[1][0], m1[1][1], m1[1][2], //
-                    m1[2][0], m1[2][1], m1[2][2]);
-
-    m1 = XYZtoRGB(dst, 1);
-    // extract the upper left 3x3 of m1 as an M33f
-    M33f XYZ_to_dst(m1[0][0], m1[0][1], m1[0][2], //
-                    m1[1][0], m1[1][1], m1[1][2], //
-                    m1[2][0], m1[2][1], m1[2][2]);
-
-    M = src_to_XYZ * CAT * XYZ_to_dst;
-
-    return true;
 }
 
 float3 YCToRGB(float3 input, float3 Yw)
