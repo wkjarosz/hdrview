@@ -542,8 +542,10 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                     frame_name = name_buffer.data();
                     spdlog::info("JPEG XL frame name: {}", name_buffer.data());
                 }
+                else if (info.have_animation)
+                    frame_name = fmt::format("frame {:04}", frame_number);
                 else
-                    frame_name = fmt::format("frame {}", frame_number);
+                    frame_name = "";
                 frame_number++;
             }
             else if (status == JXL_DEC_SUCCESS)
