@@ -28,14 +28,82 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 
 #else
 
-#include "cms.h"
 #include "colorspace.h"
 #include "heif.h"
+#include "icc.h"
 #include "libheif/heif.h"
 #include "libheif/heif_cxx.h"
 #include "timer.h"
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
+
+static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *nclx, string *tf_description = nullptr,
+                             float2 *red = nullptr, float2 *green = nullptr, float2 *blue = nullptr,
+                             float2 *white = nullptr)
+{
+    if (!nclx)
+        return false;
+
+    Timer timer;
+    spdlog::info("Linearizing pixel values using nclx.");
+    if (red)
+        *red = float2(nclx->color_primary_red_x, nclx->color_primary_red_y);
+    if (green)
+        *green = float2(nclx->color_primary_green_x, nclx->color_primary_green_y);
+    if (blue)
+        *blue = float2(nclx->color_primary_blue_x, nclx->color_primary_blue_y);
+    if (white)
+        *white = float2(nclx->color_primary_white_x, nclx->color_primary_white_y);
+
+    float            gamma = 1.f;
+    TransferFunction tf;
+    string           tf_desc;
+    switch (nclx->transfer_characteristics)
+    {
+    case heif_transfer_characteristic_ITU_R_BT_709_5:
+        tf_desc = rec709_2020_tf;
+        tf      = TransferFunction_Rec709_2020;
+        break;
+    case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
+        tf_desc = pq_tf;
+        tf      = TransferFunction_Rec2100_PQ;
+        break;
+    case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
+        tf_desc = hlg_tf;
+        tf      = TransferFunction_Rec2100_HLG;
+        break;
+    case heif_transfer_characteristic_linear:
+        tf_desc = linear_tf;
+        tf      = TransferFunction_Linear;
+        break;
+    case heif_transfer_characteristic_IEC_61966_2_1: [[fallthrough]];
+    default: tf_desc = srgb_tf; tf = TransferFunction_sRGB;
+    }
+
+    if (tf_description)
+        *tf_description = tf_desc;
+
+    if (tf == TransferFunction_Rec2100_HLG && size.z == 3)
+    {
+        // HLG needs to operate on all three channels at once
+        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                     [&pixels](int start, int end, int, int)
+                     {
+                         auto rgb_pixels = reinterpret_cast<float3 *>(pixels + start * 3);
+                         for (int i = start; i < end; ++i) rgb_pixels[i] = EOTF_HLG(rgb_pixels[i]) / 255.f;
+                     });
+    }
+    else
+    {
+        // other transfer functions apply to each channel independently
+        parallel_for(blocked_range<int>(0, size.x * size.y * size.z, 1024 * 1024),
+                     [&pixels, tf, gamma](int start, int end, int, int)
+                     {
+                         for (int i = start; i < end; ++i) pixels[i] = to_linear(pixels[i], tf, gamma);
+                     });
+    }
+    return true;
+}
 
 vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 {
@@ -218,166 +286,31 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 
                 bool colors_linearized = false;
 
-#ifdef HDRVIEW_ENABLE_LCMS2
                 // only prefer the nclx if it exists and it specifies an HDR transfer function
                 bool prefer_icc =
                     !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
-                // transform the interleaved data using the icc profile
-                if (!icc_profile.empty() && prefer_icc)
+
+                string tf_description;
+                float2 red, green, blue, white;
+                // for SDR profiles, try to transform the interleaved data using the icc profile.
+                // Then try the nclx profile
+                if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
+                                                         &tf_description, &red, &green, &blue, &white)) ||
+                    linearize_colors(float_pixels.data(), size, nclx, &tf_description, &red, &green, &blue, &white))
                 {
-                    spdlog::info("Linearizing pixel values using image's ICC color profile.");
-
-                    cmsUInt32Number format;
-                    switch (cpp)
-                    {
-                    case 1:
-                        format = TYPE_GRAY_FLT;
-                        spdlog::info("HEIF: grayscale");
-                        break;
-                    case 2: spdlog::error("HEIF: unexpected channels per plane: 2"); break;
-                    case 3:
-                        format = TYPE_RGB_FLT;
-                        spdlog::info("HEIF: RGB");
-                        break;
-                    case 4:
-                    default:
-                        format = TYPE_RGBA_FLT;
-                        spdlog::info("HEIF: RGBA");
-                        break;
-                    }
-
-                    auto profile_in = cms::open_profile_from_mem(icc_profile);
-
-                    cmsCIExyY       whitepoint;
-                    cmsCIExyYTRIPLE primaries;
-                    cms::extract_chromaticities(profile_in, primaries, whitepoint);
-                    // print out the chromaticities
-                    spdlog::info("HEIF: Applying chromaticities deduced from image's ICC profile:");
-                    spdlog::info("    Red primary: ({}, {})", primaries.Red.x, primaries.Red.y);
-                    spdlog::info("    Green primary: ({}, {})", primaries.Green.x, primaries.Green.y);
-                    spdlog::info("    Blue primary: ({}, {})", primaries.Blue.x, primaries.Blue.y);
-                    spdlog::info("    White point: ({}, {})", whitepoint.x, whitepoint.y);
-                    Imf::addChromaticities(image->header, {Imath::V2f(primaries.Red.x, primaries.Red.y),
-                                                           Imath::V2f(primaries.Green.x, primaries.Green.y),
-                                                           Imath::V2f(primaries.Blue.x, primaries.Blue.y),
-                                                           Imath::V2f(whitepoint.x, whitepoint.y)});
-
-                    auto profile_out = cms::create_linear_RGB_profile(whitepoint, primaries);
-
-                    if (profile_in && profile_out)
-                    {
-                        auto desc = cms::profile_description(profile_in);
-                        spdlog::info("HEIF: ICC profile description: '{}'", desc);
-                        if (auto xform = cms::Transform{cmsCreateTransform(profile_in.get(), format, profile_out.get(),
-                                                                           format, INTENT_ABSOLUTE_COLORIMETRIC,
-                                                                           cpp == 4 ? cmsFLAGS_COPY_ALPHA : 0)})
-                        {
-                            cmsDoTransform(xform.get(), float_pixels.data(), float_pixels.data(), size.x * size.y);
-                            colors_linearized = true;
-                            image->metadata["transfer function"] =
-                                fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
-                        }
-                        else
-                            spdlog::error("HEIF: Could not create color transformation.");
-                    }
-                    else
-                        spdlog::error("HEIF: Could not create ICC profile for color transformation.");
+                    Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
+                                                           Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+                    image->metadata["transfer function"] = tf_description;
+                    colors_linearized                    = true;
                 }
-#endif // HDRVIEW_ENABLE_LCMS2
+                else
+                    image->metadata["transfer function"] = "unknown";
 
                 // copy the interleaved float pixels into the channels
                 for (int c = 0; c < cpp; ++c)
                     image->channels[p * cpp + c].copy_from_interleaved(float_pixels.data(), size.x, size.y, cpp, c,
                                                                        [](float v) { return v; });
-
-                // now check the nclx profile and apply the transfer function
-                if (nclx && !colors_linearized)
-                {
-                    spdlog::info("HEIF: Applying chromaticities stored in image's NCLX profile.");
-                    spdlog::info("    Red primary: ({}, {})", nclx->color_primary_red_x, nclx->color_primary_red_y);
-                    spdlog::info("    Green primary: ({}, {})", nclx->color_primary_green_x,
-                                 nclx->color_primary_green_y);
-                    spdlog::info("    Blue primary: ({}, {})", nclx->color_primary_blue_x, nclx->color_primary_blue_y);
-                    spdlog::info("    White point: ({}, {})", nclx->color_primary_white_x, nclx->color_primary_white_y);
-
-                    Imf::addChromaticities(image->header, {{nclx->color_primary_red_x, nclx->color_primary_red_y},
-                                                           {nclx->color_primary_green_x, nclx->color_primary_green_y},
-                                                           {nclx->color_primary_blue_x, nclx->color_primary_blue_y},
-                                                           {nclx->color_primary_white_x, nclx->color_primary_white_y}});
-
-                    TransferFunction tf;
-                    switch (nclx->transfer_characteristics)
-                    {
-                    case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
-                        spdlog::info("HEIF: Applying {} transfer function", pq_tf);
-                        image->metadata["transfer function"] = pq_tf;
-                        tf                                   = TransferFunction_Rec2100_PQ;
-                        break;
-                    case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
-                        spdlog::info("HEIF: Applying {} transfer function", hlg_tf);
-                        image->metadata["transfer function"] = hlg_tf;
-                        tf                                   = TransferFunction_Rec2100_HLG;
-                        break;
-                    case heif_transfer_characteristic_ITU_R_BT_709_5:
-                        spdlog::info("HEIF: Applying {} transfer function", rec709_2020_tf);
-                        image->metadata["transfer function"] = rec709_2020_tf;
-                        tf                                   = TransferFunction_Rec709_2020;
-                        break;
-                    case heif_transfer_characteristic_unspecified:
-                        spdlog::warn("HEIF: Doesn't specify a transfer function; assuming {}", srgb_tf);
-                        image->metadata["transfer function"] = srgb_tf;
-                        tf                                   = TransferFunction_sRGB;
-                        break;
-                    case heif_transfer_characteristic_IEC_61966_2_1:
-                        spdlog::info("HEIF: Applying {} transfer function", srgb_tf);
-                        image->metadata["transfer function"] = srgb_tf;
-                        tf                                   = TransferFunction_sRGB;
-                        break;
-                    default:
-                        spdlog::error("HEIF: Transfer characteristics {} not implemented. Applying {} "
-                                      "transfer function instead.",
-                                      (int)nclx->transfer_characteristics, srgb_tf);
-                        image->metadata["transfer function"] = srgb_tf;
-                        tf                                   = TransferFunction_sRGB;
-                        break;
-                    }
-
-                    // apply transfer function
-                    if (image->channels.size() <= 2)
-                        image->channels[0].apply([tf](float v, int, int) { return to_linear(v, tf); });
-                    else if (image->channels.size() == 3 || image->channels.size() == 4)
-                    {
-                        // HLG needs to operate on all three channels at once
-                        if (tf == TransferFunction_Rec2100_HLG)
-                        {
-                            int block_size = std::max(1, 1024 * 1024 / size.x);
-                            parallel_for(blocked_range<int>(0, size.y, block_size),
-                                         [r = &image->channels[0], g = &image->channels[1], b = &image->channels[2]](
-                                             int begin_y, int end_y, int unit_index, int thread_index)
-                                         {
-                                             for (int y = begin_y; y < end_y; ++y)
-                                                 for (int x = 0; x < r->width(); ++x)
-                                                 {
-                                                     auto E_p   = float3{(*r)(x, y), (*g)(x, y), (*b)(x, y)};
-                                                     auto E     = EOTF_HLG(E_p) / 255.f;
-                                                     (*r)(x, y) = E[0];
-                                                     (*g)(x, y) = E[1];
-                                                     (*b)(x, y) = E[2];
-                                                 }
-                                         });
-                        }
-                        // The other transfer functions operate independently on color channels
-                        else
-                        {
-                            for (int c = 0; c < 3; ++c)
-                                image->channels[c].apply([tf](float v, int, int) { return to_linear(v, tf); });
-                        }
-                    }
-                    else
-                        spdlog::warn("HEIF: Don't know how to apply transfer function to {} channels",
-                                     image->channels.size());
-                }
             }
 
             spdlog::info("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));

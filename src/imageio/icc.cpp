@@ -1,11 +1,44 @@
-#ifdef HDRVIEW_ENABLE_LCMS2
-#include "cms.h"
+#include "icc.h"
+#include "scheduler.h"
 #include <spdlog/spdlog.h>
+#include <vector>
 
 using std::string;
+using std::vector;
 
-namespace cms
+#ifdef HDRVIEW_ENABLE_LCMS2
+#include <lcms2.h>
+#include <memory>
+#include <string>
+#include <vector>
+
+//
+// Some minimal wrappers around just the Little CMS 2 functionality we need
+//
+
+namespace icc
 {
+
+// Custom deleters for unique_ptr
+struct ProfileDeleter
+{
+    void operator()(cmsHPROFILE p) const { cmsCloseProfile(p); }
+};
+
+struct TransformDeleter
+{
+    void operator()(cmsHTRANSFORM t) const { cmsDeleteTransform(t); }
+};
+
+struct ToneCurveDeleter
+{
+    void operator()(cmsToneCurve *t) const { cmsFreeToneCurve(t); }
+};
+
+// Safe auto-freeing wrappers to LCMS2's opaque types
+using Profile   = std::unique_ptr<std::remove_pointer_t<cmsHPROFILE>, ProfileDeleter>;
+using Transform = std::unique_ptr<std::remove_pointer_t<cmsHTRANSFORM>, TransformDeleter>;
+using ToneCurve = std::unique_ptr<cmsToneCurve, ToneCurveDeleter>;
 
 Profile open_profile_from_mem(const std::vector<uint8_t> &icc_profile)
 {
@@ -68,7 +101,7 @@ cmsCIEXYZ unadapted_white(const Profile &profile)
     return XYZ;
 }
 
-bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE &primaries, cmsCIExyY &whitepoint)
+bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, cmsCIExyY *whitepoint)
 {
     // This code is adapted from libjxl
     // Copyright (c) the JPEG XL Project Authors. All rights reserved.
@@ -122,10 +155,14 @@ bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE &primaries, 
     cmsAdaptToIlluminant(&b, &d50, &wp_unadapted, adapted_b);
 
     // Convert to xyY
-    cmsXYZ2xyY(&primaries.Red, &r);
-    cmsXYZ2xyY(&primaries.Green, &g);
-    cmsXYZ2xyY(&primaries.Blue, &b);
-    cmsXYZ2xyY(&whitepoint, &wp_unadapted);
+    if (primaries)
+    {
+        cmsXYZ2xyY(&primaries->Red, &r);
+        cmsXYZ2xyY(&primaries->Green, &g);
+        cmsXYZ2xyY(&primaries->Blue, &b);
+    }
+    if (whitepoint)
+        cmsXYZ2xyY(whitepoint, &wp_unadapted);
     return true;
 }
 
@@ -141,6 +178,63 @@ string profile_description(const Profile &profile)
     return "";
 }
 
-} // namespace cms
+} // namespace icc
 
 #endif // HDRVIEW_ENABLE_LCMS2
+
+namespace icc
+{
+
+bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description, float2 *red,
+                      float2 *green, float2 *blue, float2 *white)
+{
+#ifndef HDRVIEW_ENABLE_LCMS2
+    return false;
+#else
+    if (icc_profile.empty())
+        return false;
+
+    auto            profile_in = icc::open_profile_from_mem(icc_profile);
+    cmsCIExyY       whitepoint;
+    cmsCIExyYTRIPLE primaries;
+    icc::extract_chromaticities(profile_in, &primaries, &whitepoint);
+    if (red)
+        *red = float2(primaries.Red.x, primaries.Red.y);
+    if (green)
+        *green = float2(primaries.Green.x, primaries.Green.y);
+    if (blue)
+        *blue = float2(primaries.Blue.x, primaries.Blue.y);
+    if (white)
+        *white = float2(whitepoint.x, whitepoint.y);
+
+    auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
+    cmsUInt32Number format      = TYPE_GRAY_FLT;
+    if (size.z == 3)
+        format = TYPE_RGB_FLT;
+    else if (size.z == 4)
+        format = TYPE_RGBA_FLT;
+    auto xform = icc::Transform{
+        cmsCreateTransform(profile_in.get(), format, profile_out.get(), format, INTENT_ABSOLUTE_COLORIMETRIC,
+                           (size.z == 4 ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_NOCACHE)};
+    if (!xform)
+    {
+        spdlog::error("Could not create ICC color transform.");
+        return false;
+    }
+    else
+    {
+        auto desc = icc::profile_description(profile_in);
+        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                     [xf = xform.get(), pixels, size](int start, int end, int unit_index, int thread_index)
+                     {
+                         auto data_p = pixels + start * size.z;
+                         cmsDoTransform(xf, data_p, data_p, (end - start));
+                     });
+        if (tf_description)
+            *tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
+    }
+    return true;
+#endif
+}
+
+} // namespace icc

@@ -39,8 +39,8 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 #include <jxl/resizable_parallel_runner_cxx.h>
 #include <jxl/types.h>
 
-#include "cms.h"
 #include "colorspace.h"
+#include "icc.h"
 #include "timer.h"
 
 static string color_encoding_info(const JxlColorEncoding &enc)
@@ -106,46 +106,52 @@ bool is_jxl_image(istream &is) noexcept
     return ret;
 }
 
-static bool linearize_colors(vector<float> &pixels, int3 size, JxlColorEncoding file_enc, string &tf_description,
-                             Imf::Chromaticities *chromaticities = nullptr)
+static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc, string *tf_description = nullptr,
+                             float2 *red = nullptr, float2 *green = nullptr, float2 *blue = nullptr,
+                             float2 *white = nullptr)
 {
     Timer timer;
     spdlog::info("Linearizing pixel values using encoded profile.");
-    if (chromaticities)
-    {
-        chromaticities->red   = Imath::V2f(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
-        chromaticities->green = Imath::V2f(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
-        chromaticities->blue  = Imath::V2f(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
-        chromaticities->white = Imath::V2f(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
-    }
+    if (red)
+        *red = float2(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
+    if (green)
+        *green = float2(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
+    if (blue)
+        *blue = float2(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
+    if (white)
+        *white = float2(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
 
     float            gamma = file_enc.gamma;
     TransferFunction tf;
+    string           tf_desc;
     switch (file_enc.transfer_function)
     {
     case JXL_TRANSFER_FUNCTION_709:
-        tf_description = rec709_2020_tf;
-        tf             = TransferFunction_Rec709_2020;
+        tf_desc = rec709_2020_tf;
+        tf      = TransferFunction_Rec709_2020;
         break;
     case JXL_TRANSFER_FUNCTION_PQ:
-        tf_description = pq_tf;
-        tf             = TransferFunction_Rec2100_PQ;
+        tf_desc = pq_tf;
+        tf      = TransferFunction_Rec2100_PQ;
         break;
     case JXL_TRANSFER_FUNCTION_HLG:
-        tf_description = hlg_tf;
-        tf             = TransferFunction_Rec2100_HLG;
+        tf_desc = hlg_tf;
+        tf      = TransferFunction_Rec2100_HLG;
         break;
     case JXL_TRANSFER_FUNCTION_LINEAR:
-        tf_description = linear_tf;
-        tf             = TransferFunction_Linear;
+        tf_desc = linear_tf;
+        tf      = TransferFunction_Linear;
         break;
     case JXL_TRANSFER_FUNCTION_GAMMA:
-        tf_description = fmt::format("{} ({})", gamma_tf, gamma);
-        tf             = TransferFunction_Gamma;
+        tf_desc = fmt::format("{} ({})", gamma_tf, gamma);
+        tf      = TransferFunction_Gamma;
         break;
     case JXL_TRANSFER_FUNCTION_SRGB: [[fallthrough]];
-    default: tf_description = srgb_tf; tf = TransferFunction_sRGB;
+    default: tf_desc = srgb_tf; tf = TransferFunction_sRGB;
     }
+
+    if (tf_description)
+        *tf_description = tf_desc;
 
     if (tf == TransferFunction_Rec2100_HLG && size.z == 3)
     {
@@ -153,7 +159,7 @@ static bool linearize_colors(vector<float> &pixels, int3 size, JxlColorEncoding 
         parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                      [&pixels](int start, int end, int, int)
                      {
-                         auto rgb_pixels = reinterpret_cast<float3 *>(pixels.data() + start * 3);
+                         auto rgb_pixels = reinterpret_cast<float3 *>(pixels + start * 3);
                          for (int i = start; i < end; ++i) rgb_pixels[i] = EOTF_HLG(rgb_pixels[i]) / 255.f;
                      });
     }
@@ -166,70 +172,7 @@ static bool linearize_colors(vector<float> &pixels, int3 size, JxlColorEncoding 
                          for (int i = start; i < end; ++i) pixels[i] = to_linear(pixels[i], tf, gamma);
                      });
     }
-    spdlog::debug("Linearizing pixel data using encoded profile took {} seconds", (timer.elapsed() / 1000.f));
     return true;
-}
-
-static bool linearize_colors(vector<float> &pixels, int3 size, const vector<uint8_t> &icc_profile,
-                             string &tf_description, Imf::Chromaticities *chromaticities = nullptr)
-{
-    if (icc_profile.empty())
-        return false;
-
-#ifndef HDRVIEW_ENABLE_LCMS2
-    return false;
-#else
-    Timer timer;
-    spdlog::info("Linearizing pixel values using image's ICC color profile.");
-
-    auto            profile_in = cms::open_profile_from_mem(icc_profile);
-    cmsCIExyY       whitepoint;
-    cmsCIExyYTRIPLE primaries;
-    cms::extract_chromaticities(profile_in, primaries, whitepoint);
-    if (chromaticities)
-    {
-        // print out the chromaticities
-        spdlog::info("Applying chromaticities deduced from image's ICC profile:");
-        spdlog::info("    Red primary: ({}, {})", primaries.Red.x, primaries.Red.y);
-        spdlog::info("    Green primary: ({}, {})", primaries.Green.x, primaries.Green.y);
-        spdlog::info("    Blue primary: ({}, {})", primaries.Blue.x, primaries.Blue.y);
-        spdlog::info("    White point: ({}, {})", whitepoint.x, whitepoint.y);
-        chromaticities->red   = Imath::V2f(primaries.Red.x, primaries.Red.y);
-        chromaticities->green = Imath::V2f(primaries.Green.x, primaries.Green.y);
-        chromaticities->blue  = Imath::V2f(primaries.Blue.x, primaries.Blue.y);
-        chromaticities->white = Imath::V2f(whitepoint.x, whitepoint.y);
-    }
-
-    auto            profile_out = cms::create_linear_RGB_profile(whitepoint, primaries);
-    cmsUInt32Number format      = TYPE_GRAY_FLT;
-    if (size.z == 3)
-        format = TYPE_RGB_FLT;
-    else if (size.z == 4)
-        format = TYPE_RGBA_FLT;
-    auto xform = cms::Transform{
-        cmsCreateTransform(profile_in.get(), format, profile_out.get(), format, INTENT_ABSOLUTE_COLORIMETRIC,
-                           (size.z == 4 ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_NOCACHE)};
-    if (!xform)
-    {
-        spdlog::error("Could not create ICC color transform.");
-        return false;
-    }
-    else
-    {
-        auto desc = cms::profile_description(profile_in);
-        spdlog::info("ICC profile description: '{}'", desc);
-
-        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                     [xf = xform.get(), &pixels, size](int start, int end, int unit_index, int thread_index)
-                     {
-                         auto data_p = pixels.data() + start * size.z;
-                         cmsDoTransform(xf, data_p, data_p, (end - start));
-                     });
-        tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
-    }
-    spdlog::debug("Linearizing pixel data using image's ICC color profile took {} seconds", (timer.elapsed() / 1000.f));
-    return true;
-#endif // HDRVIEW_ENABLE_LCMS2
 }
 
 //
@@ -507,22 +450,23 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
                                                            file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG);
 
-                string              tf_description;
-                Imf::Chromaticities chromaticities;
-                if ((prefer_icc && linearize_colors(pixels, size, icc_profile, tf_description, &chromaticities)) ||
-                    linearize_colors(pixels, size, file_enc, tf_description, &chromaticities))
+                string tf_description;
+                float2 red, green, blue, white;
+                if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &red,
+                                                         &green, &blue, &white)) ||
+                    linearize_colors(pixels.data(), size, file_enc, &tf_description, &red, &green, &blue, &white))
                 {
-                    Imf::addChromaticities(image->header, chromaticities);
+                    Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
+                                                           Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
                     image->metadata["transfer function"] = tf_description;
                 }
                 else
                     image->metadata["transfer function"] = "unknown";
 
-                Timer timer;
+                // copy the interleaved float pixels into the channels
                 for (int c = 0; c < size.z; ++c)
                     image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c,
                                                              [](float v) { return v; });
-                spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
                 images.push_back(image);
             }
