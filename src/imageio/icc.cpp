@@ -176,19 +176,9 @@ string profile_description(const Profile &profile)
     return "";
 }
 
-} // namespace icc
-
-#endif // HDRVIEW_ENABLE_LCMS2
-
-namespace icc
-{
-
 bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description, float2 *red,
                       float2 *green, float2 *blue, float2 *white)
 {
-#ifndef HDRVIEW_ENABLE_LCMS2
-    return false;
-#else
     if (icc_profile.empty())
         return false;
 
@@ -205,15 +195,17 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     if (white)
         *white = float2(whitepoint.x, whitepoint.y);
 
+    spdlog::error("Converting pixel values using ICC profile.");
+
     auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
     cmsUInt32Number format      = TYPE_GRAY_FLT;
     if (size.z == 3)
         format = TYPE_RGB_FLT;
     else if (size.z == 4)
         format = TYPE_RGBA_FLT;
+    auto flags = (size.z == 4 || size.z == 2 ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_NOCACHE;
     auto xform = icc::Transform{
-        cmsCreateTransform(profile_in.get(), format, profile_out.get(), format, INTENT_ABSOLUTE_COLORIMETRIC,
-                           (size.z == 4 ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC | cmsFLAGS_NOCACHE)};
+        cmsCreateTransform(profile_in.get(), format, profile_out.get(), format, INTENT_ABSOLUTE_COLORIMETRIC, flags)};
     if (!xform)
     {
         spdlog::error("Could not create ICC color transform.");
@@ -232,7 +224,21 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
             *tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
     }
     return true;
-#endif
 }
 
 } // namespace icc
+
+#else
+
+namespace icc
+{
+
+bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description, float2 *red,
+                      float2 *green, float2 *blue, float2 *white)
+{
+    return false;
+}
+
+} // namespace icc
+
+#endif // HDRVIEW_ENABLE_LCMS2

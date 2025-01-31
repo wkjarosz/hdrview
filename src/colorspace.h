@@ -332,6 +332,8 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     }
 }
 
+void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
+
 inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
 {
     return sRGB ? LinearToSRGB(color) : LinearToGamma(color, Color3(1.f / gamma));

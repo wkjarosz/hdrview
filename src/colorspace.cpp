@@ -6,6 +6,7 @@
 
 #include "colorspace.h"
 #include "common.h"
+#include "scheduler.h"
 #include <cmath>
 #include <float.h>
 
@@ -66,7 +67,7 @@ static const char* _color_gammut_names[] = {
 
 const char *linear_tf      = "Linear";
 const char *gamma_tf       = "Gamma";
-const char *srgb_tf        = "sRGB (IEC 61966-2-1)";
+const char *srgb_tf        = "sRGB IEC61966-2.1";
 const char *rec709_2020_tf = "Rec709/2020";
 const char *pq_tf          = "Rec2100 PQ";
 const char *hlg_tf         = "Rec2100 HLG";
@@ -321,4 +322,38 @@ uint8_t f32_to_byte(float v, int x, int y, bool sRGB, bool dither)
 {
     return (uint8_t)clamp((sRGB ? LinearToSRGB(v) : v) * 255.0f + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f,
                           255.0f);
+}
+
+void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
+{
+    if (tf == TransferFunction_Rec2100_HLG && (size.z == 3 || size.z == 4))
+    {
+        // HLG needs to operate on all three channels at once
+        if (size.z == 3)
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i) rgb[i] = EOTF_HLG(rgb[i]) / 255.f;
+                         });
+        else // size.z == 4
+            // don't modify the alpha channel
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [rgb = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i) rgb[i].xyz() = EOTF_HLG(rgb[i].xyz()) / 255.f;
+                         });
+    }
+    else
+    {
+        // assume this means we have an alpha channel, which we pass through without modification
+        int num_color_channels = (size.z == 2 || size.z == 4) ? size.z - 1 : size.z;
+        // other transfer functions apply to each channel independently
+        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024 / size.z),
+                     [&pixels, tf, gamma, size, num_color_channels](int start, int end, int, int)
+                     {
+                         for (int i = start; i < end; ++i)
+                             for (int c = 0; c < num_color_channels; ++c)
+                                 pixels[i * size.z + c] = to_linear(pixels[i * size.z + c], tf, gamma);
+                     });
+    }
 }

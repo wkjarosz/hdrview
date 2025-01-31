@@ -153,25 +153,8 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     if (tf_description)
         *tf_description = tf_desc;
 
-    if (tf == TransferFunction_Rec2100_HLG && size.z == 3)
-    {
-        // HLG needs to operate on all three channels at once
-        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                     [&pixels](int start, int end, int, int)
-                     {
-                         auto rgb_pixels = reinterpret_cast<float3 *>(pixels + start * 3);
-                         for (int i = start; i < end; ++i) rgb_pixels[i] = EOTF_HLG(rgb_pixels[i]) / 255.f;
-                     });
-    }
-    else
-    {
-        // other transfer functions apply to each channel independently
-        parallel_for(blocked_range<int>(0, size.x * size.y * size.z, 1024 * 1024),
-                     [&pixels, tf, gamma](int start, int end, int, int)
-                     {
-                         for (int i = start; i < end; ++i) pixels[i] = to_linear(pixels[i], tf, gamma);
-                     });
-    }
+    to_linear(pixels, size, tf, gamma);
+
     return true;
 }
 

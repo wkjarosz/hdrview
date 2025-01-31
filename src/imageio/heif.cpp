@@ -44,8 +44,6 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
     if (!nclx)
         return false;
 
-    Timer timer;
-    spdlog::info("Linearizing pixel values using nclx.");
     if (red)
         *red = float2(nclx->color_primary_red_x, nclx->color_primary_red_y);
     if (green)
@@ -83,25 +81,8 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
     if (tf_description)
         *tf_description = tf_desc;
 
-    if (tf == TransferFunction_Rec2100_HLG && size.z == 3)
-    {
-        // HLG needs to operate on all three channels at once
-        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                     [&pixels](int start, int end, int, int)
-                     {
-                         auto rgb_pixels = reinterpret_cast<float3 *>(pixels + start * 3);
-                         for (int i = start; i < end; ++i) rgb_pixels[i] = EOTF_HLG(rgb_pixels[i]) / 255.f;
-                     });
-    }
-    else
-    {
-        // other transfer functions apply to each channel independently
-        parallel_for(blocked_range<int>(0, size.x * size.y * size.z, 1024 * 1024),
-                     [&pixels, tf, gamma](int start, int end, int, int)
-                     {
-                         for (int i = start; i < end; ++i) pixels[i] = to_linear(pixels[i], tf, gamma);
-                     });
-    }
+    to_linear(pixels, size, tf, gamma);
+
     return true;
 }
 
@@ -285,7 +266,7 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 }
 
                 // only prefer the nclx if it exists and it specifies an HDR transfer function
-                bool prefer_icc =
+                bool prefer_icc = // false;
                     !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
 
