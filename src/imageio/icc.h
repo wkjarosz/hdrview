@@ -6,6 +6,7 @@
 #pragma once
 
 #include "fwd.h"
+#include <string>
 
 namespace icc
 {
