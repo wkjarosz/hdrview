@@ -193,9 +193,8 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 
     std::vector<float>   pixels;
     JxlColorEncoding     file_enc;
-    JxlColorEncoding     target_enc;
     JxlBasicInfo         info;
-    std::vector<uint8_t> icc_profile, target_profile;
+    std::vector<uint8_t> icc_profile;
     bool                 has_encoded_profile = false;
     std::vector<string>  extra_channel_names;
     int                  first_alpha = -1;
@@ -233,7 +232,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 throw invalid_argument{"JPEG XL decoder error, already provided all input"};
             else if (status == JXL_DEC_BASIC_INFO)
             {
-                spdlog::warn("JXL_DEC_BASIC_INFO");
+                spdlog::debug("JXL_DEC_BASIC_INFO");
                 if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info))
                     throw invalid_argument{"JxlDecoderGetBasicInfo failed"};
 
@@ -321,7 +320,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             }
             else if (status == JXL_DEC_COLOR_ENCODING)
             {
-                spdlog::warn("JXL_DEC_COLOR_ENCODING");
+                spdlog::debug("JXL_DEC_COLOR_ENCODING");
                 // Get the ICC color profile of the pixel data
                 size_t icc_size;
 
@@ -339,11 +338,6 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
                     throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
 
-                target_profile.resize(icc_size);
-                if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
-                                                                      target_profile.data(), target_profile.size()))
-                    throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
-
                 if (JXL_DEC_SUCCESS ==
                     JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &file_enc))
                 {
@@ -352,19 +346,10 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 }
                 else
                     spdlog::warn("JPEG XL file has no encoded color profile. Colors distortions may occur.");
-
-                if (JXL_DEC_SUCCESS ==
-                    JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &target_enc))
-                {
-                    spdlog::info("libJXL understands that we set a target color encoding:\n{}",
-                                 color_encoding_info(target_enc));
-                }
-                else
-                    spdlog::warn("libJXL does NOT understand that we set a target color encoding");
             }
             else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
             {
-                spdlog::warn("JXL_DEC_NEED_IMAGE_OUT_BUFFER");
+                spdlog::debug("JXL_DEC_NEED_IMAGE_OUT_BUFFER");
 
                 spdlog::info("size: {}x{}x{}", size.x, size.y, size.z);
 
@@ -375,14 +360,12 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size))
                     throw invalid_argument{"JxlDecoderImageOutBufferSize failed"};
 
-                spdlog::info("after1");
                 auto num_floats    = info.xsize * info.ysize * format.num_channels;
                 auto expected_size = num_floats * sizeof(float);
                 if (buffer_size != expected_size)
                     throw invalid_argument{
                         fmt::format("Invalid out buffer size {}. Expected {}", buffer_size, expected_size)};
 
-                spdlog::info("after2");
                 pixels.resize(num_floats);
                 void *pixels_buffer = static_cast<void *>(pixels.data());
                 if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format, pixels_buffer, expected_size))
@@ -395,7 +378,6 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 image->metadata["loader"]      = "libjxl";
                 image->metadata["bit depth"]   = fmt::format("{} bits per sample", info.bits_per_sample);
 
-                spdlog::info("after3");
                 for (uint32_t i = 0; i < info.num_extra_channels; ++i)
                 {
                     spdlog::info("Adding extra channel buffer for channel {}: '{}'", i, extra_channel_names[i]);
@@ -427,7 +409,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             }
             else if (status == JXL_DEC_FULL_IMAGE)
             {
-                spdlog::warn("JXL_DEC_FULL_IMAGE");
+                spdlog::debug("JXL_DEC_FULL_IMAGE");
 
                 // only prefer the encoded profile if it exists and it specifies an HDR transfer function
                 bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
@@ -451,12 +433,22 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                     image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c,
                                                              [](float v) { return v; });
 
+                // for (size_t i = size.z; i < image->channels.size(); ++i)
+                // {
+                //     auto &channel = image->channels[i];
+                //     if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
+                //         linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
+                //     {
+                //         //
+                //     }
+                // }
+
                 images.push_back(image);
             }
             else if (status == JXL_DEC_FRAME)
             {
                 // Nothing to do
-                spdlog::warn("JXL_DEC_FRAME");
+                spdlog::debug("JXL_DEC_FRAME");
 
                 JxlFrameHeader frame_header;
                 if (JXL_DEC_SUCCESS != JxlDecoderGetFrameHeader(dec.get(), &frame_header))

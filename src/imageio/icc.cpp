@@ -195,8 +195,6 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     if (white)
         *white = float2(whitepoint.x, whitepoint.y);
 
-    spdlog::error("Converting pixel values using ICC profile.");
-
     auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
     cmsUInt32Number format      = TYPE_GRAY_FLT;
     if (size.z == 3)

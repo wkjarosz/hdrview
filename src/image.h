@@ -226,16 +226,16 @@ struct ChannelGroup
 public:
     enum Type : int
     {
-        RGBA_Channels = 0,
-        RGB_Channels,
-        XYZA_Channels,
-        XYZ_Channels,
-        YCA_Channels,
-        YC_Channels,
-        YA_Channels,
-        UVorXY_Channels,
-        Z_Channel,
-        Single_Channel
+        RGBA_Channels   = 0,
+        RGB_Channels    = 1,
+        XYZA_Channels   = 2,
+        XYZ_Channels    = 3,
+        YCA_Channels    = 4,
+        YC_Channels     = 5,
+        YA_Channels     = 6,
+        UVorXY_Channels = 7,
+        Z_Channel       = 8,
+        Single_Channel  = 9
     };
 
     std::string name;                 //!< One of the comma-separated recognized channel group names (e.g. 'R,G,B,A')

@@ -238,32 +238,37 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 
             spdlog::info("Copying image channels...");
             Timer timer;
+            spdlog::info("Number of planes: {}", num_planes);
             // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
             for (int p = 0; p < num_planes; ++p)
             {
                 int            bytes_per_line = 0;
                 const uint8_t *pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
                 int            bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
-                int            bpp            = himage.get_bits_per_pixel_range(out_planes[p]);
-                spdlog::info("Bits per pixel: {} {}", bpp, bpp_storage);
-                spdlog::info("Bytes per line: {}", bytes_per_line);
-                if (bpp_storage != cpp * 16)
-                    throw runtime_error(
-                        fmt::format("HEIF: Got {} bits per pixel, but expected {}", bpp_storage, cpp * 16));
+                int            bpc            = himage.get_bits_per_pixel_range(out_planes[p]);
+                spdlog::debug(
+                    "Bits per pixel: {}; Bits per pixel storage: {}; Channels per pixel: {}; Bytes per line: {}", bpc,
+                    bpp_storage, cpp, bytes_per_line);
+                if (bpp_storage != cpp * 16 && bpp_storage != cpp * 8)
+                    throw runtime_error(fmt::format("Unsupported bits per pixel: {}", bpp_storage));
                 if (p == 0)
-                    image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * bpp, bpp);
-
-                float bppDiv = 1.f / ((1 << bpp) - 1);
+                    image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * bpc, bpc);
+                float bpc_div = 1.f / ((1 << bpc) - 1);
 
                 // copy pixels into a contiguous float buffer and normalize values to [0,1]
+                spdlog::debug("Copying to continuguous float buffer");
                 vector<float> float_pixels(size.x * size.y * cpp);
+                bool          is_16bit = bpp_storage == cpp * 16;
                 for (int y = 0; y < size.y; ++y)
                 {
-                    auto row = reinterpret_cast<const uint16_t *>(pixels + y * bytes_per_line);
+                    auto row8  = reinterpret_cast<const uint8_t *>(pixels + y * bytes_per_line);
+                    auto row16 = reinterpret_cast<const uint16_t *>(pixels + y * bytes_per_line);
                     for (int x = 0; x < size.x; ++x)
                         for (int c = 0; c < cpp; ++c)
-                            float_pixels[(y * size.x + x) * cpp + c] = row[cpp * x + c] * bppDiv;
+                            float_pixels[(y * size.x + x) * cpp + c] =
+                                bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
                 }
+                spdlog::debug("done copying to continuguous float buffer");
 
                 // only prefer the nclx if it exists and it specifies an HDR transfer function
                 bool prefer_icc = // false;
@@ -276,7 +281,8 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                 // Then try the nclx profile
                 if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
                                                          &tf_description, &red, &green, &blue, &white)) ||
-                    linearize_colors(float_pixels.data(), size, nclx, &tf_description, &red, &green, &blue, &white))
+                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &red, &green,
+                                     &blue, &white))
                 {
                     Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
                                                            Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
@@ -323,7 +329,7 @@ bool is_heif_image(istream &is) noexcept
 
         heif_filetype_result filetype_check = heif_check_filetype(magic, std::min(sizeof(magic), (size_t)is.gcount()));
         if (filetype_check == heif_filetype_no)
-            throw invalid_argument{"HEIF: Not a HEIF/AVIF file"};
+            throw invalid_argument{"Not a HEIF/AVIF file"};
         ret = true;
         if (filetype_check == heif_filetype_yes_unsupported)
             spdlog::warn("This is an unsupported HEIF/AVIF file. Reading will probably fail.");
