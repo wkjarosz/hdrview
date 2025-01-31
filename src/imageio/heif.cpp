@@ -284,8 +284,6 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                             float_pixels[(y * size.x + x) * cpp + c] = row[cpp * x + c] * bppDiv;
                 }
 
-                bool colors_linearized = false;
-
                 // only prefer the nclx if it exists and it specifies an HDR transfer function
                 bool prefer_icc =
                     !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
@@ -302,7 +300,6 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                     Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
                                                            Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
                     image->metadata["transfer function"] = tf_description;
-                    colors_linearized                    = true;
                 }
                 else
                     image->metadata["transfer function"] = "unknown";
