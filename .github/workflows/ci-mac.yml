@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif imath cli11
+        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif imath cli11 spdlog
 
       - uses: actions/checkout@v4
         with:
