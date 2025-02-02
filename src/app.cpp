@@ -1596,14 +1596,13 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
     if (!img)
         return;
 
-    int    group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
-    auto  &group           = img->groups[group_idx];
-    float4 color32         = img->raw_pixel(pixel, target);
-    float4 displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
-                                               hdrview()->gamma_live(), hdrview()->sRGB());
-    ImU32  hex =
-        ImGui::ColorConvertFloat4ToU32(ImGui::ColorConvertU32ToFloat4(ImGui::ColorConvertFloat4ToU32(displayed_color)));
-    int4 ldr_color = int4{float4{ImGui::ColorConvertU32ToFloat4(hex)} * 255.f};
+    int      group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
+    auto    &group           = img->groups[group_idx];
+    float4   color32         = img->raw_pixel(pixel, target);
+    float4   displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
+                                                 hdrview()->gamma_live(), hdrview()->sRGB());
+    uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
+    int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
 
     ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
     if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))
@@ -3207,7 +3206,7 @@ void HDRViewApp::draw_about_dialog()
                                          "https://github.com/strukturag/libheif");
 #endif
 #ifdef HDRVIEW_ENABLE_LCMS2
-                    item_and_description("LCMS2", "LittleCMS color management engine.",
+                    item_and_description("lcms2", "LittleCMS color management engine.",
                                          "https://github.com/mm2/Little-CMS");
 #endif
 #ifdef __EMSCRIPTEN__

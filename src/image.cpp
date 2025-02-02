@@ -893,12 +893,21 @@ float4 Image::shaded_pixel(int2 p, Target target, float gain, float gamma, bool 
         for (int c = 0; c < group.num_channels; ++c) value[c] = channels[group.channels[c]](p - data_window.min);
         if (group.num_channels == 1) // if group has 1 channel, replicate it across RGB
             value[1] = value[2] = value[0];
-        else if (group.num_channels == 2) // if group has 2 channels, make third channel black
-            value[2] = 0.f;
+        else if (group.num_channels == 2)
+        {
+            if (group.type == ChannelGroup::YA_Channels)
+            {
+                value[3]    = value[1];
+                value.xyz() = YCToRGB(float3{0.f, value[0], 0.f}, luminance_weights);
+                spdlog::info("YA channel group: {}", value);
+            }
+            else
+                value[2] = 0.f;
+        }
         if (group.type == ChannelGroup::YCA_Channels || group.type == ChannelGroup::YC_Channels)
             value.xyz() = YCToRGB(value.xyz(), luminance_weights);
     }
 
     value.xyz() = mul(M_to_Rec709, value.xyz());
-    return tonemap(float4{gain * value.xyz(), 1.f}, gamma, sRGB);
+    return tonemap(float4{gain * value.xyz(), value.w}, gamma, sRGB);
 }

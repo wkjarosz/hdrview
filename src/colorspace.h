@@ -294,10 +294,8 @@ inline la::vec<Real, 3> EOTF_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0)
 
 float3 YCToRGB(float3 input, float3 Yw);
 float3 RGBToYC(float3 input, float3 Yw);
-void   SRGBToLinear(float *r, float *g, float *b);
 Color3 SRGBToLinear(const Color3 &c);
 Color4 SRGBToLinear(const Color4 &c);
-void   LinearToSRGB(float *r, float *g, float *b);
 Color3 LinearToSRGB(const Color3 &c);
 Color4 LinearToSRGB(const Color4 &c);
 Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
@@ -354,3 +352,26 @@ inline float byte_to_f32(float v, bool linearize = true)
 }
 
 uint8_t f32_to_byte(float v, int x, int y, bool sRGB = true, bool dither = true);
+
+#define HDRVIEW_COL32_R_SHIFT 24
+#define HDRVIEW_COL32_G_SHIFT 16
+#define HDRVIEW_COL32_B_SHIFT 8
+#define HDRVIEW_COL32_A_SHIFT 0
+#define HDRVIEW_COL32_A_MASK  0x000000FF
+
+inline float4 color_u32_to_f128(uint32_t in)
+{
+    float s = 1.0f / 255.0f;
+    return float4(((in >> HDRVIEW_COL32_R_SHIFT) & 0xFF) * s, ((in >> HDRVIEW_COL32_G_SHIFT) & 0xFF) * s,
+                  ((in >> HDRVIEW_COL32_B_SHIFT) & 0xFF) * s, ((in >> HDRVIEW_COL32_A_SHIFT) & 0xFF) * s);
+}
+
+inline uint32_t color_f128_to_u32(const float4 &in)
+{
+    uint32_t out;
+    out = ((uint32_t)(clamp01(in.x) * 255.f + 0.5f)) << HDRVIEW_COL32_R_SHIFT;
+    out |= ((uint32_t)(clamp01(in.y) * 255.f + 0.5f)) << HDRVIEW_COL32_G_SHIFT;
+    out |= ((uint32_t)(clamp01(in.z) * 255.f + 0.5f)) << HDRVIEW_COL32_B_SHIFT;
+    out |= ((uint32_t)(clamp01(in.w) * 255.f + 0.5f)) << HDRVIEW_COL32_A_SHIFT;
+    return out;
+}

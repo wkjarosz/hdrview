@@ -269,19 +269,6 @@ float3 RGBToYC(float3 input, float3 Yw)
     return output;
 }
 
-void sRGBToLinear(float *r, float *g, float *b)
-{
-    *r = SRGBToLinear(*r);
-    *g = SRGBToLinear(*g);
-    *b = SRGBToLinear(*b);
-}
-void LinearToSRGB(float *r, float *g, float *b)
-{
-    *r = LinearToSRGB(*r);
-    *g = LinearToSRGB(*g);
-    *b = LinearToSRGB(*b);
-}
-
 Color3 LinearToSRGB(const Color3 &c) { return Color3(LinearToSRGB(c.x), LinearToSRGB(c.y), LinearToSRGB(c.z)); }
 Color4 LinearToSRGB(const Color4 &c) { return Color4(LinearToSRGB(c.xyz()), c.w); }
 Color3 SRGBToLinear(const Color3 &c) { return Color3(SRGBToLinear(c.x), SRGBToLinear(c.y), SRGBToLinear(c.z)); }

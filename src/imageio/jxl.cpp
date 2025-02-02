@@ -191,16 +191,16 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         throw invalid_argument{
             fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
 
-    std::vector<float>   pixels;
-    JxlColorEncoding     file_enc;
-    JxlBasicInfo         info;
-    std::vector<uint8_t> icc_profile;
-    bool                 has_encoded_profile = false;
-    std::vector<string>  extra_channel_names;
-    int                  first_alpha = -1;
-    int3                 size{0, 0, 0};
-    string               frame_name;
-    int                  frame_number = 0;
+    std::vector<float>               pixels;
+    JxlColorEncoding                 file_enc;
+    JxlBasicInfo                     info;
+    std::vector<uint8_t>             icc_profile;
+    bool                             has_encoded_profile = false;
+    std::vector<JxlExtraChannelInfo> extra_channel_infos;
+    std::vector<string>              extra_channel_names;
+    int3                             size{0, 0, 0};
+    string                           frame_name;
+    int                              frame_number = 0;
 
     // CmsData m_cms;
 
@@ -250,21 +250,17 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 
                 int count_alpha = 0, count_depth = 0, count_spot = 0, count_mask = 0, count_black = 0, count_cfa = 0,
                     count_thermal = 0;
+                extra_channel_infos.resize(info.num_extra_channels);
                 extra_channel_names.resize(info.num_extra_channels);
                 for (uint32_t i = 0; i < info.num_extra_channels; ++i)
                 {
-                    JxlExtraChannelInfo eci;
+                    auto &eci = extra_channel_infos[i];
                     if (JXL_DEC_SUCCESS != JxlDecoderGetExtraChannelInfo(dec.get(), i, &eci))
                     {
                         spdlog::error("JxlDecoderGetExtraChannelInfo failed");
                         continue;
                     }
 
-                    // save the index of the first encountered alpha channel
-                    if (eci.type == JXL_CHANNEL_ALPHA && first_alpha < 0)
-                        first_alpha = i;
-
-                    string       channel_name;
                     vector<char> name(eci.name_length + 1, 0);
                     // first try to create the channel name from the name in the codestream
                     if (eci.name_length &&
@@ -433,21 +429,26 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                     image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c,
                                                              [](float v) { return v; });
 
-                // for (size_t i = size.z; i < image->channels.size(); ++i)
-                // {
-                //     auto &channel = image->channels[i];
-                //     if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
-                //         linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
-                //     {
-                //         //
-                //     }
-                // }
+                for (size_t i = size.z; i < image->channels.size(); ++i)
+                {
+                    auto &channel      = image->channels[i];
+                    auto &channel_info = extra_channel_infos[i - size.z];
+
+                    // alpha channels don't have transfer function applied
+                    if (channel_info.type == JXL_CHANNEL_ALPHA)
+                        continue;
+
+                    if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
+                        linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
+                    {
+                        //
+                    }
+                }
 
                 images.push_back(image);
             }
             else if (status == JXL_DEC_FRAME)
             {
-                // Nothing to do
                 spdlog::debug("JXL_DEC_FRAME");
 
                 JxlFrameHeader frame_header;
