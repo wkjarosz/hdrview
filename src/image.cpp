@@ -614,7 +614,7 @@ void Image::build_layers_and_groups()
                 int4 group_channels;
                 for (size_t i2 = 0; i2 < found.size(); ++i2)
                 {
-                    group_channels[i2] = found[(int)i2]->second;
+                    group_channels[(int)i2] = found[(int)i2]->second;
                     spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 

@@ -31,6 +31,10 @@ enum class VariableType
 };
 
 /// Convert from a C++ type to an element of \ref VariableType
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
 template <typename T>
 constexpr VariableType get_type()
 {
@@ -61,6 +65,9 @@ constexpr VariableType get_type()
     {
         return VariableType::Invalid;
     }
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 }
 
 /// Return the size in bytes associated with a specific variable type
