@@ -597,7 +597,7 @@ void Shader::draw_array(PrimitiveType primitive_type, size_t offset, size_t coun
                                (const void *)(offset * sizeof(uint32_t))));
         else
             CHK(glDrawElementsInstanced(primitive_type_gl, (GLsizei)count, GL_UNSIGNED_INT,
-                                        (const void *)(offset * sizeof(uint32_t)), instances));
+                                        (const void *)(offset * sizeof(uint32_t)), (GLsizei)instances));
     }
 }
 

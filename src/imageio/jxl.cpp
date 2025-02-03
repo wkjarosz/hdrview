@@ -121,7 +121,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     if (white)
         *white = float2((float)file_enc.white_point_xy[0], (float)file_enc.white_point_xy[1]);
 
-    float            gamma = file_enc.gamma;
+    float            gamma = (float)file_enc.gamma;
     TransferFunction tf;
     string           tf_desc;
     switch (file_enc.transfer_function)
@@ -352,20 +352,23 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                 uint32_t num_channels = info.num_color_channels; // + (info.alpha_bits ? 1 : 0);
                 format                = {num_channels, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
-                size_t buffer_size;
-                if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size))
-                    throw invalid_argument{"JxlDecoderImageOutBufferSize failed"};
+                {
+                    size_t buffer_size;
+                    if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size))
+                        throw invalid_argument{"JxlDecoderImageOutBufferSize failed"};
 
-                auto num_floats    = info.xsize * info.ysize * format.num_channels;
-                auto expected_size = num_floats * sizeof(float);
-                if (buffer_size != expected_size)
-                    throw invalid_argument{
-                        fmt::format("Invalid out buffer size {}. Expected {}", buffer_size, expected_size)};
+                    auto num_floats    = info.xsize * info.ysize * format.num_channels;
+                    auto expected_size = num_floats * sizeof(float);
+                    if (buffer_size != expected_size)
+                        throw invalid_argument{
+                            fmt::format("Invalid out buffer size {}. Expected {}", buffer_size, expected_size)};
 
-                pixels.resize(num_floats);
-                void *pixels_buffer = static_cast<void *>(pixels.data());
-                if (JXL_DEC_SUCCESS != JxlDecoderSetImageOutBuffer(dec.get(), &format, pixels_buffer, expected_size))
-                    throw invalid_argument{"JxlDecoderSetImageOutBuffer failed"};
+                    pixels.resize(num_floats);
+                    void *pixels_buffer = static_cast<void *>(pixels.data());
+                    if (JXL_DEC_SUCCESS !=
+                        JxlDecoderSetImageOutBuffer(dec.get(), &format, pixels_buffer, expected_size))
+                        throw invalid_argument{"JxlDecoderSetImageOutBuffer failed"};
+                }
 
                 image                          = make_shared<Image>(size.xy(), size.z);
                 image->filename                = filename;

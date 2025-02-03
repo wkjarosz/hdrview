@@ -171,7 +171,7 @@ string profile_description(const Profile &profile)
     {
         auto              size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
         std::vector<char> desc_str((size_t)size);
-        cmsMLUgetASCII(desc, "en", "US", desc_str.data(), desc_str.size());
+        cmsMLUgetASCII(desc, "en", "US", desc_str.data(), (cmsUInt32Number)desc_str.size());
         return string(desc_str.data());
     }
     return "";
@@ -214,7 +214,7 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     {
         auto desc = icc::profile_description(profile_in);
         parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                     [xf = xform.get(), pixels, size](int start, int end, int unit_index, int thread_index)
+                     [xf = xform.get(), pixels, size](int start, int end, int, int)
                      {
                          auto data_p = pixels + start * size.z;
                          cmsDoTransform(xf, data_p, data_p, (end - start));

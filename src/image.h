@@ -176,7 +176,7 @@ public:
         y_stride       = y_stride == 0 ? w * n : y_stride;
         int block_size = std::max(1, 1024 * 1024 / w);
         parallel_for(blocked_range<int>(0, h, block_size),
-                     [this, n, c, w, &func, &data, y_stride](int begin_y, int end_y, int unit_index, int thread_index)
+                     [this, n, c, w, &func, &data, y_stride](int begin_y, int end_y, int, int)
                      {
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < w; ++x) this->operator()(x, y) = func(data[n * x + c + y * y_stride]);

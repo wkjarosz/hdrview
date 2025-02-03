@@ -114,9 +114,9 @@ void Image::draw_histogram()
             auto calc_pixel = [x_limits, avail_width](float plt)
             {
                 float scaleToPixels = avail_width / (x_limits[1] - x_limits[0]);
-                float scaleMin      = axis_scale_fwd_xform(x_limits[0], &hdrview()->histogram_x_scale());
-                float scaleMax      = axis_scale_fwd_xform(x_limits[1], &hdrview()->histogram_x_scale());
-                float s             = axis_scale_fwd_xform(plt, &hdrview()->histogram_x_scale());
+                float scaleMin      = (float)axis_scale_fwd_xform(x_limits[0], &hdrview()->histogram_x_scale());
+                float scaleMax      = (float)axis_scale_fwd_xform(x_limits[1], &hdrview()->histogram_x_scale());
+                float s             = (float)axis_scale_fwd_xform(plt, &hdrview()->histogram_x_scale());
                 float t             = (s - scaleMin) / (scaleMax - scaleMin);
                 plt                 = lerp(x_limits[0], x_limits[1], t);
 
@@ -136,7 +136,7 @@ void Image::draw_histogram()
                 for (int i = log_max; i >= log_min; --i)
                 {
                     float value = sgn * pow(10.f, float(i));
-                    (void)format_power_of_10(value, buff.data(), buff.size(), nullptr);
+                    (void)format_power_of_10(value, buff.data(), (int)buff.size(), nullptr);
                     float pixel          = calc_pixel(value);
                     float dist_from_prev = fabs(pixel - prev_pixel);
                     float dist_to_origin = fabs(pixel - origin);
@@ -181,7 +181,7 @@ void Image::draw_histogram()
             auto ticks = powers_of_10_ticks();
             ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform,
                                    &hdrview()->histogram_x_scale());
-            ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), ticks.size());
+            ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), (int)ticks.size());
             break;
         }
         case AxisScale_Asinh:
@@ -202,7 +202,7 @@ void Image::draw_histogram()
             if (crosses_zero) // crosses zero
             {
                 auto ticks = powers_of_10_ticks();
-                ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), ticks.size());
+                ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), (int)ticks.size());
                 ImPlot::SetupAxisFormat(ImAxis_X1, format_power_of_10);
             }
 
@@ -270,14 +270,14 @@ void Image::draw_histogram()
 
                 float marker_size = 6.f;
 
-                float c_bin = stats[c]->value_to_bin(color32[c]);
-                float y1    = stats[c]->bin_y(c_bin);
+                float c_bin = (float)stats[c]->value_to_bin(color32[c]);
+                float y1    = stats[c]->bin_y((int)c_bin);
 
                 // calculate the height of the up marker so that it sits just above the x axis.
-                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->bin_x(c_bin), y_limits[0]));
+                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->bin_x((int)c_bin), y_limits[0]));
                 pixel.y -= 0.66f * marker_size; // roughly the
                 auto  bottom = ImPlot::PixelsToPlot(pixel);
-                float y0     = bottom.y;
+                float y0     = (float)bottom.y;
 
                 ImPlot::SetNextMarkerStyle(ImPlotMarker_Up, marker_size);
                 ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c], &y0, 1, y1);

@@ -36,7 +36,7 @@ inline void from_json(const nlohmann::json &j, vec<T, N> &v)
                                   "Expecting {} values but found {}. Will only read the first {} elements here:\n{}",
                                   N, N, (int)j.size(), size, j.dump(4)));
 
-    for (size_t i = 0; i < size; ++i) j.at(i).get_to(v[i]);
+    for (size_t i = 0; i < size; ++i) j.at(i).get_to(v[(int)i]);
 }
 
 } // namespace linalg

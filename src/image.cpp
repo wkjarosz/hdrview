@@ -167,8 +167,8 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<int>(0, roi.volume(), block_size),
-                [&img, &partials, &canceled, &index_to_2d](int begin, int end, int unit_index, int thread_index)
+                blocked_range<int>(0, roi.volume(), (int)block_size),
+                [&img, &partials, &canceled, &index_to_2d](int begin, int end, int unit_index, int)
                 {
                     Summary partial = partials[unit_index]; //< compute over local symbols.
 
@@ -222,9 +222,10 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
 
         auto hist_x_limits = x_limits(settings.exposure, settings.x_scale);
 
-        hist_normalization[0] = axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : summary.minimum, &settings.x_scale);
+        hist_normalization[0] =
+            (float)axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : summary.minimum, &settings.x_scale);
         hist_normalization[1] =
-            axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : summary.maximum, &settings.x_scale) -
+            (float)axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : summary.maximum, &settings.x_scale) -
             hist_normalization[0];
 
         // compute bin center values
@@ -286,11 +287,13 @@ float4x4 ChannelGroup::colors() const
         // neutral gray, but then red is fully opaque, while blue is 2/3 transparent. We instead manually choose values
         // where all three are 0.5 transparent while producing neutral gray when composited using the over operator.
         return float4x4{
-            {1.0f, 0.15f, 0.1f, 0.5f}, {.45f, 0.75f, 0.02f, 0.5f}, {.25f, 0.333f, 0.7f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
+            {1.f, 0.15f, 0.1f, 0.5f}, {.45f, 0.75f, 0.02f, 0.5f}, {.25f, 0.333f, 0.7f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
     case YCA_Channels:
     case YC_Channels:
-        return float4x4{
-            {1, 0.35133642, 0.5, 0.5f}, {1.f, 1.f, 1.f, 0.5f}, {0.5, 0.44952777, 1, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
+        return float4x4{{1.f, 0.35133642f, 0.5f, 0.5f},
+                        {1.f, 1.f, 1.f, 0.5f},
+                        {0.5, 0.44952777f, 1.f, 0.5f},
+                        {1.0f, 1.0f, 1.0f, 0.5f}};
     case YA_Channels:
     case XYZA_Channels:
     case XYZ_Channels:
@@ -298,8 +301,7 @@ float4x4 ChannelGroup::colors() const
     case Z_Channel:
     case Single_Channel:
     default:
-        return float4x4{
-            {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}, {1.0f, 1.0f, 1.0f, 0.5f}};
+        return float4x4{{1.f, 1.f, 1.f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}, {1.f, 1.f, 1.f, 0.5f}};
     }
 }
 

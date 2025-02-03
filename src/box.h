@@ -81,7 +81,7 @@ public:
     }
     BoxT &enclose(const BoxT &box)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < (int)Dims; ++i)
         {
             min[i] = std::min(box.min[i], min[i]);
             max[i] = std::max(box.max[i], max[i]);
@@ -90,7 +90,7 @@ public:
     }
     BoxT &intersect(const BoxT &box)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < (int)Dims; ++i)
         {
             min[i] = std::max(box.min[i], min[i]);
             max[i] = std::min(box.max[i], max[i]);
@@ -172,7 +172,7 @@ public:
     {
         Value ret_val(1);
         Vec   s = size();
-        for (size_t i = 0; i < Dims; ++i) ret_val *= s[i];
+        for (int i = 0; i < (int)Dims; ++i) ret_val *= s[i];
         return ret_val;
     }
     Value area() const

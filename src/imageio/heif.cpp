@@ -327,7 +327,8 @@ bool is_heif_image(istream &is) noexcept
         uint8_t magic[12];
         is.read(reinterpret_cast<char *>(magic), sizeof(magic));
 
-        heif_filetype_result filetype_check = heif_check_filetype(magic, std::min(sizeof(magic), (size_t)is.gcount()));
+        heif_filetype_result filetype_check =
+            heif_check_filetype(magic, std::min((int)sizeof(magic), (int)is.gcount()));
         if (filetype_check == heif_filetype_no)
             throw invalid_argument{"Not a HEIF/AVIF file"};
         ret = true;

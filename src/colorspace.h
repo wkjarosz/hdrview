@@ -113,7 +113,7 @@ Real LinearToSRGB_positive(Real linear)
 {
     static constexpr Real inv_gamma = Real(1) / Real(2.4);
     if (linear <= Real(0.0031308))
-        return 12.92 * linear;
+        return Real(12.92) * linear;
     else
         return Real(1.055) * std::pow(linear, inv_gamma) - Real(0.055);
 }

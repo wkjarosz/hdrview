@@ -144,6 +144,7 @@ The default is 2 (info).)")
         ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %5l]: %$%v");
 
 #ifdef _WIN32
+        (void)argv; // prevent unused variable warning
         CLI11_PARSE(app, argc, win_argv);
 #else
         CLI11_PARSE(app, argc, argv);

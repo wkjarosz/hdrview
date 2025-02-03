@@ -285,7 +285,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         spdlog::trace("Registering glfw drop callback");
         // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
         glfwSetDropCallback((GLFWwindow *)m_params.backendPointers.glfwWindow,
-                            [](GLFWwindow *w, int count, const char **filenames)
+                            [](GLFWwindow *, int count, const char **filenames)
                             {
                                 spdlog::debug("Received glfw drop event");
                                 vector<string> arg(count);
@@ -941,7 +941,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_auto_fit_display = m_auto_fit_data = false;
                     },
                     if_img});
-        add_action({"100\%", ICON_MY_ZOOM_100, 0, 0,
+        add_action({"100%", ICON_MY_ZOOM_100, 0, 0,
                     [this]()
                     {
                         set_zoom_level(0.f);
