@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libheif-dev libopenexr-dev
+        run: sudo apt-get update && sudo apt-get install cmake xorg-dev libglu1-mesa-dev zlib1g-dev libxrandr-dev ninja-build libglfw3-dev libfreetype-dev libheif-dev libopenexr-dev libimath-dev
 
       - uses: actions/checkout@v4
         with:
