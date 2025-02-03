@@ -498,7 +498,7 @@ map<string, int> Image::channels_in_layer(const string &layer) const
     for (size_t i = 0; i < channels.size(); ++i)
         // if the channel starts with the layer name, and there is no dot afterwards, then this channel is in the layer
         if (starts_with(channels[i].name, layer) && channels[i].name.substr(layer.length()).find(".") == string::npos)
-            result.insert({channels[i].name, i});
+            result.insert({channels[i].name, (int)i});
 
     return result;
 }
@@ -618,7 +618,7 @@ void Image::build_layers_and_groups()
                     spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
-                layer.groups.emplace_back(groups.size());
+                layer.groups.emplace_back((int)groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
                 spdlog::debug("Created channel group '{}' of type {} with {} channels", groups.back().name,
