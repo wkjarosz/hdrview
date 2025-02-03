@@ -202,6 +202,10 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     string                           frame_name;
     int                              frame_number = 0;
 
+    // initialize file_enc and info to zeros to prevent warning/error on windows
+    memset(&file_enc, 0, sizeof(file_enc));
+    memset(&info, 0, sizeof(info));
+
     // CmsData m_cms;
 
     vector<ImagePtr> images;

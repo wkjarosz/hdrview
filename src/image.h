@@ -150,7 +150,7 @@ public:
     {
         int block_size = std::max(1, 1024 * 1024 / width());
         parallel_for(blocked_range<int>(0, height(), block_size),
-                     [this, &func](int begin_y, int end_y, int unit_index, int thread_index)
+                     [this, &func](int begin_y, int end_y, int, int)
                      {
                          for (int y = begin_y; y < end_y; ++y)
                              for (int x = 0; x < width(); ++x)

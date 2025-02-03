@@ -155,18 +155,18 @@ void HDRViewApp::load_fonts()
     {
         m_fonts[std::pair<string, int>{"sans regular", font_size}] =
             load_font("fonts/Roboto/Roboto-Regular.ttf", font_size);
-        append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, glyphRanges);
+        append_icon_font(FONT_ICON_FILE_NAME_MY, (float)font_size, glyphRanges);
 
         m_fonts[std::pair<string, int>{"sans bold", font_size}] = load_font("fonts/Roboto/Roboto-Bold.ttf", font_size);
-        append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, glyphRanges);
+        append_icon_font(FONT_ICON_FILE_NAME_MY, (float)font_size, glyphRanges);
 
         m_fonts[std::pair<string, int>{"mono regular", font_size}] =
             load_font("fonts/Roboto/RobotoMono-Regular.ttf", font_size);
-        append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, glyphRanges);
+        append_icon_font(FONT_ICON_FILE_NAME_MY, (float)font_size, glyphRanges);
 
         m_fonts[std::pair<string, int>{"mono bold", font_size}] =
             load_font("fonts/Roboto/RobotoMono-Bold.ttf", font_size);
-        append_icon_font(FONT_ICON_FILE_NAME_MY, font_size, glyphRanges);
+        append_icon_font(FONT_ICON_FILE_NAME_MY, (float)font_size, glyphRanges);
     }
     // spdlog::info("\ttook {} seconds.", (timer.elapsed() / 1000.f));
 }

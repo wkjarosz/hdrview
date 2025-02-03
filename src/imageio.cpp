@@ -137,10 +137,10 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
     //             return f32_to_byte(v, x, y, false, dither);
     //         });
 
-    size_t block_size = std::max(1u, 1024u * 1024u / (*w));
+    int block_size = std::max(1, 1024 * 1024 / (*w));
     parallel_for(blocked_range<int>(0, *h, block_size),
                  [this, alpha, w = *w, n = *n, data = pixels.get(), gain, g = 1.f / gamma, sRGB,
-                  dither](int begin_y, int end_y, int unit_index, int thread_index)
+                  dither](int begin_y, int end_y, int, int)
                  {
                      int y_stride = w * n;
                      for (int y = begin_y; y < end_y; ++y)
@@ -199,10 +199,9 @@ std::unique_ptr<float[]> Image::as_interleaved_floats(int *w, int *h, int *n, fl
     //                                                                          return v;
     //                                                                      });
 
-    size_t block_size = std::max(1u, 1024u * 1024u / (*w));
+    int block_size = std::max(1, 1024 * 1024 / (*w));
     parallel_for(blocked_range<int>(0, *h, block_size),
-                 [this, alpha, w = *w, n = *n, data = pixels.get(), gain](int begin_y, int end_y, int unit_index,
-                                                                          int thread_index)
+                 [this, alpha, w = *w, n = *n, data = pixels.get(), gain](int begin_y, int end_y, int, int)
                  {
                      int y_stride = w * n;
                      for (int y = begin_y; y < end_y; ++y)

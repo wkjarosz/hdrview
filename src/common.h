@@ -319,7 +319,7 @@ int next_matching_index(const std::vector<T> &vec, int current_index, Criterion 
     for (size_t i = (current_index + index_increment) % size, count = 0; count < size;
          i = (i + index_increment) % size, ++count)
         if (criterion(i, vec[i]))
-            return i; // Found the next matching element
+            return (int)i; // Found the next matching element
 
     return current_index; // Nothing matched, return current index
 }

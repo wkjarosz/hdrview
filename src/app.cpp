@@ -1575,7 +1575,7 @@ ImFont *HDRViewApp::font(const string &name, int size) const
     {
         return m_fonts.at({name, size});
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
         throw std::runtime_error(
             fmt::format("Font with name '{}' and size {} (={}) was not loaded.", name, size, ImGui::GetFontSize()));
@@ -1981,7 +1981,7 @@ void HDRViewApp::draw_file_window()
         // m_channel_filter.InputBuf
         if (auto colon = strchr(g_filter_buffer, ':'))
         {
-            int file_filter_length    = colon - g_filter_buffer + 1;
+            int file_filter_length    = int(colon - g_filter_buffer + 1);
             int channel_filter_length = IM_ARRAYSIZE(g_filter_buffer) - file_filter_length;
             ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, file_filter_length);
             ImStrncpy(m_channel_filter.InputBuf, colon + 1, channel_filter_length);
@@ -2083,9 +2083,10 @@ void HDRViewApp::draw_file_window()
 
                     // restore selection
                     if (old_current)
-                        m_current = std::find(m_images.begin(), m_images.end(), old_current) - m_images.begin();
+                        m_current = int(std::find(m_images.begin(), m_images.end(), old_current) - m_images.begin());
                     if (old_reference)
-                        m_reference = std::find(m_images.begin(), m_images.end(), old_reference) - m_images.begin();
+                        m_reference =
+                            int(std::find(m_images.begin(), m_images.end(), old_reference) - m_images.begin());
                 }
 
                 sort_specs->SpecsDirty = g_request_sort = false;
@@ -2415,21 +2416,21 @@ void HDRViewApp::draw_pixel_grid() const
 
     // draw vertical lines
     for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-        draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)), col_bg,
-                           4.f);
+        draw_list->AddLine(app_pos_at_pixel(float2((float)x, (float)bounds.min.y)),
+                           app_pos_at_pixel(float2((float)x, (float)bounds.max.y)), col_bg, 4.f);
 
     // draw horizontal lines
     for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-        draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)), col_bg,
-                           4.f);
+        draw_list->AddLine(app_pos_at_pixel(float2((float)bounds.min.x, (float)y)),
+                           app_pos_at_pixel(float2((float)bounds.max.x, (float)y)), col_bg, 4.f);
 
     // and now again with the foreground color
     for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-        draw_list->AddLine(app_pos_at_pixel(float2(x, bounds.min.y)), app_pos_at_pixel(float2(x, bounds.max.y)), col_fg,
-                           2.f);
+        draw_list->AddLine(app_pos_at_pixel(float2((float)x, (float)bounds.min.y)),
+                           app_pos_at_pixel(float2((float)x, (float)bounds.max.y)), col_fg, 2.f);
     for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-        draw_list->AddLine(app_pos_at_pixel(float2(bounds.min.x, y)), app_pos_at_pixel(float2(bounds.max.x, y)), col_fg,
-                           2.f);
+        draw_list->AddLine(app_pos_at_pixel(float2((float)bounds.min.x, (float)y)),
+                           app_pos_at_pixel(float2((float)bounds.max.x, (float)y)), col_fg, 2.f);
 }
 
 void HDRViewApp::draw_pixel_info() const
@@ -2856,6 +2857,7 @@ bool HDRViewApp::process_event(void *e)
     case SDL_FINGERUP: spdlog::trace("Got an SDL_FINGERUP event"); break;
     }
 #endif
+    (void)e; // prevent unreferenced formal parameter warning
     return false;
 }
 

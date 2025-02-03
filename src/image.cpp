@@ -195,7 +195,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
 
                     partials[unit_index] = partial; //< Store partials at the end.
                 },
-                num_threads);
+                (int)num_threads);
 
             // final reduction from partial results
             double accum = 0.f;
@@ -229,7 +229,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
             hist_normalization[0];
 
         // compute bin center values
-        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = bin_to_value(i + 0.5);
+        for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i + 0.5);
 
         // accumulate bin counts
         for (int i = 0; i < roi.volume(); ++i)
@@ -243,7 +243,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         hist_y_limits[0] = std::numeric_limits<float>::infinity();
         for (int i = 0; i < NUM_BINS; ++i)
         {
-            float bin_width = bin_to_value(i + 1) - bin_to_value(i);
+            float bin_width = float(bin_to_value(i + 1) - bin_to_value(i));
             hist_ys[i] /= bin_width;
             hist_y_limits[0] = min(hist_y_limits[0], bin_width);
         }
@@ -585,7 +585,7 @@ void Image::build_layers_and_groups()
             if (node->leaf_layer >= 0)
                 spdlog::info("node '{}' already contains a leaf layer", node->name);
 
-            node->leaf_layer = layers.size() - 1;
+            node->leaf_layer = int(layers.size() - 1);
         }
 
         // add all the layer's channels
@@ -614,7 +614,7 @@ void Image::build_layers_and_groups()
                 int4 group_channels;
                 for (size_t i2 = 0; i2 < found.size(); ++i2)
                 {
-                    group_channels[i2] = found[i2]->second;
+                    group_channels[i2] = found[(int)i2]->second;
                     spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
@@ -796,7 +796,7 @@ string Image::to_string() const
     if (M_to_Rec709 != float3x3{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
-        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, l.length());
+        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, (int)l.length());
     }
 
     out += fmt::format("Channels ({}):\n", channels.size());

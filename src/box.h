@@ -72,7 +72,7 @@ public:
     }
     BoxT &enclose(const Vec &point)
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < (int)Dims; ++i)
         {
             min[i] = std::min(point[i], min[i]);
             max[i] = std::max(point[i], max[i]);
