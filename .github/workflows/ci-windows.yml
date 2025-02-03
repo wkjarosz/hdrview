@@ -39,7 +39,7 @@ jobs:
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DUHDR_BUILD_DEPS=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON --compile-no-warning-as-error
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose --compile-no-warning-as-error
+        run: cmake --build ${{github.workspace}}/build --parallel --config ${{ matrix.buildtype }} --verbose
 
       - name: Checking that HDRView runs
         working-directory: ${{github.workspace}}
