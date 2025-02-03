@@ -44,30 +44,32 @@ if(JXL_FOUND)
   set(JXL_LIBRARIES ${JXL_LIBRARY} ${JXL_THREADS_LIBRARY} ${JXL_CMS_LIBRARY})
   set(JXL_INCLUDES ${JXL_INCLUDE_DIR})
 
-  add_library(jxl SHARED IMPORTED)
-  set_target_properties(
-    jxl
-    PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
-               INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
-               INTERFACE_LINK_LIBRARIES "${JXL_LIBRARY}"
-               IMPORTED_LOCATION "${JXL_LIBRARY}"
-  )
+  if(NOT TARGET jxl)
+    add_library(jxl SHARED IMPORTED)
+    set_target_properties(
+      jxl
+      PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
+                 INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
+                 INTERFACE_LINK_LIBRARIES "${JXL_LIBRARY}"
+                 IMPORTED_LOCATION "${JXL_LIBRARY}"
+    )
 
-  add_library(jxl_threads SHARED IMPORTED)
-  set_target_properties(
-    jxl_threads
-    PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
-               INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
-               INTERFACE_LINK_LIBRARIES "${JXL_THREADS_LIBRARY}"
-               IMPORTED_LOCATION "${JXL_THREADS_LIBRARY}"
-  )
+    add_library(jxl_threads SHARED IMPORTED)
+    set_target_properties(
+      jxl_threads
+      PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
+                 INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
+                 INTERFACE_LINK_LIBRARIES "${JXL_THREADS_LIBRARY}"
+                 IMPORTED_LOCATION "${JXL_THREADS_LIBRARY}"
+    )
 
-  add_library(jxl_cms SHARED IMPORTED)
-  set_target_properties(
-    jxl_cms
-    PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
-               INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
-               INTERFACE_LINK_LIBRARIES "${JXL_CMS_LIBRARY}"
-               IMPORTED_LOCATION "${JXL_CMS_LIBRARY}"
-  )
+    add_library(jxl_cms SHARED IMPORTED)
+    set_target_properties(
+      jxl_cms
+      PROPERTIES INTERFACE_COMPILE_FEATURES "cxx_std_11"
+                 INTERFACE_INCLUDE_DIRECTORIES "${JXL_INCLUDES}"
+                 INTERFACE_LINK_LIBRARIES "${JXL_CMS_LIBRARY}"
+                 IMPORTED_LOCATION "${JXL_CMS_LIBRARY}"
+    )
+  endif()
 endif(JXL_FOUND)

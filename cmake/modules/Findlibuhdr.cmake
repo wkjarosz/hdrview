@@ -26,12 +26,14 @@ find_library(LIBUHDR_LIBRARY uhdr PATH_SUFFIXES lib)
 find_package_handle_standard_args(libuhdr REQUIRED_VARS LIBUHDR_INCLUDES LIBUHDR_LIBRARY)
 
 if(libuhdr_FOUND)
-  add_library(core SHARED IMPORTED)
-  set_target_properties(
-    core
-    PROPERTIES CXX_STANDARD 17
-               INTERFACE_INCLUDE_DIRECTORIES "${LIBUHDR_INCLUDES}"
-               INTERFACE_LINK_LIBRARIES "${LIBUHDR_LIBRARY}"
-               IMPORTED_LOCATION "${LIBUHDR_LIBRARY}"
-  )
+  if(NOT TARGET core)
+    add_library(core UNKNOWN IMPORTED)
+    set_target_properties(
+      core
+      PROPERTIES CXX_STANDARD 17
+                 INTERFACE_INCLUDE_DIRECTORIES "${LIBUHDR_INCLUDES}"
+                 INTERFACE_LINK_LIBRARIES "${LIBUHDR_LIBRARY}"
+                 IMPORTED_LOCATION "${LIBUHDR_LIBRARY}"
+    )
+  endif()
 endif(libuhdr_FOUND)

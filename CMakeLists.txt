@@ -446,6 +446,8 @@ if(HDRVIEW_ENABLE_JPEGXL)
             "JPEGXL_ENABLE_MANPAGES OFF"
             "JPEGXL_ENABLE_JPEGLI_LIBJPEG OFF"
             "JPEGXL_ENABLE_SKCMS OFF"
+            "JPEGXL_ENABLE_VIEWERS=OFF"
+            "JPEGXL_ENABLE_PLUGINS=OFF"
             "EXCLUDE_FROM_ALL YES"
   )
   if(JXL_ADDED)
@@ -467,7 +469,13 @@ else()
   message(STATUS "lcms2 library not found.")
 endif()
 
-option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
+if(EMSCRIPTEN)
+  set(enable_heif OFF)
+else()
+  set(enable_heif ON)
+endif()
+
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ${enable_heif})
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif

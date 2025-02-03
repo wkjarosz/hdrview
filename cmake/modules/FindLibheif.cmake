@@ -33,7 +33,6 @@ if(LIBHEIF_INCLUDE_DIR)
   string(REGEX MATCHALL "[0-9.]+" LIBHEIF_VERSION ${TMP})
 endif()
 
-include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Libheif REQUIRED_VARS LIBHEIF_INCLUDE_DIR LIBHEIF_LIBRARY)
 
 if(Libheif_FOUND)
