@@ -286,7 +286,7 @@ inline la::vec<Real, 3> EOTF_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0)
     la::vec<Real, 3> E_s{OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[0] + beta)),
                          OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[1] + beta)),
                          OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[2] + beta))};
-    Real             Y_s = dot(la::vec<Real, 3>(0.2627, 0.6780, 0.0593), E_s);
+    Real             Y_s = dot(la::vec<Real, 3>(Real(0.2627), Real(0.6780), Real(0.0593)), E_s);
 
     return {OOTF_HLG(E_s[0], Y_s, alpha, gamma), OOTF_HLG(E_s[1], Y_s, alpha, gamma),
             OOTF_HLG(E_s[2], Y_s, alpha, gamma)};

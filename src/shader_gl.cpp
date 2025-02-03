@@ -64,8 +64,7 @@ static GLuint compile_gl_shader(GLenum type, string_view name, string_view shade
 
 Shader::Shader(RenderPass *render_pass, const std::string &name, const std::string &vs_source,
                const std::string &fs_source, BlendMode blend_mode) :
-    m_render_pass(render_pass),
-    m_name(name), m_blend_mode(blend_mode), m_shader_handle(0)
+    m_render_pass(render_pass), m_name(name), m_blend_mode(blend_mode), m_shader_handle(0)
 {
     GLuint vertex_shader_handle   = compile_gl_shader(GL_VERTEX_SHADER, name, vs_source),
            fragment_shader_handle = compile_gl_shader(GL_FRAGMENT_SHADER, name, fs_source);
@@ -589,7 +588,7 @@ void Shader::draw_array(PrimitiveType primitive_type, size_t offset, size_t coun
         if (instances == 0)
             CHK(glDrawArrays(primitive_type_gl, (GLint)offset, (GLsizei)count));
         else
-            CHK(glDrawArraysInstanced(primitive_type_gl, (GLint)offset, (GLsizei)count, instances));
+            CHK(glDrawArraysInstanced(primitive_type_gl, (GLint)offset, (GLsizei)count, (GLsizei)instances));
     }
     else
     {

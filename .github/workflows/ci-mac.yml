@@ -48,7 +48,7 @@ jobs:
               flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
             }
           - {
-              name: "macOS 13",
+              name: "macOS 13 x86_64",
               os: macos-13,
               arch: "x86_64",
               flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif imath cli11 spdlog
+        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif imath cli11 spdlog fmt
 
       - uses: actions/checkout@v4
         with:

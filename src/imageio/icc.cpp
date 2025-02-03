@@ -40,7 +40,8 @@ using ToneCurve = std::unique_ptr<cmsToneCurve, ToneCurveDeleter>;
 
 Profile open_profile_from_mem(const std::vector<uint8_t> &icc_profile)
 {
-    return Profile{cmsOpenProfileFromMem(icc_profile.data(), icc_profile.size())};
+    return Profile{cmsOpenProfileFromMem(reinterpret_cast<const void *>(icc_profile.data()),
+                                         static_cast<cmsUInt32Number>(icc_profile.size()))};
 }
 
 Profile create_linear_RGB_profile(const cmsCIExyY &whitepoint, const cmsCIExyYTRIPLE &primaries)
@@ -168,8 +169,8 @@ string profile_description(const Profile &profile)
 {
     if (auto desc = reinterpret_cast<const cmsMLU *>(cmsReadTag(profile.get(), cmsSigProfileDescriptionTag)))
     {
-        int               size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
-        std::vector<char> desc_str(size);
+        auto              size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
+        std::vector<char> desc_str((size_t)size);
         cmsMLUgetASCII(desc, "en", "US", desc_str.data(), desc_str.size());
         return string(desc_str.data());
     }
@@ -187,13 +188,13 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     cmsCIExyYTRIPLE primaries;
     icc::extract_chromaticities(profile_in, &primaries, &whitepoint);
     if (red)
-        *red = float2(primaries.Red.x, primaries.Red.y);
+        *red = float2((float)primaries.Red.x, (float)primaries.Red.y);
     if (green)
-        *green = float2(primaries.Green.x, primaries.Green.y);
+        *green = float2((float)primaries.Green.x, (float)primaries.Green.y);
     if (blue)
-        *blue = float2(primaries.Blue.x, primaries.Blue.y);
+        *blue = float2((float)primaries.Blue.x, (float)primaries.Blue.y);
     if (white)
-        *white = float2(whitepoint.x, whitepoint.y);
+        *white = float2((float)whitepoint.x, (float)whitepoint.y);
 
     auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
     cmsUInt32Number format      = TYPE_GRAY_FLT;

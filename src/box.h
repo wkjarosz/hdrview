@@ -205,14 +205,14 @@ public:
     //-----------------------------------------------------------------------
     bool has_volume() const
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < (int)Dims; ++i)
             if (max[i] <= min[i])
                 return false;
         return true;
     }
     bool is_empty() const
     {
-        for (size_t i = 0; i < Dims; ++i)
+        for (int i = 0; i < (int)Dims; ++i)
             if (max[i] < min[i])
                 return true;
         return false;

@@ -214,7 +214,7 @@ bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, con
 
 float3 YCToRGB(float3 input, float3 Yw)
 {
-    if (input[0] == 0.0 && input[2] == 0.0)
+    if (input[0] == 0.f && input[2] == 0.f)
         //
         // Special case -- both chroma channels are 0.  To avoid
         // rounding errors, we explicitly set the output R, G and B
@@ -223,8 +223,8 @@ float3 YCToRGB(float3 input, float3 Yw)
         return float3(input[1], input[1], input[1]);
 
     float Y = input[1];
-    float r = (input[0] + 1.0) * input[1];
-    float b = (input[2] + 1.0) * input[1];
+    float r = (input[0] + 1.f) * input[1];
+    float b = (input[2] + 1.f) * input[1];
     float g = (Y - r * Yw.x - b * Yw.z) / Yw.y;
 
     return float3(r, g, b);

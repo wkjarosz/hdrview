@@ -87,19 +87,19 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     return {};
 }
 
-void Image::save(ostream &os, const string &filename, float gain, float gamma, bool sRGB, bool dither) const
+void Image::save(ostream &os, const string &_filename, float gain, float gamma, bool sRGB, bool dither) const
 {
-    string extension = to_lower(get_extension(filename));
+    string extension = to_lower(get_extension(_filename));
     if (extension == "exr")
-        return save_exr_image(*this, os, filename);
+        return save_exr_image(*this, os, _filename);
     else if (extension == "jpg" || extension == "jpeg")
-        return save_uhdr_image(*this, os, filename, gain);
+        return save_uhdr_image(*this, os, _filename, gain);
     else if (extension == "pfm")
-        return save_pfm_image(*this, os, filename, gain);
+        return save_pfm_image(*this, os, _filename, gain);
     else if (extension == "qoi")
-        return save_qoi_image(*this, os, filename, gain, gamma, sRGB, dither);
+        return save_qoi_image(*this, os, _filename, gain, gamma, sRGB, dither);
     else
-        return save_stb_image(*this, os, filename, gain, gamma, sRGB, dither);
+        return save_stb_image(*this, os, _filename, gain, gamma, sRGB, dither);
 }
 
 std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,

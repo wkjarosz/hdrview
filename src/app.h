@@ -232,7 +232,7 @@ private:
     EChannel   m_channel          = EChannel::RGB;            ///< Which channel to display
     EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
     EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4     m_bg_color = {0.3, 0.3, 0.3, 1.0};     ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    float4     m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     float2 m_viewport_min, m_viewport_size;
 
