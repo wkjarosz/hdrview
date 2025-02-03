@@ -634,7 +634,7 @@ void Image::build_layers_and_groups()
             spdlog::debug("Still have {} ungrouped channels", layer_channels.size());
             for (auto i : layer_channels)
             {
-                layer.groups.emplace_back(groups.size());
+                layer.groups.emplace_back((int)groups.size());
                 groups.push_back(
                     ChannelGroup{Channel::tail(i.first), int4{i.second, 0, 0, 0}, 1, ChannelGroup::Single_Channel});
                 spdlog::info("\tcreating channel group with single channel '{}' in layer '{}'", groups.back().name,
