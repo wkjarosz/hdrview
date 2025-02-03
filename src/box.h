@@ -72,7 +72,7 @@ public:
     }
     BoxT &enclose(const Vec &point)
     {
-        for (int i = 0; i < (int)Dims; ++i)
+        for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::min(point[i], min[i]);
             max[i] = std::max(point[i], max[i]);
@@ -81,7 +81,7 @@ public:
     }
     BoxT &enclose(const BoxT &box)
     {
-        for (int i = 0; i < (int)Dims; ++i)
+        for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::min(box.min[i], min[i]);
             max[i] = std::max(box.max[i], max[i]);
@@ -90,7 +90,7 @@ public:
     }
     BoxT &intersect(const BoxT &box)
     {
-        for (int i = 0; i < (int)Dims; ++i)
+        for (size_t i = 0; i < Dims; ++i)
         {
             min[i] = std::max(box.min[i], min[i]);
             max[i] = std::min(box.max[i], max[i]);
@@ -172,7 +172,7 @@ public:
     {
         Value ret_val(1);
         Vec   s = size();
-        for (int i = 0; i < (int)Dims; ++i) ret_val *= s[i];
+        for (size_t i = 0; i < Dims; ++i) ret_val *= s[i];
         return ret_val;
     }
     Value area() const
@@ -205,14 +205,14 @@ public:
     //-----------------------------------------------------------------------
     bool has_volume() const
     {
-        for (int i = 0; i < (int)Dims; ++i)
+        for (size_t i = 0; i < Dims; ++i)
             if (max[i] <= min[i])
                 return false;
         return true;
     }
     bool is_empty() const
     {
-        for (int i = 0; i < (int)Dims; ++i)
+        for (size_t i = 0; i < Dims; ++i)
             if (max[i] < min[i])
                 return true;
         return false;

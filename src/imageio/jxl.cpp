@@ -113,13 +113,13 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     Timer timer;
     spdlog::info("Linearizing pixel values using encoded profile.");
     if (red)
-        *red = float2((float)file_enc.primaries_red_xy[0], (float)file_enc.primaries_red_xy[1]);
+        *red = float2(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
     if (green)
-        *green = float2((float)file_enc.primaries_green_xy[0], (float)file_enc.primaries_green_xy[1]);
+        *green = float2(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
     if (blue)
-        *blue = float2((float)file_enc.primaries_blue_xy[0], (float)file_enc.primaries_blue_xy[1]);
+        *blue = float2(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
     if (white)
-        *white = float2((float)file_enc.white_point_xy[0], (float)file_enc.white_point_xy[1]);
+        *white = float2(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
 
     float            gamma = (float)file_enc.gamma;
     TransferFunction tf;
@@ -201,10 +201,6 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     int3                             size{0, 0, 0};
     string                           frame_name;
     int                              frame_number = 0;
-
-    // initialize file_enc and info to zeros to prevent warning/error on windows
-    memset(&file_enc, 0, sizeof(file_enc));
-    memset(&info, 0, sizeof(info));
 
     // CmsData m_cms;
 
