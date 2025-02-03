@@ -45,20 +45,20 @@ jobs:
               name: "macOS 14 arm64",
               os: macos-14,
               arch: "arm64",
-              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=OFF -DHDRVIEW_ENABLE_HEIF=ON",
+              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON",
             }
           - {
               name: "macOS 13",
               os: macos-13,
               arch: "x86_64",
-              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=OFF -DHDRVIEW_ENABLE_HEIF=ON",
+              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON",
             }
 
         buildtype: [Release, Debug]
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler
+        run: brew install ninja create-dmg dylibbundler jpeg-xl little-cms2 libultrahdr libheif imath cli11
 
       - uses: actions/checkout@v4
         with:
