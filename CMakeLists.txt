@@ -299,7 +299,7 @@ if(linalg_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
-CPMAddPackage("gh:fmtlib/fmt#11.0.2")
+CPMAddPackage("gh:fmtlib/fmt#10.2.1")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
@@ -307,7 +307,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
   NAME spdlog
-  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.15.0.zip
+  URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
 )
