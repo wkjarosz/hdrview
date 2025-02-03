@@ -469,13 +469,7 @@ else()
   message(STATUS "lcms2 library not found.")
 endif()
 
-if(EMSCRIPTEN)
-  set(enable_heif OFF)
-else()
-  set(enable_heif ON)
-endif()
-
-option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ${enable_heif})
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
