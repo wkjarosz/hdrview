@@ -498,7 +498,7 @@ map<string, int> Image::channels_in_layer(const string &layer) const
     for (size_t i = 0; i < channels.size(); ++i)
         // if the channel starts with the layer name, and there is no dot afterwards, then this channel is in the layer
         if (starts_with(channels[i].name, layer) && channels[i].name.substr(layer.length()).find(".") == string::npos)
-            result.insert({channels[i].name, (int)i});
+            result.insert({channels[i].name, i});
 
     return result;
 }
@@ -585,7 +585,7 @@ void Image::build_layers_and_groups()
             if (node->leaf_layer >= 0)
                 spdlog::info("node '{}' already contains a leaf layer", node->name);
 
-            node->leaf_layer = int(layers.size() - 1);
+            node->leaf_layer = layers.size() - 1;
         }
 
         // add all the layer's channels
@@ -614,11 +614,11 @@ void Image::build_layers_and_groups()
                 int4 group_channels;
                 for (size_t i2 = 0; i2 < found.size(); ++i2)
                 {
-                    group_channels[(int)i2] = found[(int)i2]->second;
+                    group_channels[i2] = found[i2]->second;
                     spdlog::debug("Found channel '{}': {}", group_channel_names[i2], found[i2]->second);
                 }
 
-                layer.groups.emplace_back((int)groups.size());
+                layer.groups.emplace_back(groups.size());
                 groups.push_back(ChannelGroup{fmt::format("{}", fmt::join(group_channel_names, ",")), group_channels,
                                               (int)found.size(), group_type});
                 spdlog::debug("Created channel group '{}' of type {} with {} channels", groups.back().name,
@@ -796,7 +796,7 @@ string Image::to_string() const
     if (M_to_Rec709 != float3x3{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
-        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, (int)l.length());
+        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, l.length());
     }
 
     out += fmt::format("Channels ({}):\n", channels.size());

@@ -2,15 +2,18 @@
 # 
 # Module to find LIBHEIF
 #
-# This module will first look into the directories defined by the variables:
+# This module will first look in the directories defined by the variables:
 #   - Libheif_ROOT, LIBHEIF_INCLUDE_PATH, LIBHEIF_LIBRARY_PATH
 #
-# This module defines the following variables:
+# It then defines the following variables:
 #
 # - Libheif_FOUND            True if LIBHEIF was found.
 # - LIBHEIF_INCLUDES         Where to find LIBHEIF headers
 # - LIBHEIF_LIBRARIES        List of libraries to link against when using LIBHEIF
 # - LIBHEIF_VERSION          Version of LIBHEIF (e.g., 3.6.2)
+# 
+# If found, it will also define an imported targets for the library:
+# - heif
 # 
 # cmake-format: on
 
