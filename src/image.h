@@ -280,7 +280,7 @@ public:
     // We also use this as a common representation of meta data when loading non-EXR images.
     Imf::Header header;
 
-    json metadata;
+    json metadata = json::object();
 
     // But create our own versios of some which we need access to often
     std::string          filename;

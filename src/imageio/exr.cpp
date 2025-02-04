@@ -58,8 +58,9 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto &img  = *images.back();
-        img.header = part.header();
+        auto &img              = *images.back();
+        img.header             = part.header();
+        img.metadata["loader"] = "OpenEXR";
 
         for (auto a = begin(img.header); a != end(img.header); ++a) spdlog::debug("Attribute: {}", a.name());
 

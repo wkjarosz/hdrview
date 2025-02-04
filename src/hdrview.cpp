@@ -192,11 +192,11 @@ The default is 2 (info).)")
     catch (const spdlog::spdlog_ex &e)
     {
         fprintf(stderr, "Log init failed: %s\n", e.what());
-        return 1;
+        exit(EXIT_FAILURE);
     }
     catch (const std::exception &e)
     {
-        spdlog::critical("Error: {}", e.what());
+        fprintf(stderr, "Error: %s\n", e.what());
         // fprintf(stderr, "%s", USAGE);
         exit(EXIT_FAILURE);
     }
