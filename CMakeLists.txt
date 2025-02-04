@@ -495,7 +495,7 @@ if(HDRVIEW_ENABLE_HEIF)
       heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/> $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
     )
   elseif(TARGET heif)
-    message(STATUS "Using local libheif library")
+    message(STATUS "Using system-installed libheif library")
   else()
     message(FATAL_ERROR "libheif not found. Please install it or turn off HDRVIEW_ENABLE_HEIF.")
   endif()

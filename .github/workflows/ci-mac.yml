@@ -42,16 +42,16 @@ jobs:
               flags: '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_IGNORE_PATH="/usr/local/Cellar/harfbuzz/10.2.0/lib/;/usr/local/Cellar/harfbuzz/10.2.0/;/usr/local/Cellar/brotli/1.1.0/include;/usr/local/Cellar/brotli/1.1.0/lib/;/opt/homebrew/Cellar/harfbuzz/10.2.0/include/;/opt/homebrew/Cellar/harfbuzz/10.2.0/lib/;/usr/local/lib/;/usr/local/Cellar/;/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/bin;/opt/homebrew/Cellar" -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON',
             }
           - {
-              name: "macOS 14 arm64",
+              name: "macOS Apple Silicon",
               os: macos-14,
               arch: "arm64",
-              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
+              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
             }
           - {
-              name: "macOS 13 x86_64",
+              name: "macOS Intel",
               os: macos-13,
               arch: "x86_64",
-              flags: "-DCMAKE_PREFIX_PATH=`brew --prefix` -DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
+              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON",
             }
 
         buildtype: [Release, Debug]
@@ -80,7 +80,7 @@ jobs:
           cmake -B ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }} -G Ninja -DCMAKE_BUILD_TYPE=${{ matrix.buildtype }} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 ${{ matrix.config.flags }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}  --parallel 4 --config ${{ matrix.buildtype }}
+        run: cmake --build ${{github.workspace}}/build/${{ matrix.config.arch }}-${{ matrix.buildtype }}  --parallel --config ${{ matrix.buildtype }}
 
       - name: Checking that HDRView runs
         run: |

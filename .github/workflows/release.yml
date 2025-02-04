@@ -104,7 +104,7 @@ jobs:
           fetch-depth: 0
 
       - name: Configure CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DUHDR_BUILD_DEPS=ON
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_POLICY_DEFAULT_CMP0135=NEW -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON --compile-no-warning-as-error
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel --config ${{env.BUILD_TYPE}} --verbose
@@ -117,7 +117,6 @@ jobs:
         working-directory: ${{github.workspace}}/build
         run: |
           cmake -E copy_directory assets deploy/assets/
-          cmake -E rm -rf deploy/assets/app_settings/emscripten deploy/assets/app_settings/apple deploy/assets/shaders/*.metal
           cmake -E copy ${{env.BUILD_TYPE}}/HDRView.exe deploy/
 
       - name: Archive build artifacts
