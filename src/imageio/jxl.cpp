@@ -31,8 +31,8 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
-#include <jxl/cms.h>
-#include <jxl/cms_interface.h>
+// #include <jxl/cms.h>
+// #include <jxl/cms_interface.h>
 #include <jxl/codestream_header.h>
 #include <jxl/decode.h>
 #include <jxl/decode_cxx.h>
@@ -201,8 +201,6 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     int3                             size{0, 0, 0};
     string                           frame_name;
     int                              frame_number = 0;
-
-    // CmsData m_cms;
 
     vector<ImagePtr> images;
     ImagePtr         image;

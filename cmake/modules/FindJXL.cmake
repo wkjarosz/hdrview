@@ -38,13 +38,17 @@ mark_as_advanced(JXL_THREADS_LIBRARY)
 find_library(JXL_CMS_LIBRARY NAMES jxl_cms)
 mark_as_advanced(JXL_CMS_LIBRARY)
 
-find_package_handle_standard_args(JXL REQUIRED_VARS JXL_LIBRARY JXL_THREADS_LIBRARY JXL_CMS_LIBRARY JXL_INCLUDE_DIR)
+find_package_handle_standard_args(
+  JXL
+  REQUIRED_VARS JXL_LIBRARY JXL_THREADS_LIBRARY JXL_INCLUDE_DIR
+  VERSION_VAR JXL_VERSION
+)
 
 if(JXL_FOUND)
   set(JXL_LIBRARIES ${JXL_LIBRARY} ${JXL_THREADS_LIBRARY} ${JXL_CMS_LIBRARY})
   set(JXL_INCLUDES ${JXL_INCLUDE_DIR})
 
-  if(NOT TARGET jxl)
+  if(JXL_LIBRARY AND NOT TARGET jxl)
     add_library(jxl SHARED IMPORTED)
     set_target_properties(
       jxl
@@ -53,7 +57,9 @@ if(JXL_FOUND)
                  INTERFACE_LINK_LIBRARIES "${JXL_LIBRARY}"
                  IMPORTED_LOCATION "${JXL_LIBRARY}"
     )
+  endif()
 
+  if(JXL_THREADS_LIBRARY AND NOT TARGET jxl_threads)
     add_library(jxl_threads SHARED IMPORTED)
     set_target_properties(
       jxl_threads
@@ -62,7 +68,9 @@ if(JXL_FOUND)
                  INTERFACE_LINK_LIBRARIES "${JXL_THREADS_LIBRARY}"
                  IMPORTED_LOCATION "${JXL_THREADS_LIBRARY}"
     )
+  endif()
 
+  if(JXL_CMS_LIBRARY AND NOT TARGET jxl_cms)
     add_library(jxl_cms SHARED IMPORTED)
     set_target_properties(
       jxl_cms

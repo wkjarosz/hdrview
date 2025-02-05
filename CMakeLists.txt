@@ -299,7 +299,7 @@ if(linalg_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
-CPMAddPackage("gh:fmtlib/fmt#10.2.1")
+CPMAddPackage("gh:fmtlib/fmt#9.1.0")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
@@ -307,6 +307,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
   NAME spdlog
+  VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
@@ -364,12 +365,21 @@ endif()
 
 CPMAddPackage(
   NAME Imath
-  VERSION 3.1.12 # the git repo is incredibly large, so we download the archived include directory
+  VERSION 3.1.9 # we set the minimium version to 3.1.9, but if manually building use a more recent version
+  FIND_PACKAGE_ARGUMENTS "REQUIRED"
+  # the git repo is incredibly large, so we download the archived include directory
   URL https://github.com/AcademySoftwareFoundation/Imath/archive/refs/tags/v3.1.12.zip
   OPTIONS "BUILD_SHARED_LIBS OFF" "IMATH_INSTALL OFF" "IMATH_INSTALL_PKG_CONFIG OFF" "BUILD_TESTING OFF"
           "EXCLUDE_FROM_ALL YES"
 )
-list(APPEND HDRVIEW_DEPENDENCIES "Imath::Imath")
+if(Imath_ADDED)
+  message(STATUS "Building Imath library")
+elseif(TARGET Imath::Imath)
+  message(STATUS "Will link against system-installed Imath library")
+else()
+  message(FATAL_ERROR "Imath library not found. Please install it.")
+endif()
+# list(APPEND HDRVIEW_DEPENDENCIES "Imath::Imath")
 
 if(EMSCRIPTEN AND NOT HELLOIMGUI_EMSCRIPTEN_PTHREAD)
   set(OPENEXR_THREADING_OPTIONS "OPENEXR_ENABLE_THREADING OFF")
@@ -378,12 +388,12 @@ else()
 endif()
 
 CPMAddPackage(
-  NAME openexr
+  NAME OpenEXR
   GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
   # FIXME: OpenEXR v3.3.0 and above seems to break our subsample channel loading
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
-  VERSION 3.2.4
-  # GIT_TAG v3.2.4
+  VERSION 3.1.5
+  GIT_TAG v3.2.4
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
@@ -461,7 +471,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
   else()
     message(FATAL_ERROR "JPEG-XL library not found. Please install it or turn off HDRVIEW_ENABLE_JPEGXL.")
   endif()
-  list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads" "jxl_cms")
+  list(APPEND HDRVIEW_DEPENDENCIES "jxl" "jxl_threads")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_JPEGXL)
 endif()
 
@@ -485,14 +495,16 @@ if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
     GITHUB_REPOSITORY strukturag/libheif
-    VERSION 1.19.5
+    VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
+    URL https://github.com/strukturag/libheif/archive/refs/tags/v1.19.5.zip
     OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "WITH_EXAMPLES OFF" "WITH_GDK_PIXBUF OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF" "EXCLUDE_FROM_ALL YES"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
     target_include_directories(
-      heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/> $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
+      heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}> $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/>
+                     $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
     )
   elseif(TARGET heif)
     message(STATUS "Using system-installed libheif library")
@@ -505,7 +517,7 @@ endif()
 
 CPMAddPackage(
   NAME CLI11
-  VERSION 2.4.2
+  VERSION 2.4.1
   URL https://github.com/CLIUtils/CLI11/archive/v2.4.2.zip
   DOWNLOAD_ONLY YES
 )
@@ -514,7 +526,7 @@ if(CLI11_ADDED)
   add_library(CLI11::CLI11 INTERFACE IMPORTED)
   target_include_directories(CLI11::CLI11 INTERFACE "${CLI11_SOURCE_DIR}/include")
 elseif(TARGET CLI11::CLI11)
-  message(STATUS "Using local CLI11 library")
+  message(STATUS "Will link against system-installed CLI11 library")
 else()
   message(FATAL_ERROR "CLI11 library not found. Please install it.")
 endif()
