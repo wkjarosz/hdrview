@@ -34,9 +34,14 @@ jobs:
               name: "macOS Apple Silicon",
               os: macos-14,
               arch: "arm64",
-              flags: "",
+              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON --compile-no-warning-as-error",
             }
-          - { name: "macOS Intel", os: macos-13, arch: "x86_64", flags: "" }
+          - {
+              name: "macOS Intel",
+              os: macos-13,
+              arch: "x86_64",
+              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON --compile-no-warning-as-error",
+            }
 
     steps:
       - name: Install dependencies
