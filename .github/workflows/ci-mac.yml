@@ -8,9 +8,10 @@ on:
     branches:
       - "*"
     paths:
-      # This action only runs on push when C++ files are changed
+      # This action only runs on push when files affecting the build change
       - "**.cpp"
       - "**.h"
+      - "**.metal"
       - "**.cmake"
       - "**Lists.txt"
       - "**-mac.yml"
