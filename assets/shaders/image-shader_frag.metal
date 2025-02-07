@@ -89,7 +89,7 @@ float4 choose_channel(float4 rgba, int channel, const float3 yw)
         case CHANNEL_BLUE:              return float4(rgba.bbb, 1.0);
         case CHANNEL_ALPHA:             return float4(rgba.aaa, 1.0);
         case CHANNEL_Y:                 return float4(float3(Y), rgba.a);
-        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(Y)) * rgba.a, rgba.a);
+        case CHANNEL_FALSE_COLOR:       return float4(sRGBToLinear(inferno(saturate(Y))) * rgba.a, rgba.a);
         case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(Y) * rgba.a, rgba.a);
     }
     return rgba;

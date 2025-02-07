@@ -109,7 +109,7 @@ vec4 choose_channel(vec4 rgba)
     case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
     case CHANNEL_ALPHA: return vec4(rgba.aaa, 1.0);
     case CHANNEL_Y: return vec4(vec3(Y), rgba.a);
-    case CHANNEL_FALSE_COLOR: return vec4(inferno(saturate(Y)) * rgba.a, rgba.a);
+    case CHANNEL_FALSE_COLOR: return vec4(sRGBToLinear(inferno(saturate(Y))) * rgba.a, rgba.a);
     case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(Y) * rgba.a, rgba.a);
     }
     return rgba;
