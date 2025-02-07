@@ -76,11 +76,7 @@ float3 jetFalseColor(float x)
     return float3(r, g, b);
 }
 
-float3 positiveNegative(float3 col)
+float3 positiveNegative(const float x)
 {
-    float x = dot(col, float3(1.0) / 3.0);
-    float r = saturate(mix(0.0, 1.0, max(x, 0.0)));
-    float g = 0.0;
-    float b = saturate(mix(0.0, 1.0, -min(x, 0.0)));
-    return float3(r, g, b);
+    return float3(-min(x, 0.0), 0.0, max(x, 0.0));
 }

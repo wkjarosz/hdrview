@@ -100,6 +100,7 @@ float rand_tent(vec2 xy)
 
 vec4 choose_channel(vec4 rgba)
 {
+    float Y = dot(rgba.rgb, primary_yw);
     switch (channel)
     {
     case CHANNEL_RGB: return rgba;
@@ -107,9 +108,9 @@ vec4 choose_channel(vec4 rgba)
     case CHANNEL_GREEN: return vec4(rgba.ggg, 1.0);
     case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
     case CHANNEL_ALPHA: return vec4(rgba.aaa, 1.0);
-    case CHANNEL_Y: return vec4(vec3(RGBToY(rgba.rgb, primary_yw)), 1.0);
-    case CHANNEL_FALSE_COLOR: return vec4(inferno(saturate(RGBToY(rgba.rgb, primary_yw))), 1.0);
-    case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(rgba.rgb), 1.0);
+    case CHANNEL_Y: return vec4(vec3(Y), rgba.a);
+    case CHANNEL_FALSE_COLOR: return vec4(inferno(saturate(Y)) * rgba.a, rgba.a);
+    case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(Y) * rgba.a, rgba.a);
     }
     return rgba;
 }
@@ -160,17 +161,19 @@ void main()
             mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
         background.rgb = vec3(checkerboard);
     }
-    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
-    background = inv_tonemap(background);
 
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
-    bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
+    bool in_ref =
+        secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0 && has_reference;
 
     if (!in_img && !in_ref)
     {
         frag_color = background;
         return;
     }
+
+    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
+    background = inv_tonemap(background);
 
     vec4 value = vec4(
         sample_channel(primary_0_texture, primary_uv, in_img), sample_channel(primary_1_texture, primary_uv, in_img),
@@ -196,7 +199,7 @@ void main()
         value = blend(value, reference_val);
     }
 
-    vec4 foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
+    vec4 foreground = choose_channel(value * vec4(vec3(gain), 1.0));
     vec4 blended    = dither(tonemap(foreground + background * (1.0 - foreground.a)));
     blended         = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     frag_color      = vec4(blended.rgb, 1.0);

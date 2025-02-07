@@ -80,6 +80,7 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
 
 float4 choose_channel(float4 rgba, int channel, const float3 yw)
 {
+    float Y = dot(rgba.rgb, yw);
     switch (channel)
     {
         case CHANNEL_RGB:               return rgba;
@@ -87,9 +88,9 @@ float4 choose_channel(float4 rgba, int channel, const float3 yw)
         case CHANNEL_GREEN:             return float4(rgba.ggg, 1.0);
         case CHANNEL_BLUE:              return float4(rgba.bbb, 1.0);
         case CHANNEL_ALPHA:             return float4(rgba.aaa, 1.0);
-        case CHANNEL_Y:                 return float4(float3(RGBToY(rgba.rgb, yw)), 1.0);
-        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(RGBToY(rgba.rgb, yw))), 1.0);
-        case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(rgba.rgb), 1.0);
+        case CHANNEL_Y:                 return float4(float3(Y), rgba.a);
+        case CHANNEL_FALSE_COLOR:       return float4(inferno(saturate(Y)) * rgba.a, rgba.a);
+        case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(Y) * rgba.a, rgba.a);
     }
     return rgba;
 }
@@ -175,14 +176,15 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
         background.rgb = float3(checkerboard);
     }
-    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
-    background = inv_tonemap(background, gamma, sRGB);
 
     bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
-    bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);
+    bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);// and has_reference;
 
     if (!in_img and !in_ref)
         return background;
+        
+    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
+    background = inv_tonemap(background, gamma, sRGB);
 
     float4 value = float4(sample_channel(primary_0_texture, primary_0_sampler, vert.primary_uv, in_img),
                           sample_channel(primary_1_texture, primary_1_sampler, vert.primary_uv, in_img),
@@ -209,7 +211,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0);
+    float4 foreground = choose_channel(value * float4(float3(gain), 1.0), channel, primary_yw);
     float4 blended = dither(tonemap(foreground + background*(1-foreground.a), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
     blended = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     return float4(blended.rgb, 1.0);

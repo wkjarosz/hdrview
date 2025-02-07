@@ -72,11 +72,4 @@ vec3 jetFalseColor(float x)
     return vec3(r, g, b);
 }
 
-vec3 positiveNegative(vec3 col)
-{
-    float x = dot(col, vec3(1.0) / 3.0);
-    float r = saturate(mix(0.0, 1.0, max(x, 0.0)));
-    float g = 0.0;
-    float b = saturate(mix(0.0, 1.0, -min(x, 0.0)));
-    return vec3(r, g, b);
-}
+vec3 positiveNegative(float x) { return vec3(-min(x, 0.0), 0.0, max(x, 0.0)); }

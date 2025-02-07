@@ -1951,7 +1951,7 @@ void HDRViewApp::draw_file_window()
     {
         for (int n = 0; n < NUM_CHANNELS; ++n)
         {
-            const bool is_selected = (m_blend_mode == n);
+            const bool is_selected = (m_channel == n);
             if (ImGui::Selectable(channel_names()[n].c_str(), is_selected))
             {
                 m_channel = (EChannel)n;
