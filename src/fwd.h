@@ -61,10 +61,19 @@ enum EChannel : int
     BLUE,
     ALPHA,
     Y,
-    FALSE_COLOR,
-    POSITIVE_NEGATIVE,
 
     NUM_CHANNELS
+};
+
+using Tonemap_ = int;
+enum Tonemap : Tonemap_
+{
+    Tonemap_sRGB = 0,
+    Tonemap_Gamma,
+    Tonemap_FalseColor,
+    Tonemap_PositiveNegative,
+
+    Tonemap_COUNT
 };
 
 enum EBlendMode : int

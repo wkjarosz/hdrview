@@ -7,6 +7,9 @@
 #pragma once
 
 #include "common.h"
+
+#include "colormap.h"
+
 #include "fwd.h"
 #include <string>
 #include <vector>
@@ -332,13 +335,40 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
 
 void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
 
-inline Color3 tonemap(const Color3 color, float gamma, bool sRGB)
+inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap)
 {
-    return sRGB ? LinearToSRGB(color) : LinearToGamma(color, Color3(1.f / gamma));
+    switch (tonemap_mode)
+    {
+    default: return LinearToSRGB(color);
+    case Tonemap_Gamma: return LinearToGamma(color, float3{1.f / gamma});
+    case Tonemap_FalseColor: [[fallthrough]];
+    case Tonemap_PositiveNegative:
+    {
+        auto  xform     = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
+        float avg       = dot(color, float3(1.f / 3.f));
+        float cmap_size = Colormap::values(colormap).size();
+        float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
+        return LinearToSRGB(SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz()));
+    }
+    }
 }
-inline Color4 tonemap(const Color4 color, float gamma, bool sRGB)
+inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap)
 {
-    return Color4(sRGB ? LinearToSRGB(color.xyz()) : LinearToGamma(color.xyz(), Color3(1.f / gamma)), color.w);
+    switch (tonemap_mode)
+    {
+    default: return LinearToSRGB(color);
+    case Tonemap_Gamma: return LinearToGamma(color, float3{1.f / gamma});
+    case Tonemap_FalseColor: [[fallthrough]];
+    case Tonemap_PositiveNegative:
+    {
+        auto  xform     = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
+        float avg       = dot(color.xyz(), float3(1.f / 3.f));
+        float cmap_size = Colormap::values(colormap).size();
+        float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
+        return float4(LinearToSRGB(SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz()) * color.w),
+                      color.w);
+    }
+    }
 }
 
 const std::vector<std::string> &colorSpaceNames();
@@ -369,9 +399,9 @@ inline float4 color_u32_to_f128(uint32_t in)
 inline uint32_t color_f128_to_u32(const float4 &in)
 {
     uint32_t out;
-    out = ((uint32_t)(clamp01(in.x) * 255.f + 0.5f)) << HDRVIEW_COL32_R_SHIFT;
-    out |= ((uint32_t)(clamp01(in.y) * 255.f + 0.5f)) << HDRVIEW_COL32_G_SHIFT;
-    out |= ((uint32_t)(clamp01(in.z) * 255.f + 0.5f)) << HDRVIEW_COL32_B_SHIFT;
-    out |= ((uint32_t)(clamp01(in.w) * 255.f + 0.5f)) << HDRVIEW_COL32_A_SHIFT;
+    out = ((uint32_t)(saturate(in.x) * 255.f + 0.5f)) << HDRVIEW_COL32_R_SHIFT;
+    out |= ((uint32_t)(saturate(in.y) * 255.f + 0.5f)) << HDRVIEW_COL32_G_SHIFT;
+    out |= ((uint32_t)(saturate(in.z) * 255.f + 0.5f)) << HDRVIEW_COL32_B_SHIFT;
+    out |= ((uint32_t)(saturate(in.w) * 255.f + 0.5f)) << HDRVIEW_COL32_A_SHIFT;
     return out;
 }

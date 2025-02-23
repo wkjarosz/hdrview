@@ -12,6 +12,10 @@
 
 #include "fonts.h"
 
+#include "colormap.h"
+
+#include "texture.h"
+
 #include "opengl_check.h"
 
 #include "colorspace.h"
@@ -341,7 +345,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         if (force_gamma.has_value())
             m_gamma_live = m_gamma = *force_gamma;
         else
-            m_sRGB = true;
+            m_tonemap = Tonemap_sRGB;
         if (force_dither.has_value())
             m_dither = *force_dither;
 
@@ -360,6 +364,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     m_params.callbacks.BeforeExit = [this]
     {
         Image::cleanup_default_textures();
+        Colormap::cleanup();
         save_settings();
     };
 
@@ -668,7 +673,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         m_exposure_live = m_exposure = 0.0f;
                         m_gamma_live = m_gamma = 2.2f;
-                        m_sRGB                 = true;
+                        m_tonemap              = Tonemap_sRGB;
                     }});
         add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0, [this]()
                     {
@@ -697,12 +702,14 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_draw_display_window});
 
-        add_action({"sRGB", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_sRGB,
-                    "Use the sRGB non-linear response curve (instead of gamma correction)"});
-        add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
-                    { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); }, [this]() { return !m_sRGB; }});
-        add_action({"Increase gamma", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat, [this]()
-                    { m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); }, [this]() { return !m_sRGB; }});
+        // add_action({"sRGB", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_sRGB,
+        //             "Use the sRGB non-linear response curve (instead of gamma correction)"});
+        add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); },
+                    [this]() { return m_tonemap == Tonemap_Gamma; }});
+        add_action({"Increase gamma", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); },
+                    [this]() { return m_tonemap == Tonemap_Gamma; }});
 
         add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_Space, 0,
                     []()
@@ -1001,6 +1008,7 @@ void HDRViewApp::setup_rendering()
         m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
 
         Image::make_default_textures();
+        Colormap::initialize();
 
         m_shader->set_texture("dither_texture", Image::dither_texture());
         set_image_textures();
@@ -1038,7 +1046,7 @@ void HDRViewApp::load_settings()
         m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
         m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
         m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
-        m_sRGB                 = j.value<bool>("sRGB", m_sRGB);
+        m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
         m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
         m_dither               = j.value<bool>("dither", m_dither);
         g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
@@ -1066,7 +1074,7 @@ void HDRViewApp::save_settings()
     j["draw pixel grid"]         = m_draw_grid;
     j["exposure"]                = m_exposure;
     j["gamma"]                   = m_gamma;
-    j["sRGB"]                    = m_sRGB;
+    j["tonemap"]                 = m_tonemap;
     j["clamp to LDR"]            = m_clamp_to_LDR;
     j["dither"]                  = m_dither;
     j["verbosity"]               = spdlog::get_level();
@@ -1214,7 +1222,7 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("sRGB"));
+        // MenuItem(action("sRGB"));
         MenuItem(action("Increase gamma"));
         MenuItem(action("Decrease gamma"));
 
@@ -1287,10 +1295,12 @@ void HDRViewApp::save_as(const string &filename) const
     {
 #if !defined(__EMSCRIPTEN__)
         std::ofstream os{filename, std::ios_base::binary};
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_sRGB, m_dither);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_tonemap == Tonemap_sRGB,
+                              m_dither);
 #else
         std::ostringstream os;
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_sRGB, m_dither);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_tonemap == Tonemap_sRGB,
+                              m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
             filename,                                    // the default filename for the browser to save.
@@ -1362,21 +1372,27 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
     {
         // convert the buffer (if any) to a string so the async thread has its own copy,
         // then load from the string or filename depending on whether the buffer is empty
-        m_pending_images.emplace_back(std::make_shared<PendingImages>(
-            filename,
-            [buffer_str = string(buffer), filename]()
-            {
-                if (buffer_str.empty())
-                {
-                    std::ifstream is{std::filesystem::u8path(filename.c_str()), std::ios_base::binary};
-                    return Image::load(is, filename);
-                }
-                else
-                {
-                    std::istringstream is{buffer_str};
-                    return Image::load(is, filename);
-                }
-            }));
+        m_pending_images.emplace_back(
+            std::make_shared<PendingImages>(filename,
+                                            [buffer_str = string(buffer), filename]()
+                                            {
+                                                if (buffer_str.empty())
+                                                {
+                                                    auto u8p = std::filesystem::u8path(filename.c_str());
+                                                    if (std::ifstream is{u8p, std::ios_base::binary})
+                                                        return Image::load(is, filename);
+                                                    else
+                                                    {
+                                                        spdlog::error("File '{}' doesn't exist.", u8p.string());
+                                                        return vector<ImagePtr>{};
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    std::istringstream is{buffer_str};
+                                                    return Image::load(is, filename);
+                                                }
+                                            }));
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
@@ -1600,7 +1616,7 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
     auto    &group           = img->groups[group_idx];
     float4   color32         = img->raw_pixel(pixel, target);
     float4   displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
-                                                 hdrview()->gamma_live(), hdrview()->sRGB());
+                                                 hdrview()->gamma_live(), hdrview()->tonemap(), hdrview()->colormap());
     uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
     int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
 
@@ -2585,7 +2601,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("randomness", randomness);
         m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
         m_shader->set_uniform("gamma", m_gamma_live);
-        m_shader->set_uniform("sRGB", m_sRGB);
+        m_shader->set_uniform("tonemap_mode", (int)m_tonemap);
         m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
         m_shader->set_uniform("do_dither", m_dither);
 
@@ -2596,6 +2612,8 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("channel", (int)m_channel);
         m_shader->set_uniform("bg_mode", (int)m_bg_mode);
         m_shader->set_uniform("bg_color", m_bg_color);
+
+        m_shader->set_texture("colormap", Colormap::texture(m_colormap));
 
         if (reference_image())
         {
@@ -2641,21 +2659,63 @@ void HDRViewApp::draw_top_toolbar()
     IconButton(action("Reset tonemapping"));
     ImGui::SameLine();
 
-    Checkbox(action("sRGB"));
-    ImGui::SameLine();
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
+    ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "sRGB\0Gamma\0Colormap (+)\0Colormap (±)\0");
+    ImGui::SetItemTooltip("Set the tonemapping mode.");
 
-    ImGui::BeginDisabled(m_sRGB);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gamma:");
+    switch (m_tonemap)
+    {
+    default: break;
+    case Tonemap_Gamma:
+    {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+        ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "%5.3f");
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            m_gamma = m_gamma_live;
+        ImGui::SetItemTooltip("Set the exponent for gamma correction.");
+    }
+    break;
+    case Tonemap_FalseColor:
+    case Tonemap_PositiveNegative:
+    {
+        ImGui::SameLine();
+        auto p = ImGui::GetCursorScreenPos();
 
-    ImGui::SameLine();
+        if (ImPlot::ColormapButton(Colormap::name(m_colormap), ImVec2(HelloImGui::EmSize(8), ImGui::GetFrameHeight()),
+                                   m_colormap))
+            ImGui::OpenPopup("colormap_dropdown");
+        ImGui::SetItemTooltip("Click to choose a colormap.");
 
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
-    ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "%5.3f");
-    if (ImGui::IsItemDeactivatedAfterEdit())
-        m_gamma = m_gamma_live;
+        ImGui::SetNextWindowPos(ImVec2{p.x, p.y + ImGui::GetFrameHeight()});
+        ImGui::PushStyleVarX(ImGuiStyleVar_WindowPadding, ImGui::GetStyle().FramePadding.x);
+        auto tmp = ImGui::BeginPopup("colormap_dropdown");
+        ImGui::PopStyleVar();
+        if (tmp)
+        {
+            auto maps = {Colormap_Viridis, Colormap_Plasma,  Colormap_Inferno,
+                         Colormap_Turbo,   Colormap_IceFire, Colormap_CoolWarm};
+            for (auto n : maps)
+            {
+                const bool is_selected = (m_colormap == n);
+                if (ImGui::Selectable((string("##") + Colormap::name(n)).c_str(), is_selected, 0,
+                                      ImVec2(0, ImGui::GetFrameHeight())))
+                    m_colormap = n;
+                ImGui::SameLine(0.f, 0.f);
 
-    ImGui::EndDisabled();
+                ImPlot::ColormapButton(
+                    Colormap::name(n),
+                    ImVec2(HelloImGui::EmSize(8) - ImGui::GetStyle().WindowPadding.x, ImGui::GetFrameHeight()), n);
+
+                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndPopup();
+        }
+    }
+    break;
+    }
     ImGui::SameLine();
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)

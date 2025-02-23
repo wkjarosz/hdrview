@@ -340,7 +340,7 @@ public:
     void        set_as_texture(Target target = Target_Primary);
     float4      raw_pixel(int2 p, Target target = Target_Primary) const;
     float4      shaded_pixel(int2 p, Target target = Target_Primary, float gain = 1.f, float gamma = 2.4f,
-                             bool sRGB = true) const;
+                             Tonemap tonemap = Tonemap_sRGB, Colormap_ colormap = Colormap_Inferno) const;
     std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void                       build_layers_and_groups();
     void                       finalize();

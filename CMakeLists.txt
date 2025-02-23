@@ -586,6 +586,7 @@ hello_imgui_add_app(
   src/imageio/qoi.cpp
   src/imageio/uhdr.cpp
   src/app.cpp
+  src/colormap.cpp
   src/colorspace.cpp
   src/common.cpp
   src/emscripten_utils.cpp

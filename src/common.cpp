@@ -100,10 +100,15 @@ string indent(string_view input, bool also_indent_first, int amount)
     return oss.str();
 }
 
+const vector<string> &tonemap_names()
+{
+    static const vector<string> names{"sRGB", "Gamma", "False color", "Positive/Negative"};
+    return names;
+}
+
 const vector<string> &channel_names()
 {
-    static const vector<string> names{"RGB",   "Red",       "Green",       "Blue",
-                                      "Alpha", "Luminance", "False color", "Negative-positive"};
+    static const vector<string> names{"RGBA", "Red", "Green", "Blue", "Alpha", "Luminance"};
     return names;
 }
 

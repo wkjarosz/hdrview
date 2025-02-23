@@ -6,15 +6,18 @@
 
 using namespace metal;
 
-// These need to stay in sync with EChannel in fwd.h
+// These need to stay in sync with the various enums in fwd.h
 #define CHANNEL_RGB 0
 #define CHANNEL_RED 1
 #define CHANNEL_GREEN 2
 #define CHANNEL_BLUE 3
 #define CHANNEL_ALPHA 4
 #define CHANNEL_Y 5
-#define CHANNEL_FALSE_COLOR 6
-#define CHANNEL_POSITIVE_NEGATIVE 7
+
+#define Tonemap_sRGB             0
+#define Tonemap_Gamma            1
+#define Tonemap_FalseColor       2
+#define Tonemap_PositiveNegative 3
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -51,14 +54,25 @@ struct VertexOut
     float2 secondary_uv;
 };
 
-float4 tonemap(const float4 color, const float gamma, const bool sRGB)
+float4 tonemap(const float4 color, const int mode, const float gamma, texture2d<float, access::sample> colormap, sampler colormap_sampler)
 {
-    return float4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma)), color.a);
-}
-
-float4 inv_tonemap(const float4 color, const float gamma, const bool sRGB)
-{
-    return float4(sRGB ? sRGBToLinear(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), float3(gamma)), color.a);
+    switch (mode)
+    {
+        default: return color;
+        case Tonemap_Gamma: return float4(sRGBToLinear(sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma))), color.a);
+        case Tonemap_FalseColor: 
+        {
+            int cmap_size = colormap.get_width(0);
+            float t = mix(0.5/cmap_size, (cmap_size-0.5)/cmap_size, dot(color.rgb, float3(1.0/3.0)));
+            return float4(sRGBToLinear(colormap.sample(colormap_sampler, float2(t, 0.5)).rgb) * color.a, color.a);
+        }
+        case Tonemap_PositiveNegative: 
+        {
+            int cmap_size = colormap.get_width(0);
+            float t = mix(0.5/cmap_size, (cmap_size-0.5)/cmap_size, 0.5 * dot(color.rgb, float3(1.0/3.0)) + 0.5);
+            return float4(sRGBToLinear(colormap.sample(colormap_sampler, float2(t, 0.5)).rgb) * color.a, color.a);
+        }
+    }
 }
 
 float rand_box(float2 xy, texture2d<float, access::sample> dither_texture, sampler dither_sampler)
@@ -80,17 +94,14 @@ float rand_tent(float2 xy, texture2d<float, access::sample> dither_texture, samp
 
 float4 choose_channel(float4 rgba, int channel, const float3 yw)
 {
-    float Y = dot(rgba.rgb, yw);
     switch (channel)
     {
-        case CHANNEL_RGB:               return rgba;
-        case CHANNEL_RED:               return float4(rgba.rrr, 1.0);
-        case CHANNEL_GREEN:             return float4(rgba.ggg, 1.0);
-        case CHANNEL_BLUE:              return float4(rgba.bbb, 1.0);
-        case CHANNEL_ALPHA:             return float4(rgba.aaa, 1.0);
-        case CHANNEL_Y:                 return float4(float3(Y), rgba.a);
-        case CHANNEL_FALSE_COLOR:       return float4(sRGBToLinear(inferno(saturate(Y))) * rgba.a, rgba.a);
-        case CHANNEL_POSITIVE_NEGATIVE: return float4(positiveNegative(Y) * rgba.a, rgba.a);
+        case CHANNEL_RGB:   return rgba;
+        case CHANNEL_RED:   return float4(rgba.rrr, 1.0);
+        case CHANNEL_GREEN: return float4(rgba.ggg, 1.0);
+        case CHANNEL_BLUE:  return float4(rgba.bbb, 1.0);
+        case CHANNEL_ALPHA: return float4(rgba.aaa, 1.0);
+        case CHANNEL_Y:     return float4(float3(dot(rgba.rgb, yw)), rgba.a);
     }
     return rgba;
 }
@@ -133,13 +144,15 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               const constant int &blend_mode,
                               const constant int &channel,
                               const constant float &gain,
+                              const constant int &tonemap_mode,
                               const constant float &gamma,
-                              const constant bool &sRGB,
                               const constant bool &clamp_to_LDR,
                               const constant int &bg_mode,
                               const constant float4 &bg_color,
                               texture2d<float, access::sample> dither_texture,
                               sampler dither_sampler,
+                              texture2d<float, access::sample> colormap,
+                              sampler colormap_sampler,
                               texture2d<float, access::sample> primary_0_texture,
                               texture2d<float, access::sample> primary_1_texture,
                               texture2d<float, access::sample> primary_2_texture,
@@ -174,17 +187,14 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
         float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
         float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
-        background.rgb = float3(checkerboard);
+        background.rgb = sRGBToLinear(float3(checkerboard));
     }
 
     bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
     bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);// and has_reference;
 
-    if (!in_img and !in_ref)
+    if (!in_img and !(in_ref and has_reference))
         return background;
-        
-    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
-    background = inv_tonemap(background, gamma, sRGB);
 
     float4 value = float4(sample_channel(primary_0_texture, primary_0_sampler, vert.primary_uv, in_img),
                           sample_channel(primary_1_texture, primary_1_sampler, vert.primary_uv, in_img),
@@ -192,7 +202,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                           sample_channel(primary_3_texture, primary_3_sampler, vert.primary_uv, in_img));
 
     if (primary_channels_type == YCA_Channels || primary_channels_type == YC_Channels)
-        value.xyz = YCToRGB(value.xyz, primary_yw);
+        value.rgb = YCToRGB(value.xyz, primary_yw);
 
     value = primary_M_to_Rec709 * value;
 
@@ -204,15 +214,15 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                                       sample_channel(secondary_3_texture, secondary_3_sampler, vert.secondary_uv, in_ref));
 
         if (secondary_channels_type == YCA_Channels || secondary_channels_type == YC_Channels)
-            reference_val.xyz = YCToRGB(reference_val.xyz, secondary_yw);
+            reference_val.rgb = YCToRGB(reference_val.xyz, secondary_yw);
 
         reference_val = secondary_M_to_Rec709 * reference_val;
 
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = choose_channel(value * float4(float3(gain), 1.0), channel, primary_yw);
-    float4 blended = dither(tonemap(foreground + background*(1-foreground.a), gamma, sRGB), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
+    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0);
+    float4 blended = dither(linearToSRGB(tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler) + background*(1-foreground.a)), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
     blended = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     return float4(blended.rgb, 1.0);
 }

@@ -1,14 +1,17 @@
 precision mediump float;
 
-// These need to stay in sync with EChannel in fwd.h
-#define CHANNEL_RGB               0
-#define CHANNEL_RED               1
-#define CHANNEL_GREEN             2
-#define CHANNEL_BLUE              3
-#define CHANNEL_ALPHA             4
-#define CHANNEL_Y                 5
-#define CHANNEL_FALSE_COLOR       6
-#define CHANNEL_POSITIVE_NEGATIVE 7
+// These need to stay in sync with the various enums in fwd.h
+#define CHANNEL_RGB   0
+#define CHANNEL_RED   1
+#define CHANNEL_GREEN 2
+#define CHANNEL_BLUE  3
+#define CHANNEL_ALPHA 4
+#define CHANNEL_Y     5
+
+#define Tonemap_sRGB             0
+#define Tonemap_Gamma            1
+#define Tonemap_FalseColor       2
+#define Tonemap_PositiveNegative 3
 
 #define NORMAL_BLEND              0
 #define MULTIPLY_BLEND            1
@@ -47,10 +50,12 @@ uniform int   blend_mode;
 uniform int   channel;
 uniform float gain;
 uniform float gamma;
-uniform bool  sRGB;
+uniform int   tonemap_mode;
 uniform bool  clamp_to_LDR;
 uniform int   bg_mode;
 uniform vec4  bg_color;
+
+uniform sampler2D colormap;
 
 uniform sampler2D dither_texture;
 
@@ -74,11 +79,23 @@ out vec4 frag_color;
 
 vec4 tonemap(vec4 color)
 {
-    return vec4(sRGB ? linearToSRGB(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma)), color.a);
-}
-vec4 inv_tonemap(vec4 color)
-{
-    return vec4(sRGB ? sRGBToLinear(color.rgb) : sign(color.rgb) * pow(abs(color.rgb), vec3(gamma)), color.a);
+    switch (tonemap_mode)
+    {
+    default: return color;
+    case Tonemap_Gamma: return vec4(sRGBToLinear(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma))), color.a);
+    case Tonemap_FalseColor:
+    {
+        float cmap_size = float(textureSize(colormap, 0).x);
+        float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
+        return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
+    }
+    case Tonemap_PositiveNegative:
+    {
+        float cmap_size = float(textureSize(colormap, 0).x);
+        float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
+        return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
+    }
+    }
 }
 
 float rand_box(vec2 xy)
@@ -100,7 +117,6 @@ float rand_tent(vec2 xy)
 
 vec4 choose_channel(vec4 rgba)
 {
-    float Y = dot(rgba.rgb, primary_yw);
     switch (channel)
     {
     case CHANNEL_RGB: return rgba;
@@ -108,9 +124,7 @@ vec4 choose_channel(vec4 rgba)
     case CHANNEL_GREEN: return vec4(rgba.ggg, 1.0);
     case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
     case CHANNEL_ALPHA: return vec4(rgba.aaa, 1.0);
-    case CHANNEL_Y: return vec4(vec3(Y), rgba.a);
-    case CHANNEL_FALSE_COLOR: return vec4(sRGBToLinear(inferno(saturate(Y))) * rgba.a, rgba.a);
-    case CHANNEL_POSITIVE_NEGATIVE: return vec4(positiveNegative(Y) * rgba.a, rgba.a);
+    case CHANNEL_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
     }
     return rgba;
 }
@@ -159,21 +173,18 @@ void main()
         float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
         float checkerboard =
             mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
-        background.rgb = vec3(checkerboard);
+        background.rgb = sRGBToLinear(vec3(checkerboard));
     }
 
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
     bool in_ref =
         secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0 && has_reference;
 
-    if (!in_img && !in_ref)
+    if (!in_img && !(in_ref && has_reference))
     {
         frag_color = background;
         return;
     }
-
-    // inverse tonemap the background color so that it appears correct when we blend and tonemap below
-    background = inv_tonemap(background);
 
     vec4 value = vec4(
         sample_channel(primary_0_texture, primary_uv, in_img), sample_channel(primary_1_texture, primary_uv, in_img),
@@ -199,8 +210,8 @@ void main()
         value = blend(value, reference_val);
     }
 
-    vec4 foreground = choose_channel(value * vec4(vec3(gain), 1.0));
-    vec4 blended    = dither(tonemap(foreground + background * (1.0 - foreground.a)));
+    vec4 foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
+    vec4 blended    = dither(linearToSRGB(tonemap(foreground) + background * (1.0 - foreground.a)));
     blended         = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
     frag_color      = vec4(blended.rgb, 1.0);
 }

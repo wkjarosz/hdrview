@@ -7,6 +7,7 @@
 #include "common.h"
 #include "image.h"
 
+#include "colormap.h"
 #include "hello_imgui/hello_imgui.h"
 #include "imgui_ext.h"
 #include "misc/cpp/imgui_stdlib.h"
@@ -147,7 +148,8 @@ public:
     float      &gamma() { return m_gamma; }
     float      &exposure_live() { return m_exposure_live; }
     float      &exposure() { return m_exposure; }
-    bool       &sRGB() { return m_sRGB; }
+    Tonemap    &tonemap() { return m_tonemap; }
+    Colormap_  &colormap() { return m_colormap; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }
@@ -218,7 +220,7 @@ private:
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
-    bool       m_sRGB = false, m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
+    bool       m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true;
     Box2i m_roi = Box2i{int2{0}}, m_roi_live = Box2i{int2{0}};
 
@@ -229,7 +231,9 @@ private:
     bool       m_auto_fit_data    = false;      ///< Continually keep the image data window fit within the viewport
     float      m_zoom             = 1.f;        ///< The zoom factor (image pixel size / logical pixel size)
     float2     m_offset           = {0.f, 0.f}; ///< The panning offset of the image
-    EChannel   m_channel          = EChannel::RGB;            ///< Which channel to display
+    EChannel   m_channel          = EChannel::RGB; ///< Which channel to display
+    Tonemap    m_tonemap          = Tonemap_sRGB;
+    Colormap_  m_colormap         = Colormap_Inferno;
     EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
     EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
     float4     m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR

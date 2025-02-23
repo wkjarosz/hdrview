@@ -36,6 +36,7 @@ float linearToS(float a)
 }
 
 float3 linearToSRGB(float3 color) { return float3(linearToS(color.r), linearToS(color.g), linearToS(color.b)); }
+float4 linearToSRGB(float4 color) { return float4(linearToSRGB(color.rgb), color.a); }
 
 float sToLinear(float a)
 {
@@ -45,6 +46,7 @@ float sToLinear(float a)
 }
 
 float3 sRGBToLinear(float3 color) { return float3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b)); }
+float4 sRGBToLinear(float4 color) { return float4(sRGBToLinear(color.rgb), color.a); }
 
 // returns the luminance of a linear rgb color
 float RGBToY(float3 rgb, float3 weights)

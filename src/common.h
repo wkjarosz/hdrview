@@ -49,7 +49,7 @@ inline T sign(T a)
 }
 
 template <typename T>
-inline T clamp01(T a)
+inline T saturate(T a)
 {
     return std::clamp(a, T(0), T(1));
 }
@@ -119,7 +119,7 @@ inline T lerp_factor(T a, T b, T m)
 template <typename T>
 inline T smoothstep(T a, T b, T x)
 {
-    T t = clamp01(lerp_factor(a, b, x));
+    T t = saturate(lerp_factor(a, b, x));
     return t * t * (T(3) - T(2) * t);
 }
 
@@ -248,7 +248,7 @@ inline T brightness_contrast_linear(T v, T slope, T midpoint)
 template <typename T>
 inline T brightness_contrast_nonlinear(T v, T slope, T bias)
 {
-    return gain_Perlin(bias_Schlick(clamp01(v), bias), slope);
+    return gain_Perlin(bias_Schlick(saturate(v), bias), slope);
 }
 
 //! Returns a modulus b.
@@ -281,6 +281,7 @@ void process_lines(std::string_view input, std::function<void(std::string_view &
 /// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true
 std::string                     indent(std::string_view input, bool also_indent_first = false, int amount = 2);
 std::string                     add_line_numbers(std::string_view input);
+const std::vector<std::string> &tonemap_names();
 const std::vector<std::string> &channel_names();
 const std::vector<std::string> &blend_mode_names();
 std::string                     channel_to_string(EChannel channel);

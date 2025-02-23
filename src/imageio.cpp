@@ -31,6 +31,9 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     Timer timer;
     try
     {
+        if (!is.good())
+            throw invalid_argument("Invalid input stream");
+
         vector<ImagePtr> images;
 
         if (is_exr_image(is, filename))

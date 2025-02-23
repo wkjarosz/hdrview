@@ -36,6 +36,7 @@ float linearToS(float a)
 }
 
 vec3 linearToSRGB(vec3 color) { return vec3(linearToS(color.r), linearToS(color.g), linearToS(color.b)); }
+vec4 linearToSRGB(vec4 color) { return vec4(linearToSRGB(color.rgb), color.a); }
 
 float sToLinear(float a)
 {
@@ -45,6 +46,7 @@ float sToLinear(float a)
 }
 
 vec3 sRGBToLinear(vec3 color) { return vec3(sToLinear(color.r), sToLinear(color.g), sToLinear(color.b)); }
+vec4 sRGBToLinear(vec4 color) { return vec4(sRGBToLinear(color.rgb), color.a); }
 
 // returns the luminance of a linear rgb color
 float RGBToY(vec3 rgb, vec3 weights) { return dot(weights, rgb); }
