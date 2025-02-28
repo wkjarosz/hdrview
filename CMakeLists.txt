@@ -496,7 +496,8 @@ if(HDRVIEW_ENABLE_HEIF)
     NAME Libheif
     GITHUB_REPOSITORY strukturag/libheif
     VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
-    URL https://github.com/strukturag/libheif/archive/refs/tags/v1.19.5.zip
+    # URL https://github.com/strukturag/libheif/archive/refs/tags/v1.19.5.zip
+    GIT_TAG 122fd476b7c056da0e527ffc76f95072fdb5ae3d
     OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "WITH_EXAMPLES OFF" "WITH_GDK_PIXBUF OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF" "EXCLUDE_FROM_ALL YES"
   )
