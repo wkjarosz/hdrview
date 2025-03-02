@@ -140,6 +140,9 @@ float sample_channel(texture2d<float, access::sample> texture, sampler the_sampl
 fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               const constant bool& has_reference,
                               const constant bool& do_dither,
+                              const constant float &time,
+                              const constant bool &draw_clip_warnings,
+                              const constant float2 &clip_range,
                               const constant float2 &randomness,
                               const constant int &blend_mode,
                               const constant int &channel,
@@ -190,11 +193,14 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         background.rgb = sRGBToLinear(float3(checkerboard));
     }
 
+    float zebra1 = (fmod(float(int(floor((vert.position.x + vert.position.y - 30.0*time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+    float zebra2 = (fmod(float(int(floor((vert.position.x - vert.position.y - 30.0*time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+
     bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
     bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);// and has_reference;
 
     if (!in_img and !(in_ref and has_reference))
-        return background;
+        return linearToSRGB(background);
 
     float4 value = float4(sample_channel(primary_0_texture, primary_0_sampler, vert.primary_uv, in_img),
                           sample_channel(primary_1_texture, primary_1_sampler, vert.primary_uv, in_img),
@@ -222,7 +228,13 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     }
 
     float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0);
-    float4 blended = dither(linearToSRGB(tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler) + background*(1-foreground.a)), vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
-    blended = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
-    return float4(blended.rgb, 1.0);
+    float4 tonemapped = tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler) + background*(1-foreground.a);
+    bool3 clipped = draw_clip_warnings and foreground.rgb > clip_range.y;
+    bool3 crushed = draw_clip_warnings and foreground.rgb < clip_range.x;
+    float4 blended = linearToSRGB(tonemapped);
+    float4 dithered = dither(blended, vert.position.xy, randomness, do_dither, dither_texture, dither_sampler);
+    dithered = clamp(dithered, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
+    dithered.rgb = mix(dithered.rgb, float3(zebra1), float3(clipped));
+    dithered.rgb = mix(dithered.rgb, float3(zebra2), float3(crushed));
+    return float4(dithered.rgb, 1.0);
 }

@@ -281,10 +281,10 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     {
         // if (ImGui::TreeNode("Clip warnings"))
         {
-            ImGui::Checkbox("##Draw clip warning", &m_draw_clip_warning);
+            ImGui::Checkbox("##Draw clip warning", &m_draw_clip_warnings);
             ImGui::SameLine();
             ImGui::PushItemWidth(-5 * HelloImGui::EmSize());
-            ImGui::BeginDisabled(!m_draw_clip_warning);
+            ImGui::BeginDisabled(!m_draw_clip_warnings);
             ImGui::DragFloatRange2("Clip warning", &m_clip_range.min.x, &m_clip_range.max.x, 0.01f, 0.f, 0.f,
                                    "min: %.1f", "max: %.1f");
             ImGui::EndDisabled();
@@ -2620,6 +2620,9 @@ void HDRViewApp::draw_image() const
         float2 randomness(std::generate_canonical<float, 10>(g_rand) * 255,
                           std::generate_canonical<float, 10>(g_rand) * 255);
 
+        m_shader->set_uniform("time", (float)ImGui::GetTime());
+        m_shader->set_uniform("draw_clip_warnings", m_draw_clip_warnings);
+        m_shader->set_uniform("clip_range", float2{m_clip_range.min.x, m_clip_range.max.x});
         m_shader->set_uniform("randomness", randomness);
         m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
         m_shader->set_uniform("gamma", m_gamma_live);

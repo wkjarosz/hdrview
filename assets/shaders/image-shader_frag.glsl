@@ -75,6 +75,10 @@ uniform vec3      secondary_yw;
 uniform int       secondary_channels_type;
 uniform mat4      secondary_M_to_Rec709;
 
+uniform float time;
+uniform bool  draw_clip_warnings;
+uniform vec2  clip_range;
+
 out vec4 frag_color;
 
 vec4 tonemap(vec4 color)
@@ -182,7 +186,7 @@ void main()
 
     if (!in_img && !(in_ref && has_reference))
     {
-        frag_color = background;
+        frag_color = linearToSRGB(background);
         return;
     }
 
