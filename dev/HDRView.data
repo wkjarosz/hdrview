@@ -26082,106 +26082,8 @@ unlock_altbullseyeellipsis_horizontalellipsis_vertical_303	play_signticket
 level_down
 check_sign	edit_sign_312
 share_signcompasscollapsecollapse_top_317eurgbpusdinrjpyrubkrwbtcfile	file_textsort_by_alphabet_329sort_by_attributessort_by_attributes_altsort_by_ordersort_by_order_alt_334_335youtube_signyoutubexing	xing_signyoutube_playdropboxstackexchange	instagramflickradnf171bitbucket_signtumblrtumblr_signlong_arrow_downlong_arrow_uplong_arrow_leftlong_arrow_rightwindowsandroidlinuxdribbleskype
-foursquaretrellofemalemalegittipsun_366archivebugvkweiborenren_372stack_exchange_374arrow_circle_alt_left_376dot_circle_alt_378vimeo_square_380plus_square_o_382_383_384_385_386_387_388_389uniF1A0f1a1_392_393f1a4_395_396_397_398_399_400f1ab_402_403_404uniF1B1_406_407_408_409_410_411_412_413_414_415_416_417_418_419uniF1C0uniF1C1_422_423_424_425_426_427_428_429_430_431_432_433_434uniF1D0uniF1D1uniF1D2_438_439uniF1D5uniF1D6uniF1D7_443_444_445_446_447_448_449uniF1E0_451_452_453_454_455_456_457_458_459_460_461_462_463_464uniF1F0_466_467f1f3_469_470_471_472_473_474_475_476f1fc_478_479_480_481_482_483_484_485_486_487_488_489_490_491_492_493_494f210_496f212_498_499_500_501_502_503_504_505_506_507_508_509venus_511_512_513_514_515_516_517_518_519_520_521_522_523_524_525_526_527_528_529_530_531_532_533_534_535_536_537_538_539_540_541_542_543_544_545_546_547_548_549_550_551_552_553_554_555_556_557_558_559_560_561_562_563_564_565_566_567_568_569f260f261_572f263_574_575_576_577_578_579_580_581_582_583_584_585_586_587_588_589_590_591_592_593_594_595_596_597_598f27euniF280uniF281_602_603_604uniF285uniF286_607_608_609_610_611_612_613_614_615_616_617_618_619_620_621_622_623_624_625_626_627_628_629uniF2A0uniF2A1uniF2A2uniF2A3uniF2A4uniF2A5uniF2A6uniF2A7uniF2A8uniF2A9uniF2AAuniF2ABuniF2ACuniF2ADuniF2AEuniF2B0uniF2B1uniF2B2uniF2B3uniF2B4uniF2B5uniF2B6uniF2B7uniF2B8uniF2B9uniF2BAuniF2BBuniF2BCuniF2BDuniF2BEuniF2C0uniF2C1uniF2C2uniF2C3uniF2C4uniF2C5uniF2C6uniF2C7uniF2C8uniF2C9uniF2CAuniF2CBuniF2CCuniF2CDuniF2CEuniF2D0uniF2D1uniF2D2uniF2D3uniF2D4uniF2D5uniF2D6uniF2D7uniF2D8uniF2D9uniF2DAuniF2DBuniF2DCuniF2DDuniF2DEuniF2E0uniF2E1uniF2E2uniF2E3uniF2E4uniF2E5uniF2E6uniF2E7_698uniF2E9uniF2EAuniF2EBuniF2ECuniF2EDuniF2EE      ÿÿ               Â              Ì=¢Ï    ËO<0    Ô1h¹// Original copyright info from https://www.shadertoy.com/view/3lBXR3:
-//
-// update of https://www.shadertoy.com/view/WlfXRN to add Google's
-// turbo colormap
-//
-// License CC0 (public domain)
-//   https://creativecommons.org/share-your-work/public-domain/cc0/
-//
-// feel free to use these in your own work!
-//
-// similar to https://www.shadertoy.com/view/XtGGzG but with a couple small differences:
-//
-//  - use degree 6 instead of degree 5 polynomials
-//  - use nested horner representation for polynomials
-//  - polynomials were fitted to minimize maximum error (as opposed to least squares)
-//
-// data fitted from https://github.com/BIDS/colormap/blob/master/colormaps.py
-// (which is licensed CC0)
-//
-// improved version adds turbo colormap from
-// https://ai.googleblog.com/2019/08/turbo-improved-rainbow-colormap-for.html
-// and https://gist.github.com/mikhailov-work/ee72ba4191942acecc03fe6da94fc73f
-//
-// see also maeln's shader at https://www.shadertoy.com/view/3t2XzV demonstrating turbo
+foursquaretrellofemalemalegittipsun_366archivebugvkweiborenren_372stack_exchange_374arrow_circle_alt_left_376dot_circle_alt_378vimeo_square_380plus_square_o_382_383_384_385_386_387_388_389uniF1A0f1a1_392_393f1a4_395_396_397_398_399_400f1ab_402_403_404uniF1B1_406_407_408_409_410_411_412_413_414_415_416_417_418_419uniF1C0uniF1C1_422_423_424_425_426_427_428_429_430_431_432_433_434uniF1D0uniF1D1uniF1D2_438_439uniF1D5uniF1D6uniF1D7_443_444_445_446_447_448_449uniF1E0_451_452_453_454_455_456_457_458_459_460_461_462_463_464uniF1F0_466_467f1f3_469_470_471_472_473_474_475_476f1fc_478_479_480_481_482_483_484_485_486_487_488_489_490_491_492_493_494f210_496f212_498_499_500_501_502_503_504_505_506_507_508_509venus_511_512_513_514_515_516_517_518_519_520_521_522_523_524_525_526_527_528_529_530_531_532_533_534_535_536_537_538_539_540_541_542_543_544_545_546_547_548_549_550_551_552_553_554_555_556_557_558_559_560_561_562_563_564_565_566_567_568_569f260f261_572f263_574_575_576_577_578_579_580_581_582_583_584_585_586_587_588_589_590_591_592_593_594_595_596_597_598f27euniF280uniF281_602_603_604uniF285uniF286_607_608_609_610_611_612_613_614_615_616_617_618_619_620_621_622_623_624_625_626_627_628_629uniF2A0uniF2A1uniF2A2uniF2A3uniF2A4uniF2A5uniF2A6uniF2A7uniF2A8uniF2A9uniF2AAuniF2ABuniF2ACuniF2ADuniF2AEuniF2B0uniF2B1uniF2B2uniF2B3uniF2B4uniF2B5uniF2B6uniF2B7uniF2B8uniF2B9uniF2BAuniF2BBuniF2BCuniF2BDuniF2BEuniF2C0uniF2C1uniF2C2uniF2C3uniF2C4uniF2C5uniF2C6uniF2C7uniF2C8uniF2C9uniF2CAuniF2CBuniF2CCuniF2CDuniF2CEuniF2D0uniF2D1uniF2D2uniF2D3uniF2D4uniF2D5uniF2D6uniF2D7uniF2D8uniF2D9uniF2DAuniF2DBuniF2DCuniF2DDuniF2DEuniF2E0uniF2E1uniF2E2uniF2E3uniF2E4uniF2E5uniF2E6uniF2E7_698uniF2E9uniF2EAuniF2EBuniF2ECuniF2EDuniF2EE      ÿÿ               Â              Ì=¢Ï    ËO<0    Ô1h¹precision mediump float;
 
-precision mediump float;
-
-vec3 viridis(float t)
-{
-
-    const vec3 c0 = vec3(0.2777273272234177, 0.005407344544966578, 0.3340998053353061);
-    const vec3 c1 = vec3(0.1050930431085774, 1.404613529898575, 1.384590162594685);
-    const vec3 c2 = vec3(-0.3308618287255563, 0.214847559468213, 0.09509516302823659);
-    const vec3 c3 = vec3(-4.634230498983486, -5.799100973351585, -19.33244095627987);
-    const vec3 c4 = vec3(6.228269936347081, 14.17993336680509, 56.69055260068105);
-    const vec3 c5 = vec3(4.776384997670288, -13.74514537774601, -65.35303263337234);
-    const vec3 c6 = vec3(-5.435455855934631, 4.645852612178535, 26.3124352495832);
-
-    return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
-}
-
-vec3 plasma(float t)
-{
-
-    const vec3 c0 = vec3(0.05873234392399702, 0.02333670892565664, 0.5433401826748754);
-    const vec3 c1 = vec3(2.176514634195958, 0.2383834171260182, 0.7539604599784036);
-    const vec3 c2 = vec3(-2.689460476458034, -7.455851135738909, 3.110799939717086);
-    const vec3 c3 = vec3(6.130348345893603, 42.3461881477227, -28.51885465332158);
-    const vec3 c4 = vec3(-11.10743619062271, -82.66631109428045, 60.13984767418263);
-    const vec3 c5 = vec3(10.02306557647065, 71.41361770095349, -54.07218655560067);
-    const vec3 c6 = vec3(-3.658713842777788, -22.93153465461149, 18.19190778539828);
-
-    return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
-}
-
-vec3 magma(float t)
-{
-
-    const vec3 c0 = vec3(-0.002136485053939582, -0.000749655052795221, -0.005386127855323933);
-    const vec3 c1 = vec3(0.2516605407371642, 0.6775232436837668, 2.494026599312351);
-    const vec3 c2 = vec3(8.353717279216625, -3.577719514958484, 0.3144679030132573);
-    const vec3 c3 = vec3(-27.66873308576866, 14.26473078096533, -13.64921318813922);
-    const vec3 c4 = vec3(52.17613981234068, -27.94360607168351, 12.94416944238394);
-    const vec3 c5 = vec3(-50.76852536473588, 29.04658282127291, 4.23415299384598);
-    const vec3 c6 = vec3(18.65570506591883, -11.48977351997711, -5.601961508734096);
-
-    return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
-}
-
-vec3 inferno(float t)
-{
-
-    const vec3 c0 = vec3(0.0002189403691192265, 0.001651004631001012, -0.01948089843709184);
-    const vec3 c1 = vec3(0.1065134194856116, 0.5639564367884091, 3.932712388889277);
-    const vec3 c2 = vec3(11.60249308247187, -3.972853965665698, -15.9423941062914);
-    const vec3 c3 = vec3(-41.70399613139459, 17.43639888205313, 44.35414519872813);
-    const vec3 c4 = vec3(77.162935699427, -33.40235894210092, -81.80730925738993);
-    const vec3 c5 = vec3(-71.31942824499214, 32.62606426397723, 73.20951985803202);
-    const vec3 c6 = vec3(25.13112622477341, -12.24266895238567, -23.07032500287172);
-
-    return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
-}
-
-vec3 turbo(float t)
-{
-    const vec3 c0 = vec3(0.1140890109226559, 0.06288340699912215, 0.2248337216805064);
-    const vec3 c1 = vec3(6.716419496985708, 3.182286745507602, 7.571581586103393);
-    const vec3 c2 = vec3(-66.09402360453038, -4.9279827041226, -10.09439367561635);
-    const vec3 c3 = vec3(228.7660791526501, 25.04986699771073, -91.54105330182436);
-    const vec3 c4 = vec3(-334.8351565777451, -69.31749712757485, 288.5858850615712);
-    const vec3 c5 = vec3(218.7637218434795, 67.52150567819112, -305.2045772184957);
-    const vec3 c6 = vec3(-52.88903478218835, -21.54527364654712, 110.5174647748972);
-
-    return c0 + t * (c1 + t * (c2 + t * (c3 + t * (c4 + t * (c5 + t * c6)))));
-}precision mediump float;
-
-#define min_Lab     vec3(0, -128, -128)
-#define max_Lab     vec3(100, 128, 128)
-#define range_Lab   (max_Lab - min_Lab)
-#define Lab_d65_wts vec3(.95047, 1.000, 1.08883)
 #ifndef saturate
 #define saturate(v) clamp(v, 0.0, 1.0)
 #endif
@@ -26243,16 +26145,7 @@ vec3 XYZToRGB(vec3 xyz)
         mat3(3.240479, -0.969256, 0.055648, -1.537150, 1.875992, -0.204043, -0.498535, 0.041556, 1.057311);
     return XYZ2RGB * xyz;
 }
-
-vec3 jetFalseColor(float x)
-{
-    float r = saturate((x < 0.7) ? 4.0 * x - 1.5 : -4.0 * x + 4.5);
-    float g = saturate((x < 0.5) ? 4.0 * x - 0.5 : -4.0 * x + 3.5);
-    float b = saturate((x < 0.3) ? 4.0 * x + 0.5 : -4.0 * x + 2.5);
-    return vec3(r, g, b);
-}
-
-vec3 positiveNegative(float x) { return vec3(-min(x, 0.0), 0.0, max(x, 0.0)); }precision mediump float;
+precision mediump float;
 
 // These need to stay in sync with the various enums in fwd.h
 #define CHANNEL_RGB   0
