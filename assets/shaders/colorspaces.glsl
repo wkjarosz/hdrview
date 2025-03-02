@@ -1,9 +1,5 @@
 precision mediump float;
 
-#define min_Lab     vec3(0, -128, -128)
-#define max_Lab     vec3(100, 128, 128)
-#define range_Lab   (max_Lab - min_Lab)
-#define Lab_d65_wts vec3(.95047, 1.000, 1.08883)
 #ifndef saturate
 #define saturate(v) clamp(v, 0.0, 1.0)
 #endif
@@ -65,13 +61,3 @@ vec3 XYZToRGB(vec3 xyz)
         mat3(3.240479, -0.969256, 0.055648, -1.537150, 1.875992, -0.204043, -0.498535, 0.041556, 1.057311);
     return XYZ2RGB * xyz;
 }
-
-vec3 jetFalseColor(float x)
-{
-    float r = saturate((x < 0.7) ? 4.0 * x - 1.5 : -4.0 * x + 4.5);
-    float g = saturate((x < 0.5) ? 4.0 * x - 0.5 : -4.0 * x + 3.5);
-    float b = saturate((x < 0.3) ? 4.0 * x + 0.5 : -4.0 * x + 2.5);
-    return vec3(r, g, b);
-}
-
-vec3 positiveNegative(float x) { return vec3(-min(x, 0.0), 0.0, max(x, 0.0)); }
