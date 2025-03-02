@@ -275,7 +275,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     HelloImGui::DockableWindow advanced_settings_window;
     advanced_settings_window.label             = "Advanced settings";
     advanced_settings_window.dockSpaceName     = "RightSpace";
-    advanced_settings_window.isVisible         = true;
+    advanced_settings_window.isVisible         = false;
     advanced_settings_window.rememberIsVisible = true;
     advanced_settings_window.GuiFunction       = [this]
     {
@@ -285,8 +285,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
             ImGui::SameLine();
             ImGui::PushItemWidth(-5 * HelloImGui::EmSize());
             ImGui::BeginDisabled(!m_draw_clip_warnings);
-            ImGui::DragFloatRange2("Clip warning", &m_clip_range.min.x, &m_clip_range.max.x, 0.01f, 0.f, 0.f,
-                                   "min: %.1f", "max: %.1f");
+            ImGui::DragFloatRange2("Clip warning", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.1f",
+                                   "max: %.1f");
             ImGui::EndDisabled();
             ImGui::PopItemWidth();
             // ImGui::TreePop();
@@ -1073,6 +1073,8 @@ void HDRViewApp::load_settings()
         m_dither               = j.value<bool>("dither", m_dither);
         g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
         g_short_names          = j.value<bool>("short names", g_short_names);
+        m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
+        m_clip_range           = j.value<float2>("clip range", m_clip_range);
     }
     catch (json::exception &e)
     {
@@ -1102,6 +1104,8 @@ void HDRViewApp::save_settings()
     j["verbosity"]               = spdlog::get_level();
     j["file list mode"]          = g_file_list_mode;
     j["short names"]             = g_short_names;
+    j["draw clip warnings"]      = m_draw_clip_warnings;
+    j["clip range"]              = m_clip_range;
     HelloImGui::SaveUserPref("UserSettings", j.dump(4));
 }
 
@@ -2622,7 +2626,7 @@ void HDRViewApp::draw_image() const
 
         m_shader->set_uniform("time", (float)ImGui::GetTime());
         m_shader->set_uniform("draw_clip_warnings", m_draw_clip_warnings);
-        m_shader->set_uniform("clip_range", float2{m_clip_range.min.x, m_clip_range.max.x});
+        m_shader->set_uniform("clip_range", m_clip_range);
         m_shader->set_uniform("randomness", randomness);
         m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
         m_shader->set_uniform("gamma", m_gamma_live);

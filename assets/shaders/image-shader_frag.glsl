@@ -166,6 +166,7 @@ float sample_channel(sampler2D sampler, vec2 uv, bool within_image)
 
 void main()
 {
+    vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
     vec4 background = vec4(bg_color.rgb, 1.0);
     if (bg_mode == BG_BLACK)
         background.rgb = vec3(0.0);
@@ -173,16 +174,17 @@ void main()
         background.rgb = vec3(1.0);
     else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
     {
-        float dark_gray  = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
-        float checkerboard =
-            mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
-        background.rgb = sRGBToLinear(vec3(checkerboard));
+        float dark_gray    = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
+        float light_gray   = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
+        background.rgb     = sRGBToLinear(vec3(checkerboard));
     }
 
+    float zebra1 = (mod(float(int(floor((pixel.x + pixel.y - 30.0 * time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+    float zebra2 = (mod(float(int(floor((pixel.x - pixel.y - 30.0 * time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
+
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
-    bool in_ref =
-        secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0 && has_reference;
+    bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
     if (!in_img && !(in_ref && has_reference))
     {
@@ -214,8 +216,17 @@ void main()
         value = blend(value, reference_val);
     }
 
-    vec4 foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
-    vec4 blended    = dither(linearToSRGB(tonemap(foreground) + background * (1.0 - foreground.a)));
-    blended         = clamp(blended, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
-    frag_color      = vec4(blended.rgb, 1.0);
+    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
+    vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
+    bvec3 clipped    = greaterThan(foreground.rgb, clip_range.yyy);
+    bvec3 crushed    = lessThan(foreground.rgb, clip_range.xxx);
+    vec4  blended    = linearToSRGB(tonemapped);
+    vec4  dithered   = dither(blended);
+    dithered         = clamp(dithered, clamp_to_LDR ? 0.0 : -64.0, clamp_to_LDR ? 1.0 : 64.0);
+    if (draw_clip_warnings)
+    {
+        dithered.rgb = mix(dithered.rgb, vec3(zebra1), clipped);
+        dithered.rgb = mix(dithered.rgb, vec3(zebra2), crushed);
+    }
+    frag_color = vec4(dithered.rgb, 1.0);
 }
