@@ -1,9 +1,6 @@
 #include <metal_stdlib>
 #include <simd/simd.h>
 
-// #include "colorspaces.metal"
-// #include "colormaps.metal"
-
 using namespace metal;
 
 // These need to stay in sync with the various enums in fwd.h

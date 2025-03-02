@@ -1017,12 +1017,12 @@ void HDRViewApp::setup_rendering()
         m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
         m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
 
-        m_shader = new Shader(m_render_pass,
-                              /* An identifying name */
-                              "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-                              Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"),
-                                                       {"shaders/colorspaces", "shaders/colormaps"}),
-                              Shader::BlendMode::AlphaBlend);
+        m_shader = new Shader(
+            m_render_pass,
+            /* An identifying name */
+            "ImageView", Shader::from_asset("shaders/image-shader_vert"),
+            Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"), {"shaders/colorspaces"}),
+            Shader::BlendMode::AlphaBlend);
 
         const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
 
@@ -3277,8 +3277,6 @@ void HDRViewApp::draw_about_dialog()
                     ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
                     ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
 
-                    item_and_description("colormaps", "Matt Zucker's degree 6 polynomial colormaps.",
-                                         "https://www.shadertoy.com/view/3lBXR3");
                     item_and_description("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
 #ifdef HDRVIEW_ENABLE_UHDR
