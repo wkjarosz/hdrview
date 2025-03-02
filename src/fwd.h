@@ -32,6 +32,10 @@ using Color3 = float3;
 using Color4 = float4;
 
 // define some common types
+using Box1f = Box<float1>;
+using Box1d = Box<double1>;
+using Box1i = Box<int1>;
+
 using Box2f = Box<float2>;
 using Box2d = Box<double2>;
 using Box2i = Box<int2>;

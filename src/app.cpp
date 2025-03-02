@@ -272,10 +272,32 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     log_window.rememberIsVisible = true;
     log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular", 14)); };
 
+    HelloImGui::DockableWindow advanced_settings_window;
+    advanced_settings_window.label             = "Advanced settings";
+    advanced_settings_window.dockSpaceName     = "RightSpace";
+    advanced_settings_window.isVisible         = true;
+    advanced_settings_window.rememberIsVisible = true;
+    advanced_settings_window.GuiFunction       = [this]
+    {
+        // if (ImGui::TreeNode("Clip warnings"))
+        {
+            ImGui::Checkbox("##Draw clip warning", &m_draw_clip_warning);
+            ImGui::SameLine();
+            ImGui::PushItemWidth(-5 * HelloImGui::EmSize());
+            ImGui::BeginDisabled(!m_draw_clip_warning);
+            ImGui::DragFloatRange2("Clip warning", &m_clip_range.min.x, &m_clip_range.max.x, 0.01f, 0.f, 0.f,
+                                   "min: %.1f", "max: %.1f");
+            ImGui::EndDisabled();
+            ImGui::PopItemWidth();
+            // ImGui::TreePop();
+        }
+    };
+
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window,       channel_stats_window, file_window, info_window,
-                                              pixel_inspector_window, channel_window,       log_window};
+    m_params.dockingParams.dockableWindows = {histogram_window, channel_stats_window,    file_window,
+                                              info_window,      pixel_inspector_window,  channel_window,
+                                              log_window,       advanced_settings_window};
     m_params.dockingParams.dockingSplits   = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},

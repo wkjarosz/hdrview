@@ -221,7 +221,9 @@ private:
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     bool       m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
-         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true;
+         m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
+         m_draw_clip_warning = true;
+    Box1f m_clip_range{0.f, 1.f};
     Box2i m_roi = Box2i{int2{0}}, m_roi_live = Box2i{int2{0}};
 
     // Image display parameters.
