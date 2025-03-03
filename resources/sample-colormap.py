@@ -25,6 +25,7 @@ def main(arguments):
     parser.add_argument("-n", "--num-samples", type=int, default=256, help="The number of samples to generate.")
     parser.add_argument("-a", "--include-alpha", action="store_true", help="Include the alpha channel in the output.")
     parser.add_argument("-l", "--linearize", action="store_true", help="Output linear (instead of sRGB encoded) values.")
+    parser.add_argument("-b", "--bit-depth", type=int, choices=[8, 16, 32], default=32, help="Bit depth of the output values.")
 
     args = parser.parse_args(arguments)
 
@@ -40,9 +41,17 @@ def main(arguments):
     if args.include_alpha:
         values = np.column_stack((values, alpha))
 
-    values = ",\n    ".join(["{" + ", ".join([str(y) + "f" for y in x]) + "}" for x in values]) + ","
-    print(f"static const std::vector<float4> data = {{\n    {values}\n}};")
-
+    if args.bit_depth == 8:
+        values = (values * 255).astype(int)
+        values = ",\n    ".join(["IM_COL32(" + ", ".join([str(y) for y in x]) + ")" for x in values]) + ","
+        print(f"static const std::vector<ImU32> data = {{\n    {values}\n}};")
+    elif args.bit_depth == 16:
+        values = (values * 65535).astype(int)
+        values = ",\n    ".join(["{" + ", ".join([str(y) for y in x]) + "}" for x in values]) + ","
+        print(f"static const std::vector<ushort4> data = {{\n    {values}\n}};")
+    else:
+        values = ",\n    ".join(["{" + ", ".join([f"{y:.6f}f" for y in x]) + "}" for x in values]) + ","
+        print(f"static const std::vector<float4> data = {{\n    {values}\n}};")
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

@@ -2727,8 +2727,7 @@ void HDRViewApp::draw_top_toolbar()
         ImGui::PopStyleVar();
         if (tmp)
         {
-            auto maps = {Colormap_Viridis, Colormap_Plasma,  Colormap_Inferno,
-                         Colormap_Turbo,   Colormap_IceFire, Colormap_CoolWarm};
+            auto maps = {Colormap_Viridis, Colormap_Inferno, Colormap_Turbo, Colormap_IceFire, Colormap_CoolWarm};
             for (auto n : maps)
             {
                 const bool is_selected = (m_colormap == n);

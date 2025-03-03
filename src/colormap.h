@@ -39,7 +39,7 @@ public:
     static void initialize();
     static void cleanup();
 
-    static const char                *name(Colormap_ idx);
-    static Texture                   *texture(Colormap_ idx);
-    static const std::vector<float4> &values(Colormap_ idx);
+    static const char               *name(Colormap_ idx);
+    static Texture                  *texture(Colormap_ idx);
+    static const std::vector<ImU32> &values(Colormap_ idx);
 };
