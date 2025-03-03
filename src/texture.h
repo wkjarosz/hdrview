@@ -56,7 +56,7 @@ public:
     enum class InterpolationMode : uint8_t
     {
         Nearest,  ///< Nearest neighbor interpolation
-        Bilinear, ///< Bilinear ineterpolation
+        Bilinear, ///< Bilinear interpolation
         Trilinear ///< Trilinear interpolation (using MIP mapping)
     };
 
@@ -99,10 +99,10 @@ public:
     /// Return the component format
     ComponentFormat component_format() const { return m_component_format; }
 
-    /// Return the interpolation mode for minimization
+    /// Return the interpolation mode for minification
     InterpolationMode min_interpolation_mode() const { return m_min_interpolation_mode; }
 
-    /// Return the interpolation mode for minimization
+    /// Return the interpolation mode for magnification
     InterpolationMode mag_interpolation_mode() const { return m_mag_interpolation_mode; }
 
     /// Return the wrap mode

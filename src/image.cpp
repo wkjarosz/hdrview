@@ -315,12 +315,12 @@ Texture *Channel::get_texture()
     if (texture_is_dirty || !texture)
     {
 #if defined(__EMSCRIPTEN__)
-        auto mag_mode = Texture::InterpolationMode::Nearest;
+        auto min_mode = Texture::InterpolationMode::Nearest;
 #else
-        auto mag_mode = Texture::InterpolationMode::Trilinear;
+        auto min_mode = Texture::InterpolationMode::Trilinear;
 #endif
         texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, size(),
-                                            mag_mode, Texture::InterpolationMode::Nearest,
+                                            min_mode, Texture::InterpolationMode::Nearest,
                                             Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead);
         if (texture->pixel_format() != Texture::PixelFormat::R)
             throw std::invalid_argument("Pixel format not supported by the hardware!");

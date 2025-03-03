@@ -5,6 +5,7 @@
 //
 
 #include "colormap.h"
+#include "colorspace.h"
 #include "common.h"
 #include "texture.h"
 
@@ -686,15 +687,22 @@ void Colormap::initialize()
 
     for (cmap = 0; cmap < Colormap_COUNT; ++cmap)
     {
+        vector<ImU32> values_8bit;
+        values_8bit.resize(ImPlot::GetColormapSize(cmap));
+        for (size_t i = 0; i < values_8bit.size(); ++i)
+            values_8bit[i] = ImGui::ColorConvertFloat4ToU32(s_values[cmap][i]);
+
         s_textures[cmap] = std::make_unique<Texture>(
-            Texture::PixelFormat::RGBA, Texture::ComponentFormat::Float32, int2(s_values[cmap].size(), 1),
+            Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2(values_8bit.size(), 1),
             Texture::InterpolationMode::Nearest,
             cmap <= ImPlotColormap_Paired ? Texture::InterpolationMode::Nearest : Texture::InterpolationMode::Bilinear,
             Texture::WrapMode::ClampToEdge, 1, Texture::TextureFlags::ShaderRead);
         if (s_textures[cmap]->pixel_format() != Texture::PixelFormat::RGBA)
             throw std::invalid_argument("Pixel format not supported by the hardware!");
+        if (s_textures[cmap]->component_format() != Texture::ComponentFormat::UInt8)
+            throw std::invalid_argument("Component format not supported by the hardware!");
 
-        s_textures[cmap]->upload((const uint8_t *)s_values[cmap].data());
+        s_textures[cmap]->upload((const uint8_t *)values_8bit.data());
     }
 }
 void Colormap::cleanup()

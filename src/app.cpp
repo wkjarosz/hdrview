@@ -2661,6 +2661,11 @@ void HDRViewApp::draw_image() const
         m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
         m_shader->end();
     }
+
+    // ImGui::Begin("Texture window");
+    // ImGui::Image((ImTextureID)(intptr_t)Colormap::texture(m_colormap)->texture_handle(),
+    //              ImGui::GetContentRegionAvail());
+    // ImGui::End();
 }
 
 void HDRViewApp::draw_top_toolbar()
