@@ -703,8 +703,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         {
                             float m     = 0.f;
                             auto &group = img->groups[img->selected_group];
-                            for (int c = 0; c < group.num_channels && c < 3; ++c)
+
+                            bool3 should_include[NUM_CHANNELS] = {
+                                {true, true, true},   // RGB
+                                {true, false, false}, // RED
+                                {false, true, false}, // GREEN
+                                {false, false, true}, // BLUE
+                                {true, true, true},   // ALPHA
+                                {true, true, true}    // Y
+                            };
+                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
+                            {
+                                if (group.num_channels >= 3 && !should_include[m_channel][c])
+                                    continue;
                                 m = std::max(m, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                            }
 
                             m_exposure_live = m_exposure = log2(1.f / m);
                         }
