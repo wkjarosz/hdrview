@@ -71,8 +71,7 @@ static float g_scroll_multiplier = 1.0f;
 struct WatchedPixel
 {
     int2 pixel;
-    int  color_mode_current   = 0;
-    int  color_mode_reference = 0;
+    int3 color_mode{0, 0, 0}; //!< Color mode for current, reference, and composite pixels
 };
 
 static vector<WatchedPixel> g_watched_pixels;
@@ -791,6 +790,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                             save_as(filename);
                     },
                     if_img});
+        add_action({"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
+                    [this]()
+                    {
+                        string filename =
+                            pfd::save_file("Export image as", g_blank_icon,
+                                           {
+                                               "Supported image files",
+                                               fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
+                                           })
+                                .result();
+
+                        if (!filename.empty())
+                            export_as(filename);
+                    },
+                    if_img});
 
 #else
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
@@ -1222,6 +1236,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Save as..."));
+        MenuItem(action("Export image as..."));
 
         ImGui::Separator();
 
@@ -1356,6 +1371,55 @@ void HDRViewApp::save_as(const string &filename) const
     catch (...)
     {
         spdlog::error("An unknown error occurred while saving to '{}'.", filename);
+    }
+}
+
+void HDRViewApp::export_as(const string &filename) const
+{
+    try
+    {
+        Image img(current_image()->size(), 4);
+        img.finalize();
+        int2 p;
+        auto bounds     = current_image()->data_window;
+        int  block_size = std::max(1, 1024 * 1024 / img.size().x);
+        parallel_for(blocked_range<int>(0, img.size().y, block_size),
+                     [this, &img, bounds](int begin_y, int end_y, int, int)
+                     {
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < img.size().x; ++x)
+                             {
+                                 float4 v = pixel_value(int2{x, y} + bounds.min, false, 2);
+
+                                 img.channels[0](x, y) = v[0];
+                                 img.channels[1](x, y) = v[1];
+                                 img.channels[2](x, y) = v[2];
+                                 img.channels[3](x, y) = v[3];
+                             }
+                     });
+
+#if !defined(__EMSCRIPTEN__)
+        std::ofstream os{filename, std::ios_base::binary};
+        img.save(os, filename, 1.f, 1.f, false, m_dither);
+#else
+        std::ostringstream os;
+        img.save(os, filename, 1.f, 1.f, false, m_dither);
+        string buffer = os.str();
+        emscripten_browser_file::download(
+            filename,                                    // the default filename for the browser to save.
+            "application/octet-stream",                  // the MIME type of the data, treated as if it were a webserver
+                                                         // serving a file
+            string_view(buffer.c_str(), buffer.length()) // a buffer describing the data to download
+        );
+#endif
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::error("An error occurred while exporting to '{}':\n\t{}.", filename, e.what());
+    }
+    catch (...)
+    {
+        spdlog::error("An unknown error occurred while exporting to '{}'.", filename);
     }
 }
 
@@ -1645,19 +1709,68 @@ void HDRViewApp::draw_info_window()
         return img->draw_info();
 }
 
-static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mode, Target target,
-                             bool allow_copy = false)
+float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 {
-    if (!img)
-        return;
+    auto img1 = current_image();
+    auto img2 = reference_image();
 
-    int      group_idx       = target == Target_Primary ? img->selected_group : img->reference_group;
-    auto    &group           = img->groups[group_idx];
-    float4   color32         = img->raw_pixel(pixel, target);
-    float4   displayed_color = img->shaded_pixel(pixel, target, powf(2.f, hdrview()->exposure_live()),
-                                                 hdrview()->gamma_live(), hdrview()->tonemap(), hdrview()->colormap());
+    float4 value;
+
+    if (which_image == 0)
+        value = img1 ? (raw ? img1->raw_pixel(p, Target_Primary) : img1->rgba_pixel(p, Target_Primary)) : float4{0.f};
+    else if (which_image == 1)
+        value =
+            img2 ? (raw ? img2->raw_pixel(p, Target_Secondary) : img2->rgba_pixel(p, Target_Secondary)) : float4{0.f};
+    else if (which_image == 2)
+    {
+        auto rgba1 = img1 ? img1->rgba_pixel(p, Target_Primary) : float4{0.f};
+        auto rgba2 = img2 ? img2->rgba_pixel(p, Target_Secondary) : float4{0.f};
+        value      = blend(rgba1, rgba2, m_blend_mode);
+    }
+
+    return raw ? value
+               : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz(), value.w}, m_gamma_live, m_tonemap,
+                           m_colormap);
+}
+
+static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false)
+{
+    float4   color32         = hdrview()->pixel_value(pixel, true, which_image);
+    float4   displayed_color = hdrview()->pixel_value(pixel, false, which_image);
     uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
     int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
+    bool3    inside          = {false, false, false};
+
+    int    components       = 4;
+    string channel_names[4] = {"R", "G", "B", "A"};
+    if (which_image != 2)
+    {
+        ConstImagePtr img;
+        ChannelGroup  group;
+        if (which_image == 0)
+        {
+            if (!hdrview()->current_image())
+                return;
+            img        = hdrview()->current_image();
+            components = color_mode == 0 ? img->groups[img->selected_group].num_channels : 4;
+            group      = img->groups[img->selected_group];
+            inside[0]  = img->contains(pixel);
+        }
+        else if (which_image == 1)
+        {
+            if (!hdrview()->reference_image())
+                return;
+            img        = hdrview()->reference_image();
+            components = color_mode == 0 ? img->groups[img->reference_group].num_channels : 4;
+            group      = img->groups[img->reference_group];
+            inside[1]  = img->contains(pixel);
+        }
+
+        if (color_mode == 0)
+            for (int c = 0; c < components; ++c)
+                channel_names[c] = Channel::tail(img->channels[group.channels[c]].name);
+    }
+    inside[2] = inside[0] || inside[1];
 
     ImGuiColorEditFlags color_flags = ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_AlphaPreviewHalf;
     if (ImGui::ColorButton("colorbutton", displayed_color, color_flags))
@@ -1672,11 +1785,11 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
             string buf;
             if (color_mode == 0)
             {
-                if (group.num_channels == 4)
+                if (components == 4)
                     buf = fmt::format("({:g}, {:g}, {:g}, {:g})", color32.x, color32.y, color32.z, color32.w);
-                else if (group.num_channels == 3)
+                else if (components == 3)
                     buf = fmt::format("({:g}, {:g}, {:g})", color32.x, color32.y, color32.z);
-                else if (group.num_channels == 2)
+                else if (components == 2)
                     buf = fmt::format("({:g}, {:g})", color32.x, color32.y);
                 else
                     buf = fmt::format("{:g}", color32.x);
@@ -1705,11 +1818,8 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-    // static const char *rgba          = "R,G,B,A";
-    static const char *rgba_names[4] = {"R", "G", "B", "A"};
-    float              w_full        = ImGui::GetContentRegionAvail().x;
+    float w_full = ImGui::GetContentRegionAvail().x;
     // width available to all items (without spacing)
-    int   components = color_mode == 0 ? group.num_channels : 4;
     float w_items    = w_full - ImGui::GetStyle().ItemInnerSpacing.x * (components - 1);
     float prev_split = w_items;
     // distributes the available width without jitter during resize
@@ -1720,12 +1830,10 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
         prev_split = next_split;
     };
 
-    ImGui::BeginDisabled(!img->contains(pixel));
+    ImGui::BeginDisabled(!inside[which_image]);
     ImGui::BeginGroup();
     if (color_mode == 0)
     {
-        // ImGui::InputScalarN(group.name.c_str(), ImGuiDataType_Float, &color32, group.num_channels, NULL, NULL, "%-g",
-        //                     ImGuiInputTextFlags_ReadOnly);
         for (int c = 0; c < components; ++c)
         {
             if (c > 0)
@@ -1733,14 +1841,11 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
 
             set_item_width(c);
             ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &color32[c], 0.f, 0.f,
-                              fmt::format("{}: %g", Channel::tail(img->channels[group.channels[c]].name)).c_str(),
-                              ImGuiInputTextFlags_ReadOnly);
+                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
         }
     }
     else if (color_mode == 1)
     {
-        // ImGui::InputScalarN(rgba, ImGuiDataType_Float, &displayed_color, 4, NULL, NULL, "%-g",
-        //                     ImGuiInputTextFlags_ReadOnly);
         for (int c = 0; c < components; ++c)
         {
             if (c > 0)
@@ -1748,12 +1853,11 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
 
             set_item_width(c);
             ImGui::InputFloat(fmt::format("##component {}", c).c_str(), &displayed_color[c], 0.f, 0.f,
-                              fmt::format("{}: %g", rgba_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
+                              fmt::format("{}: %g", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
         }
     }
     else if (color_mode == 2)
     {
-        // ImGui::InputScalarN(rgba, ImGuiDataType_S32, &ldr_color, 4, NULL, NULL, "%-d", ImGuiInputTextFlags_ReadOnly);
         for (int c = 0; c < components; ++c)
         {
             if (c > 0)
@@ -1761,12 +1865,11 @@ static void draw_pixel_color(ConstImagePtr img, const int2 &pixel, int &color_mo
 
             set_item_width(c);
             ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, NULL,
-                                NULL, fmt::format("{}: %d", rgba_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
+                                NULL, fmt::format("{}: %d", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
         }
     }
     else if (color_mode == 3)
     {
-        // ImGui::InputScalar(rgba, ImGuiDataType_S32, &hex, NULL, NULL, "#%-08X", ImGuiInputTextFlags_ReadOnly);
         ImGui::SetNextItemWidth(IM_TRUNC(w_full));
         ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, NULL, NULL, "#%08X", ImGuiInputTextFlags_ReadOnly);
     }
@@ -1819,14 +1922,20 @@ void HDRViewApp::draw_pixel_inspector_window()
     auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
     if (PixelHeader(ICON_MY_CURSOR_ARROW "##hovered pixel", hovered_pixel))
     {
-        static int2 color_mode = {0, 0};
+        static int3 color_mode = {0, 0, 0};
         ImGui::PushID("Current");
-        draw_pixel_color(current_image(), hovered_pixel, color_mode.x, Target_Primary);
+        pixel_color_widget(hovered_pixel, color_mode.x, 0);
         ImGui::SetItemTooltip("Hovered pixel values in current channel.");
         ImGui::PopID();
+
         ImGui::PushID("Reference");
-        draw_pixel_color(reference_image(), hovered_pixel, color_mode.y, Target_Secondary);
+        pixel_color_widget(hovered_pixel, color_mode.y, 1);
         ImGui::SetItemTooltip("Hovered pixel values in reference channel.");
+        ImGui::PopID();
+
+        ImGui::PushID("Composite");
+        pixel_color_widget(hovered_pixel, color_mode.z, 2);
+        ImGui::SetItemTooltip("Hovered pixel values in composite.");
         ImGui::PopID();
 
         ImGui::Spacing();
@@ -1844,13 +1953,18 @@ void HDRViewApp::draw_pixel_inspector_window()
         if (PixelHeader(fmt::format("{}{}", ICON_MY_WATCHED_PIXEL, i + 1), wp.pixel, &visible))
         {
             ImGui::PushID("Current");
-            draw_pixel_color(current_image(), wp.pixel, wp.color_mode_current, Target_Primary, true);
+            pixel_color_widget(wp.pixel, wp.color_mode.x, 0, true);
             ImGui::SetItemTooltip("Pixel %s%d values in current channel.", ICON_MY_WATCHED_PIXEL, i + 1);
             ImGui::PopID();
 
             ImGui::PushID("Reference");
-            draw_pixel_color(reference_image(), wp.pixel, wp.color_mode_reference, Target_Secondary, true);
+            pixel_color_widget(wp.pixel, wp.color_mode.y, 1, true);
             ImGui::SetItemTooltip("Pixel %s%d values in reference channel.", ICON_MY_WATCHED_PIXEL, i + 1);
+            ImGui::PopID();
+
+            ImGui::PushID("Composite");
+            pixel_color_widget(wp.pixel, wp.color_mode.z, 2, true);
+            ImGui::SetItemTooltip("Pixel %s%d values in composite.", ICON_MY_WATCHED_PIXEL, i + 1);
             ImGui::PopID();
 
             ImGui::Spacing();
@@ -2838,7 +2952,7 @@ void HDRViewApp::draw_background()
             {
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                     // add watched pixel
-                    g_watched_pixels.emplace_back(WatchedPixel{int2{pixel_at_app_pos(io.MousePos)}, 0, 0});
+                    g_watched_pixels.emplace_back(WatchedPixel{int2{pixel_at_app_pos(io.MousePos)}});
                 else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                 {
                     if (g_watched_pixels.size())

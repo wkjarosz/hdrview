@@ -881,9 +881,8 @@ float4 Image::raw_pixel(int2 p, Target target) const
     return value;
 }
 
-// This implements a simplified CPU version of the glsl/metal fragment shaders used to render the image
-float4 Image::shaded_pixel(int2 p, Target target, float gain, float gamma, Tonemap tonemap_mode,
-                           Colormap_ colormap) const
+/// Reconstruct the raw pixel value into an RGBA value (like the first stage of the fragment shader)
+float4 Image::rgba_pixel(int2 p, Target target) const
 {
     if (!contains(p))
         return float4{0.f};
@@ -912,5 +911,5 @@ float4 Image::shaded_pixel(int2 p, Target target, float gain, float gamma, Tonem
     }
 
     value.xyz() = mul(M_to_Rec709, value.xyz());
-    return tonemap(float4{gain * value.xyz(), value.w}, gamma, tonemap_mode, colormap);
+    return value;
 }

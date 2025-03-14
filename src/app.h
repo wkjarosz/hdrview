@@ -47,6 +47,7 @@ public:
     void load_image(const string filename, const std::string_view buffer = std::string_view{});
     void load_url(const string_view url);
     void save_as(const string &filename) const;
+    void export_as(const string &filename) const;
     void close_image();
     void close_all_images();
     //-----------------------------------------------------------------------------
@@ -133,13 +134,7 @@ public:
     void  set_zoom_level(float l);
     //-----------------------------------------------------------------------------
 
-    float4 image_pixel(int2 pixel, Target target = Target_Primary) const
-    {
-        auto img = current_image();
-        if (!img)
-            return float4{0.f};
-        return img->raw_pixel(pixel, target);
-    }
+    float4 pixel_value(int2 pixel, bool raw, int which_image) const;
 
     // load font with the specified name at the specified size
     ImFont *font(const string &name, int size) const;

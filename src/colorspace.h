@@ -371,6 +371,25 @@ inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Col
     }
 }
 
+inline float4 blend(float4 top, float4 bottom, EBlendMode blend_mode)
+{
+    float3 diff  = top.xyz() - bottom.xyz();
+    float  alpha = top.w + bottom.w * (1.f - top.w);
+    switch (blend_mode)
+    {
+    // case NORMAL_BLEND:
+    default: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
+    case MULTIPLY_BLEND: return float4(top.xyz() * bottom.xyz(), alpha);
+    case DIVIDE_BLEND: return float4(top.xyz() / bottom.xyz(), alpha);
+    case ADD_BLEND: return float4(top.xyz() + bottom.xyz(), alpha);
+    case AVERAGE_BLEND: return 0.5f * (top + bottom);
+    case SUBTRACT_BLEND: return float4(diff, alpha);
+    case DIFFERENCE_BLEND: return float4(abs(diff), alpha);
+    case RELATIVE_DIFFERENCE_BLEND: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
+    }
+    return float4(0.f);
+}
+
 const std::vector<std::string> &colorSpaceNames();
 
 // assumes values of v are in byte range: [0, 255]
