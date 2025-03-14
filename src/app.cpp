@@ -1380,7 +1380,6 @@ void HDRViewApp::export_as(const string &filename) const
     {
         Image img(current_image()->size(), 4);
         img.finalize();
-        int2 p;
         auto bounds     = current_image()->data_window;
         int  block_size = std::max(1, 1024 * 1024 / img.size().x);
         parallel_for(blocked_range<int>(0, img.size().y, block_size),
