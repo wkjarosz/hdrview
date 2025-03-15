@@ -810,22 +810,38 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
                     {
-                        if (current_image())
+                        string filename;
+                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
+                        ImGui::TextUnformatted(
+                            "Please enter a filename. Format is deduced from the accepted extensions:");
+                        ImGui::TextFmt("\t{}", filter);
+                        ImGui::Separator();
+                        if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
+                                                     ImGuiInputTextFlags_EnterReturnsTrue))
                         {
-                            string filename;
-                            string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                            ImGui::TextUnformatted(
-                                "Please enter a filename. Format is deduced from the accepted extensions:");
-                            ImGui::TextFmt("\t{}", filter);
-                            ImGui::Separator();
-                            if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                                         ImGuiInputTextFlags_EnterReturnsTrue))
-                            {
-                                ImGui::CloseCurrentPopup();
+                            ImGui::CloseCurrentPopup();
 
-                                if (!filename.empty())
-                                    save_as(filename);
-                            }
+                            if (!filename.empty())
+                                save_as(filename);
+                        }
+                    },
+                    if_img, true});
+        add_action({"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
+                    [this]()
+                    {
+                        string filename;
+                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
+                        ImGui::TextUnformatted(
+                            "Please enter a filename. Format is deduced from the accepted extensions:");
+                        ImGui::TextFmt("\t{}", filter);
+                        ImGui::Separator();
+                        if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
+                                                     ImGuiInputTextFlags_EnterReturnsTrue))
+                        {
+                            ImGui::CloseCurrentPopup();
+
+                            if (!filename.empty())
+                                export_as(filename);
                         }
                     },
                     if_img, true});
