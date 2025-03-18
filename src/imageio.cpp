@@ -90,7 +90,7 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     return {};
 }
 
-void Image::save(ostream &os, const string &_filename, float gain, float gamma, bool sRGB, bool dither) const
+void Image::save(ostream &os, const string &_filename, float gain, bool sRGB, bool dither) const
 {
     string extension = to_lower(get_extension(_filename));
     if (extension == "exr")
@@ -100,13 +100,12 @@ void Image::save(ostream &os, const string &_filename, float gain, float gamma, 
     else if (extension == "pfm")
         return save_pfm_image(*this, os, _filename, gain);
     else if (extension == "qoi")
-        return save_qoi_image(*this, os, _filename, gain, gamma, sRGB, dither);
+        return save_qoi_image(*this, os, _filename, gain, sRGB, dither);
     else
-        return save_stb_image(*this, os, _filename, gain, gamma, sRGB, dither);
+        return save_stb_image(*this, os, _filename, gain, sRGB, dither);
 }
 
-std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,
-                                                       bool dither) const
+std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const
 {
     Timer timer;
     *w                   = size().x;
@@ -119,7 +118,7 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
     // for (int c = 0; c < (*n); ++c)
     //     channels[groups[selected_group].channels[c]].copy_to_interleaved(
     //         pixels.get(), *n, c,
-    //         [gain, g = 1.f / gamma, sRGB, c, dither, alpha](float v, int x, int y)
+    //         [gain, sRGB, c, dither, alpha](float v, int x, int y)
     //         {
     //             // only gamma correct and premultiply the RGB channels.
     //             // alpha channel gets stored linearly.
@@ -133,47 +132,43 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
 
     //                 if (sRGB)
     //                     v = LinearToSRGB(v);
-    //                 else if (g != 1.0f)
-    //                     v = pow(v, g);
     //             }
 
     //             return f32_to_byte(v, x, y, false, dither);
     //         });
 
     int block_size = std::max(1, 1024 * 1024 / (*w));
-    parallel_for(blocked_range<int>(0, *h, block_size),
-                 [this, alpha, w = *w, n = *n, data = pixels.get(), gain, g = 1.f / gamma, sRGB,
-                  dither](int begin_y, int end_y, int, int)
-                 {
-                     int y_stride = w * n;
-                     for (int y = begin_y; y < end_y; ++y)
-                         for (int x = 0; x < w; ++x)
-                         {
-                             auto rgba_pixel = data + y * y_stride + n * x;
-                             for (int c = 0; c < n; ++c)
-                             {
-                                 float v = channels[groups[selected_group].channels[c]](x, y);
+    parallel_for(
+        blocked_range<int>(0, *h, block_size),
+        [this, alpha, w = *w, n = *n, data = pixels.get(), gain, sRGB, dither](int begin_y, int end_y, int, int)
+        {
+            int y_stride = w * n;
+            for (int y = begin_y; y < end_y; ++y)
+                for (int x = 0; x < w; ++x)
+                {
+                    auto rgba_pixel = data + y * y_stride + n * x;
+                    for (int c = 0; c < n; ++c)
+                    {
+                        float v = channels[groups[selected_group].channels[c]](x, y);
 
-                                 // only gamma correct and premultiply the RGB channels.
-                                 // alpha channel gets stored linearly.
-                                 if (c < 3)
-                                 {
-                                     v *= gain;
+                        // only gamma correct and premultiply the RGB channels.
+                        // alpha channel gets stored linearly.
+                        if (c < 3)
+                        {
+                            v *= gain;
 
-                                     // unpremultiply
-                                     if (alpha)
-                                         v /= std::max(k_small_alpha, (*alpha)(x, y));
+                            // unpremultiply
+                            if (alpha)
+                                v /= std::max(k_small_alpha, (*alpha)(x, y));
 
-                                     if (sRGB)
-                                         v = LinearToSRGB(v);
-                                     else if (g != 1.0f)
-                                         v = pow(v, g);
-                                 }
+                            if (sRGB)
+                                v = LinearToSRGB(v);
+                        }
 
-                                 rgba_pixel[c] = f32_to_byte(v, x, y, false, dither);
-                             }
-                         }
-                 });
+                        rgba_pixel[c] = f32_to_byte(v, x, y, false, dither);
+                    }
+                }
+        });
 
     spdlog::debug("Getting interleaved 8-bit pixels took: {} seconds.", (timer.elapsed() / 1000.f));
     return pixels;

@@ -97,13 +97,12 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     return {image};
 }
 
-void save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
-                    bool dither)
+void save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)
 {
     Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
+    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
 
     // The QOI image format only supports RGB or RGBA data.
     if (n != 4 && n != 3)

@@ -213,7 +213,7 @@ private:
     vector<shared_ptr<PendingImages>> m_pending_images;
     int                               m_remaining_download = 0;
 
-    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 2.2f, m_gamma_live = 2.2f;
+    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 1.0f, m_gamma_live = 1.0f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     bool       m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
@@ -229,7 +229,7 @@ private:
     float      m_zoom             = 1.f;        ///< The zoom factor (image pixel size / logical pixel size)
     float2     m_offset           = {0.f, 0.f}; ///< The panning offset of the image
     EChannel   m_channel          = EChannel::RGB; ///< Which channel to display
-    Tonemap    m_tonemap          = Tonemap_sRGB;
+    Tonemap    m_tonemap          = Tonemap_Gamma;
     Colormap_  m_colormap         = Colormap_Inferno;
     EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
     EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered

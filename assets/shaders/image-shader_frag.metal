@@ -11,10 +11,9 @@ using namespace metal;
 #define CHANNEL_ALPHA 4
 #define CHANNEL_Y 5
 
-#define Tonemap_sRGB             0
-#define Tonemap_Gamma            1
-#define Tonemap_FalseColor       2
-#define Tonemap_PositiveNegative 3
+#define Tonemap_Gamma            0
+#define Tonemap_FalseColor       1
+#define Tonemap_PositiveNegative 2
 
 #define NORMAL_BLEND 0
 #define MULTIPLY_BLEND 1
@@ -55,8 +54,8 @@ float4 tonemap(const float4 color, const int mode, const float gamma, texture2d<
 {
     switch (mode)
     {
-        default: return color;
-        case Tonemap_Gamma: return float4(sRGBToLinear(sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma))), color.a);
+        default:
+        case Tonemap_Gamma: return float4(sign(color.rgb) * pow(abs(color.rgb), float3(1.0 / gamma)), color.a);
         case Tonemap_FalseColor: 
         {
             int cmap_size = colormap.get_width(0);

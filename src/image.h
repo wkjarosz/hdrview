@@ -366,16 +366,14 @@ public:
         \param os        The output stream to write to
         \param filename  The filename to save to
         \param gain      Multiply all pixel values by gain before saving
-        \param gamma     If not saving to an HDR format, tonemap the image to sRGB
-        \param sRGB      If not saving to an HDR format, tonemap the image using this gamma value
+        \param sRGB      If not saving to an HDR format, tonemap the image to sRGB
         \param dither    If not saving to an HDR format, dither when tonemapping down to 8-bit
         \return          Returns nothing. Throws on error.
     */
-    void save(std::ostream &os, const std::string &filename, float gain = 1.f, float gamma = 2.2f, bool sRGB = true,
+    void save(std::ostream &os, const std::string &filename, float gain = 1.f, bool sRGB = true,
               bool dither = true) const;
 
-    std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, float gamma, bool sRGB,
-                                                    bool dither) const;
+    std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
     std::unique_ptr<float[]>   as_interleaved_floats(int *w, int *h, int *n, float gain) const;
     std::unique_ptr<half[]>    as_interleaved_halves(int *w, int *h, int *n, float gain) const;
 

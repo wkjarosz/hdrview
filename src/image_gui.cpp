@@ -393,6 +393,11 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
             draw_layer_node(child_node, img_idx, id, is_current, is_reference, visible_group);
             ImGui::TreePop();
         }
+        else
+        {
+            // still account for visible groups within the closed tree node
+            visible_group += child_node.visible_groups;
+        }
     }
 }
 

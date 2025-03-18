@@ -88,9 +88,7 @@ is freely available under a 3-clause BSD license.
             ->capture_default_str()
             ->group("Tone mapping and display");
 
-        app.add_option("-g,--gamma", gamma,
-                       R"(Desired gamma value for exposure+gamma tonemapping. An
-sRGB curve is used if gamma is not specified.)")
+        app.add_option("-g,--gamma", gamma, R"(Desired gamma value for exposure+gamma tonemapping.)")
             ->group("Tone mapping and display");
 
         app.add_flag("--dither,--no-dither{false}", dither,
@@ -171,11 +169,9 @@ The default is 2 (info).)")
         if (exposure.has_value())
             spdlog::info("Forcing exposure to {:f} (intensity scale of {:f})", *exposure, powf(2.0f, *exposure));
 
-        // gamma or sRGB
+        // tonemapping. TODO: add false color modes
         if (gamma.has_value())
             spdlog::info("Forcing gamma correction to g={:f}.", *gamma);
-        else
-            spdlog::info("Using sRGB response curve.");
 
         // dithering
         if (dither.has_value())

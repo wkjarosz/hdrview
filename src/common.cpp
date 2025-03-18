@@ -102,7 +102,7 @@ string indent(string_view input, bool also_indent_first, int amount)
 
 const vector<string> &tonemap_names()
 {
-    static const vector<string> names{"sRGB", "Gamma", "False color", "Positive/Negative"};
+    static const vector<string> names{"Gamma", "False color", "Positive/Negative"};
     return names;
 }
 

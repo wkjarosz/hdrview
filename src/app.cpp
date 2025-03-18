@@ -365,8 +365,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
             m_exposure_live = m_exposure = *force_exposure;
         if (force_gamma.has_value())
             m_gamma_live = m_gamma = *force_gamma;
-        else
-            m_tonemap = Tonemap_sRGB;
         if (force_dither.has_value())
             m_dither = *force_dither;
 
@@ -693,8 +691,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0, [this]()
                     {
                         m_exposure_live = m_exposure = 0.0f;
-                        m_gamma_live = m_gamma = 2.2f;
-                        m_tonemap              = Tonemap_sRGB;
+                        m_gamma_live = m_gamma = 1.0f;
+                        m_tonemap              = Tonemap_Gamma;
                     }});
         add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0, [this]()
                     {
@@ -736,8 +734,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_draw_display_window});
 
-        // add_action({"sRGB", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_sRGB,
-        //             "Use the sRGB non-linear response curve (instead of gamma correction)"});
         add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat,
                     [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); },
                     [this]() { return m_tonemap == Tonemap_Gamma; }});
@@ -1292,7 +1288,6 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        // MenuItem(action("sRGB"));
         MenuItem(action("Increase gamma"));
         MenuItem(action("Decrease gamma"));
 
@@ -1365,12 +1360,10 @@ void HDRViewApp::save_as(const string &filename) const
     {
 #if !defined(__EMSCRIPTEN__)
         std::ofstream os{filename, std::ios_base::binary};
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_tonemap == Tonemap_sRGB,
-                              m_dither);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
 #else
         std::ostringstream os;
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), m_gamma_live, m_tonemap == Tonemap_sRGB,
-                              m_dither);
+        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
             filename,                                    // the default filename for the browser to save.
@@ -1415,10 +1408,10 @@ void HDRViewApp::export_as(const string &filename) const
 
 #if !defined(__EMSCRIPTEN__)
         std::ofstream os{filename, std::ios_base::binary};
-        img.save(os, filename, 1.f, 1.f, false, m_dither);
+        img.save(os, filename, 1.f, true, m_dither);
 #else
         std::ostringstream os;
-        img.save(os, filename, 1.f, 1.f, false, m_dither);
+        img.save(os, filename, 1.f, true, m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
             filename,                                    // the default filename for the browser to save.
@@ -1751,7 +1744,7 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false)
 {
     float4   color32         = hdrview()->pixel_value(pixel, true, which_image);
-    float4   displayed_color = hdrview()->pixel_value(pixel, false, which_image);
+    float4   displayed_color = LinearToSRGB(hdrview()->pixel_value(pixel, false, which_image));
     uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
     int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
     bool3    inside          = {false, false, false};
@@ -2418,12 +2411,16 @@ void HDRViewApp::draw_file_window()
                 else if (g_file_list_mode == 1)
                 {
                     visible_groups = img->draw_channel_rows(i, id, is_current, is_reference);
-                    MY_ASSERT(visible_groups == img->root.visible_groups, "Unexpected number of visible groups");
+                    MY_ASSERT(visible_groups == img->root.visible_groups,
+                              "Unexpected number of visible groups; {} != {}", visible_groups,
+                              img->root.visible_groups);
                 }
                 else
                 {
                     visible_groups = img->draw_channel_tree(i, id, is_current, is_reference);
-                    MY_ASSERT(visible_groups == img->root.visible_groups, "Unexpected number of visible groups");
+                    MY_ASSERT(visible_groups == img->root.visible_groups,
+                              "Unexpected number of visible groups; {} != {}", visible_groups,
+                              img->root.visible_groups);
                 }
 
                 hidden_groups += (int)img->groups.size() - visible_groups;
@@ -2836,12 +2833,12 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
-    ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "sRGB\0Gamma\0Colormap (+)\0Colormap (±)\0");
+    ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "Gamma\0Colormap (+)\0Colormap (±)\0");
     ImGui::SetItemTooltip("Set the tonemapping mode.");
 
     switch (m_tonemap)
     {
-    default: break;
+    default: [[fallthrough]];
     case Tonemap_Gamma:
     {
         ImGui::SameLine();
@@ -2852,7 +2849,7 @@ void HDRViewApp::draw_top_toolbar()
         ImGui::SetItemTooltip("Set the exponent for gamma correction.");
     }
     break;
-    case Tonemap_FalseColor:
+    case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
     {
         ImGui::SameLine();

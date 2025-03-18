@@ -163,8 +163,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     return {image};
 }
 
-void save_stb_image(const Image &img, ostream &os, const string &filename, float gain, float gamma, bool sRGB,
-                    bool dither)
+void save_stb_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)
 {
     Timer             timer;
     static const auto ostream_write_func = [](void *context, void *data, int size)
@@ -185,7 +184,7 @@ void save_stb_image(const Image &img, ostream &os, const string &filename, float
     {
         // get interleaved LDR pixel data
         int  w = 0, h = 0, n = 0;
-        auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, gamma, sRGB, dither);
+        auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
 
         bool ret = false;
         if (extension == "png")

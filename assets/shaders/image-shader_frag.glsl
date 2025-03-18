@@ -8,10 +8,9 @@ precision mediump float;
 #define CHANNEL_ALPHA 4
 #define CHANNEL_Y     5
 
-#define Tonemap_sRGB             0
-#define Tonemap_Gamma            1
-#define Tonemap_FalseColor       2
-#define Tonemap_PositiveNegative 3
+#define Tonemap_Gamma            0
+#define Tonemap_FalseColor       1
+#define Tonemap_PositiveNegative 2
 
 #define NORMAL_BLEND              0
 #define MULTIPLY_BLEND            1
@@ -85,8 +84,8 @@ vec4 tonemap(vec4 color)
 {
     switch (tonemap_mode)
     {
-    default: return color;
-    case Tonemap_Gamma: return vec4(sRGBToLinear(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma))), color.a);
+    default:
+    case Tonemap_Gamma: return vec4(sign(color.rgb) * pow(abs(color.rgb), vec3(1.0 / gamma)), color.a);
     case Tonemap_FalseColor:
     {
         float cmap_size = float(textureSize(colormap, 0).x);

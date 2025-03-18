@@ -72,8 +72,7 @@ enum EChannel : int
 using Tonemap_ = int;
 enum Tonemap : Tonemap_
 {
-    Tonemap_sRGB = 0,
-    Tonemap_Gamma,
+    Tonemap_Gamma = 0,
     Tonemap_FalseColor,
     Tonemap_PositiveNegative,
 

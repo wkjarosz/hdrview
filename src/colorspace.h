@@ -339,7 +339,7 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
 {
     switch (tonemap_mode)
     {
-    default: return LinearToSRGB(color);
+    default: [[fallthrough]];
     case Tonemap_Gamma: return LinearToGamma(color, float3{1.f / gamma});
     case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
@@ -348,27 +348,13 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
         float avg       = dot(color, float3(1.f / 3.f));
         float cmap_size = Colormap::values(colormap).size();
         float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
-        return LinearToSRGB(SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz()));
+        return SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz());
     }
     }
 }
 inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap)
 {
-    switch (tonemap_mode)
-    {
-    default: return LinearToSRGB(color);
-    case Tonemap_Gamma: return LinearToGamma(color, float3{1.f / gamma});
-    case Tonemap_FalseColor: [[fallthrough]];
-    case Tonemap_PositiveNegative:
-    {
-        auto  xform     = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg       = dot(color.xyz(), float3(1.f / 3.f));
-        float cmap_size = Colormap::values(colormap).size();
-        float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
-        return float4(LinearToSRGB(SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz()) * color.w),
-                      color.w);
-    }
-    }
+    return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap), color.w);
 }
 
 inline float4 blend(float4 top, float4 bottom, EBlendMode blend_mode)
