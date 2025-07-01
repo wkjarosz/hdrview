@@ -630,7 +630,7 @@ if(EMSCRIPTEN)
     HDRView
     PRIVATE
     -fexceptions
-    -sEXPORTED_RUNTIME_METHODS=[ccall]
+    -sEXPORTED_RUNTIME_METHODS=[ccall,HEAPU8]
     -sEXPORTED_FUNCTIONS=[_main,_malloc,_free]
     -sNO_DISABLE_EXCEPTION_CATCHING
     -sMAX_WEBGL_VERSION=2
