@@ -1183,13 +1183,23 @@ void HDRViewApp::draw_status_bar()
 
     if (auto img = current_image())
     {
-        auto &io = ImGui::GetIO();
+        auto &io  = ImGui::GetIO();
+        auto  ref = reference_image();
         if (vp_pos_in_viewport(vp_pos_at_app_pos(io.MousePos)))
         {
             auto hovered_pixel = int2{pixel_at_app_pos(io.MousePos)};
 
-            float4 color32 = img->raw_pixel(hovered_pixel);
-            auto  &group   = img->groups[img->selected_group];
+            float4 top   = img->raw_pixel(hovered_pixel);
+            float4 pixel = top;
+            if (ref && ref->data_window.contains(hovered_pixel))
+            {
+                float4 bottom = ref->raw_pixel(hovered_pixel);
+                // blend with reference image if available
+                pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
+                               blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+            }
+
+            auto &group = img->groups[img->selected_group];
 
             sized_text(3, fmt::format("({:>6d},", hovered_pixel.x), 0.f);
             sized_text(3, fmt::format("{:>6d})", hovered_pixel.y), 0.f);
@@ -1198,7 +1208,7 @@ void HDRViewApp::draw_status_bar()
             {
                 sized_text(0.5f, "=", 0.5f);
                 for (int c = 0; c < group.num_channels; ++c)
-                    sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", color32[c],
+                    sized_text(3.5f, fmt::format("{}{: 6.3f}{}", c == 0 ? "(" : "", pixel[c],
                                                  c == group.num_channels - 1 ? ")" : ","));
             }
         }
@@ -2620,6 +2630,8 @@ void HDRViewApp::draw_pixel_info() const
     if (!img || !m_draw_pixel_info)
         return;
 
+    auto ref = reference_image();
+
     static constexpr float2 align     = {0.5f, 0.5f};
     auto                    mono_font = font("mono bold", 30);
 
@@ -2670,7 +2682,15 @@ void HDRViewApp::draw_pixel_info() const
         for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
             auto   pos   = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-            float4 pixel = img->raw_pixel({x, y});
+            float4 top   = img->raw_pixel({x, y});
+            float4 pixel = top;
+            if (ref && ref->data_window.contains({x, y}))
+            {
+                float4 bottom = ref->raw_pixel({x, y});
+                // blend with reference image if available
+                pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
+                               blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
+            }
             if (alpha2 > 0.f)
             {
                 float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};

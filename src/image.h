@@ -65,6 +65,8 @@ inline double axis_scale_inv_xform(double value, void *user_data)
         return value;
 }
 
+struct Channel;
+
 struct PixelStats
 {
     static constexpr int NUM_BINS = 256;
@@ -72,10 +74,13 @@ struct PixelStats
 
     struct Settings
     {
-        float      exposure = 0.f;
-        AxisScale_ x_scale  = AxisScale_Linear;
-        AxisScale_ y_scale  = AxisScale_Linear;
-        Box2i      roi      = Box2i{int2{0}};
+        float      exposure   = 0.f;
+        AxisScale_ x_scale    = AxisScale_Linear;
+        AxisScale_ y_scale    = AxisScale_Linear;
+        Box2i      roi        = Box2i{int2{0}};
+        EBlendMode blend_mode = NORMAL_BLEND;
+        int        ref_id     = -1;
+        int        ref_group  = -1;
 
         bool match(const Settings &other) const;
     };
@@ -106,8 +111,8 @@ struct PixelStats
     PixelStats() = default;
 
     /// Populate the statistics from the provided img and settings
-    void calculate(const Array2Df &img, float exposure, AxisScale_ x_scale, AxisScale_ y_scale, const Box2i &new_roi,
-                   std::atomic<bool> &canceled);
+    void calculate(const Channel &img, int2 img_data_origin, const Channel *ref, int2 ref_data_origin,
+                   const Settings &desired, std::atomic<bool> &canceled);
 
     int    clamp_idx(int i) const { return std::clamp(i, 0, NUM_BINS - 1); }
     float &bin_x(int i) { return hist_xs[clamp_idx(i)]; }
@@ -210,7 +215,7 @@ public:
     Texture *get_texture();
 
     PixelStats *get_stats();
-    void        update_stats(const Image *img);
+    void        update_stats(int c, ConstImagePtr img1, ConstImagePtr img2);
 
 private:
     PixelStats::Ptr                    cached_stats;
@@ -282,7 +287,7 @@ public:
 
     json metadata = json::object();
 
-    // But create our own versios of some which we need access to often
+    // But create our own versions of some which we need access to often
     std::string          filename;
     std::string          partname;
     Box2i                data_window;
@@ -292,6 +297,7 @@ public:
     float3               luminance_weights       = Rec709_luminance_weights;
     int                  named_color_space       = -1;
     bool                 file_has_straight_alpha = false;
+    int                  id;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().
@@ -318,7 +324,7 @@ public:
     int         reference_group = 0;
 
     Image(int2 size, int num_channels);
-    Image()              = default;
+    Image();
     Image(const Image &) = delete;
     Image(Image &&)      = default;
 

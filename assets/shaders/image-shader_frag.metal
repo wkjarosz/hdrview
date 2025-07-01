@@ -96,7 +96,7 @@ float4 choose_channel(float4 rgba, int channel, const float3 yw)
         case CHANNEL_RED:   return float4(rgba.rrr, 1.0);
         case CHANNEL_GREEN: return float4(rgba.ggg, 1.0);
         case CHANNEL_BLUE:  return float4(rgba.bbb, 1.0);
-        case CHANNEL_ALPHA: return float4(rgba.aaa, 1.0);
+        case CHANNEL_ALPHA: return rgba;
         case CHANNEL_Y:     return float4(float3(dot(rgba.rgb, yw)), rgba.a);
     }
     return rgba;
@@ -208,6 +208,9 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
 
     value = primary_M_to_Rec709 * value;
 
+    if (channel == CHANNEL_ALPHA)
+        value = float4(value.aaa, 1.0);
+
     if (has_reference)
     {
         float4 reference_val = float4(sample_channel(secondary_0_texture, secondary_0_sampler, vert.secondary_uv, in_ref),
@@ -219,6 +222,9 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
             reference_val.rgb = YCToRGB(reference_val.xyz, secondary_yw);
 
         reference_val = secondary_M_to_Rec709 * reference_val;
+
+        if (channel == CHANNEL_ALPHA)
+            reference_val = float4(reference_val.aaa, 1.0);
 
         value = blend(value, reference_val, blend_mode);
     }

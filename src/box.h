@@ -97,6 +97,12 @@ public:
         }
         return *this;
     }
+    BoxT &move_by(const Vec &offset)
+    {
+        min += offset;
+        max += offset;
+        return *this;
+    }
     BoxT &move_min_to(const Vec &newMin)
     {
         Vec diff(newMin - min);

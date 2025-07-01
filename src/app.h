@@ -145,6 +145,7 @@ public:
     float      &exposure() { return m_exposure; }
     Tonemap    &tonemap() { return m_tonemap; }
     Colormap_  &colormap() { return m_colormap; }
+    EBlendMode &blend_mode() { return m_blend_mode; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }

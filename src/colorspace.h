@@ -357,6 +357,43 @@ inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Col
     return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap), color.w);
 }
 
+inline float2 blend(float2 top, float2 bottom, EBlendMode blend_mode)
+{
+    float diff  = top.x - bottom.x;
+    float alpha = top.y + bottom.y * (1.f - top.y);
+    switch (blend_mode)
+    {
+    // case NORMAL_BLEND:
+    default: return float2(top.x + bottom.x * (1.f - top.y), alpha);
+    case MULTIPLY_BLEND: return float2(top.x * bottom.x, alpha);
+    case DIVIDE_BLEND: return float2(top.x / bottom.x, alpha);
+    case ADD_BLEND: return float2(top.x + bottom.x, alpha);
+    case AVERAGE_BLEND: return 0.5f * (top + bottom);
+    case SUBTRACT_BLEND: return float2(diff, alpha);
+    case DIFFERENCE_BLEND: return float2(abs(diff), alpha);
+    case RELATIVE_DIFFERENCE_BLEND: return float2(abs(diff) / (bottom.x + 0.01f), alpha);
+    }
+    return float2(0.f);
+}
+
+inline float blend(float top, float bottom, EBlendMode blend_mode)
+{
+    float diff = top - bottom;
+    switch (blend_mode)
+    {
+    // case NORMAL_BLEND:
+    default: return top;
+    case MULTIPLY_BLEND: return top * bottom;
+    case DIVIDE_BLEND: return top / bottom;
+    case ADD_BLEND: return top + bottom;
+    case AVERAGE_BLEND: return 0.5f * (top + bottom);
+    case SUBTRACT_BLEND: return diff;
+    case DIFFERENCE_BLEND: return abs(diff);
+    case RELATIVE_DIFFERENCE_BLEND: return abs(diff) / (bottom + 0.01f);
+    }
+    return float(0.f);
+}
+
 inline float4 blend(float4 top, float4 bottom, EBlendMode blend_mode)
 {
     float3 diff  = top.xyz() - bottom.xyz();
@@ -381,7 +418,6 @@ const std::vector<std::string> &colorSpaceNames();
 // assumes values of v are in byte range: [0, 255]
 inline float byte_to_f32(float v, bool linearize = true)
 {
-    // perform unbiased quantization as in http://eastfarthing.com/blog/2015-12-19-color/
     float u8 = (v + 0.f) / 255.0f;
     return linearize ? SRGBToLinear(u8) : u8;
 }

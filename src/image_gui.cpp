@@ -67,8 +67,7 @@ void Image::draw_histogram()
     for (int c = 0; c < std::min(4, group.num_channels); ++c)
     {
         auto &channel = channels[group.channels[c]];
-        // if (stats_need_update)
-        channel.update_stats(this);
+        channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
         stats[c]    = channel.get_stats();
         y_limits[0] = std::min(y_limits[0], stats[c]->hist_y_limits[0]);
         y_limits[1] = std::max(y_limits[1], stats[c]->hist_y_limits[1]);
@@ -629,7 +628,7 @@ void Image::draw_channel_stats()
             for (int c = 0; c < group.num_channels; ++c)
             {
                 auto &channel = channels[group.channels[c]];
-                channel.update_stats(this);
+                channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
                 channel_stats[c] = channel.get_stats();
                 channel_names[c] = Channel::tail(channel.name);
             }

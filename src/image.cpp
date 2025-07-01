@@ -38,6 +38,7 @@ using namespace std;
 
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
 static const char         *s_target[Target_COUNT] = {"primary", "secondary"};
+static int                 s_next_image_id        = 1;
 
 const float3 Image::Rec709_luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::Chromaticities{}));
 
@@ -130,29 +131,51 @@ float2 PixelStats::x_limits(float e, AxisScale_ scale) const
     return ret;
 }
 
-void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ new_x_scale, AxisScale_ new_y_scale,
-                           const Box2i &new_roi, std::atomic<bool> &canceled)
+void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Channel *ref, int2 ref_data_origin,
+                           const Settings &desired, std::atomic<bool> &canceled)
 {
     try
     {
         spdlog::trace("Computing pixel statistics");
 
         // initialize values
-        *this             = PixelStats();
-        settings.exposure = new_exposure;
-        settings.x_scale  = new_x_scale;
-        settings.y_scale  = new_y_scale;
-        settings.roi      = new_roi;
+        *this    = PixelStats();
+        settings = desired;
 
-        Box2i roi{int2{0}, img.size()};
-        if (new_roi.has_volume())
-            roi = roi.intersect(new_roi);
+        // pixel regions we will loop over in the current and reference channels
+        Box2i croi{img_data_origin, img_data_origin + img.size()};
+        Box2i rroi = ref ? Box2i{ref_data_origin, ref_data_origin + ref->size()} : croi;
 
-        auto index_to_2d = [size_x = roi.size().x, offset = roi.min](int index)
+        if (desired.roi.has_volume())
         {
-            int y = index / size_x;
-            int x = index % size_x;
-            return int2{x, y} + offset;
+            croi = croi.intersect(desired.roi);
+            rroi = rroi.intersect(desired.roi);
+        }
+
+        // intersect with reference image window
+        if (ref && desired.blend_mode != NORMAL_BLEND)
+        {
+            croi = croi.intersect(rroi);
+            spdlog::info("c and r roi's: {}..{}; {}..{}", croi.min, croi.max, rroi.min, rroi.max);
+        }
+
+        spdlog::info("Image ROI: {}..{}", croi.min, croi.max);
+
+        if (croi.size() != rroi.size())
+            spdlog::error("Image and reference channel ROIs are not the same size!");
+
+        auto pixel_value = [&img, ref, &croi, &rroi, this](int i)
+        {
+            int2 i2d{i % croi.size().x, i / croi.size().x}; // convert to 2D coordinates
+            if (i2d.x < 0 || i2d.y < 0 || i2d.x >= croi.size().x || i2d.y >= croi.size().y)
+            {
+                spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
+                return 0.f; // out of bounds
+            }
+            float val = img(i2d + croi.min);
+            if (ref)
+                val = blend(val, (*ref)(i2d + rroi.min), settings.blend_mode);
+            return val;
         };
 
         //
@@ -161,14 +184,14 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         Timer timer;
         {
             size_t               block_size  = 1024 * 1024;
-            const size_t         num_threads = estimate_threads(roi.volume(), block_size, *Scheduler::singleton());
+            const size_t         num_threads = estimate_threads(croi.volume(), block_size, *Scheduler::singleton());
             std::vector<Summary> partials(max<size_t>(1, num_threads));
 
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<int>(0, roi.volume(), (int)block_size),
-                [&img, &partials, &canceled, &index_to_2d](int begin, int end, int unit_index, int)
+                blocked_range<int>(0, croi.volume(), (int)block_size),
+                [&partials, &canceled, &pixel_value](int begin, int end, int unit_index, int)
                 {
                     Summary partial = partials[unit_index]; //< compute over local symbols.
 
@@ -177,8 +200,7 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
                         if (canceled)
                             throw std::runtime_error("canceling summary stats");
 
-                        // computation
-                        float val = img(index_to_2d(i));
+                        float val = pixel_value(i);
 
                         if (isnan(val))
                             ++partial.nan_pixels;
@@ -232,11 +254,11 @@ void PixelStats::calculate(const Array2Df &img, float new_exposure, AxisScale_ n
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i + 0.5);
 
         // accumulate bin counts
-        for (int i = 0; i < roi.volume(); ++i)
+        for (int i = 0; i < croi.volume(); ++i)
         {
             if (canceled)
                 throw std::runtime_error("Canceling histogram accumulation");
-            bin_y(value_to_bin(img(index_to_2d(i)))) += 1;
+            bin_y(value_to_bin(pixel_value(i))) += 1;
         }
 
         // normalize histogram density by dividing bin counts by bin sizes
@@ -334,7 +356,8 @@ Texture *Channel::get_texture()
 
 bool PixelStats::Settings::match(const Settings &other) const
 {
-    return other.roi == roi &&
+    return (blend_mode == other.blend_mode && ref_id == other.ref_id && ref_group == other.ref_group) &&
+           other.roi == roi &&
            ((other.x_scale == x_scale && other.exposure == exposure) ||
             (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh)));
 }
@@ -354,19 +377,20 @@ PixelStats *Channel::get_stats()
     return cached_stats.get();
 }
 
-void Channel::update_stats(const Image *img)
+void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
 {
     MY_ASSERT(cached_stats, "PixelStats::cached_stats should never be null");
 
-    // calculate the roi in data window-relative coordinates
-    Box2i data_roi = hdrview()->roi();
-    data_roi.min -= img->data_window.min;
-    data_roi.max -= img->data_window.min;
-    PixelStats::Settings desired_settings{hdrview()->exposure(), hdrview()->histogram_x_scale(),
-                                          hdrview()->histogram_y_scale(), data_roi};
+    PixelStats::Settings desired_settings{
+        hdrview()->exposure(),   hdrview()->histogram_x_scale(), hdrview()->histogram_y_scale(),   hdrview()->roi(),
+        hdrview()->blend_mode(), img2 ? img2->id : -1,           img2 ? img2->reference_group : -1};
 
-    auto recompute_async_stats = [this, desired_settings]()
+    auto recompute_async_stats =
+        [this, desired_settings, img1, img_data_origin = img1->data_window.min,
+         ref             = img2 ? &img2->channels[img2->groups[img2->reference_group].channels[c]] : nullptr,
+         ref_data_origin = img2 ? img2->data_window.min : int2{}]()
     {
+        spdlog::info("id: {}", img1->id);
         // First cancel the potential previous async task
         if (async_canceled)
         {
@@ -377,11 +401,10 @@ void Channel::update_stats(const Image *img)
         // create the new task
         async_canceled = make_shared<atomic<bool>>(false);
         async_tracker  = do_async(
-            [this, desired_settings, canceled = async_canceled]()
+            [this, desired_settings, canceled = async_canceled, img_data_origin, ref, ref_data_origin]()
             {
                 spdlog::info("Starting a new stats computation");
-                async_stats->calculate(*this, desired_settings.exposure, desired_settings.x_scale,
-                                        desired_settings.y_scale, desired_settings.roi, *canceled);
+                async_stats->calculate(*this, img_data_origin, ref, ref_data_origin, desired_settings, *canceled);
             });
         async_settings = desired_settings;
     };
@@ -471,6 +494,8 @@ void Image::set_as_texture(Target target)
     else if (group.num_channels == 3) // if group has 3 channels, set A=1
         s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
 }
+
+Image::Image() : id(s_next_image_id++) {}
 
 Image::Image(int2 size, int num_channels)
 {
@@ -761,9 +786,6 @@ void Image::finalize()
     }
 
     compute_color_transform();
-
-    // update the stats/histograms for all channels
-    // for (auto &c : channels) c.update_stats();
 }
 
 // Recursive function to traverse the LayerTreeNode hierarchy and append names to a string

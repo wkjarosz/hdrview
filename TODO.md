@@ -2,7 +2,7 @@
 
 ##
 
-- [ ] sort image list
+- [x] sort image list
 - [ ] left vs. right align images in image list
 - [x] have spdlog output to the log window
 - [x] add image and channel list filtering
@@ -12,13 +12,12 @@
   - [x] multi-select on desktop
 - [x] fix reference image index when closing image
 - [ ] render pixel grid in the shader
-- [ ] figure out how to better handle channels dropdown with channel groups and arbitrary channels
-- [ ] improve statistics
+- [x] improve statistics
   - [x] compute min/max/avg ignoring infinities, and report # of infinities
-  - [ ] account for blend mode when computing pixel hover (and statistics)
+  - [x] account for blend mode when computing pixel hover (and statistics)
 - [x] figure our threading while considering emscripten
-- [ ] selection support
-  - [ ] compute statistics also over selection
+- [x] selection support
+  - [x] compute statistics also over selection
 - [ ] command palette/improved hotkey support
 - [ ] save as support for OpenEXR
 - [ ] handle multi-view EXRs better
@@ -26,6 +25,7 @@
 - [ ] move shader, texture, renderpass and others into separate library
 - [ ] merge metal/glsl shaders + C++ colorspace stuff?
 - [ ] express app/viewport/image coordinate transforms using 2x2 matrices
+- [ ] flip and mirror image view
 
 
 ## Old
