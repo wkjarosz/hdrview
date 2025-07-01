@@ -26273,7 +26273,7 @@ vec4 choose_channel(vec4 rgba)
     case CHANNEL_RED: return vec4(rgba.rrr, 1.0);
     case CHANNEL_GREEN: return vec4(rgba.ggg, 1.0);
     case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
-    case CHANNEL_ALPHA: return vec4(rgba.aaa, 1.0);
+    case CHANNEL_ALPHA: return rgba;
     case CHANNEL_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
     }
     return rgba;
@@ -26346,6 +26346,8 @@ void main()
         value.xyz = YCToRGB(value.xyz, primary_yw);
 
     value = primary_M_to_Rec709 * value;
+    if (channel == CHANNEL_ALPHA)
+        value = vec4(value.aaa, 1.0);
 
     if (has_reference)
     {
@@ -26358,6 +26360,8 @@ void main()
             reference_val.xyz = YCToRGB(reference_val.xyz, secondary_yw);
 
         reference_val = secondary_M_to_Rec709 * reference_val;
+        if (channel == CHANNEL_ALPHA)
+            reference_val = vec4(reference_val.aaa, 1.0);
 
         value = blend(value, reference_val);
     }
