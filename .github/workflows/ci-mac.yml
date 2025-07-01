@@ -30,6 +30,9 @@ jobs:
         config:
           # macos-13 is an intel x86_64 runner
           # macos-14 is an arm64 runner
+          # -DCMAKE_IGNORE_PATH=... dynamically constructs a list of directories to ignore during CMake's
+          #   library and header search. This helps avoid picking up non-universal versions
+          #   of harfbuzz and brotli from Homebrew installations, which cause failures for universal builds.
           - {
               name: "macOS 14 universal",
               os: macos-14,
