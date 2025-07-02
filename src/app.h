@@ -149,7 +149,7 @@ public:
     float4 pixel_value(int2 pixel, bool raw, int which_image) const;
 
     // load font with the specified name at the specified size
-    ImFont *font(const string &name, int size) const;
+    ImFont *font(const string &name) const;
 
     float      &gamma_live() { return m_gamma_live; }
     float      &gamma() { return m_gamma; }
@@ -261,7 +261,7 @@ private:
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
 
-    map<pair<string, int>, ImFont *> m_fonts;
+    ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
 
     vector<ImGui::Action>          m_actions;
     map<string, size_t>            m_action_map;

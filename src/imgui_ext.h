@@ -15,7 +15,7 @@ namespace ImGui
 class ScopedFont
 {
 public:
-    explicit ScopedFont(ImFont *font) { ImGui::PushFont(font); }
+    explicit ScopedFont(ImFont *font, float font_size_base_unscaled) { ImGui::PushFont(font, font_size_base_unscaled); }
     ~ScopedFont() { ImGui::PopFont(); }
 
     ScopedFont(ScopedFont &&)                 = delete;
@@ -29,7 +29,7 @@ class SpdLogWindow
 public:
     SpdLogWindow(int max_items = 1024);
 
-    void draw(ImFont *console_font = nullptr);
+    void draw(ImFont *console_font = nullptr, float size = 0.f);
 
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> &sink() { return m_sink; }
 

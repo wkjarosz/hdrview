@@ -79,7 +79,7 @@ void SpdLogWindow::set_pattern(const string &pattern)
     m_sink->set_formatter(std::move(formatter));
 }
 
-void SpdLogWindow::draw(ImFont *console_font)
+void SpdLogWindow::draw(ImFont *console_font, float size)
 {
     static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
@@ -145,8 +145,8 @@ void SpdLogWindow::draw(ImFont *console_font)
 
     ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_FrameStyle, window_flags);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
-    auto default_font = ImGui::GetFont();
-    ImGui::PushFont(console_font);
+    auto              default_font = ImGui::GetFont();
+    ImGui::ScopedFont sf{console_font, size};
     ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
 
     int  item_num = 0;
@@ -182,7 +182,7 @@ void SpdLogWindow::draw(ImFont *console_font)
                 ImGui::SetClipboardText(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end));
             }
             ImGui::PopID();
-            ImGui::PushFont(default_font);
+            ImGui::PushFont(default_font, 0.f);
             ImGui::SetItemTooltip("Click to copy to clipboard");
             ImGui::PopFont();
             ImGui::SameLine(ImGui::GetStyle().ItemInnerSpacing.x);
@@ -227,7 +227,6 @@ void SpdLogWindow::draw(ImFont *console_font)
     if (m_sink->has_new_items() && m_auto_scroll)
         ImGui::SetScrollHereY(1.f);
 
-    ImGui::PopFont();
     ImGui::PopStyleVar();
     ImGui::EndChild();
 }
@@ -350,7 +349,7 @@ void HyperlinkText(const char *label, const char *url)
     if (TextLink(label))
         if (g.PlatformIO.Platform_OpenInShellFn != NULL)
             g.PlatformIO.Platform_OpenInShellFn(&g, url);
-    PushFont(nullptr);
+    PushFont(GetIO().FontDefault, 14.f);
     SetItemTooltip("%s '%s'", ICON_MY_LINK, url);
     PopFont();
     if (BeginPopupContextItem())

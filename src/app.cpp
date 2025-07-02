@@ -141,7 +141,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // look blurry. Here we force that macs always use the 2X retina scale factor for fonts. Produces crisp
     // fonts on the retina screen, at the cost of more jagged fonts on screen set to a non-retina resolution.
     m_params.dpiAwareParams.dpiWindowSizeFactor = 1.f;
-    m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
+    // m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
 
     bool use_edr = HelloImGui::hasEdrSupport() && !force_sdr;
@@ -269,7 +269,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     log_window.dockSpaceName     = "LogSpace";
     log_window.isVisible         = false;
     log_window.rememberIsVisible = true;
-    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular", 14)); };
+    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), 14); };
 
     HelloImGui::DockableWindow advanced_settings_window;
     advanced_settings_window.label             = "Advanced settings";
@@ -326,10 +326,10 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // initialized first)
 
         // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
-        const char *const *opened_files = glfwGetOpenedFilenames();
+        const char *const *opened_files = glfwGetCocoaOpenedFilenames();
         if (opened_files)
         {
-            spdlog::trace("Opening files passed in through the NS api...");
+            spdlog::debug("Passing files in through the NS api...");
             vector<string> args;
             for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
             load_images(args);
@@ -340,7 +340,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         //    b) launches HDRView with files (either from the command line or Finder) when another instance is
         //    already
         //       running
-        glfwSetOpenedFilenamesCallback(
+        glfwSetCocoaOpenedFilenamesCallback(
             [](const char *image_file)
             {
                 spdlog::debug("Receiving an app drag-drop event through the NS api for file '{}'", image_file);
@@ -1719,30 +1719,18 @@ void HDRViewApp::run()
     ImPlot::DestroyContext();
 }
 
-ImFont *HDRViewApp::font(const string &name, int size) const
+ImFont *HDRViewApp::font(const string &name) const
 {
-    if (size < 0)
-    {
-        // Determine the non-scaled size that corresponds to the current, dpi-scaled font size
-        for (auto font_size : {14, 10, 16, 18, 30})
-        {
-            if (int(HelloImGui::DpiFontLoadingFactor() * font_size) == int(ImGui::GetFontSize()))
-            {
-                size = font_size;
-                break;
-            }
-        }
-    }
-
-    try
-    {
-        return m_fonts.at({name, size});
-    }
-    catch (const std::exception &)
-    {
-        throw std::runtime_error(
-            fmt::format("Font with name '{}' and size {} (={}) was not loaded.", name, size, ImGui::GetFontSize()));
-    }
+    if (name == "sans regular")
+        return m_sans_regular;
+    else if (name == "sans bold")
+        return m_sans_bold;
+    else if (name == "mono regular")
+        return m_mono_regular;
+    else if (name == "mono bold")
+        return m_mono_bold;
+    else
+        throw std::runtime_error(fmt::format("Font with name '{}' was not loaded.", name));
 }
 
 HDRViewApp::~HDRViewApp() {}
@@ -2253,9 +2241,6 @@ void HDRViewApp::draw_file_window()
     }
     ImGui::WrappedTooltip("Choose how the images and layers are listed below");
 
-    auto regular_font = font("sans regular", 14);
-    auto bold_font    = font("sans bold", 14);
-
     static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate |
                                                    ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
                                                    ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH |
@@ -2332,7 +2317,7 @@ void HDRViewApp::draw_file_window()
 
             ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-            ImGui::PushFont(g_file_list_mode == 0 ? regular_font : bold_font);
+            ImGui::PushFont(g_file_list_mode == 0 ? m_sans_regular : m_sans_bold, 14.f);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -2440,7 +2425,7 @@ void HDRViewApp::draw_file_window()
 
             if (open)
             {
-                ImGui::PushFont(regular_font);
+                ImGui::PushFont(m_sans_regular, 0.f);
                 int visible_groups = 1;
                 if (g_file_list_mode == 0)
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
@@ -2693,7 +2678,7 @@ void HDRViewApp::draw_pixel_info() const
     auto ref = reference_image();
 
     static constexpr float2 align     = {0.5f, 0.5f};
-    auto                    mono_font = font("mono bold", 30);
+    auto                    mono_font = m_mono_bold;
 
     auto  &group  = img->groups[img->selected_group];
     auto   colors = group.colors();
@@ -2707,7 +2692,7 @@ void HDRViewApp::draw_pixel_info() const
             longest_name = names[c];
     }
 
-    ImGui::PushFont(mono_font);
+    ImGui::PushFont(m_mono_bold, 30);
     static float line_height = ImGui::CalcTextSize("").y;
     const float2 channel_threshold2 =
         float2{ImGui::CalcTextSize((longest_name + ": 31.000").c_str()).x, group.num_channels * line_height};
@@ -2732,7 +2717,7 @@ void HDRViewApp::draw_pixel_info() const
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
-    ImGui::ScopedFont sf{mono_font};
+    ImGui::PushFont(mono_font, 30);
 
     auto bounds =
         Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
@@ -2764,12 +2749,13 @@ void HDRViewApp::draw_pixel_info() const
             {
                 float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
                 auto   text  = fmt::format("{:>2s}:{: > 7.3f}", names[c], pixel[c]);
-                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha2), text,
+                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha), text,
                                       align);
                 ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{colors[c].xyz(), alpha}}, text, align);
             }
         }
     }
+    ImGui::PopFont();
 }
 
 void HDRViewApp::draw_image_border() const
@@ -2834,7 +2820,7 @@ void HDRViewApp::draw_watched_pixels() const
 
     auto draw_list = ImGui::GetBackgroundDrawList();
 
-    ImGui::PushFont(font("sans bold", 14));
+    ImGui::PushFont(m_sans_bold, 14);
     for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
         ImGui::DrawCrosshairs(draw_list, app_pos_at_pixel(g_watched_pixels[i].pixel + 0.5f), fmt::format(" {}", i + 1));
     ImGui::PopFont();
@@ -2896,7 +2882,7 @@ void HDRViewApp::draw_top_toolbar()
     auto img = current_image();
 
     ImGui::AlignTextToFramePadding();
-    ImGui::PushFont(font("sans bold", 16));
+    ImGui::PushFont(m_sans_bold, 16);
     ImGui::TextUnformatted(ICON_MY_EXPOSURE);
     ImGui::PopFont();
     ImGui::SameLine();
@@ -3095,7 +3081,7 @@ void HDRViewApp::draw_background()
 
         if (current_image())
         {
-            ImGui::PushFont(font("sans bold", 18));
+            ImGui::PushFont(m_sans_bold, 18);
             auto   draw_list = ImGui::GetBackgroundDrawList();
             float2 pos       = ImGui::GetIO().MousePos;
             if (g_mouse_mode == MouseMode_RectangularSelection)
@@ -3211,8 +3197,8 @@ void HDRViewApp::draw_command_palette()
                 ImCmd::DestroyContext();
             }
             ImCmd::CreateContext();
-            ImCmd::SetStyleFont(ImCmdTextType_Regular, font("sans regular", 14));
-            ImCmd::SetStyleFont(ImCmdTextType_Highlight, font("sans bold", 14));
+            ImCmd::SetStyleFont(ImCmdTextType_Regular, m_sans_regular);
+            ImCmd::SetStyleFont(ImCmdTextType_Highlight, m_sans_bold);
             ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
             // ImVec4 highlight_font_color(1.0f, 1.0f, 1.0f, 1.0f);
             auto highlight_font_color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
@@ -3321,7 +3307,7 @@ void HDRViewApp::draw_command_palette()
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-            ImGui::ScopedFont sf{font("sans bold", 10)};
+            ImGui::ScopedFont sf{m_sans_bold, 10};
 
             string txt;
             txt = "Navigate (" ICON_MY_ARROW_UP ICON_MY_ARROW_DOWN ")";
@@ -3418,14 +3404,14 @@ void HDRViewApp::draw_about_dialog()
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
 
             {
-                ImGui::ScopedFont sf{font("sans bold", 30)};
+                ImGui::ScopedFont sf{m_sans_bold, 30};
                 ImGui::HyperlinkText("HDRView", "https://github.com/wkjarosz/hdrview");
             }
 
-            ImGui::PushFont(font("sans bold", 18));
+            ImGui::PushFont(m_sans_bold, 18);
             ImGui::TextUnformatted(version());
             ImGui::PopFont();
-            ImGui::PushFont(font("sans regular", 10));
+            ImGui::PushFont(m_sans_regular, 10);
 #if defined(__EMSCRIPTEN__)
             ImGui::TextFmt("Built with emscripten using the {} backend on {}.", backend(), build_timestamp());
 #else
@@ -3435,7 +3421,7 @@ void HDRViewApp::draw_about_dialog()
 
             ImGui::Spacing();
 
-            ImGui::PushFont(font("sans bold", 16));
+            ImGui::PushFont(m_sans_bold, 16);
             ImGui::TextUnformatted(
                 "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
                 "converting high-dynamic range images.");
@@ -3456,13 +3442,13 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextColumn();
 
             ImGui::AlignCursor(name, 1.f);
-            ImGui::PushFont(font("sans bold", 14));
+            ImGui::PushFont(m_sans_bold, 14);
             ImGui::HyperlinkText(name, url);
             ImGui::PopFont();
             ImGui::TableNextColumn();
 
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - HelloImGui::EmSize());
-            ImGui::PushFont(font("sans regular", 14));
+            ImGui::PushFont(m_sans_regular, 14);
             ImGui::TextUnformatted(desc);
             ImGui::PopFont();
         };
@@ -3473,11 +3459,11 @@ void HDRViewApp::draw_about_dialog()
             {
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
 
-                ImGui::PushFont(font("sans bold", 14));
+                ImGui::PushFont(m_sans_bold, 14);
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
-                ImGui::PushFont(font("mono regular", 30));
+                ImGui::PushFont(font("mono regular"), 30);
                 ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 

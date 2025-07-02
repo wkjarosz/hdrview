@@ -79,7 +79,7 @@ void Image::draw_histogram()
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
-    ImGui::PushFont(hdrview()->font("sans regular", 10));
+    ImGui::PushFont(hdrview()->font("sans regular"), 10);
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
@@ -458,20 +458,20 @@ void Image::draw_channels_list(bool is_reference, bool is_current)
 
 void Image::draw_info()
 {
-    auto sans_font = hdrview()->font("sans regular", 14);
-    auto bold_font = hdrview()->font("sans bold", 14);
-    auto mono_font = hdrview()->font("mono regular", 14);
+    auto sans_font = hdrview()->font("sans regular");
+    auto bold_font = hdrview()->font("sans bold");
+    auto mono_font = hdrview()->font("mono regular");
 
     auto property_name = [bold_font](const string &text)
     {
-        ImGui::PushFont(bold_font);
+        ImGui::PushFont(bold_font, 14);
         ImGui::TextUnformatted(text);
         ImGui::PopFont();
     };
     auto property_value = [](const string &text, ImFont *font, bool wrapped = false)
     {
         ImGui::SameLine();
-        ImGui::PushFont(font);
+        ImGui::PushFont(font, 14);
 
         float avail_w = ImGui::GetContentRegionAvail().x;
         float text_w  = ImGui::CalcTextSize(text.c_str()).x;
@@ -610,8 +610,8 @@ void Image::draw_info()
 
 void Image::draw_channel_stats()
 {
-    auto bold_font = hdrview()->font("sans bold", 14);
-    auto mono_font = hdrview()->font("mono regular", 14);
+    auto bold_font = hdrview()->font("sans bold");
+    auto mono_font = hdrview()->font("mono regular");
 
     static const ImGuiTableFlags table_flags =
         ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg;
@@ -634,7 +634,7 @@ void Image::draw_channel_stats()
             }
 
             // set up header row
-            ImGui::PushFont(bold_font);
+            ImGui::PushFont(bold_font, 14);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
             for (int c = 0; c < group.num_channels; ++c)
                 ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
@@ -648,13 +648,13 @@ void Image::draw_channel_stats()
             constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
             for (int s = 0; s < NUM_STATS; ++s)
             {
-                ImGui::PushFont(bold_font);
+                ImGui::PushFont(bold_font, 14);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
                 ImGui::TextUnformatted(stat_names[s]);
                 ImGui::PopFont();
-                ImGui::PushFont(mono_font);
+                ImGui::PushFont(mono_font, 14);
                 for (int c = 0; c < group.num_channels; ++c)
                 {
                     ImGui::TableNextColumn();

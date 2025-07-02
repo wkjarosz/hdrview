@@ -6,6 +6,8 @@
 
 #pragma once
 
+// #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+
 #include "linalg.h"
 #include <memory>
 using namespace linalg::aliases;

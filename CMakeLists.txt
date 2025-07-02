@@ -213,8 +213,8 @@ if(APPLE AND NOT EMSCRIPTEN)
   set(HELLOIMGUI_DOWNLOAD_GLFW_IF_NEEDED OFF)
   CPMAddPackage(
     NAME glfw
-    GITHUB_REPOSITORY Tom94/glfw
-    GIT_TAG 71eb7036b47e2733c2f7b4c0010e2ce62557009d
+    GITHUB_REPOSITORY wkjarosz/glfw
+    GIT_TAG 7a3f5df970fda02a1b6b6a4115eb9df30676a0dc
     OPTIONS "GLFW_BUILD_EXAMPLES OFF"
             "GLFW_BUILD_TESTS OFF"
             "GLFW_BUILD_DOCS OFF"
@@ -246,8 +246,17 @@ endif()
 
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF)
 set(HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF)
+set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 
-CPMAddPackage("gh:pthom/hello_imgui#v1.6.0")
+CPMAddPackage(
+  NAME hello_imgui
+  GITHUB_REPOSITORY pthom/hello_imgui
+  VERSION 1.92.0
+  GIT_TAG v1.92.0
+  OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
+          "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
+)
+
 if(hello_imgui_ADDED)
   message(STATUS "hello_imgui library added")
   if(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
@@ -255,7 +264,7 @@ if(hello_imgui_ADDED)
   endif()
 endif()
 
-CPMAddPackage("gh:epezent/implot#77674d270e851d3f3718aad00234201af2b76ac9")
+CPMAddPackage("gh:epezent/implot#3da8bd34299965d3b0ab124df743fe3e076fa222")
 if(implot_ADDED)
   message(STATUS "implot library added")
 
@@ -273,7 +282,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "implot")
 CPMAddPackage(
   NAME my_imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
-  GIT_TAG 5699254a9de9a6448360844696fb501bc5141353
+  GIT_TAG cdc9d0bc2a0de2f0bc1bbc640914e2554e2bee35
   DOWNLOAD_ONLY YES
 )
 if(my_imgui_command_palette_ADDED)
