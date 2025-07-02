@@ -62,9 +62,33 @@ public:
         max = Vec(std::numeric_limits<Value>::lowest());
         return *this;
     }
-    BoxT  expanded(Value d) const { return BoxT(min - d, max + d); }
-    BoxT  expanded(const Vec &d) const { return BoxT(min - d, max + d); }
-    BoxT  expanded(const BoxT &d) const { return BoxT(min - d.min, max + d.max); }
+
+    /// Ensures that min[i] <= max[i] for each dimension i.
+    BoxT &make_valid()
+    {
+        for (size_t i = 0; i < Dims; ++i)
+            if (min[i] > max[i])
+                std::swap(min[i], max[i]);
+        return *this;
+    }
+    BoxT &expand(Value d)
+    {
+        min -= d;
+        max += d;
+        return *this;
+    }
+    BoxT &expand(const Vec &d)
+    {
+        min -= d;
+        max += d;
+        return *this;
+    }
+    BoxT &expand(const BoxT &d)
+    {
+        min -= d.min;
+        max += d.max;
+        return *this;
+    }
     BoxT &set_size(const Vec &s)
     {
         max = min + s;
@@ -115,15 +139,6 @@ public:
         Vec diff(newMax - max);
         max = newMax;
         min += diff;
-        return *this;
-    }
-    BoxT &make_valid()
-    {
-        for (size_t i = 0; i < Dims; ++i)
-        {
-            if (min[i] > max[i])
-                std::swap(min[i], max[i]);
-        }
         return *this;
     }
     //@}

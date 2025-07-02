@@ -1041,6 +1041,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     if_img});
         add_action({"Auto fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F, 0,
                     [this]() { m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
+        add_action({"Flip horizontally", ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
+        add_action({"Flip vertically", ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
     }
 
     // load any passed-in images
@@ -1282,6 +1284,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Auto fit display window"));
         MenuItem(action("Fit data window"));
         MenuItem(action("Auto fit data window"));
+        MenuItem(action("Flip horizontally"));
+        MenuItem(action("Flip vertically"));
 
         ImGui::Separator();
 
@@ -2541,6 +2545,9 @@ void HDRViewApp::zoom_out()
 
 void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
 {
+    if (auto img = current_image())
+        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
+
     // Calculate where the new offset must be in order to satisfy the image position equation.
     m_offset = position - (pixel * m_zoom) - center_offset();
 }
@@ -2565,20 +2572,51 @@ float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebuffer
 
 float2 HDRViewApp::center_offset() const
 {
-    auto dw = scaled_display_window(current_image());
-    return (viewport_size() - dw.size()) / 2.f - dw.min;
+    auto   dw     = scaled_display_window(current_image());
+    float2 offset = (viewport_size() - dw.size()) / 2.f - dw.min;
+
+    // Adjust for flipping: if flipped, offset from the opposite side
+    // if (current_image())
+    {
+        if (m_flip.x)
+            offset.x += dw.min.x;
+        if (m_flip.y)
+            offset.y += dw.min.y;
+    }
+    return offset;
 }
 
 float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
-    auto dw = scaled_data_window(img);
-    return (m_offset + center_offset() + dw.min) / viewport_size();
+    auto   dw  = scaled_data_window(img);
+    auto   dsw = scaled_display_window(img);
+    float2 pos = m_offset + center_offset() + select(m_flip, dsw.max - dw.min, dw.min);
+
+    // Adjust for flipping: move the image to the opposite side if flipped
+    // if (img)
+    // {
+    //     if (m_flip.x)
+    //         pos.x += m_offset.x + center_offset().x + (dsw.max.x - dw.min.x);
+    //     if (m_flip.y)
+    //         pos.y += m_offset.y + center_offset().y + (dsw.max.y - dw.min.y);
+    // }
+    return pos / viewport_size();
 }
 
 float2 HDRViewApp::image_scale(ConstImagePtr img) const
 {
-    auto dw = scaled_data_window(img);
-    return dw.size() / viewport_size();
+    auto   dw    = scaled_data_window(img);
+    float2 scale = dw.size() / viewport_size();
+
+    // Negate scale for flipped axes
+    // if (img)
+    {
+        if (m_flip.x)
+            scale.x = -scale.x;
+        if (m_flip.y)
+            scale.y = -scale.y;
+    }
+    return scale;
 }
 
 void HDRViewApp::draw_pixel_grid() const
@@ -2602,8 +2640,8 @@ void HDRViewApp::draw_pixel_grid() const
     ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
     ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
 
-    auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-    // bounds = bounds.intersect(current_image()->data_window);
+    auto bounds =
+        Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
 
     // draw vertical lines
     for (int x = bounds.min.x; x <= bounds.max.x; ++x)
@@ -2674,8 +2712,8 @@ void HDRViewApp::draw_pixel_info() const
 
     ImGui::ScopedFont sf{mono_font};
 
-    auto bounds = Box2i{int2(pixel_at_vp_pos({0.f, 0.f})) - 1, int2(pixel_at_vp_pos(viewport_size())) + 1};
-    // auto bounds        = bounds.intersect(img->data_window);
+    auto bounds =
+        Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
 
     for (int y = bounds.min.y; y < bounds.max.y; ++y)
     {
@@ -2724,11 +2762,13 @@ void HDRViewApp::draw_image_border() const
 
     if (cimg && cimg->data_window.has_volume())
     {
-        Box2f data_window{app_pos_at_pixel(float2{cimg->data_window.min}),
-                          app_pos_at_pixel(float2{cimg->data_window.max})};
-        Box2f display_window{app_pos_at_pixel(float2{cimg->display_window.min}),
-                             app_pos_at_pixel(float2{cimg->display_window.max})};
-        bool  non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
+        auto data_window =
+            Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max - 1})}
+                .make_valid();
+        auto display_window = Box2f{app_pos_at_pixel(float2{cimg->display_window.min}),
+                                    app_pos_at_pixel(float2{cimg->display_window.max - 1})}
+                                  .make_valid();
+        bool non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
         ImGui::PushRowColors(true, false);
         if (m_draw_data_window)
             ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window",
@@ -2741,10 +2781,12 @@ void HDRViewApp::draw_image_border() const
 
     if (rimg && rimg->data_window.has_volume())
     {
-        Box2f data_window{app_pos_at_pixel(float2{rimg->data_window.min}),
-                          app_pos_at_pixel(float2{rimg->data_window.max})};
-        Box2f display_window{app_pos_at_pixel(float2{rimg->display_window.min}),
-                             app_pos_at_pixel(float2{rimg->display_window.max})};
+        auto data_window =
+            Box2f{app_pos_at_pixel(float2{rimg->data_window.min}), app_pos_at_pixel(float2{rimg->data_window.max - 1})}
+                .make_valid();
+        auto display_window = Box2f{app_pos_at_pixel(float2{rimg->display_window.min}),
+                                    app_pos_at_pixel(float2{rimg->display_window.max - 1})}
+                                  .make_valid();
         ImGui::PushRowColors(false, true, true);
         if (m_draw_data_window)
             ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive),

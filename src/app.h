@@ -86,9 +86,21 @@ public:
     //   3) pixel (pixel): coordinates within the displayed image (origin: top-left of image)
     //-----------------------------------------------------------------------------
     /// Calculates the image pixel coordinates of the given position in the viewport
-    float2 pixel_at_vp_pos(float2 vp_pos) const { return (vp_pos - (m_offset + center_offset())) / m_zoom; }
+    float2 pixel_at_vp_pos(float2 vp_pos) const
+    {
+        float2 pixel = (vp_pos - (m_offset + center_offset())) / m_zoom;
+        if (auto img = current_image())
+            pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
+        return pixel;
+    }
     /// Calculates the position inside the viewport for the given image pixel coordinate.
-    float2 vp_pos_at_pixel(float2 pixel) const { return m_zoom * pixel + (m_offset + center_offset()); }
+    float2 vp_pos_at_pixel(float2 pixel) const
+    {
+        if (auto img = current_image())
+            pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
+
+        return m_zoom * pixel + (m_offset + center_offset());
+    }
     /// Calculates the app position at the given image pixel coordinate.
     float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
     /// Calculates the image pixel coordinates at the given app position.
@@ -225,11 +237,12 @@ private:
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    bool       m_auto_fit_display = false;      ///< Continually keep the image display window fit within the viewport
-    bool       m_auto_fit_data    = false;      ///< Continually keep the image data window fit within the viewport
-    float      m_zoom             = 1.f;        ///< The zoom factor (image pixel size / logical pixel size)
-    float2     m_offset           = {0.f, 0.f}; ///< The panning offset of the image
-    EChannel   m_channel          = EChannel::RGB; ///< Which channel to display
+    bool       m_auto_fit_display = false; ///< Continually keep the image display window fit within the viewport
+    bool       m_auto_fit_data    = false; ///< Continually keep the image data window fit within the viewport
+    bool2      m_flip             = {false, false}; ///< Whether to flip the image horizontally and/or vertically
+    float      m_zoom             = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
+    float2     m_offset           = {0.f, 0.f};     ///< The panning offset of the image
+    EChannel   m_channel          = EChannel::RGB;  ///< Which channel to display
     Tonemap    m_tonemap          = Tonemap_Gamma;
     Colormap_  m_colormap         = Colormap_Inferno;
     EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images

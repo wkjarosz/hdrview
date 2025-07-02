@@ -413,4 +413,10 @@ public:
                        int level = 0) const;
 };
 
+inline Box2f display_window(ConstImagePtr img = nullptr)
+{
+    return img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
+}
+inline Box2f data_window(ConstImagePtr img = nullptr) { return img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}}; }
+
 // void draw_histogram(Image *img, float exposure);

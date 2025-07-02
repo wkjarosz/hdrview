@@ -143,6 +143,8 @@ void HDRViewApp::load_fonts()
         builder.AddText(ICON_MY_TIMES);
         builder.AddText(ICON_MY_SELECT);
         builder.AddText(ICON_MY_PAN_ZOOM_TOOL);
+        builder.AddText(ICON_MY_FLIP_HORIZ);
+        builder.AddText(ICON_MY_FLIP_VERT);
 
         // Build the final result (ordered ranges with all the unique characters submitted)
         builder.BuildRanges(&ranges);
