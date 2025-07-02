@@ -734,12 +734,34 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_draw_display_window});
 
-        add_action({"Decrease gamma", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat,
-                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); },
-                    [this]() { return m_tonemap == Tonemap_Gamma; }});
-        add_action({"Increase gamma", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat,
-                    [this]() { m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); },
-                    [this]() { return m_tonemap == Tonemap_Gamma; }});
+        add_action({"Decrease gamma/Previous colormap", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        switch (m_tonemap)
+                        {
+                        default: [[fallthrough]];
+                        case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); break;
+                        case Tonemap_FalseColor: [[fallthrough]];
+                        case Tonemap_PositiveNegative:
+                            m_colormap_index = mod(m_colormap_index - 1, (int)m_colormaps.size());
+                            break;
+                        }
+                    },
+                    always_enabled});
+        add_action({"Increase gamma/Next colormap", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat,
+                    [this]()
+                    {
+                        switch (m_tonemap)
+                        {
+                        default: [[fallthrough]];
+                        case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); break;
+                        case Tonemap_FalseColor: [[fallthrough]];
+                        case Tonemap_PositiveNegative:
+                            m_colormap_index = mod(m_colormap_index + 1, (int)m_colormaps.size());
+                            break;
+                        }
+                    },
+                    always_enabled});
 
         add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_Space, 0,
                     []()
@@ -1302,8 +1324,8 @@ void HDRViewApp::draw_menus()
 
         ImGui::Separator();
 
-        MenuItem(action("Increase gamma"));
-        MenuItem(action("Decrease gamma"));
+        MenuItem(action("Increase gamma/Next colormap"));
+        MenuItem(action("Decrease gamma/Previous colormap"));
 
         ImGui::Separator();
 
@@ -1752,7 +1774,7 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 
     return raw ? value
                : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz(), value.w}, m_gamma_live, m_tonemap,
-                           m_colormap);
+                           m_colormaps[m_colormap_index]);
 }
 
 static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false)
@@ -2843,7 +2865,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("bg_mode", (int)m_bg_mode);
         m_shader->set_uniform("bg_color", m_bg_color);
 
-        m_shader->set_texture("colormap", Colormap::texture(m_colormap));
+        m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
 
         if (reference_image())
         {
@@ -2917,8 +2939,9 @@ void HDRViewApp::draw_top_toolbar()
         ImGui::SameLine();
         auto p = ImGui::GetCursorScreenPos();
 
-        if (ImPlot::ColormapButton(Colormap::name(m_colormap), ImVec2(HelloImGui::EmSize(8), ImGui::GetFrameHeight()),
-                                   m_colormap))
+        if (ImPlot::ColormapButton(Colormap::name(m_colormaps[m_colormap_index]),
+                                   ImVec2(HelloImGui::EmSize(8), ImGui::GetFrameHeight()),
+                                   m_colormaps[m_colormap_index]))
             ImGui::OpenPopup("colormap_dropdown");
         ImGui::SetItemTooltip("Click to choose a colormap.");
 
@@ -2928,18 +2951,18 @@ void HDRViewApp::draw_top_toolbar()
         ImGui::PopStyleVar();
         if (tmp)
         {
-            auto maps = {Colormap_Viridis, Colormap_Inferno, Colormap_Turbo, Colormap_IceFire, Colormap_CoolWarm};
-            for (auto n : maps)
+            for (int n = 0; n < (int)m_colormaps.size(); n++)
             {
-                const bool is_selected = (m_colormap == n);
-                if (ImGui::Selectable((string("##") + Colormap::name(n)).c_str(), is_selected, 0,
+                const bool is_selected = (m_colormap_index == n);
+                if (ImGui::Selectable((string("##") + Colormap::name(m_colormaps[n])).c_str(), is_selected, 0,
                                       ImVec2(0, ImGui::GetFrameHeight())))
-                    m_colormap = n;
+                    m_colormap_index = n;
                 ImGui::SameLine(0.f, 0.f);
 
                 ImPlot::ColormapButton(
-                    Colormap::name(n),
-                    ImVec2(HelloImGui::EmSize(8) - ImGui::GetStyle().WindowPadding.x, ImGui::GetFrameHeight()), n);
+                    Colormap::name(m_colormaps[n]),
+                    ImVec2(HelloImGui::EmSize(8) - ImGui::GetStyle().WindowPadding.x, ImGui::GetFrameHeight()),
+                    m_colormaps[n]);
 
                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
                 if (is_selected)

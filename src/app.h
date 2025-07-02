@@ -156,7 +156,7 @@ public:
     float      &exposure_live() { return m_exposure_live; }
     float      &exposure() { return m_exposure; }
     Tonemap    &tonemap() { return m_tonemap; }
-    Colormap_  &colormap() { return m_colormap; }
+    Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
     EBlendMode &blend_mode() { return m_blend_mode; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
@@ -237,17 +237,21 @@ private:
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    bool       m_auto_fit_display = false; ///< Continually keep the image display window fit within the viewport
-    bool       m_auto_fit_data    = false; ///< Continually keep the image data window fit within the viewport
-    bool2      m_flip             = {false, false}; ///< Whether to flip the image horizontally and/or vertically
-    float      m_zoom             = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
-    float2     m_offset           = {0.f, 0.f};     ///< The panning offset of the image
-    EChannel   m_channel          = EChannel::RGB;  ///< Which channel to display
-    Tonemap    m_tonemap          = Tonemap_Gamma;
-    Colormap_  m_colormap         = Colormap_Inferno;
-    EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
-    EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4     m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    bool     m_auto_fit_display         = false; ///< Continually keep the image display window fit within the viewport
+    bool     m_auto_fit_data            = false; ///< Continually keep the image data window fit within the viewport
+    bool2    m_flip                     = {false, false}; ///< Whether to flip the image horizontally and/or vertically
+    float    m_zoom                     = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
+    float2   m_offset                   = {0.f, 0.f};     ///< The panning offset of the image
+    EChannel m_channel                  = EChannel::RGB;  ///< Which channel to display
+    Tonemap  m_tonemap                  = Tonemap_Gamma;
+    const vector<Colormap_> m_colormaps = {Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,
+                                           Colormap_Cool,    Colormap_Pink,     Colormap_Jet,      Colormap_Spectral,
+                                           Colormap_Turbo,   Colormap_Twilight, Colormap_RdBu,     Colormap_BrBG,
+                                           Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys};
+    int                     m_colormap_index = 1;
+    EBlendMode              m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
+    EBGMode m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
+    float4  m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     float2 m_viewport_min, m_viewport_size;
 
