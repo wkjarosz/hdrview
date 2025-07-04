@@ -144,90 +144,95 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
                             : ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_AlwaysHorizontalScrollbar;
 
     ImGui::BeginChild("##spdlog window", ImVec2(0.f, 0.f), ImGuiChildFlags_FrameStyle, window_flags);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
-    auto              default_font = ImGui::GetFont();
-    ImGui::ScopedFont sf{console_font, size};
-    ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
+        auto default_font = ImGui::GetFont();
+        ImGui::PushFont(console_font, size);
+        ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
 
-    int  item_num = 0;
-    bool did_copy = false;
-    m_sink->iterate(
-        [this, &item_num, &did_copy,
-         default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
-        {
-            ++item_num;
-            if (!m_sink->should_log(msg.level) ||
-                !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
+        int  item_num = 0;
+        bool did_copy = false;
+        m_sink->iterate(
+            [this, &item_num, &did_copy,
+             default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
+            {
+                ++item_num;
+                if (!m_sink->should_log(msg.level) ||
+                    !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
+                    return true;
+
+                bool invalid_color_range = msg.color_range_end <= msg.color_range_start ||
+                                           std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length();
+
+                // compute the size of the selectable, and draw it
+                ImVec2 selectable_size{0.f, 0.f};
+                {
+                    float prefix_width =
+                        ImGui::CalcTextSize(msg.message.c_str(), msg.message.c_str() + msg.color_range_end).x;
+                    selectable_size.y =
+                        ImGui::CalcTextSize(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end),
+                                            nullptr, false,
+                                            m_wrap_text ? (ImGui::GetContentRegionAvail().x - prefix_width) : -1.f)
+                            .y;
+                    selectable_size.x = ImGui::GetContentRegionAvail().x + (m_wrap_text ? 0 : ImGui::GetScrollMaxX());
+                }
+
+                ImGui::PushID(item_num);
+                if (ImGui::Selectable("##log item selectable", false, ImGuiSelectableFlags_AllowOverlap,
+                                      selectable_size))
+                {
+                    did_copy = true;
+                    ImGui::SetClipboardText(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end));
+                }
+                ImGui::PopID();
+                ImGui::PushFont(default_font, 0.f);
+                ImGui::SetItemTooltip("Click to copy to clipboard");
+                ImGui::PopFont();
+                ImGui::SameLine(ImGui::GetStyle().ItemInnerSpacing.x);
+
+                // if color range not specified or not valid, just draw all the text with default color
+                if (invalid_color_range)
+                {
+                    if (m_wrap_text)
+                        ImGui::TextWrapped("%s", msg.message.c_str());
+                    else
+                        ImGui::TextUnformatted(msg.message.c_str());
+                }
+                else
+                {
+                    // insert the text before the color range
+                    ImGui::TextUnformatted(msg.message.c_str(), msg.message.c_str() + msg.color_range_start);
+                    ImGui::SameLine(0.f, 0.f);
+
+                    // insert the colorized text
+                    ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(msg.level));
+                    ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_start,
+                                           msg.message.c_str() + msg.color_range_end);
+                    ImGui::SameLine(0.f, 0.f);
+                    ImGui::PopStyleColor();
+
+                    // insert the text after the color range with default format
+                    if (m_wrap_text)
+                        ImGui::TextWrapped("%s", msg.message.substr(msg.color_range_end).c_str());
+                    else
+                        ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
+                }
+
                 return true;
+            });
 
-            bool invalid_color_range = msg.color_range_end <= msg.color_range_start ||
-                                       std::min(msg.color_range_start, msg.color_range_end) >= msg.message.length();
+        if (did_copy)
+            spdlog::trace("Copied a log item to clipboard"); // the log sink is locked during the iterate loop above, so
+                                                             // this needs to happen outside
 
-            // compute the size of the selectable, and draw it
-            ImVec2 selectable_size{0.f, 0.f};
-            {
-                float prefix_width =
-                    ImGui::CalcTextSize(msg.message.c_str(), msg.message.c_str() + msg.color_range_end).x;
-                selectable_size.y =
-                    ImGui::CalcTextSize(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end), nullptr,
-                                        false, m_wrap_text ? (ImGui::GetContentRegionAvail().x - prefix_width) : -1.f)
-                        .y;
-                selectable_size.x = ImGui::GetContentRegionAvail().x + (m_wrap_text ? 0 : ImGui::GetScrollMaxX());
-            }
+        ImGui::PopStyleColor();
 
-            ImGui::PushID(item_num);
-            if (ImGui::Selectable("##log item selectable", false, ImGuiSelectableFlags_AllowOverlap, selectable_size))
-            {
-                did_copy = true;
-                ImGui::SetClipboardText(msg.message.c_str() + (invalid_color_range ? 0 : msg.color_range_end));
-            }
-            ImGui::PopID();
-            ImGui::PushFont(default_font, 0.f);
-            ImGui::SetItemTooltip("Click to copy to clipboard");
-            ImGui::PopFont();
-            ImGui::SameLine(ImGui::GetStyle().ItemInnerSpacing.x);
+        if (m_sink->has_new_items() && m_auto_scroll)
+            ImGui::SetScrollHereY(1.f);
 
-            // if color range not specified or not valid, just draw all the text with default color
-            if (invalid_color_range)
-            {
-                if (m_wrap_text)
-                    ImGui::TextWrapped("%s", msg.message.c_str());
-                else
-                    ImGui::TextUnformatted(msg.message.c_str());
-            }
-            else
-            {
-                // insert the text before the color range
-                ImGui::TextUnformatted(msg.message.c_str(), msg.message.c_str() + msg.color_range_start);
-                ImGui::SameLine(0.f, 0.f);
-
-                // insert the colorized text
-                ImGui::PushStyleColor(ImGuiCol_Text, m_level_colors.at(msg.level));
-                ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_start,
-                                       msg.message.c_str() + msg.color_range_end);
-                ImGui::SameLine(0.f, 0.f);
-                ImGui::PopStyleColor();
-
-                // insert the text after the color range with default format
-                if (m_wrap_text)
-                    ImGui::TextWrapped("%s", msg.message.substr(msg.color_range_end).c_str());
-                else
-                    ImGui::TextUnformatted(msg.message.c_str() + msg.color_range_end);
-            }
-
-            return true;
-        });
-
-    if (did_copy)
-        spdlog::trace("Copied a log item to clipboard"); // the log sink is locked during the iterate loop above, so
-                                                         // this needs to happen outside
-
-    ImGui::PopStyleColor();
-
-    if (m_sink->has_new_items() && m_auto_scroll)
-        ImGui::SetScrollHereY(1.f);
-
-    ImGui::PopStyleVar();
+        ImGui::PopFont();
+        ImGui::PopStyleVar();
+    }
     ImGui::EndChild();
 }
 
