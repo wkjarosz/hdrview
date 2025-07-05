@@ -525,12 +525,12 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
-find_package(PNG 1.6.45 REQUIRED)
+find_package(PNG)
 if(PNG_FOUND)
   message(STATUS "Using system-installed libpng library")
   list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
 else()
-  message(FATAL_ERROR "libpng library not found or version is less than 1.6.45. Please install it.")
+  message(FATAL_ERROR "libpng library not found. Please install it.")
 endif()
 
 CPMAddPackage(

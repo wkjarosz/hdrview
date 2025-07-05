@@ -144,6 +144,10 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     else
         image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * bit_depth, bit_depth);
 
+    //
+    // Read color chunks in reverse priority order
+    //
+
     double           gamma       = 2.2; // default gamma
     int              srgb_intent = 0;
     TransferFunction tf          = TransferFunction_sRGB; // default
@@ -243,6 +247,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         break;
     }
     image->metadata["transfer function"] = tf_desc;
+
+    // Done reading color chunks
+    //
 
     Timer timer;
     // Interlaced: read entire image at once
