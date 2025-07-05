@@ -525,6 +525,14 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
+find_package(PNG 1.6.45 REQUIRED)
+if(PNG_FOUND)
+  message(STATUS "Using system-installed libpng library")
+  list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
+else()
+  message(FATAL_ERROR "libpng library not found or version is less than 1.6.45. Please install it.")
+endif()
+
 CPMAddPackage(
   NAME CLI11
   VERSION 2.4.1
@@ -592,6 +600,7 @@ hello_imgui_add_app(
   src/imageio/icc.cpp
   src/imageio/jxl.cpp
   src/imageio/pfm.cpp
+  src/imageio/png.cpp
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
   src/imageio/uhdr.cpp

@@ -2771,10 +2771,10 @@ void HDRViewApp::draw_image_border() const
     if (cimg && cimg->data_window.has_volume())
     {
         auto data_window =
-            Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max - 1})}
+            Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max})}
                 .make_valid();
         auto display_window = Box2f{app_pos_at_pixel(float2{cimg->display_window.min}),
-                                    app_pos_at_pixel(float2{cimg->display_window.max - 1})}
+                                    app_pos_at_pixel(float2{cimg->display_window.max})}
                                   .make_valid();
         bool non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
         ImGui::PushRowColors(true, false);
@@ -2790,10 +2790,10 @@ void HDRViewApp::draw_image_border() const
     if (rimg && rimg->data_window.has_volume())
     {
         auto data_window =
-            Box2f{app_pos_at_pixel(float2{rimg->data_window.min}), app_pos_at_pixel(float2{rimg->data_window.max - 1})}
+            Box2f{app_pos_at_pixel(float2{rimg->data_window.min}), app_pos_at_pixel(float2{rimg->data_window.max})}
                 .make_valid();
         auto display_window = Box2f{app_pos_at_pixel(float2{rimg->display_window.min}),
-                                    app_pos_at_pixel(float2{rimg->display_window.max - 1})}
+                                    app_pos_at_pixel(float2{rimg->display_window.max})}
                                   .make_valid();
         ImGui::PushRowColors(false, true, true);
         if (m_draw_data_window)

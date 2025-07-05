@@ -20,19 +20,12 @@ using namespace std;
 
 // Reference whites used in the common color spaces below
 static const Imath::V2f _wp_ACES{0.32168f, 0.33767f};
-// static const Imath::V2f _wp_C{0.31006f, 0.31616f};
+static const Imath::V2f _wp_C{0.31006f, 0.31616f};
+static const Imath::V2f _wp_DCI{0.314f, 0.351f};
 static const Imath::V2f _wp_D50{0.34567f, 0.35850f};
 static const Imath::V2f _wp_D65{0.31271f, 0.32902f};
 static const Imath::V2f _wp_E{0.33333f, 0.33333f};
 
-// static const char _lin_ap0[]          = "lin_ap0";
-// static const char _lin_ap1_acescg[]   = "lin_ap1/acescg";
-// static const char _lin_adobergb[]     = "lin_adobergb";
-// static const char _lin_cie1931xyz[]   = "lin_cie1931xyz";
-// static const char _lin_displayp3[]    = "lin_displayp3";
-// static const char _lin_prophotorgb[]  = "lin_prophotorgb";
-// static const char _lin_rec2020_2100[] = "lin_rec2020/rec2100";
-// static const char _lin_srgb_rec709[]  = "lin_srgb/rec709";
 static const char _lin_ap0[]          = "ACES AP0";
 static const char _lin_ap1_acescg[]   = "ACEScg AP1";
 static const char _lin_adobergb[]     = "Adobe RGB";
@@ -41,6 +34,17 @@ static const char _lin_displayp3[]    = "Display P3";
 static const char _lin_prophotorgb[]  = "ProPhoto RGB";
 static const char _lin_rec2020_2100[] = "Rec2020/Rec2100";
 static const char _lin_srgb_rec709[]  = "sRGB/Rec709";
+static const char _lin_cicp_01[]      = "CICP 01";
+static const char _lin_cicp_04[]      = "CICP 04";
+static const char _lin_cicp_05[]      = "CICP 05";
+static const char _lin_cicp_06[]      = "CICP 06";
+static const char _lin_cicp_07[]      = "CICP 07";
+static const char _lin_cicp_08[]      = "CICP 08";
+static const char _lin_cicp_09[]      = "CICP 09";
+static const char _lin_cicp_10[]      = "CICP 10";
+static const char _lin_cicp_11[]      = "CICP 11";
+static const char _lin_cicp_12[]      = "CICP 12";
+static const char _lin_cicp_22[]      = "CICP 22";
 
 const char *lin_ap0_gamut          = _lin_ap0;
 const char *lin_ap1_acescg_gamut   = _lin_ap1_acescg;
@@ -50,6 +54,17 @@ const char *lin_displayp3_gamut    = _lin_displayp3;
 const char *lin_prophotorgb_gamut  = _lin_prophotorgb;
 const char *lin_rec2020_2100_gamut = _lin_rec2020_2100;
 const char *lin_srgb_rec709_gamut  = _lin_srgb_rec709;
+const char *lin_cicp_01_gamut      = _lin_cicp_01;
+const char *lin_cicp_04_gamut      = _lin_cicp_04;
+const char *lin_cicp_05_gamut      = _lin_cicp_05;
+const char *lin_cicp_06_gamut      = _lin_cicp_06;
+const char *lin_cicp_07_gamut      = _lin_cicp_07;
+const char *lin_cicp_08_gamut      = _lin_cicp_08;
+const char *lin_cicp_09_gamut      = _lin_cicp_09;
+const char *lin_cicp_10_gamut      = _lin_cicp_10;
+const char *lin_cicp_11_gamut      = _lin_cicp_11;
+const char *lin_cicp_12_gamut      = _lin_cicp_12;
+const char *lin_cicp_22_gamut      = _lin_cicp_22;
 
 // clang-format off
 static const char* _color_gammut_names[] = {
@@ -88,6 +103,7 @@ static const char* _tf_names[] = {
 //  https://en.wikipedia.org/wiki/Standard_illuminant
 //  https://en.wikipedia.org/wiki/RGB_color_spaces
 //  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
+//  ITU-T H.273: https://www.itu.int/rec/T-REC-H.273-202407-I/en
 // Chromaticity data for common color spaces
 static const std::map<const char *, Imf::Chromaticities> _chromaticities_map = {
     {_lin_ap0, {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, _wp_ACES}},
@@ -97,7 +113,18 @@ static const std::map<const char *, Imf::Chromaticities> _chromaticities_map = {
     {_lin_rec2020_2100, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}},
     {_lin_cie1931xyz, {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, _wp_E}},
     {_lin_prophotorgb, {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, _wp_D50}},
-    {_lin_srgb_rec709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}};
+    {_lin_srgb_rec709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}},
+    {_lin_cicp_01, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.709, sRGB
+    {_lin_cicp_04, {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, _wp_C}},   // BT.470 System M
+    {_lin_cicp_05, {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.470 System BG
+    {_lin_cicp_06, {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, _wp_D65}}, // SMPTE 170M
+    {_lin_cicp_07, {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, _wp_D65}}, // SMPTE 240M
+    {_lin_cicp_08, {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, _wp_C}},   // Generic Film
+    {_lin_cicp_09, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}}, // BT.2020
+    {_lin_cicp_10, {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, _wp_E}},   // SMPTE 428 (XYZ)
+    {_lin_cicp_11, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_DCI}}, // SMPTE 431-2 (DCI P3)
+    {_lin_cicp_12, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_D65}}, // SMPTE 432-1 (P3 D65)
+    {_lin_cicp_22, {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1550f, 0.0770f}, _wp_D65}}};
 
 static const std::map<const char *, const char *> _gamut_descriptions = {
     {_lin_ap0, "AP0 primaries, Academy Color Encoding System white point"},
@@ -107,7 +134,18 @@ static const std::map<const char *, const char *> _gamut_descriptions = {
     {_lin_rec2020_2100, "Rec2020/Rec2100 gamut, D65"},
     {_lin_cie1931xyz, "CIE (1931) XYZ primaries, E white point"},
     {_lin_prophotorgb, "ProPhoto RGB gamut, D50"},
-    {_lin_srgb_rec709, "sRGB/Rec709 gamut, D65"}};
+    {_lin_srgb_rec709, "sRGB/Rec709 gamut, D65"},
+    {_lin_cicp_01, "CICP 01 BT.709/sRGB gamut, D65"},
+    {_lin_cicp_04, "CICP 04 BT.470 System M, NTSC gamut, C white point"},
+    {_lin_cicp_05, "CICP 05 BT.470 System BG, D65"},
+    {_lin_cicp_06, "CICP 06 SMPTE 170M, D65"},
+    {_lin_cicp_07, "CICP 07 SMPTE 240M, D65"},
+    {_lin_cicp_08, "CICP 08 Generic Film, C white point"},
+    {_lin_cicp_09, "CICP 09 BT.2020, D65"},
+    {_lin_cicp_10, "CICP 10 SMPTE 428 (XYZ), E white point"},
+    {_lin_cicp_11, "CICP 11 SMPTE 431-2 (DCI P3), DCI white point"},
+    {_lin_cicp_12, "CICP 12 SMPTE 432-1 (P3 D65), D65"},
+    {_lin_cicp_22, "CICP 22 EBU Tech. 3213-E, D65"}};
 
 const char **color_gamut_names() { return _color_gammut_names; }
 const char  *color_gamut_description(const char *name) { return _gamut_descriptions.at(name); }

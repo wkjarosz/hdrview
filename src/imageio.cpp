@@ -19,6 +19,7 @@
 #include "imageio/heif.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
+#include "imageio/png.h"
 #include "imageio/qoi.h"
 #include "imageio/stb.h"
 #include "imageio/uhdr.h"
@@ -61,6 +62,11 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
             spdlog::info("Detected HEIF image.");
             images = load_heif_image(is, filename);
         }
+        else if (is_png_image(is))
+        {
+            spdlog::info("Detected PNG image. Loading via libpng.");
+            images = load_png_image(is, filename);
+        }
         else if (is_stb_image(is))
         {
             spdlog::info("Detected stb-compatible image. Loading via stb_image.");
@@ -101,6 +107,8 @@ void Image::save(ostream &os, const string &_filename, float gain, bool sRGB, bo
         return save_pfm_image(*this, os, _filename, gain);
     else if (extension == "qoi")
         return save_qoi_image(*this, os, _filename, gain, sRGB, dither);
+    else if (extension == "png")
+        return save_png_image(*this, os, _filename, gain, sRGB, dither);
     else
         return save_stb_image(*this, os, _filename, gain, sRGB, dither);
 }

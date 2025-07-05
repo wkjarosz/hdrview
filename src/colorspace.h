@@ -67,6 +67,17 @@ extern const char *lin_displayp3_gamut;
 extern const char *lin_prophotorgb_gamut;
 extern const char *lin_rec2020_2100_gamut;
 extern const char *lin_srgb_rec709_gamut;
+extern const char *lin_cicp_01_gamut;
+extern const char *lin_cicp_04_gamut;
+extern const char *lin_cicp_05_gamut;
+extern const char *lin_cicp_06_gamut;
+extern const char *lin_cicp_07_gamut;
+extern const char *lin_cicp_08_gamut;
+extern const char *lin_cicp_09_gamut;
+extern const char *lin_cicp_10_gamut;
+extern const char *lin_cicp_11_gamut;
+extern const char *lin_cicp_12_gamut;
+extern const char *lin_cicp_22_gamut;
 
 // return a map of common color spaces, indexed by name
 const std::map<const char *, Imf::Chromaticities> &color_gamuts();
