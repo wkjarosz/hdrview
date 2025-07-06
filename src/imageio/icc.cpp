@@ -69,6 +69,12 @@ Profile create_linear_sRGB_profile()
 // NOTE: we can't just use cmsSigMediaWhitePointTag because its interpretation differs between ICC versions.
 cmsCIEXYZ unadapted_white(const Profile &profile)
 {
+    // This code is adapted from the UnadaptedWhitePoint function in libjxl
+    // Copyright (c) the JPEG XL Project Authors. All rights reserved.
+    //
+    // Use of this source code is governed by a BSD-style
+    // license that can be found in the LICENSE file.
+
     auto white_point = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(profile.get(), cmsSigMediaWhitePointTag));
     if (white_point && !cmsReadTag(profile.get(), cmsSigChromaticAdaptationTag))
     {
@@ -102,7 +108,7 @@ cmsCIEXYZ unadapted_white(const Profile &profile)
 
 bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, cmsCIExyY *whitepoint)
 {
-    // This code is adapted from libjxl
+    // This code is adapted from the IdentifyPrimaries function in libjxl
     // Copyright (c) the JPEG XL Project Authors. All rights reserved.
     //
     // Use of this source code is governed by a BSD-style
@@ -144,14 +150,14 @@ bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, 
     }
 
     // Undo the chromatic adaptation.
-    const cmsCIEXYZ d50 = {0.96420288, 1.0, 0.82490540};
+    auto d50 = cmsD50_XYZ();
 
     auto wp_unadapted = unadapted_white(profile);
 
     cmsCIEXYZ r, g, b;
-    cmsAdaptToIlluminant(&r, &d50, &wp_unadapted, adapted_r);
-    cmsAdaptToIlluminant(&g, &d50, &wp_unadapted, adapted_g);
-    cmsAdaptToIlluminant(&b, &d50, &wp_unadapted, adapted_b);
+    cmsAdaptToIlluminant(&r, d50, &wp_unadapted, adapted_r);
+    cmsAdaptToIlluminant(&g, d50, &wp_unadapted, adapted_g);
+    cmsAdaptToIlluminant(&b, d50, &wp_unadapted, adapted_b);
 
     // Convert to xyY
     if (primaries)
@@ -186,7 +192,16 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     auto            profile_in = icc::open_profile_from_mem(icc_profile);
     cmsCIExyY       whitepoint;
     cmsCIExyYTRIPLE primaries;
-    icc::extract_chromaticities(profile_in, &primaries, &whitepoint);
+    if (!extract_chromaticities(profile_in, &primaries, &whitepoint))
+    {
+        spdlog::warn("Could not extract chromaticities from ICC profile, using sRGB defaults");
+        // Default to sRGB primaries and D65 white point
+        whitepoint      = {0.3127, 0.3290, 1.0};
+        primaries.Red   = {0.6400, 0.3300, 1.0};
+        primaries.Green = {0.3000, 0.6000, 1.0};
+        primaries.Blue  = {0.1500, 0.0600, 1.0};
+    }
+
     if (red)
         *red = float2((float)primaries.Red.x, (float)primaries.Red.y);
     if (green)
@@ -196,6 +211,7 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     if (white)
         *white = float2((float)whitepoint.x, (float)whitepoint.y);
 
+    // Create a linear version of the same profile (same primaries, but linear transfer function)
     auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
     cmsUInt32Number format      = TYPE_GRAY_FLT;
     if (size.z == 3)

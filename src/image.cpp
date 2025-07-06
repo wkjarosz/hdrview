@@ -695,7 +695,7 @@ void Image::compute_color_transform()
 
     static const Imf::Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     Imath::M33f                      M;
-    if (color_conversion_matrix(M, file_chr, bt709_chr))
+    if (color_conversion_matrix(M, file_chr, bt709_chr, 2))
     {
         // M_to_Rec709 = to_linalg(NcGetRGBToRGBMatrix(src.get(), dst));
         M_to_Rec709 = to_linalg(M);

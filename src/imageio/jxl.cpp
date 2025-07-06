@@ -138,6 +138,10 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
         tf_desc = hlg_tf;
         tf      = TransferFunction_BT2100_HLG;
         break;
+    case JXL_TRANSFER_FUNCTION_DCI:
+        tf_desc = dci_p3_tf;
+        tf      = TransferFunction_DCI_P3;
+        break;
     case JXL_TRANSFER_FUNCTION_LINEAR:
         tf_desc = linear_tf;
         tf      = TransferFunction_Linear;

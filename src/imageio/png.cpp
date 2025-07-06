@@ -1,5 +1,6 @@
 #include "png.h"
 #include "colorspace.h"
+#include "icc.h"
 #include "image.h"
 #include "texture.h"
 #include "timer.h"
@@ -148,6 +149,21 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     // Read color chunks in reverse priority order
     //
 
+    std::vector<uint8_t> icc_profile;
+    bool                 has_icc_profile  = false;
+    char                *icc_name         = nullptr;
+    int                  compression_type = 0;
+    png_bytep            icc_ptr          = nullptr;
+    png_uint_32          icc_len          = 0;
+
+    if (png_get_iCCP(png_ptr, info_ptr, &icc_name, &compression_type, &icc_ptr, &icc_len))
+    {
+        icc_profile.assign(icc_ptr, icc_ptr + icc_len);
+        has_icc_profile = true;
+        spdlog::info("PNG: Found ICC profile: {} ({} bytes)", icc_name, icc_len);
+        image->metadata["icc profile"] = icc_name;
+    }
+
     double           gamma       = 2.2; // default gamma
     int              srgb_intent = 0;
     TransferFunction tf          = TransferFunction_sRGB; // default
@@ -176,6 +192,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         tf = TransferFunction_sRGB;
     }
 
+    bool has_cICP = false;
 #ifdef PNG_cICP_SUPPORTED
     png_byte colour_primaries;
     png_byte transfer_function;
@@ -185,6 +202,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     if (png_get_cICP(png_ptr, info_ptr, &colour_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
     {
+        has_cICP = true;
         spdlog::info("PNG: Found cICP chunk: Colour Primaries: {}, Transfer Function: {}, "
                      "Matrix Coefficients: {}, Video Full Range: {}",
                      int(colour_primaries), int(transfer_function), int(matrix_coefficients),
@@ -221,7 +239,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             tf    = TransferFunction_Gamma;
             gamma = 2.8f;
             break;
+        case 7: tf = TransferFunction_ST240; break;
         case 8: tf = TransferFunction_Linear; break;
+        case 11: tf = TransferFunction_IEC61966_2_4; break;
         case 13: tf = TransferFunction_sRGB; break;
         case 16: tf = TransferFunction_BT2100_PQ; break;
         case 17: tf = TransferFunction_DCI_P3; break;
@@ -260,17 +280,16 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     // Interlaced: read entire image at once
     vector<png_bytep> row_pointers(height);
 
+    vector<float> float_pixels(width * height * channels);
+
     if (bit_depth == 16)
     {
         vector<uint16_t> imagedata(width * height * channels);
         for (size_t y = 0; y < height; ++y)
             row_pointers[y] = reinterpret_cast<png_bytep>(&imagedata[y * width * channels]);
         png_read_image(png_ptr, row_pointers.data());
-        for (size_t y = 0; y < height; ++y)
-            for (size_t x = 0; x < width; ++x)
-                for (int c = 0; c < channels; ++c)
-                    image->channels[c](x, y) =
-                        to_linear(imagedata[y * width * channels + x * channels + c] / 65535.0f, tf, gamma);
+
+        for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = imagedata[i] / 65535.f;
     }
     else if (bit_depth <= 8)
     {
@@ -278,14 +297,33 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         for (size_t y = 0; y < height; ++y)
             row_pointers[y] = reinterpret_cast<png_bytep>(&imagedata[y * width * channels]);
         png_read_image(png_ptr, row_pointers.data());
-        for (size_t y = 0; y < height; ++y)
-            for (size_t x = 0; x < width; ++x)
-                for (int c = 0; c < channels; ++c)
-                    image->channels[c](x, y) =
-                        to_linear(imagedata[y * width * channels + x * channels + c] / 255.0f, tf, gamma);
+
+        for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = imagedata[i] / 255.f;
     }
     else
         throw runtime_error("Unsupported PNG bit depth");
+
+    // linearize colors
+    if (has_icc_profile && !has_cICP)
+    {
+        float2 red, green, blue, white;
+        if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &red, &green, &blue, &white))
+        {
+            spdlog::info("PNG: Linearizing colors using ICC profile.");
+            Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
+                                                   Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+            image->metadata["transfer function"] = tf_desc;
+        }
+    }
+    else if (tf != TransferFunction_Linear)
+    {
+        to_linear(float_pixels.data(), size, tf, gamma);
+    }
+
+    // copy the interleaved float pixels into the channels
+    for (int c = 0; c < size.z; ++c)
+        image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
+                                                 [](float v) { return v; });
 
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 

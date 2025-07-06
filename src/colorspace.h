@@ -656,7 +656,7 @@ inline uint32_t color_f128_to_u32(const float4 &in)
 //         return linear;
 //     case 4: // Gamma 2.2 (IEC 61966-2-1)
 //         return LinearToGamma(linear, 1.0f / 2.2f);
-//     case 5: // Gamma 2.8 (ITU-R BT.470 System M)
+//     case 5: // Gamma 2.8 (ITU-R BT.470 System B G)
 //         return LinearToGamma(linear, 1.0f / 2.8f);
 //     case 7: // ST240/SMPTE 240M
 //         return OETF_ST240(linear);
