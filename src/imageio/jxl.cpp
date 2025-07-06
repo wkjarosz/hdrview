@@ -127,16 +127,16 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     switch (file_enc.transfer_function)
     {
     case JXL_TRANSFER_FUNCTION_709:
-        tf_desc = rec709_2020_tf;
-        tf      = TransferFunction_Rec709_2020;
+        tf_desc = itu_tf;
+        tf      = TransferFunction_ITU;
         break;
     case JXL_TRANSFER_FUNCTION_PQ:
         tf_desc = pq_tf;
-        tf      = TransferFunction_Rec2100_PQ;
+        tf      = TransferFunction_BT2100_PQ;
         break;
     case JXL_TRANSFER_FUNCTION_HLG:
         tf_desc = hlg_tf;
-        tf      = TransferFunction_Rec2100_HLG;
+        tf      = TransferFunction_BT2100_HLG;
         break;
     case JXL_TRANSFER_FUNCTION_LINEAR:
         tf_desc = linear_tf;

@@ -210,8 +210,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         {
         case 1: [[fallthrough]];
         case 6: [[fallthrough]];
+        case 12: [[fallthrough]];
         case 14: [[fallthrough]];
-        case 15: tf = TransferFunction_Rec709_2020; break;
+        case 15: tf = TransferFunction_ITU; break;
         case 4:
             tf    = TransferFunction_Gamma;
             gamma = 2.2f;
@@ -222,8 +223,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             break;
         case 8: tf = TransferFunction_Linear; break;
         case 13: tf = TransferFunction_sRGB; break;
-        case 16: tf = TransferFunction_Rec2100_PQ; break;
-        case 18: tf = TransferFunction_Rec2100_HLG; break;
+        case 16: tf = TransferFunction_BT2100_PQ; break;
+        case 17: tf = TransferFunction_DCI_P3; break;
+        case 18: tf = TransferFunction_BT2100_HLG; break;
         default:
             spdlog::warn("PNG: cICP transfer function ({}) is not supported, assuming sRGB", transfer_function);
             tf = TransferFunction_sRGB;
@@ -234,12 +236,15 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
 
     switch (tf)
     {
-    case TransferFunction_Linear: tf_desc = lin_cicp_22_gamut; break;
+    case TransferFunction_Linear: tf_desc = linear_tf; break;
     case TransferFunction_Gamma: tf_desc = fmt::format("{} ({})", gamma_tf, float(1.0 / gamma)); break;
     case TransferFunction_sRGB: tf_desc = srgb_tf; break;
-    case TransferFunction_Rec709_2020: tf_desc = rec709_2020_tf; break;
-    case TransferFunction_Rec2100_PQ: tf_desc = pq_tf; break;
-    case TransferFunction_Rec2100_HLG: tf_desc = hlg_tf; break;
+    case TransferFunction_ITU: tf_desc = itu_tf; break;
+    case TransferFunction_BT2100_PQ: tf_desc = pq_tf; break;
+    case TransferFunction_BT2100_HLG: tf_desc = hlg_tf; break;
+    case TransferFunction_ST240: tf_desc = st240_tf; break;
+    case TransferFunction_IEC61966_2_4: tf_desc = iec61966_2_4_tf; break;
+    case TransferFunction_DCI_P3: tf_desc = dci_p3_tf; break;
     default:
         tf_desc = fmt::format("{} (assumed)", srgb_tf);
         spdlog::warn("PNG: Transfer function {} is not supported, assuming sRGB", int(tf));

@@ -693,9 +693,9 @@ void Image::compute_color_transform()
     if (Imf::hasAdoptedNeutral(header))
         file_chr.white = Imf::adoptedNeutral(header);
 
-    static const Imf::Chromaticities rec709_chr{}; // default rec709 (sRGB) primaries
+    static const Imf::Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     Imath::M33f                      M;
-    if (color_conversion_matrix(M, file_chr, rec709_chr))
+    if (color_conversion_matrix(M, file_chr, bt709_chr))
     {
         // M_to_Rec709 = to_linalg(NcGetRGBToRGBMatrix(src.get(), dst));
         M_to_Rec709 = to_linalg(M);

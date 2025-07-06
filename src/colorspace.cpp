@@ -26,45 +26,45 @@ static const Imath::V2f _wp_D50{0.34567f, 0.35850f};
 static const Imath::V2f _wp_D65{0.31271f, 0.32902f};
 static const Imath::V2f _wp_E{0.33333f, 0.33333f};
 
-static const char _lin_ap0[]          = "ACES AP0";
-static const char _lin_ap1_acescg[]   = "ACEScg AP1";
-static const char _lin_adobergb[]     = "Adobe RGB";
-static const char _lin_cie1931xyz[]   = "CIE 1931 XYZ";
-static const char _lin_displayp3[]    = "Display P3";
-static const char _lin_prophotorgb[]  = "ProPhoto RGB";
-static const char _lin_rec2020_2100[] = "Rec2020/Rec2100";
-static const char _lin_srgb_rec709[]  = "sRGB/Rec709";
-static const char _lin_cicp_01[]      = "CICP 01";
-static const char _lin_cicp_04[]      = "CICP 04";
-static const char _lin_cicp_05[]      = "CICP 05";
-static const char _lin_cicp_06[]      = "CICP 06";
-static const char _lin_cicp_07[]      = "CICP 07";
-static const char _lin_cicp_08[]      = "CICP 08";
-static const char _lin_cicp_09[]      = "CICP 09";
-static const char _lin_cicp_10[]      = "CICP 10";
-static const char _lin_cicp_11[]      = "CICP 11";
-static const char _lin_cicp_12[]      = "CICP 12";
-static const char _lin_cicp_22[]      = "CICP 22";
+static const char _lin_ap0[]         = "ACES AP0";
+static const char _lin_ap1_acescg[]  = "ACEScg AP1";
+static const char _lin_adobergb[]    = "Adobe RGB";
+static const char _lin_cie1931xyz[]  = "CIE 1931 XYZ";
+static const char _lin_displayp3[]   = "Display P3";
+static const char _lin_prophotorgb[] = "ProPhoto RGB";
+static const char _lin_bt2020_2100[] = "BT.2020/BT.2100";
+static const char _lin_srgb_bt709[]  = "sRGB/BT.709";
+static const char _lin_cicp_01[]     = "CICP 01";
+static const char _lin_cicp_04[]     = "CICP 04";
+static const char _lin_cicp_05[]     = "CICP 05";
+static const char _lin_cicp_06[]     = "CICP 06";
+static const char _lin_cicp_07[]     = "CICP 07";
+static const char _lin_cicp_08[]     = "CICP 08";
+static const char _lin_cicp_09[]     = "CICP 09";
+static const char _lin_cicp_10[]     = "CICP 10";
+static const char _lin_cicp_11[]     = "CICP 11";
+static const char _lin_cicp_12[]     = "CICP 12";
+static const char _lin_cicp_22[]     = "CICP 22";
 
-const char *lin_ap0_gamut          = _lin_ap0;
-const char *lin_ap1_acescg_gamut   = _lin_ap1_acescg;
-const char *lin_adobergb_gamut     = _lin_adobergb;
-const char *lin_cie1931xyz_gamut   = _lin_cie1931xyz;
-const char *lin_displayp3_gamut    = _lin_displayp3;
-const char *lin_prophotorgb_gamut  = _lin_prophotorgb;
-const char *lin_rec2020_2100_gamut = _lin_rec2020_2100;
-const char *lin_srgb_rec709_gamut  = _lin_srgb_rec709;
-const char *lin_cicp_01_gamut      = _lin_cicp_01;
-const char *lin_cicp_04_gamut      = _lin_cicp_04;
-const char *lin_cicp_05_gamut      = _lin_cicp_05;
-const char *lin_cicp_06_gamut      = _lin_cicp_06;
-const char *lin_cicp_07_gamut      = _lin_cicp_07;
-const char *lin_cicp_08_gamut      = _lin_cicp_08;
-const char *lin_cicp_09_gamut      = _lin_cicp_09;
-const char *lin_cicp_10_gamut      = _lin_cicp_10;
-const char *lin_cicp_11_gamut      = _lin_cicp_11;
-const char *lin_cicp_12_gamut      = _lin_cicp_12;
-const char *lin_cicp_22_gamut      = _lin_cicp_22;
+const char *lin_ap0_gamut         = _lin_ap0;
+const char *lin_ap1_acescg_gamut  = _lin_ap1_acescg;
+const char *lin_adobergb_gamut    = _lin_adobergb;
+const char *lin_cie1931xyz_gamut  = _lin_cie1931xyz;
+const char *lin_displayp3_gamut   = _lin_displayp3;
+const char *lin_prophotorgb_gamut = _lin_prophotorgb;
+const char *lin_bt2020_2100_gamut = _lin_bt2020_2100;
+const char *lin_srgb_bt709_gamut  = _lin_srgb_bt709;
+const char *lin_cicp_01_gamut     = _lin_cicp_01;
+const char *lin_cicp_04_gamut     = _lin_cicp_04;
+const char *lin_cicp_05_gamut     = _lin_cicp_05;
+const char *lin_cicp_06_gamut     = _lin_cicp_06;
+const char *lin_cicp_07_gamut     = _lin_cicp_07;
+const char *lin_cicp_08_gamut     = _lin_cicp_08;
+const char *lin_cicp_09_gamut     = _lin_cicp_09;
+const char *lin_cicp_10_gamut     = _lin_cicp_10;
+const char *lin_cicp_11_gamut     = _lin_cicp_11;
+const char *lin_cicp_12_gamut     = _lin_cicp_12;
+const char *lin_cicp_22_gamut     = _lin_cicp_22;
 
 // clang-format off
 static const char* _color_gammut_names[] = {
@@ -74,25 +74,28 @@ static const char* _color_gammut_names[] = {
     _lin_cie1931xyz,
     _lin_displayp3,
     _lin_prophotorgb,
-    _lin_rec2020_2100,
-    _lin_srgb_rec709,
+    _lin_bt2020_2100,
+    _lin_srgb_bt709,
     nullptr
 };
 // clang-format on
 
-const char *linear_tf      = "Linear";
-const char *gamma_tf       = "Gamma";
-const char *srgb_tf        = "sRGB IEC61966-2.1";
-const char *rec709_2020_tf = "Rec709/2020";
-const char *pq_tf          = "Rec2100 PQ";
-const char *hlg_tf         = "Rec2100 HLG";
+const char *linear_tf       = "Linear";
+const char *gamma_tf        = "Gamma";
+const char *srgb_tf         = "sRGB IEC61966-2.1";
+const char *itu_tf          = "BT.709/2020";
+const char *pq_tf           = "BT.2100 PQ";
+const char *hlg_tf          = "BT.2100 HLG";
+const char *st240_tf        = "SMPTE ST 240";
+const char *iec61966_2_4_tf = "IEC 61966-2-4";
+const char *dci_p3_tf       = "DCI-P3";
 
 // clang-format off
 static const char* _tf_names[] = {
     linear_tf,
     gamma_tf,
     srgb_tf,
-    rec709_2020_tf,
+    itu_tf,
     pq_tf,
     hlg_tf,
     nullptr
@@ -110,10 +113,10 @@ static const std::map<const char *, Imf::Chromaticities> _chromaticities_map = {
     {_lin_ap1_acescg, {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, _wp_ACES}},
     {_lin_adobergb, {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, _wp_D65}},
     {_lin_displayp3, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_D65}},
-    {_lin_rec2020_2100, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}},
+    {_lin_bt2020_2100, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}},
     {_lin_cie1931xyz, {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, _wp_E}},
     {_lin_prophotorgb, {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, _wp_D50}},
-    {_lin_srgb_rec709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}},
+    {_lin_srgb_bt709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}},
     {_lin_cicp_01, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.709, sRGB
     {_lin_cicp_04, {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, _wp_C}},   // BT.470 System M
     {_lin_cicp_05, {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.470 System BG
@@ -131,10 +134,10 @@ static const std::map<const char *, const char *> _gamut_descriptions = {
     {_lin_ap1_acescg, "AP1 primaries, Academy Color Encoding System white point"},
     {_lin_adobergb, "Adobe RGB (1998) gamut, D65"},
     {_lin_displayp3, "Display-P3 gamut, D65"},
-    {_lin_rec2020_2100, "Rec2020/Rec2100 gamut, D65"},
+    {_lin_bt2020_2100, "BT.2020/BT.2100 gamut, D65"},
     {_lin_cie1931xyz, "CIE (1931) XYZ primaries, E white point"},
     {_lin_prophotorgb, "ProPhoto RGB gamut, D50"},
-    {_lin_srgb_rec709, "sRGB/Rec709 gamut, D65"},
+    {_lin_srgb_bt709, "sRGB/Rec709 gamut, D65"},
     {_lin_cicp_01, "CICP 01 BT.709/sRGB gamut, D65"},
     {_lin_cicp_04, "CICP 04 BT.470 System M, NTSC gamut, C white point"},
     {_lin_cicp_05, "CICP 05 BT.470 System BG, D65"},
@@ -351,21 +354,21 @@ uint8_t f32_to_byte(float v, int x, int y, bool sRGB, bool dither)
 
 void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
 {
-    if (tf == TransferFunction_Rec2100_HLG && (size.z == 3 || size.z == 4))
+    if (tf == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
     {
         // HLG needs to operate on all three channels at once
         if (size.z == 3)
             parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                          [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
                          {
-                             for (int i = start; i < end; ++i) rgb[i] = EOTF_HLG(rgb[i]) / 255.f;
+                             for (int i = start; i < end; ++i) rgb[i] = EOTF_BT2100_HLG(rgb[i]) / 255.f;
                          });
         else // size.z == 4
             // don't modify the alpha channel
             parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                          [rgb = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
                          {
-                             for (int i = start; i < end; ++i) rgb[i].xyz() = EOTF_HLG(rgb[i].xyz()) / 255.f;
+                             for (int i = start; i < end; ++i) rgb[i].xyz() = EOTF_BT2100_HLG(rgb[i].xyz()) / 255.f;
                          });
     }
     else

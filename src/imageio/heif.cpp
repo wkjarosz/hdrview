@@ -59,16 +59,16 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
     switch (nclx->transfer_characteristics)
     {
     case heif_transfer_characteristic_ITU_R_BT_709_5:
-        tf_desc = rec709_2020_tf;
-        tf      = TransferFunction_Rec709_2020;
+        tf_desc = itu_tf;
+        tf      = TransferFunction_ITU;
         break;
     case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
         tf_desc = pq_tf;
-        tf      = TransferFunction_Rec2100_PQ;
+        tf      = TransferFunction_BT2100_PQ;
         break;
     case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
         tf_desc = hlg_tf;
-        tf      = TransferFunction_Rec2100_HLG;
+        tf      = TransferFunction_BT2100_HLG;
         break;
     case heif_transfer_characteristic_linear:
         tf_desc = linear_tf;

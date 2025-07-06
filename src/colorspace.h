@@ -65,8 +65,8 @@ extern const char *lin_adobergb_gamut;
 extern const char *lin_cie1931xyz_gamut;
 extern const char *lin_displayp3_gamut;
 extern const char *lin_prophotorgb_gamut;
-extern const char *lin_rec2020_2100_gamut;
-extern const char *lin_srgb_rec709_gamut;
+extern const char *lin_bt2020_2100_gamut;
+extern const char *lin_srgb_bt709_gamut;
 extern const char *lin_cicp_01_gamut;
 extern const char *lin_cicp_04_gamut;
 extern const char *lin_cicp_05_gamut;
@@ -104,9 +104,12 @@ enum TransferFunction : TransferFunction_
     TransferFunction_Linear = 0,
     TransferFunction_Gamma,
     TransferFunction_sRGB,
-    TransferFunction_Rec709_2020, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and and SMPTE 170M
-    TransferFunction_Rec2100_PQ,
-    TransferFunction_Rec2100_HLG,
+    TransferFunction_ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
+    TransferFunction_BT2100_PQ,
+    TransferFunction_BT2100_HLG,
+    TransferFunction_ST240,
+    TransferFunction_IEC61966_2_4,
+    TransferFunction_DCI_P3,
     // DCI_P3, // TODO
 
     TransferFunction_COUNT
@@ -116,9 +119,12 @@ enum TransferFunction : TransferFunction_
 extern const char *linear_tf;
 extern const char *gamma_tf;
 extern const char *srgb_tf;
-extern const char *rec709_2020_tf;
+extern const char *itu_tf;
 extern const char *pq_tf;
 extern const char *hlg_tf;
+extern const char *st240_tf;
+extern const char *iec61966_2_4_tf;
+extern const char *dci_p3_tf;
 
 const char **transfer_function_names();
 
@@ -167,20 +173,32 @@ Real SRGBToLinear(Real sRGB)
 }
 
 template <typename Real>
-Real Rec2020ToLinear(Real rec2020)
+Real inverse_OETF_ITU(Real bt2020)
 {
     constexpr Real alpha   = Real(1.09929682680944);
     constexpr Real alpham1 = alpha - Real(1.0);
     constexpr Real gamma   = Real(0.081242858298635); // alpha * pow(beta, 0.45) - (alpha-1)
 
-    if (rec2020 < gamma)
-        return rec2020 / Real(4.5);
+    if (bt2020 < gamma)
+        return bt2020 / Real(4.5);
     else
-        return std::pow((rec2020 + alpham1) / alpha, Real(1.0 / 0.45));
+        return std::pow((bt2020 + alpham1) / alpha, Real(1.0 / 0.45));
 }
 
+/*! Defines The ITU-T BT.601, BT.709 and BT.2020 optical-electro transfer function (OETF).
+
+    The opto-electrical transfer function (OETF) in ITU-T BT.601, BT.709 and BT.2020 specifications (for standard
+   definition television, HDTV and UHDTV respectively), and SMPTE 170M, which defines NTSC broadcasts.
+
+    \param linear A linear color value R_S, G_S, B_S in the range of [0,1]
+
+    \returns A non-linear color value R'_S, G'_S, B'_S in the range of [0,1]
+
+    see:
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_ITU
+*/
 template <typename Real>
-Real LinearToRec2020(Real linear)
+Real OETF_ITU(Real linear)
 {
     constexpr Real alpha = Real(1.09929682680944);
     constexpr Real beta  = Real(0.018053968510807);
@@ -201,7 +219,7 @@ Real LinearToRec2020(Real linear)
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_PQ
 */
 template <typename Real>
-inline Real EOTF_PQ(Real E_p)
+inline Real EOTF_BT2100_PQ(Real E_p)
 {
     constexpr Real m1inv = Real(16384) / Real(2610);
     constexpr Real m2inv = Real(4096) / Real(2523 * 128);
@@ -213,7 +231,30 @@ inline Real EOTF_PQ(Real E_p)
     return Real(10000) * std::pow(std::max(Real(0), E_pm2 - c1) / (c2 - c3 * E_pm2), m1inv);
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF).
+/*! Defines Recommendation ITU-R BT.2100-2 Reference PQ inverse electro-optical transfer function (EOTF^-1).
+
+    \param F_D Luminance of a displayed linear component R_D, G_D, B_D in cd/m^2/
+
+    \returns A non-linear color value R', G', B' in PQ space.
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_PQ
+*/
+template <typename Real>
+inline Real inverse_EOTF_BT2100_PQ(Real F_D)
+{
+    constexpr Real m1 = Real(2610) / Real(16384);
+    constexpr Real m2 = Real(2523 * 128) / Real(4096);
+    constexpr Real c1 = Real(3424) / Real(4096);      // 0.8359375f;
+    constexpr Real c2 = Real(2413) / Real(4096) * 32; // 18.8515625f;
+    constexpr Real c3 = Real(2392) / Real(4096) * 32; // 18.6875f;
+
+    const Real Y = F_D / Real(10000);
+    return std::pow((c1 + c2 * std::pow(Y, m1)) / (1 + c3 * std::pow(Y, m1)), m2);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse optical-electro transfer function (OETF^-1).
 
     \param x A non-linear color value R', G', B' in HLG space in the range of [0,1]
 
@@ -224,7 +265,7 @@ inline Real EOTF_PQ(Real E_p)
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline Real OETF_inverse_HLG(Real x)
+inline Real inverse_OETF_BT2100_HLG(Real x)
 {
     // Constants defined by the HLG standard
     constexpr Real a = Real(0.17883277);
@@ -234,25 +275,46 @@ inline Real OETF_inverse_HLG(Real x)
     return (x < Real(0.5)) ? (x * x) / Real(3) : (std::exp((x - c) / a) + b) / Real(12);
 }
 
-/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF).
+/*! Recommendation ITU-R BT.2100-2 Reference HLG optical-electro transfer function (OETF).
 
-    \param E_s   Signal for a color component R_s, G_s, B_s proportional to scene linear light normalized to the range
-                 [0,1].
-    \param Y_s   Normalized scene luminance, defined as: 0.2627 × R_s + 0.6780 × G_s + 0.0593 × B_s
-    \param alpha Adjustable user gain (display “contrast”) representing L_W, the nominal peak luminance of achromatic
-                 pixels.
-    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+    \param E The R_S, G_S, B_S color component of linear scene light, normalized to [0,1]
 
-    \returns  Luminance of a displayed linear component {R_d, G_d, or B_d}, in cd/m^2.
+    \returns The resulting non-linear color value R'_S, G'_S, B'_S in HLG space in the range of [0,1]
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline Real OOTF_HLG(Real E_s, Real Y_s, Real alpha, Real gamma = Real(1.2))
+inline Real OETF_BT2100_HLG(Real E)
 {
-    return (alpha * std::pow(Y_s, gamma - Real(1)) * E_s);
+    // Constants defined by the HLG standard
+    constexpr Real a = Real(0.17883277);
+    constexpr Real b = Real(0.28466892); // 1 - 4*a;
+    constexpr Real c = Real(0.55991073); // 0.5 - a * std::log(4 * a)
+
+    return (E <= Real(1) / Real(12)) ? std::sqrt(Real(3) * E) : (a * std::log(12 * E - b) + c);
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG opto-optical transfer function (OOTF^-1).
+
+    \param E_S   Signal for a color component R_S, G_S, B_S proportional to scene linear light normalized to the range
+                 [0,1].
+    \param Y_S   Normalized scene luminance, defined as: 0.2627 × R_S + 0.6780 × G_S + 0.0593 × B_S
+    \param alpha Adjustable user gain (display “contrast”) representing L_W, the nominal peak luminance of achromatic
+                 pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns  Luminance of a displayed linear component {R_D, G_D, or B_D}, in cd/m^2.
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+    https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
+*/
+template <typename Real>
+inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.2))
+{
+    return (alpha * std::pow(Y_S, gamma - Real(1)) * E_S);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
@@ -262,19 +324,19 @@ inline Real OOTF_HLG(Real E_s, Real Y_s, Real alpha, Real gamma = Real(1.2))
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
     \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
-    \returns Luminance of a displayed linear component {R_d, G_d, or B_d} in cd/m^2/.
+    \returns Luminance of a displayed linear component {R_D, G_D, or B_D} in cd/m^2/.
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline Real EOTF_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
+inline Real EOTF_BT2100_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
 {
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
-    auto       E_s   = OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p + beta));
-    return OOTF_HLG(E_s, E_s, alpha, gamma);
+    auto       E_s   = inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p + beta));
+    return OOTF_BT2100_HLG(E_s, E_s, alpha, gamma);
 }
 
 /*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
@@ -284,26 +346,128 @@ inline Real EOTF_HLG(Real E_p, Real L_B = Real(0), Real L_W = Real(1000), Real g
     \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
     \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
 
-    \returns Displayed linear color {R_d, G_d, B_d} in cd/m^2.
+    \returns Displayed linear color {R_D, G_D, B_D} in cd/m^2.
 
     see:
     https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
     https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#TRANSFER_HLG
 */
 template <typename Real>
-inline la::vec<Real, 3> EOTF_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0), Real L_W = Real(1000),
-                                 Real gamma = Real(1.2))
+inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = Real(0), Real L_W = Real(1000),
+                                        Real gamma = Real(1.2))
 {
     const Real alpha = L_W - L_B;
     const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
 
-    la::vec<Real, 3> E_s{OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[0] + beta)),
-                         OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[1] + beta)),
-                         OETF_inverse_HLG(std::max(Real(0), (Real(1) - beta) * E_p[2] + beta))};
+    la::vec<Real, 3> E_s{inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p[0] + beta)),
+                         inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p[1] + beta)),
+                         inverse_OETF_BT2100_HLG(std::max(Real(0), (Real(1) - beta) * E_p[2] + beta))};
     Real             Y_s = dot(la::vec<Real, 3>(Real(0.2627), Real(0.6780), Real(0.0593)), E_s);
 
-    return {OOTF_HLG(E_s[0], Y_s, alpha, gamma), OOTF_HLG(E_s[1], Y_s, alpha, gamma),
-            OOTF_HLG(E_s[2], Y_s, alpha, gamma)};
+    return {OOTF_BT2100_HLG(E_s[0], Y_s, alpha, gamma), OOTF_BT2100_HLG(E_s[1], Y_s, alpha, gamma),
+            OOTF_BT2100_HLG(E_s[2], Y_s, alpha, gamma)};
+}
+
+/*! ST240/SMPTE240M OETF (Opto-Electronic Transfer Function).
+
+    Since the OOTF is linear, this function also implements EOTF^-1.
+*/
+template <typename Real>
+inline Real OETF_ST240(Real linear)
+{
+    constexpr Real alpha = Real(1.1115);
+    constexpr Real beta  = Real(0.0228);
+    if (linear < beta)
+        return Real(4.0) * linear;
+    else
+        return alpha * std::pow(linear, Real(0.45)) - (alpha - Real(1.0));
+}
+
+/*! ST240/SMPTE240M EOTF (Electro-Optical Transfer Function).
+
+    Since the OOTF is linear, this function also implements OETF^-1.
+*/
+template <typename Real>
+inline Real EOTF_ST240(Real nonlinear)
+{
+    constexpr Real alpha = Real(1.1115);
+    constexpr Real beta  = Real(0.0913);
+    if (nonlinear < beta)
+        return nonlinear / Real(4.0);
+    else
+        return std::pow((nonlinear + (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
+}
+
+/*! IEC 61966-2-4 OETF (Opto-Electronic Transfer Function).
+
+    Implements the transfer function as specified in IEC 61966-2-4.
+
+    \param linear Linear input value (R, G, or B channel)
+    \returns Non-linear encoded value
+*/
+template <typename Real>
+inline Real OETF_IEC61966_2_4(Real linear)
+{
+    constexpr Real beta  = Real(0.018);
+    constexpr Real alpha = Real(1.099);
+    if (linear < -beta)
+        return -alpha * std::pow(-linear, Real(0.45)) + (alpha - Real(1.0));
+    else if (linear > beta)
+        return alpha * std::pow(linear, Real(0.45)) - (alpha - Real(1.0));
+    else
+        return Real(4.5) * linear;
+}
+
+/*! IEC 61966-2-4 EOTF (Electro-Optical Transfer Function).
+
+    Implements the inverse transfer function as specified in IEC 61966-2-4.
+
+    \param nonlinear Non-linear encoded value (R', G', or B' channel)
+    \returns Linear output value
+*/
+template <typename Real>
+inline Real EOTF_IEC61966_2_4(Real nonlinear)
+{
+    constexpr Real beta  = Real(0.081);
+    constexpr Real alpha = Real(1.099);
+    if (nonlinear < -beta)
+        return -std::pow(-(nonlinear - (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
+    else if (nonlinear > beta)
+        return std::pow((nonlinear + (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
+    else
+        return nonlinear / Real(4.5);
+}
+
+/*! DCI-P3 EOTF (Electro-Optical Transfer Function).
+
+    Applies the DCI-P3 EOTF as specified:
+    X = X'^2.6 * 52.37
+    Y = Y'^2.6 * 52.37
+    Z = Z'^2.6 * 52.37
+
+    \param nonlinear Non-linear encoded value (R', G', or B' channel)
+    \returns Linear output value
+*/
+template <typename Real>
+inline Real EOTF_DCI_P3(Real nonlinear)
+{
+    return std::pow(nonlinear, Real(2.6)) * Real(52.37);
+}
+
+/*! DCI-P3 inverse EOTF (EOTF^-1).
+
+    Applies the inverse DCI-P3 EOTF as specified:
+    X' = (X / 52.37)^(1/2.6)
+    Y' = (Y / 52.37)^(1/2.6)
+    Z' = (Z / 52.37)^(1/2.6)
+
+    \param linear Linear input value (R, G, or B channel)
+    \returns Non-linear encoded value
+*/
+template <typename Real>
+inline Real inverse_EOTF_DCI_P3(Real linear)
+{
+    return std::pow(linear / Real(52.37), Real(1.0) / Real(2.6));
 }
 
 float3 YCToRGB(float3 input, float3 Yw);
@@ -321,9 +485,12 @@ inline float to_linear(const float encoded, const TransferFunction tf, const flo
     {
     case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
-    case TransferFunction_Rec709_2020: return Rec2020ToLinear(encoded);
-    case TransferFunction_Rec2100_PQ: return EOTF_PQ(encoded) / 255.f;
-    case TransferFunction_Rec2100_HLG: return EOTF_HLG(encoded) / 255.f;
+    case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
+    case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 255.f;
+    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
+    case TransferFunction_ST240: return EOTF_ST240(encoded);
+    case TransferFunction_IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
+    case TransferFunction_DCI_P3: return EOTF_DCI_P3(encoded);
     case TransferFunction_Linear: [[fallthrough]];
     default: return encoded;
     }
@@ -335,10 +502,15 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     {
     case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
-    case TransferFunction_Rec709_2020:
-        return float3{Rec2020ToLinear(encoded.x), Rec2020ToLinear(encoded.y), Rec2020ToLinear(encoded.z)};
-    case TransferFunction_Rec2100_PQ: return float3{EOTF_PQ(encoded.x), EOTF_PQ(encoded.y), EOTF_PQ(encoded.z)} / 255.f;
-    case TransferFunction_Rec2100_HLG: return EOTF_HLG(encoded) / 255.f;
+    case TransferFunction_ITU:
+        return float3{inverse_OETF_ITU(encoded.x), inverse_OETF_ITU(encoded.y), inverse_OETF_ITU(encoded.z)};
+    case TransferFunction_BT2100_PQ:
+        return float3{EOTF_BT2100_PQ(encoded.x), EOTF_BT2100_PQ(encoded.y), EOTF_BT2100_PQ(encoded.z)} / 255.f;
+    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
+    case TransferFunction_ST240: return float3{EOTF_ST240(encoded.x), EOTF_ST240(encoded.y), EOTF_ST240(encoded.z)};
+    case TransferFunction_IEC61966_2_4:
+        return float3{EOTF_IEC61966_2_4(encoded.x), EOTF_IEC61966_2_4(encoded.y), EOTF_IEC61966_2_4(encoded.z)};
+    case TransferFunction_DCI_P3: return float3{EOTF_DCI_P3(encoded.x), EOTF_DCI_P3(encoded.y), EOTF_DCI_P3(encoded.z)};
     case TransferFunction_Linear: [[fallthrough]];
     default: return encoded;
     }
@@ -457,3 +629,60 @@ inline uint32_t color_f128_to_u32(const float4 &in)
     out |= ((uint32_t)(saturate(in.w) * 255.f + 0.5f)) << HDRVIEW_COL32_A_SHIFT;
     return out;
 }
+
+// /*!\brief Applies the transfer function as defined in Table 3 of ITU-T H.273 for the given TransferCharacteristics
+//  * value.
+//  *
+//  * See Table 3 – Interpretation of transfer characteristics (TransferCharacteristics) value.
+//  *
+//  * @param value The TransferCharacteristics value (see H.273 Table 3)
+//  * @param linear The linear input value
+//  * @return The encoded value according to the transfer function
+//  */
+// inline float ApplyTransferCharacteristics(int value, float linear)
+// {
+//     switch (value)
+//     {
+//     case 0: // Reserved
+//         return linear;
+//     case 1:  // BT.709
+//     case 6:  // SMPTE 170M
+//     case 14: // BT.2020 10-bit
+//     case 15: // BT.2020 12-bit
+//         return OETF_ITU(linear);
+//     case 2:            // Unspecified
+//         return linear; // No-op
+//     case 3:            // Reserved
+//         return linear;
+//     case 4: // Gamma 2.2 (IEC 61966-2-1)
+//         return LinearToGamma(linear, 1.0f / 2.2f);
+//     case 5: // Gamma 2.8 (ITU-R BT.470 System M)
+//         return LinearToGamma(linear, 1.0f / 2.8f);
+//     case 7: // ST240/SMPTE 240M
+//         return OETF_ST240(linear);
+//     case 8: // linear transfer
+//         return linear;
+//     case 9: // Logarithmic transfer characteristic
+//         return linear;
+//     case 10: // Logarithmic transfer characteristic
+//         return linear;
+//     case 11: // IEC 61966-2-4
+//         return OETF_IEC61966_2_4(linear);
+//     case 12: // ITU-R BT.1361-0 extended color gamut system
+//         return OETF_ITU(linear);
+//     case 13: // IEC 61966-2-1 sRGB (with
+//              // MatrixCoefficients equal to 0)
+//              // IEC 61966-2-1 sYCC (with
+//              // MatrixCoefficients equal to 5)
+//         return LinearToSRGB(linear);
+//     case 16: // PQ (ST 2084)
+//         return inverse_EOTF_BT2100_PQ(linear);
+//     case 17: // SMPTE ST 428-1 (DCI)
+//         return inverse_EOTF_DCI_P3(linear);
+//     case 18: // HLG (ARIB STD-B67)
+//         return OETF_BT2100_HLG(linear);
+//     default:
+//         // For unsupported or reserved values, return input unchanged
+//         return linear;
+//     }
+// }

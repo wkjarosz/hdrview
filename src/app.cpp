@@ -83,6 +83,8 @@ static constexpr size_t g_max_recent                          = 15;
 static bool             g_show_help                           = false;
 static bool             g_show_command_palette                = false;
 static bool             g_show_tweak_window                   = false;
+static bool             g_show_demo_window                    = false;
+static bool             g_show_debug_window                   = false;
 static bool             g_show_bg_color_picker                = false;
 static char             g_filter_buffer[256]                  = {0};
 static int              g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
@@ -549,6 +551,51 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 if (ImGuiTheme::ShowThemeTweakGui(&tweakedTheme))
                     ApplyTweakedTheme(tweakedTheme);
             }
+            ImGui::End();
+        }
+
+        if (g_show_demo_window)
+            ImGui::ShowDemoWindow(&g_show_demo_window);
+
+        if (g_show_debug_window)
+        {
+            ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("Debug", &g_show_debug_window))
+            {
+                // ImGui::Text("Hello ImGui version: %s", HelloImGui::VersionString().c_str());
+                ImGui::Text("ImGui version: %s", ImGui::GetVersion());
+                // ImGui::Text("Renderer backend: %s", m_params.rendererBackendOptions.backendName.c_str());
+                // ImGui::Text("DPI aware: %s", m_params.dpiAwareParams.isDpiAware ? "yes" : "no");
+                ImGui::Text("EDR support: %s", HelloImGui::hasEdrSupport() ? "yes" : "no");
+                // ImGui::Text("HDRView version: %s", HDRVIEW_VERSION_STRING);
+
+                if (ImPlot::BeginPlot("Line Plots"))
+                {
+                    ImPlot::SetupAxes("x", "sRGB(x)");
+
+                    auto f = [](float x) { return EOTF_BT2100_HLG(x); };
+                    auto g = [](float y) { return OETF_BT2100_HLG(y); };
+
+                    const int    N = 101;
+                    static float xs1[N], ys1[N];
+                    for (int i = 0; i < N; ++i)
+                    {
+                        xs1[i] = i / float(N - 1);
+                        ys1[i] = f(xs1[i]);
+                    }
+                    static float xs2[N], ys2[N];
+                    for (int i = 0; i < N; ++i)
+                    {
+                        ys2[i] = lerp(0.0f, ys1[N - 1], i / float(N - 1));
+                        xs2[i] = g(ys2[i]);
+                    }
+
+                    ImPlot::PlotLine("x, f(x)", xs1, ys1, N);
+                    ImPlot::PlotLine("f^{-1}(y), y", xs2, ys2, N);
+                    ImPlot::EndPlot();
+                }
+            }
+
             ImGui::End();
         }
     };
@@ -1377,6 +1424,14 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Show top toolbar"));
         MenuItem(action("Show status bar"));
         MenuItem(action("Show FPS in status bar"));
+
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Developer"))
+    {
+        ImGui::MenuItem("Dear ImGui demo window", NULL, &g_show_demo_window);
+        ImGui::MenuItem("Debug window", NULL, &g_show_debug_window);
 
         ImGui::EndMenu();
     }
