@@ -525,6 +525,8 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
+set(CMAKE_FIND_FRAMEWORK LAST)
+
 find_package(PNG 1.6.45 REQUIRED)
 if(PNG_FOUND)
   message(STATUS "Using system-installed libpng library")
