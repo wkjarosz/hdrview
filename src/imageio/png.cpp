@@ -151,7 +151,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
 
     std::vector<uint8_t> icc_profile;
     bool                 has_icc_profile  = false;
-    char                *icc_name         = nullptr;
+    png_charp            icc_name         = nullptr;
     int                  compression_type = 0;
     png_bytep            icc_ptr          = nullptr;
     png_uint_32          icc_len          = 0;
@@ -161,7 +161,6 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         icc_profile.assign(icc_ptr, icc_ptr + icc_len);
         has_icc_profile = true;
         spdlog::info("PNG: Found ICC profile: {} ({} bytes)", icc_name, icc_len);
-        image->metadata["icc profile"] = icc_name;
     }
 
     double           gamma       = 2.2; // default gamma
@@ -271,7 +270,6 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         tf = TransferFunction_sRGB;
         break;
     }
-    image->metadata["transfer function"] = tf_desc;
 
     // Done reading color chunks
     //
@@ -312,13 +310,13 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             spdlog::info("PNG: Linearizing colors using ICC profile.");
             Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
                                                    Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
-            image->metadata["transfer function"] = tf_desc;
         }
     }
     else if (tf != TransferFunction_Linear)
     {
         to_linear(float_pixels.data(), size, tf, gamma);
     }
+    image->metadata["transfer function"] = tf_desc;
 
     // copy the interleaved float pixels into the channels
     for (int c = 0; c < size.z; ++c)
