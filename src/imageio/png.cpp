@@ -5,6 +5,17 @@
 #include "texture.h"
 #include "timer.h"
 
+#ifndef HDRVIEW_ENABLE_LIBPNG
+
+bool is_png_image(istream &is) noexcept { return false; }
+
+vector<ImagePtr> load_png_image(istream &is, const string_view filename)
+{
+    throw runtime_error("PNG support not enabled in this build.");
+}
+
+#else
+
 #include <cmath>
 #include <cstring>
 #include <fmt/core.h>
@@ -375,3 +386,5 @@ void save_png_image(const Image &img, ostream &os, const string &filename, float
     png_write_end(png_ptr, nullptr);
     png_destroy_write_struct(&png_ptr, &info_ptr);
 }
+
+#endif

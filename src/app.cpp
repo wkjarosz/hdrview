@@ -3563,6 +3563,9 @@ void HDRViewApp::draw_about_dialog()
                     item_and_description("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
                                          "https://github.com/strukturag/libheif");
 #endif
+#ifdef HDRVIEW_ENABLE_LIBPNG
+                    item_and_description("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
+#endif
 #ifdef HDRVIEW_ENABLE_LCMS2
                     item_and_description("lcms2", "LittleCMS color management engine.",
                                          "https://github.com/mm2/Little-CMS");

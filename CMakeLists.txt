@@ -525,14 +525,26 @@ if(HDRVIEW_ENABLE_HEIF)
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_HEIF)
 endif()
 
-set(CMAKE_FIND_FRAMEWORK LAST)
-
-find_package(PNG 1.6.45 REQUIRED)
-if(PNG_FOUND)
-  message(STATUS "Using system-installed libpng library")
-  list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
-else()
-  message(FATAL_ERROR "libpng library not found or version is less than 1.6.45.. Please install it.")
+option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
+if(HDRVIEW_ENABLE_LIBPNG)
+  CPMAddPackage(
+    NAME libpng
+    # GITHUB_REPOSITORY pnggroup/libpng/tags GIT_TAG v1.6.50
+    VERSION 1.6.50
+    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
+    OPTIONS "PNG_TOOLS OFF PNG_SHARED OFF" "PNG_TESTS OFF" "WITH_EXAMPLES OFF" "WITH_GDK_PIXBUF OFF"
+            "CMAKE_COMPILE_WARNING_AS_ERROR OFF" "EXCLUDE_FROM_ALL YES"
+  )
+  if(libpng_ADDED)
+    message(STATUS "Will build libpng library")
+    list(APPEND HDRVIEW_DEPENDENCIES "png_static")
+  elseif(PNG_FOUND)
+    message(STATUS "Using system-installed libpng library")
+    list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
+  else()
+    message(FATAL_ERROR "libpng not found. Please install it or turn off HDRVIEW_ENABLE_LIBPNG.")
+  endif()
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBPNG)
 endif()
 
 CPMAddPackage(
