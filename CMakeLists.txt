@@ -396,13 +396,13 @@ if(HDRVIEW_ENABLE_LIBPNG)
     # GITHUB_REPOSITORY pnggroup/libpng/tags GIT_TAG v1.6.50
     VERSION 1.6.50
     URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
-    OPTIONS "PNG_TOOLS OFF" "PNG_TESTS OFF" "EXCLUDE_FROM_ALL YES"
+    OPTIONS "PNG_TOOLS OFF" "PNG_SHARED OFF" "PNG_TESTS OFF" "EXCLUDE_FROM_ALL YES"
   )
   if(PNG_ADDED)
     message(STATUS "Will build libpng library")
-    set_target_properties(png_shared PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    set_target_properties(png_static PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    list(APPEND HDRVIEW_DEPENDENCIES "png_shared")
+    # set_target_properties(png_shared PROPERTIES POSITION_INDEPENDENT_CODE TRUE) set_target_properties(png_static
+    # PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    list(APPEND HDRVIEW_DEPENDENCIES "png_static")
   elseif(PNG_FOUND)
     message(STATUS "Using system-installed libpng library")
     list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
