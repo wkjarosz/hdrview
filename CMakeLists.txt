@@ -206,8 +206,9 @@ if(HDRVIEW_ENABLE_LIBPNG)
     URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
     OPTIONS "ZLIB_TEST ON" "SKIP_INSTALL_EXPORT ON" "ZLIB_INSTALL ON"
   )
-  if(zlib_cmake_ADDED)
+  if(zlib-cmake_ADDED)
     message(STATUS "Will build zlib library")
+    set_target_properties(ZLIB PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
   elseif(ZLIB_FOUND)
     message(STATUS "Using system-installed zlib library")
   else()
