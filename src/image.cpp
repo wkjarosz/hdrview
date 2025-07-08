@@ -169,8 +169,8 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
             int2 i2d{i % croi.size().x, i / croi.size().x}; // convert to 2D coordinates
             if (i2d.x < 0 || i2d.y < 0 || i2d.x >= croi.size().x || i2d.y >= croi.size().y)
             {
-                spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
-                return 0.f; // out of bounds
+                // spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
+                return 0.f / 0.f; // out of bounds
             }
             float val = img(i2d + croi.min);
             if (ref)
@@ -689,35 +689,17 @@ void Image::compute_color_transform()
     if (Imf::hasChromaticities(header))
         file_chr = Imf::chromaticities(header);
 
-    Imath::V2f src_neutral = file_chr.white;
     if (Imf::hasAdoptedNeutral(header))
         file_chr.white = Imf::adoptedNeutral(header);
 
     static const Imf::Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     Imath::M33f                      M;
-    if (color_conversion_matrix(M, file_chr, bt709_chr, 2))
+    if (color_conversion_matrix(M, file_chr, bt709_chr, adaptation_method))
     {
         // M_to_Rec709 = to_linalg(NcGetRGBToRGBMatrix(src.get(), dst));
         M_to_Rec709 = to_linalg(M);
         spdlog::info("Will transform pixel values to Rec. 709/sRGB primaries and whitepoint on display.");
         spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
-    }
-
-    // determine if this is (close to) one of the named color spaces
-    if (Imf::hasChromaticities(header))
-    {
-        const auto &cs_chrs = color_gamuts();
-        for (int i = 0; color_gamut_names()[i]; ++i)
-        {
-            auto &cs_name = color_gamut_names()[i];
-            auto &cs_chr  = cs_chrs.at(cs_name);
-            if (approx_equal(cs_chr, file_chr))
-            {
-                spdlog::info("Detected color space: '{}'", cs_name);
-                named_color_space = i;
-                break;
-            }
-        }
     }
 }
 
@@ -786,6 +768,27 @@ void Image::finalize()
     }
 
     compute_color_transform();
+
+    // determine if this is (close to) one of the named color spaces
+    if (Imf::hasChromaticities(header))
+    {
+        Imf::Chromaticities file_chr = Imf::chromaticities(header);
+        if (Imf::hasAdoptedNeutral(header))
+            file_chr.white = Imf::adoptedNeutral(header);
+
+        const auto &cs_chrs = color_gamuts();
+        for (int i = 0; color_gamut_names()[i]; ++i)
+        {
+            auto &cs_name = color_gamut_names()[i];
+            auto &cs_chr  = cs_chrs.at(cs_name);
+            if (approx_equal(cs_chr, file_chr))
+            {
+                spdlog::info("Detected color space: '{}'", cs_name);
+                named_color_space = i;
+                break;
+            }
+        }
+    }
 }
 
 // Recursive function to traverse the LayerTreeNode hierarchy and append names to a string

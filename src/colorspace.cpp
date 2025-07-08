@@ -10,8 +10,6 @@
 #include <cmath>
 #include <float.h>
 
-#include "dithermatrix256.h"
-
 #include <ImfChromaticities.h>
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
@@ -76,6 +74,17 @@ static const char* _color_gammut_names[] = {
     _lin_prophotorgb,
     _lin_bt2020_2100,
     _lin_srgb_bt709,
+    _lin_cicp_01,
+    _lin_cicp_04,
+    _lin_cicp_05,
+    _lin_cicp_06,
+    _lin_cicp_07,
+    _lin_cicp_08,
+    _lin_cicp_09,
+    _lin_cicp_10,
+    _lin_cicp_11,
+    _lin_cicp_12,
+    _lin_cicp_22,
     nullptr
 };
 // clang-format on
@@ -336,20 +345,6 @@ void xyYToXZ(float *X, float *Z, float x, float y, float Y)
         *X = x * Y;
         *Z = (1.0f - x - y) * Y / y;
     }
-}
-
-const vector<string> &colorSpaceNames()
-{
-    static const vector<string> names = {"Linear sRGB", "Linear sGray", "Linear Adobe RGB",
-                                         "CIE XYZ",     "CIE L*a*b*",   "CIE L*u*v*",
-                                         "CIE xyY",     "HSL",          "HSV"};
-    return names;
-}
-
-uint8_t f32_to_byte(float v, int x, int y, bool sRGB, bool dither)
-{
-    return (uint8_t)clamp((sRGB ? LinearToSRGB(v) : v) * 255.0f + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f,
-                          255.0f);
 }
 
 void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)

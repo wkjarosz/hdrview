@@ -43,6 +43,7 @@ public:
     // loading, saving, and closing images
     //-----------------------------------------------------------------------------
     void open_image();
+    void open_folder();
     void load_images(const std::vector<std::string> &filenames);
     void load_image(const string filename, const std::string_view buffer = std::string_view{});
     void load_url(const string_view url);
@@ -128,10 +129,12 @@ public:
     //-----------------------------------------------------------------------------
     /// Centers the image without affecting the scaling factor.
     void center();
-    /// Centers and scales the image so that its display window fits inside the viewport.
+    /// Centers and zooms the view so that the image's display window fits inside the viewport.
     void fit_display_window();
-    /// Centers and scales the image so that its data window fits inside the viewport.
+    /// Centers and zooms the view so that the image's data window fits inside the viewport.
     void fit_data_window();
+    /// Centers and zooms the view so that the selection fits inside the viewport.
+    void fit_selection();
     /**
         Changes the zoom factor by the provided amount modified by the zoom sensitivity member variable.
         The scaling occurs such that the image pixel coordinate under focus_vp_pos remains in
@@ -218,7 +221,9 @@ private:
     {
         string        filename;
         ImageLoadTask images;
-        PendingImages(const string &f, ImageLoadTask::NoProgressTaskFunc func) : filename(f), images(func)
+        bool          add_to_recent;
+        PendingImages(const string &f, ImageLoadTask::NoProgressTaskFunc func, bool recent = true) :
+            filename(f), images(func), add_to_recent(recent)
         {
             images.compute();
         }
@@ -234,11 +239,14 @@ private:
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
     Box2i  m_roi{int2{0}}, m_roi_live{int2{0}};
 
+    void cancel_autofit() { m_auto_fit_selection = m_auto_fit_display = m_auto_fit_data = false; }
+
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
     bool     m_auto_fit_display         = false; ///< Continually keep the image display window fit within the viewport
     bool     m_auto_fit_data            = false; ///< Continually keep the image data window fit within the viewport
+    bool     m_auto_fit_selection       = false; ///< Continually keep the selection box fit within the viewport
     bool2    m_flip                     = {false, false}; ///< Whether to flip the image horizontally and/or vertically
     float    m_zoom                     = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
     float2   m_offset                   = {0.f, 0.f};     ///< The panning offset of the image
@@ -258,6 +266,8 @@ private:
     HelloImGui::RunnerParams m_params;
 
     vector<string> m_recent_files;
+
+    void add_recent_file(const string &f);
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
 

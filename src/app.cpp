@@ -37,6 +37,9 @@
 #include <sstream>
 #include <utility>
 
+#include <filesystem>
+namespace fs = std::filesystem;
+
 #include "emscripten_utils.h"
 
 #ifdef __EMSCRIPTEN__
@@ -157,6 +160,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     spdlog::info("Creating a {} framebuffer.", m_params.rendererBackendOptions.requestFloatBuffer
                                                    ? "floating-point precision"
                                                    : "standard precision");
+
+    spdlog::info("uint16_t::max: {}", std::numeric_limits<uint16_t>::max());
 
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
@@ -294,12 +299,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         }
     };
 
+#ifdef _WIN32
+    ImGuiKey modKey = ImGuiMod_Alt;
+#else
+    ImGuiKey modKey = ImGuiMod_Super;
+#endif
+
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
     m_params.dockingParams.dockableWindows = {histogram_window, channel_stats_window,    file_window,
                                               info_window,      pixel_inspector_window,  channel_window,
                                               log_window,       advanced_settings_window};
-    m_params.dockingParams.dockingSplits   = {
+    vector<ImGuiKeyChord> window_keychords = {
+        ImGuiKey_F5, ImGuiKey_F6, ImGuiKey_F7, ImGuiKey_F8, ImGuiKey_F9, ImGuiKey_F10, modKey | ImGuiKey_GraveAccent,
+        ImGuiKey_F11};
+    m_params.dockingParams.dockingSplits = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
         HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
@@ -614,6 +628,10 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         };
         add_action({"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
+#if !defined(__EMSCRIPTEN__)
+        add_action({"Open folder...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, [this]() { open_folder(); }});
+#endif
+
 #if defined(__EMSCRIPTEN__)
         add_action({"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
                     [this]()
@@ -727,7 +745,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
         {
             HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
-            add_action({fmt::format("Show {} window", w.label).c_str(), g_blank_icon, 0, 0, []() {},
+            add_action({fmt::format("Show {} window", w.label).c_str(), g_blank_icon, window_keychords[i], 0, []() {},
                         [&w]() { return w.canBeClosed; }, false, &w.isVisible});
         }
 
@@ -940,11 +958,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                             return is_valid(i);
                         }});
 
-#ifdef _WIN32
-        ImGuiKey modKey = ImGuiMod_Alt;
-#else
-        ImGuiKey modKey = ImGuiMod_Super;
-#endif
         // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (int n = 1; n <= 10; ++n)
             add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
@@ -1068,48 +1081,58 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     [this]()
                     {
                         zoom_out();
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"Zoom in", ICON_MY_ZOOM_IN, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
                     [this]()
                     {
                         zoom_in();
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"100%", ICON_MY_ZOOM_100, 0, 0,
                     [this]()
                     {
                         set_zoom_level(0.f);
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"Center", ICON_MY_CENTER, ImGuiKey_C, 0,
                     [this]()
                     {
                         center();
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"Fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0,
                     [this]()
                     {
                         fit_display_window();
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"Auto fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiKey_F, 0,
-                    [this]() { m_auto_fit_data = false; }, if_img, false, &m_auto_fit_display});
+                    [this]() { m_auto_fit_selection = m_auto_fit_data = false; }, if_img, false, &m_auto_fit_display});
         add_action({"Fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Alt | ImGuiKey_F, 0,
                     [this]()
                     {
                         fit_data_window();
-                        m_auto_fit_display = m_auto_fit_data = false;
+                        cancel_autofit();
                     },
                     if_img});
         add_action({"Auto fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F, 0,
-                    [this]() { m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
+                    [this]() { m_auto_fit_selection = m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
+        add_action({"Fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+                    [this]()
+                    {
+                        fit_selection();
+                        cancel_autofit();
+                    },
+                    [if_img, this]() { return if_img() && m_roi.has_volume(); }});
+        add_action({"Auto fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+                    [this]() { m_auto_fit_display = m_auto_fit_data = false; },
+                    [if_img, this]() { return if_img() && m_roi.has_volume(); }, false, &m_auto_fit_selection});
         add_action({"Flip horizontally", ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
         add_action({"Flip vertically", ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
     }
@@ -1174,6 +1197,7 @@ void HDRViewApp::load_settings()
         m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
         m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
         m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
+        m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
         m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
         m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
         m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
@@ -1204,6 +1228,7 @@ void HDRViewApp::save_settings()
     j["draw display window"]     = m_draw_display_window;
     j["auto fit data window"]    = m_auto_fit_data;
     j["auto fit display window"] = m_auto_fit_display;
+    j["auto fit selection"]      = m_auto_fit_selection;
     j["draw pixel info"]         = m_draw_pixel_info;
     j["draw pixel grid"]         = m_draw_grid;
     j["exposure"]                = m_exposure;
@@ -1298,6 +1323,9 @@ void HDRViewApp::draw_menus()
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
+#if !defined(__EMSCRIPTEN__)
+        MenuItem(action("Open folder..."));
+#endif
 
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
@@ -1353,6 +1381,8 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Auto fit display window"));
         MenuItem(action("Fit data window"));
         MenuItem(action("Auto fit data window"));
+        MenuItem(action("Fit selection"));
+        MenuItem(action("Auto fit selection"));
         MenuItem(action("Flip horizontally"));
         MenuItem(action("Flip vertically"));
 
@@ -1524,14 +1554,7 @@ void HDRViewApp::export_as(const string &filename) const
 
 void HDRViewApp::load_images(const vector<string> &filenames)
 {
-    for (auto f : filenames)
-    {
-        auto formats = Image::loadable_formats();
-        if (formats.find(to_lower(get_extension(f))) != formats.end())
-            load_image(f);
-        else
-            spdlog::warn("Skipping unsupported file '{}'", f);
-    }
+    for (auto f : filenames) load_image(f);
 }
 
 void HDRViewApp::open_image()
@@ -1566,44 +1589,75 @@ void HDRViewApp::open_image()
 #endif
 }
 
+void HDRViewApp::open_folder() { load_images({pfd::select_folder("Open images in folder", "").result()}); }
+
 void HDRViewApp::load_image(const string filename, const string_view buffer)
 {
+    auto load_one = [this](const string filename, const string_view buffer, bool add_to_recent)
+    {
+        try
+        {
+            // convert the buffer (if any) to a string so the async thread has its own copy,
+            // then load from the string or filename depending on whether the buffer is empty
+            m_pending_images.emplace_back(std::make_shared<PendingImages>(
+                filename,
+                [buffer_str = string(buffer), filename]()
+                {
+                    if (buffer_str.empty())
+                    {
+                        auto u8p = std::filesystem::u8path(filename.c_str());
+                        if (std::ifstream is{u8p, std::ios_base::binary})
+                            return Image::load(is, filename);
+                        else
+                        {
+                            spdlog::error("File '{}' doesn't exist.", u8p.string());
+                            return vector<ImagePtr>{};
+                        }
+                    }
+                    else
+                    {
+                        std::istringstream is{buffer_str};
+                        return Image::load(is, filename);
+                    }
+                },
+                add_to_recent));
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
+            return;
+        }
+    };
+
     // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
     spdlog::debug("Loading file '{}'...", filename);
-    try
+
+    auto path = fs::path(filename);
+    if (!fs::exists(path))
+        return;
+    if (fs::is_directory(path))
     {
-        // convert the buffer (if any) to a string so the async thread has its own copy,
-        // then load from the string or filename depending on whether the buffer is empty
-        m_pending_images.emplace_back(
-            std::make_shared<PendingImages>(filename,
-                                            [buffer_str = string(buffer), filename]()
-                                            {
-                                                if (buffer_str.empty())
-                                                {
-                                                    auto u8p = std::filesystem::u8path(filename.c_str());
-                                                    if (std::ifstream is{u8p, std::ios_base::binary})
-                                                        return Image::load(is, filename);
-                                                    else
-                                                    {
-                                                        spdlog::error("File '{}' doesn't exist.", u8p.string());
-                                                        return vector<ImagePtr>{};
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    std::istringstream is{buffer_str};
-                                                    return Image::load(is, filename);
-                                                }
-                                            }));
+        spdlog::info("Loading images from folder '{}'", filename);
+
+        std::error_code ec;
+        auto            canon_p = fs::canonical(path);
+        for (auto const &entry : fs::directory_iterator{canon_p, ec})
+        {
+            if (!entry.is_directory())
+                load_one(entry.path().u8string(), buffer, false);
+        }
+        m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
+        add_recent_file(filename);
+    }
+    else if (fs::is_regular_file(path))
+    {
+        load_one(filename, buffer, true);
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
     }
-    catch (const std::exception &e)
-    {
-        spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
-        return;
-    }
+    else
+        spdlog::warn("Skipping unsupported file '{}'", filename);
 }
 
 void HDRViewApp::load_url(const string_view url)
@@ -1672,6 +1726,13 @@ void HDRViewApp::load_url(const string_view url)
 #endif
 }
 
+void HDRViewApp::add_recent_file(const string &f)
+{
+    m_recent_files.push_back(f);
+    if (m_recent_files.size() > g_max_recent)
+        m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
+}
+
 void HDRViewApp::add_pending_images()
 {
     // Criterion to check if a image is ready, and copy it into our m_images vector if so
@@ -1687,9 +1748,8 @@ void HDRViewApp::add_pending_images()
             for (auto &i : new_images) m_images.push_back(i);
 
             // if loading was successful, add the filename to the recent list and limit to g_max_recent files
-            m_recent_files.push_back(p->filename);
-            if (m_recent_files.size() > g_max_recent)
-                m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
+            if (p->add_to_recent)
+                add_recent_file(p->filename);
 
             return true;
         }
@@ -2555,7 +2615,19 @@ void HDRViewApp::fit_data_window()
         m_zoom = minelem(viewport_size() / img->data_window.size());
 
         auto center_pos   = float2(viewport_size() / 2.f);
-        auto center_pixel = Box2f(current_image()->data_window).center();
+        auto center_pixel = Box2f(img->data_window).center();
+        reposition_pixel_to_vp_pos(center_pos, center_pixel);
+    }
+}
+
+void HDRViewApp::fit_selection()
+{
+    if (current_image() && m_roi.has_volume())
+    {
+        m_zoom = minelem(viewport_size() / m_roi.size());
+
+        auto center_pos   = float2(viewport_size() / 2.f);
+        auto center_pixel = Box2f(m_roi).center();
         reposition_pixel_to_vp_pos(center_pos, center_pixel);
     }
 }
@@ -3109,7 +3181,7 @@ void HDRViewApp::draw_background()
             }
 
             if (cancel_autofit)
-                m_auto_fit_display = m_auto_fit_data = false;
+                this->cancel_autofit();
         }
 
         //
@@ -3124,6 +3196,8 @@ void HDRViewApp::draw_background()
             fit_display_window();
         if (m_auto_fit_data)
             fit_data_window();
+        if (m_auto_fit_selection)
+            fit_selection();
 
         m_render_pass->begin();
         draw_image();

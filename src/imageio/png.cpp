@@ -1,3 +1,9 @@
+//
+// Copyright (C) Wojciech Jarosz. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
 #include "png.h"
 #include "colorspace.h"
 #include "icc.h"
@@ -202,12 +208,12 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         tf = TransferFunction_sRGB;
     }
 
-    bool has_cICP = false;
+    bool     has_cICP              = false;
+    png_byte video_full_range_flag = 1;
 #ifdef PNG_cICP_SUPPORTED
     png_byte colour_primaries;
     png_byte transfer_function;
     png_byte matrix_coefficients;
-    png_byte video_full_range_flag;
 
     if (png_get_cICP(png_ptr, info_ptr, &colour_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
@@ -298,7 +304,10 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             row_pointers[y] = reinterpret_cast<png_bytep>(&imagedata[y * width * channels]);
         png_read_image(png_ptr, row_pointers.data());
 
-        for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = imagedata[i] / 65535.f;
+        if (video_full_range_flag)
+            for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = dequantize_full(imagedata[i]);
+        else
+            for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = dequantize_narrow(imagedata[i]);
     }
     else if (bit_depth <= 8)
     {
@@ -307,7 +316,10 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             row_pointers[y] = reinterpret_cast<png_bytep>(&imagedata[y * width * channels]);
         png_read_image(png_ptr, row_pointers.data());
 
-        for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = imagedata[i] / 255.f;
+        if (video_full_range_flag)
+            for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = dequantize_full(imagedata[i]);
+        else
+            for (size_t i = 0; i < imagedata.size(); ++i) float_pixels[i] = dequantize_narrow(imagedata[i]);
     }
     else
         throw runtime_error("Unsupported PNG bit depth");

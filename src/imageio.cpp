@@ -123,28 +123,6 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
 
     std::unique_ptr<uint8_t[]> pixels(new uint8_t[(*w) * (*h) * (*n)]);
 
-    // for (int c = 0; c < (*n); ++c)
-    //     channels[groups[selected_group].channels[c]].copy_to_interleaved(
-    //         pixels.get(), *n, c,
-    //         [gain, sRGB, c, dither, alpha](float v, int x, int y)
-    //         {
-    //             // only gamma correct and premultiply the RGB channels.
-    //             // alpha channel gets stored linearly.
-    //             if (c < 3)
-    //             {
-    //                 v *= gain;
-
-    //                 // unpremultiply
-    //                 if (alpha)
-    //                     v /= std::max(k_small_alpha, (*alpha)(x, y));
-
-    //                 if (sRGB)
-    //                     v = LinearToSRGB(v);
-    //             }
-
-    //             return f32_to_byte(v, x, y, false, dither);
-    //         });
-
     int block_size = std::max(1, 1024 * 1024 / (*w));
     parallel_for(
         blocked_range<int>(0, *h, block_size),
@@ -173,7 +151,7 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
                                 v = LinearToSRGB(v);
                         }
 
-                        rgba_pixel[c] = f32_to_byte(v, x, y, false, dither);
+                        rgba_pixel[c] = quantize_full<uint8_t>(v, dither, x, y);
                     }
                 }
         });

@@ -250,7 +250,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
         Timer timer;
         for (int c = 0; c < num_components; ++c)
             image->channels[4 + c].copy_from_interleaved(
-                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return byte_to_f32(v); },
+                byte_data, gainmap->w, gainmap->h, num_components, c, [](uint8_t v) { return dequantize_full(v); },
                 stride_y);
 
         spdlog::debug("Copying gainmap data took: {} seconds.", (timer.elapsed() / 1000.f));

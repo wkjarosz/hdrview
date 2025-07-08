@@ -10,6 +10,8 @@
 
 #include "colormap.h"
 
+#include "dithermatrix256.h"
+
 #include "fwd.h"
 #include <string>
 #include <vector>
@@ -596,16 +598,37 @@ inline float4 blend(float4 top, float4 bottom, EBlendMode blend_mode)
     return float4(0.f);
 }
 
-const std::vector<std::string> &colorSpaceNames();
-
-// assumes values of v are in byte range: [0, 255]
-inline float byte_to_f32(float v, bool linearize = true)
+//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
+template <typename T>
+inline float dequantize_full(T v)
 {
-    float u8 = (v + 0.f) / 255.0f;
-    return linearize ? SRGBToLinear(u8) : u8;
+    constexpr float denom = 1.f / float(std::numeric_limits<T>::max());
+    return v * denom;
 }
 
-uint8_t f32_to_byte(float v, int x, int y, bool sRGB = true, bool dither = true);
+//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
+template <typename T>
+T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
+{
+    constexpr float maximum = float(std::numeric_limits<T>::max());
+    return (T)std::clamp(v * maximum + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f, maximum);
+}
+
+//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
+template <typename T>
+inline float dequantize_narrow(T v)
+{
+    constexpr float denom = 1.f / float(1u << (std::numeric_limits<uint8_t>::digits - 8));
+    return (v * denom - 16.f) / 219.f;
+}
+
+//! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
+template <typename T>
+T quantize_narrow(float v, int x = 0, int y = 0, bool dither = true)
+{
+    constexpr float maximum = 1u << (std::numeric_limits<uint8_t>::digits - 8);
+    return (T)std::clamp((219.f * v + 16.f) * maximum + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f, maximum);
+}
 
 #define HDRVIEW_COL32_R_SHIFT 24
 #define HDRVIEW_COL32_G_SHIFT 16

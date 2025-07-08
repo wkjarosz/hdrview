@@ -561,6 +561,32 @@ void Image::draw_info()
         ImGui::EndCombo();
     }
 
+    {
+        const char *wan[]      = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
+        auto        open_combo = ImGui::BeginCombo(
+            "Adaptation", adaptation_method <= 0 || adaptation_method > 3 ? "None" : wan[adaptation_method],
+            ImGuiComboFlags_HeightLargest);
+        ImGui::WrappedTooltip("Method for chromatic adaptation transform.");
+        if (open_combo)
+        {
+            for (int n = 0; wan[n]; ++n)
+            {
+                const bool is_selected = (adaptation_method == n);
+                if (ImGui::Selectable(wan[n], is_selected))
+                {
+                    adaptation_method = n;
+                    spdlog::debug("Switching to adaptation method {}.", n);
+                    compute_color_transform();
+                }
+
+                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
+
     if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
     {
         auto &chr = attrib->value();

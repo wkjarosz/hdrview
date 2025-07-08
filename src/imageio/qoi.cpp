@@ -89,8 +89,12 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     Timer timer;
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
-                                                 size.z, c, [linearize, c](uint8_t v)
-                                                 { return byte_to_f32(v, linearize && c != 3); });
+                                                 size.z, c,
+                                                 [linearize, c](uint8_t v)
+                                                 {
+                                                     auto v2 = dequantize_full(v);
+                                                     return linearize && c != 3 ? SRGBToLinear(v2) : v2;
+                                                 });
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
