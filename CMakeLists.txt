@@ -199,6 +199,39 @@ include(FindPkgConfig)
 # =====================================================================================
 include(cmake/CPM.cmake)
 
+option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
+if(HDRVIEW_ENABLE_LIBPNG)
+  CPMAddPackage(
+    NAME zlib-cmake
+    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+    OPTIONS "ZLIB_TEST ON" "SKIP_INSTALL_EXPORT ON" "ZLIB_INSTALL ON"
+  )
+  if(zlib_cmake_ADDED)
+    message(STATUS "Will build zlib library")
+  elseif(ZLIB_FOUND)
+    message(STATUS "Using system-installed zlib library")
+  else()
+    message(FATAL_ERROR "zlib not found.")
+  endif()
+  CPMAddPackage(
+    NAME PNG
+    # GITHUB_REPOSITORY pnggroup/libpng/tags GIT_TAG v1.6.50
+    VERSION 1.6.50
+    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
+    OPTIONS "PNG_TOOLS OFF PNG_SHARED OFF" "PNG_TESTS OFF" "EXCLUDE_FROM_ALL YES"
+  )
+  if(PNG_ADDED)
+    message(STATUS "Will build libpng library")
+    list(APPEND HDRVIEW_DEPENDENCIES "png_shared")
+  elseif(PNG_FOUND)
+    message(STATUS "Using system-installed libpng library")
+    list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
+  else()
+    message(FATAL_ERROR "libpng not found. Please install it or turn off HDRVIEW_ENABLE_LIBPNG.")
+  endif()
+  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBPNG)
+endif()
+
 if(APPLE AND NOT EMSCRIPTEN)
   # default to GLFW+Metal on macOS
   set(HELLOIMGUI_HAS_METAL ON)
@@ -370,39 +403,6 @@ else()
   endif()
   list(APPEND HDRVIEW_DEPENDENCIES "portable-file-dialogs")
 
-endif()
-
-option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
-if(HDRVIEW_ENABLE_LIBPNG)
-  CPMAddPackage(
-    NAME zlib-cmake
-    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
-    OPTIONS "ZLIB_TEST ON" "SKIP_INSTALL_EXPORT ON" "ZLIB_INSTALL ON"
-  )
-  if(zlib_cmake_ADDED)
-    message(STATUS "Will build zlib library")
-  elseif(ZLIB_FOUND)
-    message(STATUS "Using system-installed zlib library")
-  else()
-    message(FATAL_ERROR "zlib not found.")
-  endif()
-  CPMAddPackage(
-    NAME PNG
-    # GITHUB_REPOSITORY pnggroup/libpng/tags GIT_TAG v1.6.50
-    VERSION 1.6.50
-    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
-    OPTIONS "PNG_TOOLS OFF PNG_SHARED OFF" "PNG_TESTS OFF" "EXCLUDE_FROM_ALL YES"
-  )
-  if(PNG_ADDED)
-    message(STATUS "Will build libpng library")
-    list(APPEND HDRVIEW_DEPENDENCIES "png_static")
-  elseif(PNG_FOUND)
-    message(STATUS "Using system-installed libpng library")
-    list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
-  else()
-    message(FATAL_ERROR "libpng not found. Please install it or turn off HDRVIEW_ENABLE_LIBPNG.")
-  endif()
-  list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBPNG)
 endif()
 
 CPMAddPackage(
