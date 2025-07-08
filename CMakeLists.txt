@@ -362,7 +362,11 @@ if(EMSCRIPTEN)
 
 else()
 
-  CPMAddPackage("gh:samhocevar/portable-file-dialogs#7f852d88a480020d7f91957cbcefe514fc95000c")
+  CPMAddPackage(
+    NAME portable-file-dialogs
+    GITHUB_REPOSITORY wkjarosz/portable-file-dialogs
+    GIT_TAG 1d755d814b77e546f544266bc24ac76029b8763b
+  )
   if(portable-file-dialogs_ADDED)
     message(STATUS "portable-file-dialogs library added")
     add_library(portable-file-dialogs INTERFACE IMPORTED)
