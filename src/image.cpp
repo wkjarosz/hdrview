@@ -170,7 +170,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
             if (i2d.x < 0 || i2d.y < 0 || i2d.x >= croi.size().x || i2d.y >= croi.size().y)
             {
                 // spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
-                return 0.f / 0.f; // out of bounds
+                return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
             float val = img(i2d + croi.min);
             if (ref)

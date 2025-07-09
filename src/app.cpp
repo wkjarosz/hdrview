@@ -1589,7 +1589,12 @@ void HDRViewApp::open_image()
 #endif
 }
 
-void HDRViewApp::open_folder() { load_images({pfd::select_folder("Open images in folder", "").result()}); }
+void HDRViewApp::open_folder()
+{
+#if !defined(__EMSCRIPTEN__)
+    load_images({pfd::select_folder("Open images in folder", "").result()});
+#endif
+}
 
 void HDRViewApp::load_image(const string filename, const string_view buffer)
 {
