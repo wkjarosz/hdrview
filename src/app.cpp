@@ -1596,12 +1596,14 @@ void HDRViewApp::open_folder()
 #endif
 }
 
+// Note: the filename is passed by value in case its an element of m_recent_files, which we modify
 void HDRViewApp::load_image(const string filename, const string_view buffer)
 {
-    auto load_one = [this](const string filename, const string_view buffer, bool add_to_recent)
+    auto load_one = [this](const string &filename, const string_view buffer, bool add_to_recent)
     {
         try
         {
+            spdlog::info("Loading file '{}'...", filename);
             // convert the buffer (if any) to a string so the async thread has its own copy,
             // then load from the string or filename depending on whether the buffer is empty
             m_pending_images.emplace_back(std::make_shared<PendingImages>(
@@ -1634,13 +1636,10 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
         }
     };
 
-    // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-    spdlog::debug("Loading file '{}'...", filename);
-
     auto path = fs::path(filename);
     if (!fs::exists(path))
-        return;
-    if (fs::is_directory(path))
+        spdlog::error("File '{}' does not exist.", filename);
+    else if (fs::is_directory(path))
     {
         spdlog::info("Loading images from folder '{}'", filename);
 
@@ -1654,15 +1653,13 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
         add_recent_file(filename);
     }
-    else if (fs::is_regular_file(path))
+    else
     {
         load_one(filename, buffer, true);
 
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
     }
-    else
-        spdlog::warn("Skipping unsupported file '{}'", filename);
 }
 
 void HDRViewApp::load_url(const string_view url)
