@@ -618,7 +618,7 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
 template <typename T>
 inline float dequantize_narrow(T v)
 {
-    constexpr float denom = 1.f / float(1u << (std::numeric_limits<uint8_t>::digits - 8));
+    constexpr float denom = 1.f / float(1u << (std::numeric_limits<T>::digits - 8));
     return (v * denom - 16.f) / 219.f;
 }
 
@@ -626,7 +626,7 @@ inline float dequantize_narrow(T v)
 template <typename T>
 T quantize_narrow(float v, int x = 0, int y = 0, bool dither = true)
 {
-    constexpr float maximum = 1u << (std::numeric_limits<uint8_t>::digits - 8);
+    constexpr float maximum = 1u << (std::numeric_limits<T>::digits - 8);
     return (T)std::clamp((219.f * v + 16.f) * maximum + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f, maximum);
 }
 
