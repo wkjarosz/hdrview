@@ -6,6 +6,7 @@
 
 #include "uhdr.h"
 #include "colorspace.h"
+#include "exif.h"
 #include "image.h"
 #include "texture.h"
 #include "timer.h"
@@ -184,6 +185,23 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     image->filename                = filename;
     image->file_has_straight_alpha = true;
     image->metadata["loader"]      = "libuhdr";
+
+    const uhdr_mem_block_t *exif_data = uhdr_dec_get_exif(decoder.get());
+    if (exif_data && exif_data->data && exif_data->data_sz > 0)
+    {
+        spdlog::debug("UltraHDR: Found EXIF data of size {} bytes", exif_data->data_sz);
+
+        try
+        {
+            auto j                  = exif_to_json(reinterpret_cast<uint8_t *>(exif_data->data), exif_data->data_sz);
+            image->metadata["exif"] = j;
+            spdlog::info("UltraHDR: EXIF metadata successfully parsed: {}", j.dump(2));
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("UltraHDR: Exception while parsing EXIF chunk: {}", e.what());
+        }
+    }
 
     {
         auto  half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]);

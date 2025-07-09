@@ -376,6 +376,19 @@ else()
 
 endif()
 
+CPMAddPackage(
+  NAME exif
+  GITHUB_REPOSITORY Tom94/libexif
+  GIT_TAG f99967d09f1424170388cb2c0b65dcf67d6f5ac3
+  OPTIONS "BUILD_SHARED_LIBS OFF"
+)
+if(exif_ADDED)
+  message(STATUS "Will build exif library")
+  list(APPEND HDRVIEW_DEPENDENCIES "exif_static")
+else()
+  message(FATAL_ERROR "libexif not found.")
+endif()
+
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
   CPMAddPackage(
@@ -552,6 +565,10 @@ if(HDRVIEW_ENABLE_HEIF)
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
+    # Remove the doc_doxygen target created with 'ALL'
+    if(TARGET doc_doxygen)
+      set_target_properties(doc_doxygen PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
     target_include_directories(
       heif INTERFACE $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}> $<BUILD_INTERFACE:${Libheif_SOURCE_DIR}/libheif/api/>
                      $<BUILD_INTERFACE:${Libheif_BINARY_DIR}>
@@ -627,6 +644,7 @@ endif()
 hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  src/imageio/exif.cpp
   src/imageio/exr.cpp
   src/imageio/heif.cpp
   src/imageio/icc.cpp

@@ -36,6 +36,26 @@ std::string format_indented(int indent, fmt::format_string<Args...> format_str, 
     return fmt::format("{:{}}", "", indent) + fmt::format(format_str, std::forward<Args>(args)...);
 }
 
+//! Returns 1 if architecture is little endian, 0 in case of big endian.
+inline bool is_little_endian()
+{
+    unsigned int x = 1;
+    char        *c = (char *)&x;
+    return bool((int)*c);
+}
+
+template <typename T>
+T swap_bytes(T value)
+{
+    T    result;
+    auto value_bytes  = reinterpret_cast<unsigned char *>(&value);
+    auto result_bytes = reinterpret_cast<unsigned char *>(&result);
+
+    for (size_t i = 0; i < sizeof(T); ++i) result_bytes[i] = value_bytes[sizeof(T) - 1 - i];
+
+    return result;
+}
+
 template <typename T>
 inline T sqr(T x)
 {

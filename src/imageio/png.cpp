@@ -6,6 +6,7 @@
 
 #include "png.h"
 #include "colorspace.h"
+#include "exif.h"
 #include "icc.h"
 #include "image.h"
 #include "texture.h"
@@ -78,18 +79,6 @@ struct PngWriteStream
     }
 };
 
-/*
-   Function check_endianness() returns 1, if architecture
-   is little endian, 0 in case of big endian.
- */
-
-int check_endianness()
-{
-    unsigned int x = 1;
-    char        *c = (char *)&x;
-    return (int)*c;
-}
-
 } // end anonymous namespace
 
 bool is_png_image(istream &is) noexcept
@@ -147,7 +136,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
 
     png_read_update_info(png_ptr, info_ptr);
 
-    if (bit_depth == 16 && check_endianness() == 1)
+    if (bit_depth == 16 && is_little_endian())
         png_set_swap(png_ptr);
 
     int channels = png_get_channels(png_ptr, info_ptr);
@@ -349,6 +338,27 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
+
+    // Read raw EXIF data from the PNG file, if present
+#if defined(PNG_eXIf_SUPPORTED)
+    png_bytep   exif_ptr = nullptr;
+    png_uint_32 exif_len = 0;
+    if (png_get_eXIf_1(png_ptr, info_ptr, &exif_len, &exif_ptr) && exif_ptr && exif_len > 0)
+    {
+        spdlog::info("PNG: Found EXIF chunk ({} bytes)", exif_len);
+
+        try
+        {
+            auto j                  = exif_to_json(exif_ptr, exif_len);
+            image->metadata["exif"] = j;
+            spdlog::info("PNG: EXIF metadata successfully parsed: {}", j.dump(2));
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("PNG: Exception while parsing EXIF chunk: {}", e.what());
+        }
+    }
+#endif
 
     return {image};
 }

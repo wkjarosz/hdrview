@@ -15,6 +15,8 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "exif.h"
+
 using namespace std;
 
 #ifndef HDRVIEW_ENABLE_HEIF
@@ -219,6 +221,46 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
             image->partname                = subimage != 0 ? fmt::format("{:d}", id) : "";
             image->file_has_straight_alpha = has_alpha && !ihandle.is_premultiplied_alpha();
             image->metadata["loader"]      = "libheif";
+
+            // try to get exif metadata
+            int num_metadata_blocks = heif_image_handle_get_number_of_metadata_blocks(raw_ihandle, "Exif");
+            if (num_metadata_blocks > 0)
+            {
+                spdlog::info("Found {} EXIF metadata block(s). Attempting to decode...", num_metadata_blocks);
+
+                vector<heif_item_id> metadataIDs(num_metadata_blocks);
+                heif_image_handle_get_list_of_metadata_block_IDs(raw_ihandle, "Exif", metadataIDs.data(),
+                                                                 num_metadata_blocks);
+                for (int i = 0; i < num_metadata_blocks; ++i)
+                {
+                    size_t exif_size = heif_image_handle_get_metadata_size(raw_ihandle, metadataIDs[i]);
+                    if (exif_size <= 4)
+                    {
+                        spdlog::warn("Failed to get size of EXIF data.");
+                        continue;
+                    }
+
+                    vector<uint8_t> exif_data(exif_size);
+                    if (auto error = heif_image_handle_get_metadata(raw_ihandle, metadataIDs[i], exif_data.data());
+                        error.code != heif_error_Ok)
+                    {
+                        spdlog::warn("Failed to read EXIF data: {}", error.message);
+                        continue;
+                    }
+
+                    try
+                    {
+                        // exclude the first four bytes, which are the length
+                        auto j                  = exif_to_json(exif_data.data() + 4, exif_size - 4);
+                        image->metadata["exif"] = j;
+                        spdlog::info("HEIF: EXIF metadata successfully parsed: {}", image->metadata.dump(2));
+                    }
+                    catch (const std::exception &e)
+                    {
+                        spdlog::warn("HEIF: Exception while parsing EXIF chunk: {}", e.what());
+                    }
+                }
+            }
 
             spdlog::info("Decoding heif image...");
             auto himage = ihandle.decode_image(out_colorspace, out_chroma);
