@@ -1637,9 +1637,7 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
     };
 
     auto path = fs::path(filename);
-    if (!fs::exists(path))
-        spdlog::error("File '{}' does not exist.", filename);
-    else if (fs::is_directory(path))
+    if (fs::is_directory(path))
     {
         spdlog::info("Loading images from folder '{}'", filename);
 
@@ -1653,13 +1651,21 @@ void HDRViewApp::load_image(const string filename, const string_view buffer)
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
         add_recent_file(filename);
     }
-    else
+    else if (!buffer.empty())
     {
+        // if we have a buffer, we assume it is a file that has been downloaded
+        // and we load it directly from the buffer
+        spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
         load_one(filename, buffer, true);
-
+    }
+    else if (fs::exists(path) && fs::is_regular_file(path))
+    {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
+        load_one(filename, buffer, true);
     }
+    else if (!fs::exists(path))
+        spdlog::error("File '{}' does not exist.", filename);
 }
 
 void HDRViewApp::load_url(const string_view url)
