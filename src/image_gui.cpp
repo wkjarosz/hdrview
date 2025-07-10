@@ -481,29 +481,12 @@ void Image::draw_info()
         ImGui::SameLine(label_size);
         ImGui::PushFont(font, 14);
 
-        float avail_w = ImGui::GetContentRegionAvail().x;
-        float text_w  = ImGui::CalcTextSize(text.c_str()).x;
+        // place it on the same line as the property name
+        if (wrapped)
+            ImGui::TextWrapped("%s", text.c_str());
+        else
+            ImGui::TextUnformatted(text);
 
-        // if (text_w < avail_w)
-        {
-            // place it on the same line as the property name
-            // ImGui::TextUnformatted(text);
-            if (wrapped)
-                ImGui::TextWrapped("%s", text.c_str());
-            else
-                ImGui::TextUnformatted(text);
-        }
-        // else
-        // {
-        //     // place it indented on the next line
-        //     ImGui::NewLine();
-        //     ImGui::Indent();
-        //     if (wrapped)
-        //         ImGui::TextWrapped("%s", text.c_str());
-        //     else
-        //         ImGui::TextUnformatted(text);
-        //     ImGui::Unindent();
-        // }
         ImGui::PopFont();
     };
 
@@ -596,9 +579,6 @@ void Image::draw_info()
             }
             bool edited = false;
 
-            // property_name("Chromaticities");
-            // property_value(has_chromaticities ? "Specified" : "Unknown (Assuming BT 709)", bold_font);
-
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
 
             property_name("Red");
@@ -621,21 +601,6 @@ void Image::draw_info()
             ImGui::SetNextItemWidth(-FLT_MIN);
             edited |= ImGui::DragFloat2("##White", &chr.white.x, 0.01f, 0.f, 1.f, "%.4f");
 
-            // property_value(fmt::format("Red: ({}, {})\nGreen: ({}, {})\nBlue: ({}, {})\nWhite: ({}, {})", chr.red.x,
-            //                            chr.red.y, chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x,
-            //                            chr.white.y),
-            //                mono_font);
-            // ImGui::BeginDisabled();
-            // ImGui::SameLine(label_size);
-            // ImGui::BeginGroup();
-            // ImGui::SetNextItemWidth(HelloImGui::EmSize(-3.f));
-            // edited |= ImGui::DragFloat2("Green", &chr.green.x, 0.1f, 0.f, 0.f, "%.3f");
-            // ImGui::SetNextItemWidth(HelloImGui::EmSize(-3.f));
-            // edited |= ImGui::DragFloat2("Blue", &chr.blue.x, 0.1f, 0.f, 0.f, "%.3f");
-            // ImGui::SetNextItemWidth(HelloImGui::EmSize(-3.f));
-            // edited |= ImGui::DragFloat2("White", &chr.white.x, 0.01f, 0.f, 0.f, "%.3f");
-            // ImGui::EndGroup();
-
             ImGui::PopStyleVar();
             if (edited)
             {
@@ -645,7 +610,6 @@ void Image::draw_info()
                 named_color_space = -1; // reset the color space to unknown
                 compute_color_transform();
             }
-            // ImGui::EndDisabled();
         }
 
         if (auto attrib = header.findTypedAttribute<Imf::V2fAttribute>("adoptedNeutral"))
@@ -720,7 +684,7 @@ void Image::draw_info()
 
                 for (auto &field : table_obj.items()) max_w = std::max(field.key().length(), max_w);
             }
-            label_size = HelloImGui::EmSize(0.5f) * (float)max_w;
+            label_size = HelloImGui::EmSize(0.55f) * (float)max_w;
 
             for (auto &exif_entry : metadata["exif"].items())
             {
@@ -743,385 +707,6 @@ void Image::draw_info()
             }
         }
     }
-
-    // ImGui::SeparatorText("File info");
-
-    // const float TEXT_BASE_HEIGHT = ImGui::GetTextLineHeightWithSpacing();
-
-    // if (ImGui::BeginTable("Info table", 3,
-    //                       ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuterV
-    //                       |
-    //                           ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable |
-    //                           ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY,
-    //                       ImVec2(0.0f, TEXT_BASE_HEIGHT * 20)))
-    // {
-    //     ImGui::PushFont(bold_font);
-    //     ImGui::TableSetupColumn("Name");
-    //     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_NoHide);
-    //     ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_DefaultHide | ImGuiTableColumnFlags_WidthFixed);
-    //     ImGui::TableHeadersRow();
-    //     ImGui::PopFont();
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("File name");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextWrapped("%s", filename.c_str());
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("path");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextUnformatted("Part name");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted(partname.empty() ? "<none>" : partname);
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("string");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextUnformatted("Loader");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted(metadata.value<string>("loader", "unknown"));
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("string");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextUnformatted("Bit depth");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextWrapped("%s", metadata.value<string>("bit depth", "unknown").c_str());
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("string");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Transfer function");
-    //     ImGui::WrappedTooltip("The transfer function applied at load time to make the values linear.");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextWrapped("%s", metadata.value<string>("transfer function", "linear").c_str());
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("string");
-
-    //     vector<pair<string, string>> attrib_names = {
-    //         {"owner", "Owner"}, {"comments", "Comments"}, {"capDate", "Capture date"}};
-
-    //     for (auto a : attrib_names)
-    //     {
-    //         if (auto attrib = header.findTypedAttribute<Imf::StringAttribute>(a.first))
-    //         {
-    //             ImGui::TableNextRow();
-    //             ImGui::TableNextColumn();
-    //             ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //             ImGui::TextWrapped("%s", a.second.c_str());
-    //             ImGui::TableNextColumn();
-    //             ImGui::TextWrapped("%s", attrib->value().c_str());
-    //             ImGui::TableNextColumn();
-    //             ImGui::TextUnformatted("string");
-    //         }
-    //     }
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Resolution");
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%s", fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y).c_str());
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("int2");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Data window");
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%s", fmt::format("[{}, {}) {} [{}, {})", data_window.min.x, data_window.max.x,
-    //                                          ICON_MY_TIMES, data_window.min.y, data_window.max.y)
-    //                                  .c_str());
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("box2i");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Display window");
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%s", fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
-    //                                          ICON_MY_TIMES, display_window.min.y, display_window.max.y)
-    //                                  .c_str());
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("box2i");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::AlignTextToFramePadding();
-    //     ImGui::TextWrapped("Color gamut");
-    //     ImGui::TableNextColumn();
-    //     ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
-    //     auto csn = color_gamut_names();
-    //     // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
-    //     auto open_combo = ImGui::BeginCombo("##Color gamut", named_color_space < 0 ? "Unknown" :
-    //     csn[named_color_space],
-    //                                         ImGuiComboFlags_HeightLargest);
-    //     ImGui::WrappedTooltip(
-    //         "Interpret the values stored in the file using the chromaticities of a common color profile.");
-    //     if (open_combo)
-    //     {
-    //         for (int n = 0; csn[n]; ++n)
-    //         {
-    //             const bool is_selected = (named_color_space == n);
-    //             if (ImGui::Selectable(csn[n], is_selected))
-    //             {
-    //                 named_color_space = n;
-    //                 spdlog::debug("Switching to color space {}.", n);
-    //                 Imf::addChromaticities(header, gamut_chromaticities(csn[n]));
-    //                 compute_color_transform();
-    //             }
-
-    //             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-    //             if (is_selected)
-    //                 ImGui::SetItemDefaultFocus();
-    //         }
-    //         ImGui::EndCombo();
-    //     }
-    //     // ImGui::PopStyleVar();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("enum");
-
-    //     {
-    //         ImGui::TableNextRow();
-    //         ImGui::TableNextColumn();
-    //         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //         ImGui::AlignTextToFramePadding();
-    //         ImGui::TextWrapped("Adaptation");
-    //         ImGui::TableNextColumn();
-
-    //         ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
-    //         const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
-    //         // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
-    //         auto open_combo = ImGui::BeginCombo(
-    //             "##Adaptation", adaptation_method <= 0 || adaptation_method > 3 ? "None" : wan[adaptation_method],
-    //             ImGuiComboFlags_HeightLargest);
-    //         ImGui::WrappedTooltip("Method for chromatic adaptation transform.");
-    //         if (open_combo)
-    //         {
-    //             for (int n = 0; wan[n]; ++n)
-    //             {
-    //                 const bool is_selected = (adaptation_method == n);
-    //                 if (ImGui::Selectable(wan[n], is_selected))
-    //                 {
-    //                     adaptation_method = n;
-    //                     spdlog::debug("Switching to adaptation method {}.", n);
-    //                     compute_color_transform();
-    //                 }
-
-    //                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-    //                 if (is_selected)
-    //                     ImGui::SetItemDefaultFocus();
-    //             }
-    //             ImGui::EndCombo();
-    //         }
-    //         // ImGui::PopStyleVar();
-
-    //         ImGui::TableNextColumn();
-    //         ImGui::TextUnformatted("enum");
-    //     }
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Chromaticities");
-
-    //     ImGui::TableNextColumn();
-    //     Imf::Chromaticities chr{};
-    //     if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
-    //         chr = attrib->value();
-    //     else
-    //         ImGui::TextUnformatted("<Assuming BT 709>");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::Indent();
-    //     ImGui::TextWrapped("Red");
-    //     ImGui::Unindent();
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%.6f, %.6f", chr.red.x, chr.red.y);
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float2");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::Indent();
-    //     ImGui::TextWrapped("Green");
-    //     ImGui::Unindent();
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%.6f, %.6f", chr.green.x, chr.green.y);
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float2");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::Indent();
-    //     ImGui::TextWrapped("Blue");
-    //     ImGui::Unindent();
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%.6f, %.6f", chr.blue.x, chr.blue.y);
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float2");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::Indent();
-    //     ImGui::TextWrapped("Whitepoint");
-    //     ImGui::Unindent();
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextWrapped("%.6f, %.6f", chr.white.x, chr.white.y);
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float2");
-
-    //     // ImGui::BeginDisabled();
-    //     // ImGui::InputFloat2("Red", &chr.red.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::InputFloat2("Green", &chr.green.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::InputFloat2("Blue", &chr.blue.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::InputFloat2("White", &chr.white.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::EndDisabled();
-
-    //     // ImGui::TableNextColumn();
-    //     // ImGui::TextUnformatted("box2i");
-
-    //     if (auto attrib = header.findTypedAttribute<Imf::V2fAttribute>("adoptedNeutral"))
-    //     {
-    //         ImGui::TableNextRow();
-    //         ImGui::TableNextColumn();
-    //         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //         ImGui::TextWrapped("Adopted neutral");
-    //         ImGui::TableNextColumn();
-    //         ImGui::PushFont(mono_font);
-    //         ImGui::TextUnformatted(fmt::format("{}, {}", attrib->value().x, attrib->value().y));
-    //         ImGui::PopFont();
-    //         ImGui::TableNextColumn();
-    //         ImGui::TextUnformatted("float2");
-    //     }
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Luminance weights");
-    //     ImGui::TableNextColumn();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextUnformatted(
-    //         fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y,
-    //         luminance_weights.z));
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float3");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("Color transform matrix");
-    //     ImGui::TableNextColumn();
-
-    //     // ImGui::BeginDisabled();
-    //     // ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
-    //     // ImGui::InputFloat3("##row1", &M_to_Rec709[0][0], "%8.2e", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
-    //     // ImGui::InputFloat3("##row2", &M_to_Rec709[1][0], "%8.2e", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
-    //     // ImGui::InputFloat3("##row3", &M_to_Rec709[2][0], "%8.2e", ImGuiInputTextFlags_ReadOnly);
-    //     // ImGui::EndDisabled();
-    //     ImGui::PushFont(mono_font);
-    //     ImGui::TextUnformatted(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-    //                                        "{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-    //                                        "{:+8.2e}, {:+8.2e}, {:+8.2e}",
-    //                                        M_to_Rec709[0][0], M_to_Rec709[0][1], M_to_Rec709[0][2], // prevent wrap
-    //                                        M_to_Rec709[1][0], M_to_Rec709[1][1], M_to_Rec709[1][2], //
-    //                                        M_to_Rec709[2][0], M_to_Rec709[2][1], M_to_Rec709[2][2]));
-    //     ImGui::PopFont();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float3");
-
-    //     ImGui::TableNextRow();
-    //     ImGui::TableNextColumn();
-    //     ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-    //     ImGui::TextWrapped("File had straight alpha");
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted(fmt::format("{}", file_has_straight_alpha));
-    //     ImGui::TableNextColumn();
-    //     ImGui::TextUnformatted("float3");
-
-    //     ImGui::EndTable();
-    // }
-
-    // // if (metadata.contains("exif") && metadata["exif"].is_object())
-    // // {
-    // //     ImGui::SeparatorText("EXIF metadata");
-
-    // //     if (ImGui::BeginTable("Info table", 3,
-    // //                           ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH
-    // |
-    // //                               ImGuiTableFlags_RowBg | ImGuiTableFlags_Hideable))
-    // //     {
-
-    // //         ImGui::PushFont(bold_font);
-    // //         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-    // //         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-    // //         ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_DefaultHide | ImGuiTableColumnFlags_WidthFixed);
-    // //         ImGui::TableHeadersRow();
-    // //         ImGui::PopFont();
-    // //         for (auto &exif_entry : metadata["exif"].items())
-    // //         {
-    // //             const std::string &table_name = exif_entry.key();
-    // //             const auto        &table_obj  = exif_entry.value();
-    // //             if (!table_obj.is_object())
-    // //                 continue;
-
-    // //             for (auto &field : table_obj.items())
-    // //             {
-    // //                 const std::string &key       = field.key();
-    // //                 const auto        &field_obj = field.value();
-    // //                 if (!field_obj.is_object() || !field_obj.contains("string") || !field_obj.contains("type"))
-    // //                     continue;
-
-    // //                 ImGui::TableNextRow();
-    // //                 ImGui::TableNextColumn();
-
-    // //                 ImGui::TextWrapped("%s", key.c_str());
-    // //                 ImGui::TableNextColumn();
-    // //                 // ImGui::PushFont(bold_font);
-    // //                 ImGui::TextWrapped("%s", field_obj["string"].get<std::string>().c_str());
-    // //                 // ImGui::PopFont();
-    // //                 ImGui::TableNextColumn();
-    // //                 ImGui::TextUnformatted(field_obj["type"].get<std::string>().c_str());
-    // //             }
-    // //         }
-    // //         ImGui::EndTable();
-    // //     }
-    // // }
 }
 
 void Image::draw_channel_stats()
