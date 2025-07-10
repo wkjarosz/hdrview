@@ -110,6 +110,8 @@ enum TransferFunction : TransferFunction_
     TransferFunction_BT2100_PQ,
     TransferFunction_BT2100_HLG,
     TransferFunction_ST240,
+    TransferFunction_Log100,
+    TransferFunction_Log100_Sqrt10,
     TransferFunction_IEC61966_2_4,
     TransferFunction_DCI_P3,
     // DCI_P3, // TODO
@@ -400,9 +402,35 @@ inline Real EOTF_ST240(Real nonlinear)
         return std::pow((nonlinear + (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
 }
 
+template <typename Real>
+inline Real EOTF_log100(Real nonlinear)
+{
+    return nonlinear > 0.0f ? std::exp((nonlinear - 1.0f) * 2.0f * std::log(10.0f)) : 0.0f;
+}
+
+template <typename Real>
+inline Real OETF_log100(Real linear)
+{
+    return linear > 0.0f ? (std::log(linear) / (2.0f * std::log(10.0f)) + 1.0f) : 0.0f;
+}
+
+template <typename Real>
+inline Real EOTF_log100_sqrt10(Real nonlinear)
+{
+    return nonlinear > 0.0f ? std::exp((nonlinear - 1.0f) * 2.5f * std::log(10.0f)) : 0.0f;
+}
+
+template <typename Real>
+inline Real OETF_log100_sqrt10(Real linear)
+{
+    return linear > 0.0f ? (std::log(linear) / (2.5f * std::log(10.0f)) + 1.0f) : 0.0f;
+}
+
 /*! IEC 61966-2-4 OETF (Opto-Electronic Transfer Function).
 
     Implements the transfer function as specified in IEC 61966-2-4.
+
+    This is imply the ITU OETF which mirrors negative values.
 
     \param linear Linear input value (R, G, or B channel)
     \returns Non-linear encoded value
@@ -410,19 +438,14 @@ inline Real EOTF_ST240(Real nonlinear)
 template <typename Real>
 inline Real OETF_IEC61966_2_4(Real linear)
 {
-    constexpr Real beta  = Real(0.018);
-    constexpr Real alpha = Real(1.099);
-    if (linear < -beta)
-        return -alpha * std::pow(-linear, Real(0.45)) + (alpha - Real(1.0));
-    else if (linear > beta)
-        return alpha * std::pow(linear, Real(0.45)) - (alpha - Real(1.0));
-    else
-        return Real(4.5) * linear;
+    return std::copysign(OETF_ITU(std::abs(linear)), linear);
 }
 
 /*! IEC 61966-2-4 EOTF (Electro-Optical Transfer Function).
 
     Implements the inverse transfer function as specified in IEC 61966-2-4.
+
+    This is imply the ITU inverse OETF which mirrors negative values.
 
     \param nonlinear Non-linear encoded value (R', G', or B' channel)
     \returns Linear output value
@@ -430,19 +453,12 @@ inline Real OETF_IEC61966_2_4(Real linear)
 template <typename Real>
 inline Real EOTF_IEC61966_2_4(Real nonlinear)
 {
-    constexpr Real beta  = Real(0.081);
-    constexpr Real alpha = Real(1.099);
-    if (nonlinear < -beta)
-        return -std::pow(-(nonlinear - (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
-    else if (nonlinear > beta)
-        return std::pow((nonlinear + (alpha - Real(1.0))) / alpha, Real(1.0) / Real(0.45));
-    else
-        return nonlinear / Real(4.5);
+    return std::copysign(inverse_OETF_ITU(std::abs(nonlinear)), nonlinear);
 }
 
 /*! DCI-P3 EOTF (Electro-Optical Transfer Function).
 
-    Applies the DCI-P3 EOTF as specified:
+    Applies the DCI-P3 EOTF as specified in SMPTE ST 428-1 (DCI):
     X = X'^2.6 * 52.37
     Y = Y'^2.6 * 52.37
     Z = Z'^2.6 * 52.37
@@ -458,7 +474,7 @@ inline Real EOTF_DCI_P3(Real nonlinear)
 
 /*! DCI-P3 inverse EOTF (EOTF^-1).
 
-    Applies the inverse DCI-P3 EOTF as specified:
+    Applies the inverse DCI-P3 EOTF as specified in SMPTE ST 428-1 (DCI):
     X' = (X / 52.37)^(1/2.6)
     Y' = (Y / 52.37)^(1/2.6)
     Z' = (Z / 52.37)^(1/2.6)
@@ -491,6 +507,8 @@ inline float to_linear(const float encoded, const TransferFunction tf, const flo
     case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 255.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
     case TransferFunction_ST240: return EOTF_ST240(encoded);
+    case TransferFunction_Log100: return EOTF_log100(encoded);
+    case TransferFunction_Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
     case TransferFunction_IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
     case TransferFunction_DCI_P3: return EOTF_DCI_P3(encoded);
     case TransferFunction_Linear: [[fallthrough]];
@@ -510,6 +528,9 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
         return float3{EOTF_BT2100_PQ(encoded.x), EOTF_BT2100_PQ(encoded.y), EOTF_BT2100_PQ(encoded.z)} / 255.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
     case TransferFunction_ST240: return float3{EOTF_ST240(encoded.x), EOTF_ST240(encoded.y), EOTF_ST240(encoded.z)};
+    case TransferFunction_Log100: return float3{EOTF_log100(encoded.x), EOTF_log100(encoded.y), EOTF_log100(encoded.z)};
+    case TransferFunction_Log100_Sqrt10:
+        return float3{EOTF_log100_sqrt10(encoded.x), EOTF_log100_sqrt10(encoded.y), EOTF_log100_sqrt10(encoded.z)};
     case TransferFunction_IEC61966_2_4:
         return float3{EOTF_IEC61966_2_4(encoded.x), EOTF_IEC61966_2_4(encoded.y), EOTF_IEC61966_2_4(encoded.z)};
     case TransferFunction_DCI_P3: return float3{EOTF_DCI_P3(encoded.x), EOTF_DCI_P3(encoded.y), EOTF_DCI_P3(encoded.z)};

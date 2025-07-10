@@ -571,12 +571,8 @@ void Image::draw_info()
 
         {
             Imf::Chromaticities chr{};
-            bool                has_chromaticities = false;
             if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
-            {
-                chr                = attrib->value();
-                has_chromaticities = true;
-            }
+                chr = attrib->value();
             bool edited = false;
 
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));

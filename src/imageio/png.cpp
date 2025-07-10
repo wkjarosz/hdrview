@@ -50,10 +50,17 @@ bool check_png_signature(istream &is)
     return is_png;
 }
 
+template <bool Read = true>
 struct PngInfoPtrDeleter
 {
     mutable png_structp png_ptr;
-    void                operator()(png_infop info_ptr) const { png_destroy_read_struct(&png_ptr, &info_ptr, nullptr); }
+    void                operator()(png_infop info_ptr) const
+    {
+        if constexpr (Read)
+            png_destroy_read_struct(&png_ptr, &info_ptr, nullptr);
+        else
+            png_destroy_write_struct(&png_ptr, &info_ptr);
+    }
 };
 
 } // end anonymous namespace
@@ -83,12 +90,13 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     if (!png_ptr)
         throw runtime_error("Failed to create PNG read struct");
 
-    std::unique_ptr<png_info, PngInfoPtrDeleter> info_ptr{png_create_info_struct(png_ptr), PngInfoPtrDeleter{png_ptr}};
-
     png_set_error_fn(
         png_ptr, nullptr, [](png_structp png_ptr, png_const_charp error_msg)
         { throw invalid_argument{fmt::format("PNG error: {}", error_msg)}; },
         [](png_structp png_ptr, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
+
+    std::unique_ptr<png_info, PngInfoPtrDeleter<true>> info_ptr{png_create_info_struct(png_ptr),
+                                                                PngInfoPtrDeleter<true>{png_ptr}};
 
     if (!info_ptr)
         throw runtime_error("Failed to create PNG info struct");
@@ -109,14 +117,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     png_get_IHDR(png_ptr, info_ptr.get(), &width, &height, &file_bit_depth, &color_type, &interlace, nullptr, nullptr);
 
     // Convert palette to RGB, expand bit depths to 16-bit, add alpha if needed
-    if (color_type == PNG_COLOR_TYPE_PALETTE)
-        png_set_palette_to_rgb(png_ptr);
-    if ((color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) && file_bit_depth < 8)
-    {
-        png_set_expand_gray_1_2_4_to_8(png_ptr);
-    }
-    if (png_get_valid(png_ptr, info_ptr.get(), PNG_INFO_tRNS))
-        png_set_tRNS_to_alpha(png_ptr);
+    png_set_palette_to_rgb(png_ptr);
+    png_set_expand_gray_1_2_4_to_8(png_ptr);
+    png_set_tRNS_to_alpha(png_ptr);
 
     if (interlace != PNG_INTERLACE_NONE)
     {
@@ -203,10 +206,14 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
                      &video_full_range_flag))
     {
         has_cICP = true;
-        spdlog::info("PNG: Found cICP chunk: Colour Primaries: {}, Transfer Function: {}, "
-                     "Matrix Coefficients: {}, Video Full Range: {}",
-                     int(colour_primaries), int(transfer_function), int(matrix_coefficients),
-                     int(video_full_range_flag));
+        spdlog::info("PNG: Found cICP chunk:\n\tColour Primaries: {}\n\tTransfer Function: {}\n\t"
+                     "Matrix Coefficients: {}\n\tVideo Full Range: {}",
+                     colour_primaries, transfer_function, matrix_coefficients, video_full_range_flag);
+
+        if (matrix_coefficients != 0)
+            spdlog::warn(
+                "Unsupported matrix coefficients in cICP chunk: {}. PNG images only support RGB (=0). Ignoring.",
+                matrix_coefficients);
 
         switch (colour_primaries)
         {
@@ -358,17 +365,17 @@ void save_png_image(const Image &img, ostream &os, const string &filename, float
     png_structp png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     if (!png_ptr)
         throw runtime_error("Failed to create PNG write struct");
-    png_infop info_ptr = png_create_info_struct(png_ptr);
+
+    png_set_error_fn(
+        png_ptr, nullptr, [](png_structp png_ptr, png_const_charp error_msg)
+        { throw invalid_argument{fmt::format("PNG error: {}", error_msg)}; },
+        [](png_structp png_ptr, png_const_charp warning_msg) { spdlog::warn("PNG warning: {}", warning_msg); });
+
+    std::unique_ptr<png_info, PngInfoPtrDeleter<false>> info_ptr{png_create_info_struct(png_ptr),
+                                                                 PngInfoPtrDeleter<false>{png_ptr}};
+
     if (!info_ptr)
-    {
-        png_destroy_write_struct(&png_ptr, nullptr);
         throw runtime_error("Failed to create PNG info struct");
-    }
-    if (setjmp(png_jmpbuf(png_ptr)))
-    {
-        png_destroy_write_struct(&png_ptr, &info_ptr);
-        throw runtime_error("Error during PNG write");
-    }
 
     png_set_write_fn(
         png_ptr, &os,
@@ -390,17 +397,16 @@ void save_png_image(const Image &img, ostream &os, const string &filename, float
                      : (n == 3) ? PNG_COLOR_TYPE_RGB
                                 : PNG_COLOR_TYPE_RGB_ALPHA;
 
-    png_set_IHDR(png_ptr, info_ptr, w, h, 8, color_type, PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
+    png_set_IHDR(png_ptr, info_ptr.get(), w, h, 8, color_type, PNG_INTERLACE_ADAM7, PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
 
-    png_write_info(png_ptr, info_ptr);
+    png_write_info(png_ptr, info_ptr.get());
 
     // Write image data row by row
     size_t row_bytes = w * n;
     for (int y = 0; y < h; ++y) png_write_row(png_ptr, pixels.get() + y * row_bytes);
 
-    png_write_end(png_ptr, nullptr);
-    png_destroy_write_struct(&png_ptr, &info_ptr);
+    png_write_end(png_ptr, info_ptr.get());
 }
 
 #endif
