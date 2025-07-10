@@ -291,16 +291,7 @@ json exif_data_to_json(ExifData *ed)
         if (!content || !content->count)
             continue;
 
-        string ifd_name;
-        switch (ifd_idx)
-        {
-        case EXIF_IFD_0: ifd_name = "IFD0"; break;
-        case EXIF_IFD_1: ifd_name = "IFD1"; break;
-        case EXIF_IFD_EXIF: ifd_name = "EXIF"; break;
-        case EXIF_IFD_GPS: ifd_name = "GPS"; break;
-        case EXIF_IFD_INTEROPERABILITY: ifd_name = "INTEROPERABILITY"; break;
-        default: ifd_name = "IFD" + std::to_string(ifd_idx);
-        }
+        string ifd_name = exif_ifd_get_name((ExifIfd)ifd_idx);
 
         json ifd_json;
 
