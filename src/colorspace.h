@@ -22,21 +22,32 @@
 #include <map>
 #include <string>
 
-// Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
-inline void primaries_from_matrix(const float3x3 &rgb_to_XYZ, float2 *red, float2 *green, float2 *blue, float2 *white)
+struct Chromaticities
 {
+    // Default constructor produces chromaticities according to Rec. ITU-R BT.709-3 (sRGB)
+    float2 red   = {0.64f, 0.33f};
+    float2 green = {0.30f, 0.60f};
+    float2 blue  = {0.15f, 0.06f};
+    float2 white = {0.31271f, 0.32902f}; // D65
+};
+
+// Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
+inline Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
+{
+    Chromaticities result;
     // Multiplying the matrix by [1,0,0], [0,1,0], or [0,0,1] gives the XYZ values of the primaries.
     // Hence, the columns of the matrix are XYZ values of the primaries.
     // Divide each by its sum to get corresponding chromaticities.
-    *red   = rgb_to_XYZ.x.xy() / sum(rgb_to_XYZ.x);
-    *green = rgb_to_XYZ.y.xy() / sum(rgb_to_XYZ.y);
-    *blue  = rgb_to_XYZ.z.xy() / sum(rgb_to_XYZ.z);
+    result.red   = rgb_to_XYZ.x.xy() / sum(rgb_to_XYZ.x);
+    result.green = rgb_to_XYZ.y.xy() / sum(rgb_to_XYZ.y);
+    result.blue  = rgb_to_XYZ.z.xy() / sum(rgb_to_XYZ.z);
 
     // Multiplying the matrix by full-intensity for each primary [1,1,1] gives us XYZ of white.
     // Hence, the sum of the columns is the XYZ of white.
     // Divide that by the sum of its components to get its chromaticity;
     float3 wpXYZ = rgb_to_XYZ.x + rgb_to_XYZ.y + rgb_to_XYZ.z;
-    *white       = wpXYZ.xy() / sum(wpXYZ);
+    result.white = wpXYZ.xy() / sum(wpXYZ);
+    return result;
 }
 
 /*!
@@ -522,18 +533,14 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     {
     case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
-    case TransferFunction_ITU:
-        return float3{inverse_OETF_ITU(encoded.x), inverse_OETF_ITU(encoded.y), inverse_OETF_ITU(encoded.z)};
-    case TransferFunction_BT2100_PQ:
-        return float3{EOTF_BT2100_PQ(encoded.x), EOTF_BT2100_PQ(encoded.y), EOTF_BT2100_PQ(encoded.z)} / 219.f;
+    case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
+    case TransferFunction_BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
-    case TransferFunction_ST240: return float3{EOTF_ST240(encoded.x), EOTF_ST240(encoded.y), EOTF_ST240(encoded.z)};
-    case TransferFunction_Log100: return float3{EOTF_log100(encoded.x), EOTF_log100(encoded.y), EOTF_log100(encoded.z)};
-    case TransferFunction_Log100_Sqrt10:
-        return float3{EOTF_log100_sqrt10(encoded.x), EOTF_log100_sqrt10(encoded.y), EOTF_log100_sqrt10(encoded.z)};
-    case TransferFunction_IEC61966_2_4:
-        return float3{EOTF_IEC61966_2_4(encoded.x), EOTF_IEC61966_2_4(encoded.y), EOTF_IEC61966_2_4(encoded.z)};
-    case TransferFunction_DCI_P3: return float3{EOTF_DCI_P3(encoded.x), EOTF_DCI_P3(encoded.y), EOTF_DCI_P3(encoded.z)};
+    case TransferFunction_ST240: return la::apply(EOTF_ST240<float>, encoded);
+    case TransferFunction_Log100: return la::apply(EOTF_log100<float>, encoded);
+    case TransferFunction_Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
+    case TransferFunction_IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
+    case TransferFunction_DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
     case TransferFunction_Linear: [[fallthrough]];
     default: return encoded;
     }

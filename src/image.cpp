@@ -696,12 +696,7 @@ void Image::compute_color_transform()
     static const Imf::Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     Imath::M33f                      M;
     if (color_conversion_matrix(M, file_chr, bt709_chr, adaptation_method))
-    {
-        // M_to_Rec709 = to_linalg(NcGetRGBToRGBMatrix(src.get(), dst));
         M_to_Rec709 = to_linalg(M);
-        spdlog::info("Will transform pixel values to Rec. 709/sRGB primaries and whitepoint on display.");
-        spdlog::debug("M_to_Rec709 = {}", M_to_Rec709);
-    }
 }
 
 void Image::finalize()

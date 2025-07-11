@@ -319,19 +319,13 @@ float3 RGBToYC(float3 input, float3 Yw)
     return output;
 }
 
-Color3 LinearToSRGB(const Color3 &c) { return Color3(LinearToSRGB(c.x), LinearToSRGB(c.y), LinearToSRGB(c.z)); }
-Color4 LinearToSRGB(const Color4 &c) { return Color4(LinearToSRGB(c.xyz()), c.w); }
-Color3 SRGBToLinear(const Color3 &c) { return Color3(SRGBToLinear(c.x), SRGBToLinear(c.y), SRGBToLinear(c.z)); }
-Color4 SRGBToLinear(const Color4 &c) { return Color4(SRGBToLinear(c.xyz()), c.w); }
+Color3 LinearToSRGB(const Color3 &c) { return la::apply(LinearToSRGB<float>, c); }
+Color4 LinearToSRGB(const Color4 &c) { return {LinearToSRGB(c.xyz()), c.w}; }
+Color3 SRGBToLinear(const Color3 &c) { return la::apply(SRGBToLinear<float>, c); }
+Color4 SRGBToLinear(const Color4 &c) { return {SRGBToLinear(c.xyz()), c.w}; }
 
-Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma)
-{
-    return Color3(LinearToGamma(c.x, inv_gamma.x), LinearToGamma(c.y, inv_gamma.y), LinearToGamma(c.z, inv_gamma.z));
-}
-Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma)
-{
-    return Color4(LinearToGamma(c.xyz(), inv_gamma), c.w);
-}
+Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma) { return la::apply(LinearToGamma<float>, c, inv_gamma); }
+Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma) { return {LinearToGamma(c.xyz(), inv_gamma), c.w}; }
 
 void xyYToXZ(float *X, float *Z, float x, float y, float Y)
 {

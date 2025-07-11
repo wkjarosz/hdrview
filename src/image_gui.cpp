@@ -461,8 +461,9 @@ void Image::draw_info()
     auto sans_font = hdrview()->font("sans regular");
     auto bold_font = hdrview()->font("sans bold");
     auto mono_font = hdrview()->font("mono regular");
+    auto mono_bold = hdrview()->font("mono bold");
 
-    float label_size = HelloImGui::EmSize(10.f);
+    float label_size = HelloImGui::EmSize(9.f);
     float min_w      = HelloImGui::EmSize(8.f);
 
     auto property_name = [sans_font, &label_size](const string &text)
@@ -477,7 +478,7 @@ void Image::draw_info()
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
     };
-    auto property_value = [label_size, min_w](const string &text, ImFont *font, bool wrapped = false)
+    auto property_value = [&label_size, min_w](const string &text, ImFont *font, bool wrapped = false)
     {
         ImGui::SameLine(label_size);
         ImGui::PushFont(font, 14);
@@ -507,10 +508,6 @@ void Image::draw_info()
         property_name("File's bit depth");
         property_value(metadata.value<string>("bit depth", "unknown"), bold_font, true);
 
-        property_name("Transfer function");
-        ImGui::WrappedTooltip("The transfer function applied at load time to make the values linear.");
-        property_value(metadata.value<string>("transfer function", "linear"), bold_font, true);
-
         property_name("Resolution");
         property_value(fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y), bold_font);
 
@@ -524,12 +521,24 @@ void Image::draw_info()
                                    display_window.min.y, display_window.max.y),
                        bold_font);
 
+        property_name("Straight alpha");
+        property_value(fmt::format("{}", file_has_straight_alpha), bold_font);
+    }
+
+    if (ImGui::CollapsingHeader("Color space", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+
+        property_name("Transfer function");
+        ImGui::WrappedTooltip("The transfer function applied at load time to make the values linear.");
+        property_value(metadata.value<string>("transfer function", "linear"), bold_font, true);
+
         {
             // ImGui::AlignTextToFramePadding();
             property_name("Color gamut");
 
             ImGui::SameLine(label_size);
 
+            ImGui::PushFont(bold_font, 0.f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
             auto csn = color_gamut_names();
             ImGui::SetNextItemWidth(
@@ -559,6 +568,7 @@ void Image::draw_info()
                 ImGui::EndCombo();
             }
             ImGui::PopStyleVar();
+            ImGui::PopFont();
         }
 
         {
@@ -567,6 +577,7 @@ void Image::draw_info()
                 chr = attrib->value();
             bool edited = false;
 
+            ImGui::PushFont(mono_bold, 0.f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
 
             property_name("Red");
@@ -592,6 +603,8 @@ void Image::draw_info()
             edited |= ImGui::DragFloat2("##White", &chr.white.x, 0.01f, 0.f, 1.f, "%.4f");
 
             ImGui::PopStyleVar();
+            ImGui::PopFont();
+
             if (edited)
             {
                 spdlog::debug("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
@@ -614,6 +627,7 @@ void Image::draw_info()
 
             ImGui::SameLine(label_size);
 
+            ImGui::PushFont(bold_font, 0.f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
 
             const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
@@ -642,30 +656,88 @@ void Image::draw_info()
                 ImGui::EndCombo();
             }
             ImGui::PopStyleVar();
+            ImGui::PopFont();
         }
 
-        property_name("Luminance weights");
-        property_value(
-            fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y, luminance_weights.z),
-            mono_font);
+        {
+            property_name("Luminance weights");
+            // property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y,
+            //                            luminance_weights.z),
+            //                mono_font);
 
-        property_name("Color matrix");
-        property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                                   "{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
-                                   "{:+8.2e}, {:+8.2e}, {:+8.2e}",
-                                   M_to_Rec709[0][0], M_to_Rec709[0][1], M_to_Rec709[0][2], // prevent wrap
-                                   M_to_Rec709[1][0], M_to_Rec709[1][1], M_to_Rec709[1][2], //
-                                   M_to_Rec709[2][0], M_to_Rec709[2][1], M_to_Rec709[2][2]),
-                       mono_font);
+            ImGui::PushFont(mono_bold, 0.f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
 
-        property_name("File had straight alpha");
-        property_value(fmt::format("{}", file_has_straight_alpha), bold_font);
+            ImGui::SameLine(label_size);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < min_w * 2.f ? min_w * 2.f : -FLT_MIN);
+            ImGui::InputFloat3("##Yw", &luminance_weights.x, "%+8.2e",
+                               ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
+
+            ImGui::PopStyleVar();
+            ImGui::PopFont();
+        }
+
+        {
+            property_name("Color matrix");
+            // property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+            //                            "{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
+            //                            "{:+8.2e}, {:+8.2e}, {:+8.2e}",
+            //                            M_to_Rec709[0][0], M_to_Rec709[0][1], M_to_Rec709[0][2], // prevent wrap
+            //                            M_to_Rec709[1][0], M_to_Rec709[1][1], M_to_Rec709[1][2], //
+            //                            M_to_Rec709[2][0], M_to_Rec709[2][1], M_to_Rec709[2][2]),
+            //                mono_font);
+
+            ImGui::PushFont(mono_bold, 0.f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
+
+            ImGui::SameLine(label_size);
+            float w = ImGui::GetContentRegionAvail().x < min_w * 2.f ? min_w * 2.f : -FLT_MIN;
+            ImGui::SetNextItemWidth(w);
+            ImGui::InputFloat3("##M0", &M_to_Rec709[0][0], "%+8.2e",
+                               ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
+
+            ImGui::NewLine();
+            ImGui::SameLine(label_size);
+            ImGui::SetNextItemWidth(w);
+            ImGui::InputFloat3("##M1", &M_to_Rec709[1][0], "%+8.2e",
+                               ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
+
+            ImGui::NewLine();
+            ImGui::SameLine(label_size);
+            ImGui::SetNextItemWidth(w);
+            ImGui::InputFloat3("##M2", &M_to_Rec709[2][0], "%+8.2e",
+                               ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
+
+            ImGui::PopStyleVar();
+            ImGui::PopFont();
+        }
     }
 
     if (metadata.contains("exr header") && metadata["exr header"].is_object())
     {
         if (ImGui::CollapsingHeader("EXR header", ImGuiTreeNodeFlags_Framed))
         {
+            static ImGuiTextFilter exr_filter;
+            const ImVec2           button_size   = ImGui::IconButtonSize();
+            bool                   filter_active = exr_filter.IsActive(); // save here to avoid flicker
+
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemAllowOverlap();
+            if (ImGui::InputTextWithHint(
+                    "##exif filter",
+                    ICON_MY_FILTER
+                    "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
+                    exr_filter.InputBuf, IM_ARRAYSIZE(exr_filter.InputBuf)))
+                exr_filter.Build();
+            if (filter_active)
+            {
+                ImGui::SameLine(0.f, 0.f);
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
+                if (ImGui::IconButton(ICON_MY_DELETE))
+                    exr_filter.Clear();
+            }
+
             // calculate the label size based on the longest key
             size_t max_w = 0;
             for (auto &field : metadata["exr header"].items()) max_w = std::max(field.key().length(), max_w);
@@ -676,11 +748,16 @@ void Image::draw_info()
             {
                 const std::string &key       = field.key();
                 const auto        &field_obj = field.value();
-                if (!field_obj.is_object() || !field_obj.contains("string") || !field_obj.contains("type"))
+                if (!field_obj.is_object() || !field_obj.contains("string"))
+                    continue;
+
+                auto value  = field_obj["string"].get<std::string>();
+                auto concat = key + " " + value;
+                if (!exr_filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
                     continue;
 
                 property_name(key);
-                property_value(field_obj["string"].get<std::string>(), bold_font);
+                property_value(value, bold_font);
             }
         }
     }
@@ -689,6 +766,27 @@ void Image::draw_info()
     {
         if (ImGui::CollapsingHeader("EXIF metadata", ImGuiTreeNodeFlags_Framed))
         {
+            static ImGuiTextFilter exif_filter;
+            const ImVec2           button_size   = ImGui::IconButtonSize();
+            bool                   filter_active = exif_filter.IsActive(); // save here to avoid flicker
+
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemAllowOverlap();
+            if (ImGui::InputTextWithHint(
+                    "##exif filter",
+                    ICON_MY_FILTER
+                    "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
+                    exif_filter.InputBuf, IM_ARRAYSIZE(exif_filter.InputBuf)))
+                exif_filter.Build();
+            if (filter_active)
+            {
+                ImGui::SameLine(0.f, 0.f);
+
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
+                if (ImGui::IconButton(ICON_MY_DELETE))
+                    exif_filter.Clear();
+            }
+
             // calculate the label size based on the longest key
             size_t max_w = 0;
             for (auto &exif_entry : metadata["exif"].items())
@@ -713,11 +811,16 @@ void Image::draw_info()
                 {
                     const std::string &key       = field.key();
                     const auto        &field_obj = field.value();
-                    if (!field_obj.is_object() || !field_obj.contains("string") || !field_obj.contains("type"))
+                    if (!field_obj.is_object() || !field_obj.contains("string"))
+                        continue;
+
+                    auto value  = field_obj["string"].get<std::string>();
+                    auto concat = key + " " + value;
+                    if (!exif_filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
                         continue;
 
                     property_name(key);
-                    property_value(field_obj["string"].get<std::string>(), bold_font);
+                    property_value(value, bold_font);
                 }
             }
         }
