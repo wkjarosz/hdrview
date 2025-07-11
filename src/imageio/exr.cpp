@@ -6,6 +6,7 @@
 
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
+#include "exr_header.h"
 #include "exr_std_streams.h"
 #include "image.h"
 #include "texture.h"
@@ -19,6 +20,7 @@
 #include <ImfOutputFile.h>
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
+#include <ImfVersion.h>
 #include <fstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
@@ -58,11 +60,18 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto &img              = *images.back();
-        img.header             = part.header();
-        img.metadata["loader"] = "OpenEXR";
+        auto &img                  = *images.back();
+        img.header                 = part.header();
+        img.metadata["loader"]     = "OpenEXR";
+        img.metadata["exr header"] = exr_header_to_json(part.header());
 
-        for (auto a = begin(img.header); a != end(img.header); ++a) spdlog::debug("Attribute: {}", a.name());
+        img.metadata["exr header"]["version"] = {
+            {"type", "version"},
+            {"string", fmt::format("{}, flags 0x{:x}", Imf::getVersion(part.version()), Imf::getFlags(part.version()))},
+            {"version", Imf::getVersion(part.version())},
+            {"flags", fmt::format("0x{:x}", Imf::getFlags(part.version()))}};
+
+        spdlog::debug("exr header: {}", img.metadata["exr header"].dump(2));
 
         if (img.header.hasName())
             img.partname = img.header.name();

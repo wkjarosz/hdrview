@@ -504,8 +504,8 @@ inline float to_linear(const float encoded, const TransferFunction tf, const flo
     case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
     case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 255.f;
-    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
+    case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
+    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
     case TransferFunction_ST240: return EOTF_ST240(encoded);
     case TransferFunction_Log100: return EOTF_log100(encoded);
     case TransferFunction_Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
@@ -525,8 +525,8 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     case TransferFunction_ITU:
         return float3{inverse_OETF_ITU(encoded.x), inverse_OETF_ITU(encoded.y), inverse_OETF_ITU(encoded.z)};
     case TransferFunction_BT2100_PQ:
-        return float3{EOTF_BT2100_PQ(encoded.x), EOTF_BT2100_PQ(encoded.y), EOTF_BT2100_PQ(encoded.z)} / 255.f;
-    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 255.f;
+        return float3{EOTF_BT2100_PQ(encoded.x), EOTF_BT2100_PQ(encoded.y), EOTF_BT2100_PQ(encoded.z)} / 219.f;
+    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
     case TransferFunction_ST240: return float3{EOTF_ST240(encoded.x), EOTF_ST240(encoded.y), EOTF_ST240(encoded.z)};
     case TransferFunction_Log100: return float3{EOTF_log100(encoded.x), EOTF_log100(encoded.y), EOTF_log100(encoded.z)};
     case TransferFunction_Log100_Sqrt10:

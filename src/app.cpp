@@ -161,8 +161,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                                                    ? "floating-point precision"
                                                    : "standard precision");
 
-    spdlog::info("uint16_t::max: {}", std::numeric_limits<uint16_t>::max());
-
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
     m_params.appWindowParams.windowTitle             = "HDRView";

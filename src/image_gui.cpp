@@ -476,7 +476,7 @@ void Image::draw_info()
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
     };
-    auto property_value = [bold_font, &label_size](const string &text, ImFont *font, bool wrapped = false)
+    auto property_value = [&label_size](const string &text, ImFont *font, bool wrapped = false)
     {
         ImGui::SameLine(label_size);
         ImGui::PushFont(font, 14);
@@ -507,18 +507,6 @@ void Image::draw_info()
         property_name("Transfer function");
         ImGui::WrappedTooltip("The transfer function applied at load time to make the values linear.");
         property_value(metadata.value<string>("transfer function", "linear"), bold_font, true);
-
-        vector<pair<string, string>> attrib_names = {
-            {"owner", "Owner"}, {"comments", "Comments"}, {"capDate", "Capture date"}};
-
-        for (auto a : attrib_names)
-        {
-            if (auto attrib = header.findTypedAttribute<Imf::StringAttribute>(a.first))
-            {
-                property_name(a.second);
-                property_value(attrib->value(), bold_font, true);
-            }
-        }
 
         property_name("Resolution");
         property_value(fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y), bold_font);
@@ -664,6 +652,29 @@ void Image::draw_info()
 
         property_name("File had straight alpha");
         property_value(fmt::format("{}", file_has_straight_alpha), bold_font);
+    }
+
+    if (metadata.contains("exr header") && metadata["exr header"].is_object())
+    {
+        if (ImGui::CollapsingHeader("EXR header", ImGuiTreeNodeFlags_Framed))
+        {
+            // calculate the label size based on the longest key
+            size_t max_w = 0;
+            for (auto &field : metadata["exr header"].items()) max_w = std::max(field.key().length(), max_w);
+
+            label_size = HelloImGui::EmSize(0.55f) * (float)max_w;
+
+            for (auto &field : metadata["exr header"].items())
+            {
+                const std::string &key       = field.key();
+                const auto        &field_obj = field.value();
+                if (!field_obj.is_object() || !field_obj.contains("string") || !field_obj.contains("type"))
+                    continue;
+
+                property_name(key);
+                property_value(field_obj["string"].get<std::string>(), bold_font);
+            }
+        }
     }
 
     if (metadata.contains("exif") && metadata["exif"].is_object())
