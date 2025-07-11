@@ -463,6 +463,7 @@ void Image::draw_info()
     auto mono_font = hdrview()->font("mono regular");
 
     float label_size = HelloImGui::EmSize(10.f);
+    float min_w      = HelloImGui::EmSize(8.f);
 
     auto property_name = [sans_font, &label_size](const string &text)
     {
@@ -476,16 +477,18 @@ void Image::draw_info()
         ImGui::PopTextWrapPos();
         ImGui::PopFont();
     };
-    auto property_value = [&label_size](const string &text, ImFont *font, bool wrapped = false)
+    auto property_value = [label_size, min_w](const string &text, ImFont *font, bool wrapped = false)
     {
         ImGui::SameLine(label_size);
         ImGui::PushFont(font, 14);
 
-        // place it on the same line as the property name
         if (wrapped)
-            ImGui::TextWrapped("%s", text.c_str());
-        else
-            ImGui::TextUnformatted(text);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + max(min_w, ImGui::GetContentRegionAvail().x));
+
+        ImGui::TextUnformatted(text);
+
+        if (wrapped)
+            ImGui::PopTextWrapPos();
 
         ImGui::PopFont();
     };
@@ -529,7 +532,8 @@ void Image::draw_info()
 
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
             auto csn = color_gamut_names();
-            ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
+            ImGui::SetNextItemWidth(
+                ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
             auto open_combo =
                 ImGui::BeginCombo("##Color gamut", named_color_space < 0 ? "Unknown" : csn[named_color_space],
                                   ImGuiComboFlags_HeightLargest);
@@ -567,22 +571,24 @@ void Image::draw_info()
 
             property_name("Red");
             ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(-FLT_MIN);
+
+            float w = ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN;
+            ImGui::SetNextItemWidth(w);
             edited |= ImGui::DragFloat2("##Red", &chr.red.x, 0.01f, 0.f, 1.f, "%.4f");
 
             property_name("Green");
             ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemWidth(w);
             edited |= ImGui::DragFloat2("##Green", &chr.green.x, 0.01f, 0.f, 1.f, "%.4f");
 
             property_name("Blue");
             ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemWidth(w);
             edited |= ImGui::DragFloat2("##Blue", &chr.blue.x, 0.01f, 0.f, 1.f, "%.4f");
 
             property_name("White");
             ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SetNextItemWidth(w);
             edited |= ImGui::DragFloat2("##White", &chr.white.x, 0.01f, 0.f, 1.f, "%.4f");
 
             ImGui::PopStyleVar();
@@ -607,10 +613,12 @@ void Image::draw_info()
             property_name("Adaptation");
 
             ImGui::SameLine(label_size);
+
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
 
             const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
-            ImGui::SetNextItemWidth(-FLT_MIN); // use the full width of the column
+            ImGui::SetNextItemWidth(
+                ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
             auto open_combo = ImGui::BeginCombo(
                 "##Adaptation", adaptation_method <= 0 || adaptation_method > 3 ? "None" : wan[adaptation_method],
                 ImGuiComboFlags_HeightLargest);

@@ -181,7 +181,6 @@ private:
 
     void draw_background();
     void draw_channel_stats_window();
-    void draw_info_window();
     void draw_pixel_inspector_window();
     void draw_about_dialog();
     void draw_pixel_info() const;

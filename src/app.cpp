@@ -244,6 +244,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     info_window.dockSpaceName     = "RightSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
+    info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar;
     info_window.GuiFunction       = [this]
     {
         if (auto img = current_image())
@@ -1855,12 +1856,6 @@ ImFont *HDRViewApp::font(const string &name) const
 }
 
 HDRViewApp::~HDRViewApp() {}
-
-void HDRViewApp::draw_info_window()
-{
-    if (auto img = current_image())
-        return img->draw_info();
-}
 
 float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 {
