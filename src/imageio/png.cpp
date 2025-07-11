@@ -139,16 +139,6 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         throw invalid_argument{
             fmt::format("PNG: requested bit depth to be either 8 or 16 now, but received {}", bit_depth)};
 
-    int3 size{int(width), int(height), channels};
-    auto image                     = make_shared<Image>(size.xy(), size.z);
-    image->filename                = filename;
-    image->file_has_straight_alpha = size.z == 4 || size.z == 2;
-    image->metadata["loader"]      = "libpng";
-    if (color_type == PNG_COLOR_TYPE_PALETTE)
-        image->metadata["bit depth"] = fmt::format("{}-bit indexed color", file_bit_depth);
-    else
-        image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * file_bit_depth, file_bit_depth);
-
     //
     // Read color chunks in reverse priority order
     //
@@ -178,6 +168,8 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         tf = TransferFunction_Gamma;
     }
 
+    Imf::Chromaticities chr;
+
     // Read chromaticities if present
     double wx, wy, rx, ry, gx, gy, bx, by;
     if (png_get_cHRM(png_ptr, info_ptr.get(), &wx, &wy, &rx, &ry, &gx, &gy, &bx, &by))
@@ -185,8 +177,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         spdlog::info(
             "PNG: Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})", rx,
             ry, gx, gy, bx, by, wx, wy);
-        Imf::addChromaticities(image->header,
-                               {Imath::V2f(rx, ry), Imath::V2f(gx, gy), Imath::V2f(bx, by), Imath::V2f(wx, wy)});
+        chr = Imf::Chromaticities{Imath::V2f(rx, ry), Imath::V2f(gx, gy), Imath::V2f(bx, by), Imath::V2f(wx, wy)};
     }
 
     if (png_get_sRGB(png_ptr, info_ptr.get(), &srgb_intent))
@@ -217,17 +208,17 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
 
         switch (colour_primaries)
         {
-        case 1: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_01_gamut)); break;
-        case 4: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_04_gamut)); break;
-        case 5: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_05_gamut)); break;
-        case 6: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_06_gamut)); break;
-        case 7: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_07_gamut)); break;
-        case 8: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_08_gamut)); break;
-        case 9: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_09_gamut)); break;
-        case 10: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_10_gamut)); break;
-        case 11: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_11_gamut)); break;
-        case 12: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_12_gamut)); break;
-        case 22: Imf::addChromaticities(image->header, gamut_chromaticities(lin_cicp_22_gamut)); break;
+        case 1: chr = gamut_chromaticities(lin_cicp_01_gamut); break;
+        case 4: chr = gamut_chromaticities(lin_cicp_04_gamut); break;
+        case 5: chr = gamut_chromaticities(lin_cicp_05_gamut); break;
+        case 6: chr = gamut_chromaticities(lin_cicp_06_gamut); break;
+        case 7: chr = gamut_chromaticities(lin_cicp_07_gamut); break;
+        case 8: chr = gamut_chromaticities(lin_cicp_08_gamut); break;
+        case 9: chr = gamut_chromaticities(lin_cicp_09_gamut); break;
+        case 10: chr = gamut_chromaticities(lin_cicp_10_gamut); break;
+        case 11: chr = gamut_chromaticities(lin_cicp_11_gamut); break;
+        case 12: chr = gamut_chromaticities(lin_cicp_12_gamut); break;
+        case 22: chr = gamut_chromaticities(lin_cicp_22_gamut); break;
         default: spdlog::warn("PNG: Unknown cICP color primaries: {}", int(colour_primaries)); break;
         }
 
@@ -282,65 +273,18 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     // Done reading color chunks
     //
 
-    Timer timer;
-    // Interlaced: read entire image at once
-    vector<png_bytep> row_pointers(height);
+    json metadata = json::object();
 
-    vector<float>    float_pixels(width * height * channels);
-    const auto       num_pixels        = size_t(size.x * size.y);
-    const auto       bytes_per_channel = size_t(bit_depth / 8);
-    const auto       bytes_per_pixel   = bytes_per_channel * channels;
-    vector<png_byte> imagedata(num_pixels * bytes_per_pixel);
-    for (size_t y = 0; y < height; ++y) row_pointers[y] = &imagedata[y * width * bytes_per_pixel];
-
-    png_read_image(png_ptr, row_pointers.data());
-
-    if (video_full_range_flag)
-        for (size_t i = 0; i < float_pixels.size(); ++i)
-            float_pixels[i] = bit_depth == 16 ? dequantize_full(reinterpret_cast<uint16_t *>(imagedata.data())[i])
-                                              : dequantize_full(reinterpret_cast<uint8_t *>(imagedata.data())[i]);
-    else
-        for (size_t i = 0; i < float_pixels.size(); ++i)
-            float_pixels[i] = bit_depth == 16 ? dequantize_narrow(reinterpret_cast<uint16_t *>(imagedata.data())[i])
-                                              : dequantize_narrow(reinterpret_cast<uint8_t *>(imagedata.data())[i]);
-
-    // linearize colors
-    if (has_icc_profile && !has_cICP)
-    {
-        float2 red, green, blue, white;
-        if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &red, &green, &blue, &white))
-        {
-            spdlog::info("PNG: Linearizing colors using ICC profile.");
-            Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
-                                                   Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
-        }
-    }
-    else if (tf != TransferFunction_Linear)
-    {
-        to_linear(float_pixels.data(), size, tf, gamma);
-    }
-    image->metadata["transfer function"] = tf_desc;
-
-    // copy the interleaved float pixels into the channels
-    for (int c = 0; c < size.z; ++c)
-        image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
-                                                 [](float v) { return v; });
-
-    spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
-
-    // Read raw EXIF data from the PNG file, if present
 #if defined(PNG_eXIf_SUPPORTED)
     png_bytep   exif_ptr = nullptr;
     png_uint_32 exif_len = 0;
     if (png_get_eXIf_1(png_ptr, info_ptr.get(), &exif_len, &exif_ptr) && exif_ptr && exif_len > 0)
     {
         spdlog::info("PNG: Found EXIF chunk ({} bytes)", exif_len);
-
         try
         {
-            auto j                  = exif_to_json(exif_ptr, exif_len);
-            image->metadata["exif"] = j;
-            spdlog::info("PNG: EXIF metadata successfully parsed: {}", j.dump(2));
+            metadata["exif"] = exif_to_json(exif_ptr, exif_len);
+            spdlog::info("PNG: EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
         }
         catch (const std::exception &e)
         {
@@ -349,7 +293,97 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     }
 #endif
 
-    return {image};
+    metadata["loader"] = "libpng";
+    if (color_type == PNG_COLOR_TYPE_PALETTE)
+        metadata["bit depth"] = fmt::format("{}-bit indexed color", file_bit_depth);
+    else
+        metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", channels * file_bit_depth, file_bit_depth);
+
+    png_uint_32 num_frames = 0, num_plays = 0;
+    bool        animation = false;
+#ifdef PNG_APNG_SUPPORTED
+    animation = png_get_acTL(png_ptr, info_ptr.get(), &num_frames, &num_plays) && num_frames > 1;
+#endif
+
+    if (animation)
+        spdlog::info("PNG: Detected APNG with {} frames, {} plays", num_frames, num_plays);
+    else
+        num_frames = 1, num_plays = 0;
+
+    std::vector<ImagePtr> images;
+    for (png_uint_32 frame_idx = 0; frame_idx < num_frames; ++frame_idx)
+    {
+        if (frame_idx > 0)
+            // Advance to next frame
+            png_read_frame_head(png_ptr, info_ptr.get());
+
+        png_uint_32 frame_width = width, frame_height = height;
+        png_uint_32 frame_x_off = 0, frame_y_off = 0;
+        if (animation)
+        {
+            png_uint_16 delay_num = 0, delay_den = 0;
+            png_byte    dispose_op = 0, blend_op = 0;
+            // Get frame control info
+            png_get_next_frame_fcTL(png_ptr, info_ptr.get(), &frame_width, &frame_height, &frame_x_off, &frame_y_off,
+                                    &delay_num, &delay_den, &dispose_op, &blend_op);
+        }
+
+        int3 size{int(frame_width), int(frame_height), channels};
+        auto image                     = make_shared<Image>(size.xy(), size.z);
+        image->filename                = filename;
+        image->file_has_straight_alpha = size.z == 4 || size.z == 2;
+        Imf::addChromaticities(image->header, chr);
+        image->metadata = metadata;
+
+        if (animation)
+        {
+            image->partname       = fmt::format("frame {:04}", frame_idx);
+            image->data_window    = Box2i{int2(frame_x_off, frame_y_off), int2(frame_x_off, frame_y_off) + size.xy()};
+            image->display_window = Box2i{int2{0}, int2(width, height)};
+        }
+
+        const auto             num_pixels        = size_t(size.x * size.y);
+        const auto             bytes_per_channel = size_t(bit_depth / 8);
+        const auto             bytes_per_pixel   = bytes_per_channel * image->channels.size();
+        std::vector<png_byte>  imagedata(num_pixels * bytes_per_pixel);
+        std::vector<png_bytep> row_pointers(size.y);
+        for (int y = 0; y < size.y; ++y) row_pointers[y] = &imagedata[y * size.x * bytes_per_pixel];
+        png_read_image(png_ptr, row_pointers.data());
+
+        // process and copy over the pixel data
+        std::vector<float> float_pixels(size.x * size.y * size.z);
+        if (video_full_range_flag)
+            for (size_t i = 0; i < float_pixels.size(); ++i)
+                float_pixels[i] = bit_depth == 16
+                                      ? dequantize_full(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
+                                      : dequantize_full(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
+        else
+            for (size_t i = 0; i < float_pixels.size(); ++i)
+                float_pixels[i] = bit_depth == 16
+                                      ? dequantize_narrow(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
+                                      : dequantize_narrow(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
+        // ICC profile linearization
+        if (has_icc_profile && !has_cICP)
+        {
+            float2 red, green, blue, white;
+            if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &red, &green, &blue, &white))
+            {
+                spdlog::info("PNG: Linearizing colors using ICC profile.");
+                Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
+                                                       Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+            }
+        }
+        else if (tf != TransferFunction_Linear)
+        {
+            to_linear(float_pixels.data(), size, tf, gamma);
+        }
+        image->metadata["transfer function"] = tf_desc;
+        for (int c = 0; c < size.z; ++c)
+            image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
+                                                     [](float v) { return v; });
+        images.push_back(image);
+    }
+    return images;
 }
 
 void save_png_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)

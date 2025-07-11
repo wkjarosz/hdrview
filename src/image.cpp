@@ -514,6 +514,7 @@ Image::Image(int2 size, int num_channels)
             channels.emplace_back(name, size);
         }
     }
+    display_window = data_window = Box2i{int2{0}, channels.front().size()};
 }
 
 map<string, int> Image::channels_in_layer(const string &layer) const
