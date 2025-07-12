@@ -85,6 +85,14 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
         tf_desc = dci_p3_tf;
         tf      = TransferFunction_DCI_P3;
         break;
+    case heif_transfer_characteristic_logarithmic_100:
+        tf_desc = log100_tf;
+        tf      = TransferFunction_Log100;
+        break;
+    case heif_transfer_characteristic_logarithmic_100_sqrt10:
+        tf_desc = log100_sqrt10_tf;
+        tf      = TransferFunction_Log100_Sqrt10;
+        break;
     case heif_transfer_characteristic_ITU_R_BT_470_6_System_M:
         tf      = TransferFunction_Gamma;
         gamma   = 2.2f;

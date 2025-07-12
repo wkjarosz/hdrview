@@ -152,6 +152,8 @@ extern const char *itu_tf;
 extern const char *pq_tf;
 extern const char *hlg_tf;
 extern const char *st240_tf;
+extern const char *log100_tf;
+extern const char *log100_sqrt10_tf;
 extern const char *iec61966_2_4_tf;
 extern const char *dci_p3_tf;
 

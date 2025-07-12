@@ -296,8 +296,7 @@ public:
     int                           adaptation_method       = 2;
     int                           named_color_space       = -1;
     bool                          file_has_straight_alpha = false;
-
-    json metadata = json::object();
+    json                          metadata                = json::object();
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().

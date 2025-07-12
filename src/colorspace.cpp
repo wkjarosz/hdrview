@@ -86,15 +86,17 @@ static const char* _color_gammut_names[] = {
 };
 // clang-format on
 
-const char *linear_tf       = "Linear";
-const char *gamma_tf        = "Gamma";
-const char *srgb_tf         = "sRGB IEC61966-2.1";
-const char *itu_tf          = "BT.709/2020";
-const char *pq_tf           = "BT.2100 PQ";
-const char *hlg_tf          = "BT.2100 HLG";
-const char *st240_tf        = "SMPTE ST 240";
-const char *iec61966_2_4_tf = "IEC 61966-2-4";
-const char *dci_p3_tf       = "DCI-P3";
+const char *linear_tf        = "Linear";
+const char *gamma_tf         = "Gamma";
+const char *srgb_tf          = "sRGB IEC61966-2.1";
+const char *itu_tf           = "BT.709/2020";
+const char *pq_tf            = "BT.2100 PQ";
+const char *hlg_tf           = "BT.2100 HLG";
+const char *st240_tf         = "SMPTE ST 240";
+const char *log100_tf        = "Log100";
+const char *log100_sqrt10_tf = "Log100 Sqrt10";
+const char *iec61966_2_4_tf  = "IEC 61966-2-4";
+const char *dci_p3_tf        = "DCI-P3";
 
 // clang-format off
 static const char* _tf_names[] = {

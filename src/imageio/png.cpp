@@ -240,6 +240,8 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             break;
         case 7: tf = TransferFunction_ST240; break;
         case 8: tf = TransferFunction_Linear; break;
+        case 9: tf = TransferFunction_Log100; break;
+        case 10: tf = TransferFunction_Log100_Sqrt10; break;
         case 11: tf = TransferFunction_IEC61966_2_4; break;
         case 13: tf = TransferFunction_sRGB; break;
         case 16: tf = TransferFunction_BT2100_PQ; break;
