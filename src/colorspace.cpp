@@ -5,24 +5,21 @@
 //
 
 #include "colorspace.h"
+#include "Imath_to_linalg.h"
 #include "common.h"
 #include "scheduler.h"
 #include <cmath>
 #include <float.h>
 
-#include <ImfChromaticities.h>
-#include <ImfRgbaYca.h>
-#include <ImfStandardAttributes.h>
-
 using namespace std;
 
 // Reference whites used in the common color spaces below
-static const Imath::V2f _wp_ACES{0.32168f, 0.33767f};
-static const Imath::V2f _wp_C{0.31006f, 0.31616f};
-static const Imath::V2f _wp_DCI{0.314f, 0.351f};
-static const Imath::V2f _wp_D50{0.34567f, 0.35850f};
-static const Imath::V2f _wp_D65{0.31271f, 0.32902f};
-static const Imath::V2f _wp_E{0.33333f, 0.33333f};
+static const float2 _wp_ACES{0.32168f, 0.33767f};
+static const float2 _wp_C{0.31006f, 0.31616f};
+static const float2 _wp_DCI{0.314f, 0.351f};
+static const float2 _wp_D50{0.34567f, 0.35850f};
+static const float2 _wp_D65{0.31271f, 0.32902f};
+static const float2 _wp_E{0.33333f, 0.33333f};
 
 static const char _lin_ap0[]         = "ACES AP0";
 static const char _lin_ap1_acescg[]  = "ACEScg AP1";
@@ -117,7 +114,7 @@ static const char* _tf_names[] = {
 //  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
 //  ITU-T H.273: https://www.itu.int/rec/T-REC-H.273-202407-I/en
 // Chromaticity data for common color spaces
-static const std::map<const char *, Imf::Chromaticities> _chromaticities_map = {
+static const std::map<const char *, Chromaticities> _chromaticities_map = {
     {_lin_ap0, {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, _wp_ACES}},
     {_lin_ap1_acescg, {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, _wp_ACES}},
     {_lin_adobergb, {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, _wp_D65}},
@@ -164,23 +161,100 @@ const char  *color_gamut_description(const char *name) { return _gamut_descripti
 
 const char **transfer_function_names() { return _tf_names; }
 
-const std::map<const char *, Imf::Chromaticities> &color_gamuts() { return _chromaticities_map; }
+const std::map<const char *, Chromaticities> &color_gamuts() { return _chromaticities_map; }
 
-const Imf::Chromaticities &gamut_chromaticities(const char *name) { return _chromaticities_map.at(name); }
+const Chromaticities &gamut_chromaticities(const char *name) { return _chromaticities_map.at(name); }
 
-bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
-                             int CAT_method)
+float4x4 RGB_to_XYZ(const Chromaticities &chroma, float Y)
+{
+    // Adapted from ImfChromaticities.cpp
+    //
+
+    //
+    // For an explanation of how the color conversion matrix is derived,
+    // see Roy Hall, "Illumination and Color in Computer Generated Imagery",
+    // Springer-Verlag, 1989, chapter 3, "Perceptual Response"; and
+    // Charles A. Poynton, "A Technical Introduction to Digital Video",
+    // John Wiley & Sons, 1996, chapter 7, "Color science for video".
+    //
+
+    //
+    // X and Z values of RGB value (1, 1, 1), or "white"
+    //
+
+    // prevent a division that rounds to zero
+    if (std::abs(chroma.white.y) <= 1.f && std::abs(chroma.white.x * Y) >= std::abs(chroma.white.y) * FLT_MAX)
+    {
+        throw std::invalid_argument("Bad chromaticities: white.y cannot be zero");
+    }
+
+    float X = chroma.white.x * Y / chroma.white.y;
+    float Z = (1 - chroma.white.x - chroma.white.y) * Y / chroma.white.y;
+
+    //
+    // Scale factors for matrix rows, compute numerators and common denominator
+    //
+
+    float d = chroma.red.x * (chroma.blue.y - chroma.green.y) + chroma.blue.x * (chroma.green.y - chroma.red.y) +
+              chroma.green.x * (chroma.red.y - chroma.blue.y);
+
+    float SrN =
+        (X * (chroma.blue.y - chroma.green.y) - chroma.green.x * (Y * (chroma.blue.y - 1) + chroma.blue.y * (X + Z)) +
+         chroma.blue.x * (Y * (chroma.green.y - 1) + chroma.green.y * (X + Z)));
+
+    float SgN =
+        (X * (chroma.red.y - chroma.blue.y) + chroma.red.x * (Y * (chroma.blue.y - 1) + chroma.blue.y * (X + Z)) -
+         chroma.blue.x * (Y * (chroma.red.y - 1) + chroma.red.y * (X + Z)));
+
+    float SbN =
+        (X * (chroma.green.y - chroma.red.y) - chroma.red.x * (Y * (chroma.green.y - 1) + chroma.green.y * (X + Z)) +
+         chroma.green.x * (Y * (chroma.red.y - 1) + chroma.red.y * (X + Z)));
+
+    if (std::abs(d) < 1.f && (std::abs(SrN) >= std::abs(d) * FLT_MAX || std::abs(SgN) >= std::abs(d) * FLT_MAX ||
+                              std::abs(SbN) >= std::abs(d) * FLT_MAX))
+    {
+        // cannot generate matrix if all RGB primaries have the same y value
+        // or if they all have the an x value of zero
+        // in both cases, the primaries are colinear, which makes them unusable
+        throw std::invalid_argument("Bad chromaticities: RGBtoXYZ matrix is degenerate");
+    }
+
+    float Sr = SrN / d;
+    float Sg = SgN / d;
+    float Sb = SbN / d;
+
+    //
+    // Assemble the matrix
+    //
+
+    float4x4 M{la::identity};
+
+    M[0][0] = Sr * chroma.red.x;
+    M[0][1] = Sr * chroma.red.y;
+    M[0][2] = Sr * (1 - chroma.red.x - chroma.red.y);
+
+    M[1][0] = Sg * chroma.green.x;
+    M[1][1] = Sg * chroma.green.y;
+    M[1][2] = Sg * (1 - chroma.green.x - chroma.green.y);
+
+    M[2][0] = Sb * chroma.blue.x;
+    M[2][1] = Sb * chroma.blue.y;
+    M[2][2] = Sb * (1 - chroma.blue.x - chroma.blue.y);
+
+    M[3][3] = 1.f;
+
+    return M;
+}
+
+bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst, int CAT_method)
 {
     try
     {
-        using namespace Imath;
-        using namespace Imf;
-
         if (src == dst)
         {
             // The file already contains data in the target colorspace.
             // color conversion is not necessary.
-            M = M33f{};
+            M = float3x3{la::identity};
             return false;
         }
 
@@ -191,68 +265,64 @@ bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, con
         // white point.
         //
 
-        M33f CAT{}; // chromatic adaptation matrix
-        if (CAT_method > 0 && CAT_method <= 3)
+        float3x3 CAT{la::identity}; // chromatic adaptation matrix
+        if (CAT_method > 0 && CAT_method <= 3 && src.white != dst.white)
         {
-            // the cone primary respons matrices (and their inverses) for 3 different methods
-            static const M33f CPM[3] = {{1.f, 0.f, 0.f, // XYZ scaling
-                                         0.f, 1.f, 0.f, //
-                                         0.f, 0.f, 1.f},
-                                        {0.895100f, -0.750200f, 0.038900f, // Bradford
-                                         0.266400f, 1.713500f, -0.068500f, //
-                                         -0.161400f, 0.036700f, 1.029600f},
-                                        {0.4002400f, -0.2263000f, 0.0000000f, // Von Kries
-                                         0.7076000f, 1.1653200f, 0.0000000f,  //
-                                         -0.0808100f, 0.0457000f, 0.9182200f}};
-            static const M33f invCPM[3]{{1.f, 0.f, 0.f, //
-                                         0.f, 1.f, 0.f, //
-                                         0.f, 0.f, 1.f},
-                                        {0.986993f, 0.432305f, -0.008529f, //
-                                         -0.147054f, 0.518360f, 0.040043f, //
-                                         0.159963f, 0.049291f, 0.968487f},
-                                        {1.8599364f, 0.3611914f, 0.0000000f,  //
-                                         -1.1293816f, 0.6388125f, 0.0000000f, //
-                                         0.2198974f, -0.0000064f, 1.0890636f}};
+            // the cone primary response matrices (and their inverses) for 3 different methods
+            static const float3x3 CPM[3] = {{{1.f, 0.f, 0.f}, // XYZ scaling
+                                             {0.f, 1.f, 0.f},
+                                             {0.f, 0.f, 1.f}},
+                                            {{0.895100f, -0.750200f, 0.038900f}, // Bradford
+                                             {0.266400f, 1.713500f, -0.068500f},
+                                             {-0.161400f, 0.036700f, 1.029600f}},
+                                            {{0.4002400f, -0.2263000f, 0.0000000f}, // Von Kries
+                                             {0.7076000f, 1.1653200f, 0.0000000f},
+                                             {-0.0808100f, 0.0457000f, 0.9182200f}}};
+            static const float3x3 invCPM[3]{{{1.f, 0.f, 0.f}, //
+                                             {0.f, 1.f, 0.f}, //
+                                             {0.f, 0.f, 1.f}},
+                                            {{0.986993f, 0.432305f, -0.008529f}, //
+                                             {-0.147054f, 0.518360f, 0.040043f}, //
+                                             {0.159963f, 0.049291f, 0.968487f}},
+                                            {{1.8599364f, 0.3611914f, 0.0000000f},  //
+                                             {-1.1293816f, 0.6388125f, 0.0000000f}, //
+                                             {0.2198974f, -0.0000064f, 1.0890636f}}};
             //
             // Convert the white points of the two RGB spaces to XYZ
             //
 
-            float fx = src.white.x;
-            float fy = src.white.y;
-            V3f   src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
+            float  fx = src.white.x;
+            float  fy = src.white.y;
+            float3 src_neutral_XYZ(fx / fy, 1, (1 - fx - fy) / fy);
 
-            float ax = dst.white.x;
-            float ay = dst.white.y;
-            V3f   dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
+            float  ax = dst.white.x;
+            float  ay = dst.white.y;
+            float3 dst_neutral_XYZ(ax / ay, 1, (1 - ax - ay) / ay);
 
             //
             // Compute the CAT
             //
 
-            V3f ratio((dst_neutral_XYZ * CPM[CAT_method - 1]) / (src_neutral_XYZ * CPM[CAT_method - 1]));
+            float3 ratio(mul(CPM[CAT_method - 1], dst_neutral_XYZ) / mul(CPM[CAT_method - 1], src_neutral_XYZ));
 
-            M33f ratio_mat(ratio[0], 0, 0, 0, ratio[1], 0, 0, 0, ratio[2]);
+            float3x3 ratio_mat({ratio[0], 0.f, 0.f}, {0.f, ratio[1], 0.f}, {0.f, 0.f, ratio[2]});
 
-            CAT = CPM[CAT_method - 1] * ratio_mat * invCPM[CAT_method - 1];
+            CAT = mul(invCPM[CAT_method - 1], ratio_mat, CPM[CAT_method - 1]);
         }
 
         //
         // Build a combined file-RGB-to-target-RGB conversion matrix
         //
 
-        auto m1 = RGBtoXYZ(src, 1);
+        auto m1 = RGB_to_XYZ(src, 1);
         // extract the upper left 3x3 of m1 as an M33f
-        M33f src_to_XYZ(m1[0][0], m1[0][1], m1[0][2], //
-                        m1[1][0], m1[1][1], m1[1][2], //
-                        m1[2][0], m1[2][1], m1[2][2]);
+        float3x3 src_to_XYZ(m1.x.xyz(), m1.y.xyz(), m1.z.xyz());
 
-        m1 = XYZtoRGB(dst, 1);
+        m1 = XYZ_to_RGB(dst, 1);
         // extract the upper left 3x3 of m1 as an M33f
-        M33f XYZ_to_dst(m1[0][0], m1[0][1], m1[0][2], //
-                        m1[1][0], m1[1][1], m1[1][2], //
-                        m1[2][0], m1[2][1], m1[2][2]);
+        float3x3 XYZ_to_dst(m1.x.xyz(), m1.y.xyz(), m1.z.xyz());
 
-        M = src_to_XYZ * CAT * XYZ_to_dst;
+        M = mul(XYZ_to_dst, CAT, src_to_XYZ);
 
         return true;
     }

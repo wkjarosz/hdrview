@@ -17,6 +17,7 @@
 #include <cfloat>
 #include <half.h>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -281,24 +282,22 @@ public:
     static Texture              *dither_texture();
     static const float3          Rec709_luminance_weights;
 
-    // We retain the Imf::Header for all attributes.
-    // We also use this as a common representation of meta data when loading non-EXR images.
-    Imf::Header header;
+    int id;
+
+    std::string                   filename;
+    std::string                   partname;
+    Box2i                         data_window;
+    Box2i                         display_window;
+    std::vector<Channel>          channels;
+    std::optional<Chromaticities> chromaticities;  //!< The chromaticities of the file
+    std::optional<float2>         adopted_neutral; //!< The adopted neutral of the file, if any
+    float3x3                      M_to_Rec709             = la::identity;
+    float3                        luminance_weights       = Rec709_luminance_weights;
+    int                           adaptation_method       = 2;
+    int                           named_color_space       = -1;
+    bool                          file_has_straight_alpha = false;
 
     json metadata = json::object();
-
-    // But create our own versions of some which we need access to often
-    std::string          filename;
-    std::string          partname;
-    Box2i                data_window;
-    Box2i                display_window;
-    std::vector<Channel> channels;
-    float3x3             M_to_Rec709             = la::identity;
-    float3               luminance_weights       = Rec709_luminance_weights;
-    int                  adaptation_method       = 2;
-    int                  named_color_space       = -1;
-    bool                 file_has_straight_alpha = false;
-    int                  id;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().

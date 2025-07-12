@@ -557,7 +557,7 @@ void Image::draw_info()
                     {
                         named_color_space = n;
                         spdlog::debug("Switching to color space {}.", n);
-                        Imf::addChromaticities(header, gamut_chromaticities(csn[n]));
+                        chromaticities = gamut_chromaticities(csn[n]);
                         compute_color_transform();
                     }
 
@@ -572,10 +572,8 @@ void Image::draw_info()
         }
 
         {
-            Imf::Chromaticities chr{};
-            if (auto attrib = header.findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
-                chr = attrib->value();
-            bool edited = false;
+            Chromaticities chr{chromaticities.value_or(Chromaticities{})};
+            bool           edited = false;
 
             ImGui::PushFont(mono_bold, 0.f);
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
@@ -609,16 +607,16 @@ void Image::draw_info()
             {
                 spdlog::debug("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
                               chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
-                Imf::addChromaticities(header, chr);
+                chromaticities    = chr;
                 named_color_space = -1; // reset the color space to unknown
                 compute_color_transform();
             }
         }
 
-        if (auto attrib = header.findTypedAttribute<Imf::V2fAttribute>("adoptedNeutral"))
+        if (adopted_neutral)
         {
             property_name("Adopted neutral");
-            property_value(fmt::format("({}, {})", attrib->value().x, attrib->value().y), mono_font);
+            property_value(fmt::format("({}, {})", adopted_neutral->x, adopted_neutral->y), mono_font);
         }
 
         {

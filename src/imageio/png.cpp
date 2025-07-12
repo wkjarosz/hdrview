@@ -11,6 +11,7 @@
 #include "image.h"
 #include "texture.h"
 #include "timer.h"
+#include <optional>
 
 #ifndef HDRVIEW_ENABLE_LIBPNG
 
@@ -168,7 +169,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         tf = TransferFunction_Gamma;
     }
 
-    Imf::Chromaticities chr;
+    std::optional<Chromaticities> chr;
 
     // Read chromaticities if present
     double wx, wy, rx, ry, gx, gy, bx, by;
@@ -177,7 +178,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         spdlog::info(
             "PNG: Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})", rx,
             ry, gx, gy, bx, by, wx, wy);
-        chr = Imf::Chromaticities{Imath::V2f(rx, ry), Imath::V2f(gx, gy), Imath::V2f(bx, by), Imath::V2f(wx, wy)};
+        *chr = Chromaticities{float2(rx, ry), float2(gx, gy), float2(bx, by), float2(wx, wy)};
     }
 
     if (png_get_sRGB(png_ptr, info_ptr.get(), &srgb_intent))
@@ -189,37 +190,37 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     bool     has_cICP              = false;
     png_byte video_full_range_flag = 1;
 #ifdef PNG_cICP_SUPPORTED
-    png_byte colour_primaries;
+    png_byte color_primaries;
     png_byte transfer_function;
     png_byte matrix_coefficients;
 
-    if (png_get_cICP(png_ptr, info_ptr.get(), &colour_primaries, &transfer_function, &matrix_coefficients,
+    if (png_get_cICP(png_ptr, info_ptr.get(), &color_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
     {
         has_cICP = true;
-        spdlog::info("PNG: Found cICP chunk:\n\tColour Primaries: {}\n\tTransfer Function: {}\n\t"
+        spdlog::info("PNG: Found cICP chunk:\n\tcolor Primaries: {}\n\tTransfer Function: {}\n\t"
                      "Matrix Coefficients: {}\n\tVideo Full Range: {}",
-                     colour_primaries, transfer_function, matrix_coefficients, video_full_range_flag);
+                     color_primaries, transfer_function, matrix_coefficients, video_full_range_flag);
 
         if (matrix_coefficients != 0)
             spdlog::warn(
                 "Unsupported matrix coefficients in cICP chunk: {}. PNG images only support RGB (=0). Ignoring.",
                 matrix_coefficients);
 
-        switch (colour_primaries)
+        switch (color_primaries)
         {
-        case 1: chr = gamut_chromaticities(lin_cicp_01_gamut); break;
-        case 4: chr = gamut_chromaticities(lin_cicp_04_gamut); break;
-        case 5: chr = gamut_chromaticities(lin_cicp_05_gamut); break;
-        case 6: chr = gamut_chromaticities(lin_cicp_06_gamut); break;
-        case 7: chr = gamut_chromaticities(lin_cicp_07_gamut); break;
-        case 8: chr = gamut_chromaticities(lin_cicp_08_gamut); break;
-        case 9: chr = gamut_chromaticities(lin_cicp_09_gamut); break;
-        case 10: chr = gamut_chromaticities(lin_cicp_10_gamut); break;
-        case 11: chr = gamut_chromaticities(lin_cicp_11_gamut); break;
-        case 12: chr = gamut_chromaticities(lin_cicp_12_gamut); break;
-        case 22: chr = gamut_chromaticities(lin_cicp_22_gamut); break;
-        default: spdlog::warn("PNG: Unknown cICP color primaries: {}", int(colour_primaries)); break;
+        case 1: *chr = gamut_chromaticities(lin_cicp_01_gamut); break;
+        case 4: *chr = gamut_chromaticities(lin_cicp_04_gamut); break;
+        case 5: *chr = gamut_chromaticities(lin_cicp_05_gamut); break;
+        case 6: *chr = gamut_chromaticities(lin_cicp_06_gamut); break;
+        case 7: *chr = gamut_chromaticities(lin_cicp_07_gamut); break;
+        case 8: *chr = gamut_chromaticities(lin_cicp_08_gamut); break;
+        case 9: *chr = gamut_chromaticities(lin_cicp_09_gamut); break;
+        case 10: *chr = gamut_chromaticities(lin_cicp_10_gamut); break;
+        case 11: *chr = gamut_chromaticities(lin_cicp_11_gamut); break;
+        case 12: *chr = gamut_chromaticities(lin_cicp_12_gamut); break;
+        case 22: *chr = gamut_chromaticities(lin_cicp_22_gamut); break;
+        default: spdlog::warn("PNG: Unknown cICP color primaries: {}", int(color_primaries)); break;
         }
 
         switch (transfer_function)
@@ -332,8 +333,8 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         auto image                     = make_shared<Image>(size.xy(), size.z);
         image->filename                = filename;
         image->file_has_straight_alpha = size.z == 4 || size.z == 2;
-        Imf::addChromaticities(image->header, chr);
-        image->metadata = metadata;
+        image->chromaticities          = chr;
+        image->metadata                = metadata;
 
         if (animation)
         {
@@ -365,12 +366,11 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
         // ICC profile linearization
         if (has_icc_profile && !has_cICP)
         {
-            float2 red, green, blue, white;
-            if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &red, &green, &blue, &white))
+            Chromaticities chr;
+            if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
             {
                 spdlog::info("PNG: Linearizing colors using ICC profile.");
-                Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
-                                                       Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+                image->chromaticities = chr;
             }
         }
         else if (tf != TransferFunction_Linear)

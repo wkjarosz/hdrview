@@ -108,19 +108,17 @@ bool is_jxl_image(istream &is) noexcept
 }
 
 static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc, string *tf_description = nullptr,
-                             float2 *red = nullptr, float2 *green = nullptr, float2 *blue = nullptr,
-                             float2 *white = nullptr)
+                             Chromaticities *c = nullptr)
 {
     Timer timer;
     spdlog::info("Linearizing pixel values using encoded profile.");
-    if (red)
-        *red = float2(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
-    if (green)
-        *green = float2(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
-    if (blue)
-        *blue = float2(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
-    if (white)
-        *white = float2(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
+    if (c)
+    {
+        c->red   = float2(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
+        c->green = float2(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
+        c->blue  = float2(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
+        c->white = float2(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
+    }
 
     float            gamma = (float)file_enc.gamma;
     TransferFunction tf;
@@ -414,14 +412,12 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
                                                        file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG);
 
-            string tf_description;
-            float2 red, green, blue, white;
-            if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &red, &green,
-                                                     &blue, &white)) ||
-                linearize_colors(pixels.data(), size, file_enc, &tf_description, &red, &green, &blue, &white))
+            string         tf_description;
+            Chromaticities chr;
+            if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
+                linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
             {
-                Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
-                                                       Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+                image->chromaticities                = chr;
                 image->metadata["transfer function"] = tf_description;
             }
             else

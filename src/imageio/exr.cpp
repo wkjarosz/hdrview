@@ -60,8 +60,12 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         }
 
         images.emplace_back(make_shared<Image>());
-        auto &img                  = *images.back();
-        img.header                 = part.header();
+        auto &img = *images.back();
+        if (auto a = part.header().findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
+            img.chromaticities = {{a->value().red.x, a->value().red.y},
+                                  {a->value().green.x, a->value().green.y},
+                                  {a->value().blue.x, a->value().blue.y},
+                                  {a->value().white.x, a->value().white.y}};
         img.metadata["loader"]     = "OpenEXR";
         img.metadata["exr header"] = exr_header_to_json(part.header());
 
@@ -73,8 +77,8 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
 
         spdlog::debug("exr header: {}", img.metadata["exr header"].dump(2));
 
-        if (img.header.hasName())
-            img.partname = img.header.name();
+        if (part.header().hasName())
+            img.partname = part.header().name();
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
         img.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
@@ -91,7 +95,7 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
                                                img.display_window.min.x, img.display_window.min.y,
                                                img.display_window.max.x, img.display_window.max.y)};
 
-        const auto &channels = img.header.channels();
+        const auto &channels = part.header().channels();
 
         Imf::FrameBuffer framebuffer;
         for (auto c = channels.begin(); c != channels.end(); ++c)
@@ -111,7 +115,7 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
         // see https://github.com/AcademySoftwareFoundation/openexr/issues/1949
         // Until that is fixed in the next release, we are sticking with v3.2.4
         int i = 0;
-        for (auto c = img.header.channels().begin(); c != img.header.channels().end(); ++c, ++i)
+        for (auto c = part.header().channels().begin(); c != part.header().channels().end(); ++c, ++i)
         {
             int xs = c.channel().xSampling;
             int ys = c.channel().ySampling;
@@ -141,8 +145,14 @@ void save_exr_image(const Image &img, ostream &os_, const string &filename)
         auto dataWindow    = Imath::Box2i(Imath::V2i(img.data_window.min.x, img.data_window.min.y),
                                           Imath::V2i(img.data_window.max.x - 1, img.data_window.max.y - 1));
 
-        // start with the header we have from reading in the file
-        Imf::Header header = img.header;
+        Imf::Header header;
+        if (img.chromaticities)
+            header.insert(
+                "chromaticities",
+                Imf::ChromaticitiesAttribute{{Imath::V2f(img.chromaticities->red.x, img.chromaticities->red.y),
+                                              Imath::V2f(img.chromaticities->green.x, img.chromaticities->green.y),
+                                              Imath::V2f(img.chromaticities->blue.x, img.chromaticities->blue.y),
+                                              Imath::V2f(img.chromaticities->white.x, img.chromaticities->white.y)}});
         header.insert("channels", Imf::ChannelListAttribute());
         header.displayWindow() = displayWindow;
         header.dataWindow()    = dataWindow;

@@ -183,8 +183,8 @@ string profile_description(const Profile &profile)
     return "";
 }
 
-bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description, float2 *red,
-                      float2 *green, float2 *blue, float2 *white)
+bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
+                      Chromaticities *c)
 {
     if (icc_profile.empty())
         return false;
@@ -202,14 +202,13 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
         primaries.Blue  = {0.1500, 0.0600, 1.0};
     }
 
-    if (red)
-        *red = float2((float)primaries.Red.x, (float)primaries.Red.y);
-    if (green)
-        *green = float2((float)primaries.Green.x, (float)primaries.Green.y);
-    if (blue)
-        *blue = float2((float)primaries.Blue.x, (float)primaries.Blue.y);
-    if (white)
-        *white = float2((float)whitepoint.x, (float)whitepoint.y);
+    if (c)
+    {
+        c->red   = float2((float)primaries.Red.x, (float)primaries.Red.y);
+        c->green = float2((float)primaries.Green.x, (float)primaries.Green.y);
+        c->blue  = float2((float)primaries.Blue.x, (float)primaries.Blue.y);
+        c->white = float2((float)whitepoint.x, (float)whitepoint.y);
+    }
 
     // Create a linear version of the same profile (same primaries, but linear transfer function)
     auto            profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
@@ -248,8 +247,8 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
 namespace icc
 {
 
-bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description, float2 *red,
-                      float2 *green, float2 *blue, float2 *white)
+bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
+                      Chromaticities *chr)
 {
     return false;
 }

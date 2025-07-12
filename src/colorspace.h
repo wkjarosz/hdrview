@@ -16,9 +16,6 @@
 #include <string>
 #include <vector>
 
-#include <ImathMatrix.h>
-#include <ImfChromaticities.h>
-#include <ImfHeader.h>
 #include <map>
 #include <string>
 
@@ -29,7 +26,32 @@ struct Chromaticities
     float2 green = {0.30f, 0.60f};
     float2 blue  = {0.15f, 0.06f};
     float2 white = {0.31271f, 0.32902f}; // D65
+
+    bool operator==(const Chromaticities &c) const
+    {
+        return red == c.red && green == c.green && blue == c.blue && white == c.white;
+    }
+
+    bool operator!=(const Chromaticities &c) const
+    {
+        return red != c.red || green != c.green || blue != c.blue || white != c.white;
+    }
 };
+
+// approximate equality comparison for Chromaticities
+inline bool approx_equal(const Chromaticities &a, const Chromaticities &b, float tol = 1e-4f)
+{
+    return la::all(la::less(la::abs(a.red - b.red), tol)) && la::all(la::less(la::abs(a.green - b.green), tol)) &&
+           la::all(la::less(la::abs(a.blue - b.blue), tol)) && la::all(la::less(la::abs(a.white - b.white), tol));
+}
+
+float4x4        RGB_to_XYZ(const Chromaticities &chroma, float Y);
+inline float4x4 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
+inline float3   computeYw(const Chromaticities &cr)
+{
+    auto m = RGB_to_XYZ(cr, 1.f);
+    return float3{m[0][1], m[1][1], m[2][1]} / (m[0][1] + m[1][1] + m[2][1]);
+}
 
 // Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
 inline Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
@@ -68,8 +90,7 @@ inline Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
     \returns
         True if color conversion is needed, in which case M will contain the conversion matrix.
 */
-bool color_conversion_matrix(Imath::M33f &M, const Imf::Chromaticities &src, const Imf::Chromaticities &dst,
-                             int CAT_method = 0);
+bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst, int CAT_method = 0);
 
 // names of the predefined linear color gamuts
 extern const char *lin_ap0_gamut;
@@ -93,23 +114,16 @@ extern const char *lin_cicp_12_gamut;
 extern const char *lin_cicp_22_gamut;
 
 // return a map of common color spaces, indexed by name
-const std::map<const char *, Imf::Chromaticities> &color_gamuts();
+const std::map<const char *, Chromaticities> &color_gamuts();
 
 // return a reference to the chromaticities of a named color gamut, or throw if not found
-const Imf::Chromaticities &gamut_chromaticities(const char *name);
+const Chromaticities &gamut_chromaticities(const char *name);
 
 // return a map of common white points, indexed by name
-const std::map<const char *, Imath::V2f> &white_points();
+const std::map<const char *, float2> &white_points();
 
 const char **color_gamut_names();
 const char  *color_gamut_description(const char *name);
-
-// approximate equality comparison for Imf::Chromaticities
-inline bool approx_equal(const Imf::Chromaticities &a, const Imf::Chromaticities &b, float tol = 1e-4f)
-{
-    return a.red.equalWithAbsError(b.red, tol) && a.green.equalWithAbsError(b.green, tol) &&
-           a.blue.equalWithAbsError(b.blue, tol) && a.white.equalWithAbsError(b.white, tol);
-}
 
 using TransferFunction_ = int;
 enum TransferFunction : TransferFunction_

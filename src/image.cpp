@@ -16,12 +16,6 @@
 #include <numeric>
 #include <sstream>
 
-#include <ImfChromaticities.h>
-#include <ImfRgbaYca.h>
-#include <ImfStandardAttributes.h>
-
-#include "Imath_to_linalg.h"
-
 #include <spdlog/spdlog.h>
 
 #include <stdexcept> // for runtime_error, out_of_range
@@ -40,7 +34,7 @@ static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr,
 static const char         *s_target[Target_COUNT] = {"primary", "secondary"};
 static int                 s_next_image_id        = 1;
 
-const float3 Image::Rec709_luminance_weights = to_linalg(Imf::RgbaYca::computeYw(Imf::Chromaticities{}));
+const float3 Image::Rec709_luminance_weights = computeYw(Chromaticities{});
 
 pair<string, string> Channel::split(const string &channel)
 {
@@ -674,29 +668,20 @@ void Image::compute_color_transform()
 {
     // get color correction info from the header
     luminance_weights = Image::Rec709_luminance_weights;
-    try
-    {
-        auto Yw           = Imf::RgbaYca::computeYw(Imf::chromaticities(header));
-        luminance_weights = to_linalg(Yw);
-    }
-    catch (...)
-    {
-        //
-    }
+    if (chromaticities)
+        luminance_weights = computeYw(*chromaticities);
 
     spdlog::debug("Yw = {}", luminance_weights);
 
-    Imf::Chromaticities file_chr{};
-    if (Imf::hasChromaticities(header))
-        file_chr = Imf::chromaticities(header);
+    Chromaticities chr{};
+    if (chromaticities)
+        chr = *chromaticities;
 
-    if (Imf::hasAdoptedNeutral(header))
-        file_chr.white = Imf::adoptedNeutral(header);
+    if (adopted_neutral)
+        chr.white = *adopted_neutral;
 
-    static const Imf::Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
-    Imath::M33f                      M;
-    if (color_conversion_matrix(M, file_chr, bt709_chr, adaptation_method))
-        M_to_Rec709 = to_linalg(M);
+    static const Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
+    color_conversion_matrix(M_to_Rec709, chr, bt709_chr, adaptation_method);
 }
 
 void Image::finalize()
@@ -766,18 +751,18 @@ void Image::finalize()
     compute_color_transform();
 
     // determine if this is (close to) one of the named color spaces
-    if (Imf::hasChromaticities(header))
+    if (chromaticities)
     {
-        Imf::Chromaticities file_chr = Imf::chromaticities(header);
-        if (Imf::hasAdoptedNeutral(header))
-            file_chr.white = Imf::adoptedNeutral(header);
+        Chromaticities chr = *chromaticities;
+        if (adopted_neutral)
+            chr.white = *adopted_neutral;
 
         const auto &cs_chrs = color_gamuts();
         for (int i = 0; color_gamut_names()[i]; ++i)
         {
             auto &cs_name = color_gamut_names()[i];
             auto &cs_chr  = cs_chrs.at(cs_name);
-            if (approx_equal(cs_chr, file_chr))
+            if (approx_equal(cs_chr, chr))
             {
                 spdlog::info("Detected color space: '{}'", cs_name);
                 named_color_space = i;

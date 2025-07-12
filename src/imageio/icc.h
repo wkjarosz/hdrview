@@ -5,6 +5,7 @@
 //
 #pragma once
 
+#include "colorspace.h"
 #include "fwd.h"
 #include <string>
 
@@ -33,6 +34,5 @@ namespace icc
         True if the pixel values were successfully linearized.
 */
 bool linearize_colors(float *pixels, int3 size, const std::vector<uint8_t> &icc_profile,
-                      std::string *tf_description = nullptr, float2 *red = nullptr, float2 *green = nullptr,
-                      float2 *blue = nullptr, float2 *white = nullptr);
+                      std::string *tf_description = nullptr, Chromaticities *chr = nullptr);
 } // namespace icc

@@ -40,20 +40,18 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 #include <ImfStandardAttributes.h>
 
 static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *nclx, string *tf_description = nullptr,
-                             float2 *red = nullptr, float2 *green = nullptr, float2 *blue = nullptr,
-                             float2 *white = nullptr)
+                             Chromaticities *c = nullptr)
 {
     if (!nclx)
         return false;
 
-    if (red)
-        *red = float2(nclx->color_primary_red_x, nclx->color_primary_red_y);
-    if (green)
-        *green = float2(nclx->color_primary_green_x, nclx->color_primary_green_y);
-    if (blue)
-        *blue = float2(nclx->color_primary_blue_x, nclx->color_primary_blue_y);
-    if (white)
-        *white = float2(nclx->color_primary_white_x, nclx->color_primary_white_y);
+    if (c)
+    {
+        c->red   = float2(nclx->color_primary_red_x, nclx->color_primary_red_y);
+        c->green = float2(nclx->color_primary_green_x, nclx->color_primary_green_y);
+        c->blue  = float2(nclx->color_primary_blue_x, nclx->color_primary_blue_y);
+        c->white = float2(nclx->color_primary_white_x, nclx->color_primary_white_y);
+    }
 
     float            gamma = 1.f;
     TransferFunction tf;
@@ -343,17 +341,15 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
                     !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                               nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
 
-                string tf_description;
-                float2 red, green, blue, white;
+                string         tf_description;
+                Chromaticities chr;
                 // for SDR profiles, try to transform the interleaved data using the icc profile.
                 // Then try the nclx profile
                 if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
-                                                         &tf_description, &red, &green, &blue, &white)) ||
-                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &red, &green,
-                                     &blue, &white))
+                                                         &tf_description, &chr)) ||
+                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &chr))
                 {
-                    Imf::addChromaticities(image->header, {Imath::V2f(red.x, red.y), Imath::V2f(green.x, green.y),
-                                                           Imath::V2f(blue.x, blue.y), Imath::V2f(white.x, white.y)});
+                    image->chromaticities                = chr;
                     image->metadata["transfer function"] = tf_description;
                 }
                 else
