@@ -48,11 +48,11 @@ static uhdr_color_gamut cg_from_chr(const optional<Chromaticities> &chr)
 {
     if (chr)
     {
-        if (approx_equal(*chr, gamut_chromaticities(lin_srgb_bt709_gamut)))
+        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_sRGB_BT709)))
             return UHDR_CG_BT_709;
-        if (approx_equal(*chr, gamut_chromaticities(lin_displayp3_gamut)))
+        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)))
             return UHDR_CG_DISPLAY_P3;
-        if (approx_equal(*chr, gamut_chromaticities(lin_bt2020_2100_gamut)))
+        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_BT2020_2100)))
             return UHDR_CG_BT_2100;
     }
 
@@ -216,18 +216,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     // HDRView assumes the Rec 709 primaries/gamut. Set the matrix to convert to it
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
     {
-        image->chromaticities = gamut_chromaticities(lin_displayp3_gamut);
+        image->chromaticities = gamut_chromaticities(ColorGamut_Display_P3_SMPTE432);
         spdlog::info("File uses Display P3 primaries and whitepoint.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_2100)
     {
-        image->chromaticities = gamut_chromaticities(lin_bt2020_2100_gamut);
+        image->chromaticities = gamut_chromaticities(ColorGamut_BT2020_2100);
         spdlog::info("File uses Rec. 2100 primaries and whitepoint.");
     }
     else if (decoded_image->cg == UHDR_CG_BT_709)
     {
         // insert into the header, but no conversion necessary since HDRView uses BT 709 internally
-        image->chromaticities = gamut_chromaticities(lin_srgb_bt709_gamut);
+        image->chromaticities = gamut_chromaticities(ColorGamut_sRGB_BT709);
         spdlog::info("File uses Rec. 709/sRGB primaries and whitepoint.");
     }
     else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)

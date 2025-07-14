@@ -54,66 +54,14 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
     }
 
     float            gamma = 1.f;
-    TransferFunction tf;
-    string           tf_desc;
-    switch (nclx->transfer_characteristics)
-    {
-    case heif_transfer_characteristic_ITU_R_BT_709_5: [[fallthrough]];
-    case heif_transfer_characteristic_ITU_R_BT_601_6: [[fallthrough]];
-    case heif_transfer_characteristic_ITU_R_BT_2020_2_10bit: [[fallthrough]];
-    case heif_transfer_characteristic_ITU_R_BT_2020_2_12bit:
-        tf_desc = itu_tf;
-        tf      = TransferFunction_ITU;
-        break;
-    case heif_transfer_characteristic_ITU_R_BT_2100_0_PQ:
-        tf_desc = pq_tf;
-        tf      = TransferFunction_BT2100_PQ;
-        break;
-    case heif_transfer_characteristic_ITU_R_BT_2100_0_HLG:
-        tf_desc = hlg_tf;
-        tf      = TransferFunction_BT2100_HLG;
-        break;
-    case heif_transfer_characteristic_linear:
-        tf_desc = linear_tf;
-        tf      = TransferFunction_Linear;
-        break;
-    case heif_transfer_characteristic_SMPTE_240M:
-        tf_desc = st240_tf;
-        tf      = TransferFunction_ST240;
-        break;
-    case heif_transfer_characteristic_SMPTE_ST_428_1:
-        tf_desc = dci_p3_tf;
-        tf      = TransferFunction_DCI_P3;
-        break;
-    case heif_transfer_characteristic_logarithmic_100:
-        tf_desc = log100_tf;
-        tf      = TransferFunction_Log100;
-        break;
-    case heif_transfer_characteristic_logarithmic_100_sqrt10:
-        tf_desc = log100_sqrt10_tf;
-        tf      = TransferFunction_Log100_Sqrt10;
-        break;
-    case heif_transfer_characteristic_ITU_R_BT_470_6_System_M:
-        tf      = TransferFunction_Gamma;
-        gamma   = 2.2f;
-        tf_desc = fmt::format("{} ({})", gamma_tf, float(1.0 / gamma));
-        break;
-    case heif_transfer_characteristic_ITU_R_BT_470_6_System_B_G:
-        tf      = TransferFunction_Gamma;
-        gamma   = 2.8f;
-        tf_desc = fmt::format("{} ({})", gamma_tf, float(1.0 / gamma));
-        break;
-    case heif_transfer_characteristic_IEC_61966_2_4:
-        tf_desc = iec61966_2_4_tf;
-        tf      = TransferFunction_IEC61966_2_4;
-        break;
-    case heif_transfer_characteristic_IEC_61966_2_1: [[fallthrough]];
+    TransferFunction tf    = transfer_function_from_cicp((int)nclx->transfer_characteristics, &gamma);
 
-    default: tf_desc = srgb_tf; tf = TransferFunction_sRGB;
-    }
+    if (tf == TransferFunction_Unknown)
+        spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
+                     (int)nclx->transfer_characteristics);
 
     if (tf_description)
-        *tf_description = tf_desc;
+        *tf_description = transfer_function_name(tf);
 
     to_linear(pixels, size, tf, gamma);
 

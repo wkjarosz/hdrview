@@ -682,6 +682,16 @@ void Image::compute_color_transform()
 
     static const Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     color_conversion_matrix(M_to_Rec709, chr, bt709_chr, adaptation_method);
+
+    // determine if this is (close to) one of the named color spaces
+    if (chromaticities)
+    {
+        named_color_space = named_color_gamut(*chromaticities);
+        spdlog::debug("Detected color space: '{}'", color_gamut_name((ColorGamut)named_color_space));
+
+        named_white_point = ::named_white_point(chr.white);
+        spdlog::debug("Detected white point: '{}'", white_point_name(named_white_point));
+    }
 }
 
 void Image::finalize()
@@ -749,27 +759,6 @@ void Image::finalize()
     }
 
     compute_color_transform();
-
-    // determine if this is (close to) one of the named color spaces
-    if (chromaticities)
-    {
-        Chromaticities chr = *chromaticities;
-        if (adopted_neutral)
-            chr.white = *adopted_neutral;
-
-        const auto &cs_chrs = color_gamuts();
-        for (int i = 0; color_gamut_names()[i]; ++i)
-        {
-            auto &cs_name = color_gamut_names()[i];
-            auto &cs_chr  = cs_chrs.at(cs_name);
-            if (approx_equal(cs_chr, chr))
-            {
-                spdlog::info("Detected color space: '{}'", cs_name);
-                named_color_space = i;
-                break;
-            }
-        }
-    }
 }
 
 // Recursive function to traverse the LayerTreeNode hierarchy and append names to a string

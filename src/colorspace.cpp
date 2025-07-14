@@ -14,158 +14,341 @@
 using namespace std;
 
 // Reference whites used in the common color spaces below
-static const float2 _wp_ACES{0.32168f, 0.33767f};
-static const float2 _wp_C{0.31006f, 0.31616f};
-static const float2 _wp_DCI{0.314f, 0.351f};
-static const float2 _wp_D50{0.34567f, 0.35850f};
-static const float2 _wp_D65{0.31271f, 0.32902f};
-static const float2 _wp_E{0.33333f, 0.33333f};
+static const float2 wp_ACES{0.32168f, 0.33767f};
+static const float2 wp_A{0.44758f, 0.40745f};
+static const float2 wp_B{0.34842f, 0.35161f};
+static const float2 wp_C{0.31006f, 0.31616f};
+static const float2 wp_E{0.33333f, 0.33333f};
+static const float2 wp_D50{0.34567f, 0.35850f};
+static const float2 wp_D55{0.33242f, 0.34743f};
+static const float2 wp_D65{0.31271f, 0.32902f};
+static const float2 wp_D75{0.29902f, 0.31485f};
+static const float2 wp_DCI{0.3140f, 0.3510f};
 
-static const char _lin_ap0[]         = "ACES AP0";
-static const char _lin_ap1_acescg[]  = "ACEScg AP1";
-static const char _lin_adobergb[]    = "Adobe RGB";
-static const char _lin_cie1931xyz[]  = "CIE 1931 XYZ";
-static const char _lin_displayp3[]   = "Display P3";
-static const char _lin_prophotorgb[] = "ProPhoto RGB";
-static const char _lin_bt2020_2100[] = "BT.2020/BT.2100";
-static const char _lin_srgb_bt709[]  = "sRGB/BT.709";
-static const char _lin_cicp_01[]     = "CICP 01";
-static const char _lin_cicp_04[]     = "CICP 04";
-static const char _lin_cicp_05[]     = "CICP 05";
-static const char _lin_cicp_06[]     = "CICP 06";
-static const char _lin_cicp_07[]     = "CICP 07";
-static const char _lin_cicp_08[]     = "CICP 08";
-static const char _lin_cicp_09[]     = "CICP 09";
-static const char _lin_cicp_10[]     = "CICP 10";
-static const char _lin_cicp_11[]     = "CICP 11";
-static const char _lin_cicp_12[]     = "CICP 12";
-static const char _lin_cicp_22[]     = "CICP 22";
+static const char *Unspecified_wp = "Unspecified (Assuming D65)";
+static const char *ACES_wp        = "ACES";
+static const char *A_wp           = "Std Illuminant A";
+static const char *B_wp           = "Std Illuminant B";
+static const char *C_wp           = "Std Illuminant C";
+static const char *E_wp           = "Std Illuminant E";
+static const char *D50_wp         = "D50";
+static const char *D55_wp         = "D55";
+static const char *D65_wp         = "D65";
+static const char *D75_wp         = "D75";
+static const char *DCI_wp         = "DCI";
+static const char *Custom_wp      = "Custom";
 
-const char *lin_ap0_gamut         = _lin_ap0;
-const char *lin_ap1_acescg_gamut  = _lin_ap1_acescg;
-const char *lin_adobergb_gamut    = _lin_adobergb;
-const char *lin_cie1931xyz_gamut  = _lin_cie1931xyz;
-const char *lin_displayp3_gamut   = _lin_displayp3;
-const char *lin_prophotorgb_gamut = _lin_prophotorgb;
-const char *lin_bt2020_2100_gamut = _lin_bt2020_2100;
-const char *lin_srgb_bt709_gamut  = _lin_srgb_bt709;
-const char *lin_cicp_01_gamut     = _lin_cicp_01;
-const char *lin_cicp_04_gamut     = _lin_cicp_04;
-const char *lin_cicp_05_gamut     = _lin_cicp_05;
-const char *lin_cicp_06_gamut     = _lin_cicp_06;
-const char *lin_cicp_07_gamut     = _lin_cicp_07;
-const char *lin_cicp_08_gamut     = _lin_cicp_08;
-const char *lin_cicp_09_gamut     = _lin_cicp_09;
-const char *lin_cicp_10_gamut     = _lin_cicp_10;
-const char *lin_cicp_11_gamut     = _lin_cicp_11;
-const char *lin_cicp_12_gamut     = _lin_cicp_12;
-const char *lin_cicp_22_gamut     = _lin_cicp_22;
+static const char *unspecified_gamut         = "Unspecified (Assuming sRGB/BT.709)";
+static const char *srgb_bt709_gamut          = "sRGB/BT.709";
+static const char *bt470m_gamut              = "BT.470 M";
+static const char *bt470bg_gamut             = "BT.470 BG";
+static const char *smpte170_gamut            = "SMPTE ST 170";
+static const char *smpte240_gamut            = "SMPTE ST 240";
+static const char *generic_film_gamut        = "Generic film";
+static const char *bt2020_2100_cicp_09_gamut = "BT.2020/BT.2100";
+static const char *smpte428_gamut            = "SMPTE ST 428-1";
+static const char *dcip3_gamut               = "DCI P3/SMPTE RP 431";
+static const char *displayp3_gamut           = "Display P3/SMPTE EG 432";
+static const char *cicp_22_gamut             = "CICP 22";
+static const char *aces_ap0_gamut            = "ACES AP0";
+static const char *acescg_ap1_gamut          = "ACEScg AP1";
+static const char *adobergb_gamut            = "Adobe RGB";
+static const char *prophotorgb_gamut         = "ProPhoto RGB";
+static const char *cie1931xyz_gamut          = "CIE 1931 XYZ";
+static const char *custom_gamut              = "Custom";
 
-// clang-format off
-static const char* _color_gammut_names[] = {
-    _lin_ap0,
-    _lin_ap1_acescg,
-    _lin_adobergb,
-    _lin_cie1931xyz,
-    _lin_displayp3,
-    _lin_prophotorgb,
-    _lin_bt2020_2100,
-    _lin_srgb_bt709,
-    _lin_cicp_01,
-    _lin_cicp_04,
-    _lin_cicp_05,
-    _lin_cicp_06,
-    _lin_cicp_07,
-    _lin_cicp_08,
-    _lin_cicp_09,
-    _lin_cicp_10,
-    _lin_cicp_11,
-    _lin_cicp_12,
-    _lin_cicp_22,
+static const char *unknown_tf       = "Unknown (Assuming sRGB)";
+static const char *linear_tf        = "Linear";
+static const char *gamma_tf         = "Gamma";
+static const char *srgb_tf          = "sRGB IEC61966-2.1";
+static const char *itu_tf           = "BT.709/2020";
+static const char *pq_tf            = "BT.2100 PQ";
+static const char *hlg_tf           = "BT.2100 HLG";
+static const char *st240_tf         = "SMPTE ST 240";
+static const char *log100_tf        = "Log100";
+static const char *log100_sqrt10_tf = "Log100 Sqrt10";
+static const char *iec61966_2_4_tf  = "IEC 61966-2-4";
+static const char *dci_p3_tf        = "DCI-P3";
+
+float2 white_point(WhitePoint wp)
+{
+    switch (wp)
+    {
+    case WhitePoint_Unspecified: return wp_D65;
+    case WhitePoint_ACES: return wp_ACES;
+    case WhitePoint_A: return wp_A;
+    case WhitePoint_B: return wp_B;
+    case WhitePoint_C: return wp_C;
+    case WhitePoint_E: return wp_E;
+    case WhitePoint_D50: return wp_D50;
+    case WhitePoint_D55: return wp_D55;
+    case WhitePoint_D65: return wp_D65;
+    case WhitePoint_D75: return wp_D75;
+    case WhitePoint_DCI: return wp_DCI;
+    case WhitePoint_Custom: [[fallthrough]];
+    default:
+        // Return NaNs for unrecognized
+        return {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN()};
+    }
+}
+
+WhitePoint named_white_point(float2 wp)
+{
+    if (approx_equal(wp, wp_ACES))
+        return WhitePoint_ACES;
+    if (approx_equal(wp, wp_A))
+        return WhitePoint_A;
+    if (approx_equal(wp, wp_B))
+        return WhitePoint_B;
+    if (approx_equal(wp, wp_C))
+        return WhitePoint_C;
+    if (approx_equal(wp, wp_E))
+        return WhitePoint_E;
+    if (approx_equal(wp, wp_D50))
+        return WhitePoint_D50;
+    if (approx_equal(wp, wp_D55))
+        return WhitePoint_D55;
+    if (approx_equal(wp, wp_D65))
+        return WhitePoint_D65;
+    if (approx_equal(wp, wp_D75))
+        return WhitePoint_D75;
+    if (approx_equal(wp, wp_DCI))
+        return WhitePoint_DCI;
+
+    // Return custom for unrecognized
+    return WhitePoint_Custom;
+}
+
+const char *white_point_name(WhitePoint wp)
+{
+    switch (wp)
+    {
+    case WhitePoint_Unspecified: return Unspecified_wp;
+    case WhitePoint_ACES: return ACES_wp;
+    case WhitePoint_A: return A_wp;
+    case WhitePoint_B: return B_wp;
+    case WhitePoint_C: return C_wp;
+    case WhitePoint_E: return E_wp;
+    case WhitePoint_D50: return D50_wp;
+    case WhitePoint_D55: return D55_wp;
+    case WhitePoint_D65: return D65_wp;
+    case WhitePoint_D75: return D75_wp;
+    case WhitePoint_DCI: return DCI_wp;
+    case WhitePoint_Custom: [[fallthrough]];
+    default: return Custom_wp;
+    }
+}
+
+const char **white_point_names()
+{
+    // clang-format off
+static const char* _names[] = {
+    Unspecified_wp,
+    ACES_wp,
+    A_wp,
+    B_wp,
+    C_wp,
+    E_wp,
+    D50_wp,
+    D55_wp,
+    D65_wp,
+    D75_wp,
+    DCI_wp,
+    Custom_wp,
     nullptr
 };
-// clang-format on
+    // clang-format on
+    return _names;
+}
 
-const char *linear_tf        = "Linear";
-const char *gamma_tf         = "Gamma";
-const char *srgb_tf          = "sRGB IEC61966-2.1";
-const char *itu_tf           = "BT.709/2020";
-const char *pq_tf            = "BT.2100 PQ";
-const char *hlg_tf           = "BT.2100 HLG";
-const char *st240_tf         = "SMPTE ST 240";
-const char *log100_tf        = "Log100";
-const char *log100_sqrt10_tf = "Log100 Sqrt10";
-const char *iec61966_2_4_tf  = "IEC 61966-2-4";
-const char *dci_p3_tf        = "DCI-P3";
+const char *color_gamut_name(const ColorGamut primaries)
+{
+    switch (primaries)
+    {
+    case ColorGamut_sRGB_BT709: return srgb_bt709_gamut;
+    case ColorGamut_Unspecified: return unspecified_gamut;
+    case ColorGamut_BT470M: return bt470m_gamut;
+    case ColorGamut_BT470BG: return bt470bg_gamut;
+    case ColorGamut_SMPTE170M: return smpte170_gamut;
+    case ColorGamut_SMPTE240M: return smpte240_gamut;
+    case ColorGamut_Film: return generic_film_gamut;
+    case ColorGamut_BT2020_2100: return bt2020_2100_cicp_09_gamut;
+    case ColorGamut_SMPTE428: return smpte428_gamut;
+    case ColorGamut_DCI_P3_SMPTE431: return dcip3_gamut;
+    case ColorGamut_Display_P3_SMPTE432: return displayp3_gamut;
+    case ColorGamut_CICP_22: return cicp_22_gamut;
+    case ColorGamut_ACES_AP0: return aces_ap0_gamut;
+    case ColorGamut_ACEScg_AP1: return acescg_ap1_gamut;
+    case ColorGamut_AdobeRGB: return adobergb_gamut;
+    case ColorGamut_ProPhotoRGB: return prophotorgb_gamut;
+    case ColorGamut_CIE1931XYZ: return cie1931xyz_gamut;
+    case ColorGamut_Custom: [[fallthrough]];
+    default: return custom_gamut;
+    }
+}
 
-// clang-format off
-static const char* _tf_names[] = {
-    linear_tf,
-    gamma_tf,
-    srgb_tf,
-    itu_tf,
-    pq_tf,
-    hlg_tf,
-    nullptr
-};
-// clang-format on
+const char **color_gamut_names()
+{
+    static const char *_names[] = {unspecified_gamut,
+                                   srgb_bt709_gamut,
+                                   bt470m_gamut,
+                                   bt470bg_gamut,
+                                   smpte170_gamut,
+                                   smpte240_gamut,
+                                   generic_film_gamut,
+                                   bt2020_2100_cicp_09_gamut,
+                                   smpte428_gamut,
+                                   dcip3_gamut,
+                                   displayp3_gamut,
+                                   cicp_22_gamut,
+                                   aces_ap0_gamut,
+                                   acescg_ap1_gamut,
+                                   adobergb_gamut,
+                                   prophotorgb_gamut,
+                                   cie1931xyz_gamut,
+                                   custom_gamut,
+                                   nullptr};
+    return _names;
+}
 
-// data from:
-//  https://en.wikipedia.org/wiki/Standard_illuminant
-//  https://en.wikipedia.org/wiki/RGB_color_spaces
-//  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
-//  ITU-T H.273: https://www.itu.int/rec/T-REC-H.273-202407-I/en
-// Chromaticity data for common color spaces
-static const std::map<const char *, Chromaticities> _chromaticities_map = {
-    {_lin_ap0, {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, _wp_ACES}},
-    {_lin_ap1_acescg, {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, _wp_ACES}},
-    {_lin_adobergb, {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, _wp_D65}},
-    {_lin_displayp3, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_D65}},
-    {_lin_bt2020_2100, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}},
-    {_lin_cie1931xyz, {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, _wp_E}},
-    {_lin_prophotorgb, {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, _wp_D50}},
-    {_lin_srgb_bt709, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}},
-    {_lin_cicp_01, {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.709, sRGB
-    {_lin_cicp_04, {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, _wp_C}},   // BT.470 System M
-    {_lin_cicp_05, {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, _wp_D65}}, // BT.470 System BG
-    {_lin_cicp_06, {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, _wp_D65}}, // SMPTE 170M
-    {_lin_cicp_07, {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, _wp_D65}}, // SMPTE 240M
-    {_lin_cicp_08, {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, _wp_C}},   // Generic Film
-    {_lin_cicp_09, {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, _wp_D65}}, // BT.2020
-    {_lin_cicp_10, {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, _wp_E}},   // SMPTE 428 (XYZ)
-    {_lin_cicp_11, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_DCI}}, // SMPTE 431-2 (DCI P3)
-    {_lin_cicp_12, {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, _wp_D65}}, // SMPTE 432-1 (P3 D65)
-    {_lin_cicp_22, {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1550f, 0.0770f}, _wp_D65}}};
+Chromaticities gamut_chromaticities(ColorGamut primaries)
+{
+    // data from:
+    //  https://en.wikipedia.org/wiki/Standard_illuminant
+    //  https://en.wikipedia.org/wiki/RGB_color_spaces
+    //  http://www.brucelindbloom.com/index.html?WorkingSpaceInfo.html
+    //  ITU-T H.273: https://www.itu.int/rec/T-REC-H.273-202407-I/en
+    // Chromaticity data for common color spaces
+    switch (primaries)
+    {
+    case ColorGamut_sRGB_BT709: [[fallthrough]];
+    case ColorGamut_Unspecified: return {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, wp_D65};
+    case ColorGamut_BT470M: return {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, wp_C};
+    case ColorGamut_BT470BG: return {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, wp_D65};
+    case ColorGamut_SMPTE170M: return {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, wp_D65};
+    case ColorGamut_SMPTE240M: return {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, wp_D65};
+    case ColorGamut_Film: return {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, wp_C};
+    case ColorGamut_BT2020_2100: return {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, wp_D65};
+    case ColorGamut_SMPTE428: return {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, wp_E};
+    case ColorGamut_DCI_P3_SMPTE431: return {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, wp_DCI};
+    case ColorGamut_Display_P3_SMPTE432: return {{0.6800f, 0.3200f}, {0.2650f, 0.6900f}, {0.1500f, 0.0600f}, wp_D65};
+    case ColorGamut_CICP_22: return {{0.6300f, 0.3400f}, {0.2950f, 0.6050f}, {0.1550f, 0.0770f}, wp_D65};
+    case ColorGamut_ACES_AP0: return {{0.73470f, 0.26530f}, {0.00000f, 1.00000f}, {0.00010f, -0.07700f}, wp_ACES};
+    case ColorGamut_ACEScg_AP1: return {{0.713f, 0.293f}, {0.165f, 0.830f}, {0.128f, 0.044f}, wp_ACES};
+    case ColorGamut_AdobeRGB: return {{0.6400f, 0.3300f}, {0.2100f, 0.7100f}, {0.1500f, 0.0600f}, wp_D65};
+    case ColorGamut_ProPhotoRGB: return {{0.7347f, 0.2653f}, {0.1596f, 0.8404f}, {0.0366f, 0.0001f}, wp_D50};
+    case ColorGamut_CIE1931XYZ: return {{1.f, 0.f}, {0.f, 1.f}, {0.f, 0.f}, wp_E};
+    case ColorGamut_Custom: [[fallthrough]];
+    default: throw std::invalid_argument("Unrecognized ColorGamut value");
+    }
+}
 
-static const std::map<const char *, const char *> _gamut_descriptions = {
-    {_lin_ap0, "AP0 primaries, Academy Color Encoding System white point"},
-    {_lin_ap1_acescg, "AP1 primaries, Academy Color Encoding System white point"},
-    {_lin_adobergb, "Adobe RGB (1998) gamut, D65"},
-    {_lin_displayp3, "Display-P3 gamut, D65"},
-    {_lin_bt2020_2100, "BT.2020/BT.2100 gamut, D65"},
-    {_lin_cie1931xyz, "CIE (1931) XYZ primaries, E white point"},
-    {_lin_prophotorgb, "ProPhoto RGB gamut, D50"},
-    {_lin_srgb_bt709, "sRGB/Rec709 gamut, D65"},
-    {_lin_cicp_01, "CICP 01 BT.709/sRGB gamut, D65"},
-    {_lin_cicp_04, "CICP 04 BT.470 System M, NTSC gamut, C white point"},
-    {_lin_cicp_05, "CICP 05 BT.470 System BG, D65"},
-    {_lin_cicp_06, "CICP 06 SMPTE 170M, D65"},
-    {_lin_cicp_07, "CICP 07 SMPTE 240M, D65"},
-    {_lin_cicp_08, "CICP 08 Generic Film, C white point"},
-    {_lin_cicp_09, "CICP 09 BT.2020, D65"},
-    {_lin_cicp_10, "CICP 10 SMPTE 428 (XYZ), E white point"},
-    {_lin_cicp_11, "CICP 11 SMPTE 431-2 (DCI P3), DCI white point"},
-    {_lin_cicp_12, "CICP 12 SMPTE 432-1 (P3 D65), D65"},
-    {_lin_cicp_22, "CICP 22 EBU Tech. 3213-E, D65"}};
+Chromaticities chromaticities_from_cicp(int cicp)
+{
+    switch (cicp)
+    {
+    case 1: return gamut_chromaticities(ColorGamut_sRGB_BT709);
+    case 2: return gamut_chromaticities(ColorGamut_Unspecified);
+    case 4: return gamut_chromaticities(ColorGamut_BT470M);
+    case 5: return gamut_chromaticities(ColorGamut_BT470BG);
+    case 6: return gamut_chromaticities(ColorGamut_SMPTE170M);
+    case 7: return gamut_chromaticities(ColorGamut_SMPTE240M);
+    case 8: return gamut_chromaticities(ColorGamut_Film);
+    case 9: return gamut_chromaticities(ColorGamut_BT2020_2100);
+    case 10: return gamut_chromaticities(ColorGamut_SMPTE428);
+    case 11: return gamut_chromaticities(ColorGamut_DCI_P3_SMPTE431);
+    case 12: return gamut_chromaticities(ColorGamut_Display_P3_SMPTE432);
+    case 22: return gamut_chromaticities(ColorGamut_CICP_22);
+    default: throw std::invalid_argument("Unrecognized or unsupported CICP value for chromaticities");
+    }
+}
 
-const char **color_gamut_names() { return _color_gammut_names; }
-const char  *color_gamut_description(const char *name) { return _gamut_descriptions.at(name); }
+ColorGamut named_color_gamut(const Chromaticities &chr)
+{
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_sRGB_BT709)))
+        return ColorGamut_sRGB_BT709;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_BT470M)))
+        return ColorGamut_BT470M;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_BT470BG)))
+        return ColorGamut_BT470BG;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_SMPTE170M)))
+        return ColorGamut_SMPTE170M;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_SMPTE240M)))
+        return ColorGamut_SMPTE240M;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_Film)))
+        return ColorGamut_Film;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_BT2020_2100)))
+        return ColorGamut_BT2020_2100;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_SMPTE428)))
+        return ColorGamut_SMPTE428;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_DCI_P3_SMPTE431)))
+        return ColorGamut_DCI_P3_SMPTE431;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)))
+        return ColorGamut_Display_P3_SMPTE432;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_CICP_22)))
+        return ColorGamut_CICP_22;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_ACES_AP0)))
+        return ColorGamut_ACES_AP0;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_ACEScg_AP1)))
+        return ColorGamut_ACEScg_AP1;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_AdobeRGB)))
+        return ColorGamut_AdobeRGB;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_ProPhotoRGB)))
+        return ColorGamut_ProPhotoRGB;
+    if (approx_equal(chr, gamut_chromaticities(ColorGamut_CIE1931XYZ)))
+        return ColorGamut_CIE1931XYZ;
 
-const char **transfer_function_names() { return _tf_names; }
+    return ColorGamut_Custom;
+}
 
-const std::map<const char *, Chromaticities> &color_gamuts() { return _chromaticities_map; }
+string transfer_function_name(TransferFunction tf, float gamma)
+{
+    switch (tf)
+    {
+    case TransferFunction_Linear: return linear_tf;
+    case TransferFunction_Gamma: return fmt::format("{} (={})", gamma_tf, float(1.0 / gamma));
+    case TransferFunction_sRGB: return srgb_tf;
+    case TransferFunction_ITU: return itu_tf;
+    case TransferFunction_BT2100_PQ: return pq_tf;
+    case TransferFunction_BT2100_HLG: return hlg_tf;
+    case TransferFunction_ST240: return st240_tf;
+    case TransferFunction_Log100: return log100_tf;
+    case TransferFunction_Log100_Sqrt10: return log100_sqrt10_tf;
+    case TransferFunction_IEC61966_2_4: return iec61966_2_4_tf;
+    case TransferFunction_DCI_P3: return dci_p3_tf;
+    default: return unknown_tf;
+    }
+}
 
-const Chromaticities &gamut_chromaticities(const char *name) { return _chromaticities_map.at(name); }
+TransferFunction transfer_function_from_cicp(int cicp, float *gamma)
+{
+    switch (cicp)
+    {
+    case 1: [[fallthrough]];
+    case 6: [[fallthrough]];
+    case 12: [[fallthrough]];
+    case 14: [[fallthrough]];
+    case 15: return TransferFunction_ITU;
+    case 4:
+        if (gamma)
+            *gamma = 2.2f;
+        return TransferFunction_Gamma;
+    case 5:
+        if (gamma)
+            *gamma = 2.8f;
+        return TransferFunction_Gamma;
+    case 7: return TransferFunction_ST240;
+    case 8: return TransferFunction_Linear;
+    case 9: return TransferFunction_Log100;
+    case 10: return TransferFunction_Log100_Sqrt10;
+    case 11: return TransferFunction_IEC61966_2_4;
+    case 13: return TransferFunction_sRGB;
+    case 16: return TransferFunction_BT2100_PQ;
+    case 17: return TransferFunction_DCI_P3;
+    case 18: return TransferFunction_BT2100_HLG;
+    default: return TransferFunction_Unknown;
+    }
+}
 
 float4x4 RGB_to_XYZ(const Chromaticities &chroma, float Y)
 {
@@ -332,6 +515,24 @@ bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chrom
     {
         return false;
     }
+}
+
+Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
+{
+    Chromaticities result;
+    // Multiplying the matrix by [1,0,0], [0,1,0], or [0,0,1] gives the XYZ values of the primaries.
+    // Hence, the columns of the matrix are XYZ values of the primaries.
+    // Divide each by its sum to get corresponding chromaticities.
+    result.red   = rgb_to_XYZ.x.xy() / sum(rgb_to_XYZ.x);
+    result.green = rgb_to_XYZ.y.xy() / sum(rgb_to_XYZ.y);
+    result.blue  = rgb_to_XYZ.z.xy() / sum(rgb_to_XYZ.z);
+
+    // Multiplying the matrix by full-intensity for each primary [1,1,1] gives us XYZ of white.
+    // Hence, the sum of the columns is the XYZ of white.
+    // Divide that by the sum of its components to get its chromaticity;
+    float3 wpXYZ = rgb_to_XYZ.x + rgb_to_XYZ.y + rgb_to_XYZ.z;
+    result.white = wpXYZ.xy() / sum(wpXYZ);
+    return result;
 }
 
 float3 YCToRGB(float3 input, float3 Yw)

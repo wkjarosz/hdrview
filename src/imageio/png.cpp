@@ -160,8 +160,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
 
     double           gamma       = 2.2; // default gamma
     int              srgb_intent = 0;
-    TransferFunction tf          = TransferFunction_sRGB; // default
-    string           tf_desc;
+    TransferFunction tf          = TransferFunction_Unknown; // default
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
@@ -207,71 +206,24 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
                 "Unsupported matrix coefficients in cICP chunk: {}. PNG images only support RGB (=0). Ignoring.",
                 matrix_coefficients);
 
-        switch (color_primaries)
+        try
         {
-        case 1: *chr = gamut_chromaticities(lin_cicp_01_gamut); break;
-        case 4: *chr = gamut_chromaticities(lin_cicp_04_gamut); break;
-        case 5: *chr = gamut_chromaticities(lin_cicp_05_gamut); break;
-        case 6: *chr = gamut_chromaticities(lin_cicp_06_gamut); break;
-        case 7: *chr = gamut_chromaticities(lin_cicp_07_gamut); break;
-        case 8: *chr = gamut_chromaticities(lin_cicp_08_gamut); break;
-        case 9: *chr = gamut_chromaticities(lin_cicp_09_gamut); break;
-        case 10: *chr = gamut_chromaticities(lin_cicp_10_gamut); break;
-        case 11: *chr = gamut_chromaticities(lin_cicp_11_gamut); break;
-        case 12: *chr = gamut_chromaticities(lin_cicp_12_gamut); break;
-        case 22: *chr = gamut_chromaticities(lin_cicp_22_gamut); break;
-        default: spdlog::warn("PNG: Unknown cICP color primaries: {}", int(color_primaries)); break;
+            chr = chromaticities_from_cicp(color_primaries);
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("PNG: Unknown cICP color primaries: {}", int(color_primaries));
         }
 
-        switch (transfer_function)
-        {
-        case 1: [[fallthrough]];
-        case 6: [[fallthrough]];
-        case 12: [[fallthrough]];
-        case 14: [[fallthrough]];
-        case 15: tf = TransferFunction_ITU; break;
-        case 4:
-            tf    = TransferFunction_Gamma;
-            gamma = 2.2f;
-            break;
-        case 5:
-            tf    = TransferFunction_Gamma;
-            gamma = 2.8f;
-            break;
-        case 7: tf = TransferFunction_ST240; break;
-        case 8: tf = TransferFunction_Linear; break;
-        case 9: tf = TransferFunction_Log100; break;
-        case 10: tf = TransferFunction_Log100_Sqrt10; break;
-        case 11: tf = TransferFunction_IEC61966_2_4; break;
-        case 13: tf = TransferFunction_sRGB; break;
-        case 16: tf = TransferFunction_BT2100_PQ; break;
-        case 17: tf = TransferFunction_DCI_P3; break;
-        case 18: tf = TransferFunction_BT2100_HLG; break;
-        default:
-            spdlog::warn("PNG: cICP transfer function ({}) is not supported, assuming sRGB", transfer_function);
-            tf = TransferFunction_sRGB;
-            break;
-        }
+        float gamma_f = gamma;
+        tf            = transfer_function_from_cicp(transfer_function, &gamma_f);
+        gamma         = gamma_f;
+        if (tf == TransferFunction_Unknown)
+            spdlog::warn("PNG: cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
     }
 #endif
 
-    switch (tf)
-    {
-    case TransferFunction_Linear: tf_desc = linear_tf; break;
-    case TransferFunction_Gamma: tf_desc = fmt::format("{} ({})", gamma_tf, float(1.0 / gamma)); break;
-    case TransferFunction_sRGB: tf_desc = srgb_tf; break;
-    case TransferFunction_ITU: tf_desc = itu_tf; break;
-    case TransferFunction_BT2100_PQ: tf_desc = pq_tf; break;
-    case TransferFunction_BT2100_HLG: tf_desc = hlg_tf; break;
-    case TransferFunction_ST240: tf_desc = st240_tf; break;
-    case TransferFunction_IEC61966_2_4: tf_desc = iec61966_2_4_tf; break;
-    case TransferFunction_DCI_P3: tf_desc = dci_p3_tf; break;
-    default:
-        tf_desc = fmt::format("{} (assumed)", srgb_tf);
-        spdlog::warn("PNG: Transfer function {} is not supported, assuming sRGB", int(tf));
-        tf = TransferFunction_sRGB;
-        break;
-    }
+    string tf_desc = transfer_function_name(tf, gamma);
 
     // Done reading color chunks
     //

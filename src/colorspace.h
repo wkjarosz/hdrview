@@ -22,10 +22,10 @@
 struct Chromaticities
 {
     // Default constructor produces chromaticities according to Rec. ITU-R BT.709-3 (sRGB)
-    float2 red   = {0.64f, 0.33f};
-    float2 green = {0.30f, 0.60f};
-    float2 blue  = {0.15f, 0.06f};
-    float2 white = {0.31271f, 0.32902f}; // D65
+    float2 red{0.64f, 0.33f};
+    float2 green{0.30f, 0.60f};
+    float2 blue{0.15f, 0.06f};
+    float2 white{0.31271f, 0.32902f}; // D65
 
     bool operator==(const Chromaticities &c) const
     {
@@ -38,12 +38,105 @@ struct Chromaticities
     }
 };
 
+template <typename T, int N>
+inline bool approx_equal(const la::vec<T, N> &a, const la::vec<T, N> &b, T tol = T(1e-4))
+{
+    return la::all(la::less(la::abs(a - b), tol));
+}
+
+template <typename T, int N, int M>
+inline bool approx_equal(const la::mat<T, N, M> &a, const la::mat<T, N, M> &b, T tol = T(1e-4))
+{
+    return la::all(la::less(la::abs(a - b), tol));
+}
+
 // approximate equality comparison for Chromaticities
 inline bool approx_equal(const Chromaticities &a, const Chromaticities &b, float tol = 1e-4f)
 {
-    return la::all(la::less(la::abs(a.red - b.red), tol)) && la::all(la::less(la::abs(a.green - b.green), tol)) &&
-           la::all(la::less(la::abs(a.blue - b.blue), tol)) && la::all(la::less(la::abs(a.white - b.white), tol));
+    return approx_equal(a.red, b.red, tol) && approx_equal(a.green, b.green, tol) &&
+           approx_equal(a.blue, b.blue, tol) && approx_equal(a.white, b.white, tol);
 }
+
+using WhitePoint_ = int;
+enum WhitePoint : WhitePoint_
+{
+    WhitePoint_Unspecified = 0, //!< unspecified, assuming D65
+    WhitePoint_FirstNamed  = 1,
+    WhitePoint_ACES        = 1,  //!< ~6000k
+    WhitePoint_A           = 2,  //!< incandescent / tungsten
+    WhitePoint_B           = 3,  //!< obsolete, direct sunlight at noon
+    WhitePoint_C           = 4,  //!< obsolete, average / North sky daylight NTSC 1953, PAL-M
+    WhitePoint_E           = 5,  //!< equal energy
+    WhitePoint_D50         = 6,  //!< horizon light, ICC profile PCS
+    WhitePoint_D55         = 7,  //!< mid-morning / mid-afternoon daylight
+    WhitePoint_D65         = 8,  //!< noon daylight: television, sRGB color space
+    WhitePoint_D75         = 9,  //!< North sky daylight
+    WhitePoint_DCI         = 10, //!< ~6300 K
+    WhitePoint_LastNamed   = WhitePoint_DCI,
+    WhitePoint_Custom      = 11,
+    WhitePoint_Count       = 12
+};
+
+float2       white_point(WhitePoint wp);
+const char  *white_point_name(WhitePoint wp);
+const char **white_point_names();
+WhitePoint   named_white_point(float2 wp);
+
+using ColorGamut_ = int;
+enum ColorGamut : ColorGamut_
+{
+    ColorGamut_Unspecified         = 0,
+    ColorGamut_FirstNamed          = 1,
+    ColorGamut_sRGB_BT709          = 1,
+    ColorGamut_BT470M              = 2,
+    ColorGamut_BT470BG             = 3,
+    ColorGamut_SMPTE170M           = 4,
+    ColorGamut_SMPTE240M           = 5,
+    ColorGamut_Film                = 6,
+    ColorGamut_BT2020_2100         = 7,
+    ColorGamut_SMPTE428            = 8,
+    ColorGamut_DCI_P3_SMPTE431     = 9,
+    ColorGamut_Display_P3_SMPTE432 = 10,
+    ColorGamut_CICP_22             = 11,
+    ColorGamut_ACES_AP0            = 12,
+    ColorGamut_ACEScg_AP1          = 13,
+    ColorGamut_AdobeRGB            = 14,
+    ColorGamut_ProPhotoRGB         = 15,
+    ColorGamut_CIE1931XYZ          = 16,
+    ColorGamut_LastNamed           = ColorGamut_CIE1931XYZ,
+    ColorGamut_Custom              = 17
+};
+
+//! Returns a description of the ColorGamut enum value.
+const char  *color_gamut_name(const ColorGamut primaries);
+const char **color_gamut_names();
+
+//! Returns the Chromaticities corresponding to one of the predefined color primaries, or throws if the primaries
+//! are not recognized.
+Chromaticities gamut_chromaticities(ColorGamut primaries);
+Chromaticities chromaticities_from_cicp(int cicp);
+ColorGamut     named_color_gamut(const Chromaticities &chr);
+
+using TransferFunction_ = int;
+enum TransferFunction : TransferFunction_
+{
+    TransferFunction_Unknown = 0,
+    TransferFunction_Linear,
+    TransferFunction_Gamma,
+    TransferFunction_sRGB,
+    TransferFunction_ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
+    TransferFunction_BT2100_PQ,
+    TransferFunction_BT2100_HLG,
+    TransferFunction_ST240,
+    TransferFunction_Log100,
+    TransferFunction_Log100_Sqrt10,
+    TransferFunction_IEC61966_2_4,
+    TransferFunction_DCI_P3,
+    TransferFunction_Count
+};
+
+std::string      transfer_function_name(TransferFunction tf, float gamma = 2.2f);
+TransferFunction transfer_function_from_cicp(int cicp, float *gamma = nullptr);
 
 float4x4        RGB_to_XYZ(const Chromaticities &chroma, float Y);
 inline float4x4 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
@@ -51,25 +144,6 @@ inline float3   computeYw(const Chromaticities &cr)
 {
     auto m = RGB_to_XYZ(cr, 1.f);
     return float3{m[0][1], m[1][1], m[2][1]} / (m[0][1] + m[1][1] + m[2][1]);
-}
-
-// Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
-inline Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
-{
-    Chromaticities result;
-    // Multiplying the matrix by [1,0,0], [0,1,0], or [0,0,1] gives the XYZ values of the primaries.
-    // Hence, the columns of the matrix are XYZ values of the primaries.
-    // Divide each by its sum to get corresponding chromaticities.
-    result.red   = rgb_to_XYZ.x.xy() / sum(rgb_to_XYZ.x);
-    result.green = rgb_to_XYZ.y.xy() / sum(rgb_to_XYZ.y);
-    result.blue  = rgb_to_XYZ.z.xy() / sum(rgb_to_XYZ.z);
-
-    // Multiplying the matrix by full-intensity for each primary [1,1,1] gives us XYZ of white.
-    // Hence, the sum of the columns is the XYZ of white.
-    // Divide that by the sum of its components to get its chromaticity;
-    float3 wpXYZ = rgb_to_XYZ.x + rgb_to_XYZ.y + rgb_to_XYZ.z;
-    result.white = wpXYZ.xy() / sum(wpXYZ);
-    return result;
 }
 
 /*!
@@ -92,72 +166,8 @@ inline Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
 */
 bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst, int CAT_method = 0);
 
-// names of the predefined linear color gamuts
-extern const char *lin_ap0_gamut;
-extern const char *lin_ap1_acescg_gamut;
-extern const char *lin_adobergb_gamut;
-extern const char *lin_cie1931xyz_gamut;
-extern const char *lin_displayp3_gamut;
-extern const char *lin_prophotorgb_gamut;
-extern const char *lin_bt2020_2100_gamut;
-extern const char *lin_srgb_bt709_gamut;
-extern const char *lin_cicp_01_gamut;
-extern const char *lin_cicp_04_gamut;
-extern const char *lin_cicp_05_gamut;
-extern const char *lin_cicp_06_gamut;
-extern const char *lin_cicp_07_gamut;
-extern const char *lin_cicp_08_gamut;
-extern const char *lin_cicp_09_gamut;
-extern const char *lin_cicp_10_gamut;
-extern const char *lin_cicp_11_gamut;
-extern const char *lin_cicp_12_gamut;
-extern const char *lin_cicp_22_gamut;
-
-// return a map of common color spaces, indexed by name
-const std::map<const char *, Chromaticities> &color_gamuts();
-
-// return a reference to the chromaticities of a named color gamut, or throw if not found
-const Chromaticities &gamut_chromaticities(const char *name);
-
-// return a map of common white points, indexed by name
-const std::map<const char *, float2> &white_points();
-
-const char **color_gamut_names();
-const char  *color_gamut_description(const char *name);
-
-using TransferFunction_ = int;
-enum TransferFunction : TransferFunction_
-{
-    TransferFunction_Linear = 0,
-    TransferFunction_Gamma,
-    TransferFunction_sRGB,
-    TransferFunction_ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
-    TransferFunction_BT2100_PQ,
-    TransferFunction_BT2100_HLG,
-    TransferFunction_ST240,
-    TransferFunction_Log100,
-    TransferFunction_Log100_Sqrt10,
-    TransferFunction_IEC61966_2_4,
-    TransferFunction_DCI_P3,
-    // DCI_P3, // TODO
-
-    TransferFunction_COUNT
-};
-
-// names of the predefined transfer functions
-extern const char *linear_tf;
-extern const char *gamma_tf;
-extern const char *srgb_tf;
-extern const char *itu_tf;
-extern const char *pq_tf;
-extern const char *hlg_tf;
-extern const char *st240_tf;
-extern const char *log100_tf;
-extern const char *log100_sqrt10_tf;
-extern const char *iec61966_2_4_tf;
-extern const char *dci_p3_tf;
-
-const char **transfer_function_names();
+// Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
+Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ);
 
 template <typename Real>
 Real LinearToSRGB_positive(Real linear)
@@ -173,7 +183,7 @@ Real LinearToSRGB_positive(Real linear)
 template <typename Real>
 Real LinearToSRGB(Real linear)
 {
-    return sign(linear) * LinearToSRGB_positive(std::fabs(linear));
+    return std::copysign(LinearToSRGB_positive(std::fabs(linear)), linear);
 }
 
 template <typename Real>
@@ -185,7 +195,7 @@ Real LinearToGamma_positive(Real linear, Real inv_gamma)
 template <typename Real>
 Real LinearToGamma(Real linear, Real inv_gamma)
 {
-    return sign(linear) * LinearToGamma_positive(std::fabs(linear), inv_gamma);
+    return std::copysign(LinearToGamma_positive(std::fabs(linear), inv_gamma), linear);
 }
 
 template <typename Real>
@@ -200,7 +210,7 @@ Real SRGBToLinear_positive(Real sRGB)
 template <typename Real>
 Real SRGBToLinear(Real sRGB)
 {
-    return sign(sRGB) * SRGBToLinear_positive(std::fabs(sRGB));
+    return std::copysign(SRGBToLinear_positive(std::fabs(sRGB)), sRGB);
 }
 
 template <typename Real>
@@ -524,11 +534,12 @@ Color4 LinearToSRGB(const Color4 &c);
 Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float to_linear(const float encoded, const TransferFunction tf, const float gamma = 2.2f)
+inline float to_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
 {
     switch (tf)
     {
     case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_Unknown: [[fallthrough]];
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
     case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
     case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
@@ -547,8 +558,9 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
 {
     switch (tf)
     {
-    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_Unknown: [[fallthrough]];
     case TransferFunction_sRGB: return SRGBToLinear(encoded);
+    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
     case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
     case TransferFunction_BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
@@ -712,7 +724,7 @@ inline uint32_t color_f128_to_u32(const float4 &in)
 //     {
 //     case 0: // Reserved
 //         return linear;
-//     case 1:  // BT.709
+//     case 1:  // BT.709, BT.1361-0, IEC 61966-2-1 sRGB or sYCC, IEC 61966-2-4, SMPTE RP 177 Annex B
 //     case 6:  // SMPTE 170M
 //     case 14: // BT.2020 10-bit
 //     case 15: // BT.2020 12-bit

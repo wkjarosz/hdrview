@@ -121,40 +121,16 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     }
 
     float            gamma = (float)file_enc.gamma;
-    TransferFunction tf;
-    string           tf_desc;
-    switch (file_enc.transfer_function)
-    {
-    case JXL_TRANSFER_FUNCTION_709:
-        tf_desc = itu_tf;
-        tf      = TransferFunction_ITU;
-        break;
-    case JXL_TRANSFER_FUNCTION_PQ:
-        tf_desc = pq_tf;
-        tf      = TransferFunction_BT2100_PQ;
-        break;
-    case JXL_TRANSFER_FUNCTION_HLG:
-        tf_desc = hlg_tf;
-        tf      = TransferFunction_BT2100_HLG;
-        break;
-    case JXL_TRANSFER_FUNCTION_DCI:
-        tf_desc = dci_p3_tf;
-        tf      = TransferFunction_DCI_P3;
-        break;
-    case JXL_TRANSFER_FUNCTION_LINEAR:
-        tf_desc = linear_tf;
-        tf      = TransferFunction_Linear;
-        break;
-    case JXL_TRANSFER_FUNCTION_GAMMA:
-        tf_desc = fmt::format("{} ({})", gamma_tf, gamma);
-        tf      = TransferFunction_Gamma;
-        break;
-    case JXL_TRANSFER_FUNCTION_SRGB: [[fallthrough]];
-    default: tf_desc = srgb_tf; tf = TransferFunction_sRGB;
-    }
+    TransferFunction tf    = transfer_function_from_cicp((int)file_enc.transfer_function, &gamma);
+
+    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA)
+        tf = TransferFunction_Gamma;
+    else if (tf == TransferFunction_Unknown)
+        spdlog::warn("JPEG-XL: cICP transfer function ({}) is not recognized, assuming sRGB",
+                     (int)file_enc.transfer_function);
 
     if (tf_description)
-        *tf_description = tf_desc;
+        *tf_description = transfer_function_name(tf, gamma);
 
     to_linear(pixels, size, tf, gamma);
 

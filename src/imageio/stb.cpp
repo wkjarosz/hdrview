@@ -148,7 +148,8 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     else
         image->metadata["bit depth"] = "8 bpc";
 
-    image->metadata["transfer function"] = linearize ? srgb_tf : linear_tf;
+    image->metadata["transfer function"] =
+        linearize ? transfer_function_name(TransferFunction_Unknown) : transfer_function_name(TransferFunction_Linear);
 
     if (linearize)
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");

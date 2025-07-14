@@ -294,7 +294,8 @@ public:
     float3x3                      M_to_Rec709             = la::identity;
     float3                        luminance_weights       = Rec709_luminance_weights;
     int                           adaptation_method       = 2;
-    int                           named_color_space       = -1;
+    ColorGamut                    named_color_space       = ColorGamut_Unspecified;
+    WhitePoint                    named_white_point       = WhitePoint_Unspecified;
     bool                          file_has_straight_alpha = false;
     json                          metadata                = json::object();
 

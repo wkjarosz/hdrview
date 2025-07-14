@@ -79,7 +79,9 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     image->file_has_straight_alpha       = size.z > 3;
     image->metadata["loader"]            = "qoi";
     image->metadata["bit depth"]         = fmt::format("{}-bit (8 bpc)", size.z * 8);
-    image->metadata["transfer function"] = desc.colorspace == QOI_LINEAR ? linear_tf : srgb_tf;
+    image->metadata["transfer function"] = desc.colorspace == QOI_LINEAR
+                                               ? transfer_function_name(TransferFunction_Linear)
+                                               : transfer_function_name(TransferFunction_sRGB);
 
     bool linearize = desc.colorspace != QOI_LINEAR;
 
@@ -122,7 +124,7 @@ void save_qoi_image(const Image &img, ostream &os, const string &filename, float
     };
     int encoded_size = 0;
 
-    spdlog::info("Saving {}-channel, {}x{} pixels {} QOI image.", n, w, h, sRGB ? srgb_tf : linear_tf);
+    spdlog::info("Saving {}-channel, {}x{} pixels {} QOI image.", n, w, h, sRGB ? "sRGB" : "linear");
     std::unique_ptr<void, decltype(std::free) *> encoded_data{qoi_encode(pixels.get(), &desc, &encoded_size),
                                                               std::free};
 
