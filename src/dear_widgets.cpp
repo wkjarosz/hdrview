@@ -1,5 +1,7 @@
 ﻿#include <dear_widgets.h>
 
+#include "common.h"
+
 #ifdef DEAR_WIDGETS_TESSELATION
 #include <map>
 #endif
@@ -3141,6 +3143,8 @@ void DrawMarker(ImDrawList *pDrawList, ImVec2 start, ImVec2 size, ImU32 fg_color
 }
 #endif
 
+#include "common.h"
+
 //////////////////////////////////////////////////////////////////////////
 // Widgets
 //////////////////////////////////////////////////////////////////////////
@@ -3148,7 +3152,7 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
                           ImVec2 whitePoint, float *xyzToRGB, int chromeLineSamplesCount, int resX, int resY,
                           ImU32 maskColor, float wavelengthMin, float wavelengthMax, ImVec2 plotMin, ImVec2 plotMax,
                           ImVec2 gridMin, ImVec2 gridMax, bool showColorSpaceTriangle, bool showWhitePoint,
-                          bool showBorder, bool showGrid, ImU32 borderColor, float borderThickness)
+                          bool showBorder, bool showGrid, ImU32 borderColor, float borderThickness, ImU32 gridColor, float gridThickness)
 {
     ImVec2 sq_min = ImVec2(curPos.x + ImRescale(gridMin.x, plotMin.x, plotMax.x, 0.0f, size.x),
                            curPos.y + ImRescale(gridMin.y, plotMin.y, plotMax.y, size.y, 0.0f));
@@ -3167,50 +3171,81 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
         },
         xyzToRGB, gridMin.x, gridMax.x, gridMax.y, gridMin.y, sq_min, sq_max - sq_min, resX, resY);
 
-    float            illum;
-    float            x, y, z;
-    float            sum;
-    ImVector<ImVec2> chromLine;
-    // +1 to close the line
-    // +5 for the enclosure
-    int ptsCount = chromeLineSamplesCount + 1 + 5;
-    chromLine.resize(ptsCount);
-    for (int i = 0; i < chromeLineSamplesCount; ++i)
-    {
-        float const wavelength =
-            ScaleFromNormalized(((float)i) / ((float)(chromeLineSamplesCount - 1)), wavelengthMin, wavelengthMax);
+	float            illum;
+	float            x, y, z;
+	float            sum;
+	ImVector<ImVec2> chromLine;
+	// +1 to close the line
+	// +5 for the enclosure
+	int ptsCount = chromeLineSamplesCount + 1 + 5;
+	chromLine.resize(ptsCount);
 
-        illum = ImFunctionFromData(wavelength, s_Illuminance_D65_min, s_Illuminance_D65_max, s_Illuminance_D65,
-                                   s_Illuminance_D65_samplesCount);
-        x     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_X,
-                                           s_CIE_1931_2deg_samplesCount);
-        y     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Y,
-                                           s_CIE_1931_2deg_samplesCount);
-        z     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Z,
-                                           s_CIE_1931_2deg_samplesCount);
+	// Compute chromaticity line
+	for (int i = 0; i < chromeLineSamplesCount; ++i)
+	{
+		float const wavelength =
+			ScaleFromNormalized(((float)i) / ((float)(chromeLineSamplesCount - 1)), wavelengthMin, wavelengthMax);
 
-        sum = x + y + z;
+		illum = ImFunctionFromData(wavelength, s_Illuminance_D65_min, s_Illuminance_D65_max, s_Illuminance_D65,
+								   s_Illuminance_D65_samplesCount);
+		x     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_X,
+										   s_CIE_1931_2deg_samplesCount);
+		y     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Y,
+										   s_CIE_1931_2deg_samplesCount);
+		z     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Z,
+										   s_CIE_1931_2deg_samplesCount);
 
-        x /= sum;
-        y /= sum;
+		sum = x + y + z;
 
-        chromLine[i] = ImVec2(x, y);
-    }
-    chromLine[chromeLineSamplesCount] = chromLine[0];
-    // plotMin.x, plotMax.x, plotMin.y, plotMax.y
-    chromLine[chromeLineSamplesCount + 1] = ImVec2(plotMax.x, plotMax.y);
-    chromLine[chromeLineSamplesCount + 2] = ImVec2(plotMax.x, plotMin.y);
-    chromLine[chromeLineSamplesCount + 3] = ImVec2(plotMin.x, plotMin.y);
-    chromLine[chromeLineSamplesCount + 4] = ImVec2(plotMin.x, plotMax.y);
-    chromLine[chromeLineSamplesCount + 5] = ImVec2(plotMax.x, plotMax.y);
-    for (int i = 0; i < ptsCount; ++i)
-    {
-        chromLine[i].x = Rescale(chromLine[i].x, plotMin.x, plotMax.x, curPos.x, curPos.x + size.x);
-        chromLine[i].y = Rescale(chromLine[i].y, plotMin.y, plotMax.y, curPos.y + size.y, curPos.y - 1.0f);
-    }
+		x /= sum;
+		y /= sum;
+
+		chromLine[i] = ImVec2(x, y);
+	}
+	chromLine[chromeLineSamplesCount] = chromLine[0];
+	// plotMin.x, plotMax.x, plotMin.y, plotMax.y
+	chromLine[chromeLineSamplesCount + 1] = ImVec2(plotMax.x, plotMax.y);
+	chromLine[chromeLineSamplesCount + 2] = ImVec2(plotMax.x, plotMin.y);
+	chromLine[chromeLineSamplesCount + 3] = ImVec2(plotMin.x, plotMin.y);
+	chromLine[chromeLineSamplesCount + 4] = ImVec2(plotMin.x, plotMax.y);
+	chromLine[chromeLineSamplesCount + 5] = ImVec2(plotMax.x, plotMax.y);
+
+	// Rescale to screen coordinates
+	for (int i = 0; i < ptsCount; ++i)
+	{
+		chromLine[i].x = Rescale(chromLine[i].x, plotMin.x, plotMax.x, curPos.x, curPos.x + size.x);
+		chromLine[i].y = Rescale(chromLine[i].y, plotMin.y, plotMax.y, curPos.y + size.y, curPos.y - 1.0f);
+	}
+
+	// Calculate number of tick marks at 10 nm intervals
+	int tickCount = (int)ImFloor((wavelengthMax - wavelengthMin) / 10.0f) + 1;
+	ImVector<ImVec4> tickMarks;
+	tickMarks.resize(tickCount); // Stores tick mark location and orientation
+
+	float firstTick = (ImFloor(wavelengthMin / 10.f) + 1.f) * 10.f;
+	for (int tickIdx = 0; tickIdx < tickCount; ++tickIdx)
+	{
+		float nm = firstTick + tickIdx * 10.0f;
+		// spdlog::info("Tick {}: Wavelength = {}", tickIdx, nm);
+		float t    = (nm - wavelengthMin) / (wavelengthMax - wavelengthMin);
+		float fIdx = t * (chromeLineSamplesCount - 1);
+		int i0 = ImClamp((int)ImFloor(fIdx), 0, chromeLineSamplesCount - 2);
+		int i1 = i0 + 1;
+		float frac = fIdx - (float)i0;
+
+		// Interpolate position between chromLine[i0] and chromLine[i1]
+		ImVec2 pos = ImLerp(chromLine[i0], chromLine[i1], frac);
+
+		// Compute tangent direction between i0 and i1
+		ImVec2 tangent = ImNormalized(chromLine[i1] - chromLine[i0]);
+		ImVec2 normal(-tangent.y, tangent.x);
+		normal = ImNormalized(normal); // Ensure normal is unit length
+
+		tickMarks[tickIdx] = ImVec4(pos.x, pos.y, normal.x, normal.y);
+	}
+
     // Workaround: Overdraw with strokeWidth of 2. Because we seem to have missing the first and last row of pixel.
     //			The problem is more visible with alpha < 255.
-
     DrawShapeWithHole(pDrawList, &chromLine[0], ptsCount, maskColor, &clipRect, 1, 2);
 
     if (showGrid)
@@ -3218,11 +3253,10 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
         const float tick_len = 8.0f;
 
         // Draw square
-        pDrawList->AddRect(sq_min, sq_max, IM_COL32(255, 255, 255, 255), 0.0f, 0, 2.0f);
+        pDrawList->AddRect(sq_min, sq_max, gridColor, 0.0f, 0, gridThickness);
 
         // Draw grid lines (vertical and horizontal) at 0.1 increments within gridMin/gridMax
-        const ImU32 grid_col       = IM_COL32(255, 255, 255, 128); // 50% transparent white
-        const float grid_thickness = 0.7f;
+        auto gridColorHalf = ImGui::GetColorU32(gridColor, 0.5f);
 
         // X grid lines (vertical)
         int t_start_i = (int)ImCeil((gridMin.x + 1e-5f) * 10.0f);
@@ -3231,19 +3265,19 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
         {
             float t = ti * 0.1f;
             float x = ImLerp(sq_min.x, sq_max.x, (t - gridMin.x) / (gridMax.x - gridMin.x));
-            pDrawList->AddLine(ImVec2(x, sq_min.y), ImVec2(x, sq_max.y), grid_col, grid_thickness);
+            pDrawList->AddLine(ImVec2(x, sq_min.y), ImVec2(x, sq_max.y), gridColorHalf, 0.5f*gridThickness);
 
             // Bottom edge (tick inside)
             {
                 float y0 = sq_max.y;
                 float y1 = y0 + tick_len;
-                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), IM_COL32(255, 255, 255, 255), 1.5f);
+                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
             }
             // Top edge (tick inside)
             {
                 float y0 = sq_min.y;
                 float y1 = y0 - tick_len;
-                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), IM_COL32(255, 255, 255, 255), 1.5f);
+                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
             }
         }
         // Y grid lines (horizontal)
@@ -3253,19 +3287,19 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
         {
             float t = ti * 0.1f;
             float y = ImLerp(sq_min.y, sq_max.y, (t - gridMin.y) / (gridMax.y - gridMin.y));
-            pDrawList->AddLine(ImVec2(sq_min.x, y), ImVec2(sq_max.x, y), grid_col, grid_thickness);
+            pDrawList->AddLine(ImVec2(sq_min.x, y), ImVec2(sq_max.x, y), gridColorHalf, 0.5f*gridThickness);
 
             // Left edge (tick inside)
             {
                 float x0 = sq_min.x;
                 float x1 = x0 + tick_len;
-                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), IM_COL32(255, 255, 255, 255), 1.5f);
+                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
             }
             // Right edge (tick inside)
             {
                 float x0 = sq_max.x;
                 float x1 = x0 - tick_len;
-                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), IM_COL32(255, 255, 255, 255), 1.5f);
+                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
             }
         }
     }
@@ -3273,34 +3307,157 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
     if (showBorder)
     {
         pDrawList->AddPolyline(&chromLine[0], chromeLineSamplesCount, borderColor, ImDrawFlags_Closed, borderThickness);
+		
+		ImGui::PushFont(nullptr, 10.f);
+		// Draw tick marks stored in tickMarks
+		const float tick_length = 4.0f;
+		const float major_tick_length = 8.0f;
+		for (int i = 0; i < tickMarks.size(); ++i)
+		{
+			ImVec4 tick = tickMarks[i];
+			ImVec2 p(tick.x, tick.y);
+			ImVec2 normal(tick.z, tick.w);
+
+			// Compute wavelength for this tick
+			float nm = firstTick + i * 10.0f;
+			// Check if tick is at a 100 nm multiple
+			bool is_major = (static_cast<int>(nm) % 100 == 0);
+
+			// Already rescaled to screen coordinates above
+			// Draw tick mark perpendicular to the curve
+			ImVec2 tick_start = p;
+			ImVec2 tick_end   = p + normal * (is_major ? major_tick_length : tick_length);
+
+			pDrawList->AddLine(tick_start, tick_end, borderColor, is_major ? borderThickness : borderThickness * 0.5f);
+
+			// Add text label for major ticks (100 nm multiples)
+			if (is_major)
+			{
+				static char label[8];
+				ImFormatString(label, sizeof(label), "%d nm", static_cast<int>(nm));
+
+				// Compute text size
+				ImVec2 text_size = ImGui::CalcTextSize(label);
+
+				// Offset text slightly along the normal direction from the tick end
+				const float text_offset = text_size.y;
+				ImVec2 text_pos = tick_end + normal * text_offset;
+
+				// Align text position continuously based on normal direction using ImLerp
+				text_pos += ImLerp(-text_size, ImVec2(0.f, 0.f), 0.5f * (normal.x + 1.0f));
+
+				pDrawList->AddText(text_pos, IM_COL32(0,0,0,255), label);
+				pDrawList->AddText(text_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label);
+			}
+		}
+		ImGui::PopFont();
     }
 
     const float radius = 1.5f * borderThickness;
+	ImVec2 sRGBLines[] = {primR, primG, primB};
 
-    if (showColorSpaceTriangle)
-    {
-        ImVec2 sRGBLines[] = {primR, primG, primB};
-        for (int i = 0; i < 3; ++i)
-        {
-            ImVec2 &vCur = sRGBLines[i];
-            vCur.x       = curPos.x + ImRescale(vCur.x, plotMin.x, plotMax.x, 0.0f, size.x);
-            vCur.y       = curPos.y + ImRescale(vCur.y, plotMin.y, plotMax.y, size.y, 0.0f);
-        }
-        pDrawList->AddPolyline(&sRGBLines[0], 3, IM_COL32(255, 255, 255, 255), ImDrawFlags_Closed, borderThickness);
+	if (showColorSpaceTriangle)
+	{
+		for (int i = 0; i < 3; ++i)
+		{
+			ImVec2 &vCur = sRGBLines[i];
+			vCur.x       = curPos.x + ImRescale(vCur.x, plotMin.x, plotMax.x, 0.0f, size.x);
+			vCur.y       = curPos.y + ImRescale(vCur.y, plotMin.y, plotMax.y, size.y, 0.0f);
+		}
+		pDrawList->AddPolyline(&sRGBLines[0], 3, IM_COL32(255, 255, 255, 255), ImDrawFlags_Closed, borderThickness);
+	}
 
-        // Draw filled circles at triangle corners, colored by primary
-        pDrawList->AddCircleFilled(sRGBLines[0], radius, IM_COL32(100, 0, 0, 255), 0); // Red
-        pDrawList->AddCircleFilled(sRGBLines[1], radius, IM_COL32(0, 100, 0, 255), 0); // Green
-        pDrawList->AddCircleFilled(sRGBLines[2], radius, IM_COL32(0, 0, 100, 255), 0); // Blue
-    }
+	if (showGrid)
+	{
+		ImVec2 mouse_pos = ImGui::GetIO().MousePos;
+		if (clipRect.Contains(mouse_pos))
+		{
+			// Convert mouse position to chromaticity coordinates
+			float x = ImClamp((mouse_pos.x - curPos.x) / size.x, 0.0f, 1.0f);
+			float y = ImClamp((mouse_pos.y - curPos.y) / size.y, 0.0f, 1.0f);
 
-    if (showWhitePoint)
-    {
-        ImVec2 vWhitePoint = whitePoint;
-        vWhitePoint.x      = curPos.x + ImRescale(vWhitePoint.x, plotMin.x, plotMax.x, 0.0f, size.x);
-        vWhitePoint.y      = curPos.y + ImRescale(vWhitePoint.y, plotMin.y, plotMax.y, size.y, 0.0f);
-        pDrawList->AddCircleFilled(vWhitePoint, radius, IM_COL32(0, 0, 0, 255), 0);
-    }
+			// Rescale to chromaticity coordinates
+			float chrom_x = plotMin.x + x * (plotMax.x - plotMin.x);
+			float chrom_y = plotMax.y - y * (plotMax.y - plotMin.y);
+
+			// Convert chromaticity coordinates back to screen
+			float screen_x = curPos.x + ImRescale(chrom_x, plotMin.x, plotMax.x, 0.0f, size.x);
+			float screen_y = curPos.y + ImRescale(chrom_y, plotMin.y, plotMax.y, size.y, 0.0f);
+
+			// Draw vertical and horizontal lines
+			pDrawList->AddLine(ImVec2(screen_x, sq_min.y), ImVec2(screen_x, sq_max.y), IM_COL32(0, 0, 0, 128), 1.5f);
+			pDrawList->AddLine(ImVec2(sq_min.x, screen_y), ImVec2(sq_max.x, screen_y), IM_COL32(0, 0, 0, 128), 1.5f);
+
+			// Format text for coordinates
+			char label_x[32], label_y[32];
+			ImFormatString(label_x, sizeof(label_x), "x = %.3f", chrom_x);
+			ImFormatString(label_y, sizeof(label_y), "y = %.3f", chrom_y);
+
+			ImVec2 text_size = ImGui::CalcTextSize(label_x);
+
+			// Draw text near lines, but keep inside plot area
+			float pad = 4.f;
+			float center_x = (sq_min.x + sq_max.x) * 0.5f;
+			float center_y = (sq_min.y + sq_max.y) * 0.5f;
+
+			// For x label: position left/right depending on screen_x, above/below depending on screen_y
+			bool x_right = (screen_x > center_x);
+			bool y_above = (screen_y < center_y);
+
+			ImVec2 text_x_pos = ImVec2(
+				x_right ? screen_x - pad - text_size.x : screen_x + pad,
+				y_above ? sq_max.y - pad + text_size.y : sq_min.y - pad - text_size.y
+			);
+
+			// For y label: align horizontally opposite to x label, vertically near screen_y
+			ImVec2 text_y_pos = ImVec2(
+				x_right ? sq_min.x + 2.5f * pad : sq_max.x - pad - text_size.x,
+				y_above ? screen_y + pad : screen_y - pad - text_size.y
+			);
+
+			pDrawList->AddText(text_x_pos, IM_COL32(0,0,0,255), label_x);
+			pDrawList->AddText(text_x_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label_x);
+
+			pDrawList->AddText(text_y_pos, IM_COL32(0,0,0,255), label_y);
+			pDrawList->AddText(text_y_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label_y);
+		}
+	}
+
+	if (showColorSpaceTriangle)
+	{
+
+		// Draw filled circles at triangle corners, colored by primary
+		pDrawList->AddCircleFilled(sRGBLines[0], radius, IM_COL32(200, 0, 0, 255), 0); // Red
+		pDrawList->AddCircleFilled(sRGBLines[1], radius, IM_COL32(0, 200, 0, 255), 0); // Green
+		pDrawList->AddCircleFilled(sRGBLines[2], radius, IM_COL32(0, 0, 200, 255), 0); // Blue
+
+        pDrawList->AddCircle(sRGBLines[0], radius + 1.f, IM_COL32(0, 0, 0, 255), 0, 1.5f); // Red
+        pDrawList->AddCircle(sRGBLines[1], radius + 1.f, IM_COL32(0, 0, 0, 255), 0, 1.5f); // Green
+        pDrawList->AddCircle(sRGBLines[2], radius + 1.f, IM_COL32(0, 0, 0, 255), 0, 1.5f); // Blue
+
+		// Draw text labels for R, G, B
+		const char* labels[3] = {"R", "G", "B"};
+		for (int i = 0; i < 3; ++i)
+		{
+			ImVec2 label_pos = sRGBLines[i] + ImVec2(radius + 2.0f, -radius - 8.0f);
+			pDrawList->AddText(label_pos, IM_COL32(0,0,0,255), labels[i]);
+			pDrawList->AddText(label_pos-ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), labels[i]);
+		}
+	}
+
+	if (showWhitePoint)
+	{
+		ImVec2 vWhitePoint = whitePoint;
+		vWhitePoint.x      = curPos.x + ImRescale(vWhitePoint.x, plotMin.x, plotMax.x, 0.0f, size.x);
+		vWhitePoint.y      = curPos.y + ImRescale(vWhitePoint.y, plotMin.y, plotMax.y, size.y, 0.0f);
+		pDrawList->AddCircleFilled(vWhitePoint, radius, IM_COL32(255, 255, 255, 255), 0);
+		pDrawList->AddCircle(vWhitePoint, radius + 1.f, IM_COL32(0, 0, 0, 255), 0, 1.5f);
+
+		// Draw text label for W
+		ImVec2 label_pos = vWhitePoint + ImVec2(radius + 2.0f, -radius - 8.0f);
+		pDrawList->AddText(label_pos, IM_COL32(0,0,0,255), "W");
+		pDrawList->AddText(label_pos-ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), "W");
+	}
 
     pDrawList->PopClipRect();
 }

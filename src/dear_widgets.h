@@ -837,7 +837,9 @@ namespace ImWidgets{
 										 bool showBorder = true,
 										 bool showGrid = true,
 										 ImU32 borderColor = IM_COL32( 0, 0, 0, 255 ),
-										 float borderThickness = 3.0f );
+										 float borderThickness = 3.0f, 
+										 ImU32 gridColor = IM_COL32( 255, 255, 255, 255 ),
+										 float gridThickness = 2.0f );
     IMGUI_API bool ChromaticityPlotDragBehavior(const char *str_id, ImVec2 curPos, ImVec2 size, ImVec2 *primR,
                                                 ImVec2 *primG, ImVec2 *primB, ImVec2 *whitePoint, ImVec2 plotMin,
                                                 ImVec2 plotMax);

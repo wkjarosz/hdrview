@@ -630,10 +630,11 @@ void Image::draw_info()
             float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
 
             ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImWidgets::DrawChromaticityPlot(
-                pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red, gamut_chr.green, gamut_chr.blue,
-                gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64, ImGui::GetColorU32(ImGuiCol_WindowBg, 0.5f), 380.f, 700.f,
-                vMin - pad, vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0, 255), 2.f);
+            ImWidgets::DrawChromaticityPlot(pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red, gamut_chr.green,
+                                            gamut_chr.blue, gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64,
+                                            ImGui::GetColorU32(ImGuiCol_WindowBg, 0.5f), 380.f, 700.f, vMin - pad,
+                                            vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0, 255), 2.f,
+                                            ImGui::GetColorU32(ImGuiCol_Text), 1.5f);
 
             auto &io = ImGui::GetIO();
             if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
