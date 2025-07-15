@@ -3250,6 +3250,18 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
 
     if (showGrid)
     {
+		ImGui::PushFont(nullptr, 10.f);
+
+		// Estimate grid spacing in pixels
+		float x_grid_spacing = (sq_max.x - sq_min.x) / ((gridMax.x - gridMin.x) * 10.0f);
+		float y_grid_spacing = (sq_min.y - sq_max.y) / ((gridMax.y - gridMin.y) * 10.0f);
+
+		// Get font size (height)
+		float label_threshold = 2.f * ImGui::GetFontSize();
+
+		bool show_x_labels = x_grid_spacing > label_threshold;
+		bool show_y_labels = y_grid_spacing > label_threshold;
+
         const float tick_len = 8.0f;
 
         // Draw square
@@ -3258,50 +3270,74 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
         // Draw grid lines (vertical and horizontal) at 0.1 increments within gridMin/gridMax
         auto gridColorHalf = ImGui::GetColorU32(gridColor, 0.5f);
 
-        // X grid lines (vertical)
-        int t_start_i = (int)ImCeil((gridMin.x + 1e-5f) * 10.0f);
-        int t_end_i   = (int)ImFloor((gridMax.x - 1e-5f) * 10.0f);
-        for (int ti = t_start_i; ti <= t_end_i; ++ti)
-        {
-            float t = ti * 0.1f;
-            float x = ImLerp(sq_min.x, sq_max.x, (t - gridMin.x) / (gridMax.x - gridMin.x));
-            pDrawList->AddLine(ImVec2(x, sq_min.y), ImVec2(x, sq_max.y), gridColorHalf, 0.5f*gridThickness);
+		// X grid lines (vertical)
+		int t_start_i = (int)ImCeil((gridMin.x + 1e-5f) * 10.0f);
+		int t_end_i   = (int)ImFloor((gridMax.x - 1e-5f) * 10.0f);
+		for (int ti = t_start_i; ti <= t_end_i; ++ti)
+		{
+			float t = ti * 0.1f;
+			float x = ImLerp(sq_min.x, sq_max.x, (t - gridMin.x) / (gridMax.x - gridMin.x));
+			pDrawList->AddLine(ImVec2(x, sq_min.y), ImVec2(x, sq_max.y), gridColorHalf, 0.5f*gridThickness);
 
-            // Bottom edge (tick inside)
-            {
-                float y0 = sq_max.y;
-                float y1 = y0 + tick_len;
-                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
-            }
-            // Top edge (tick inside)
-            {
-                float y0 = sq_min.y;
-                float y1 = y0 - tick_len;
-                pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
-            }
-        }
-        // Y grid lines (horizontal)
-        t_start_i = (int)ImCeil((gridMin.y + 1e-5f) * 10.0f);
-        t_end_i   = (int)ImFloor((gridMax.y - 1e-5f) * 10.0f);
-        for (int ti = t_start_i; ti <= t_end_i; ++ti)
-        {
-            float t = ti * 0.1f;
-            float y = ImLerp(sq_min.y, sq_max.y, (t - gridMin.y) / (gridMax.y - gridMin.y));
-            pDrawList->AddLine(ImVec2(sq_min.x, y), ImVec2(sq_max.x, y), gridColorHalf, 0.5f*gridThickness);
+			// Bottom edge (tick inside)
+			{
+				float y0 = sq_min.y;
+				float y1 = y0 - tick_len;
+				pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
+			}
 
-            // Left edge (tick inside)
-            {
-                float x0 = sq_min.x;
-                float x1 = x0 + tick_len;
-                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
-            }
-            // Right edge (tick inside)
-            {
-                float x0 = sq_max.x;
-                float x1 = x0 - tick_len;
-                pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
-            }
-        }
+			// Top edge (tick inside)
+			{
+				float y0 = sq_max.y;
+				float y1 = y0 + tick_len;
+				pDrawList->AddLine(ImVec2(x, y0), ImVec2(x, y1), gridColor, 0.75f*gridThickness);
+
+				if (show_x_labels)
+				{
+					// Add text label above tick (top side)
+					static char label[16];
+					ImFormatString(label, sizeof(label), "%.1f", t);
+					ImVec2 text_size = ImGui::CalcTextSize(label);
+					ImVec2 text_pos = ImVec2(x - text_size.x * 0.5f, y1 + 4.0f);
+					pDrawList->AddText(text_pos, IM_COL32(0,0,0,255), label);
+					pDrawList->AddText(text_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label);
+				}
+			}
+		}
+		// Y grid lines (horizontal)
+		t_start_i = (int)ImCeil((gridMin.y + 1e-5f) * 10.0f);
+		t_end_i   = (int)ImFloor((gridMax.y - 1e-5f) * 10.0f);
+		for (int ti = t_start_i; ti <= t_end_i; ++ti)
+		{
+			float t = ti * 0.1f;
+			float y = ImLerp(sq_min.y, sq_max.y, (t - gridMin.y) / (gridMax.y - gridMin.y));
+			pDrawList->AddLine(ImVec2(sq_min.x, y), ImVec2(sq_max.x, y), gridColorHalf, 0.5f*gridThickness);
+
+			// Left edge (tick inside)
+			{
+				float x0 = sq_min.x;
+				float x1 = x0 + tick_len;
+				pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
+			}
+			// Right edge (tick inside)
+			{
+				float x0 = sq_max.x;
+				float x1 = x0 - tick_len;
+				pDrawList->AddLine(ImVec2(x0, y), ImVec2(x1, y), gridColor, 0.75f*gridThickness);
+
+				if (show_y_labels)
+				{
+					// Add text label to the right of tick (right side)
+					static char label[16];
+					ImFormatString(label, sizeof(label), "%.1f", t);
+					ImVec2 text_size = ImGui::CalcTextSize(label);
+					ImVec2 text_pos = ImVec2(x1 - text_size.x - 2.0f, y - text_size.y * 0.4f);
+					pDrawList->AddText(text_pos, IM_COL32(0,0,0,255), label);
+					pDrawList->AddText(text_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label);
+				}
+			}
+		}
+		ImGui::PopFont();
     }
 
     if (showBorder)
@@ -3387,39 +3423,6 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
 			// Draw vertical and horizontal lines
 			pDrawList->AddLine(ImVec2(screen_x, sq_min.y), ImVec2(screen_x, sq_max.y), IM_COL32(0, 0, 0, 128), 1.5f);
 			pDrawList->AddLine(ImVec2(sq_min.x, screen_y), ImVec2(sq_max.x, screen_y), IM_COL32(0, 0, 0, 128), 1.5f);
-
-			// Format text for coordinates
-			char label_x[32], label_y[32];
-			ImFormatString(label_x, sizeof(label_x), "x = %.3f", chrom_x);
-			ImFormatString(label_y, sizeof(label_y), "y = %.3f", chrom_y);
-
-			ImVec2 text_size = ImGui::CalcTextSize(label_x);
-
-			// Draw text near lines, but keep inside plot area
-			float pad = 4.f;
-			float center_x = (sq_min.x + sq_max.x) * 0.5f;
-			float center_y = (sq_min.y + sq_max.y) * 0.5f;
-
-			// For x label: position left/right depending on screen_x, above/below depending on screen_y
-			bool x_right = (screen_x > center_x);
-			bool y_above = (screen_y < center_y);
-
-			ImVec2 text_x_pos = ImVec2(
-				x_right ? screen_x - pad - text_size.x : screen_x + pad,
-				y_above ? sq_max.y - pad + text_size.y : sq_min.y - pad - text_size.y
-			);
-
-			// For y label: align horizontally opposite to x label, vertically near screen_y
-			ImVec2 text_y_pos = ImVec2(
-				x_right ? sq_min.x + 2.5f * pad : sq_max.x - pad - text_size.x,
-				y_above ? screen_y + pad : screen_y - pad - text_size.y
-			);
-
-			pDrawList->AddText(text_x_pos, IM_COL32(0,0,0,255), label_x);
-			pDrawList->AddText(text_x_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label_x);
-
-			pDrawList->AddText(text_y_pos, IM_COL32(0,0,0,255), label_y);
-			pDrawList->AddText(text_y_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label_y);
 		}
 	}
 

@@ -615,12 +615,12 @@ void Image::draw_info()
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             // our working space is always BT.709/sRGB
             auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_sRGB)));
-            auto xyz2rgb = transpose(XYZ_to_RGB(Chromaticities{}, 1.f));
+            auto xyz2rgb = transpose(XYZ_to_sRGB());
             // this is equivalent to:
             // auto           xyz2rgb = transpose(mul(M_to_sRGB, M_XYZ_to_RGB));
 
             float         pad = 0.01f;
-            static float2 vMin{0.f, 0.f};
+            static float2 vMin{-0.05f, -0.05f};
             static float2 vMax{0.8f, 0.9f};
             static float2 vSize  = vMax - vMin;
             static float  aspect = vSize.x / vSize.y;
@@ -632,7 +632,7 @@ void Image::draw_info()
             ImVec2 pos = ImGui::GetCursorScreenPos();
             ImWidgets::DrawChromaticityPlot(pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red, gamut_chr.green,
                                             gamut_chr.blue, gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64,
-                                            ImGui::GetColorU32(ImGuiCol_WindowBg, 0.5f), 380.f, 700.f, vMin - pad,
+                                            ImGui::GetColorU32(ImGuiCol_WindowBg, 0.7f), 380.f, 700.f, vMin - pad,
                                             vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0, 255), 2.f,
                                             ImGui::GetColorU32(ImGuiCol_Text), 1.5f);
 
