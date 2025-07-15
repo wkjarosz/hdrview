@@ -3313,12 +3313,10 @@ bool ChromaticityPlotDragBehavior(const char *str_id, ImVec2 curPos, ImVec2 size
     if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
     {
         ImVec2 mouse_pos = ImGui::GetIO().MousePos;
-        ImVec2 plot_pos  = ImVec2(mouse_pos.x - curPos.x, mouse_pos.y - curPos.y);
+        ImVec2 plot_pos  = mouse_pos - curPos;
 
         // Convert from screen to chromaticity coordinates
-        ImVec2 rel;
-        rel.x = plot_pos.x / size.x;
-        rel.y = plot_pos.y / size.y;
+        ImVec2 rel = plot_pos / size;
 
         ImVec2 clicked;
         clicked.x = plotMin.x + rel.x * (plotMax.x - plotMin.x);
@@ -3326,8 +3324,7 @@ bool ChromaticityPlotDragBehavior(const char *str_id, ImVec2 curPos, ImVec2 size
         clicked.y = plotMax.y - rel.y * (plotMax.y - plotMin.y);
 
         // Clamp to plot region
-        clicked.x = ImClamp(clicked.x, plotMin.x, plotMax.x);
-        clicked.y = ImClamp(clicked.y, plotMin.y, plotMax.y);
+        clicked = ImClamp(clicked, plotMin, plotMax);
 
         // Find which chromaticity (red, green, blue, white) is closest to the clicked point
         // You need to provide access to the chromaticity points (primR, primG, primB, whitePoint)
@@ -3336,9 +3333,8 @@ bool ChromaticityPlotDragBehavior(const char *str_id, ImVec2 curPos, ImVec2 size
         float  min_dist    = FLT_MAX;
         for (int i = 0; i < 4; ++i)
         {
-            float dx   = chromas[i].x - clicked.x;
-            float dy   = chromas[i].y - clicked.y;
-            float dist = dx * dx + dy * dy;
+			ImVec2 d = chromas[i] - clicked;
+            float dist = ImLengthSqr(d);
             if (dist < min_dist)
             {
                 min_dist    = dist;

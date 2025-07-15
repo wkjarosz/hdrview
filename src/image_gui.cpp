@@ -613,8 +613,11 @@ void Image::draw_info()
             ImDrawList *pDrawList = ImGui::GetWindowDrawList();
 
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
-            auto           rgb2xyz = transpose(M_RGB_to_XYZ);
-            auto           xyz2rgb = transpose(M_XYZ_to_RGB);
+            // our working space is always BT.709/sRGB
+            auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_Rec709)));
+            auto xyz2rgb = transpose(XYZ_to_RGB(Chromaticities{}, 1.f));
+            // this is equivalent to:
+            // auto           xyz2rgb = transpose(mul(M_to_Rec709, M_XYZ_to_RGB));
 
             float         pad = 0.01f;
             static float2 vMin{0.f, 0.f};
