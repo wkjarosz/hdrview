@@ -146,6 +146,16 @@ enum Target : Target_
     Target_COUNT
 };
 
+inline const char *target_name(Target t)
+{
+    switch (t)
+    {
+    case Target_Primary: return "primary";
+    case Target_Secondary: return "secondary";
+    default: return "unknown";
+    }
+}
+
 using MouseMode_ = int;
 enum MouseMode : MouseMode_
 {

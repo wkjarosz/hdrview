@@ -31,8 +31,7 @@ using namespace std;
 //
 
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
-static const char         *s_target[Target_COUNT] = {"primary", "secondary"};
-static int                 s_next_image_id        = 1;
+static int                 s_next_image_id = 1;
 
 const float3 Image::Rec709_luminance_weights = computeYw(Chromaticities{});
 
@@ -433,11 +432,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
 void Image::set_null_texture(Target target)
 {
     auto s = hdrview()->shader();
-    auto t = s_target[target];
-
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
-    s->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
-    s->set_uniform(fmt::format("{}_yw", t), Rec709_luminance_weights);
+    auto t = target_name(target);
 
     for (int c = 0; c < 4; ++c) s->set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
 }
@@ -445,16 +440,9 @@ void Image::set_null_texture(Target target)
 void Image::set_as_texture(Target target)
 {
     auto                s         = hdrview()->shader();
-    auto                t         = s_target[target];
+    auto                t         = target_name(target);
     int                 group_idx = target == Target_Primary ? selected_group : reference_group;
     const ChannelGroup &group     = groups[group_idx];
-
-    // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL. resulted in
-    // rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-    s->set_uniform(fmt::format("{}_M_to_Rec709", t),
-                   float4x4{{M_to_Rec709[0], 0.f}, {M_to_Rec709[1], 0.f}, {M_to_Rec709[2], 0.f}, {0.f, 0.f, 0.f, 1.f}});
-    s->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
-    s->set_uniform(fmt::format("{}_yw", t), luminance_weights);
 
     for (int c = 0; c < group.num_channels; ++c)
         s->set_texture(fmt::format("{}_{}_texture", t, c), channels[group.channels[c]].get_texture());
@@ -682,6 +670,8 @@ void Image::compute_color_transform()
 
     static const Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
     color_conversion_matrix(M_to_Rec709, chr, bt709_chr, adaptation_method);
+    M_RGB_to_XYZ = RGB_to_XYZ(chr, 1.f);
+    M_XYZ_to_RGB = XYZ_to_RGB(chr, 1.f);
 
     // determine if this is (close to) one of the named color spaces
     if (chromaticities)

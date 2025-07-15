@@ -289,8 +289,9 @@ public:
     Box2i                         data_window;
     Box2i                         display_window;
     std::vector<Channel>          channels;
-    std::optional<Chromaticities> chromaticities;  //!< The chromaticities of the file
-    std::optional<float2>         adopted_neutral; //!< The adopted neutral of the file, if any
+    std::optional<Chromaticities> chromaticities;             //!< The chromaticities of the file
+    std::optional<float2>         adopted_neutral;            //!< The adopted neutral of the file, if any
+    float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; //!< The RGB to XYZ and XYZ to RGB conversion matrices
     float3x3                      M_to_Rec709             = la::identity;
     float3                        luminance_weights       = Rec709_luminance_weights;
     int                           adaptation_method       = 2;

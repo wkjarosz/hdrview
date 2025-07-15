@@ -4,6 +4,10 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "fwd.h"
+
+#include "dear_widgets.h"
+
 #include "app.h"
 #include "common.h"
 #include "image.h"
@@ -567,45 +571,7 @@ void Image::draw_info()
             }
             ImGui::PopStyleVar();
             ImGui::PopFont();
-        }
 
-        {
-            Chromaticities chr{chromaticities.value_or(Chromaticities{})};
-            bool           edited = false;
-
-            ImGui::PushFont(mono_bold, 0.f);
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
-
-            property_name("Red");
-            ImGui::SameLine(label_size);
-
-            float w = ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN;
-            ImGui::SetNextItemWidth(w);
-            edited |= ImGui::SliderFloat2("##Red", &chr.red.x, 0.f, 1.f, "%.4f");
-
-            property_name("Green");
-            ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(w);
-            edited |= ImGui::SliderFloat2("##Green", &chr.green.x, 0.f, 1.f, "%.4f");
-
-            property_name("Blue");
-            ImGui::SameLine(label_size);
-            ImGui::SetNextItemWidth(w);
-            edited |= ImGui::SliderFloat2("##Blue", &chr.blue.x, 0.f, 1.f, "%.4f");
-
-            ImGui::PopStyleVar();
-            ImGui::PopFont();
-
-            if (edited)
-            {
-                spdlog::debug("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
-                              chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
-                chromaticities = chr;
-                compute_color_transform();
-            }
-        }
-
-        {
             property_name("White point");
 
             ImGui::SameLine(label_size);
@@ -615,7 +581,7 @@ void Image::draw_info()
             auto wpn = white_point_names();
             ImGui::SetNextItemWidth(
                 ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
-            auto open_combo =
+            open_combo =
                 ImGui::BeginCombo("##White point", white_point_name(named_white_point), ImGuiComboFlags_HeightLargest);
             if (open_combo)
             {
@@ -641,8 +607,92 @@ void Image::draw_info()
             }
             ImGui::PopStyleVar();
             ImGui::PopFont();
+        }
 
+        {
+            ImDrawList *pDrawList = ImGui::GetWindowDrawList();
+
+            Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
+            auto           rgb2xyz = transpose(M_RGB_to_XYZ);
+            auto           xyz2rgb = transpose(M_XYZ_to_RGB);
+
+            float         pad = 0.01f;
+            static float2 vMin{0.f, 0.f};
+            static float2 vMax{0.8f, 0.9f};
+            static float2 vSize  = vMax - vMin;
+            static float  aspect = vSize.x / vSize.y;
+
+            property_name("Diagram");
+            ImGui::SameLine(label_size);
+            float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
+
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            ImWidgets::DrawChromaticityPlot(
+                pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red, gamut_chr.green, gamut_chr.blue,
+                gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64, ImGui::GetColorU32(ImGuiCol_WindowBg, 0.5f), 380.f, 700.f,
+                vMin - pad, vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0, 255), 2.f);
+
+            auto &io = ImGui::GetIO();
+            if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+            {
+                auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
+                float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
+
+                ImWidgets::DrawChromaticityPointsGeneric(pDrawList, pos, ImVec2(size, size / aspect), &rgb2xyz.x.x,
+                                                         &color32.x, 1, vMin.x, vMax.x, vMin.y, vMax.y,
+                                                         IM_COL32(0, 0, 0, 255), 2.f, 4);
+            }
+
+            if (ImWidgets::ChromaticityPlotDragBehavior("##chromaticityDrag", pos, ImVec2(size, size / aspect),
+                                                        (ImVec2 *)&gamut_chr.red, (ImVec2 *)&gamut_chr.green,
+                                                        (ImVec2 *)&gamut_chr.blue, (ImVec2 *)&gamut_chr.white,
+                                                        {0.0f - pad, 0.0f - pad}, {0.8f + pad, 0.9f + pad}))
+            {
+                chromaticities = gamut_chr;
+                compute_color_transform();
+            }
+        }
+
+        {
+            const Chromaticities chr_orig{chromaticities.value_or(Chromaticities{})};
+            Chromaticities       chr{chr_orig};
+            bool                 edited = false;
+
+            ImGui::PushFont(mono_bold, 0.f);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
+
+            property_name("Red");
+            ImGui::SameLine(label_size);
+
+            float w = ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN;
+            ImGui::SetNextItemWidth(w);
+            edited |= ImGui::SliderFloat2("##Red", &chr.red.x, 0.f, 1.f, "%.4f");
+
+            property_name("Green");
+            ImGui::SameLine(label_size);
+            ImGui::SetNextItemWidth(w);
+            edited |= ImGui::SliderFloat2("##Green", &chr.green.x, 0.f, 1.f, "%.4f");
+
+            property_name("Blue");
+            ImGui::SameLine(label_size);
+            ImGui::SetNextItemWidth(w);
+            edited |= ImGui::SliderFloat2("##Blue", &chr.blue.x, 0.f, 1.f, "%.4f");
+
+            ImGui::PopStyleVar();
+            ImGui::PopFont();
+
+            if (chr_orig != chr || edited)
+            {
+                spdlog::debug("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
+                              chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
+                chromaticities = chr;
+                compute_color_transform();
+            }
+        }
+
+        {
             Chromaticities chr{chromaticities.value_or(Chromaticities{})};
+            float2         wp     = chr.white;
             bool           edited = false;
 
             ImGui::PushFont(mono_bold, 0.f);
@@ -651,15 +701,16 @@ void Image::draw_info()
             property_name("White");
             ImGui::SameLine(label_size);
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN);
-            edited |= ImGui::SliderFloat2("##White", &chr.white.x, 0.f, 1.f, "%.4f");
+            edited |= ImGui::SliderFloat2("##White", &wp.x, 0.f, 1.f, "%.4f");
 
             ImGui::PopStyleVar();
             ImGui::PopFont();
 
-            if (edited)
+            if (edited || wp != chr.white)
             {
-                spdlog::debug("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
-                              chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
+                chr.white = wp;
+                spdlog::info("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
+                             chr.green.x, chr.green.y, chr.blue.x, chr.blue.y, chr.white.x, chr.white.y);
                 chromaticities = chr;
                 compute_color_transform();
             }

@@ -244,7 +244,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     info_window.dockSpaceName     = "RightSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
-    info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar;
+    info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
     info_window.GuiFunction       = [this]
     {
         if (auto img = current_image())
@@ -2956,6 +2956,34 @@ void HDRViewApp::draw_watched_pixels() const
 
 void HDRViewApp::draw_image() const
 {
+    auto set_color = [this](Target target, ConstImagePtr img)
+    {
+        auto t = target_name(target);
+        if (img)
+        {
+            int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
+            const ChannelGroup &group     = img->groups[group_idx];
+
+            // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
+            // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
+            m_shader->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{{img->M_to_Rec709[0], 0.f},
+                                                                             {img->M_to_Rec709[1], 0.f},
+                                                                             {img->M_to_Rec709[2], 0.f},
+                                                                             {0.f, 0.f, 0.f, 1.f}});
+            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
+            m_shader->set_uniform(fmt::format("{}_yw", t), img->luminance_weights);
+        }
+        else
+        {
+            m_shader->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
+            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
+            m_shader->set_uniform(fmt::format("{}_yw", t), Image::Rec709_luminance_weights);
+        }
+    };
+
+    set_color(Target_Primary, current_image());
+    set_color(Target_Secondary, reference_image());
+
     if (current_image() && !current_image()->data_window.is_empty())
     {
         float2 randomness(std::generate_canonical<float, 10>(g_rand) * 255,

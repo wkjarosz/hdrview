@@ -60,21 +60,34 @@ inline bool approx_equal(const Chromaticities &a, const Chromaticities &b, float
 using WhitePoint_ = int;
 enum WhitePoint : WhitePoint_
 {
-    WhitePoint_Unspecified = 0, //!< unspecified, assuming D65
-    WhitePoint_FirstNamed  = 1,
-    WhitePoint_ACES        = 1,  //!< ~6000k
-    WhitePoint_A           = 2,  //!< incandescent / tungsten
-    WhitePoint_B           = 3,  //!< obsolete, direct sunlight at noon
-    WhitePoint_C           = 4,  //!< obsolete, average / North sky daylight NTSC 1953, PAL-M
-    WhitePoint_E           = 5,  //!< equal energy
-    WhitePoint_D50         = 6,  //!< horizon light, ICC profile PCS
-    WhitePoint_D55         = 7,  //!< mid-morning / mid-afternoon daylight
-    WhitePoint_D65         = 8,  //!< noon daylight: television, sRGB color space
-    WhitePoint_D75         = 9,  //!< North sky daylight
-    WhitePoint_DCI         = 10, //!< ~6300 K
-    WhitePoint_LastNamed   = WhitePoint_DCI,
-    WhitePoint_Custom      = 11,
-    WhitePoint_Count       = 12
+    WhitePoint_FirstNamed = 0,
+    WhitePoint_ACES       = WhitePoint_FirstNamed, // Academy Color Encoding System, ~6000k
+    WhitePoint_D50,                                //	horizon light, ICC profile PCS
+    WhitePoint_D55,                                //	mid-morning / mid-afternoon daylight
+    WhitePoint_D65,                                //	noon daylight: television, sRGB color space
+    WhitePoint_D75,                                //	North sky daylight
+    WhitePoint_D93,                                //	high-efficiency blue phosphor monitors, BT.2035
+    WhitePoint_DCI,                                // ~6300 K
+    WhitePoint_F1,                                 //	daylight fluorescent
+    WhitePoint_F2,                                 //	cool white fluorescent
+    WhitePoint_F3,                                 //	white fluorescent
+    WhitePoint_F4,                                 //	warm white fluorescent
+    WhitePoint_F5,                                 //	daylight fluorescent
+    WhitePoint_F6,                                 //	light white fluorescent
+    WhitePoint_F7,                                 //	D65 simulator, daylight simulator
+    WhitePoint_F8,                                 //	D50 simulator, Sylvania F40 Design 50
+    WhitePoint_F9,                                 //	cool white deluxe fluorescent
+    WhitePoint_F10,                                //	Philips TL85, Ultralume 50
+    WhitePoint_F11,                                //	Philips TL84, Ultralume 40
+    WhitePoint_F12,                                //	Philips TL83, Ultralume 30
+    WhitePoint_A,                                  //	incandescent / tungsten
+    WhitePoint_B,                                  //	obsolete, direct sunlight at noon
+    WhitePoint_C,                                  //	obsolete, average / North sky daylight
+    WhitePoint_E,                                  //	equal energy
+    WhitePoint_LastNamed = WhitePoint_E,
+    WhitePoint_Unspecified, //!< unspecified, assuming D65
+    WhitePoint_Custom,
+    WhitePoint_Count
 };
 
 float2       white_point(WhitePoint wp);
@@ -85,26 +98,27 @@ WhitePoint   named_white_point(float2 wp);
 using ColorGamut_ = int;
 enum ColorGamut : ColorGamut_
 {
-    ColorGamut_Unspecified         = 0,
-    ColorGamut_FirstNamed          = 1,
-    ColorGamut_sRGB_BT709          = 1,
-    ColorGamut_BT470M              = 2,
-    ColorGamut_BT470BG             = 3,
-    ColorGamut_SMPTE170M           = 4,
-    ColorGamut_SMPTE240M           = 5,
-    ColorGamut_Film                = 6,
-    ColorGamut_BT2020_2100         = 7,
-    ColorGamut_SMPTE428            = 8,
-    ColorGamut_DCI_P3_SMPTE431     = 9,
-    ColorGamut_Display_P3_SMPTE432 = 10,
-    ColorGamut_CICP_22             = 11,
-    ColorGamut_ACES_AP0            = 12,
-    ColorGamut_ACEScg_AP1          = 13,
-    ColorGamut_AdobeRGB            = 14,
-    ColorGamut_ProPhotoRGB         = 15,
-    ColorGamut_CIE1931XYZ          = 16,
-    ColorGamut_LastNamed           = ColorGamut_CIE1931XYZ,
-    ColorGamut_Custom              = 17
+    ColorGamut_FirstNamed = 0,
+    ColorGamut_sRGB_BT709 = ColorGamut_FirstNamed,
+    ColorGamut_BT470M,
+    ColorGamut_BT470BG,
+    ColorGamut_SMPTE170M,
+    ColorGamut_SMPTE240M,
+    ColorGamut_Film,
+    ColorGamut_BT2020_2100,
+    ColorGamut_SMPTE428,
+    ColorGamut_DCI_P3_SMPTE431,
+    ColorGamut_Display_P3_SMPTE432,
+    ColorGamut_CICP_22,
+    ColorGamut_ACES_AP0,
+    ColorGamut_ACEScg_AP1,
+    ColorGamut_AdobeRGB,
+    ColorGamut_ProPhotoRGB,
+    ColorGamut_CIE1931XYZ,
+    ColorGamut_LastNamed = ColorGamut_CIE1931XYZ,
+    ColorGamut_Unspecified,
+    ColorGamut_Custom,
+    ColorGamut_Count
 };
 
 //! Returns a description of the ColorGamut enum value.
@@ -138,8 +152,8 @@ enum TransferFunction : TransferFunction_
 std::string      transfer_function_name(TransferFunction tf, float gamma = 2.2f);
 TransferFunction transfer_function_from_cicp(int cicp, float *gamma = nullptr);
 
-float4x4        RGB_to_XYZ(const Chromaticities &chroma, float Y);
-inline float4x4 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
+float3x3        RGB_to_XYZ(const Chromaticities &chroma, float Y);
+inline float3x3 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
 inline float3   computeYw(const Chromaticities &cr)
 {
     auto m = RGB_to_XYZ(cr, 1.f);
