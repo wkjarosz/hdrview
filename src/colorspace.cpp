@@ -314,7 +314,8 @@ float3x3 RGB_to_XYZ(const Chromaticities &chroma, float Y)
     return M;
 }
 
-bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst, int CAT_method)
+bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst,
+                             AdaptationMethod CAT_method)
 {
     try
     {
@@ -410,7 +411,7 @@ Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ)
     return result;
 }
 
-float3 YCToRGB(float3 input, float3 Yw)
+float3 YC_to_RGB(float3 input, float3 Yw)
 {
     if (input[0] == 0.f && input[2] == 0.f)
         //
@@ -428,7 +429,7 @@ float3 YCToRGB(float3 input, float3 Yw)
     return float3(r, g, b);
 }
 
-float3 RGBToYC(float3 input, float3 Yw)
+float3 RGB_to_YC(float3 input, float3 Yw)
 {
     //
     // Conversion to YCA works only if R, G and B are finite and non-negative.
@@ -467,13 +468,34 @@ float3 RGBToYC(float3 input, float3 Yw)
     return output;
 }
 
-Color3 LinearToSRGB(const Color3 &c) { return la::apply(LinearToSRGB<float>, c); }
-Color4 LinearToSRGB(const Color4 &c) { return {LinearToSRGB(c.xyz()), c.w}; }
-Color3 SRGBToLinear(const Color3 &c) { return la::apply(SRGBToLinear<float>, c); }
-Color4 SRGBToLinear(const Color4 &c) { return {SRGBToLinear(c.xyz()), c.w}; }
+const float3x3 &sRGB_to_XYZ()
+{
+    static const float3x3 M = RGB_to_XYZ(Chromaticities{}, 1.f);
+    return M;
+}
 
-Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma) { return la::apply(LinearToGamma<float>, c, inv_gamma); }
-Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma) { return {LinearToGamma(c.xyz(), inv_gamma), c.w}; }
+const float3x3 &XYZ_to_sRGB()
+{
+    static const float3x3 M = XYZ_to_RGB(Chromaticities{}, 1.f);
+    return M;
+}
+
+const float3 &sRGB_Yw()
+{
+    static const float3 Yw = computeYw(Chromaticities{});
+    return Yw;
+}
+
+Color3 linear_to_sRGB(const Color3 &c) { return la::apply(linear_to_sRGB<float>, c); }
+Color4 linear_to_sRGB(const Color4 &c) { return {linear_to_sRGB(c.xyz()), c.w}; }
+Color3 sRGB_to_linear(const Color3 &c) { return la::apply(sRGB_to_linear<float>, c); }
+Color4 sRGB_to_linear(const Color4 &c) { return {sRGB_to_linear(c.xyz()), c.w}; }
+
+Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma)
+{
+    return la::apply(linear_to_gamma<float>, c, inv_gamma);
+}
+Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma) { return {linear_to_gamma(c.xyz(), inv_gamma), c.w}; }
 
 void xyYToXZ(float *X, float *Z, float x, float y, float Y)
 {

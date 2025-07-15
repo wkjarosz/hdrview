@@ -545,7 +545,7 @@ void Image::draw_info()
             auto csn = color_gamut_names();
             ImGui::SetNextItemWidth(
                 ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
-            auto open_combo = ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut)named_color_space),
+            auto open_combo = ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut)color_space),
                                                 ImGuiComboFlags_HeightLargest);
             ImGui::WrappedTooltip(
                 "Interpret the values stored in the file using the chromaticities of a common color profile.");
@@ -554,10 +554,10 @@ void Image::draw_info()
                 for (ColorGamut_ n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
                 {
                     auto       cg          = (ColorGamut)n;
-                    const bool is_selected = (named_color_space == n);
+                    const bool is_selected = (color_space == n);
                     if (ImGui::Selectable(csn[n], is_selected))
                     {
-                        named_color_space = cg;
+                        color_space = cg;
                         spdlog::debug("Switching to color space {}.", n);
                         chromaticities = ::gamut_chromaticities(cg);
                         compute_color_transform();
@@ -582,20 +582,20 @@ void Image::draw_info()
             ImGui::SetNextItemWidth(
                 ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
             open_combo =
-                ImGui::BeginCombo("##White point", white_point_name(named_white_point), ImGuiComboFlags_HeightLargest);
+                ImGui::BeginCombo("##White point", white_point_name(white_point), ImGuiComboFlags_HeightLargest);
             if (open_combo)
             {
                 for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
                 {
                     auto       wp          = (WhitePoint)n;
-                    const bool is_selected = (named_white_point == n);
+                    const bool is_selected = (white_point == n);
                     if (ImGui::Selectable(wpn[n], is_selected))
                     {
-                        named_white_point = wp;
+                        white_point = wp;
                         spdlog::debug("Switching to white point {}.", n);
                         if (!chromaticities)
                             chromaticities = Chromaticities{};
-                        chromaticities->white = white_point(wp);
+                        chromaticities->white = ::white_point(wp);
                         compute_color_transform();
                     }
 
@@ -614,10 +614,10 @@ void Image::draw_info()
 
             Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
             // our working space is always BT.709/sRGB
-            auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_Rec709)));
+            auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_sRGB)));
             auto xyz2rgb = transpose(XYZ_to_RGB(Chromaticities{}, 1.f));
             // this is equivalent to:
-            // auto           xyz2rgb = transpose(mul(M_to_Rec709, M_XYZ_to_RGB));
+            // auto           xyz2rgb = transpose(mul(M_to_sRGB, M_XYZ_to_RGB));
 
             float         pad = 0.01f;
             static float2 vMin{0.f, 0.f};
@@ -737,18 +737,22 @@ void Image::draw_info()
             const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
             ImGui::SetNextItemWidth(
                 ImGui::GetContentRegionAvail().x < min_w ? min_w : -FLT_MIN); // use the full width of the column
-            auto open_combo = ImGui::BeginCombo(
-                "##Adaptation", adaptation_method <= 0 || adaptation_method > 3 ? "None" : wan[adaptation_method],
-                ImGuiComboFlags_HeightLargest);
+            auto open_combo = ImGui::BeginCombo("##Adaptation",
+                                                adaptation_method <= AdaptationMethod_Identity ||
+                                                        adaptation_method >= AdaptationMethod_Count
+                                                    ? "None"
+                                                    : wan[adaptation_method],
+                                                ImGuiComboFlags_HeightLargest);
             ImGui::WrappedTooltip("Method for chromatic adaptation transform.");
             if (open_combo)
             {
-                for (int n = 0; wan[n]; ++n)
+                for (AdaptationMethod_ n = 0; wan[n]; ++n)
                 {
-                    const bool is_selected = (adaptation_method == n);
+                    auto       am          = (AdaptationMethod)n;
+                    const bool is_selected = (adaptation_method == am);
                     if (ImGui::Selectable(wan[n], is_selected))
                     {
-                        adaptation_method = n;
+                        adaptation_method = am;
                         spdlog::debug("Switching to adaptation method {}.", n);
                         compute_color_transform();
                     }
@@ -786,9 +790,9 @@ void Image::draw_info()
             // property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
             //                            "{:+8.2e}, {:+8.2e}, {:+8.2e}\n"
             //                            "{:+8.2e}, {:+8.2e}, {:+8.2e}",
-            //                            M_to_Rec709[0][0], M_to_Rec709[0][1], M_to_Rec709[0][2], // prevent wrap
-            //                            M_to_Rec709[1][0], M_to_Rec709[1][1], M_to_Rec709[1][2], //
-            //                            M_to_Rec709[2][0], M_to_Rec709[2][1], M_to_Rec709[2][2]),
+            //                            M_to_sRGB[0][0], M_to_sRGB[0][1], M_to_sRGB[0][2], // prevent wrap
+            //                            M_to_sRGB[1][0], M_to_sRGB[1][1], M_to_sRGB[1][2], //
+            //                            M_to_sRGB[2][0], M_to_sRGB[2][1], M_to_sRGB[2][2]),
             //                mono_font);
 
             ImGui::PushFont(mono_bold, 0.f);
@@ -797,19 +801,19 @@ void Image::draw_info()
             ImGui::SameLine(label_size);
             float w = ImGui::GetContentRegionAvail().x < min_w * 2.f ? min_w * 2.f : -FLT_MIN;
             ImGui::SetNextItemWidth(w);
-            ImGui::InputFloat3("##M0", &M_to_Rec709[0][0], "%+8.2e",
+            ImGui::InputFloat3("##M0", &M_to_sRGB[0][0], "%+8.2e",
                                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
 
             ImGui::NewLine();
             ImGui::SameLine(label_size);
             ImGui::SetNextItemWidth(w);
-            ImGui::InputFloat3("##M1", &M_to_Rec709[1][0], "%+8.2e",
+            ImGui::InputFloat3("##M1", &M_to_sRGB[1][0], "%+8.2e",
                                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
 
             ImGui::NewLine();
             ImGui::SameLine(label_size);
             ImGui::SetNextItemWidth(w);
-            ImGui::InputFloat3("##M2", &M_to_Rec709[2][0], "%+8.2e",
+            ImGui::InputFloat3("##M2", &M_to_sRGB[2][0], "%+8.2e",
                                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly);
 
             ImGui::PopStyleVar();

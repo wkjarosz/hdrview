@@ -40,7 +40,7 @@ inline double axis_scale_fwd_xform(double value, void *user_data)
 
     const auto x_scale = *(AxisScale_ *)user_data;
     if (x_scale == AxisScale_SRGB)
-        return LinearToSRGB(value);
+        return linear_to_sRGB(value);
     else if (x_scale == AxisScale_SymLog)
         return value > 0 ? (std::log10(value + eps) - log_eps) : -(std::log10(-value + eps) - log_eps);
     else if (x_scale == AxisScale_Asinh)
@@ -57,7 +57,7 @@ inline double axis_scale_inv_xform(double value, void *user_data)
 
     const auto x_scale = *(AxisScale_ *)user_data;
     if (x_scale == AxisScale_SRGB)
-        return SRGBToLinear(value);
+        return sRGB_to_linear(value);
     else if (x_scale == AxisScale_SymLog)
         return value > 0 ? (std::pow(10., value + log_eps) - eps) : -(pow(10., -value + log_eps) - eps);
     else if (x_scale == AxisScale_Asinh)
@@ -280,7 +280,6 @@ public:
     static Texture              *black_texture();
     static Texture              *white_texture();
     static Texture              *dither_texture();
-    static const float3          Rec709_luminance_weights;
 
     int id;
 
@@ -292,11 +291,11 @@ public:
     std::optional<Chromaticities> chromaticities;             //!< The chromaticities of the file
     std::optional<float2>         adopted_neutral;            //!< The adopted neutral of the file, if any
     float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; //!< The RGB to XYZ and XYZ to RGB conversion matrices
-    float3x3                      M_to_Rec709             = la::identity;
-    float3                        luminance_weights       = Rec709_luminance_weights;
-    int                           adaptation_method       = 2;
-    ColorGamut                    named_color_space       = ColorGamut_Unspecified;
-    WhitePoint                    named_white_point       = WhitePoint_Unspecified;
+    float3x3                      M_to_sRGB               = la::identity;
+    float3                        luminance_weights       = sRGB_Yw();
+    AdaptationMethod              adaptation_method       = AdaptationMethod_Bradford;
+    ColorGamut                    color_space             = ColorGamut_Unspecified;
+    WhitePoint                    white_point             = WhitePoint_Unspecified;
     bool                          file_has_straight_alpha = false;
     json                          metadata                = json::object();
 

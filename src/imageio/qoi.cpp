@@ -95,7 +95,7 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
                                                  [linearize, c](uint8_t v)
                                                  {
                                                      auto v2 = dequantize_full(v);
-                                                     return linearize && c != 3 ? SRGBToLinear(v2) : v2;
+                                                     return linearize && c != 3 ? sRGB_to_linear(v2) : v2;
                                                  });
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));

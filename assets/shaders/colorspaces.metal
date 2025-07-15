@@ -5,7 +5,7 @@ using namespace metal;
 
 // Luminance-chroma to RGB conversion
 // assumes `input: {RY, Y, BY}`
-float3 YCToRGB(float3 input, float3 Yw)
+float3 YC_to_RGB(float3 input, float3 Yw)
 {
     if (input[0] == 0.0 && input[2] == 0.0)
         //

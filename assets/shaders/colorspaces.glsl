@@ -6,7 +6,7 @@ precision mediump float;
 
 // Luminance-chroma to RGB conversion
 // assumes `input: {RY, Y, BY}`
-vec3 YCToRGB(vec3 c, vec3 Yw)
+vec3 YC_to_RGB(vec3 c, vec3 Yw)
 {
     if (c[0] == 0.0 && c[2] == 0.0)
         //

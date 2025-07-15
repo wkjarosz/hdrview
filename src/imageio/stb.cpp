@@ -157,7 +157,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     Timer timer;
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c, [linearize, c](float v)
-                                                 { return linearize && c != 3 ? SRGBToLinear(v) : v; });
+                                                 { return linearize && c != 3 ? sRGB_to_linear(v) : v; });
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 

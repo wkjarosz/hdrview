@@ -152,6 +152,16 @@ enum TransferFunction : TransferFunction_
 std::string      transfer_function_name(TransferFunction tf, float gamma = 2.2f);
 TransferFunction transfer_function_from_cicp(int cicp, float *gamma = nullptr);
 
+using AdaptationMethod_ = int;
+enum AdaptationMethod : AdaptationMethod_
+{
+    AdaptationMethod_Identity = 0, //!< Identity CAT
+    AdaptationMethod_XYZScaling,   //!< XYZ scaling CAT
+    AdaptationMethod_Bradford,     //!< Bradford CAT
+    AdaptationMethod_VonKries,     //!< Von Kries CAT
+    AdaptationMethod_Count
+};
+
 float3x3        RGB_to_XYZ(const Chromaticities &chroma, float Y);
 inline float3x3 XYZ_to_RGB(const Chromaticities &chroma, float Y) { return inverse(RGB_to_XYZ(chroma, Y)); }
 inline float3   computeYw(const Chromaticities &cr)
@@ -159,6 +169,10 @@ inline float3   computeYw(const Chromaticities &cr)
     auto m = RGB_to_XYZ(cr, 1.f);
     return float3{m[0][1], m[1][1], m[2][1]} / (m[0][1] + m[1][1] + m[2][1]);
 }
+
+const float3   &sRGB_Yw();
+const float3x3 &sRGB_to_XYZ();
+const float3x3 &XYZ_to_sRGB();
 
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
@@ -178,13 +192,14 @@ inline float3   computeYw(const Chromaticities &cr)
     \returns
         True if color conversion is needed, in which case M will contain the conversion matrix.
 */
-bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst, int CAT_method = 0);
+bool color_conversion_matrix(float3x3 &M, const Chromaticities &src, const Chromaticities &dst,
+                             AdaptationMethod CAT_method = AdaptationMethod_Identity);
 
 // Function to deduce chromaticities and white point from a 3x3 RGB to XYZ matrix
 Chromaticities primaries_from_matrix(const float3x3 &rgb_to_XYZ);
 
 template <typename Real>
-Real LinearToSRGB_positive(Real linear)
+Real linear_to_sRGB_positive(Real linear)
 {
     static constexpr Real inv_gamma = Real(1) / Real(2.4);
     if (linear <= Real(0.0031308))
@@ -195,25 +210,25 @@ Real LinearToSRGB_positive(Real linear)
 
 // to/from linear to sRGB
 template <typename Real>
-Real LinearToSRGB(Real linear)
+Real linear_to_sRGB(Real linear)
 {
-    return std::copysign(LinearToSRGB_positive(std::fabs(linear)), linear);
+    return std::copysign(linear_to_sRGB_positive(std::fabs(linear)), linear);
 }
 
 template <typename Real>
-Real LinearToGamma_positive(Real linear, Real inv_gamma)
+Real linear_to_gamma_positive(Real linear, Real inv_gamma)
 {
     return std::pow(linear, inv_gamma);
 }
 
 template <typename Real>
-Real LinearToGamma(Real linear, Real inv_gamma)
+Real linear_to_gamma(Real linear, Real inv_gamma)
 {
-    return std::copysign(LinearToGamma_positive(std::fabs(linear), inv_gamma), linear);
+    return std::copysign(linear_to_gamma_positive(std::fabs(linear), inv_gamma), linear);
 }
 
 template <typename Real>
-Real SRGBToLinear_positive(Real sRGB)
+Real sRGB_to_linear_positive(Real sRGB)
 {
     if (sRGB < Real(0.04045))
         return (Real(1) / Real(12.92)) * sRGB;
@@ -222,9 +237,9 @@ Real SRGBToLinear_positive(Real sRGB)
 }
 
 template <typename Real>
-Real SRGBToLinear(Real sRGB)
+Real sRGB_to_linear(Real sRGB)
 {
-    return std::copysign(SRGBToLinear_positive(std::fabs(sRGB)), sRGB);
+    return std::copysign(sRGB_to_linear_positive(std::fabs(sRGB)), sRGB);
 }
 
 template <typename Real>
@@ -539,22 +554,22 @@ inline Real inverse_EOTF_DCI_P3(Real linear)
     return std::pow(linear / Real(52.37), Real(1.0) / Real(2.6));
 }
 
-float3 YCToRGB(float3 input, float3 Yw);
-float3 RGBToYC(float3 input, float3 Yw);
-Color3 SRGBToLinear(const Color3 &c);
-Color4 SRGBToLinear(const Color4 &c);
-Color3 LinearToSRGB(const Color3 &c);
-Color4 LinearToSRGB(const Color4 &c);
-Color3 LinearToGamma(const Color3 &c, const Color3 &inv_gamma);
-Color4 LinearToGamma(const Color4 &c, const Color3 &inv_gamma);
+float3 YC_to_RGB(float3 input, float3 Yw);
+float3 RGB_to_YC(float3 input, float3 Yw);
+Color3 sRGB_to_linear(const Color3 &c);
+Color4 sRGB_to_linear(const Color4 &c);
+Color3 linear_to_sRGB(const Color3 &c);
+Color4 linear_to_sRGB(const Color4 &c);
+Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
+Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
 inline float to_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
 {
     switch (tf)
     {
-    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
     case TransferFunction_Unknown: [[fallthrough]];
-    case TransferFunction_sRGB: return SRGBToLinear(encoded);
+    case TransferFunction_sRGB: return sRGB_to_linear(encoded);
     case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
     case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
@@ -573,8 +588,8 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     switch (tf)
     {
     case TransferFunction_Unknown: [[fallthrough]];
-    case TransferFunction_sRGB: return SRGBToLinear(encoded);
-    case TransferFunction_Gamma: return LinearToGamma(encoded, 1.f / gamma);
+    case TransferFunction_sRGB: return sRGB_to_linear(encoded);
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
     case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
     case TransferFunction_BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
@@ -595,7 +610,7 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
     switch (tonemap_mode)
     {
     default: [[fallthrough]];
-    case Tonemap_Gamma: return LinearToGamma(color, float3{1.f / gamma});
+    case Tonemap_Gamma: return linear_to_gamma(color, float3{1.f / gamma});
     case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
     {
@@ -603,7 +618,7 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
         float avg       = dot(color, float3(1.f / 3.f));
         float cmap_size = Colormap::values(colormap).size();
         float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
-        return SRGBToLinear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz());
+        return sRGB_to_linear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz());
     }
     }
 }
@@ -748,9 +763,9 @@ inline uint32_t color_f128_to_u32(const float4 &in)
 //     case 3:            // Reserved
 //         return linear;
 //     case 4: // Gamma 2.2 (IEC 61966-2-1)
-//         return LinearToGamma(linear, 1.0f / 2.2f);
+//         return linear_to_gamma(linear, 1.0f / 2.2f);
 //     case 5: // Gamma 2.8 (ITU-R BT.470 System B G)
-//         return LinearToGamma(linear, 1.0f / 2.8f);
+//         return linear_to_gamma(linear, 1.0f / 2.8f);
 //     case 7: // ST240/SMPTE 240M
 //         return OETF_ST240(linear);
 //     case 8: // linear transfer
@@ -767,7 +782,7 @@ inline uint32_t color_f128_to_u32(const float4 &in)
 //              // MatrixCoefficients equal to 0)
 //              // IEC 61966-2-1 sYCC (with
 //              // MatrixCoefficients equal to 5)
-//         return LinearToSRGB(linear);
+//         return linear_to_sRGB(linear);
 //     case 16: // PQ (ST 2084)
 //         return inverse_EOTF_BT2100_PQ(linear);
 //     case 17: // SMPTE ST 428-1 (DCI)

@@ -33,8 +33,6 @@ using namespace std;
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
 static int                 s_next_image_id = 1;
 
-const float3 Image::Rec709_luminance_weights = computeYw(Chromaticities{});
-
 pair<string, string> Channel::split(const string &channel)
 {
     size_t dot = channel.rfind(".");
@@ -655,7 +653,7 @@ void Image::build_layers_and_groups()
 void Image::compute_color_transform()
 {
     // get color correction info from the header
-    luminance_weights = Image::Rec709_luminance_weights;
+    luminance_weights = sRGB_Yw();
     if (chromaticities)
         luminance_weights = computeYw(*chromaticities);
 
@@ -669,18 +667,18 @@ void Image::compute_color_transform()
         chr.white = *adopted_neutral;
 
     static const Chromaticities bt709_chr{}; // default bt709 (sRGB) primaries
-    color_conversion_matrix(M_to_Rec709, chr, bt709_chr, adaptation_method);
+    color_conversion_matrix(M_to_sRGB, chr, bt709_chr, adaptation_method);
     M_RGB_to_XYZ = RGB_to_XYZ(chr, 1.f);
     M_XYZ_to_RGB = XYZ_to_RGB(chr, 1.f);
 
     // determine if this is (close to) one of the named color spaces
     if (chromaticities)
     {
-        named_color_space = named_color_gamut(*chromaticities);
-        spdlog::debug("Detected color space: '{}'", color_gamut_name((ColorGamut)named_color_space));
+        color_space = named_color_gamut(*chromaticities);
+        spdlog::debug("Detected color space: '{}'", color_gamut_name((ColorGamut)color_space));
 
-        named_white_point = ::named_white_point(chr.white);
-        spdlog::debug("Detected white point: '{}'", white_point_name(named_white_point));
+        white_point = named_white_point(chr.white);
+        spdlog::debug("Detected white point: '{}'", white_point_name(white_point));
     }
 }
 
@@ -775,13 +773,13 @@ string Image::to_string() const
                            display_window.max.x, display_window.max.y);
     }
 
-    if (luminance_weights != Image::Rec709_luminance_weights)
+    if (luminance_weights != sRGB_Yw())
         out += fmt::format("Luminance weights: {}\n", luminance_weights);
 
-    if (M_to_Rec709 != float3x3{la::identity})
+    if (M_to_sRGB != float3x3{la::identity})
     {
         string l = "Color matrix to Rec 709 RGB: ";
-        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_Rec709), false, l.length());
+        out += indent(fmt::format("{}{:::> 8.5f}\n", l, M_to_sRGB), false, l.length());
     }
 
     out += fmt::format("Channels ({}):\n", channels.size());
@@ -885,16 +883,16 @@ float4 Image::rgba_pixel(int2 p, Target target) const
             if (group.type == ChannelGroup::YA_Channels)
             {
                 value[3]    = value[1];
-                value.xyz() = YCToRGB(float3{0.f, value[0], 0.f}, luminance_weights);
+                value.xyz() = YC_to_RGB(float3{0.f, value[0], 0.f}, luminance_weights);
                 spdlog::info("YA channel group: {}", value);
             }
             else
                 value[2] = 0.f;
         }
         if (group.type == ChannelGroup::YCA_Channels || group.type == ChannelGroup::YC_Channels)
-            value.xyz() = YCToRGB(value.xyz(), luminance_weights);
+            value.xyz() = YC_to_RGB(value.xyz(), luminance_weights);
     }
 
-    value.xyz() = mul(M_to_Rec709, value.xyz());
+    value.xyz() = mul(M_to_sRGB, value.xyz());
     return value;
 }

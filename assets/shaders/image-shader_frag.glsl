@@ -64,7 +64,7 @@ uniform sampler2D primary_2_texture;
 uniform sampler2D primary_3_texture;
 uniform vec3      primary_yw;
 uniform int       primary_channels_type;
-uniform mat4      primary_M_to_Rec709;
+uniform mat4      primary_M_to_sRGB;
 
 uniform sampler2D secondary_0_texture;
 uniform sampler2D secondary_1_texture;
@@ -72,7 +72,7 @@ uniform sampler2D secondary_2_texture;
 uniform sampler2D secondary_3_texture;
 uniform vec3      secondary_yw;
 uniform int       secondary_channels_type;
-uniform mat4      secondary_M_to_Rec709;
+uniform mat4      secondary_M_to_sRGB;
 
 uniform float time;
 uniform bool  draw_clip_warnings;
@@ -196,9 +196,9 @@ void main()
         sample_channel(primary_2_texture, primary_uv, in_img), sample_channel(primary_3_texture, primary_uv, in_img));
 
     if (primary_channels_type == YCA_Channels || primary_channels_type == YC_Channels)
-        value.xyz = YCToRGB(value.xyz, primary_yw);
+        value.xyz = YC_to_RGB(value.xyz, primary_yw);
 
-    value = primary_M_to_Rec709 * value;
+    value = primary_M_to_sRGB * value;
     if (channel == CHANNEL_ALPHA)
         value = vec4(value.aaa, 1.0);
 
@@ -210,9 +210,9 @@ void main()
                                   sample_channel(secondary_3_texture, secondary_uv, in_ref));
 
         if (secondary_channels_type == YCA_Channels || secondary_channels_type == YC_Channels)
-            reference_val.xyz = YCToRGB(reference_val.xyz, secondary_yw);
+            reference_val.xyz = YC_to_RGB(reference_val.xyz, secondary_yw);
 
-        reference_val = secondary_M_to_Rec709 * reference_val;
+        reference_val = secondary_M_to_sRGB * reference_val;
         if (channel == CHANNEL_ALPHA)
             reference_val = vec4(reference_val.aaa, 1.0);
 

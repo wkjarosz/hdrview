@@ -60,9 +60,9 @@ Profile create_linear_RGB_profile(const cmsCIExyY &whitepoint, const cmsCIExyYTR
 
 Profile create_linear_sRGB_profile()
 {
-    cmsCIExyY       D65             = {0.3127, 0.3290, 1.0};
-    cmsCIExyYTRIPLE Rec709Primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    return create_linear_RGB_profile(D65, Rec709Primaries);
+    static const cmsCIExyY       D65            = {0.3127, 0.3290, 1.0};
+    static const cmsCIExyYTRIPLE sRGB_primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
+    return create_linear_RGB_profile(D65, sRGB_primaries);
 }
 
 // Returns white point that was specified when creating the profile.

@@ -148,7 +148,7 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
                                 v /= std::max(k_small_alpha, (*alpha)(x, y));
 
                             if (sRGB)
-                                v = LinearToSRGB(v);
+                                v = linear_to_sRGB(v);
                         }
 
                         rgba_pixel[c] = quantize_full<uint8_t>(v, dither, x, y);

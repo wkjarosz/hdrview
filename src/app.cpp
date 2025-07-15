@@ -1884,7 +1884,7 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
 static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false)
 {
     float4   color32         = hdrview()->pixel_value(pixel, true, which_image);
-    float4   displayed_color = LinearToSRGB(hdrview()->pixel_value(pixel, false, which_image));
+    float4   displayed_color = linear_to_sRGB(hdrview()->pixel_value(pixel, false, which_image));
     uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
     int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
     bool3    inside          = {false, false, false};
@@ -2966,18 +2966,18 @@ void HDRViewApp::draw_image() const
 
             // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
             // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            m_shader->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{{img->M_to_Rec709[0], 0.f},
-                                                                             {img->M_to_Rec709[1], 0.f},
-                                                                             {img->M_to_Rec709[2], 0.f},
-                                                                             {0.f, 0.f, 0.f, 1.f}});
+            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{{img->M_to_sRGB[0], 0.f},
+                                                                           {img->M_to_sRGB[1], 0.f},
+                                                                           {img->M_to_sRGB[2], 0.f},
+                                                                           {0.f, 0.f, 0.f, 1.f}});
             m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
             m_shader->set_uniform(fmt::format("{}_yw", t), img->luminance_weights);
         }
         else
         {
-            m_shader->set_uniform(fmt::format("{}_M_to_Rec709", t), float4x4{la::identity});
+            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{la::identity});
             m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
-            m_shader->set_uniform(fmt::format("{}_yw", t), Image::Rec709_luminance_weights);
+            m_shader->set_uniform(fmt::format("{}_yw", t), sRGB_Yw());
         }
     };
 
