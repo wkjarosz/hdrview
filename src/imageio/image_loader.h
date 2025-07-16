@@ -34,6 +34,11 @@ private:
     void add_recent_file(const std::string &f);
     void remove_recent_file(const std::string &f);
 
-    std::set<std::filesystem::path> mDirectories;
-    std::set<std::filesystem::path> mFilesFoundInDirectories;
+    // FIXME: currently both sets below only grow as files are loaded.
+    // need to stop watching entries when files/all files in a directory are closed
+    std::set<std::filesystem::path> m_directories;
+
+    // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched
+    // directory and manually closed them, so don't want to automatically reload them)
+    std::set<std::filesystem::path> m_files_found_in_directories;
 };

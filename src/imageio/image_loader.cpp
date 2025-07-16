@@ -128,7 +128,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
         std::error_code ec;
         auto            canon_p = fs::canonical(path);
-        mDirectories.emplace(canon_p);
+        m_directories.emplace(canon_p);
 
         vector<fs::directory_entry> entries;
         for (auto const &entry : fs::directory_iterator{canon_p, ec})
@@ -137,7 +137,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             bool supported_ext = Image::loadable_formats().find(ext) != Image::loadable_formats().end();
             if (!entry.is_directory() && supported_ext)
             {
-                mFilesFoundInDirectories.emplace(entry);
+                m_files_found_in_directories.emplace(entry);
                 entries.emplace_back(entry);
             }
         }
@@ -199,16 +199,16 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
 void BackgroundImageLoader::load_new_files()
 {
     std::error_code ec;
-    for (const auto &dir : mDirectories)
+    for (const auto &dir : m_directories)
         for (auto const &entry : fs::directory_iterator{dir, ec})
         {
             if (entry.is_directory())
                 continue;
 
             const auto p = entry.path();
-            if (!mFilesFoundInDirectories.count(p))
+            if (!m_files_found_in_directories.count(p))
             {
-                mFilesFoundInDirectories.emplace(p);
+                m_files_found_in_directories.emplace(p);
                 background_load(p.u8string());
             }
         }
