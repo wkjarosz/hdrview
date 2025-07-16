@@ -2,8 +2,10 @@
 
 #include "async.h"
 #include "fwd.h"
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,6 +17,8 @@ struct BackgroundImageLoader
     void load_recent_file(int index);
     void get_loaded_images(std::function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return pending_images.size(); }
+
+    void load_new_files();
 
     void set_recent_files(const std::vector<std::string> &recents) { m_recent_files = recents; }
     void clear_recent_files() { set_recent_files({}); }
@@ -29,4 +33,7 @@ private:
 
     void add_recent_file(const std::string &f);
     void remove_recent_file(const std::string &f);
+
+    std::set<std::filesystem::path> mDirectories;
+    std::set<std::filesystem::path> mFilesFoundInDirectories;
 };

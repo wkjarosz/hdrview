@@ -1354,7 +1354,7 @@ void HDRViewApp::draw_menus()
             {
                 if (ImGui::MenuItem(fmt::format("{}##File{}", *f, i).c_str()))
                 {
-                    load_image(*f, true);
+                    m_image_loader.load_recent_file(i);
                     break;
                 }
             }
@@ -1688,7 +1688,10 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
 {
     int id = image_index(image);
     if (id == -1)
+    {
+        spdlog::warn("Tried to reload image '{}' that is not loaded.", image->filename);
         return;
+    }
 
     auto filename = image->filename;
     spdlog::info("Reloading file '{}'...", filename);
@@ -1702,12 +1705,12 @@ void HDRViewApp::reload_modified_files()
     {
         auto &img = m_images[i];
         if (!fs::exists(img->path))
+        {
+            spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
             continue;
+        }
 
         fs::file_time_type last_modified;
-
-        // Unlikely, but the file could have been deleted, moved, or something else could have happened to it that makes
-        // obtaining its last modified time impossible. Ignore such errors.
         try
         {
             last_modified = fs::last_write_time(img->path);
@@ -3088,7 +3091,7 @@ void HDRViewApp::draw_background()
         if (now - m_last_file_changes_check_time >= 250ms)
         {
             reload_modified_files();
-            // mImagesLoader->checkDirectoriesForNewFilesAndLoadThose();
+            m_image_loader.load_new_files();
             m_last_file_changes_check_time = now;
         }
     }

@@ -77,7 +77,6 @@ bool host_is_safari()
 //
 extern "C"
 {
-
     EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size)
     {
         auto [size, unit] = human_readable_size(buffer_size);

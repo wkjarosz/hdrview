@@ -1,10 +1,9 @@
 #include "image_loader.h"
 #include "image.h"
-#include <filesystem>
 #include <fstream>
 
-namespace fs = std::filesystem;
 using namespace std;
+namespace fs = std::filesystem;
 
 using ImageLoadTask = AsyncTask<std::vector<ImagePtr>>;
 
@@ -104,7 +103,11 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                         images = Image::load(is, path.u8string());
                     }
 
-                    for (auto &img : images) img->last_modified = last_modified;
+                    for (auto &img : images)
+                    {
+                        img->last_modified = last_modified;
+                        img->path          = path;
+                    }
                     return images;
                 },
                 add_to_recent, should_select, to_replace));
@@ -117,19 +120,26 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     };
 
     auto path = fs::u8path(filename.c_str());
-    if (fs::is_directory(path))
+    if (!fs::exists(path))
+        spdlog::error("File '{}' does not exist.", filename);
+    else if (fs::is_directory(path))
     {
         spdlog::info("Loading images from folder '{}'", path.u8string());
 
-        std::error_code             ec;
-        auto                        canon_p = fs::canonical(path);
+        std::error_code ec;
+        auto            canon_p = fs::canonical(path);
+        mDirectories.emplace(canon_p);
+
         vector<fs::directory_entry> entries;
         for (auto const &entry : fs::directory_iterator{canon_p, ec})
         {
             auto ext           = to_lower(get_extension(entry.path().filename().u8string()));
             bool supported_ext = Image::loadable_formats().find(ext) != Image::loadable_formats().end();
             if (!entry.is_directory() && supported_ext)
+            {
+                mFilesFoundInDirectories.emplace(entry);
                 entries.emplace_back(entry);
+            }
         }
 
         sort(begin(entries), end(entries),
@@ -154,8 +164,6 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         remove_recent_file(filename);
         load_one(filename, buffer, true, should_select, to_replace);
     }
-    else if (!fs::exists(path))
-        spdlog::error("File '{}' does not exist.", filename);
 }
 
 void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback)
@@ -186,4 +194,22 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
                                                 return false;
                                         }),
                          pending_images.end());
+}
+
+void BackgroundImageLoader::load_new_files()
+{
+    std::error_code ec;
+    for (const auto &dir : mDirectories)
+        for (auto const &entry : fs::directory_iterator{dir, ec})
+        {
+            if (entry.is_directory())
+                continue;
+
+            const auto p = entry.path();
+            if (!mFilesFoundInDirectories.count(p))
+            {
+                mFilesFoundInDirectories.emplace(p);
+                background_load(p.u8string());
+            }
+        }
 }
