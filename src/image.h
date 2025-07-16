@@ -24,6 +24,9 @@
 
 #include <ImfHeader.h>
 
+#include <filesystem>
+namespace fs = std::filesystem;
+
 #include "dithermatrix256.h"
 
 // A very small value to avoid divisions by zero when converting to unpremultiplied alpha. The technical introduction to
@@ -273,13 +276,13 @@ struct LayerTreeNode
 struct Image
 {
 public:
-    static std::set<std::string> loadable_formats(); /// Set of supported formats for image loading
-    static std::set<std::string> savable_formats();  /// Set of supported formats for image saving
-    static void                  make_default_textures();
-    static void                  cleanup_default_textures();
-    static Texture              *black_texture();
-    static Texture              *white_texture();
-    static Texture              *dither_texture();
+    static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
+    static const std::set<std::string> &savable_formats();  /// Set of supported formats for image saving
+    static void                         make_default_textures();
+    static void                         cleanup_default_textures();
+    static Texture                     *black_texture();
+    static Texture                     *white_texture();
+    static Texture                     *dither_texture();
 
     int id;
 
@@ -298,6 +301,9 @@ public:
     WhitePoint                    white_point             = WhitePoint_Unspecified;
     bool                          file_has_straight_alpha = false;
     json                          metadata                = json::object();
+
+    fs::path           path;
+    fs::file_time_type last_modified;
 
     //
     // Layers, groups, and the layer node tree are built from the loaded channels in finalize().

@@ -3376,11 +3376,12 @@ void DrawChromaticityPlot(ImDrawList *pDrawList, ImVec2 curPos, ImVec2 size, ImV
 				ImVec2 text_size = ImGui::CalcTextSize(label);
 
 				// Offset text slightly along the normal direction from the tick end
-				const float text_offset = text_size.y;
+				const float text_offset = 0.5f * text_size.y;
 				ImVec2 text_pos = tick_end + normal * text_offset;
 
 				// Align text position continuously based on normal direction using ImLerp
-				text_pos += ImLerp(-text_size, ImVec2(0.f, 0.f), 0.5f * (normal.x + 1.0f));
+				text_pos.x += ImLerp(-text_size.x, 0.f, 0.5f * (normal.x + 1.f));
+				text_pos.y += ImLerp(-text_size.y, 0.f, 0.5f * (normal.y + 1.f));
 
 				pDrawList->AddText(text_pos, IM_COL32(0,0,0,255), label);
 				pDrawList->AddText(text_pos - ImVec2{1.f,1.f}, IM_COL32(255,255,255,255), label);

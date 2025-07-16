@@ -9,10 +9,12 @@
 
 #include "colormap.h"
 #include "hello_imgui/hello_imgui.h"
+#include "imageio/image_loader.h"
 #include "imgui_ext.h"
 #include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
 #include "shader.h"
+#include <chrono>
 #include <map>
 #include <string>
 #include <string_view>
@@ -44,13 +46,15 @@ public:
     //-----------------------------------------------------------------------------
     void open_image();
     void open_folder();
-    void load_images(const std::vector<std::string> &filenames);
-    void load_image(const string filename, const std::string_view buffer = std::string_view{});
+    void load_images(const vector<string> &filenames);
+    void load_image(const string filename, bool should_select = true, const string_view buffer = string_view{});
     void load_url(const string_view url);
     void save_as(const string &filename) const;
     void export_as(const string &filename) const;
     void close_image();
     void close_all_images();
+    void reload_image(ImagePtr image, bool shall_select = false);
+    void reload_modified_files();
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -64,6 +68,7 @@ public:
     ImagePtr      current_image() { return image(m_current); }
     ConstImagePtr reference_image() const { return image(m_reference); }
     ImagePtr      reference_image() { return image(m_reference); }
+    int           image_index(ConstImagePtr img) const;
     ConstImagePtr image(int index) const { return is_valid(index) ? m_images[index] : nullptr; }
     ImagePtr      image(int index) { return is_valid(index) ? m_images[index] : nullptr; }
     void          set_current_image_index(int index, bool force = false)
@@ -203,8 +208,6 @@ private:
 
     void setup_rendering();
 
-    void add_pending_images();
-
 private:
     //-----------------------------------------------------------------------------
     // Private data members
@@ -215,20 +218,9 @@ private:
     vector<ImagePtr> m_images;
     int              m_current = -1, m_reference = -1;
 
-    using ImageLoadTask = AsyncTask<vector<ImagePtr>>;
-    struct PendingImages
-    {
-        string        filename;
-        ImageLoadTask images;
-        bool          add_to_recent;
-        PendingImages(const string &f, ImageLoadTask::NoProgressTaskFunc func, bool recent = true) :
-            filename(f), images(func), add_to_recent(recent)
-        {
-            images.compute();
-        }
-    };
-    vector<shared_ptr<PendingImages>> m_pending_images;
-    int                               m_remaining_download = 0;
+    BackgroundImageLoader m_image_loader;
+
+    int m_remaining_download = 0;
 
     float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 1.0f, m_gamma_live = 1.0f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
@@ -264,10 +256,6 @@ private:
 
     HelloImGui::RunnerParams m_params;
 
-    vector<string> m_recent_files;
-
-    void add_recent_file(const string &f);
-
     ImGuiTextFilter m_file_filter, m_channel_filter;
 
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
@@ -275,6 +263,10 @@ private:
     vector<ImGui::Action>          m_actions;
     map<string, size_t>            m_action_map;
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
+
+    bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
+
+    std::chrono::steady_clock::time_point m_last_file_changes_check_time = {};
 
     ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };

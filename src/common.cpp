@@ -203,3 +203,55 @@ pair<float, std::string> human_readable_size(size_t bytes)
 
     return {size, units[unit_index]};
 }
+
+bool natural_less(const string_view a, const string_view b)
+{
+    size_t ia = 0, ib = 0;
+    while (ia < a.size() && ib < b.size())
+    {
+        if (std::isdigit(a[ia]) && std::isdigit(b[ib]))
+        {
+            // Skip leading zeros
+            size_t za = ia, zb = ib;
+            while (za < a.size() && a[za] == '0') ++za;
+            while (zb < b.size() && b[zb] == '0') ++zb;
+
+            // Find the end of the digit sequence
+            size_t enda = za;
+            while (enda < a.size() && std::isdigit(a[enda])) ++enda;
+            size_t endb = zb;
+            while (endb < b.size() && std::isdigit(b[endb])) ++endb;
+
+            size_t lena = enda - za;
+            size_t lenb = endb - zb;
+
+            // Compare by length first (more digits = larger number)
+            if (lena != lenb)
+                return lena < lenb;
+
+            // Compare digit by digit
+            for (size_t i = 0; i < lena; ++i)
+            {
+                if (a[za + i] != b[zb + i])
+                    return a[za + i] < b[zb + i];
+            }
+
+            // If equal, shorter sequence with more leading zeros is less
+            size_t total_len_a = enda - ia;
+            size_t total_len_b = endb - ib;
+            if (total_len_a != total_len_b)
+                return total_len_a < total_len_b;
+
+            ia = enda;
+            ib = endb;
+        }
+        else
+        {
+            if (a[ia] != b[ib])
+                return a[ia] < b[ib];
+            ++ia;
+            ++ib;
+        }
+    }
+    return a.size() < b.size();
+}

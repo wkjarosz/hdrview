@@ -29,7 +29,6 @@
 #include <spdlog/spdlog.h>
 
 #include <cmath>
-#include <filesystem>
 #include <fmt/core.h>
 #include <fstream>
 #include <memory>
@@ -79,22 +78,21 @@ struct WatchedPixel
 
 static vector<WatchedPixel> g_watched_pixels;
 
-static std::mt19937     g_rand(53);
-static constexpr float  MIN_ZOOM                              = 0.01f;
-static constexpr float  MAX_ZOOM                              = 512.f;
-static constexpr size_t g_max_recent                          = 15;
-static bool             g_show_help                           = false;
-static bool             g_show_command_palette                = false;
-static bool             g_show_tweak_window                   = false;
-static bool             g_show_demo_window                    = false;
-static bool             g_show_debug_window                   = false;
-static bool             g_show_bg_color_picker                = false;
-static char             g_filter_buffer[256]                  = {0};
-static int              g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
-static bool             g_request_sort                        = false;
-static bool             g_short_names                         = false;
-static MouseMode_       g_mouse_mode                          = MouseMode_PanZoom;
-static bool             g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+static std::mt19937    g_rand(53);
+static constexpr float MIN_ZOOM                              = 0.01f;
+static constexpr float MAX_ZOOM                              = 512.f;
+static bool            g_show_help                           = false;
+static bool            g_show_command_palette                = false;
+static bool            g_show_tweak_window                   = false;
+static bool            g_show_demo_window                    = false;
+static bool            g_show_debug_window                   = false;
+static bool            g_show_bg_color_picker                = false;
+static char            g_filter_buffer[256]                  = {0};
+static int             g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
+static bool            g_request_sort                        = false;
+static bool            g_short_names                         = false;
+static MouseMode_      g_mouse_mode                          = MouseMode_PanZoom;
+static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
 #define g_blank_icon ""
 
@@ -501,7 +499,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
     m_params.callbacks.ShowGui = [this]()
     {
-        add_pending_images();
+        m_image_loader.get_loaded_images(
+            [this](ImagePtr new_image, ImagePtr to_replace, bool should_select)
+            {
+                int idx = (to_replace) ? image_index(to_replace) : -1;
+                if (is_valid(idx))
+                    m_images[idx] = new_image;
+                else
+                    m_images.push_back(new_image);
+
+                if (should_select)
+                    m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
+
+                update_visibility(); // this also calls set_image_textures();
+                g_request_sort = true;
+            });
 
         draw_about_dialog();
 
@@ -857,6 +869,11 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
+        add_action({"Reload image", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_R, 0,
+                    [this]() { reload_image(current_image()); }, if_img});
+        add_action({"Auto-reload on changes", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, []() {}, always_enabled, false,
+                    &m_watch_files_for_changes});
+
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
                     {
@@ -1185,9 +1202,8 @@ void HDRViewApp::load_settings()
     try
     {
         json j = json::parse(s);
-        m_recent_files.clear();
         spdlog::debug("Restoring recent file list...");
-        m_recent_files = j.value<std::vector<std::string>>("recent files", m_recent_files);
+        m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
         m_bg_mode =
             (EBGMode)std::clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
         m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
@@ -1220,7 +1236,7 @@ void HDRViewApp::save_settings()
     spdlog::info("Saving user settings to '{}'", HelloImGui::IniSettingsLocation(m_params));
 
     json j;
-    j["recent files"]            = m_recent_files;
+    j["recent files"]            = m_image_loader.recent_files();
     j["background mode"]         = (int)m_bg_mode;
     j["background color"]        = m_bg_color.xyz();
     j["draw data window"]        = m_draw_data_window;
@@ -1246,12 +1262,11 @@ void HDRViewApp::save_settings()
 void HDRViewApp::draw_status_bar()
 {
     const float y = ImGui::GetCursorPosY() - HelloImGui::EmSize(0.15f);
-    if (m_pending_images.size())
+    if (auto num = m_image_loader.num_pending_images())
     {
         ImGui::SetCursorPos({ImGui::GetStyle().ItemSpacing.x, y});
-        ImGui::ProgressBar(
-            -1.0f * (float)ImGui::GetTime(), HelloImGui::EmToVec2(15.f, 0.f),
-            fmt::format("Loading {} image{}", m_pending_images.size(), m_pending_images.size() > 1 ? "s" : "").c_str());
+        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), HelloImGui::EmToVec2(15.f, 0.f),
+                           fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
         ImGui::SameLine();
     }
     else if (m_remaining_download > 0)
@@ -1330,16 +1345,16 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Open URL..."));
 #else
 
-        ImGui::BeginDisabled(m_recent_files.empty());
+        ImGui::BeginDisabled(m_image_loader.recent_files().empty());
         if (ImGui::BeginMenuEx("Open recent", ICON_MY_OPEN_IMAGE))
         {
-            size_t i = m_recent_files.size() - 1;
-            for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
+            auto   recents = m_image_loader.recent_files_short(47, 50);
+            size_t i       = 0;
+            for (auto f = recents.begin(); f != recents.end(); ++f, ++i)
             {
-                string short_name = (f->length() < 100) ? *f : f->substr(0, 47) + "..." + f->substr(f->length() - 50);
-                if (ImGui::MenuItem(fmt::format("{}##File{}", short_name, i).c_str()))
+                if (ImGui::MenuItem(fmt::format("{}##File{}", *f, i).c_str()))
                 {
-                    load_image(*f);
+                    load_image(*f, true);
                     break;
                 }
             }
@@ -1347,10 +1362,12 @@ void HDRViewApp::draw_menus()
             ImGui::Separator();
 
             if (ImGui::MenuItem("Clear recently opened"))
-                m_recent_files.clear();
+                m_image_loader.clear_recent_files();
             ImGui::EndMenu();
         }
         ImGui::EndDisabled();
+        MenuItem(action("Reload image"));
+        MenuItem(action("Auto-reload on changes"));
 #endif
 
         ImGui::Separator();
@@ -1553,7 +1570,7 @@ void HDRViewApp::export_as(const string &filename) const
 
 void HDRViewApp::load_images(const vector<string> &filenames)
 {
-    for (auto f : filenames) load_image(f);
+    for (size_t i = 0; i < filenames.size(); ++i) load_image(filenames[i], i == 0);
 }
 
 void HDRViewApp::open_image()
@@ -1578,7 +1595,7 @@ void HDRViewApp::open_image()
                 auto [size, unit] = human_readable_size(buffer.size());
                 spdlog::debug("User uploaded a {:.0f} {} file with filename '{}' of mime-type '{}'", size, unit,
                               filename, mime_type);
-                hdrview()->load_image(filename, buffer);
+                hdrview()->load_image(filename, true, buffer);
             }
         });
 #else
@@ -1596,75 +1613,9 @@ void HDRViewApp::open_folder()
 }
 
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-void HDRViewApp::load_image(const string filename, const string_view buffer)
+void HDRViewApp::load_image(const string filename, bool should_select, const string_view buffer)
 {
-    auto load_one = [this](const string &filename, const string_view buffer, bool add_to_recent)
-    {
-        try
-        {
-            spdlog::info("Loading file '{}'...", filename);
-            // convert the buffer (if any) to a string so the async thread has its own copy,
-            // then load from the string or filename depending on whether the buffer is empty
-            m_pending_images.emplace_back(std::make_shared<PendingImages>(
-                filename,
-                [buffer_str = string(buffer), filename]()
-                {
-                    if (buffer_str.empty())
-                    {
-                        auto u8p = std::filesystem::u8path(filename.c_str());
-                        if (std::ifstream is{u8p, std::ios_base::binary})
-                            return Image::load(is, filename);
-                        else
-                        {
-                            spdlog::error("File '{}' doesn't exist.", u8p.string());
-                            return vector<ImagePtr>{};
-                        }
-                    }
-                    else
-                    {
-                        std::istringstream is{buffer_str};
-                        return Image::load(is, filename);
-                    }
-                },
-                add_to_recent));
-        }
-        catch (const std::exception &e)
-        {
-            spdlog::error("Could not load image \"{}\": {}.", filename, e.what());
-            return;
-        }
-    };
-
-    auto path = fs::path(filename);
-    if (fs::is_directory(path))
-    {
-        spdlog::info("Loading images from folder '{}'", filename);
-
-        std::error_code ec;
-        auto            canon_p = fs::canonical(path);
-        for (auto const &entry : fs::directory_iterator{canon_p, ec})
-        {
-            if (!entry.is_directory())
-                load_one(entry.path().u8string(), buffer, false);
-        }
-        m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
-        add_recent_file(filename);
-    }
-    else if (!buffer.empty())
-    {
-        // if we have a buffer, we assume it is a file that has been downloaded
-        // and we load it directly from the buffer
-        spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
-        load_one(filename, buffer, true);
-    }
-    else if (fs::exists(path) && fs::is_regular_file(path))
-    {
-        // remove any instances of filename from the recent files list until we know it has loaded successfully
-        m_recent_files.erase(std::remove(m_recent_files.begin(), m_recent_files.end(), filename), m_recent_files.end());
-        load_one(filename, buffer, true);
-    }
-    else if (!fs::exists(path))
-        spdlog::error("File '{}' does not exist.", filename);
+    m_image_loader.background_load(filename, buffer, should_select);
 }
 
 void HDRViewApp::load_url(const string_view url)
@@ -1695,7 +1646,7 @@ void HDRViewApp::load_url(const string_view url)
             auto filename    = get_filename(url);
             auto char_buffer = reinterpret_cast<const char *>(buffer);
             spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-            hdrview()->load_image(url, {char_buffer, (size_t)buffer_size});
+            hdrview()->load_image(url, true, {char_buffer, (size_t)buffer_size});
         },
         (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
             auto   payload                         = reinterpret_cast<Payload *>(data);
@@ -1733,56 +1684,51 @@ void HDRViewApp::load_url(const string_view url)
 #endif
 }
 
-void HDRViewApp::add_recent_file(const string &f)
+void HDRViewApp::reload_image(ImagePtr image, bool should_select)
 {
-    m_recent_files.push_back(f);
-    if (m_recent_files.size() > g_max_recent)
-        m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
+    int id = image_index(image);
+    if (id == -1)
+        return;
+
+    auto filename = image->filename;
+    spdlog::info("Reloading file '{}'...", filename);
+    m_image_loader.background_load(filename, {}, should_select, image);
 }
 
-void HDRViewApp::add_pending_images()
+void HDRViewApp::reload_modified_files()
 {
-    // Criterion to check if a image is ready, and copy it into our m_images vector if so
-    auto removable = [this](shared_ptr<PendingImages> p)
+    bool any_reloaded = false;
+    for (int i = 0; i < num_images(); ++i)
     {
-        if (p->images.ready())
+        auto &img = m_images[i];
+        if (!fs::exists(img->path))
+            continue;
+
+        fs::file_time_type last_modified;
+
+        // Unlikely, but the file could have been deleted, moved, or something else could have happened to it that makes
+        // obtaining its last modified time impossible. Ignore such errors.
+        try
         {
-            // get the result, add any loaded images, and report that we can remove this task
-            auto new_images = p->images.get();
-            if (new_images.empty())
-                return true;
-
-            for (auto &i : new_images) m_images.push_back(i);
-
-            // if loading was successful, add the filename to the recent list and limit to g_max_recent files
-            if (p->add_to_recent)
-                add_recent_file(p->filename);
-
-            return true;
+            last_modified = fs::last_write_time(img->path);
         }
-        else
-            return false;
-    };
+        catch (...)
+        {
+            continue;
+        }
 
-    auto num_previous = m_images.size();
-
-    // move elements matching the criterion to the end of the vector, and then erase all matching elements
-    m_pending_images.erase(std::remove_if(m_pending_images.begin(), m_pending_images.end(), removable),
-                           m_pending_images.end());
-
-    auto num_added = m_images.size() - num_previous;
-    if (num_added > 0)
-    {
-        spdlog::info("Added {} new image{}.", num_added, (num_added > 1) ? "s" : "");
-        // only select the newly loaded image if there is no valid selection
-        // if (is_valid(m_current))
-        //     return;
-
-        m_current = int(m_images.size() - 1);
-
-        update_visibility(); // this also calls set_image_textures();
-        g_request_sort = true;
+        if (last_modified != img->last_modified)
+        {
+            // Updating the last-modified date prevents double-scheduled reloads if the load take a lot of time or
+            // fails.
+            img->last_modified = last_modified;
+            reload_image(img);
+            any_reloaded = true;
+        }
     }
+
+    if (!any_reloaded)
+        spdlog::debug("No modified files found to reload.");
 }
 
 void HDRViewApp::set_image_textures()
@@ -3132,7 +3078,20 @@ void HDRViewApp::draw_top_toolbar()
 
 void HDRViewApp::draw_background()
 {
+    using namespace std::literals;
     process_shortcuts();
+
+    // If watching files for changes, do so every 250ms
+    if (m_watch_files_for_changes)
+    {
+        auto now = std::chrono::steady_clock::now();
+        if (now - m_last_file_changes_check_time >= 250ms)
+        {
+            reload_modified_files();
+            // mImagesLoader->checkDirectoriesForNewFilesAndLoadThose();
+            m_last_file_changes_check_time = now;
+        }
+    }
 
     try
     {
@@ -3281,6 +3240,14 @@ int HDRViewApp::nth_visible_image_index(int n) const
     return (int)nth_matching_index(m_images, (size_t)n, [](size_t, const ImagePtr &img) { return img->visible; });
 }
 
+int HDRViewApp::image_index(ConstImagePtr img) const
+{
+    for (int i = 0; i < num_images(); ++i)
+        if (m_images[i] == img)
+            return i;
+    return -1; // not found
+}
+
 bool HDRViewApp::process_event(void *e)
 {
 #ifdef HELLOIMGUI_USE_SDL2
@@ -3371,25 +3338,14 @@ void HDRViewApp::draw_command_palette()
 
 #if !defined(__EMSCRIPTEN__)
             // add a two-step command to list and open recent files
-            if (!m_recent_files.empty())
+            if (!m_image_loader.recent_files().empty())
                 ImCmd::AddCommand({"Open recent",
                                    [this]()
                                    {
-                                       vector<string> short_names;
-                                       size_t         i = m_recent_files.size() - 1;
-                                       for (auto f = m_recent_files.rbegin(); f != m_recent_files.rend(); ++f, --i)
-                                           short_names.push_back((f->length() < 60) ? *f
-                                                                                    : f->substr(0, 32) + "..." +
-                                                                                          f->substr(f->length() - 25));
-                                       ImCmd::Prompt(short_names);
+                                       ImCmd::Prompt(m_image_loader.recent_files_short());
                                        ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                    },
-                                   [this](int selected_option)
-                                   {
-                                       int idx = int(m_recent_files.size() - 1) - selected_option;
-                                       if (idx >= 0 && idx < int(m_recent_files.size()))
-                                           load_image(m_recent_files[idx]);
-                                   },
+                                   [this](int selected_option) { m_image_loader.load_recent_file(selected_option); },
                                    nullptr, ICON_MY_OPEN_IMAGE});
 
 #endif

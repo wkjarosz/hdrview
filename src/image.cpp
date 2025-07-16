@@ -82,21 +82,25 @@ Texture *Image::black_texture() { return s_black_texture.get(); }
 Texture *Image::white_texture() { return s_white_texture.get(); }
 Texture *Image::dither_texture() { return s_dither_texture.get(); }
 
-std::set<std::string> Image::loadable_formats()
+const std::set<std::string> &Image::loadable_formats()
 {
-    return {"dng",  "jpg",  "jpeg",
+    static const std::set<std::string> formats = {"dng",  "jpg",  "jpeg",
 #ifdef HDRVIEW_ENABLE_JPEGXL
-            "jxl",
+                                                  "jxl",
 #endif
 #ifdef HDRVIEW_ENABLE_HEIF
-            "heic", "heif", "avif", "avifs",
+                                                  "heic", "heif", "avif", "avifs",
 #endif
-            "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "psd", "pfm", "tga", "gif", "hdr", "exr", "qoi"};
+                                                  "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "psd",
+                                                  "pfm",  "tga",  "gif",  "hdr",   "exr", "qoi"};
+    return formats;
 }
 
-std::set<std::string> Image::savable_formats()
+const std::set<std::string> &Image::savable_formats()
 {
-    return {"bmp", "exr", "pfm", "ppm", "png", "hdr", "jpg", "jpeg", "tga", "qoi"};
+    static const std::set<std::string> formats = {"bmp", "exr", "pfm",  "ppm", "png",
+                                                  "hdr", "jpg", "jpeg", "tga", "qoi"};
+    return formats;
 }
 
 //
@@ -477,7 +481,7 @@ void Image::set_as_texture(Target target)
 
 Image::Image() : id(s_next_image_id++) {}
 
-Image::Image(int2 size, int num_channels)
+Image::Image(int2 size, int num_channels) : Image()
 {
     if (num_channels < 3)
     {

@@ -650,7 +650,7 @@ void Image::draw_info()
             if (ImWidgets::ChromaticityPlotDragBehavior("##chromaticityDrag", pos, ImVec2(size, size / aspect),
                                                         (ImVec2 *)&gamut_chr.red, (ImVec2 *)&gamut_chr.green,
                                                         (ImVec2 *)&gamut_chr.blue, (ImVec2 *)&gamut_chr.white,
-                                                        {0.0f - pad, 0.0f - pad}, {0.8f + pad, 0.9f + pad}))
+                                                        vMin - pad, vMax + pad))
             {
                 chromaticities = gamut_chr;
                 compute_color_transform();

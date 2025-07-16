@@ -370,3 +370,6 @@ size_t nth_matching_index(const std::vector<T> &vec, size_t n, Criterion criteri
 //! Given a collection of strings (e.g. file names) that might share a common prefix and suffix, determine the character
 //! range that is unique across the strings
 std::pair<int, int> find_common_prefix_suffix(const std::vector<std::string> &names);
+
+// Compare two strings in "natural" order (e.g. file2 < file10)
+bool natural_less(const std::string_view a, const std::string_view b);
