@@ -428,8 +428,8 @@ if (typeof window === 'undefined') {
                                 Module.HEAPU8.set(uint8Array, buf);
                                 var res = Module.ccall('hdrview_loadfile',  // C function name
                                     'int',
-                                    ['string', 'number', 'number'],  // name, data, size
-                                    [file.name, buf, uint8Array.length]);
+                                    ['string', 'number', 'number', 'number'],  // name, data, size, should_select
+                                    [file.name, buf, uint8Array.length, i == 0]);
                                 Module._free(buf);
                                 if (res != 0)
                                     console.warn('hdrview_loadfile() failed!');
