@@ -69,7 +69,7 @@ bool is_pfm_image(istream &is) noexcept
     return ret;
 }
 
-unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *width, int *height, int *num_channels)
+unique_ptr<float[]> load_pfm_image(istream &is, string_view filename, int *width, int *height, int *num_channels)
 {
     try
     {
@@ -126,7 +126,7 @@ unique_ptr<float[]> load_pfm_image(istream &is, const string &filename, int *wid
     }
 }
 
-vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
+vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename)
 {
     int3 size;
     auto float_data                      = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
@@ -143,10 +143,10 @@ vector<ImagePtr> load_pfm_image(std::istream &is, const string &filename)
     return {image};
 }
 
-void write_pfm_image(ostream &os, const string &filename, int width, int height, int num_channels, const float data[])
+void write_pfm_image(ostream &os, string_view filename, int width, int height, int num_channels, const float data[])
 {
     if (!os)
-        throw invalid_argument("write_pfm_image: Error opening file '" + filename);
+        throw invalid_argument(fmt::format("write_pfm_image: Error opening file '{}'", filename));
 
     string magic;
 
@@ -177,7 +177,7 @@ void write_pfm_image(ostream &os, const string &filename, int width, int height,
     os.write((const char *)data, width * height * sizeof(float) * num_channels);
 }
 
-void save_pfm_image(const Image &img, ostream &os, const string &filename, float gain)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain)
 {
     Timer timer;
     // get interleaved LDR pixel data

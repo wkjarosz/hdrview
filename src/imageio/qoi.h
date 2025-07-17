@@ -15,7 +15,7 @@
 // should not throw
 bool is_qoi_image(std::istream &is) noexcept;
 // throws on error
-std::vector<ImagePtr> load_qoi_image(std::istream &is, const std::string &filename);
+std::vector<ImagePtr> load_qoi_image(std::istream &is, const std::string_view filename);
 /// throws on error
-void save_qoi_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f, bool sRGB = true,
-                    bool dither = true);
+void save_qoi_image(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
+                    bool sRGB = true, bool dither = true);

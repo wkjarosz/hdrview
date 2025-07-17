@@ -1689,16 +1689,14 @@ void HDRViewApp::load_url(const string_view url)
 
 void HDRViewApp::reload_image(ImagePtr image, bool should_select)
 {
-    int id = image_index(image);
-    if (id == -1)
+    if (!image)
     {
-        spdlog::warn("Tried to reload image '{}' that is not loaded.", image->filename);
+        spdlog::warn("Tried to reload a null image");
         return;
     }
 
-    auto filename = image->filename;
-    spdlog::info("Reloading file '{}'...", filename);
-    m_image_loader.background_load(filename, {}, should_select, image);
+    spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
+    m_image_loader.background_load(image->filename, {}, should_select, image, image->channel_selector);
 }
 
 void HDRViewApp::reload_modified_files()

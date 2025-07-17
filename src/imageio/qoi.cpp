@@ -46,7 +46,7 @@ bool is_qoi_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
+vector<ImagePtr> load_qoi_image(istream &is, string_view filename)
 {
     if (!is_qoi_image(is))
         throw invalid_argument{"QOI: invalid magic string"};
@@ -103,7 +103,7 @@ vector<ImagePtr> load_qoi_image(istream &is, const string &filename)
     return {image};
 }
 
-void save_qoi_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)
+void save_qoi_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
 {
     Timer timer;
     // get interleaved LDR pixel data

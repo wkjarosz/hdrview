@@ -114,7 +114,7 @@ bool is_stb_image(istream &is) noexcept
     return supported_format(is, j);
 }
 
-vector<ImagePtr> load_stb_image(istream &is, const string &filename)
+vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
 {
     // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
     // we'll do our own srgb correction
@@ -164,7 +164,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string &filename)
     return {image};
 }
 
-void save_stb_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)
+void save_stb_image(const Image &img, ostream &os, const string_view filename, float gain, bool sRGB, bool dither)
 {
     Timer             timer;
     static const auto ostream_write_func = [](void *context, void *data, int size)

@@ -56,12 +56,12 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
 }
 
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
-                                            ImagePtr to_replace)
+                                            ImagePtr to_replace, const string &channel_selector)
 {
     if (should_select)
         spdlog::debug("will select image '{}'", filename);
     auto load_one = [this](const fs::path &path, const string_view buffer, bool add_to_recent, bool should_select,
-                           ImagePtr to_replace)
+                           ImagePtr to_replace, const string &channel_selector)
     {
         try
         {
@@ -72,7 +72,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             // then load from the string or filename depending on whether the buffer is empty
             pending_images.emplace_back(std::make_shared<PendingImages>(
                 path.u8string(),
-                [buffer_str = string(buffer), path]() -> vector<ImagePtr>
+                [buffer_str = string(buffer), path, channel_selector]() -> vector<ImagePtr>
                 {
                     vector<ImagePtr>   images{};
                     fs::file_time_type last_modified = fs::file_time_type::clock::now();
@@ -90,7 +90,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                         }
 
                         if (std::ifstream is{path, std::ios_base::binary})
-                            images = Image::load(is, path.u8string());
+                            images = Image::load(is, path.u8string(), channel_selector);
                         else
                         {
                             spdlog::error("File '{}' doesn't exist.", path.u8string());
@@ -100,7 +100,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                     else
                     {
                         std::istringstream is{buffer_str};
-                        images = Image::load(is, path.u8string());
+                        images = Image::load(is, path.u8string(), channel_selector);
                     }
 
                     for (auto &img : images)
@@ -146,8 +146,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
              [](const auto &a, const auto &b) { return natural_less(a.path().string(), b.path().string()); });
 
         for (size_t i = 0; i < entries.size(); ++i)
-            load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace);
+            load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, channel_selector);
 
+        // this moves the file to the top of the recent files list
         remove_recent_file(filename);
         add_recent_file(filename);
     }
@@ -156,13 +157,13 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         // if we have a buffer, we assume it is a file that has been downloaded
         // and we load it directly from the buffer
         spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
-        load_one(path, buffer, true, should_select, to_replace);
+        load_one(path, buffer, true, should_select, to_replace, channel_selector);
     }
     else if (fs::exists(path) && fs::is_regular_file(path))
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);
-        load_one(filename, buffer, true, should_select, to_replace);
+        load_one(filename, buffer, true, should_select, to_replace, channel_selector);
     }
 }
 
@@ -183,8 +184,7 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
                                                 for (size_t i = 0; i < new_images.size(); ++i)
                                                     callback(new_images[i], p->to_replace, p->should_select);
 
-                                                // if loading was successful, add the filename to the recent list and
-                                                // limit to g_max_recent files
+                                                // if loading was successful, add the filename to the recent list
                                                 if (p->add_to_recent)
                                                     add_recent_file(p->filename);
 

@@ -9,6 +9,7 @@
 #include "exr_header.h"
 #include "exr_std_streams.h"
 #include "image.h"
+#include "imgui.h"
 #include "texture.h"
 #include "timer.h"
 #include <ImfChannelList.h>
@@ -28,25 +29,38 @@
 
 using namespace std;
 
-bool is_exr_image(istream &is_, const string &filename) noexcept
+bool is_exr_image(istream &is_, string_view filename) noexcept
 {
-    auto is = StdIStream{is_, filename.c_str()};
+    auto is = StdIStream{is_, string(filename).c_str()};
     return Imf::isOpenExrFile(is);
 }
 
-vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
+vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view channel_selector)
 {
-    auto is = StdIStream{is_, filename.c_str()};
+    auto is = StdIStream{is_, string(filename).c_str()};
 
     Imf::MultiPartInputFile infile{is};
 
     if (infile.parts() <= 0)
         throw invalid_argument{"EXR file contains no parts!"};
 
+    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    filter.Build();
+
     vector<ImagePtr> images;
     for (int p = 0; p < infile.parts(); ++p)
     {
         Imf::InputPart part{infile, p};
+
+        auto channel_name = [&](Imf::ChannelList::ConstIterator c)
+        {
+            string name = c.name();
+            if (part.header().hasName())
+                name = part.header().name() + "."s + name;
+            return name;
+        };
+
+        const auto &channels = part.header().channels();
 
         Imath::Box2i dataWindow    = part.header().dataWindow();
         Imath::Box2i displayWindow = part.header().displayWindow();
@@ -59,51 +73,55 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
             continue;
         }
 
-        images.emplace_back(make_shared<Image>());
-        auto &img = *images.back();
+        auto img = make_shared<Image>();
         if (auto a = part.header().findTypedAttribute<Imf::ChromaticitiesAttribute>("chromaticities"))
-            img.chromaticities = {{a->value().red.x, a->value().red.y},
-                                  {a->value().green.x, a->value().green.y},
-                                  {a->value().blue.x, a->value().blue.y},
-                                  {a->value().white.x, a->value().white.y}};
-        img.metadata["loader"]     = "OpenEXR";
-        img.metadata["exr header"] = exr_header_to_json(part.header());
+            img->chromaticities = {{a->value().red.x, a->value().red.y},
+                                   {a->value().green.x, a->value().green.y},
+                                   {a->value().blue.x, a->value().blue.y},
+                                   {a->value().white.x, a->value().white.y}};
+        img->metadata["loader"]     = "OpenEXR";
+        img->metadata["exr header"] = exr_header_to_json(part.header());
 
-        img.metadata["exr header"]["version"] = {
+        img->metadata["exr header"]["version"] = {
             {"type", "version"},
             {"string", fmt::format("{}, flags 0x{:x}", Imf::getVersion(part.version()), Imf::getFlags(part.version()))},
             {"version", Imf::getVersion(part.version())},
             {"flags", fmt::format("0x{:x}", Imf::getFlags(part.version()))}};
 
-        spdlog::debug("exr header: {}", img.metadata["exr header"].dump(2));
+        spdlog::debug("exr header: {}", img->metadata["exr header"].dump(2));
 
         if (part.header().hasName())
-            img.partname = part.header().name();
+            img->partname = part.header().name();
 
         // OpenEXR library's boxes include the max element, our boxes don't, so we increment by 1
-        img.data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
-        img.display_window = {{displayWindow.min.x, displayWindow.min.y},
-                              {displayWindow.max.x + 1, displayWindow.max.y + 1}};
+        img->data_window    = {{dataWindow.min.x, dataWindow.min.y}, {dataWindow.max.x + 1, dataWindow.max.y + 1}};
+        img->display_window = {{displayWindow.min.x, displayWindow.min.y},
+                               {displayWindow.max.x + 1, displayWindow.max.y + 1}};
 
-        if (img.data_window.is_empty())
+        if (img->data_window.is_empty())
             throw invalid_argument{fmt::format("EXR image has invalid data window: [{},{}] - [{},{}]",
-                                               img.data_window.min.x, img.data_window.min.y, img.data_window.max.x,
-                                               img.data_window.max.y)};
+                                               img->data_window.min.x, img->data_window.min.y, img->data_window.max.x,
+                                               img->data_window.max.y)};
 
-        if (img.display_window.is_empty())
+        if (img->display_window.is_empty())
             throw invalid_argument{fmt::format("EXR image has invalid display window: [{},{}] - [{},{}]",
-                                               img.display_window.min.x, img.display_window.min.y,
-                                               img.display_window.max.x, img.display_window.max.y)};
-
-        const auto &channels = part.header().channels();
+                                               img->display_window.min.x, img->display_window.min.y,
+                                               img->display_window.max.x, img->display_window.max.y)};
 
         Imf::FrameBuffer framebuffer;
         for (auto c = channels.begin(); c != channels.end(); ++c)
         {
-            string name = c.name();
+            auto name = channel_name(c);
+            if (!filter.PassFilter(&name[0], &name[0] + name.size()))
+            {
+                spdlog::debug("Skipping EXR channel '{}' in part {}: '{}'", name, p);
+                continue;
+            }
 
-            img.channels.emplace_back(name, size);
-            framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img.channels.back().data(), dataWindow, 0, 0,
+            name = c.name();
+
+            img->channels.emplace_back(name, size);
+            framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img->channels.back().data(), dataWindow, 0, 0,
                                                           c.channel().xSampling, c.channel().ySampling));
         }
 
@@ -124,17 +142,19 @@ vector<ImagePtr> load_exr_image(istream &is_, const string &filename)
 
             spdlog::warn("EXR channel '{}' is subsampled ({},{}). Only rudimentary subsampling is supported.", c.name(),
                          xs, ys);
-            Array2Df tmp = img.channels[i];
+            Array2Df tmp = img->channels[i];
 
             int subsampled_width = size.x / xs;
             for (int y = 0; y < size.y; ++y)
-                for (int x = 0; x < size.x; ++x) img.channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
+                for (int x = 0; x < size.x; ++x) img->channels[i]({x, y}) = tmp(x / xs + (y / ys) * subsampled_width);
         }
+
+        images.emplace_back(img);
     }
     return images;
 }
 
-void save_exr_image(const Image &img, ostream &os_, const string &filename)
+void save_exr_image(const Image &img, ostream &os_, string_view filename)
 {
     try
     {
@@ -177,7 +197,7 @@ void save_exr_image(const Image &img, ostream &os_, const string &filename)
             }
         }
 
-        auto            os = StdOStream{os_, filename.c_str()};
+        auto            os = StdOStream{os_, string(filename).c_str()};
         Imf::OutputFile file{os, header};
         file.setFrameBuffer(frameBuffer);
         file.writePixels(img.data_window.size().y);

@@ -9,6 +9,7 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
+#include "imgui.h"
 #include "texture.h"
 #include "timer.h"
 #include <optional>
@@ -17,7 +18,7 @@
 
 bool is_png_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_png_image(istream &is, const string_view filename)
+vector<ImagePtr> load_png_image(istream &is, string_view filename)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -82,7 +83,7 @@ bool is_png_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_png_image(istream &is, const string &filename)
+vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view channel_selector)
 {
     if (!check_png_signature(is))
         throw runtime_error("Not a PNG file");
@@ -265,6 +266,9 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     else
         num_frames = 1, num_plays = 0;
 
+    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    filter.Build();
+
     std::vector<ImagePtr> images;
     for (png_uint_32 frame_idx = 0; frame_idx < num_frames; ++frame_idx)
     {
@@ -295,6 +299,12 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
             image->partname       = fmt::format("frame {:04}", frame_idx);
             image->data_window    = Box2i{int2(frame_x_off, frame_y_off), int2(frame_x_off, frame_y_off) + size.xy()};
             image->display_window = Box2i{int2{0}, int2(width, height)};
+
+            if (!filter.PassFilter(&image->partname[0], &image->partname[0] + image->partname.size()))
+            {
+                spdlog::debug("PNG: Skipping frame {} (filtered out by channel selector)", frame_idx);
+                continue;
+            }
         }
 
         const auto             num_pixels        = size_t(size.x * size.y);
@@ -340,7 +350,7 @@ vector<ImagePtr> load_png_image(istream &is, const string &filename)
     return images;
 }
 
-void save_png_image(const Image &img, ostream &os, const string &filename, float gain, bool sRGB, bool dither)
+void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
 {
     Timer timer;
     // get interleaved LDR pixel data

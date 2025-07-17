@@ -23,7 +23,7 @@ using namespace std;
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
+vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
@@ -155,7 +155,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 // - Setting the desired JxlDecoderSetOutputColorProfile to JXL_TRANSFER_FUNCTION_SRGB does call the CMS functions.
 //
 
-vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
+vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view channel_selector)
 {
     // calculate size of stream
     is.clear();
@@ -180,6 +180,7 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
     int3                             size{0, 0, 0};
     string                           frame_name;
     int                              frame_number = 0;
+    bool                             skip_color   = true;
 
     vector<ImagePtr> images;
     ImagePtr         image;
@@ -198,6 +199,9 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
 
     JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size());
     JxlDecoderCloseInput(dec.get());
+
+    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    filter.Build();
 
     for (;;)
     {
@@ -278,6 +282,16 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                             fmt::format("thermal{}", count_thermal ? " (" + to_string(count_thermal) + ")" : "");
                         count_thermal++;
                         break;
+                    case JXL_CHANNEL_RESERVED0: type_name = "reserved0"; break;
+                    case JXL_CHANNEL_RESERVED1: type_name = "reserved1"; break;
+                    case JXL_CHANNEL_RESERVED2: type_name = "reserved2"; break;
+                    case JXL_CHANNEL_RESERVED3: type_name = "reserved3"; break;
+                    case JXL_CHANNEL_RESERVED4: type_name = "reserved4"; break;
+                    case JXL_CHANNEL_RESERVED5: type_name = "reserved5"; break;
+                    case JXL_CHANNEL_RESERVED6: type_name = "reserved6"; break;
+                    case JXL_CHANNEL_RESERVED7: type_name = "reserved7"; break;
+                    case JXL_CHANNEL_UNKNOWN: type_name = "unknown"; break;
+                    case JXL_CHANNEL_OPTIONAL: type_name = "optional"; break;
                     default: type_name = fmt::format("extra channel {}", i); break;
                     }
                     extra_channel_names[i] = type_name;
@@ -327,7 +341,19 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
             uint32_t num_channels = info.num_color_channels; // + (info.alpha_bits ? 1 : 0);
             format                = {num_channels, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
+            image                          = make_shared<Image>(size.xy(), size.z);
+            image->filename                = filename;
+            image->partname                = frame_name;
+            image->file_has_straight_alpha = info.alpha_bits && !info.alpha_premultiplied;
+            image->metadata["loader"]      = "libjxl";
+            image->metadata["bit depth"]   = fmt::format("{} bits per sample", info.bits_per_sample);
+
+            skip_color = false;
             {
+                auto name = (frame_name.empty()) ? string("R") : frame_name + "." + string("R");
+                if ((skip_color = !filter.PassFilter(&name[0], &name[0] + name.size())))
+                    spdlog::debug("Color channels '{}' filtered out by channel selector", name);
+
                 size_t buffer_size;
                 if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size))
                     throw invalid_argument{"JxlDecoderImageOutBufferSize failed"};
@@ -344,15 +370,15 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
                     throw invalid_argument{"JxlDecoderSetImageOutBuffer failed"};
             }
 
-            image                          = make_shared<Image>(size.xy(), size.z);
-            image->filename                = filename;
-            image->partname                = frame_name;
-            image->file_has_straight_alpha = info.alpha_bits && !info.alpha_premultiplied;
-            image->metadata["loader"]      = "libjxl";
-            image->metadata["bit depth"]   = fmt::format("{} bits per sample", info.bits_per_sample);
-
             for (uint32_t i = 0; i < info.num_extra_channels; ++i)
             {
+                auto name = (frame_name.empty()) ? extra_channel_names[i] : frame_name + "." + extra_channel_names[i];
+                if (!filter.PassFilter(&name[0], &name[0] + name.size()))
+                {
+                    spdlog::debug("Skipping extra channel {}: '{}' (filtered out by channel selector)", i, name);
+                    continue;
+                }
+
                 spdlog::info("Adding extra channel buffer for channel {}: '{}'", i, extra_channel_names[i]);
                 image->channels.emplace_back(extra_channel_names[i], size.xy());
                 auto  &channel = image->channels.back();
@@ -383,6 +409,11 @@ vector<ImagePtr> load_jxl_image(istream &is, const string &filename)
         else if (status == JXL_DEC_FULL_IMAGE)
         {
             spdlog::debug("JXL_DEC_FULL_IMAGE");
+            if (skip_color)
+            {
+                spdlog::debug("Skipping image, all channels filtered out by channel selector");
+                continue;
+            }
 
             // only prefer the encoded profile if it exists and it specifies an HDR transfer function
             bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&

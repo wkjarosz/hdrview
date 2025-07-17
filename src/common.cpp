@@ -12,27 +12,27 @@
 
 using namespace std;
 
-bool starts_with(const string &s, const string &prefix) { return s.rfind(prefix, 0) == 0; }
-bool ends_with(const string &s, const string &suffix)
+bool starts_with(string_view s, string_view prefix) { return s.rfind(prefix, 0) == 0; }
+bool ends_with(string_view s, string_view suffix)
 {
     return s.find(suffix, s.length() - suffix.length()) != string::npos;
 }
 
-string get_extension(const string &path)
+string_view get_extension(string_view path)
 {
     if (auto last_dot = path.find_last_of("."); last_dot != string::npos)
         return path.substr(last_dot + 1);
     return "";
 }
 
-string get_filename(const string &path)
+string_view get_filename(string_view path)
 {
     if (auto last_slash = path.find_last_of("/\\"); last_slash != string::npos)
         return path.substr(last_slash + 1);
     return path;
 }
 
-string get_basename(const string &path)
+string_view get_basename(string_view path)
 {
     auto last_slash = path.find_last_of("/\\");
     auto last_dot   = path.find_last_of(".");
@@ -44,16 +44,40 @@ string get_basename(const string &path)
     return path.substr(start, length);
 }
 
-string to_lower(string str)
+string to_lower(string_view str)
 {
-    transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)tolower(c); });
-    return str;
+    string result{str};
+    transform(begin(result), end(result), begin(result), [](unsigned char c) { return (char)tolower(c); });
+    return result;
 }
 
-string to_upper(string str)
+string to_upper(string_view str)
 {
-    transform(begin(str), end(str), begin(str), [](unsigned char c) { return (char)toupper(c); });
-    return str;
+    string result{str};
+    transform(begin(result), end(result), begin(result), [](unsigned char c) { return (char)toupper(c); });
+    return result;
+}
+
+vector<string_view> split(string_view text, string_view delim)
+{
+    vector<string_view> result;
+    size_t              begin = 0;
+    while (true)
+    {
+        size_t end = text.find_first_of(delim, begin);
+        if (end == string::npos)
+        {
+            result.emplace_back(text.substr(begin));
+            break;
+        }
+        else
+        {
+            result.emplace_back(text.substr(begin, end - begin));
+            begin = end + 1;
+        }
+    }
+
+    return result;
 }
 
 void process_lines(string_view input, function<void(string_view)> op)

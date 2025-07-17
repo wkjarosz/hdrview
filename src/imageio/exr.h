@@ -13,8 +13,9 @@
 #include "fwd.h"
 
 // does not throw
-bool is_exr_image(std::istream &is, const std::string &filename) noexcept;
+bool is_exr_image(std::istream &is, std::string_view filename) noexcept;
 // throws on error
-std::vector<ImagePtr> load_exr_image(std::istream &is, const std::string &filename);
+std::vector<ImagePtr> load_exr_image(std::istream &is, std::string_view filename,
+                                     std::string_view channel_selector = std::string_view{});
 // throws on error
-void save_exr_image(const Image &img, std::ostream &os, const std::string &filename);
+void save_exr_image(const Image &img, std::ostream &os, std::string_view filename);

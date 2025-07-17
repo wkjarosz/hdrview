@@ -13,7 +13,8 @@
 struct BackgroundImageLoader
 {
     void background_load(const std::string filename, const std::string_view = std::string_view{},
-                         bool should_select = false, ImagePtr to_replace = nullptr);
+                         bool should_select = false, ImagePtr to_replace = nullptr,
+                         const std::string &channel_selector = "");
     void load_recent_file(int index);
     void get_loaded_images(std::function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return pending_images.size(); }

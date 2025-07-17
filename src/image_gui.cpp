@@ -506,6 +506,9 @@ void Image::draw_info()
         property_name("Part name");
         property_value(partname.empty() ? "<none>" : partname, bold_font, true);
 
+        property_name("Channel selector");
+        property_value(channel_selector.empty() ? "<none>" : channel_selector, bold_font, true);
+
         property_name("Loader");
         property_value(metadata.value<string>("loader", "unknown"), bold_font, true);
 

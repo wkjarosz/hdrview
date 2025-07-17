@@ -15,6 +15,7 @@
 #include "fwd.h"
 #include <algorithm>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -288,13 +289,14 @@ inline T square(T value)
     return value * value;
 }
 
-bool                          starts_with(const std::string &s, const std::string &prefix);
-bool                          ends_with(const std::string &s, const std::string &suffix);
-std::string                   get_extension(const std::string &path);
-std::string                   get_filename(const std::string &path);
-std::string                   get_basename(const std::string &path);
-std::string                   to_lower(std::string str);
-std::string                   to_upper(std::string str);
+bool                          starts_with(std::string_view s, std::string_view prefix);
+bool                          ends_with(std::string_view s, std::string_view suffix);
+std::string_view              get_extension(std::string_view path);
+std::string_view              get_filename(std::string_view path);
+std::string_view              get_basename(std::string_view path);
+std::vector<std::string_view> split(std::string_view text, std::string_view delim);
+std::string                   to_lower(std::string_view str);
+std::string                   to_upper(std::string_view str);
 std::pair<float, std::string> human_readable_size(size_t bytes);
 /// Run func on each line of the input string
 void process_lines(std::string_view input, std::function<void(std::string_view &)> op);

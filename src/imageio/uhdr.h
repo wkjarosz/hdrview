@@ -8,13 +8,13 @@
 
 #include <istream>
 #include <memory>
-#include <string>
+#include <string_view>
 
 #include "fwd.h"
 
 // should not throw
 bool is_uhdr_image(std::istream &is) noexcept;
 // throws on error
-std::vector<ImagePtr> load_uhdr_image(std::istream &is, const std::string &filename);
+std::vector<ImagePtr> load_uhdr_image(std::istream &is, std::string_view filename);
 // throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, const std::string &filename, float gain = 1.f);
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f);

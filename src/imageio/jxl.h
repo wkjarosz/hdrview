@@ -8,11 +8,12 @@
 
 #include <istream>
 #include <memory>
-#include <string>
+#include <string_view>
 
 #include "fwd.h"
 
 // should not throw
 bool is_jxl_image(std::istream &is) noexcept;
 // throws on error
-std::vector<ImagePtr> load_jxl_image(std::istream &is, const std::string &filename);
+std::vector<ImagePtr> load_jxl_image(std::istream &is, std::string_view filename,
+                                     std::string_view channel_selector = std::string_view{});

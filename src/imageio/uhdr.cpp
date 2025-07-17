@@ -26,12 +26,12 @@ using namespace std;
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
+vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, string_view filename, float gain)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -120,7 +120,7 @@ bool is_uhdr_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
+vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
     if (!is.good())
         throw invalid_argument("UltraHDR: invalid file stream.");
@@ -292,7 +292,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, const string &filename)
     return {image};
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string &filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain)
 {
     Timer timer;
     // get interleaved HDR pixel data

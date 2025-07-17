@@ -288,6 +288,7 @@ public:
 
     std::string                   filename;
     std::string                   partname;
+    std::string                   channel_selector;
     Box2i                         data_window;
     Box2i                         display_window;
     std::vector<Channel>          channels;
@@ -348,24 +349,25 @@ public:
     int  next_visible_group_index(int index, EDirection direction) const;
     int  nth_visible_group_index(int n) const;
 
-    static void                set_null_texture(Target target = Target_Primary);
-    void                       set_as_texture(Target target = Target_Primary);
-    float4                     raw_pixel(int2 p, Target target = Target_Primary) const;
-    float4                     rgba_pixel(int2 p, Target target = Target_Primary) const;
-    std::map<std::string, int> channels_in_layer(const std::string &layer) const;
-    void                       build_layers_and_groups();
-    void                       finalize();
-    void                       compute_color_transform();
-    std::string                to_string() const;
+    static void set_null_texture(Target target = Target_Primary);
+    void        set_as_texture(Target target = Target_Primary);
+    float4      raw_pixel(int2 p, Target target = Target_Primary) const;
+    float4      rgba_pixel(int2 p, Target target = Target_Primary) const;
+    void        finalize();
+    void        compute_color_transform();
+    std::string to_string() const;
 
     /**
         Load the an image from the input stream.
 
-        \param [] is        The input stream to read from
-        \param [] filename  The corresponding filename if `is` was opened from a file
-        \return             A vector of possibly multiple images (e.g. from multi-part EXR files)
+        \param [] is                The input stream to read from
+        \param [] filename          The corresponding filename if `is` was opened from a file
+        \param [] channel_selector  A comma-separated list of channel names to select from the image. If empty, all
+                                    channels are selected.
+        \return                     A vector of possibly multiple images (e.g. from multi-part EXR files)
     */
-    static std::vector<ImagePtr> load(std::istream &is, const std::string &filename);
+    static std::vector<ImagePtr> load(std::istream &is, std::string_view filename,
+                                      std::string_view channel_selector = std::string_view{});
 
     /**
         Write the image to the output stream.
@@ -382,7 +384,7 @@ public:
         \param dither    If not saving to an HDR format, dither when tonemapping down to 8-bit
         \return          Returns nothing. Throws on error.
     */
-    void save(std::ostream &os, const std::string &filename, float gain = 1.f, bool sRGB = true,
+    void save(std::ostream &os, std::string_view filename, float gain = 1.f, bool sRGB = true,
               bool dither = true) const;
 
     std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
@@ -415,6 +417,10 @@ public:
     void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
     void draw_channel_stats();
+
+private:
+    void                       build_layers_and_groups();
+    std::map<std::string, int> channels_in_layer(const std::string &layer) const;
     void traverse_tree(const LayerTreeNode *node, std::function<void(const LayerTreeNode *, int)> callback,
                        int level = 0) const;
 };

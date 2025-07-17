@@ -26,7 +26,7 @@
 
 using namespace std;
 
-vector<ImagePtr> Image::load(istream &is, const string &filename)
+vector<ImagePtr> Image::load(istream &is, string_view filename, string_view channel_selector)
 {
     spdlog::info("Loading from file: {}", filename);
     Timer timer;
@@ -40,7 +40,7 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         if (is_exr_image(is, filename))
         {
             spdlog::info("Detected EXR image.");
-            images = load_exr_image(is, filename);
+            images = load_exr_image(is, filename, channel_selector);
         }
         else if (is_uhdr_image(is))
         {
@@ -55,17 +55,17 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
         else if (is_jxl_image(is))
         {
             spdlog::info("Detected JPEG XL image. Loading via libjxl.");
-            images = load_jxl_image(is, filename);
+            images = load_jxl_image(is, filename, channel_selector);
         }
         else if (is_heif_image(is))
         {
             spdlog::info("Detected HEIF image.");
-            images = load_heif_image(is, filename);
+            images = load_heif_image(is, filename, channel_selector);
         }
         else if (is_png_image(is))
         {
             spdlog::info("Detected PNG image. Loading via libpng.");
-            images = load_png_image(is, filename);
+            images = load_png_image(is, filename, channel_selector);
         }
         else if (is_stb_image(is))
         {
@@ -85,6 +85,22 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
             i->finalize();
             i->filename   = filename;
             i->short_name = i->file_and_partname();
+
+            // If multiple image "parts" were loaded and they have names, store these names in the image's channel
+            // selector. This is useful if we later want to reload a specific image part from the original file.
+            if (i->partname.empty())
+                i->channel_selector = string{channel_selector};
+            else
+            {
+                const auto selector_parts = split(channel_selector, ",");
+                if (channel_selector.empty())
+                    i->channel_selector = i->partname;
+                else if (find(begin(selector_parts), end(selector_parts), i->partname) == end(selector_parts))
+                    i->channel_selector = fmt::format("{},{}", i->partname, channel_selector);
+                else
+                    i->channel_selector = string{channel_selector};
+            }
+
             spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
         }
         return images;
@@ -96,7 +112,7 @@ vector<ImagePtr> Image::load(istream &is, const string &filename)
     return {};
 }
 
-void Image::save(ostream &os, const string &_filename, float gain, bool sRGB, bool dither) const
+void Image::save(ostream &os, string_view _filename, float gain, bool sRGB, bool dither) const
 {
     string extension = to_lower(get_extension(_filename));
     if (extension == "exr")

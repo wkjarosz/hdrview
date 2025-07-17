@@ -15,4 +15,5 @@
 // should not throw
 bool is_heif_image(std::istream &is) noexcept;
 // throws on error
-std::vector<ImagePtr> load_heif_image(std::istream &is, const std::string_view filename);
+std::vector<ImagePtr> load_heif_image(std::istream &is, std::string_view filename,
+                                      std::string_view channel_selector = std::string_view{});
