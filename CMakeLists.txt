@@ -455,7 +455,7 @@ CPMAddPackage(
   # FIXME: OpenEXR v3.3.0 and above seems to break our subsample channel loading
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
   VERSION 3.1.5
-  GIT_TAG v3.2.4
+  GIT_TAG v3.3.4
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"

@@ -33,11 +33,11 @@ vector<ImagePtr> load_heif_image(istream &is, const string_view filename)
 #include "colorspace.h"
 #include "heif.h"
 #include "icc.h"
-#include "libheif/heif.h"
-#include "libheif/heif_cxx.h"
 #include "timer.h"
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
+#include <libheif/heif.h>
+#include <libheif/heif_cxx.h>
 
 static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *nclx, string *tf_description = nullptr,
                              Chromaticities *c = nullptr)

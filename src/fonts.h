@@ -17,6 +17,9 @@
 #endif
 
 #if defined(HDRVIEW_ICONSET_FA6)
+
+// https://fontawesome.com/v6/search?ic=free
+
 #include "hello_imgui/icons_font_awesome_6.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/Font_Awesome_6_Free-Solid-900.otf"
 #define ICON_MIN_MY            ICON_MIN_FA
@@ -82,31 +85,34 @@
 #define ICON_MY_TEXT_WRAP_OFF      ICON_FA_ALIGN_LEFT
 #define ICON_MY_WIDEST             ICON_FA_VOLUME_HIGH
 #define ICON_MY_LINK               ICON_FA_LINK
-
-#define ICON_MY_TOOLBAR           ""
-#define ICON_MY_STATUSBAR         ""
-#define ICON_MY_FPS               ICON_FA_GAUGE_HIGH
-#define ICON_MY_HIDE_GUI          ""
-#define ICON_MY_SHOW_PIXEL_VALUES ""
-#define ICON_MY_DATA_WINDOW       ICON_FA_EXPAND
-#define ICON_MY_DISPLAY_WINDOW    ICON_FA_EXPAND
-#define ICON_MY_PAN_ZOOM_TOOL     ICON_FA_HAND
-#define ICON_MY_FLIP_HORIZ        ""
-#define ICON_MY_FLIP_VERT         ""
-#define ICON_MY_SELECT            ICON_FA_EXPAND
-#define ICON_MY_WATCHED_PIXEL     ICON_FA_LOCATION_CROSSHAIRS
-#define ICON_MY_VISIBILITY_OFF    ICON_FA_EYE_SLASH
-#define ICON_MY_NO_CHANNEL_GROUP  ICON_FA_IMAGES
-#define ICON_MY_TREE_VIEW         ICON_FA_FOLDER_TREE
-#define ICON_MY_LIST_VIEW         ICON_FA_LAYER_GROUP
-#define ICON_MY_SHORT_NAMES       ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE
-#define ICON_MY_FULL_NAMES        ICON_FA_ARROWS_LEFT_RIGHT
-#define ICON_MY_HOVERED_PIXEL     ""
-#define ICON_MY_ARROW_DROP_DOWN   ""
-#define ICON_MY_CURSOR_ARROW      ICON_FA_ARROW_POINTER
-#define ICON_MY_TIMES             ICON_FA_XMARK
+#define ICON_MY_TOOLBAR            ""
+#define ICON_MY_STATUSBAR          ""
+#define ICON_MY_FPS                ICON_FA_GAUGE_HIGH
+#define ICON_MY_HIDE_GUI           ""
+#define ICON_MY_SHOW_PIXEL_VALUES  ""
+#define ICON_MY_DATA_WINDOW        ICON_FA_EXPAND
+#define ICON_MY_DISPLAY_WINDOW     ICON_FA_EXPAND
+#define ICON_MY_PAN_ZOOM_TOOL      ICON_FA_HAND
+#define ICON_MY_FLIP_HORIZ         ""
+#define ICON_MY_FLIP_VERT          ""
+#define ICON_MY_SELECT             ICON_FA_EXPAND
+#define ICON_MY_WATCHED_PIXEL      ICON_FA_LOCATION_CROSSHAIRS
+#define ICON_MY_VISIBILITY_OFF     ICON_FA_EYE_SLASH
+#define ICON_MY_NO_CHANNEL_GROUP   ICON_FA_IMAGES
+#define ICON_MY_TREE_VIEW          ICON_FA_FOLDER_TREE
+#define ICON_MY_LIST_VIEW          ICON_FA_LAYER_GROUP
+#define ICON_MY_SHORT_NAMES        ICON_FA_ARROWS_LEFT_RIGHT_TO_LINE
+#define ICON_MY_FULL_NAMES         ICON_FA_ARROWS_LEFT_RIGHT
+#define ICON_MY_HOVERED_PIXEL      ""
+#define ICON_MY_ARROW_DROP_DOWN    ""
+#define ICON_MY_CURSOR_ARROW       ICON_FA_ARROW_POINTER
+#define ICON_MY_TIMES              ICON_FA_XMARK
+#define ICON_MY_WATCH_FOLDER       ICON_FA_ARROWS_ROTATE
+#define ICON_MY_RELOAD             ICON_FA_ROTATE_RIGHT
 
 #elif defined(HDRVIEW_ICONSET_LC)
+
+// https://lucide.dev/icons/
 #include "icons/IconsLucide.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/lucide.ttf"
 #define ICON_MIN_MY            ICON_MIN_LC
@@ -172,31 +178,33 @@
 #define ICON_MY_TEXT_WRAP_OFF      ICON_LC_ALIGN_LEFT
 #define ICON_MY_WIDEST             ICON_LC_VOLUME_X
 #define ICON_MY_LINK               ICON_LC_LINK
-
-#define ICON_MY_TOOLBAR           ICON_LC_PANEL_TOP_OPEN
-#define ICON_MY_STATUSBAR         ICON_LC_PANEL_BOTTOM_OPEN
-#define ICON_MY_FPS               ICON_LC_GAUGE
-#define ICON_MY_HIDE_GUI          ""
-#define ICON_MY_SHOW_PIXEL_VALUES ICON_LC_BINARY
-#define ICON_MY_DATA_WINDOW       ""
-#define ICON_MY_DISPLAY_WINDOW    ""
-#define ICON_MY_PAN_ZOOM_TOOL     ICON_LC_HAND
-#define ICON_MY_FLIP_HORIZ        ""
-#define ICON_MY_FLIP_VERT         ""
-#define ICON_MY_SELECT            ICON_LC_SQUARE_DASHED
-#define ICON_MY_WATCHED_PIXEL     ICON_LC_CROSSHAIR
-#define ICON_MY_VISIBILITY_OFF    ICON_LC_EYE_OFF
-#define ICON_MY_NO_CHANNEL_GROUP  ICON_LC_IMAGES
-#define ICON_MY_TREE_VIEW         ICON_LC_LIST_TREE
-#define ICON_MY_LIST_VIEW         ICON_LC_LAYERS
-#define ICON_MY_SHORT_NAMES       ICON_LC_CHEVRONS_RIGHT_LEFT
-#define ICON_MY_FULL_NAMES        ICON_LC_CHEVRONS_LEFT_RIGHT
-#define ICON_MY_HOVERED_PIXEL     ""
-#define ICON_MY_ARROW_DROP_DOWN   ""
-#define ICON_MY_CURSOR_ARROW      ICON_LC_MOUSE_POINTER
-#define ICON_MY_TIMES             ICON_LC_X
+#define ICON_MY_TOOLBAR            ICON_LC_PANEL_TOP_OPEN
+#define ICON_MY_STATUSBAR          ICON_LC_PANEL_BOTTOM_OPEN
+#define ICON_MY_FPS                ICON_LC_GAUGE
+#define ICON_MY_HIDE_GUI           ""
+#define ICON_MY_SHOW_PIXEL_VALUES  ICON_LC_BINARY
+#define ICON_MY_DATA_WINDOW        ""
+#define ICON_MY_DISPLAY_WINDOW     ""
+#define ICON_MY_PAN_ZOOM_TOOL      ICON_LC_HAND
+#define ICON_MY_FLIP_HORIZ         ""
+#define ICON_MY_FLIP_VERT          ""
+#define ICON_MY_SELECT             ICON_LC_SQUARE_DASHED
+#define ICON_MY_WATCHED_PIXEL      ICON_LC_CROSSHAIR
+#define ICON_MY_VISIBILITY_OFF     ICON_LC_EYE_OFF
+#define ICON_MY_NO_CHANNEL_GROUP   ICON_LC_IMAGES
+#define ICON_MY_TREE_VIEW          ICON_LC_LIST_TREE
+#define ICON_MY_LIST_VIEW          ICON_LC_LAYERS
+#define ICON_MY_SHORT_NAMES        ICON_LC_CHEVRONS_RIGHT_LEFT
+#define ICON_MY_FULL_NAMES         ICON_LC_CHEVRONS_LEFT_RIGHT
+#define ICON_MY_HOVERED_PIXEL      ""
+#define ICON_MY_ARROW_DROP_DOWN    ""
+#define ICON_MY_CURSOR_ARROW       ICON_LC_MOUSE_POINTER
+#define ICON_MY_TIMES              ICON_LC_X
+#define ICON_MY_WATCH_FOLDER       ICON_LC_FOLDER_SYNC
+#define ICON_MY_RELOAD             ICON_LC_REFRESH_CW
 
 #elif defined(HDRVIEW_ICONSET_MS)
+// https://fonts.google.com/icons?icon.set=Material+Symbols
 #include "icons/IconsMaterialSymbols.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialSymbolsRounded_Filled-Regular.ttf"
 #define ICON_MIN_MY            ICON_MIN_MS
@@ -286,9 +294,11 @@
 #define ICON_MY_PAN_ZOOM_TOOL      ICON_MS_PAN_TOOL
 #define ICON_MY_FLIP_HORIZ         ICON_MS_SWAP_HORIZ
 #define ICON_MY_FLIP_VERT          ICON_MS_SWAP_VERT
+#define ICON_MY_WATCH_FOLDER       ICON_MS_FOLDER_EYE
+#define ICON_MY_RELOAD             ICON_MS_RESTORE_PAGE
 
 #elif defined(HDRVIEW_ICONSET_MD)
-
+// https://fonts.google.com/icons?icon.set=Material+Icons
 #include "icons/IconsMaterialDesign.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/MaterialIcons-Regular.ttf"
 #define ICON_MIN_MY            ICON_MIN_MD
@@ -354,32 +364,33 @@
 #define ICON_MY_TEXT_WRAP_OFF      ICON_MD_FORMAT_ALIGN_LEFT
 #define ICON_MY_WIDEST             ICON_MD_VOLUME_UP
 #define ICON_MY_LINK               ICON_MD_LINK
-
-#define ICON_MY_TOOLBAR           ""
-#define ICON_MY_STATUSBAR         ""
-#define ICON_MY_FPS               ICON_MD_SPEED
-#define ICON_MY_HIDE_GUI          ICON_MD_FULLSCREEN
-#define ICON_MY_SHOW_PIXEL_VALUES ICON_MD_123
-#define ICON_MY_DATA_WINDOW       ICON_MD_SELECT_ALL
-#define ICON_MY_DISPLAY_WINDOW    ICON_MD_CHECK_BOX_OUTLINE_BLANK
-#define ICON_MY_PAN_ZOOM_TOOL     ICON_MD_PAN_TOOL
-#define ICON_MY_FLIP_HORIZ        ""
-#define ICON_MY_FLIP_VERT         ""
-#define ICON_MY_SELECT            ICON_MD_HIGHLIGHT_ALT
-#define ICON_MY_WATCHED_PIXEL     ICON_MD_MY_LOCATION
-#define ICON_MY_VISIBILITY_OFF    ICON_MD_VISIBILITY_OFF
-#define ICON_MY_NO_CHANNEL_GROUP  ICON_MD_PERM_MEDIA
-#define ICON_MY_TREE_VIEW         ICON_MD_ACCOUNT_TREE
-#define ICON_MY_LIST_VIEW         ICON_MD_LAYERS
-#define ICON_MY_SHORT_NAMES       ICON_MD_FILTER_LIST
-#define ICON_MY_FULL_NAMES        ICON_MD_FILTER_LIST_OFF
-#define ICON_MY_HOVERED_PIXEL     ""
-#define ICON_MY_ARROW_DROP_DOWN   ""
-#define ICON_MY_CURSOR_ARROW      ICON_MD_MOUSE
-#define ICON_MY_TIMES             ICON_MD_CLOSE
+#define ICON_MY_TOOLBAR            ""
+#define ICON_MY_STATUSBAR          ""
+#define ICON_MY_FPS                ICON_MD_SPEED
+#define ICON_MY_HIDE_GUI           ICON_MD_FULLSCREEN
+#define ICON_MY_SHOW_PIXEL_VALUES  ICON_MD_123
+#define ICON_MY_DATA_WINDOW        ICON_MD_SELECT_ALL
+#define ICON_MY_DISPLAY_WINDOW     ICON_MD_CHECK_BOX_OUTLINE_BLANK
+#define ICON_MY_PAN_ZOOM_TOOL      ICON_MD_PAN_TOOL
+#define ICON_MY_FLIP_HORIZ         ""
+#define ICON_MY_FLIP_VERT          ""
+#define ICON_MY_SELECT             ICON_MD_HIGHLIGHT_ALT
+#define ICON_MY_WATCHED_PIXEL      ICON_MD_MY_LOCATION
+#define ICON_MY_VISIBILITY_OFF     ICON_MD_VISIBILITY_OFF
+#define ICON_MY_NO_CHANNEL_GROUP   ICON_MD_PERM_MEDIA
+#define ICON_MY_TREE_VIEW          ICON_MD_ACCOUNT_TREE
+#define ICON_MY_LIST_VIEW          ICON_MD_LAYERS
+#define ICON_MY_SHORT_NAMES        ICON_MD_FILTER_LIST
+#define ICON_MY_FULL_NAMES         ICON_MD_FILTER_LIST_OFF
+#define ICON_MY_HOVERED_PIXEL      ""
+#define ICON_MY_ARROW_DROP_DOWN    ""
+#define ICON_MY_CURSOR_ARROW       ICON_MD_MOUSE
+#define ICON_MY_TIMES              ICON_MD_CLOSE
+#define ICON_MY_WATCH_FOLDER       ICON_MD_SYNC
+#define ICON_MY_RELOAD             ICON_MD_RESTORE_PAGE
 
 #elif defined(HDRVIEW_ICONSET_MDI)
-
+// https://pictogrammers.com/library/mdi/
 #include "icons/IconsMaterialDesignIcons.h"
 #define FONT_ICON_FILE_NAME_MY "fonts/materialdesignicons-webfont.ttf"
 #define ICON_MIN_MY            ICON_MIN_MDI
@@ -455,28 +466,29 @@
 #define ICON_MY_NUMBERIC_10        ICON_MDI_NUMERIC_10_BOX
 #define ICON_MY_WIDEST             ICON_MDI_VOLUME_HIGH
 #define ICON_MY_LINK               ICON_MDI_LINK
-
-#define ICON_MY_TOOLBAR           ICON_MDI_DOCK_TOP
-#define ICON_MY_STATUSBAR         ICON_MDI_DOCK_BOTTOM
-#define ICON_MY_FPS               ICON_MDI_SPEEDOMETER
-#define ICON_MY_HIDE_GUI          ""
-#define ICON_MY_SHOW_PIXEL_VALUES ICON_MDI_DECIMAL
-#define ICON_MY_DATA_WINDOW       ICON_MDI_SELECT_ALL
-#define ICON_MY_DISPLAY_WINDOW    ICON_MDI_SELECT
-#define ICON_MY_PAN_ZOOM_TOOL     ICON_MDI_HAND_BACK_LEFT
-#define ICON_MY_FLIP_HORIZ        ""
-#define ICON_MY_FLIP_VERT         ""
-#define ICON_MY_SELECT            ICON_MDI_SELECTION
-#define ICON_MY_WATCHED_PIXEL     ICON_MDI_TARGET
-#define ICON_MY_VISIBILITY_OFF    ICON_MDI_EYE_OFF
-#define ICON_MY_NO_CHANNEL_GROUP  ICON_MDI_LAYERS_OFF
-#define ICON_MY_TREE_VIEW         ICON_MDI_FILE_TREE
-#define ICON_MY_LIST_VIEW         ICON_MDI_LAYERS
-#define ICON_MY_SHORT_NAMES       ICON_MDI_ARROW_EXPAND_HORIZONTAL
-#define ICON_MY_FULL_NAMES        ICON_MDI_ARROW_LEFT_RIGHT
-#define ICON_MY_HOVERED_PIXEL     ""
-#define ICON_MY_ARROW_DROP_DOWN   ""
-#define ICON_MY_CURSOR_ARROW      ICON_MDI_CURSOR_DEFAULT
-#define ICON_MY_TIMES             ICON_MDI_CLOSE
+#define ICON_MY_TOOLBAR            ICON_MDI_DOCK_TOP
+#define ICON_MY_STATUSBAR          ICON_MDI_DOCK_BOTTOM
+#define ICON_MY_FPS                ICON_MDI_SPEEDOMETER
+#define ICON_MY_HIDE_GUI           ""
+#define ICON_MY_SHOW_PIXEL_VALUES  ICON_MDI_DECIMAL
+#define ICON_MY_DATA_WINDOW        ICON_MDI_SELECT_ALL
+#define ICON_MY_DISPLAY_WINDOW     ICON_MDI_SELECT
+#define ICON_MY_PAN_ZOOM_TOOL      ICON_MDI_HAND_BACK_LEFT
+#define ICON_MY_FLIP_HORIZ         ""
+#define ICON_MY_FLIP_VERT          ""
+#define ICON_MY_SELECT             ICON_MDI_SELECTION
+#define ICON_MY_WATCHED_PIXEL      ICON_MDI_TARGET
+#define ICON_MY_VISIBILITY_OFF     ICON_MDI_EYE_OFF
+#define ICON_MY_NO_CHANNEL_GROUP   ICON_MDI_LAYERS_OFF
+#define ICON_MY_TREE_VIEW          ICON_MDI_FILE_TREE
+#define ICON_MY_LIST_VIEW          ICON_MDI_LAYERS
+#define ICON_MY_SHORT_NAMES        ICON_MDI_ARROW_EXPAND_HORIZONTAL
+#define ICON_MY_FULL_NAMES         ICON_MDI_ARROW_LEFT_RIGHT
+#define ICON_MY_HOVERED_PIXEL      ""
+#define ICON_MY_ARROW_DROP_DOWN    ""
+#define ICON_MY_CURSOR_ARROW       ICON_MDI_CURSOR_DEFAULT
+#define ICON_MY_TIMES              ICON_MDI_CLOSE
+#define ICON_MY_WATCH_FOLDER       ICON_MDI_FOLDER_SYNC
+#define ICON_MY_RELOAD             ICON_MS_FILE_RESTORE
 
 #endif

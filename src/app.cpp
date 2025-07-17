@@ -869,9 +869,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
-        add_action({"Reload image", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_R, 0,
+        add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
                     [this]() { reload_image(current_image()); }, if_img});
-        add_action({"Auto-reload on changes", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0, []() {}, always_enabled, false,
+        add_action({"Auto-reload on changes", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_watch_files_for_changes});
 
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
@@ -1366,6 +1366,9 @@ void HDRViewApp::draw_menus()
             ImGui::EndMenu();
         }
         ImGui::EndDisabled();
+
+        ImGui::Separator();
+
         MenuItem(action("Reload image"));
         MenuItem(action("Auto-reload on changes"));
 #endif

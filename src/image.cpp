@@ -31,7 +31,7 @@ using namespace std;
 //
 
 static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
-static int                 s_next_image_id = 1;
+static atomic<int>         s_next_image_id = 1;
 
 pair<string, string> Channel::split(const string &channel)
 {
