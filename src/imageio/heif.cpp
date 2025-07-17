@@ -16,6 +16,7 @@
 #include <stdexcept>
 
 #include "exif.h"
+#include "imgui.h"
 
 using namespace std;
 
@@ -105,6 +106,9 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
         spdlog::info("HEIF: Found {} subimages", num_subimages);
 
+        ImGuiTextFilter filter{string(channel_selector).c_str()};
+        filter.Build();
+
         // just get the primary image for now
         for (int subimage = 0; subimage < num_subimages; ++subimage)
         {
@@ -172,9 +176,18 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
             auto image                     = make_shared<Image>(size.xy(), size.z);
             image->filename                = filename;
-            image->partname                = subimage != 0 ? fmt::format("{:d}", id) : "";
+            image->partname                = fmt::format("{:d}", id);
             image->file_has_straight_alpha = has_alpha && !ihandle.is_premultiplied_alpha();
             image->metadata["loader"]      = "libheif";
+
+            {
+                auto name = (image->partname.empty()) ? string("R,G,B") : image->partname + "." + string("R,G,B");
+                if (!filter.PassFilter(&name[0], &name[0] + name.size()))
+                {
+                    spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, channel_selector);
+                    continue;
+                }
+            }
 
             // try to get exif metadata
             int num_metadata_blocks = heif_image_handle_get_number_of_metadata_blocks(raw_ihandle, "Exif");
