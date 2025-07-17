@@ -77,7 +77,8 @@ bool host_is_safari()
 //
 extern "C"
 {
-    EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size)
+    EMSCRIPTEN_KEEPALIVE int hdrview_loadfile(const char *filename, const char *buffer, size_t buffer_size,
+                                              bool should_select)
     {
         auto [size, unit] = human_readable_size(buffer_size);
         spdlog::info("User dropped a {:.0f} {} file with filename '{}'", size, unit, filename);
@@ -89,7 +90,7 @@ extern "C"
         }
         else
         {
-            hdrview()->load_image(filename, {buffer, buffer_size});
+            hdrview()->load_image(filename, {buffer, buffer_size}, should_select);
             return 0;
         }
     }

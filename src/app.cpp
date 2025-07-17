@@ -1570,7 +1570,7 @@ void HDRViewApp::export_as(const string &filename) const
 
 void HDRViewApp::load_images(const vector<string> &filenames)
 {
-    for (size_t i = 0; i < filenames.size(); ++i) load_image(filenames[i], i == 0);
+    for (size_t i = 0; i < filenames.size(); ++i) load_image(filenames[i], {}, i == 0);
 }
 
 void HDRViewApp::open_image()
@@ -1595,7 +1595,7 @@ void HDRViewApp::open_image()
                 auto [size, unit] = human_readable_size(buffer.size());
                 spdlog::debug("User uploaded a {:.0f} {} file with filename '{}' of mime-type '{}'", size, unit,
                               filename, mime_type);
-                hdrview()->load_image(filename, true, buffer);
+                hdrview()->load_image(filename, buffer, true);
             }
         });
 #else
@@ -1613,7 +1613,7 @@ void HDRViewApp::open_folder()
 }
 
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-void HDRViewApp::load_image(const string filename, bool should_select, const string_view buffer)
+void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select)
 {
     m_image_loader.background_load(filename, buffer, should_select);
 }
@@ -1646,7 +1646,7 @@ void HDRViewApp::load_url(const string_view url)
             auto filename    = get_filename(url);
             auto char_buffer = reinterpret_cast<const char *>(buffer);
             spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-            hdrview()->load_image(url, true, {char_buffer, (size_t)buffer_size});
+            hdrview()->load_image(url, {char_buffer, (size_t)buffer_size}, true);
         },
         (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
             auto   payload                         = reinterpret_cast<Payload *>(data);
@@ -1672,7 +1672,7 @@ void HDRViewApp::load_url(const string_view url)
     //         auto filename    = get_filename(url);
     //         auto char_buffer = reinterpret_cast<const char *>(buffer);
     //         spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-    //         hdrview()->load_image(url, {char_buffer, (size_t)buffer_size});
+    //         hdrview()->load_image(url, {char_buffer, (size_t)buffer_size}, true);
     //     },
     //     (em_arg_callback_func)[](void *data) {
     //         auto   payload = reinterpret_cast<Payload *>(data);
