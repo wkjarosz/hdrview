@@ -24,7 +24,7 @@ using namespace std;
 
 bool is_heif_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_heif_image(istream &is, string_view filename)
+vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view channel_selector)
 {
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
