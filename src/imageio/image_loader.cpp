@@ -33,6 +33,10 @@ void BackgroundImageLoader::load_recent_file(int index)
 
 void BackgroundImageLoader::add_recent_file(const string &f)
 {
+    auto it = std::find(m_recent_files.begin(), m_recent_files.end(), f);
+    if (it != m_recent_files.end())
+        m_recent_files.erase(it);
+
     m_recent_files.push_back(f);
     if (m_recent_files.size() > g_max_recent)
         m_recent_files.erase(m_recent_files.begin(), m_recent_files.end() - g_max_recent);
@@ -121,7 +125,14 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     };
 
     auto path = fs::u8path(filename.c_str());
-    if (!fs::exists(path))
+    if (!buffer.empty())
+    {
+        // if we have a buffer, we assume it is a file that has been downloaded
+        // and we load it directly from the buffer
+        spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
+        load_one(path, buffer, true, should_select, to_replace, channel_selector);
+    }
+    else if (!fs::exists(path))
         spdlog::error("File '{}' does not exist.", filename);
     else if (fs::is_directory(path))
     {
@@ -150,17 +161,9 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, channel_selector);
 
         // this moves the file to the top of the recent files list
-        remove_recent_file(filename);
         add_recent_file(filename);
     }
-    else if (!buffer.empty())
-    {
-        // if we have a buffer, we assume it is a file that has been downloaded
-        // and we load it directly from the buffer
-        spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
-        load_one(path, buffer, true, should_select, to_replace, channel_selector);
-    }
-    else if (fs::exists(path) && fs::is_regular_file(path))
+    else if (fs::is_regular_file(path))
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);

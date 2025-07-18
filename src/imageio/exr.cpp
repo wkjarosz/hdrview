@@ -133,8 +133,8 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
 
         if (!has_channels)
         {
-            spdlog::warn("EXR part {}: '{}' has no channels matching the filter '{}', skipping...", p,
-                         part.header().hasName() ? part.header().name() : "unnamed", channel_selector);
+            spdlog::debug("EXR part {}: '{}' has no channels matching the filter '{}', skipping...", p,
+                          part.header().hasName() ? part.header().name() : "unnamed", channel_selector);
             continue;
         }
 
