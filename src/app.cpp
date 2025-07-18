@@ -1497,7 +1497,7 @@ void HDRViewApp::draw_status_bar()
         ImGui::PushID("Current");
         static int color_mode = 0;
         ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, color_mode, 0, false, HelloImGui::EmSize(25.f));
+        pixel_color_widget(hovered_pixel, color_mode, 2, false, HelloImGui::EmSize(25.f));
         ImGui::PopID();
 
         float real_zoom = m_zoom * pixel_ratio();
