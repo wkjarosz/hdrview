@@ -36,9 +36,6 @@
 #include <sstream>
 #include <utility>
 
-#include <filesystem>
-namespace fs = std::filesystem;
-
 #include "emscripten_utils.h"
 
 #ifdef __EMSCRIPTEN__
@@ -511,6 +508,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
 
+                m_active_directories.insert(fs::canonical(new_image->filename).parent_path());
+
                 update_visibility(); // this also calls set_image_textures();
                 g_request_sort = true;
             });
@@ -871,6 +870,12 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 #if !defined(__EMSCRIPTEN__)
         add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
                     [this]() { reload_image(current_image()); }, if_img});
+        add_action({"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
+                    [this]()
+                    {
+                        for (auto &i : m_images) reload_image(i);
+                    },
+                    if_img});
         add_action({"Auto-reload on changes", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_watch_files_for_changes});
 
@@ -1370,6 +1375,7 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Reload image"));
+        MenuItem(action("Reload all images"));
         MenuItem(action("Auto-reload on changes"));
 #endif
 
@@ -1767,7 +1773,42 @@ void HDRViewApp::close_image()
     if (next < m_current) // there is no visible image after this one, go to previous visible
         next = next_visible_image_index(m_current, Backward);
 
+    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
+
     m_images.erase(m_images.begin() + m_current);
+
+    if (!m_active_directories.empty())
+    {
+        spdlog::debug("Active directories before closing image in '{}'.", parent_path.u8string());
+        for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
+    }
+
+    // Remove the parent directory from m_active_directories if no other images are from the same directory
+    bool found = false;
+    for (const auto &img : m_images)
+        if (fs::canonical(img->filename).parent_path() == parent_path)
+        {
+            found = true;
+            break;
+        }
+
+    if (!found)
+        m_active_directories.erase(parent_path);
+
+    if (!m_active_directories.empty())
+    {
+        spdlog::debug("Active directories after closing image in '{}'.", parent_path.u8string());
+        for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
+    }
+
+    spdlog::debug("Watched directories after closing image:");
+    m_image_loader.remove_watched_directories(
+        [this](const fs::path &path)
+        {
+            spdlog::debug("{} watched directory: {}", m_active_directories.count(path) == 0 ? "Removing" : "Keeping",
+                          path.u8string());
+            return m_active_directories.count(path) == 0;
+        });
 
     // adjust the indices after erasing the current image
     set_current_image_index(next < m_current ? next : next - 1);
@@ -1781,6 +1822,8 @@ void HDRViewApp::close_all_images()
     m_images.clear();
     m_current   = -1;
     m_reference = -1;
+    m_active_directories.clear();
+    m_image_loader.remove_watched_directories([](const fs::path &path) { return true; });
     update_visibility(); // this also calls set_image_textures();
 }
 

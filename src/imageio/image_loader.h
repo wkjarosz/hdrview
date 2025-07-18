@@ -19,6 +19,9 @@ struct BackgroundImageLoader
     void get_loaded_images(std::function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return pending_images.size(); }
 
+    //! Remove all watched directories that match the criterion.
+    void remove_watched_directories(std::function<bool(const std::filesystem::path &)> remove_criterion);
+
     void load_new_files();
 
     void set_recent_files(const std::vector<std::string> &recents) { m_recent_files = recents; }
@@ -35,8 +38,6 @@ private:
     void add_recent_file(const std::string &f);
     void remove_recent_file(const std::string &f);
 
-    // FIXME: currently both sets below only grow as files are loaded.
-    // need to stop watching entries when files/all files in a directory are closed
     std::set<std::filesystem::path> m_directories;
 
     // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched

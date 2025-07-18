@@ -15,15 +15,19 @@
 #include "renderpass.h"
 #include "shader.h"
 #include <chrono>
+#include <filesystem>
 #include <map>
 #include <string>
 #include <string_view>
 #include <vector>
 
+namespace fs = std::filesystem;
+
 using std::function;
 using std::map;
 using std::ofstream;
 using std::pair;
+using std::set;
 using std::shared_ptr;
 using std::string;
 using std::string_view;
@@ -216,6 +220,7 @@ private:
     RenderPass      *m_render_pass = nullptr;
     Shader          *m_shader      = nullptr;
     vector<ImagePtr> m_images;
+    set<fs::path>    m_active_directories; ///< Set of directories containing the currently loaded images
     int              m_current = -1, m_reference = -1;
 
     BackgroundImageLoader m_image_loader;

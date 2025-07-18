@@ -65,8 +65,6 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     {
         try
         {
-            if (should_select)
-                spdlog::debug("will select image file'{}'", path.u8string());
             spdlog::info("Loading file '{}'...", path.u8string());
             // convert the buffer (if any) to a string so the async thread has its own copy,
             // then load from the string or filename depending on whether the buffer is empty
@@ -78,15 +76,18 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                     fs::file_time_type last_modified = fs::file_time_type::clock::now();
                     if (buffer_str.empty())
                     {
-                        if (fs::exists(path))
+                        if (!fs::exists(path))
                         {
-                            try
-                            {
-                                last_modified = fs::last_write_time(path);
-                            }
-                            catch (...)
-                            {
-                            }
+                            spdlog::error("File '{}' doesn't exist.", path.u8string());
+                            return {};
+                        }
+
+                        try
+                        {
+                            last_modified = fs::last_write_time(path);
+                        }
+                        catch (...)
+                        {
                         }
 
                         if (std::ifstream is{path, std::ios_base::binary})
@@ -164,6 +165,30 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);
         load_one(filename, buffer, true, should_select, to_replace, channel_selector);
+    }
+}
+
+void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion)
+{
+    // Remove directories that match the criterion
+    for (auto it = m_directories.begin(); it != m_directories.end();)
+    {
+        if (criterion(*it))
+            it = m_directories.erase(it);
+        else
+            ++it;
+    }
+
+    // Keep only files whose parent directory is still in m_directories
+    for (auto it = m_files_found_in_directories.begin(); it != m_files_found_in_directories.end();)
+    {
+        const auto &file_path      = *it;
+        bool        parent_in_dirs = std::any_of(m_directories.begin(), m_directories.end(),
+                                                 [&file_path](const fs::path &dir) { return file_path.parent_path() == dir; });
+        if (parent_in_dirs)
+            ++it;
+        else
+            it = m_files_found_in_directories.erase(it);
     }
 }
 

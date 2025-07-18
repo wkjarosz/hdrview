@@ -82,26 +82,34 @@ vector<ImagePtr> Image::load(istream &is, string_view filename, string_view chan
 
         for (auto i : images)
         {
-            i->finalize();
-            i->filename   = filename;
-            i->short_name = i->file_and_partname();
-
-            // If multiple image "parts" were loaded and they have names, store these names in the image's channel
-            // selector. This is useful if we later want to reload a specific image part from the original file.
-            if (i->partname.empty())
-                i->channel_selector = string{channel_selector};
-            else
+            try
             {
-                const auto selector_parts = split(channel_selector, ",");
-                if (channel_selector.empty())
-                    i->channel_selector = i->partname;
-                else if (find(begin(selector_parts), end(selector_parts), i->partname) == end(selector_parts))
-                    i->channel_selector = fmt::format("{},{}", i->partname, channel_selector);
-                else
-                    i->channel_selector = string{channel_selector};
-            }
+                i->finalize();
+                i->filename   = filename;
+                i->short_name = i->file_and_partname();
 
-            spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
+                // If multiple image "parts" were loaded and they have names, store these names in the image's channel
+                // selector. This is useful if we later want to reload a specific image part from the original file.
+                if (i->partname.empty())
+                    i->channel_selector = string{channel_selector};
+                else
+                {
+                    const auto selector_parts = split(channel_selector, ",");
+                    if (channel_selector.empty())
+                        i->channel_selector = i->partname;
+                    else if (find(begin(selector_parts), end(selector_parts), i->partname) == end(selector_parts))
+                        i->channel_selector = fmt::format("{},{}", i->partname, channel_selector);
+                    else
+                        i->channel_selector = string{channel_selector};
+                }
+
+                spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
+            }
+            catch (const exception &e)
+            {
+                spdlog::error("Skipping image loaded from \"{}\" due to error:\n\t{}", filename, e.what());
+                continue; // skip this image
+            }
         }
         return images;
     }

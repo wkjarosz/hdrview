@@ -88,7 +88,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
             {"version", Imf::getVersion(part.version())},
             {"flags", fmt::format("0x{:x}", Imf::getFlags(part.version()))}};
 
-        spdlog::debug("exr header: {}", img->metadata["exr header"].dump(2));
+        // spdlog::debug("exr header: {}", img->metadata["exr header"].dump(2));
 
         if (part.header().hasName())
             img->partname = part.header().name();
@@ -109,6 +109,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
                                                img->display_window.max.x, img->display_window.max.y)};
 
         Imf::FrameBuffer framebuffer;
+        bool             has_channels = false;
         for (auto c = channels.begin(); c != channels.end(); ++c)
         {
             auto name = channel_name(c);
@@ -117,12 +118,24 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
                 spdlog::debug("Skipping EXR channel '{}' in part {}: '{}'", name, p);
                 continue;
             }
+            else
+            {
+                has_channels = true;
+                spdlog::debug("Loading EXR channel '{}' in part {}: '{}'", name, p, c.name());
+            }
 
             name = c.name();
 
             img->channels.emplace_back(name, size);
             framebuffer.insert(c.name(), Imf::Slice::Make(Imf::FLOAT, img->channels.back().data(), dataWindow, 0, 0,
                                                           c.channel().xSampling, c.channel().ySampling));
+        }
+
+        if (!has_channels)
+        {
+            spdlog::warn("EXR part {}: '{}' has no channels matching the filter '{}', skipping...", p,
+                         part.header().hasName() ? part.header().name() : "unnamed", channel_selector);
+            continue;
         }
 
         part.setFrameBuffer(framebuffer);
