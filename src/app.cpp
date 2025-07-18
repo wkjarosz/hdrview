@@ -519,8 +519,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
 
+#if !defined(__EMSCRIPTEN__)
                 m_active_directories.insert(fs::canonical(new_image->filename).parent_path());
-
+#endif
                 update_visibility(); // this also calls set_image_textures();
                 g_request_sort = true;
             });
@@ -1673,23 +1674,15 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    static const char *info_icon = ICON_MY_ABOUT;
     auto posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (2.f * (HelloImGui::EmSize(1.9f))));
     if (posX > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(posX);
 
     auto a = action("Show Log window");
     ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected);
-    // {
-    //     if (a.p_selected)
-    //         *a.p_selected = !*a.p_selected;
-    //     ImGui::SetTooltip("%s", a.tooltip.c_str());
-    // }
     a = action("Help");
     if (ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), &g_help_is_open))
-    {
         g_show_help = true;
-    }
 }
 
 void HDRViewApp::save_as(const string &filename) const
@@ -1965,9 +1958,11 @@ void HDRViewApp::close_image()
     if (next < m_current) // there is no visible image after this one, go to previous visible
         next = next_visible_image_index(m_current, Backward);
 
-    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
-
+    auto filename = m_images[m_current]->filename;
     m_images.erase(m_images.begin() + m_current);
+
+#if !defined(__EMSCRIPTEN__)
+    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
 
     if (!m_active_directories.empty())
     {
@@ -2001,6 +1996,7 @@ void HDRViewApp::close_image()
                           path.u8string());
             return m_active_directories.count(path) == 0;
         });
+#endif
 
     // adjust the indices after erasing the current image
     set_current_image_index(next < m_current ? next : next - 1);

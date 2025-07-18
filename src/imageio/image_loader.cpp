@@ -134,6 +134,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     }
     else if (!fs::exists(path))
         spdlog::error("File '{}' does not exist.", filename);
+#if !defined(__EMSCRIPTEN__)
     else if (fs::is_directory(path))
     {
         spdlog::info("Loading images from folder '{}'", path.u8string());
@@ -163,6 +164,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         // this moves the file to the top of the recent files list
         add_recent_file(filename);
     }
+#endif
     else if (fs::is_regular_file(path))
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
