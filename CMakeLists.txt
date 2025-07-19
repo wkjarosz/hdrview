@@ -42,7 +42,7 @@ endif()
 # cmake-format: on
 
 # copy assets to the build directory
-set(MY_RESOURCE_FILES "assets/app_settings/icon.png")
+set(MY_RESOURCE_FILES "assets/app_settings/icon.png" "assets/app_settings/icon-256.png")
 if(EMSCRIPTEN)
   file(
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES

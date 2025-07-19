@@ -3605,7 +3605,7 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextColumn();
             // right align the image
             ImGui::AlignCursor(icon_size + 0.5f * HelloImGui::EmSize(), 1.f);
-            HelloImGui::ImageFromAsset("app_settings/icon.png", {icon_size, icon_size}); // show the app icon
+            HelloImGui::ImageFromAsset("app_settings/icon-256.png", {icon_size, icon_size}); // show the app icon
 
             ImGui::TableNextColumn();
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
