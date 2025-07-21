@@ -500,6 +500,7 @@ else()
     set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/)
   endif()
   set(JPEG_LIBRARIES ${JPEG_LIB_PREFIX}${JPEG_LIB})
+  include(ExternalProject)
   if(EMSCRIPTEN)
     ExternalProject_Add(
       ${JPEGTURBO_TARGET_NAME}
