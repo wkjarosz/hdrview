@@ -61,6 +61,9 @@ jobs:
         buildtype: [Release, Debug]
 
     steps:
+      - name: Delete dependencies
+        run: brew uninstall libjpeg
+
       - name: Install dependencies
         run: brew install ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif libpng imath cli11 spdlog fmt aom libde265 x265
 
