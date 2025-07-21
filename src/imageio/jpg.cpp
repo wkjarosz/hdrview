@@ -19,7 +19,7 @@
 
 using namespace std;
 
-#ifndef HDRVIEW_ENABLE_JPEGXL
+#ifndef HDRVIEW_ENABLE_TURBOJPEG
 
 bool is_jpg_image(istream &is) noexcept { return false; }
 
@@ -41,32 +41,25 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 namespace
 {
 
-#define ICC_MARKER       (JPEG_APP0 + 2) /* JPEG marker code for ICC */
-#define ICC_OVERHEAD_LEN 14              /* size of non-profile data in APP2 */
-#define DSTATE_READY     202             /* found SOS, ready for start_decompress */
+#define ICC_OVERHEAD_LEN 14  /* size of non-profile data in APP2 */
+#define DSTATE_READY     202 /* found SOS, ready for start_decompress */
 
-/* Read ICC profile.  See libjpeg.txt for usage information. */
+// Adapted from turbojpeg's jpeg_read_icc_profile function (which isn't available everywhere)
+/* Read ICC profile.
 /*
  * See if there was an ICC profile in the JPEG file being read; if so,
- * reassemble and return the profile data.
+ * reassemble and return the profile data as a std::vector<uint8_t>.
  *
- * TRUE is returned if an ICC profile was found, FALSE if not.  If TRUE is
- * returned, *icc_data_ptr is set to point to the returned data, and
- * *icc_data_len is set to its length.
+ * If an ICC profile is found, the returned vector contains the profile data.
+ * If not, the returned vector is empty.
  *
- * IMPORTANT: the data at *icc_data_ptr is allocated with malloc() and must be
- * freed by the caller with free() when the caller no longer needs it.
- * (Alternatively, we could write this routine to use the IJG library's memory
- * allocator, so that the data would be freed implicitly when
- * jpeg_finish_decompress() is called.  But it seems likely that many
- * applications will prefer to have the data stick around after decompression
- * finishes.)
+ * No manual memory management is required; the vector owns its data.
  */
 std::vector<uint8_t> read_icc_profile(j_decompress_ptr cinfo)
 {
     auto marker_is_icc = [](jpeg_saved_marker_ptr marker)
     {
-        return marker->marker == ICC_MARKER && marker->data_length >= ICC_OVERHEAD_LEN &&
+        return marker->marker == (JPEG_APP0 + 2) && marker->data_length >= ICC_OVERHEAD_LEN &&
                /* verify the identifying string */
                marker->data[0] == 0x49 && marker->data[1] == 0x43 && marker->data[2] == 0x43 &&
                marker->data[3] == 0x5F && marker->data[4] == 0x50 && marker->data[5] == 0x52 &&
@@ -93,21 +86,12 @@ std::vector<uint8_t> read_icc_profile(j_decompress_ptr cinfo)
             if (num_markers == 0)
                 num_markers = marker->data[13];
             else if (num_markers != marker->data[13])
-            {
-                // WARNMS(cinfo, JWRN_BOGUS_ICC);
                 return {};
-            }
             seq_no = marker->data[12];
             if (seq_no <= 0 || seq_no > num_markers)
-            {
-                // WARNMS(cinfo, JWRN_BOGUS_ICC);
                 return {};
-            }
             if (marker_present[seq_no])
-            {
-                // WARNMS(cinfo, JWRN_BOGUS_ICC);
                 return {};
-            }
             marker_present[seq_no] = 1;
             data_length[seq_no]    = marker->data_length - ICC_OVERHEAD_LEN;
         }
@@ -121,19 +105,13 @@ std::vector<uint8_t> read_icc_profile(j_decompress_ptr cinfo)
     for (seq_no = 1; seq_no <= num_markers; seq_no++)
     {
         if (marker_present[seq_no] == 0)
-        {
-            // WARNMS(cinfo, JWRN_BOGUS_ICC);
             return {};
-        }
         data_offset[seq_no] = total_length;
         total_length += data_length[seq_no];
     }
 
     if (total_length == 0)
-    {
-        // WARNMS(cinfo, JWRN_BOGUS_ICC);
         return {};
-    }
 
     std::vector<uint8_t> icc_data(total_length);
     // Fill in assembled data
