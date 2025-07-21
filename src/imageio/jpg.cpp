@@ -17,9 +17,25 @@
 #include <string>
 #include <vector>
 
-#include <jpeglib.h>
-
 using namespace std;
+
+#ifndef HDRVIEW_ENABLE_JPEGXL
+
+bool is_jpg_image(istream &is) noexcept { return false; }
+
+vector<ImagePtr> load_jpg_image(istream &is, string_view filename)
+{
+    throw runtime_error("Turbo JPEG support not enabled in this build.");
+}
+
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive)
+{
+    return;
+}
+
+#else
+
+#include <jpeglib.h>
 
 bool is_jpg_image(std::istream &is) noexcept
 {
@@ -274,3 +290,5 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     }
     jpeg_finish_compress(&cinfo);
 }
+
+#endif
