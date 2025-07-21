@@ -529,7 +529,7 @@ else()
     )
   endif()
 
-  list(APPEND HDRVIEW_DEPENDENCIES ${JPEGTURBO_TARGET_NAME})
+  list(APPEND HDRVIEW_DEPENDENCIES ${JPEG_LIBRARIES})
 endif()
 
 option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
@@ -741,6 +741,11 @@ message(STATUS "HDRView build definitions: ${HDRVIEW_DEFINITIONS}")
 
 target_link_libraries(HDRView PRIVATE ${HDRVIEW_DEPENDENCIES})
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_DEFINITIONS})
+
+if(NOT JPEG_FOUND)
+  add_dependencies(HDRView ${JPEGTURBO_TARGET_NAME})
+  target_include_directories(HDRView PRIVATE ${JPEG_INCLUDE_DIRS})
+endif()
 
 if(APPLE)
   target_compile_options(HDRView PRIVATE "-fobjc-arc")
