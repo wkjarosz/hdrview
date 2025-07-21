@@ -23,7 +23,7 @@ using namespace std;
 
 bool is_jpg_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_jpg_image(istream &is, string_view filename)
+std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, std::string_view channel_selector)
 {
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
