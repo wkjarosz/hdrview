@@ -409,7 +409,13 @@ if(HDRVIEW_ENABLE_LIBPNG)
     GITHUB_REPOSITORY pnggroup/libpng
     GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
     # VERSION 1.6.50 URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
-    OPTIONS "PNG_TOOLS OFF" "PNG_SHARED OFF" "PNG_TESTS OFF" "EXCLUDE_FROM_ALL YES"
+    OPTIONS "PNG_SHARED OFF"
+            "PNG_STATIC ON"
+            "PNG_FRAMEWORK OFF"
+            "PNG_TESTS OFF"
+            "PNG_TOOLS OFF"
+            "SKIP_INSTALL_ALL ON"
+            "EXCLUDE_FROM_ALL YES"
   )
   if(PNG_ADDED)
     message(STATUS "Will build libpng library")
@@ -478,16 +484,48 @@ endif()
 list(APPEND HDRVIEW_DEPENDENCIES "OpenEXR::OpenEXR")
 
 # libjpeg-turbo
-option(HDRVIEW_ENABLE_TURBOJPEG "Enable Turbo JPEG support" ON)
-if(HDRVIEW_ENABLE_TURBOJPEG)
-  find_package(TurboJpeg)
-  if(TurboJpeg_FOUND)
-    message(STATUS "Found system-installed libjpeg-turbo library ${TurboJpeg_LIBRARIES} at ${TurboJpeg_INCLUDE_DIRS}")
-    list(APPEND HDRVIEW_DEPENDENCIES TurboJpeg::TurboJpeg)
-    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_TURBOJPEG)
+option(HDRVIEW_ENABLE_LIBJPEG "Enable libJPEG support" ON)
+if(HDRVIEW_ENABLE_LIBJPEG)
+  find_package(JPEG)
+  if(TARGET JPEG::JPEG)
+    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
+
+    include(CheckCXXSourceCompiles)
+
+    # this is needed for CheckCXXSourceCompiles
+    set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
+    check_cxx_source_compiles(
+      "
+  #include <stddef.h>
+  #include <stdio.h>
+  #include <jpeglib.h>
+
+  int main() {
+    jpeg_write_icc_profile(NULL, NULL, 0);
+    return 0;
+  }
+  "
+      HAVE_JPEG_WRITE_ICC_PROFILE
+    )
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_INCLUDES)
+
+    if(HAVE_JPEG_WRITE_ICC_PROFILE)
+      # add_definitions(-DHAVE_JPEG_WRITE_ICC_PROFILE=1)
+      message(STATUS "Found libjpeg-turbo with JPEG_WRITE_ICC_PROFILE support")
+    else()
+      message(STATUS "Found libjpeg-turbo, but it does not support JPEG_WRITE_ICC_PROFILE")
+    endif()
+
+    list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   endif()
 endif()
-# find_package(JPEG QUIET) if(JPEG_FOUND)
+
+# if(HDRVIEW_ENABLE_LIBJPEG) find_package(TurboJpeg) if(TurboJpeg_FOUND) message(STATUS "Found system-installed
+# libjpeg-turbo library ${TurboJpeg_LIBRARIES} at ${TurboJpeg_INCLUDE_DIRS}") list(APPEND HDRVIEW_DEPENDENCIES
+# TurboJpeg::TurboJpeg) list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG) endif() endif() find_package(JPEG QUIET)
+# if(JPEG_FOUND)
 
 # include(CheckCSourceCompiles) message(STATUS "libjpeg include dirs: ${JPEG_INCLUDE_DIRS}") message(STATUS "libjpeg
 # libraries: ${JPEG_LIBRARIES}") # Add common system libraries for static linking set(CMAKE_REQUIRED_INCLUDES
@@ -527,8 +565,14 @@ if(HDRVIEW_ENABLE_UHDR)
     GITHUB_REPOSITORY google/libultrahdr
     # VERSION 1.4.0
     GIT_TAG 5fa99b5271a3c80a13c78062d7adc6310222dd8e
-    OPTIONS "BUILD_SHARED_LIBS OFF" "UHDR_BUILD_EXAMPLES OFF" "UHDR_BUILD_TESTS OFF" "UHDR_BUILD_BENCHMARK OFF"
-            "UHDR_BUILD_FUZZERS OFF" "UHDR_ENABLE_INSTALL OFF"
+    OPTIONS "UHDR_BUILD_BENCHMARK OFF"
+            "UHDR_BUILD_FUZZERS OFF"
+            "JPEG_FOUND TRUE"
+            "BUILD_SHARED_LIBS OFF"
+            "UHDR_BUILD_DEPS ON"
+            "UHDR_BUILD_EXAMPLES OFF"
+            "UHDR_BUILD_TESTS OFF"
+            "UHDR_ENABLE_INSTALL OFF"
   )
   if(libuhdr_ADDED)
     message(STATUS "Building uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
@@ -562,6 +606,8 @@ if(HDRVIEW_ENABLE_JPEGXL)
             "JPEGXL_ENABLE_SKCMS OFF"
             "JPEGXL_ENABLE_VIEWERS=OFF"
             "JPEGXL_ENABLE_PLUGINS=OFF"
+            "JPEGXL_BUNDLE_LIBPNG OFF"
+            "JPEGXL_ENABLE_SJPEG OFF"
             "EXCLUDE_FROM_ALL YES"
   )
   if(JXL_ADDED)
@@ -590,7 +636,7 @@ else()
   endif()
 endif()
 
-option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ON)
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
@@ -598,8 +644,21 @@ if(HDRVIEW_ENABLE_HEIF)
     VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
     # URL https://github.com/strukturag/libheif/archive/refs/tags/v1.19.5.zip
     GIT_TAG 122fd476b7c056da0e527ffc76f95072fdb5ae3d
-    OPTIONS "BUILD_SHARED_LIBS OFF" "BUILD_TESTING OFF" "WITH_EXAMPLES OFF" "WITH_GDK_PIXBUF OFF"
-            "CMAKE_COMPILE_WARNING_AS_ERROR OFF" "EXCLUDE_FROM_ALL YES"
+    OPTIONS "BUILD_SHARED_LIBS OFF"
+            "BUILD_TESTING OFF"
+            "WITH_EXAMPLES OFF"
+            "WITH_FUZZERS OFF"
+            "WITH_GDK_PIXBUF OFF"
+            "WITH_INSTALL OFF"
+            "CMAKE_COMPILE_WARNING_AS_ERROR OFF"
+            "EXCLUDE_FROM_ALL YES"
+            # codecs
+            "WITH_LIBSHARPYUV OFF"
+            # "WITH_LIBDE265 OFF" "WITH_X265 OFF"
+            "WITH_OpenH264_ENCODER OFF"
+            # "WITH_OpenH264_DECODER OFF"
+            "WITH_AOM_ENCODER OFF"
+            # "WITH_AOM_DECODER OFF"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")

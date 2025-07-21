@@ -19,7 +19,7 @@
 
 using namespace std;
 
-#ifndef HDRVIEW_ENABLE_TURBOJPEG
+#ifndef HDRVIEW_ENABLE_LIBJPEG
 
 bool is_jpg_image(istream &is) noexcept { return false; }
 
