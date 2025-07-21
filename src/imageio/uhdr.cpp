@@ -194,7 +194,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
         {
             auto j                  = exif_to_json(reinterpret_cast<uint8_t *>(exif_data->data), exif_data->data_sz);
             image->metadata["exif"] = j;
-            spdlog::info("UltraHDR: EXIF metadata successfully parsed: {}", j.dump(2));
+            spdlog::debug("UltraHDR: EXIF metadata successfully parsed: {}", j.dump(2));
         }
         catch (const std::exception &e)
         {

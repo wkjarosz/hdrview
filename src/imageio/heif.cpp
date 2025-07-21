@@ -220,7 +220,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                         // exclude the first four bytes, which are the length
                         auto j                  = exif_to_json(exif_data.data() + 4, exif_size - 4);
                         image->metadata["exif"] = j;
-                        spdlog::info("HEIF: EXIF metadata successfully parsed: {}", image->metadata.dump(2));
+                        spdlog::debug("HEIF: EXIF metadata successfully parsed: {}", image->metadata.dump(2));
                     }
                     catch (const std::exception &e)
                     {

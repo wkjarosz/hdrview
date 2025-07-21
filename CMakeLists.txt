@@ -477,20 +477,69 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "OpenEXR::OpenEXR")
 
+# libjpeg-turbo
+find_package(JPEG QUIET)
+if(JPEG_FOUND)
+  message(STATUS "Found system-installed libjpeg library ${JPEG_LIBRARIES} (version \"${JPEG_VERSION}\")")
+  list(APPEND HDRVIEW_DEPENDENCIES "JPEG::JPEG")
+else()
+  message(STATUS "libjpeg library not found, will build libjpeg-turbo")
+  set(JPEGTURBO_TARGET_NAME turbojpeg)
+  set(JPEGTURBO_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${JPEGTURBO_TARGET_NAME})
+  set(JPEGTURBO_SOURCE_DIR ${THIRD_PARTY_DIR}/${JPEGTURBO_TARGET_NAME})
+  set(JPEGTURBO_BINARY_DIR ${JPEGTURBO_PREFIX_DIR}/src/${JPEGTURBO_TARGET_NAME}-build)
+  set(JPEG_INCLUDE_DIRS ${JPEGTURBO_SOURCE_DIR}/src ${JPEGTURBO_BINARY_DIR})
+  if(MSVC)
+    set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg-static${CMAKE_STATIC_LIBRARY_SUFFIX})
+  else()
+    set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg${CMAKE_STATIC_LIBRARY_SUFFIX})
+  endif()
+  if(IS_MULTI)
+    set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/$<CONFIG>/)
+  else()
+    set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/)
+  endif()
+  set(JPEG_LIBRARIES ${JPEG_LIB_PREFIX}${JPEG_LIB})
+  if(EMSCRIPTEN)
+    ExternalProject_Add(
+      ${JPEGTURBO_TARGET_NAME}
+      GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
+      GIT_TAG 3.1.0
+      PREFIX ${JPEGTURBO_PREFIX_DIR}
+      SOURCE_DIR ${JPEGTURBO_SOURCE_DIR}
+      BINARY_DIR ${JPEGTURBO_BINARY_DIR}
+      CONFIGURE_COMMAND emcmake cmake ${JPEGTURBO_SOURCE_DIR} -DENABLE_SHARED=0 -DWITH_SIMD=0
+      BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static
+      BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
+      INSTALL_COMMAND ""
+    )
+  else()
+    ExternalProject_Add(
+      ${JPEGTURBO_TARGET_NAME}
+      GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
+      GIT_TAG 3.1.0
+      PREFIX ${JPEGTURBO_PREFIX_DIR}
+      SOURCE_DIR ${JPEGTURBO_SOURCE_DIR}
+      BINARY_DIR ${JPEGTURBO_BINARY_DIR}
+      BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static
+      CMAKE_ARGS ${UHDR_CMAKE_ARGS} -DENABLE_SHARED=0
+      BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
+      INSTALL_COMMAND ""
+    )
+  endif()
+
+  list(APPEND HDRVIEW_DEPENDENCIES ${JPEGTURBO_TARGET_NAME})
+endif()
+
 option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
 if(HDRVIEW_ENABLE_UHDR)
   CPMAddPackage(
     NAME libuhdr
     GITHUB_REPOSITORY google/libultrahdr
-    VERSION 1.4.0
-    # GIT_TAG bf2aa439eea9ad5da483003fa44182f990f74091
-    OPTIONS "BUILD_SHARED_LIBS OFF"
-            "UHDR_BUILD_EXAMPLES OFF"
-            "UHDR_BUILD_TESTS OFF"
-            "UHDR_BUILD_BENCHMARK OFF"
-            "UHDR_BUILD_FUZZERS OFF"
-            "UHDR_ENABLE_INSTALL OFF"
-            "UHDR_ENABLE_INTRINSICS OFF"
+    # VERSION 1.4.0
+    GIT_TAG 5fa99b5271a3c80a13c78062d7adc6310222dd8e
+    OPTIONS "BUILD_SHARED_LIBS OFF" "UHDR_BUILD_EXAMPLES OFF" "UHDR_BUILD_TESTS OFF" "UHDR_BUILD_BENCHMARK OFF"
+            "UHDR_BUILD_FUZZERS OFF" "UHDR_ENABLE_INSTALL OFF"
   )
   if(libuhdr_ADDED)
     message(STATUS "Building uhdr library with UHDR_BUILD_DEPS=${UHDR_BUILD_DEPS}")
@@ -499,7 +548,7 @@ if(HDRVIEW_ENABLE_UHDR)
   else()
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
-  list(APPEND HDRVIEW_DEPENDENCIES "core")
+  list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
 endif()
 
@@ -650,6 +699,7 @@ hello_imgui_add_app(
   src/imageio/exr.cpp
   src/imageio/heif.cpp
   src/imageio/icc.cpp
+  src/imageio/jpg.cpp
   src/imageio/jxl.cpp
   src/imageio/pfm.cpp
   src/imageio/png.cpp

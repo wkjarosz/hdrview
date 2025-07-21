@@ -436,6 +436,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, size.z, c,
                                                          [](float v) { return v; });
 
+            // apply transfer function to extra channels
             for (size_t i = size.z; i < image->channels.size(); ++i)
             {
                 auto &channel      = image->channels[i];
@@ -566,7 +567,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 {
                     auto j = exif_to_json(exif_data.data() + 4 + offset, exif_data.size() - 4 - offset);
                     image->metadata["exif"] = j;
-                    spdlog::info("JPEG-XL: EXIF metadata successfully parsed: {}", j.dump(2));
+                    spdlog::debug("JPEG-XL: EXIF metadata successfully parsed: {}", j.dump(2));
 
                     for (auto &&image : images) image->metadata["exif"] = j;
                 }

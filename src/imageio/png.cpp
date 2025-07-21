@@ -240,7 +240,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
         try
         {
             metadata["exif"] = exif_to_json(exif_ptr, exif_len);
-            spdlog::info("PNG: EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
+            spdlog::debug("PNG: EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
         }
         catch (const std::exception &e)
         {

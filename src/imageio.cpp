@@ -17,6 +17,7 @@
 
 #include "imageio/exr.h"
 #include "imageio/heif.h"
+#include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
 #include "imageio/png.h"
@@ -46,6 +47,11 @@ vector<ImagePtr> Image::load(istream &is, string_view filename, string_view chan
         {
             spdlog::info("Detected UltraHDR JPEG image. Loading via libultrahdr.");
             images = load_uhdr_image(is, filename);
+        }
+        else if (is_jpg_image(is))
+        {
+            spdlog::info("Detected JPEG image. Loading via libjpeg.");
+            images = load_jpg_image(is, filename, channel_selector);
         }
         else if (is_qoi_image(is))
         {
