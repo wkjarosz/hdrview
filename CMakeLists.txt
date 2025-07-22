@@ -617,7 +617,8 @@ if(HDRVIEW_ENABLE_UHDR)
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
   message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
-  add_dependencies(uhdr turbojpeg)
+  add_dependencies(core jpeg-turbo)
+  add_dependencies(uhdr jpeg-turbo)
 
   # # The following variables ensure that find_package can find libjpeg-turbo
   # set(JPEG_LIBRARY ${JPEG_LIBRARIES})
