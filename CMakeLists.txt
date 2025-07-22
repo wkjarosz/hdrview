@@ -110,7 +110,8 @@ set_property(DIRECTORY PROPERTY VS_STARTUP_PROJECT HDRView)
 # ============================================================================
 # Set a default build configuration (Release)
 # ============================================================================
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+get_cmake_property(IS_MULTI GENERATOR_IS_MULTI_CONFIG)
+if(NOT CMAKE_BUILD_TYPE AND NOT IS_MULTI)
   set(DEFAULT_BUILD_TYPE Release)
   if(EMSCRIPTEN)
     set(DEFAULT_BUILD_TYPE MinSizeRel)
