@@ -37,13 +37,13 @@ jobs:
               name: "macOS 14 universal",
               os: macos-14,
               arch: "universal",
-              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_IGNORE_PATH=\"$(find /opt/homebrew/Cellar/harfbuzz/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/harfbuzz/*/lib -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/lib -type d 2>/dev/null | tr '\n' ';')/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar\" -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=OFF",
+              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_IGNORE_PATH=\"$(find /opt/homebrew/Cellar/harfbuzz/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/harfbuzz/*/lib -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/lib -type d 2>/dev/null | tr '\n' ';')/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar\" -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=OFF",
             }
           - {
               name: "macOS 13 universal",
               os: macos-13,
               arch: "universal",
-              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_IGNORE_PATH=\"$(find /usr/local/Cellar/harfbuzz/*/lib -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/harfbuzz/*/ -maxdepth 0 -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/brotli/*/include -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/brotli/*/lib -type d 2>/dev/null | tr '\n' ';')/usr/local/lib/;/usr/local/Cellar/\" -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=OFF",
+              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_IGNORE_PATH=\"$(find /usr/local/Cellar/harfbuzz/*/lib -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/harfbuzz/*/ -maxdepth 0 -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/brotli/*/include -type d 2>/dev/null | tr '\n' ';')$(find /usr/local/Cellar/brotli/*/lib -type d 2>/dev/null | tr '\n' ';')/usr/local/lib/;/usr/local/Cellar/\" -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=OFF",
             }
           - {
               name: "macOS 14 Apple Silicon",

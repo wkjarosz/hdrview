@@ -102,9 +102,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: |
-          pip install Pillow
-          choco install libjpeg-turbo
+        run: pip install Pillow
 
       - uses: actions/checkout@v4
         with:

@@ -497,28 +497,28 @@ if(HDRVIEW_ENABLE_LIBJPEG)
   if(JPEG_FOUND)
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
 
-    # include(CheckCXXSourceCompiles)
+    include(CheckCXXSourceCompiles)
 
-  #   # this is needed for CheckCXXSourceCompiles
-  #   set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
-  #   set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
-  #   check_cxx_source_compiles(
-  #     "
-  # #include <stddef.h>
-  # #include <stdio.h>
-  # #include <jpeglib.h>
+    # this is needed for CheckCXXSourceCompiles
+    set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${JPEG_INCLUDE_DIRS})
+    check_cxx_source_compiles(
+      "
+  #include <stddef.h>
+  #include <stdio.h>
+  #include <jpeglib.h>
 
-  # int main() {
-  #   jpeg_write_icc_profile(NULL, NULL, 0);
-  #   return 0;
-  # }
-  # "
-  #     HAVE_JPEG_WRITE_ICC_PROFILE
-  #   )
-  #   unset(CMAKE_REQUIRED_LIBRARIES)
-  #   unset(CMAKE_REQUIRED_INCLUDES)
+  int main() {
+    jpeg_write_icc_profile(NULL, NULL, 0);
+    return 0;
+  }
+  "
+      HAVE_JPEG_WRITE_ICC_PROFILE
+    )
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_INCLUDES)
 
-  #   message(STATUS "Found libjpeg-turbo with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
+    message(STATUS "Found libjpeg-turbo with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
 
     set(JPEG_HEADER_FOUND FALSE)
     foreach(JPEG_DIR ${JPEG_INCLUDE_DIRS})
@@ -605,7 +605,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
     set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR}/src)
 
-    # set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
+    set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
 
     add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
     add_dependencies(jpeg-turbo ${JPEGTURBO_TARGET_NAME})
@@ -633,7 +633,7 @@ if(HDRVIEW_ENABLE_UHDR)
     GIT_TAG 5fa99b5271a3c80a13c78062d7adc6310222dd8e
     OPTIONS "UHDR_BUILD_BENCHMARK OFF"
             "UHDR_BUILD_FUZZERS OFF"
-            # "JPEG_FOUND TRUE"
+            "JPEG_FOUND TRUE"
             "BUILD_SHARED_LIBS OFF"
             "UHDR_BUILD_DEPS ON"
             "UHDR_BUILD_EXAMPLES OFF"
@@ -648,22 +648,8 @@ if(HDRVIEW_ENABLE_UHDR)
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
   message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
-  # add_dependencies(core jpeg-turbo)
-  # add_dependencies(uhdr jpeg-turbo)
-
-  # # The following variables ensure that find_package can find libjpeg-turbo
-  # set(JPEG_LIBRARY ${JPEG_LIBRARIES})
-  # set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
-
-  # add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
-  # add_dependencies(jpeg-turbo turbojpeg)
-  # set_target_properties(
-  #   jpeg-turbo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIRS}" INTERFACE_LINK_LIBRARIES
-  #                                                                              "${JPEG_LIBRARIES}"
-  # )
-  # add_library(JPEG::JPEG ALIAS jpeg-turbo)
-
-  # message(STATUS "libjpeg library found: ${JPEG_LIBRARIES} ${JPEG_INCLUDE_DIRS}")
+  add_dependencies(core JPEG::JPEG)
+  add_dependencies(uhdr JPEG::JPEG)
 
   list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
