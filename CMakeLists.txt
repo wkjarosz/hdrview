@@ -483,11 +483,12 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "OpenEXR::OpenEXR")
 
+# cmake-format: off
 # libjpeg-turbo
 option(HDRVIEW_ENABLE_LIBJPEG "Enable libJPEG support" ON)
 if(HDRVIEW_ENABLE_LIBJPEG)
-  find_package(JPEG)
-  if(TARGET JPEG::JPEG)
+  # find_package(JPEG)
+  if(JPEG_FOUND)
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
 
     include(CheckCXXSourceCompiles)
@@ -519,45 +520,75 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     endif()
 
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
+  else()
+    message(STATUS "libjpeg library not found, will build libjpeg-turbo")
+
+    set(JPEGTURBO_TARGET_NAME turbojpeg)
+    set(JPEGTURBO_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${JPEGTURBO_TARGET_NAME})
+    set(JPEGTURBO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/${JPEGTURBO_TARGET_NAME}) #
+    set(JPEGTURBO_BINARY_DIR ${JPEGTURBO_PREFIX_DIR}/src/${JPEGTURBO_TARGET_NAME}-build)
+    message(STATUS "Building libjpeg-turbo in ${JPEGTURBO_BINARY_DIR}")
+    message(STATUS "Source directory: ${JPEGTURBO_SOURCE_DIR}")
+    set(JPEG_INCLUDE_DIRS ${JPEGTURBO_SOURCE_DIR}/src ${JPEGTURBO_BINARY_DIR})
+    if(MSVC)
+      set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg-static${CMAKE_STATIC_LIBRARY_SUFFIX})
+    else()
+      set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg${CMAKE_STATIC_LIBRARY_SUFFIX})
+    endif()
+    if(IS_MULTI)
+      set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/$<CONFIG>/)
+    else()
+      set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/)
+    endif()
+    set(JPEG_LIBRARIES ${JPEG_LIB_PREFIX}${JPEG_LIB})
+    include(ExternalProject)
+    if(EMSCRIPTEN)
+      ExternalProject_Add(
+        ${JPEGTURBO_TARGET_NAME}
+        GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
+        GIT_TAG 3.1.0
+        PREFIX ${JPEGTURBO_PREFIX_DIR}
+        SOURCE_DIR ${JPEGTURBO_SOURCE_DIR}
+        BINARY_DIR ${JPEGTURBO_BINARY_DIR}
+        CONFIGURE_COMMAND emcmake cmake ${JPEGTURBO_SOURCE_DIR} -DENABLE_SHARED=0 -DWITH_SIMD=0
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static
+        BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
+        INSTALL_COMMAND ""
+      )
+    else()
+      ExternalProject_Add(
+        ${JPEGTURBO_TARGET_NAME}
+        GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git
+        GIT_TAG 3.1.0
+        PREFIX ${JPEGTURBO_PREFIX_DIR}
+        SOURCE_DIR ${JPEGTURBO_SOURCE_DIR}
+        BINARY_DIR ${JPEGTURBO_BINARY_DIR}
+        BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static
+        CMAKE_ARGS ${UHDR_CMAKE_ARGS} -DENABLE_SHARED=0
+        BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
+        INSTALL_COMMAND ""
+      )
+    endif()
+
+    # The following variables ensure that find_package can find libjpeg-turbo
+    set(JPEG_LIBRARY ${JPEG_LIBRARIES})
+    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
+
+    add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
+    add_dependencies(jpeg-turbo ${JPEGTURBO_TARGET_NAME})
+    set_target_properties(
+      jpeg-turbo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIRS}" INTERFACE_LINK_LIBRARIES
+                                                                                 "${JPEG_LIBRARIES}"
+    )
+    add_library(JPEG::JPEG ALIAS jpeg-turbo)
+
+    list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
+    list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
   endif()
 endif()
+# cmake-format: on
 
-# if(HDRVIEW_ENABLE_LIBJPEG) find_package(TurboJpeg) if(TurboJpeg_FOUND) message(STATUS "Found system-installed
-# libjpeg-turbo library ${TurboJpeg_LIBRARIES} at ${TurboJpeg_INCLUDE_DIRS}") list(APPEND HDRVIEW_DEPENDENCIES
-# TurboJpeg::TurboJpeg) list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG) endif() endif() find_package(JPEG QUIET)
-# if(JPEG_FOUND)
-
-# include(CheckCSourceCompiles) message(STATUS "libjpeg include dirs: ${JPEG_INCLUDE_DIRS}") message(STATUS "libjpeg
-# libraries: ${JPEG_LIBRARIES}") # Add common system libraries for static linking set(CMAKE_REQUIRED_INCLUDES
-# ${JPEG_INCLUDE_DIRS}) set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES} m z pthread) check_c_source_compiles( " #include
-# <jpeglib.h> #ifdef LIBJPEG_TURBO_VERSION_NUMBER int main() { return 0; } #else #error Not libjpeg-turbo #endif "
-# HAVE_LIBJPEG_TURBO ) unset(CMAKE_REQUIRED_INCLUDES) unset(CMAKE_REQUIRED_LIBRARIES)
-
-# if(HAVE_LIBJPEG_TURBO) message(STATUS "Found system-installed libjpeg library ${JPEG_LIBRARIES} (version
-# \"${JPEG_VERSION}\")") else() message(STATUS "Found system-installed libjpeg library ${JPEG_LIBRARIES}, but it is not
-# libjpeg-turbo") set(JPEG_FOUND FALSE) endif()
-
-# list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG) else() message(STATUS "libjpeg library not found, will build
-# libjpeg-turbo") set(JPEGTURBO_TARGET_NAME turbojpeg) set(JPEGTURBO_PREFIX_DIR
-# ${CMAKE_CURRENT_BINARY_DIR}/${JPEGTURBO_TARGET_NAME}) set(JPEGTURBO_SOURCE_DIR
-# ${THIRD_PARTY_DIR}/${JPEGTURBO_TARGET_NAME}) set(JPEGTURBO_BINARY_DIR
-# ${JPEGTURBO_PREFIX_DIR}/src/${JPEGTURBO_TARGET_NAME}-build) set(JPEG_INCLUDE_DIRS ${JPEGTURBO_SOURCE_DIR}/src
-# ${JPEGTURBO_BINARY_DIR}) if(MSVC) set(JPEG_LIB
-# ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg-static${CMAKE_STATIC_LIBRARY_SUFFIX}) else() set(JPEG_LIB
-# ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg${CMAKE_STATIC_LIBRARY_SUFFIX}) endif() if(IS_MULTI) set(JPEG_LIB_PREFIX
-# ${JPEGTURBO_BINARY_DIR}/$<CONFIG>/) else() set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/) endif() set(JPEG_LIBRARIES
-# ${JPEG_LIB_PREFIX}${JPEG_LIB}) include(ExternalProject) if(EMSCRIPTEN) ExternalProject_Add( ${JPEGTURBO_TARGET_NAME}
-# GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git GIT_TAG 3.1.0 PREFIX ${JPEGTURBO_PREFIX_DIR}
-# SOURCE_DIR ${JPEGTURBO_SOURCE_DIR} BINARY_DIR ${JPEGTURBO_BINARY_DIR} CONFIGURE_COMMAND emcmake cmake
-# ${JPEGTURBO_SOURCE_DIR} -DENABLE_SHARED=0 -DWITH_SIMD=0 BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config
-# $<CONFIG> --target jpeg-static BUILD_BYPRODUCTS ${JPEG_LIBRARIES} INSTALL_COMMAND "" ) else() ExternalProject_Add(
-# ${JPEGTURBO_TARGET_NAME} GIT_REPOSITORY https://github.com/libjpeg-turbo/libjpeg-turbo.git GIT_TAG 3.1.0 PREFIX
-# ${JPEGTURBO_PREFIX_DIR} SOURCE_DIR ${JPEGTURBO_SOURCE_DIR} BINARY_DIR ${JPEGTURBO_BINARY_DIR} BUILD_COMMAND
-# ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static CMAKE_ARGS ${UHDR_CMAKE_ARGS}
-# -DENABLE_SHARED=0 BUILD_BYPRODUCTS ${JPEG_LIBRARIES} INSTALL_COMMAND "" ) endif()
-
-# list(APPEND HDRVIEW_DEPENDENCIES ${JPEG_LIBRARIES}) endif()
-
+# cmake-format: off
 option(HDRVIEW_ENABLE_UHDR "Whether to build with Ultra HDR support" ON)
 if(HDRVIEW_ENABLE_UHDR)
   CPMAddPackage(
@@ -567,7 +598,7 @@ if(HDRVIEW_ENABLE_UHDR)
     GIT_TAG 5fa99b5271a3c80a13c78062d7adc6310222dd8e
     OPTIONS "UHDR_BUILD_BENCHMARK OFF"
             "UHDR_BUILD_FUZZERS OFF"
-            # "JPEG_FOUND TRUE"
+            "JPEG_FOUND TRUE"
             "BUILD_SHARED_LIBS OFF"
             "UHDR_BUILD_DEPS ON"
             "UHDR_BUILD_EXAMPLES OFF"
@@ -581,9 +612,27 @@ if(HDRVIEW_ENABLE_UHDR)
   else()
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
+  message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
+  add_dependencies(uhdr ${JPEGTURBO_TARGET_NAME})
+
+  # # The following variables ensure that find_package can find libjpeg-turbo
+  # set(JPEG_LIBRARY ${JPEG_LIBRARIES})
+  # set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
+
+  # add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
+  # add_dependencies(jpeg-turbo turbojpeg)
+  # set_target_properties(
+  #   jpeg-turbo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIRS}" INTERFACE_LINK_LIBRARIES
+  #                                                                              "${JPEG_LIBRARIES}"
+  # )
+  # add_library(JPEG::JPEG ALIAS jpeg-turbo)
+
+  # message(STATUS "libjpeg library found: ${JPEG_LIBRARIES} ${JPEG_INCLUDE_DIRS}")
+
   list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
 endif()
+# cmake-format: on
 
 option(HDRVIEW_ENABLE_JPEGXL "Enable JPEG-XL support" ON)
 if(HDRVIEW_ENABLE_JPEGXL)
