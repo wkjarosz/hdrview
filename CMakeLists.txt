@@ -714,8 +714,7 @@ if(HDRVIEW_ENABLE_HEIF)
             "WITH_INSTALL OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF"
             "EXCLUDE_FROM_ALL YES"
-            "JPEG_FOUND TRUE"
-            # codecs
+            # "JPEG_FOUND TRUE" codecs
             "WITH_LIBSHARPYUV OFF"
             # "WITH_LIBDE265 OFF" "WITH_X265 OFF"
             "WITH_OpenH264_ENCODER OFF"
@@ -723,8 +722,7 @@ if(HDRVIEW_ENABLE_HEIF)
             "WITH_JPEG_ENCODER OFF"
             "WITH_JPEG_DECODER OFF"
             "WITH_AOM_ENCODER OFF"
-            # "WITH_AOM_DECODER OFF"
-            "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
+            # "WITH_AOM_DECODER OFF" "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
