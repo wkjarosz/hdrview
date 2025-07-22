@@ -527,7 +527,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     message(STATUS "Building libjpeg-turbo in ${JPEGTURBO_BINARY_DIR}")
     message(STATUS "Source directory: ${JPEGTURBO_SOURCE_DIR}")
-    set(JPEG_INCLUDE_DIRS ${JPEGTURBO_SOURCE_DIR}/src ${JPEGTURBO_BINARY_DIR})
+    set(JPEG_INCLUDE_DIRS ${JPEGTURBO_BINARY_DIR} ${JPEGTURBO_SOURCE_DIR}/src)
     if(MSVC)
       set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg-static${CMAKE_STATIC_LIBRARY_SUFFIX})
     else()
@@ -617,7 +617,7 @@ if(HDRVIEW_ENABLE_UHDR)
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
   message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
-  add_dependencies(uhdr ${JPEGTURBO_TARGET_NAME})
+  add_dependencies(uhdr turbojpeg)
 
   # # The following variables ensure that find_package can find libjpeg-turbo
   # set(JPEG_LIBRARY ${JPEG_LIBRARIES})
