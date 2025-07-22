@@ -567,8 +567,16 @@ if(HDRVIEW_ENABLE_LIBJPEG)
             -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
             -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
             -DWITH_JPEG8=1
+            -DWITH_TURBOJPEG=1
         BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
         INSTALL_COMMAND ""
+      )
+
+      ExternalProject_Add_Step(${JPEGTURBO_TARGET_NAME} print_jpeglib_h
+        COMMAND ${CMAKE_COMMAND} -E echo "========== src/jpeglib.h =========="
+        COMMAND ${CMAKE_COMMAND} -E cat ${JPEGTURBO_SOURCE_DIR}/src/jpeglib.h
+        DEPENDEES download
+        ALWAYS 1
       )
     endif()
 
