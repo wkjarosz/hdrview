@@ -538,9 +538,6 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     file(MAKE_DIRECTORY ${JPEGTURBO_SOURCE_DIR}/src)
 
-    message(STATUS "Building libjpeg-turbo in ${JPEGTURBO_BINARY_DIR}")
-    message(STATUS "Source directory: ${JPEGTURBO_SOURCE_DIR}")
-
     set(JPEG_INCLUDE_DIRS ${JPEGTURBO_BINARY_DIR} ${JPEGTURBO_SOURCE_DIR}/src)
     if(MSVC)
       set(JPEG_LIB ${CMAKE_STATIC_LIBRARY_PREFIX}jpeg-static${CMAKE_STATIC_LIBRARY_SUFFIX})
@@ -553,6 +550,10 @@ if(HDRVIEW_ENABLE_LIBJPEG)
       set(JPEG_LIB_PREFIX ${JPEGTURBO_BINARY_DIR}/)
     endif()
     set(JPEG_LIBRARIES ${JPEG_LIB_PREFIX}${JPEG_LIB})
+
+    message(STATUS "JPEGTURBO_BINARY_DIR: ${JPEGTURBO_BINARY_DIR}")
+    message(STATUS "JPEGTURBO_SOURCE_DIR: ${JPEGTURBO_SOURCE_DIR}")
+
     include(ExternalProject)
     if(EMSCRIPTEN)
       ExternalProject_Add(
@@ -596,7 +597,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     # The following variables ensure that find_package can find libjpeg-turbo
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
-    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
+    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR}/src)
 
     # set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
 
@@ -611,6 +612,8 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
   endif()
+  message(STATUS "JPEG_LIBRARIES: ${JPEG_LIBRARIES}")
+  message(STATUS "JPEG_INCLUDE_DIRS: ${JPEG_INCLUDE_DIRS}")
 endif()
 # cmake-format: on
 
