@@ -512,12 +512,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     unset(CMAKE_REQUIRED_LIBRARIES)
     unset(CMAKE_REQUIRED_INCLUDES)
 
-    if(HAVE_JPEG_WRITE_ICC_PROFILE)
-      # add_definitions(-DHAVE_JPEG_WRITE_ICC_PROFILE=1)
-      message(STATUS "Found libjpeg-turbo with JPEG_WRITE_ICC_PROFILE support")
-    else()
-      message(STATUS "Found libjpeg-turbo, but it does not support JPEG_WRITE_ICC_PROFILE")
-    endif()
+    message(STATUS "Found libjpeg-turbo with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
 
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
@@ -567,7 +562,11 @@ if(HDRVIEW_ENABLE_LIBJPEG)
         SOURCE_DIR ${JPEGTURBO_SOURCE_DIR}
         BINARY_DIR ${JPEGTURBO_BINARY_DIR}
         BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG> --target jpeg-static
-        CMAKE_ARGS ${UHDR_CMAKE_ARGS} -DENABLE_SHARED=0
+        CMAKE_ARGS
+            -DENABLE_SHARED=0
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
+            -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
+            -DWITH_JPEG8=1
         BUILD_BYPRODUCTS ${JPEG_LIBRARIES}
         INSTALL_COMMAND ""
       )
@@ -576,6 +575,8 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     # The following variables ensure that find_package can find libjpeg-turbo
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
     set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
+
+    set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
 
     add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
     add_dependencies(jpeg-turbo ${JPEGTURBO_TARGET_NAME})
@@ -704,13 +705,17 @@ if(HDRVIEW_ENABLE_HEIF)
             "WITH_INSTALL OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF"
             "EXCLUDE_FROM_ALL YES"
+            "JPEG_FOUND TRUE"
             # codecs
             "WITH_LIBSHARPYUV OFF"
             # "WITH_LIBDE265 OFF" "WITH_X265 OFF"
             "WITH_OpenH264_ENCODER OFF"
             # "WITH_OpenH264_DECODER OFF"
+            "WITH_JPEG_ENCODER OFF"
+            "WITH_JPEG_DECODER OFF"
             "WITH_AOM_ENCODER OFF"
             # "WITH_AOM_DECODER OFF"
+            "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
