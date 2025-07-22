@@ -22,6 +22,11 @@ if(HDRVIEW_IGNORE_BREW_PORTS)
   set(CMAKE_IGNORE_PATH "/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin")
 endif()
 
+# Set the framework search order to last, so that we can find libraries in the system directories first. This is to
+# prevent CMAKE from finding old versions of headers, e.g. libjpeg in /Library/Frameworks/Mono.framework/Headers, and
+# first check other install locations like brew.
+set(CMAKE_FIND_FRAMEWORK LAST)
+
 # cmake-format: off
 set(HDRVIEW_DEFINITIONS HELLOIMGUI_NO_FONT_AWESOME4)
 set(HDRVIEW_ICONSET
@@ -533,7 +538,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     set(JPEGTURBO_TARGET_NAME turbojpeg-hdrview)
     set(JPEGTURBO_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${JPEGTURBO_TARGET_NAME})
-    set(JPEGTURBO_SOURCE_DIR ${JPEGTURBO_PREFIX_DIR}/source) #
+    set(JPEGTURBO_SOURCE_DIR ${JPEGTURBO_PREFIX_DIR}/source)
     set(JPEGTURBO_BINARY_DIR ${JPEGTURBO_PREFIX_DIR}/build)
 
     file(MAKE_DIRECTORY ${JPEGTURBO_SOURCE_DIR}/src)
