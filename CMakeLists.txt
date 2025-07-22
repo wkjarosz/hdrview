@@ -518,7 +518,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
   else()
     message(STATUS "libjpeg library not found, will build libjpeg-turbo")
 
-    set(JPEGTURBO_TARGET_NAME turbojpeg)
+    set(JPEGTURBO_TARGET_NAME turbojpeg-hdrview)
     set(JPEGTURBO_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/${JPEGTURBO_TARGET_NAME})
     set(JPEGTURBO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/${JPEGTURBO_TARGET_NAME}) #
     set(JPEGTURBO_BINARY_DIR ${JPEGTURBO_PREFIX_DIR}/src/${JPEGTURBO_TARGET_NAME}-build)
@@ -580,11 +580,11 @@ if(HDRVIEW_ENABLE_LIBJPEG)
       )
     endif()
 
-    # The following variables ensure that find_package can find libjpeg-turbo
-    set(JPEG_LIBRARY ${JPEG_LIBRARIES})
-    set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
+    # # The following variables ensure that find_package can find libjpeg-turbo
+    # set(JPEG_LIBRARY ${JPEG_LIBRARIES})
+    # set(JPEG_INCLUDE_DIR ${JPEGTURBO_SOURCE_DIR})
 
-    set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
+    # set(HAVE_JPEG_WRITE_ICC_PROFILE TRUE)
 
     add_library(jpeg-turbo INTERFACE IMPORTED GLOBAL)
     add_dependencies(jpeg-turbo ${JPEGTURBO_TARGET_NAME})
@@ -592,9 +592,9 @@ if(HDRVIEW_ENABLE_LIBJPEG)
       jpeg-turbo PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${JPEG_INCLUDE_DIRS}" INTERFACE_LINK_LIBRARIES
                                                                                  "${JPEG_LIBRARIES}"
     )
-    add_library(JPEG::JPEG ALIAS jpeg-turbo)
+    # add_library(JPEG::JPEG ALIAS jpeg-turbo)
 
-    list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
+    list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
   endif()
 endif()
@@ -610,7 +610,7 @@ if(HDRVIEW_ENABLE_UHDR)
     GIT_TAG 5fa99b5271a3c80a13c78062d7adc6310222dd8e
     OPTIONS "UHDR_BUILD_BENCHMARK OFF"
             "UHDR_BUILD_FUZZERS OFF"
-            "JPEG_FOUND TRUE"
+            # "JPEG_FOUND TRUE"
             "BUILD_SHARED_LIBS OFF"
             "UHDR_BUILD_DEPS ON"
             "UHDR_BUILD_EXAMPLES OFF"
@@ -698,7 +698,7 @@ else()
   endif()
 endif()
 
-option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ON)
+option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" OFF)
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
