@@ -601,14 +601,14 @@ if(HDRVIEW_ENABLE_LIBJPEG)
       )
     endif()
 
-    add_custom_command(
-      TARGET ${JPEGTURBO_TARGET_NAME}
-      POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-              ${JPEGTURBO_SOURCE_DIR}/src/jconfig.h
-              ${JPEGTURBO_BINARY_DIR}/jconfig.h
-      COMMENT "Copying jconfig.h to build directory"
-    )
+    # add_custom_command(
+    #   TARGET ${JPEGTURBO_TARGET_NAME}
+    #   POST_BUILD
+    #   COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    #           ${JPEGTURBO_SOURCE_DIR}/src/jconfig.h
+    #           ${JPEGTURBO_BINARY_DIR}/jconfig.h
+    #   COMMENT "Copying jconfig.h to build directory"
+    # )
 
     # The following variables ensure that find_package can find libjpeg-turbo
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
@@ -743,7 +743,7 @@ if(HDRVIEW_ENABLE_HEIF)
             "WITH_OpenH264_ENCODER OFF"
             "WITH_OpenH264_DECODER ON"
             "WITH_JPEG_ENCODER OFF"
-            "WITH_JPEG_DECODER ON"
+            "WITH_JPEG_DECODER OFF"
             "WITH_AOM_ENCODER OFF"
             "WITH_AOM_DECODER ON"
             "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
