@@ -80,7 +80,9 @@ static constexpr float MIN_ZOOM                              = 0.01f;
 static constexpr float MAX_ZOOM                              = 512.f;
 static bool            g_show_help                           = false;
 static bool            g_help_is_open                        = false;
+static bool            g_use_default_theme                   = false;
 static bool            g_show_command_palette                = false;
+static bool            g_show_developer_menu                 = false;
 static bool            g_show_tweak_window                   = false;
 static bool            g_show_demo_window                    = false;
 static bool            g_show_debug_window                   = false;
@@ -95,6 +97,119 @@ static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, fal
 #define g_blank_icon ""
 
 static HDRViewApp *g_hdrview = nullptr;
+
+void apply_default_theme()
+{
+    // Apply default style
+    HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
+    // Create a tweaked theme
+    auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+    // ImGuiTheme::ImGuiTweakedTheme tweakedTheme;
+    tweakedTheme.Theme           = ImGuiTheme::ImGuiTheme_DarculaDarker;
+    tweakedTheme.Tweaks.Rounding = 4.0f;
+
+    tweakedTheme.Tweaks.ValueMultiplierBg      = 0.5;
+    tweakedTheme.Tweaks.ValueMultiplierFrameBg = 0.5;
+
+    // Apply the tweaked theme
+    ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
+
+    // make things like radio buttons look nice and round
+    ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
+
+    // Then apply further modifications to ImGui style
+    ImGui::GetStyle().DisabledAlpha            = 0.5;
+    ImGui::GetStyle().WindowRounding           = 0;
+    ImGui::GetStyle().WindowBorderSize         = 1.0;
+    ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_Right;
+    ImGui::GetStyle().WindowPadding            = ImVec2(8, 8);
+    ImGui::GetStyle().FrameRounding            = 3;
+    ImGui::GetStyle().PopupRounding            = 4;
+    ImGui::GetStyle().GrabRounding             = 2;
+    ImGui::GetStyle().ScrollbarRounding        = 4;
+    ImGui::GetStyle().TabRounding              = 4;
+    ImGui::GetStyle().WindowRounding           = 6;
+    ImGui::GetStyle().DockingSeparatorSize     = 2;
+    ImGui::GetStyle().SeparatorTextBorderSize  = 1;
+    ImGui::GetStyle().TabBarBorderSize         = 2;
+    ImGui::GetStyle().FramePadding             = ImVec2(4, 4);
+
+    ImVec4 *colors                             = ImGui::GetStyle().Colors;
+    colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);
+    colors[ImGuiCol_PopupBg]                   = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
+    colors[ImGuiCol_Border]                    = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    colors[ImGuiCol_BorderShadow]              = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    colors[ImGuiCol_FrameBg]                   = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
+    colors[ImGuiCol_FrameBgActive]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+    colors[ImGuiCol_TitleBg]                   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]             = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_CheckMark]                 = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_ButtonHovered]             = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
+    colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_Header]                    = ImVec4(0.18f, 0.34f, 0.59f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_HeaderActive]              = ImVec4(0.29f, 0.58f, 1.00f, 1.00f);
+    colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+    colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
+    colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_TabHovered]                = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
+    colors[ImGuiCol_Tab]                       = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
+    colors[ImGuiCol_TabSelected]               = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+    colors[ImGuiCol_TabDimmed]                 = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
+    colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+    colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+    colors[ImGuiCol_PlotLines]                 = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
+    colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
+    colors[ImGuiCol_TextLink]                  = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
+    colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+    colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+}
+
+void apply_theme(int t)
+{
+    if (t == 0)
+    {
+        g_use_default_theme = true;
+        apply_default_theme();
+    }
+    else
+    {
+        g_use_default_theme                                                 = false;
+        ImGuiTheme::ImGuiTheme_ theme                                       = (ImGuiTheme::ImGuiTheme_)(t - 1);
+        HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
+        ImGuiTheme::ApplyTheme(theme);
+    }
+}
 
 void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
                   std::optional<bool> force_sdr, std::optional<bool> apple_keys, const vector<string> &in_files)
@@ -411,98 +526,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // Change style
     m_params.callbacks.SetupImGuiStyle = []()
     {
-        // Apply default style
-        HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
-        // Create a tweaked theme
-        ImGuiTheme::ImGuiTweakedTheme tweakedTheme;
-        tweakedTheme.Theme           = ImGuiTheme::ImGuiTheme_DarculaDarker;
-        tweakedTheme.Tweaks.Rounding = 4.0f;
-
-        tweakedTheme.Tweaks.ValueMultiplierBg      = 0.5;
-        tweakedTheme.Tweaks.ValueMultiplierFrameBg = 0.5;
-
-        // Apply the tweaked theme
-        ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
-
-        // make things like radio buttons look nice and round
-        ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
-
-        // Then apply further modifications to ImGui style
-        ImGui::GetStyle().DisabledAlpha            = 0.5;
-        ImGui::GetStyle().WindowRounding           = 0;
-        ImGui::GetStyle().WindowBorderSize         = 1.0;
-        ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_Right;
-        ImGui::GetStyle().WindowPadding            = ImVec2(8, 8);
-        ImGui::GetStyle().FrameRounding            = 3;
-        ImGui::GetStyle().PopupRounding            = 4;
-        ImGui::GetStyle().GrabRounding             = 2;
-        ImGui::GetStyle().ScrollbarRounding        = 4;
-        ImGui::GetStyle().TabRounding              = 4;
-        ImGui::GetStyle().WindowRounding           = 6;
-        ImGui::GetStyle().DockingSeparatorSize     = 2;
-        ImGui::GetStyle().SeparatorTextBorderSize  = 1;
-        ImGui::GetStyle().TabBarBorderSize         = 2;
-        ImGui::GetStyle().FramePadding             = ImVec2(4, 4);
-
-        ImVec4 *colors                             = ImGui::GetStyle().Colors;
-        colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-        colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-        colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-        colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);
-        colors[ImGuiCol_PopupBg]                   = ImVec4(0.25f, 0.25f, 0.25f, 1.00f);
-        colors[ImGuiCol_Border]                    = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-        colors[ImGuiCol_BorderShadow]              = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
-        colors[ImGuiCol_FrameBg]                   = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
-        colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
-        colors[ImGuiCol_FrameBgActive]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
-        colors[ImGuiCol_TitleBg]                   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-        colors[ImGuiCol_TitleBgActive]             = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-        colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-        colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
-        colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_CheckMark]                 = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-        colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-        colors[ImGuiCol_ButtonHovered]             = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
-        colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_Header]                    = ImVec4(0.18f, 0.34f, 0.59f, 1.00f);
-        colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_HeaderActive]              = ImVec4(0.29f, 0.58f, 1.00f, 1.00f);
-        colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
-        colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
-        colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-        colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabHovered]                = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
-        colors[ImGuiCol_Tab]                       = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
-        colors[ImGuiCol_TabSelected]               = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
-        colors[ImGuiCol_TabDimmed]                 = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
-        colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
-        colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
-        colors[ImGuiCol_PlotLines]                 = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
-        colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
-        colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
-        colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
-        colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
-        colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
-        colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
-        colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-        colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
-        colors[ImGuiCol_TextLink]                  = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
-        colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
-        colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-        colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
-        colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+        spdlog::info("Setting up ImGui Style: '{}'", g_use_default_theme ? "default" : "tweaked");
+        if (g_use_default_theme)
+            apply_default_theme();
     };
 
     m_params.callbacks.ShowGui = [this]()
@@ -676,9 +702,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
                     []() {}, always_enabled, false, &g_show_command_palette});
 
-        add_action(
-            {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
-
         static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
                                  m_params.callbacks.edgesToolbars.end();
         add_action({"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
@@ -762,6 +785,14 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
                     [this]() { m_params.dockingParams.layoutReset = true; },
                     [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+
+        add_action({"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
+                    &g_show_developer_menu});
+        add_action(
+            {"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &g_show_demo_window});
+        add_action({"Show debug window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &g_show_debug_window});
+        add_action(
+            {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
         for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
         {
@@ -1241,6 +1272,32 @@ void HDRViewApp::load_settings()
         m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
         m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
         m_clip_range           = j.value<float2>("clip range", m_clip_range);
+
+        g_use_default_theme = j.value<bool>("use default theme", g_use_default_theme);
+
+        if (j.contains("theme"))
+        {
+            spdlog::info("Restoring theme: {}", j["theme"].get<string>());
+            HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
+                ImGuiTheme::ImGuiTheme_FromName(j["theme"].get<string>().c_str());
+        }
+
+        if (j.contains("theme tweaks"))
+        {
+            auto &tweaks_j           = j["theme tweaks"];
+            auto &t                  = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Tweaks;
+            t.Rounding               = tweaks_j.value<float>("Rounding", t.Rounding);
+            t.RoundingScrollbarRatio = tweaks_j.value<float>("RoundingScrollbarRatio", t.RoundingScrollbarRatio);
+            t.AlphaMultiplier        = tweaks_j.value<float>("AlphaMultiplier", t.AlphaMultiplier);
+            t.Hue                    = tweaks_j.value<float>("Hue", t.Hue);
+            t.SaturationMultiplier   = tweaks_j.value<float>("SaturationMultiplier", t.SaturationMultiplier);
+            t.ValueMultiplierFront   = tweaks_j.value<float>("ValueMultiplierFront", t.ValueMultiplierFront);
+            t.ValueMultiplierBg      = tweaks_j.value<float>("ValueMultiplierBg", t.ValueMultiplierBg);
+            t.ValueMultiplierText    = tweaks_j.value<float>("ValueMultiplierText", t.ValueMultiplierText);
+            t.ValueMultiplierFrameBg = tweaks_j.value<float>("ValueMultiplierFrameBg", t.ValueMultiplierFrameBg);
+        }
+
+        ApplyTweakedTheme(HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme);
     }
     catch (json::exception &e)
     {
@@ -1274,6 +1331,21 @@ void HDRViewApp::save_settings()
     j["draw clip warnings"]      = m_draw_clip_warnings;
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
+
+    j["use default theme"] = g_use_default_theme;
+    // Save ImGui theme tweaks
+    const auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+    j["theme"]               = ImGuiTheme::ImGuiTheme_Name(tweakedTheme.Theme);
+    j["theme tweaks"]        = {{"Rounding", tweakedTheme.Tweaks.Rounding},
+                                {"RoundingScrollbarRatio", tweakedTheme.Tweaks.RoundingScrollbarRatio},
+                                {"AlphaMultiplier", tweakedTheme.Tweaks.AlphaMultiplier},
+                                {"Hue", tweakedTheme.Tweaks.Hue},
+                                {"SaturationMultiplier", tweakedTheme.Tweaks.SaturationMultiplier},
+                                {"ValueMultiplierFront", tweakedTheme.Tweaks.ValueMultiplierFront},
+                                {"ValueMultiplierBg", tweakedTheme.Tweaks.ValueMultiplierBg},
+                                {"ValueMultiplierText", tweakedTheme.Tweaks.ValueMultiplierText},
+                                {"ValueMultiplierFrameBg", tweakedTheme.Tweaks.ValueMultiplierFrameBg}};
+
     HelloImGui::SaveUserPref("UserSettings", j.dump(4));
 }
 
@@ -1663,13 +1735,33 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Show status bar"));
         MenuItem(action("Show FPS in status bar"));
 
+        auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+        if (ImGui::BeginMenuEx("Theme", ICON_MY_THEME))
+        {
+            if (ImGui::MenuItemEx("Theme tweak window", ICON_MY_TWEAK_THEME, nullptr, g_show_tweak_window))
+                g_show_tweak_window = !g_show_tweak_window;
+            ImGui::Separator();
+            if (ImGui::MenuItem("HDRView dark", nullptr, g_use_default_theme))
+                apply_theme(0);
+
+            for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
+            {
+                ImGuiTheme::ImGuiTheme_ theme    = (ImGuiTheme::ImGuiTheme_)(i);
+                bool                    selected = (theme == tweakedTheme.Theme) && !g_use_default_theme;
+                if (ImGui::MenuItem(ImGuiTheme::ImGuiTheme_Name(theme), nullptr, selected))
+                    apply_theme(i + 1);
+            }
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu("Developer"))
+    if (g_show_developer_menu && ImGui::BeginMenu("Developer"))
     {
-        ImGui::MenuItem("Dear ImGui demo window", NULL, &g_show_demo_window);
-        ImGui::MenuItem("Debug window", NULL, &g_show_debug_window);
+        ImGui::MenuItem(action("Show Dear ImGui demo window"));
+        ImGui::MenuItem(action("Show debug window"));
+        ImGui::MenuItem(action("Show developer menu"));
 
         ImGui::EndMenu();
     }
@@ -3480,19 +3572,14 @@ void HDRViewApp::draw_command_palette()
                                []()
                                {
                                    vector<string> theme_names;
+                                   theme_names.push_back("HDRView dark");
                                    for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
                                        theme_names.push_back(ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)(i)));
 
                                    ImCmd::Prompt(theme_names);
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
-                               [](int selected_option)
-                               {
-                                   ImGuiTheme::ImGuiTheme_ theme = (ImGuiTheme::ImGuiTheme_)(selected_option);
-                                   HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
-                                   ImGuiTheme::ApplyTheme(theme);
-                               },
-                               nullptr, ICON_MY_THEME});
+                               [](int selected_option) { apply_theme(selected_option); }, nullptr, ICON_MY_THEME});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");

@@ -110,6 +110,15 @@
 #define ICON_MY_OPEN_FOLDER        ICON_MY_OPEN_IMAGE
 #define ICON_MY_WATCH_FOLDER       ICON_FA_ARROWS_ROTATE
 #define ICON_MY_RELOAD             ICON_FA_ROTATE_RIGHT
+#define ICON_MY_HISTOGRAM_WINDOW   ""
+#define ICON_MY_STATISTICS_WINDOW  ""
+#define ICON_MY_INFO_WINDOW        ""
+#define ICON_MY_FILES_WINDOW       ""
+#define ICON_MY_CHANNELS_WINDOW    ""
+#define ICON_MY_LOG_WINDOW         ""
+#define ICON_MY_INSPECTOR_WINDOW   ""
+#define ICON_MY_SETTINGS_WINDOW    ""
+#define ICON_MY_DEVELOPER_WINDOW   ""
 
 #elif defined(HDRVIEW_ICONSET_LC)
 
@@ -204,6 +213,15 @@
 #define ICON_MY_OPEN_FOLDER        ICON_MY_OPEN_IMAGE
 #define ICON_MY_WATCH_FOLDER       ICON_LC_FOLDER_SYNC
 #define ICON_MY_RELOAD             ICON_LC_REFRESH_CW
+#define ICON_MY_HISTOGRAM_WINDOW   ""
+#define ICON_MY_STATISTICS_WINDOW  ""
+#define ICON_MY_INFO_WINDOW        ""
+#define ICON_MY_FILES_WINDOW       ""
+#define ICON_MY_CHANNELS_WINDOW    ""
+#define ICON_MY_LOG_WINDOW         ""
+#define ICON_MY_INSPECTOR_WINDOW   ""
+#define ICON_MY_SETTINGS_WINDOW    ""
+#define ICON_MY_DEVELOPER_WINDOW   ""
 
 #elif defined(HDRVIEW_ICONSET_MS)
 // https://fonts.google.com/icons?icon.set=Material+Symbols
@@ -307,6 +325,7 @@
 #define ICON_MY_LOG_WINDOW         ICON_MS_TERMINAL
 #define ICON_MY_INSPECTOR_WINDOW   ICON_MS_FRAME_INSPECT
 #define ICON_MY_SETTINGS_WINDOW    ICON_MS_SETTINGS
+#define ICON_MY_DEVELOPER_WINDOW   ICON_MS_CONSTRUCTION
 
 #elif defined(HDRVIEW_ICONSET_MD)
 // https://fonts.google.com/icons?icon.set=Material+Icons
@@ -400,6 +419,15 @@
 #define ICON_MY_OPEN_FOLDER        ICON_MD_PERM_MEDIA
 #define ICON_MY_WATCH_FOLDER       ICON_MD_SYNC
 #define ICON_MY_RELOAD             ICON_MD_RESTORE_PAGE
+#define ICON_MY_HISTOGRAM_WINDOW   ""
+#define ICON_MY_STATISTICS_WINDOW  ""
+#define ICON_MY_INFO_WINDOW        ""
+#define ICON_MY_FILES_WINDOW       ""
+#define ICON_MY_CHANNELS_WINDOW    ""
+#define ICON_MY_LOG_WINDOW         ""
+#define ICON_MY_INSPECTOR_WINDOW   ""
+#define ICON_MY_SETTINGS_WINDOW    ""
+#define ICON_MY_DEVELOPER_WINDOW   ""
 
 #elif defined(HDRVIEW_ICONSET_MDI)
 // https://pictogrammers.com/library/mdi/
@@ -502,5 +530,14 @@
 #define ICON_MY_TIMES              ICON_MDI_CLOSE
 #define ICON_MY_WATCH_FOLDER       ICON_MDI_FOLDER_SYNC
 #define ICON_MY_RELOAD             ICON_MDI_FILE_RESTORE
+#define ICON_MY_HISTOGRAM_WINDOW   ""
+#define ICON_MY_STATISTICS_WINDOW  ""
+#define ICON_MY_INFO_WINDOW        ""
+#define ICON_MY_FILES_WINDOW       ""
+#define ICON_MY_CHANNELS_WINDOW    ""
+#define ICON_MY_LOG_WINDOW         ""
+#define ICON_MY_INSPECTOR_WINDOW   ""
+#define ICON_MY_SETTINGS_WINDOW    ""
+#define ICON_MY_DEVELOPER_WINDOW   ""
 
 #endif
