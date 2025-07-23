@@ -400,7 +400,7 @@ if(HDRVIEW_ENABLE_LIBPNG)
   CPMAddPackage(
     NAME zlib-cmake
     URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
-    OPTIONS "ZLIB_TEST ON" "ZLIB_INSTALL ON"
+    OPTIONS "ZLIB_TEST OFF" "ZLIB_INSTALL ON"
   )
   if(zlib-cmake_ADDED)
     message(STATUS "Will build zlib library")
@@ -618,6 +618,9 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     list(APPEND HDRVIEW_DEPENDENCIES jpeg-turbo)
     list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LIBJPEG)
   endif()
+  if (HAVE_JPEG_WRITE_ICC_PROFILE)
+    add_definitions(-DHAVE_JPEG_WRITE_ICC_PROFILE=1)
+  endif ()
   message(STATUS "JPEG_LIBRARIES: ${JPEG_LIBRARIES}")
   message(STATUS "JPEG_INCLUDE_DIRS: ${JPEG_INCLUDE_DIRS}")
 endif()
@@ -734,7 +737,7 @@ if(HDRVIEW_ENABLE_HEIF)
             "WITH_JPEG_DECODER ON"
             "WITH_AOM_ENCODER OFF"
             "WITH_AOM_DECODER ON"
-            # "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
+            "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")
