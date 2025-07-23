@@ -624,10 +624,38 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
             ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Debug", &g_show_debug_window))
             {
-                // ImGui::Text("Hello ImGui version: %s", HelloImGui::VersionString().c_str());
+                auto PlatformBackendTypeName = [](HelloImGui::PlatformBackendType type)
+                {
+                    using T = HelloImGui::PlatformBackendType;
+                    switch (type)
+                    {
+                    case T::FirstAvailable: return "FirstAvailable";
+                    case T::Glfw: return "Glfw";
+                    case T::Sdl: return "Sdl";
+                    case T::Null: return "Null";
+                    default: return "Unknown";
+                    }
+                };
+                auto RendererBackendTypeName = [](HelloImGui::RendererBackendType type)
+                {
+                    using T = HelloImGui::RendererBackendType;
+                    switch (type)
+                    {
+                    case T::FirstAvailable: return "FirstAvailable";
+                    case T::OpenGL3: return "OpenGL3";
+                    case T::Metal: return "Metal";
+                    case T::Vulkan: return "Vulkan";
+                    case T::DirectX11: return "DirectX11";
+                    case T::DirectX12: return "DirectX12";
+                    case T::Null: return "Null";
+                    default: return "Unknown";
+                    }
+                };
+
                 ImGui::Text("ImGui version: %s", ImGui::GetVersion());
-                // ImGui::Text("Renderer backend: %s", m_params.rendererBackendOptions.backendName.c_str());
-                // ImGui::Text("DPI aware: %s", m_params.dpiAwareParams.isDpiAware ? "yes" : "no");
+                ImGui::Text("Platform backend: %s", PlatformBackendTypeName(m_params.platformBackendType));
+                ImGui::Text("Renderer backend: %s", RendererBackendTypeName(m_params.rendererBackendType));
+
                 ImGui::Text("EDR support: %s", HelloImGui::hasEdrSupport() ? "yes" : "no");
                 // ImGui::Text("HDRView version: %s", HDRVIEW_VERSION_STRING);
 
