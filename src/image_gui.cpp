@@ -947,66 +947,68 @@ void Image::draw_channel_stats()
     static const ImGuiTableFlags table_flags =
         ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg;
 
+    static int value_mode = 0;
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Value mode", &value_mode, "Raw values\0Exposure-adjusted\0\0");
+    float gain = value_mode == 0 ? 1.f : pow(2.f, hdrview()->exposure_live());
+
+    auto &group = groups[selected_group];
+    // Set the hover and active colors to be the same as the background color
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
+    if (ImGui::BeginTable("Channel statistics", group.num_channels + 1, table_flags))
     {
-        auto &group = groups[selected_group];
-        // Set the hover and active colors to be the same as the background color
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImGui::GetStyleColorVec4(ImGuiCol_TableHeaderBg));
-        if (ImGui::BeginTable("Channel statistics", group.num_channels + 1, table_flags))
+        PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
+        string      channel_names[4];
+        for (int c = 0; c < group.num_channels; ++c)
         {
-            PixelStats *channel_stats[4] = {nullptr, nullptr, nullptr, nullptr};
-            string      channel_names[4];
-            for (int c = 0; c < group.num_channels; ++c)
-            {
-                auto &channel = channels[group.channels[c]];
-                channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
-                channel_stats[c] = channel.get_stats();
-                channel_names[c] = Channel::tail(channel.name);
-            }
-
-            // set up header row
-            ImGui::PushFont(bold_font, 14);
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
-            for (int c = 0; c < group.num_channels; ++c)
-                ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
-                                        ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupScrollFreeze(1, 1);
-            ImGui::TableHeadersRow();
-            ImGui::PopFont();
-
-            const char   *stat_names[] = {"Minimum", "Average", "Maximum", "# of NaNs",
-                                          "# of Infs"}; //, "# valid pixels"};
-            constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
-            for (int s = 0; s < NUM_STATS; ++s)
-            {
-                ImGui::PushFont(bold_font, 14);
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-                ImGui::TextUnformatted(stat_names[s]);
-                ImGui::PopFont();
-                ImGui::PushFont(mono_font, 14);
-                for (int c = 0; c < group.num_channels; ++c)
-                {
-                    ImGui::TableNextColumn();
-                    switch (s)
-                    {
-                    case 0: ImGui::TextFmt("{: > 6.3f}", channel_stats[c]->summary.minimum); break;
-                    case 1: ImGui::TextFmt("{: > 6.3f}", channel_stats[c]->summary.average); break;
-                    case 2: ImGui::TextFmt("{: > 6.3f}", channel_stats[c]->summary.maximum); break;
-                    case 3: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
-                    case 4:
-                    default:
-                        ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.inf_pixels);
-                        break;
-                        // case 5:
-                        // default: ImGui::TextFmt("{:d}", channel_stats[c]->summary.valid_pixels); break;
-                    }
-                }
-                ImGui::PopFont();
-            }
-            ImGui::EndTable();
+            auto &channel = channels[group.channels[c]];
+            channel.update_stats(c, hdrview()->current_image(), hdrview()->reference_image());
+            channel_stats[c] = channel.get_stats();
+            channel_names[c] = Channel::tail(channel.name);
         }
-        ImGui::PopStyleColor(2);
+
+        // set up header row
+        ImGui::PushFont(bold_font, 14);
+        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
+        for (int c = 0; c < group.num_channels; ++c)
+            ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
+                                    ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupScrollFreeze(1, 1);
+        ImGui::TableHeadersRow();
+        ImGui::PopFont();
+
+        const char   *stat_names[] = {"Minimum", "Average", "Maximum", "# of NaNs", "# of Infs"}; //, "# valid pixels"};
+        constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
+        for (int s = 0; s < NUM_STATS; ++s)
+        {
+            ImGui::PushFont(bold_font, 14);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
+            ImGui::TextUnformatted(stat_names[s]);
+            ImGui::PopFont();
+            ImGui::PushFont(mono_font, 14);
+            for (int c = 0; c < group.num_channels; ++c)
+            {
+                ImGui::TableNextColumn();
+                switch (s)
+                {
+                case 0: ImGui::TextFmt("{:f}", channel_stats[c]->summary.minimum * gain); break;
+                case 1: ImGui::TextFmt("{:f}", channel_stats[c]->summary.average * gain); break;
+                case 2: ImGui::TextFmt("{:f}", channel_stats[c]->summary.maximum * gain); break;
+                case 3: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
+                case 4:
+                default:
+                    ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.inf_pixels);
+                    break;
+                    // case 5:
+                    // default: ImGui::TextFmt("{:d}", channel_stats[c]->summary.valid_pixels); break;
+                }
+            }
+            ImGui::PopFont();
+        }
+        ImGui::EndTable();
     }
+    ImGui::PopStyleColor(2);
 }

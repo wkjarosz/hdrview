@@ -1278,9 +1278,15 @@ void HDRViewApp::load_settings()
         if (j.contains("theme"))
         {
             spdlog::info("Restoring theme: {}", j["theme"].get<string>());
-            HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
-                ImGuiTheme::ImGuiTheme_FromName(j["theme"].get<string>().c_str());
+            auto name = j["theme"].get<string>();
+            if (name == "HDRView dark")
+                g_use_default_theme = true;
+            else
+                HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
+                    ImGuiTheme::ImGuiTheme_FromName(name.c_str());
         }
+        else
+            g_use_default_theme = true;
 
         if (j.contains("theme tweaks"))
         {
@@ -1332,10 +1338,9 @@ void HDRViewApp::save_settings()
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
 
-    j["use default theme"] = g_use_default_theme;
     // Save ImGui theme tweaks
     const auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-    j["theme"]               = ImGuiTheme::ImGuiTheme_Name(tweakedTheme.Theme);
+    j["theme"]               = g_use_default_theme ? "HDRView dark" : ImGuiTheme::ImGuiTheme_Name(tweakedTheme.Theme);
     j["theme tweaks"]        = {{"Rounding", tweakedTheme.Tweaks.Rounding},
                                 {"RoundingScrollbarRatio", tweakedTheme.Tweaks.RoundingScrollbarRatio},
                                 {"AlphaMultiplier", tweakedTheme.Tweaks.AlphaMultiplier},
