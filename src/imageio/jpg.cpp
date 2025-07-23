@@ -227,7 +227,15 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             throw std::invalid_argument{"Failed to read JPEG header."};
 
         // ICC profile extraction
-        std::vector<uint8_t> icc_profile = read_icc_profile(&cinfo);
+        // std::vector<uint8_t> icc_profile = read_icc_profile(&cinfo);
+        std::vector<uint8_t> icc_profile;
+        {
+            unsigned char *icc_data = nullptr;
+            unsigned int   icc_len  = 0;
+            if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len))
+                icc_profile.assign(icc_data, icc_data + icc_len);
+            free(icc_data);
+        }
 
         bool cmyk = cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK;
         // bool gray_scale = cinfo.jpeg_color_space == JCS_GRAYSCALE;

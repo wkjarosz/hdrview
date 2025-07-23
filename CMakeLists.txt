@@ -714,24 +714,27 @@ if(HDRVIEW_ENABLE_HEIF)
     GITHUB_REPOSITORY strukturag/libheif
     VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
     # URL https://github.com/strukturag/libheif/archive/refs/tags/v1.19.5.zip
-    GIT_TAG 122fd476b7c056da0e527ffc76f95072fdb5ae3d
+    GIT_TAG 95428fdf22b2e0ec3ad4515c882fa0d6dd663f0a
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "WITH_EXAMPLES OFF"
+            "WITH_EXAMPLE_HEIF_VIEW OFF"
             "WITH_FUZZERS OFF"
             "WITH_GDK_PIXBUF OFF"
             "WITH_INSTALL OFF"
             "CMAKE_COMPILE_WARNING_AS_ERROR OFF"
             "EXCLUDE_FROM_ALL YES"
-            # "JPEG_FOUND TRUE" codecs
+            # codecs
             "WITH_LIBSHARPYUV OFF"
-            # "WITH_LIBDE265 OFF" "WITH_X265 OFF"
+            "WITH_LIBDE265 ON"
+            "WITH_X265 ON"
             "WITH_OpenH264_ENCODER OFF"
-            # "WITH_OpenH264_DECODER OFF"
+            "WITH_OpenH264_DECODER ON"
             "WITH_JPEG_ENCODER OFF"
-            "WITH_JPEG_DECODER OFF"
+            "WITH_JPEG_DECODER ON"
             "WITH_AOM_ENCODER OFF"
-            # "WITH_AOM_DECODER OFF" "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
+            "WITH_AOM_DECODER ON"
+            # "HAVE_JPEG_WRITE_ICC_PROFILE ${HAVE_JPEG_WRITE_ICC_PROFILE}"
   )
   if(Libheif_ADDED)
     message(STATUS "Will build libheif library")

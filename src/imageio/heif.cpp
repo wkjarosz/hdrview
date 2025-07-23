@@ -277,7 +277,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
             // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
             for (int p = 0; p < num_planes; ++p)
             {
-                int            bytes_per_line = 0;
+                size_t         bytes_per_line = 0;
                 const uint8_t *pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
                 int            bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
                 int            bpc            = himage.get_bits_per_pixel_range(out_planes[p]);
