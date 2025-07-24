@@ -80,7 +80,7 @@ static constexpr float MIN_ZOOM                              = 0.01f;
 static constexpr float MAX_ZOOM                              = 512.f;
 static bool            g_show_help                           = false;
 static bool            g_help_is_open                        = false;
-static bool            g_use_default_theme                   = false;
+static bool            g_use_default_theme                   = true;
 static bool            g_show_command_palette                = false;
 static bool            g_show_developer_menu                 = false;
 static bool            g_show_tweak_window                   = false;
@@ -526,7 +526,10 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // Change style
     m_params.callbacks.SetupImGuiStyle = []()
     {
-        spdlog::info("Setting up ImGui Style: '{}'", g_use_default_theme ? "default" : "tweaked");
+        spdlog::info("Setting up ImGui Style: '{}'",
+                     g_use_default_theme ? "HDRView dark"
+                                         : ImGuiTheme::ImGuiTheme_Name(
+                                               HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme));
         if (g_use_default_theme)
             apply_default_theme();
     };
@@ -1260,7 +1263,14 @@ void HDRViewApp::load_settings()
 
     auto s = HelloImGui::LoadUserPref("UserSettings");
     if (s.empty())
+    {
+        spdlog::warn("No user settings found, using defaults.");
+        spdlog::info("Will use Style: '{}'",
+                     g_use_default_theme ? "HDRView dark"
+                                         : ImGuiTheme::ImGuiTheme_Name(
+                                               HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme));
         return;
+    }
 
     try
     {
@@ -1298,8 +1308,11 @@ void HDRViewApp::load_settings()
             if (name == "HDRView dark")
                 g_use_default_theme = true;
             else
+            {
+                g_use_default_theme = false;
                 HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
                     ImGuiTheme::ImGuiTheme_FromName(name.c_str());
+            }
         }
         else
             g_use_default_theme = true;
