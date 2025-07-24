@@ -275,7 +275,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // set up HelloImGui parameters
     m_params.appWindowParams.windowGeometry.size     = {1200, 800};
     m_params.appWindowParams.windowTitle             = "HDRView";
-    m_params.appWindowParams.restorePreviousGeometry = false;
+    m_params.appWindowParams.restorePreviousGeometry = true;
 
     // Setting this to true allows multiple viewports where you can drag windows outside out the main window in
     // order to put their content into new native windows
@@ -647,8 +647,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 {
                     ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 
-                    auto f = [](float x) { return to_linear(x, tf, gamma); };
-                    auto g = [](float y) { return from_linear(y, tf, gamma); };
+                    auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
+                    auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
 
                     const int    N = 101;
                     static float xs1[N], ys1[N];
