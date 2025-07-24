@@ -624,47 +624,31 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
             ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Debug", &g_show_debug_window))
             {
-                auto PlatformBackendTypeName = [](HelloImGui::PlatformBackendType type)
+                static float            gamma = 2.2f;
+                static TransferFunction tf    = TransferFunction_Linear;
+                ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
+                if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
+                                      ImGuiComboFlags_HeightLargest))
                 {
-                    using T = HelloImGui::PlatformBackendType;
-                    switch (type)
+                    for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
                     {
-                    case T::FirstAvailable: return "FirstAvailable";
-                    case T::Glfw: return "Glfw";
-                    case T::Sdl: return "Sdl";
-                    case T::Null: return "Null";
-                    default: return "Unknown";
+                        const bool is_selected = (tf == n);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
+                                              is_selected))
+                            tf = (TransferFunction)n;
+
+                        // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
                     }
-                };
-                auto RendererBackendTypeName = [](HelloImGui::RendererBackendType type)
+                    ImGui::EndCombo();
+                }
+                if (ImPlot::BeginPlot("Transfer functions"))
                 {
-                    using T = HelloImGui::RendererBackendType;
-                    switch (type)
-                    {
-                    case T::FirstAvailable: return "FirstAvailable";
-                    case T::OpenGL3: return "OpenGL3";
-                    case T::Metal: return "Metal";
-                    case T::Vulkan: return "Vulkan";
-                    case T::DirectX11: return "DirectX11";
-                    case T::DirectX12: return "DirectX12";
-                    case T::Null: return "Null";
-                    default: return "Unknown";
-                    }
-                };
+                    ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
 
-                ImGui::Text("ImGui version: %s", ImGui::GetVersion());
-                ImGui::Text("Platform backend: %s", PlatformBackendTypeName(m_params.platformBackendType));
-                ImGui::Text("Renderer backend: %s", RendererBackendTypeName(m_params.rendererBackendType));
-
-                ImGui::Text("EDR support: %s", HelloImGui::hasEdrSupport() ? "yes" : "no");
-                // ImGui::Text("HDRView version: %s", HDRVIEW_VERSION_STRING);
-
-                if (ImPlot::BeginPlot("Line Plots"))
-                {
-                    ImPlot::SetupAxes("x", "sRGB(x)");
-
-                    auto f = [](float x) { return EOTF_BT2100_HLG(x); };
-                    auto g = [](float y) { return OETF_BT2100_HLG(y); };
+                    auto f = [](float x) { return to_linear(x, tf, gamma); };
+                    auto g = [](float y) { return from_linear(y, tf, gamma); };
 
                     const int    N = 101;
                     static float xs1[N], ys1[N];
@@ -680,8 +664,12 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         xs2[i] = g(ys2[i]);
                     }
 
-                    ImPlot::PlotLine("x, f(x)", xs1, ys1, N);
-                    ImPlot::PlotLine("f^{-1}(y), y", xs2, ys2, N);
+                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 5.f);
+                    ImPlot::PlotLine("to_linear", xs1, ys1, N);
+                    ImPlot::PopStyleVar();
+                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 1.f);
+                    ImPlot::PlotLine("from_linear", xs2, ys2, N);
+                    ImPlot::PopStyleVar();
                     ImPlot::EndPlot();
                 }
             }
@@ -1301,7 +1289,7 @@ void HDRViewApp::load_settings()
         m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
         m_clip_range           = j.value<float2>("clip range", m_clip_range);
 
-        g_use_default_theme = j.value<bool>("use default theme", g_use_default_theme);
+        g_show_developer_menu = j.value<bool>("show developer menu", g_show_developer_menu);
 
         if (j.contains("theme"))
         {
@@ -1365,6 +1353,7 @@ void HDRViewApp::save_settings()
     j["draw clip warnings"]      = m_draw_clip_warnings;
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
+    j["show developer menu"]     = g_show_developer_menu;
 
     // Save ImGui theme tweaks
     const auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
@@ -3716,6 +3705,35 @@ void HDRViewApp::draw_about_dialog()
         g_help_is_open = true;
         ImGui::Spacing();
 
+        auto platform_backend = [](HelloImGui::PlatformBackendType type)
+        {
+            using T = HelloImGui::PlatformBackendType;
+            switch (type)
+            {
+            case T::FirstAvailable: return "FirstAvailable";
+            case T::Glfw: return "GLFW 3";
+            case T::Sdl: return "SDL 2";
+            case T::Null: return "Null";
+            default: return "Unknown";
+            }
+        }(m_params.platformBackendType);
+
+        auto renderer_backend = [](HelloImGui::RendererBackendType type)
+        {
+            using T = HelloImGui::RendererBackendType;
+            switch (type)
+            {
+            case T::FirstAvailable: return "FirstAvailable";
+            case T::OpenGL3: return "OpenGL3";
+            case T::Metal: return "Metal";
+            case T::Vulkan: return "Vulkan";
+            case T::DirectX11: return "DirectX11";
+            case T::DirectX12: return "DirectX12";
+            case T::Null: return "Null";
+            default: return "Unknown";
+            }
+        }(m_params.rendererBackendType);
+
         if (ImGui::BeginTable("about_table1", 2))
         {
             ImGui::TableSetupColumn("icon", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
@@ -3739,11 +3757,8 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TextUnformatted(version());
             ImGui::PopFont();
             ImGui::PushFont(m_sans_regular, 10);
-#if defined(__EMSCRIPTEN__)
-            ImGui::TextFmt("Built with emscripten using the {} backend on {}.", backend(), build_timestamp());
-#else
-            ImGui::TextFmt("Built using the {} backend on {}.", backend(), build_timestamp());
-#endif
+            ImGui::TextFmt("Built on {} using the {} backend with {}.", build_timestamp(), platform_backend,
+                           renderer_backend);
             ImGui::PopFont();
 
             ImGui::Spacing();
@@ -3871,6 +3886,58 @@ void HDRViewApp::draw_about_dialog()
                                          "https://github.com/Tom94/tev");
                     ImGui::EndTable();
                 }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Build info"))
+            {
+                ImGui::PushFont(m_mono_regular, 0.f);
+                ImVec2 child_size = ImVec2(0, HelloImGui::EmSize(12.f));
+                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_FrameStyle);
+
+                ImGui::Text("ImGui version: %s", ImGui::GetVersion());
+
+                ImGui::Text("EDR support: %s", HelloImGui::hasEdrSupport() ? "yes" : "no");
+#ifdef __EMSCRIPTEN__
+                ImGui::Text("define: __EMSCRIPTEN__");
+#endif
+#ifdef ASSETS_LOCATION
+                ImGui::Text("ASSETS_LOCATION:"##ASSETS_LOCATION);
+#endif
+#ifdef HDRVIEW_ICONSET_FA6
+                ImGui::Text("HDRVIEW_ICONSET: Font Awesome 6");
+#elif defined(HDRVIEW_ICONSET_LC)
+                ImGui::Text("HDRVIEW_ICONSET: Lucide Icons");
+#elif defined(HDRVIEW_ICONSET_MS)
+                ImGui::Text("HDRVIEW_ICONSET: Material Symbols");
+#elif defined(HDRVIEW_ICONSET_MD)
+                ImGui::Text("HDRVIEW_ICONSET: Material Design");
+#elif defined(HDRVIEW_ICONSET_MDI)
+                ImGui::Text("HDRVIEW_ICONSET: Material Design Icons");
+#endif
+
+                ImGui::Text("Image IO libraries:");
+#ifdef HDRVIEW_ENABLE_UHDR
+                ImGui::Text("\tlibuhdr: yes");
+#else
+                ImGui::Text("\tlibuhdr: no");
+#endif
+#ifdef HDRVIEW_ENABLE_JPEGXL
+                ImGui::Text("\tlibjxl:  yes");
+#else
+                ImGui::Text("\tlibjxl:  no");
+#endif
+#ifdef HDRVIEW_ENABLE_HEIF
+                ImGui::Text("\tlibheif: yes");
+#else
+                ImGui::Text("\tlibheif: no");
+#endif
+#ifdef HDRVIEW_ENABLE_LIBPNG
+                ImGui::Text("\tlibpng:  yes");
+#else
+                ImGui::Text("\tlibpng:  no");
+#endif
+                ImGui::EndChild();
+                ImGui::PopFont();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

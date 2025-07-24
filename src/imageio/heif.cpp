@@ -291,7 +291,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                 float bpc_div = 1.f / ((1 << bpc) - 1);
 
                 // copy pixels into a contiguous float buffer and normalize values to [0,1]
-                spdlog::debug("Copying to continuguous float buffer");
+                spdlog::debug("Copying to contiguous float buffer");
                 vector<float> float_pixels(size.x * size.y * cpp);
                 bool          is_16bit = bpp_storage == cpp * 16;
                 for (int y = 0; y < size.y; ++y)

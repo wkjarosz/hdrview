@@ -387,6 +387,27 @@ inline Real OOTF_BT2100_HLG(Real E_S, Real Y_S, Real alpha, Real gamma = Real(1.
     return (alpha * std::pow(Y_S, gamma - Real(1)) * E_S);
 }
 
+/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse opto-optical transfer function (OOTF^-1).
+
+    Computes the inverse of the HLG OOTF, mapping displayed linear values {R_D, G_D, B_D} in cd/m^2
+    back to scene-referred linear values {R_S, G_S, B_S} normalized to [0,1].
+
+    \param E_D Displayed linear value (R_D, G_D, B_D) in cd/m^2
+    \param alpha Adjustable user gain (display “contrast”) representing L_W, the nominal peak luminance of achromatic
+   pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns Scene-referred linear value {R_S, G_S, B_S} normalized to [0,1].
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+*/
+template <typename Real>
+inline Real inverse_OOTF_BT2100_HLG(Real E_D, Real Y_D, Real alpha = Real(1.0), Real gamma = Real(1.2))
+{
+    return (E_D / alpha) * std::pow(Y_D / alpha, Real(1.0) / gamma - Real(1.0));
+}
+
 /*! Recommendation ITU-R BT.2100-2 Reference HLG electro-optical transfer function (EOTF).
 
     \param E_p Denotes a non-linear color value R', G', B' in HLG space.
@@ -436,6 +457,45 @@ inline la::vec<Real, 3> EOTF_BT2100_HLG(const la::vec<Real, 3> &E_p, Real L_B = 
 
     return {OOTF_BT2100_HLG(E_s[0], Y_s, alpha, gamma), OOTF_BT2100_HLG(E_s[1], Y_s, alpha, gamma),
             OOTF_BT2100_HLG(E_s[2], Y_s, alpha, gamma)};
+}
+
+/*! Recommendation ITU-R BT.2100-2 Reference HLG inverse electro-optical transfer function (EOTF^-1).
+
+    Computes the inverse of the HLG EOTF, mapping displayed linear values {R'_D, G'_D, B'_D} in cd/m^2
+    back to non-linear HLG signal values {R'_S, G'_S, B'_S} in [0,1].
+
+    \param E_D Displayed linear value (R'_D, G'_D, B'_D) in cd/m^2
+    \param L_B Display luminance for black in cd/m^2.
+    \param L_W Nominal peak luminance of the display in cd/m^2 for achromatic pixels.
+    \param gamma System gamma value. 1.2 at the nominal display peak luminance of 1000 cd/m^2.
+
+    \returns Non-linear HLG signal value {R'_S, G'_S, B'_S} in [0,1].
+
+    see:
+    https://www.itu.int/dms_pubrec/itu-r/rec/bt/R-REC-BT.2100-2-201807-I!!PDF-E.pdf
+*/
+template <typename Real>
+inline Real inverse_EOTF_BT2100_HLG(Real E_D, Real L_B = Real(0), Real L_W = Real(1000), Real gamma = Real(1.2))
+{
+    const Real alpha = L_W - L_B;
+    const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
+
+    return (OETF_BT2100_HLG(inverse_OOTF_BT2100_HLG(E_D, E_D, alpha, gamma)) - beta) / (Real(1) - beta);
+}
+
+template <typename Real>
+inline la::vec<Real, 3> inverse_EOTF_BT2100_HLG(const la::vec<Real, 3> &E_D, Real L_B = Real(0), Real L_W = Real(1000),
+                                                Real gamma = Real(1.2))
+{
+    const Real alpha = L_W - L_B;
+    const Real beta  = L_B != 0 ? std::sqrt(Real(3) * std::pow(L_B / L_W, Real(1) / gamma)) : Real(0);
+
+    Real             Y_D = dot(la::vec<Real, 3>(Real(0.2627), Real(0.6780), Real(0.0593)), E_D);
+    la::vec<Real, 3> E_S{inverse_OOTF_BT2100_HLG(E_D[0], Y_D, alpha, gamma),
+                         inverse_OOTF_BT2100_HLG(E_D[1], Y_D, alpha, gamma),
+                         inverse_OOTF_BT2100_HLG(E_D[2], Y_D, alpha, gamma)};
+    auto             E_p{la::apply(OETF_BT2100_HLG<float>, E_S)};
+    return (E_p - beta) / (Real(1) - beta);
 }
 
 /*! ST240/SMPTE240M OETF (Opto-Electronic Transfer Function).
@@ -562,6 +622,26 @@ Color3 linear_to_sRGB(const Color3 &c);
 Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
+
+inline float from_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
+{
+    switch (tf)
+    {
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, gamma);
+    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_sRGB: return linear_to_sRGB(encoded);
+    case TransferFunction_ITU: return OETF_ITU(encoded);
+    case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(encoded * 219.f);
+    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(encoded * 219.f);
+    case TransferFunction_ST240: return OETF_ST240(encoded);
+    case TransferFunction_Log100: return OETF_log100(encoded);
+    case TransferFunction_Log100_Sqrt10: return OETF_log100_sqrt10(encoded);
+    case TransferFunction_IEC61966_2_4: return OETF_IEC61966_2_4(encoded);
+    case TransferFunction_DCI_P3: return inverse_EOTF_DCI_P3(encoded);
+    case TransferFunction_Linear: [[fallthrough]];
+    default: return encoded;
+    }
+}
 
 inline float to_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
 {
