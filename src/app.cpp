@@ -76,11 +76,12 @@ struct WatchedPixel
 static vector<WatchedPixel> g_watched_pixels;
 
 static std::mt19937    g_rand(53);
-static constexpr float MIN_ZOOM                              = 0.01f;
-static constexpr float MAX_ZOOM                              = 512.f;
-static bool            g_show_help                           = false;
-static bool            g_help_is_open                        = false;
-static bool            g_use_default_theme                   = true;
+static constexpr float MIN_ZOOM       = 0.01f;
+static constexpr float MAX_ZOOM       = 512.f;
+static bool            g_show_help    = false;
+static bool            g_help_is_open = false;
+static json            g_settings;
+static int             g_theme                               = -1;
 static bool            g_show_command_palette                = false;
 static bool            g_show_developer_menu                 = false;
 static bool            g_show_tweak_window                   = false;
@@ -98,43 +99,34 @@ static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, fal
 
 static HDRViewApp *g_hdrview = nullptr;
 
-void apply_default_theme()
+static void apply_default_theme()
 {
     // Apply default style
     HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
-    // Create a tweaked theme
-    auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-    // ImGuiTheme::ImGuiTweakedTheme tweakedTheme;
-    tweakedTheme.Theme           = ImGuiTheme::ImGuiTheme_DarculaDarker;
-    tweakedTheme.Tweaks.Rounding = 4.0f;
 
-    tweakedTheme.Tweaks.ValueMultiplierBg      = 0.5;
-    tweakedTheme.Tweaks.ValueMultiplierFrameBg = 0.5;
-
-    // Apply the tweaked theme
-    ImGuiTheme::ApplyTweakedTheme(tweakedTheme);
+    auto &style = ImGui::GetStyle();
 
     // make things like radio buttons look nice and round
-    ImGui::GetStyle().CircleTessellationMaxError = 0.1f;
+    style.CircleTessellationMaxError = 0.1f;
 
-    // Then apply further modifications to ImGui style
-    ImGui::GetStyle().DisabledAlpha            = 0.5;
-    ImGui::GetStyle().WindowRounding           = 0;
-    ImGui::GetStyle().WindowBorderSize         = 1.0;
-    ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_Right;
-    ImGui::GetStyle().WindowPadding            = ImVec2(8, 8);
-    ImGui::GetStyle().FrameRounding            = 3;
-    ImGui::GetStyle().PopupRounding            = 4;
-    ImGui::GetStyle().GrabRounding             = 2;
-    ImGui::GetStyle().ScrollbarRounding        = 4;
-    ImGui::GetStyle().TabRounding              = 4;
-    ImGui::GetStyle().WindowRounding           = 6;
-    ImGui::GetStyle().DockingSeparatorSize     = 2;
-    ImGui::GetStyle().SeparatorTextBorderSize  = 1;
-    ImGui::GetStyle().TabBarBorderSize         = 2;
-    ImGui::GetStyle().FramePadding             = ImVec2(4, 4);
+    // Then apply modifications to ImGui style
+    style.DisabledAlpha            = 0.5;
+    style.WindowRounding           = 0;
+    style.WindowBorderSize         = 1.0;
+    style.WindowMenuButtonPosition = ImGuiDir_Right;
+    style.WindowPadding            = ImVec2(8, 8);
+    style.FrameRounding            = 3;
+    style.PopupRounding            = 4;
+    style.GrabRounding             = 2;
+    style.ScrollbarRounding        = 4;
+    style.TabRounding              = 4;
+    style.WindowRounding           = 6;
+    style.DockingSeparatorSize     = 2;
+    style.SeparatorTextBorderSize  = 1;
+    style.TabBarBorderSize         = 2;
+    style.FramePadding             = ImVec2(4, 4);
 
-    ImVec4 *colors                             = ImGui::GetStyle().Colors;
+    ImVec4 *colors                             = style.Colors;
     colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
     colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
@@ -194,21 +186,193 @@ void apply_default_theme()
     colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
     colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
 }
-
-void apply_theme(int t)
+static string theme_name(int t)
 {
-    if (t == 0)
-    {
-        g_use_default_theme = true;
-        apply_default_theme();
-    }
+    if (t >= 0 && t < ImGuiTheme::ImGuiTheme_Count)
+        return ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)t);
+    else if (t == -1)
+        return "HDRView dark";
     else
+        return "Custom";
+}
+
+static void apply_theme(int t)
+{
+    spdlog::info("Applying theme: '{}'", theme_name(t));
+    if (t >= ImGuiTheme::ImGuiTheme_Count)
     {
-        g_use_default_theme                                                 = false;
-        ImGuiTheme::ImGuiTheme_ theme                                       = (ImGuiTheme::ImGuiTheme_)(t - 1);
+        spdlog::error("Invalid theme index: {}. Using default theme.", t);
+        t = -1;
+    }
+
+    g_theme = t;
+
+    if (t >= 0)
+    {
+        ImGuiTheme::ImGuiTheme_ theme                                       = (ImGuiTheme::ImGuiTheme_)t;
         HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
         ImGuiTheme::ApplyTheme(theme);
     }
+    else if (t == -1)
+        apply_default_theme();
+
+    // otherwise, its a custom theme, and we keep the parameters that were read from the config file
+}
+
+static void load_theme(json j)
+{
+    if (j.contains("theme"))
+    {
+        spdlog::info("Restoring theme: '{}'", j["theme"].get<string>());
+        auto name = j["theme"].get<string>();
+        if (name == "HDRView dark")
+            g_theme = -1;
+        else if (name == "Custom")
+            g_theme = -2;
+        else
+            g_theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
+                ImGuiTheme::ImGuiTheme_FromName(name.c_str());
+    }
+    else
+        g_theme = -1;
+
+    if (g_theme >= 0)
+        ApplyTweakedTheme(HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme);
+
+    if (g_theme == -2 && j.contains("style"))
+    {
+        spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
+        json   &j_style    = j["style"];
+        auto   &style      = ImGui::GetStyle();
+        ImVec4 *colors     = ImGui::GetStyle().Colors;
+        auto    read_color = [&](const char *key, ImGuiCol idx)
+        {
+            if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 4)
+                colors[idx] = ImVec4(j_style[key][0].get<float>(), j_style[key][1].get<float>(),
+                                     j_style[key][2].get<float>(), j_style[key][3].get<float>());
+            // else: leave as is (current style value)
+        };
+
+        // Loop over all ImGuiCol values and try to read each from the JSON
+        for (int col = 0; col < ImGuiCol_COUNT; ++col)
+        {
+            // Get the enum name as a string, e.g., "ImGuiCol_Text"
+            const char *col_name = ImGui::GetStyleColorName(col);
+            if (col_name)
+                read_color(col_name, (ImGuiCol)col);
+        }
+
+        // ImGuiStyle scalar/vector members
+        auto read_float = [&](const char *key, float &val)
+        {
+            if (j_style.contains(key))
+                val = j_style[key].get<float>();
+        };
+        auto read_vec2 = [&](const char *key, ImVec2 &val)
+        {
+            if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 2)
+                val = ImVec2(j_style[key][0].get<float>(), j_style[key][1].get<float>());
+        };
+
+        read_float("Alpha", style.Alpha);
+        read_float("DisabledAlpha", style.DisabledAlpha);
+        read_vec2("WindowPadding", style.WindowPadding);
+        read_float("WindowRounding", style.WindowRounding);
+        read_float("WindowBorderSize", style.WindowBorderSize);
+        read_vec2("WindowMinSize", style.WindowMinSize);
+        read_vec2("WindowTitleAlign", style.WindowTitleAlign);
+        read_float("ChildRounding", style.ChildRounding);
+        read_float("ChildBorderSize", style.ChildBorderSize);
+        read_float("PopupRounding", style.PopupRounding);
+        read_float("PopupBorderSize", style.PopupBorderSize);
+        read_vec2("FramePadding", style.FramePadding);
+        read_float("FrameRounding", style.FrameRounding);
+        read_float("FrameBorderSize", style.FrameBorderSize);
+        read_vec2("ItemSpacing", style.ItemSpacing);
+        read_vec2("ItemInnerSpacing", style.ItemInnerSpacing);
+        read_float("IndentSpacing", style.IndentSpacing);
+        read_vec2("CellPadding", style.CellPadding);
+        read_float("ScrollbarSize", style.ScrollbarSize);
+        read_float("ScrollbarRounding", style.ScrollbarRounding);
+        read_float("GrabMinSize", style.GrabMinSize);
+        read_float("GrabRounding", style.GrabRounding);
+        read_float("ImageBorderSize", style.ImageBorderSize);
+        read_float("TabRounding", style.TabRounding);
+        read_float("TabBorderSize", style.TabBorderSize);
+        read_float("TabBarBorderSize", style.TabBarBorderSize);
+        read_float("TabBarOverlineSize", style.TabBarOverlineSize);
+        read_float("TableAngledHeadersAngle", style.TableAngledHeadersAngle);
+        read_vec2("TableAngledHeadersTextAlign", style.TableAngledHeadersTextAlign);
+        read_float("TreeLinesSize", style.TreeLinesSize);
+        read_float("TreeLinesRounding", style.TreeLinesRounding);
+        read_vec2("ButtonTextAlign", style.ButtonTextAlign);
+        read_vec2("SelectableTextAlign", style.SelectableTextAlign);
+        read_float("SeparatorTextBorderSize", style.SeparatorTextBorderSize);
+        read_vec2("SeparatorTextAlign", style.SeparatorTextAlign);
+        read_vec2("SeparatorTextPadding", style.SeparatorTextPadding);
+        read_float("DockingSeparatorSize", style.DockingSeparatorSize);
+    }
+}
+
+static void save_theme(json &j)
+{
+    // Save ImGui theme tweaks
+    j["theme"] = theme_name(g_theme);
+
+    if (g_theme != -2)
+        return;
+
+    auto   &j_style = j["style"];
+    ImVec4 *colors  = ImGui::GetStyle().Colors;
+    // Save all ImGuiCol colors
+    for (int col = 0; col < ImGuiCol_COUNT; ++col)
+    {
+        const ImVec4 &c        = colors[col];
+        const char   *col_name = ImGui::GetStyleColorName(col);
+        if (col_name)
+            j_style[col_name] = {c.x, c.y, c.z, c.w};
+    }
+
+    const auto &style                      = ImGui::GetStyle();
+    j_style["Alpha"]                       = style.Alpha;
+    j_style["DisabledAlpha"]               = style.DisabledAlpha;
+    j_style["WindowPadding"]               = {style.WindowPadding.x, style.WindowPadding.y};
+    j_style["WindowRounding"]              = style.WindowRounding;
+    j_style["WindowBorderSize"]            = style.WindowBorderSize;
+    j_style["WindowMinSize"]               = {style.WindowMinSize.x, style.WindowMinSize.y};
+    j_style["WindowTitleAlign"]            = {style.WindowTitleAlign.x, style.WindowTitleAlign.y};
+    j_style["ChildRounding"]               = style.ChildRounding;
+    j_style["ChildBorderSize"]             = style.ChildBorderSize;
+    j_style["PopupRounding"]               = style.PopupRounding;
+    j_style["PopupBorderSize"]             = style.PopupBorderSize;
+    j_style["FramePadding"]                = {style.FramePadding.x, style.FramePadding.y};
+    j_style["FrameRounding"]               = style.FrameRounding;
+    j_style["FrameBorderSize"]             = style.FrameBorderSize;
+    j_style["ItemSpacing"]                 = {style.ItemSpacing.x, style.ItemSpacing.y};
+    j_style["ItemInnerSpacing"]            = {style.ItemInnerSpacing.x, style.ItemInnerSpacing.y};
+    j_style["IndentSpacing"]               = style.IndentSpacing;
+    j_style["CellPadding"]                 = {style.CellPadding.x, style.CellPadding.y};
+    j_style["ScrollbarSize"]               = style.ScrollbarSize;
+    j_style["ScrollbarRounding"]           = style.ScrollbarRounding;
+    j_style["GrabMinSize"]                 = style.GrabMinSize;
+    j_style["GrabRounding"]                = style.GrabRounding;
+    j_style["ImageBorderSize"]             = style.ImageBorderSize;
+    j_style["TabRounding"]                 = style.TabRounding;
+    j_style["TabBorderSize"]               = style.TabBorderSize;
+    j_style["TabBarBorderSize"]            = style.TabBarBorderSize;
+    j_style["TabBarOverlineSize"]          = style.TabBarOverlineSize;
+    j_style["TableAngledHeadersAngle"]     = style.TableAngledHeadersAngle;
+    j_style["TableAngledHeadersTextAlign"] = {style.TableAngledHeadersTextAlign.x, style.TableAngledHeadersTextAlign.y};
+    j_style["TreeLinesSize"]               = style.TreeLinesSize;
+    j_style["TreeLinesRounding"]           = style.TreeLinesRounding;
+    j_style["ButtonTextAlign"]             = {style.ButtonTextAlign.x, style.ButtonTextAlign.y};
+    j_style["SelectableTextAlign"]         = {style.SelectableTextAlign.x, style.SelectableTextAlign.y};
+    j_style["SeparatorTextBorderSize"]     = style.SeparatorTextBorderSize;
+    j_style["SeparatorTextAlign"]          = {style.SeparatorTextAlign.x, style.SeparatorTextAlign.y};
+    j_style["SeparatorTextPadding"]        = {style.SeparatorTextPadding.x, style.SeparatorTextPadding.y};
+    j_style["DockingSeparatorSize"]        = style.DockingSeparatorSize;
+
+    spdlog::debug("Saved custom ImGui style values to settings:\n{}", j["style"].dump(2));
 }
 
 void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
@@ -526,12 +690,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // Change style
     m_params.callbacks.SetupImGuiStyle = []()
     {
-        spdlog::info("Setting up ImGui Style: '{}'",
-                     g_use_default_theme ? "HDRView dark"
-                                         : ImGuiTheme::ImGuiTheme_Name(
-                                               HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme));
-        if (g_use_default_theme)
-            apply_default_theme();
+        spdlog::info("Setting up ImGui Style: '{}'", theme_name(g_theme));
+        load_theme(g_settings);
+        apply_theme(g_theme);
     };
 
     m_params.callbacks.ShowGui = [this]()
@@ -609,12 +770,33 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
         if (g_show_tweak_window)
         {
-            auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+            // auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
             ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Theme Tweaks", &g_show_tweak_window))
             {
-                if (ImGuiTheme::ShowThemeTweakGui(&tweakedTheme))
-                    ApplyTweakedTheme(tweakedTheme);
+                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
+                if (ImGui::BeginCombo("Theme", theme_name(g_theme).c_str(), ImGuiComboFlags_HeightLargest))
+                {
+                    for (int t = -1; t < ImGuiTheme::ImGuiTheme_Count; ++t)
+                    {
+                        const bool is_selected = t == g_theme;
+                        if (ImGui::Selectable(theme_name(t).c_str(), is_selected))
+                            apply_theme(t);
+
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
+                ImGuiStyle previous = ImGui::GetStyle();
+
+                ImGui::ShowStyleEditor(nullptr);
+
+                bool theme_changed = memcmp(&previous, &ImGui::GetStyle(), sizeof(ImGuiStyle) - 2 * sizeof(float)) != 0;
+
+                if (theme_changed)
+                    g_theme = -2; // Custom theme
             }
             ImGui::End();
         }
@@ -1265,10 +1447,6 @@ void HDRViewApp::load_settings()
     if (s.empty())
     {
         spdlog::warn("No user settings found, using defaults.");
-        spdlog::info("Will use Style: '{}'",
-                     g_use_default_theme ? "HDRView dark"
-                                         : ImGuiTheme::ImGuiTheme_Name(
-                                               HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme));
         return;
     }
 
@@ -1301,38 +1479,8 @@ void HDRViewApp::load_settings()
 
         g_show_developer_menu = j.value<bool>("show developer menu", g_show_developer_menu);
 
-        if (j.contains("theme"))
-        {
-            spdlog::info("Restoring theme: {}", j["theme"].get<string>());
-            auto name = j["theme"].get<string>();
-            if (name == "HDRView dark")
-                g_use_default_theme = true;
-            else
-            {
-                g_use_default_theme = false;
-                HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
-                    ImGuiTheme::ImGuiTheme_FromName(name.c_str());
-            }
-        }
-        else
-            g_use_default_theme = true;
-
-        if (j.contains("theme tweaks"))
-        {
-            auto &tweaks_j           = j["theme tweaks"];
-            auto &t                  = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Tweaks;
-            t.Rounding               = tweaks_j.value<float>("Rounding", t.Rounding);
-            t.RoundingScrollbarRatio = tweaks_j.value<float>("RoundingScrollbarRatio", t.RoundingScrollbarRatio);
-            t.AlphaMultiplier        = tweaks_j.value<float>("AlphaMultiplier", t.AlphaMultiplier);
-            t.Hue                    = tweaks_j.value<float>("Hue", t.Hue);
-            t.SaturationMultiplier   = tweaks_j.value<float>("SaturationMultiplier", t.SaturationMultiplier);
-            t.ValueMultiplierFront   = tweaks_j.value<float>("ValueMultiplierFront", t.ValueMultiplierFront);
-            t.ValueMultiplierBg      = tweaks_j.value<float>("ValueMultiplierBg", t.ValueMultiplierBg);
-            t.ValueMultiplierText    = tweaks_j.value<float>("ValueMultiplierText", t.ValueMultiplierText);
-            t.ValueMultiplierFrameBg = tweaks_j.value<float>("ValueMultiplierFrameBg", t.ValueMultiplierFrameBg);
-        }
-
-        ApplyTweakedTheme(HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme);
+        // save settings so we can call load_theme from SetupImGuiStyle
+        g_settings = j;
     }
     catch (json::exception &e)
     {
@@ -1368,18 +1516,7 @@ void HDRViewApp::save_settings()
     j["clip range"]              = m_clip_range;
     j["show developer menu"]     = g_show_developer_menu;
 
-    // Save ImGui theme tweaks
-    const auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-    j["theme"]               = g_use_default_theme ? "HDRView dark" : ImGuiTheme::ImGuiTheme_Name(tweakedTheme.Theme);
-    j["theme tweaks"]        = {{"Rounding", tweakedTheme.Tweaks.Rounding},
-                                {"RoundingScrollbarRatio", tweakedTheme.Tweaks.RoundingScrollbarRatio},
-                                {"AlphaMultiplier", tweakedTheme.Tweaks.AlphaMultiplier},
-                                {"Hue", tweakedTheme.Tweaks.Hue},
-                                {"SaturationMultiplier", tweakedTheme.Tweaks.SaturationMultiplier},
-                                {"ValueMultiplierFront", tweakedTheme.Tweaks.ValueMultiplierFront},
-                                {"ValueMultiplierBg", tweakedTheme.Tweaks.ValueMultiplierBg},
-                                {"ValueMultiplierText", tweakedTheme.Tweaks.ValueMultiplierText},
-                                {"ValueMultiplierFrameBg", tweakedTheme.Tweaks.ValueMultiplierFrameBg}};
+    save_theme(j);
 
     HelloImGui::SaveUserPref("UserSettings", j.dump(4));
 }
@@ -1770,22 +1907,18 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Show status bar"));
         MenuItem(action("Show FPS in status bar"));
 
-        auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
         if (ImGui::BeginMenuEx("Theme", ICON_MY_THEME))
         {
             if (ImGui::MenuItemEx("Theme tweak window", ICON_MY_TWEAK_THEME, nullptr, g_show_tweak_window))
                 g_show_tweak_window = !g_show_tweak_window;
-            ImGui::Separator();
-            if (ImGui::MenuItem("HDRView dark", nullptr, g_use_default_theme))
-                apply_theme(0);
 
-            for (int i = 0; i < ImGuiTheme::ImGuiTheme_Count; ++i)
-            {
-                ImGuiTheme::ImGuiTheme_ theme    = (ImGuiTheme::ImGuiTheme_)(i);
-                bool                    selected = (theme == tweakedTheme.Theme) && !g_use_default_theme;
-                if (ImGui::MenuItem(ImGuiTheme::ImGuiTheme_Name(theme), nullptr, selected))
-                    apply_theme(i + 1);
-            }
+            ImGui::Separator();
+
+            int start = g_theme == -2 ? -2 : -1;
+            for (int t = start; t < ImGuiTheme::ImGuiTheme_Count; ++t)
+                if (ImGui::MenuItem(theme_name(t).c_str(), nullptr, t == g_theme))
+                    apply_theme(t);
+
             ImGui::EndMenu();
         }
 
@@ -3614,7 +3747,7 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::Prompt(theme_names);
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
-                               [](int selected_option) { apply_theme(selected_option); }, nullptr, ICON_MY_THEME});
+                               [](int selected_option) { apply_theme(selected_option - 1); }, nullptr, ICON_MY_THEME});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
             ImCmd::SetNextCommandPaletteSearch("");
