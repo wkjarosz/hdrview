@@ -102,10 +102,10 @@ static HDRViewApp *g_hdrview = nullptr;
 static void apply_default_theme()
 {
     // Apply default style
-    HelloImGui::ImGuiDefaultSettings::SetupDefaultImGuiStyle();
+    ImGuiStyle &style = ImGui::GetStyle();
+    style             = ImGuiStyle(); // resets all fields to default values
 
-    auto &style = ImGui::GetStyle();
-
+    style.FontSizeBase = 14.0f; // base font size
     // make things like radio buttons look nice and round
     style.CircleTessellationMaxError = 0.1f;
 
@@ -311,6 +311,12 @@ static void load_theme(json j)
         read_vec2("SeparatorTextAlign", style.SeparatorTextAlign);
         read_vec2("SeparatorTextPadding", style.SeparatorTextPadding);
         read_float("DockingSeparatorSize", style.DockingSeparatorSize);
+        read_float("FontSizeBase", style.FontSizeBase);
+        read_float("FontScaleMain", style.FontScaleMain);
+        read_float("FontScaleDpi", style.FontScaleDpi);
+        read_float("CircleTessellationMaxError", style.CircleTessellationMaxError);
+        if (j_style.contains("WindowMenuButtonPosition"))
+            style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
     }
 }
 
@@ -371,6 +377,11 @@ static void save_theme(json &j)
     j_style["SeparatorTextAlign"]          = {style.SeparatorTextAlign.x, style.SeparatorTextAlign.y};
     j_style["SeparatorTextPadding"]        = {style.SeparatorTextPadding.x, style.SeparatorTextPadding.y};
     j_style["DockingSeparatorSize"]        = style.DockingSeparatorSize;
+    j_style["FontSizeBase"]                = style.FontSizeBase;
+    j_style["FontScaleMain"]               = style.FontScaleMain;
+    j_style["FontScaleDpi"]                = style.FontScaleDpi;
+    j_style["CircleTessellationMaxError"]  = style.CircleTessellationMaxError;
+    j_style["WindowMenuButtonPosition"]    = (int)style.WindowMenuButtonPosition;
 
     spdlog::debug("Saved custom ImGui style values to settings:\n{}", j["style"].dump(2));
 }
@@ -550,7 +561,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     log_window.dockSpaceName     = "LogSpace";
     log_window.isVisible         = false;
     log_window.rememberIsVisible = true;
-    log_window.GuiFunction       = [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), 14); };
+    log_window.GuiFunction       = [this]
+    { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); };
 
     HelloImGui::DockableWindow advanced_settings_window;
     advanced_settings_window.label             = "Advanced settings";
@@ -2731,7 +2743,7 @@ void HDRViewApp::draw_file_window()
 
             ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-            ImGui::PushFont(g_file_list_mode == 0 ? m_sans_regular : m_sans_bold, 14.f);
+            ImGui::PushFont(g_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -3118,7 +3130,7 @@ void HDRViewApp::draw_pixel_info() const
             longest_name = names[c];
     }
 
-    ImGui::PushFont(m_mono_bold, 30);
+    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
     static float line_height = ImGui::CalcTextSize("").y;
     const float2 channel_threshold2 =
         float2{ImGui::CalcTextSize((longest_name + ": 31.000").c_str()).x, group.num_channels * line_height};
@@ -3143,7 +3155,7 @@ void HDRViewApp::draw_pixel_info() const
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
-    ImGui::PushFont(mono_font, 30);
+    ImGui::PushFont(mono_font, ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
 
     auto bounds =
         Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
@@ -3246,7 +3258,7 @@ void HDRViewApp::draw_watched_pixels() const
 
     auto draw_list = ImGui::GetBackgroundDrawList();
 
-    ImGui::PushFont(m_sans_bold, 14);
+    ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
     for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
         ImGui::DrawCrosshairs(draw_list, app_pos_at_pixel(g_watched_pixels[i].pixel + 0.5f), fmt::format(" {}", i + 1));
     ImGui::PopFont();
@@ -3336,7 +3348,7 @@ void HDRViewApp::draw_top_toolbar()
     auto img = current_image();
 
     ImGui::AlignTextToFramePadding();
-    ImGui::PushFont(m_sans_bold, 16);
+    ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
     ImGui::TextUnformatted(ICON_MY_EXPOSURE);
     ImGui::PopFont();
     ImGui::SameLine();
@@ -3550,7 +3562,7 @@ void HDRViewApp::draw_background()
 
         if (current_image())
         {
-            ImGui::PushFont(m_sans_bold, 18);
+            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
             auto   draw_list = ImGui::GetBackgroundDrawList();
             float2 pos       = ImGui::GetIO().MousePos;
             if (g_mouse_mode == MouseMode_RectangularSelection)
@@ -3899,17 +3911,17 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::HyperlinkText("HDRView", "https://github.com/wkjarosz/hdrview");
             }
 
-            ImGui::PushFont(m_sans_bold, 18);
+            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
             ImGui::TextUnformatted(version());
             ImGui::PopFont();
-            ImGui::PushFont(m_sans_regular, 10);
+            ImGui::PushFont(m_sans_regular, ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
             ImGui::TextFmt("Built on {} using the {} backend with {}.", build_timestamp(), platform_backend,
                            renderer_backend);
             ImGui::PopFont();
 
             ImGui::Spacing();
 
-            ImGui::PushFont(m_sans_bold, 16);
+            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
             ImGui::TextUnformatted(
                 "HDRView is a simple research-oriented tool for examining, comparing, manipulating, and "
                 "converting high-dynamic range images.");
@@ -3930,13 +3942,13 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextColumn();
 
             ImGui::AlignCursor(name, 1.f);
-            ImGui::PushFont(m_sans_bold, 14);
+            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
             ImGui::HyperlinkText(name, url);
             ImGui::PopFont();
             ImGui::TableNextColumn();
 
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - HelloImGui::EmSize());
-            ImGui::PushFont(m_sans_regular, 14);
+            ImGui::PushFont(m_sans_regular, ImGui::GetStyle().FontSizeBase);
             ImGui::TextUnformatted(desc);
             ImGui::PopFont();
         };
@@ -3947,11 +3959,11 @@ void HDRViewApp::draw_about_dialog()
             {
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
 
-                ImGui::PushFont(m_sans_bold, 14);
+                ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
                 ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
                 ImGui::PopFont();
 
-                ImGui::PushFont(font("mono regular"), 30);
+                ImGui::PushFont(font("mono regular"), ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
                 ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
                 ImGui::PopFont();
 

@@ -83,7 +83,7 @@ void Image::draw_histogram()
 
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
-    ImGui::PushFont(hdrview()->font("sans regular"), 10);
+    ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
@@ -472,7 +472,7 @@ void Image::draw_info()
 
     auto property_name = [sans_font, &label_size](const string &text)
     {
-        ImGui::PushFont(sans_font, 14);
+        ImGui::PushFont(sans_font, ImGui::GetStyle().FontSizeBase);
         ImGui::PushTextWrapPos((label_size - HelloImGui::EmSize(0.25f)));
         float text_w = ImGui::CalcTextSize(text.c_str()).x;
         auto  shift  = 1.0f * (1.f * (label_size - HelloImGui::EmSize(1.f)) - text_w);
@@ -485,7 +485,7 @@ void Image::draw_info()
     auto property_value = [&label_size, min_w](const string &text, ImFont *font, bool wrapped = false)
     {
         ImGui::SameLine(label_size);
-        ImGui::PushFont(font, 14);
+        ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
 
         if (wrapped)
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + max(min_w, ImGui::GetContentRegionAvail().x));
@@ -969,7 +969,7 @@ void Image::draw_channel_stats()
         }
 
         // set up header row
-        ImGui::PushFont(bold_font, 14);
+        ImGui::PushFont(bold_font, ImGui::GetStyle().FontSizeBase);
         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed);
         for (int c = 0; c < group.num_channels; ++c)
             ImGui::TableSetupColumn(fmt::format("{}{}", ICON_MY_CHANNEL_GROUP, channel_names[c]).c_str(),
@@ -982,13 +982,13 @@ void Image::draw_channel_stats()
         constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
         for (int s = 0; s < NUM_STATS; ++s)
         {
-            ImGui::PushFont(bold_font, 14);
+            ImGui::PushFont(bold_font, ImGui::GetStyle().FontSizeBase);
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
             ImGui::TextUnformatted(stat_names[s]);
             ImGui::PopFont();
-            ImGui::PushFont(mono_font, 14);
+            ImGui::PushFont(mono_font, ImGui::GetStyle().FontSizeBase);
             for (int c = 0; c < group.num_channels; ++c)
             {
                 ImGui::TableNextColumn();

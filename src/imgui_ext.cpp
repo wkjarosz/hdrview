@@ -354,7 +354,7 @@ void HyperlinkText(const char *label, const char *url)
     if (TextLink(label))
         if (g.PlatformIO.Platform_OpenInShellFn != NULL)
             g.PlatformIO.Platform_OpenInShellFn(&g, url);
-    PushFont(GetIO().FontDefault, 14.f);
+    PushFont(GetIO().FontDefault, ImGui::GetStyle().FontSizeBase);
     SetItemTooltip("%s '%s'", ICON_MY_LINK, url);
     PopFont();
     if (BeginPopupContextItem())
