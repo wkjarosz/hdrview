@@ -3145,6 +3145,26 @@ void DrawMarker(ImDrawList *pDrawList, ImVec2 start, ImVec2 size, ImU32 fg_color
 
 #include "common.h"
 
+
+ImVec2 xyWavelengthChromaticity(float wavelength)
+{
+    // Convert wavelength to xy chromaticity coordinates
+    auto illum = ImFunctionFromData(wavelength, s_Illuminance_D65_min, s_Illuminance_D65_max, s_Illuminance_D65,
+                                    s_Illuminance_D65_samplesCount);
+    auto x     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_X,
+                                            s_CIE_1931_2deg_samplesCount);
+    auto y     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Y,
+                                            s_CIE_1931_2deg_samplesCount);
+    auto z     = illum * ImFunctionFromData(wavelength, s_CIE_1931_2deg_min, s_CIE_1931_2deg_max, s_CIE_1931_2deg_Z,
+                                            s_CIE_1931_2deg_samplesCount);
+
+    auto sum = x + y + z;
+
+    x /= sum;
+    y /= sum;
+    return ImVec2(x, y);
+}
+
 //////////////////////////////////////////////////////////////////////////
 // Widgets
 //////////////////////////////////////////////////////////////////////////

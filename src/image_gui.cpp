@@ -460,6 +460,12 @@ void Image::draw_channels_list(bool is_reference, bool is_current)
     }
 }
 
+template <typename Type>
+inline Type ScaleFromNormalized(Type const x, Type const newMin, Type const newMax)
+{
+    return x * (newMax - newMin) + newMin;
+}
+
 void Image::draw_info()
 {
     auto sans_font = hdrview()->font("sans regular");
@@ -612,17 +618,56 @@ void Image::draw_info()
             ImGui::PopFont();
         }
 
+        // {
+        //     ImDrawList *pDrawList = ImGui::GetWindowDrawList();
+
+        //     Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
+        //     // our working space is always BT.709/sRGB
+        //     auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_sRGB)));
+        //     auto xyz2rgb = transpose(XYZ_to_sRGB());
+        //     // this is equivalent to:
+        //     // auto           xyz2rgb = transpose(mul(M_to_sRGB, M_XYZ_to_RGB));
+
+        //     float         pad = 0.01f;
+        //     static float2 vMin{-0.05f, -0.05f};
+        //     static float2 vMax{0.8f, 0.9f};
+        //     static float2 vSize  = vMax - vMin;
+        //     static float  aspect = vSize.x / vSize.y;
+
+        //     property_name("Diagram");
+        //     ImGui::SameLine(label_size);
+        //     float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
+
+        //     ImVec2 pos = ImGui::GetCursorScreenPos();
+        //     ImWidgets::DrawChromaticityPlot(pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red,
+        //     gamut_chr.green,
+        //                                     gamut_chr.blue, gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64,
+        //                                     ImGui::GetColorU32(ImGuiCol_WindowBg, 0.7f), 380.f, 700.f, vMin - pad,
+        //                                     vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0,
+        //                                     255), 2.f, ImGui::GetColorU32(ImGuiCol_Text), 1.5f);
+
+        //     auto &io = ImGui::GetIO();
+        //     if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+        //     {
+        //         auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
+        //         float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
+
+        //         ImWidgets::DrawChromaticityPointsGeneric(pDrawList, pos, ImVec2(size, size / aspect), &rgb2xyz.x.x,
+        //                                                  &color32.x, 1, vMin.x, vMax.x, vMin.y, vMax.y,
+        //                                                  IM_COL32(0, 0, 0, 255), 2.f, 4);
+        //     }
+
+        //     if (ImWidgets::ChromaticityPlotDragBehavior("##chromaticityDrag", pos, ImVec2(size, size / aspect),
+        //                                                 (ImVec2 *)&gamut_chr.red, (ImVec2 *)&gamut_chr.green,
+        //                                                 (ImVec2 *)&gamut_chr.blue, (ImVec2 *)&gamut_chr.white,
+        //                                                 vMin - pad, vMax + pad))
+        //     {
+        //         chromaticities = gamut_chr;
+        //         compute_color_transform();
+        //     }
+        // }
+
         {
-            ImDrawList *pDrawList = ImGui::GetWindowDrawList();
-
-            Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
-            // our working space is always BT.709/sRGB
-            auto rgb2xyz = transpose(mul(M_RGB_to_XYZ, inverse(M_to_sRGB)));
-            auto xyz2rgb = transpose(XYZ_to_sRGB());
-            // this is equivalent to:
-            // auto           xyz2rgb = transpose(mul(M_to_sRGB, M_XYZ_to_RGB));
-
-            float         pad = 0.01f;
             static float2 vMin{-0.05f, -0.05f};
             static float2 vMax{0.8f, 0.9f};
             static float2 vSize  = vMax - vMin;
@@ -632,32 +677,266 @@ void Image::draw_info()
             ImGui::SameLine(label_size);
             float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
 
-            ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImWidgets::DrawChromaticityPlot(pDrawList, pos, ImVec2(size, size / aspect), gamut_chr.red, gamut_chr.green,
-                                            gamut_chr.blue, gamut_chr.white, &xyz2rgb.x.x, 200, 64, 64,
-                                            ImGui::GetColorU32(ImGuiCol_WindowBg, 0.7f), 380.f, 700.f, vMin - pad,
-                                            vMax + pad, vMin, vMax, true, true, true, true, IM_COL32(0, 0, 0, 255), 2.f,
-                                            ImGui::GetColorU32(ImGuiCol_Text), 1.5f);
-
-            auto &io = ImGui::GetIO();
-            if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+            ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+            if (ImPlot::BeginPlot("##ChromaticityDiagram", ImVec2(size, size / aspect),
+                                  ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend |
+                                      ImPlotFlags_NoTitle))
             {
-                auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
-                float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
+                constexpr float wavelengthMin          = 380.f;
+                constexpr float wavelengthMax          = 700.f;
+                constexpr int   chromeLineSamplesCount = 200;
 
-                ImWidgets::DrawChromaticityPointsGeneric(pDrawList, pos, ImVec2(size, size / aspect), &rgb2xyz.x.x,
-                                                         &color32.x, 1, vMin.x, vMax.x, vMin.y, vMax.y,
-                                                         IM_COL32(0, 0, 0, 255), 2.f, 4);
-            }
+                auto text_color_f    = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+                auto border_color_f  = ImGui::GetStyleColorVec4(ImGuiCol_Border);
+                border_color_f.w     = 1.f;
+                auto text_color_fc   = ImVec4{contrasting_color(text_color_f)};
+                auto border_color_fc = ImVec4{contrasting_color(border_color_f)};
 
-            if (ImWidgets::ChromaticityPlotDragBehavior("##chromaticityDrag", pos, ImVec2(size, size / aspect),
-                                                        (ImVec2 *)&gamut_chr.red, (ImVec2 *)&gamut_chr.green,
-                                                        (ImVec2 *)&gamut_chr.blue, (ImVec2 *)&gamut_chr.white,
-                                                        vMin - pad, vMax + pad))
-            {
-                chromaticities = gamut_chr;
-                compute_color_transform();
+                static Box2f plot_limits;
+                auto         createLocus = []()
+                {
+                    ImVector<float2> chromLine;
+                    chromLine.resize(chromeLineSamplesCount);
+
+                    // Compute chromaticity line
+                    for (int i = 0; i < chromeLineSamplesCount; ++i)
+                    {
+                        chromLine[i] = ImWidgets::xyWavelengthChromaticity(
+                            lerp(wavelengthMin, wavelengthMax, ((float)i) / ((float)(chromeLineSamplesCount - 1))));
+                        plot_limits.enclose(chromLine[i]);
+                    }
+
+                    return chromLine;
+                };
+                const static ImVector<float2> chromLine = createLocus();
+
+                static const float firstTick = (ImFloor(wavelengthMin / 10.f) + 1.f) * 10.f;
+                // Calculate number of tick marks at 10 nm intervals
+                auto createTicks = []()
+                {
+                    ImVector<float4> tickMarks;
+                    int              tickCount = (int)ImFloor((wavelengthMax - wavelengthMin) / 10.0f) + 1;
+                    tickMarks.resize(tickCount); // Stores tick mark location and orientation
+
+                    for (int tickIdx = 0; tickIdx < tickCount; ++tickIdx)
+                    {
+                        float nm = firstTick + tickIdx * 10.0f;
+                        // spdlog::info("Tick {}: Wavelength = {}", tickIdx, nm);
+                        float t    = (nm - wavelengthMin) / (wavelengthMax - wavelengthMin);
+                        float fIdx = t * (chromeLineSamplesCount - 1);
+                        int   i0   = ImClamp((int)ImFloor(fIdx), 0, chromeLineSamplesCount - 2);
+                        int   i1   = i0 + 1;
+                        float frac = fIdx - (float)i0;
+
+                        // Interpolate position between chromLine[i0] and chromLine[i1]
+                        float2 pos = lerp(chromLine[i0], chromLine[i1], frac);
+
+                        // Compute tangent direction between i0 and i1
+                        float2 tangent = (chromLine[i1] - chromLine[i0]);
+                        float2 normal(-tangent.y, tangent.x);
+                        normal /= length(normal); // Ensure normal is unit length
+
+                        tickMarks[tickIdx] = float4(pos.x, pos.y, normal.x, normal.y);
+                    }
+                    return tickMarks;
+                };
+                const static ImVector<float4> tickMarks = createTicks();
+
+                ImPlot::PushStyleColor(ImPlotCol_AxisGrid, ImGui::GetColorU32(ImGuiCol_Text));
+
+                ImPlot::GetInputMap().ZoomRate = 0.03f;
+                ImPlot::SetupAxis(ImAxis_X1, "x", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_Foreground);
+                ImPlot::SetupAxis(ImAxis_Y1, "y", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_Foreground);
+                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
+                ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
+
+                ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
+
+                ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
+
+                ImPlot::PushPlotClipRect();
+
+                //
+                // plot background texture
+                //
+                ImPlot::PlotImage("##chromaticity_image", (ImTextureRef)chromaticity_texture()->texture_handle(),
+                                  ImPlotPoint(plot_limits.min.x, plot_limits.min.y),
+                                  ImPlotPoint(plot_limits.max.x, plot_limits.max.y),
+                                  {plot_limits.min.x, plot_limits.max.y}, {plot_limits.max.x, plot_limits.min.y});
+
+                //
+                // draw the spectral locus
+                //
+
+                {
+                    float2 plot_size   = ImPlot::GetPlotSize();
+                    auto   plot_rect   = ImPlot::GetPlotLimits();
+                    float  texel_width = length(
+                        1.f / 256.f / float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min) *
+                        plot_size);
+
+                    // ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, std::max(2.f, 1.5f * texel_width));
+                    // ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 0.0f});
+                    // ImPlot::PlotLine("##locus", &chromLine.Data->x, &chromLine.Data->y, chromLine.Size,
+                    //                  ImPlotLineFlags_Loop, 0, sizeof(ImVec2));
+                    // ImPlot::PopStyleColor();
+                    // ImPlot::PopStyleVar();
+
+                    // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves
+                    ImVector<float2> poly = chromLine;
+                    // Iterate over all entries in poly and map them to pixel coordinates
+                    for (int i = 0; i < poly.Size; ++i) poly[i] = ImPlot::PlotToPixels({poly[i].x, poly[i].y});
+
+                    ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size,
+                                                           ImGui::GetColorU32(border_color_f), ImDrawFlags_Closed,
+                                                           std::max(2.f, 1.2f * texel_width));
+                }
+
+                //
+                // draw wavelength tick marks
+                //
+                {
+                    ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 10.f / 10.f);
+                    // Draw tick marks stored in tickMarks
+                    constexpr float tick_length       = 4.0f;
+                    constexpr float major_tick_length = 8.0f;
+                    constexpr float border_thickness  = 2.f;
+                    for (int i = 0; i < tickMarks.size(); ++i)
+                    {
+                        ImVec4 tick = tickMarks[i];
+                        ImVec2 p(tick.x, tick.y);
+                        ImVec2 normal(-tick.z, tick.w);
+
+                        // Compute wavelength for this tick
+                        float nm = firstTick + i * 10.0f;
+                        // Check if tick is at a 100 nm multiple
+                        bool is_major = (static_cast<int>(nm) % 100 == 0);
+
+                        // Already rescaled to screen coordinates above
+                        // Draw tick mark perpendicular to the curve
+                        ImVec2 tick_start = ImPlot::PlotToPixels(p);
+                        ImVec2 tick_end =
+                            ImPlot::PlotToPixels(p) + normal * (is_major ? major_tick_length : tick_length);
+
+                        ImPlot::GetPlotDrawList()->AddLine(tick_start, tick_end, ImGui::GetColorU32(border_color_f),
+                                                           is_major ? border_thickness : border_thickness * 0.5f);
+
+                        // Add text label for major ticks (100 nm multiples)
+                        if (is_major)
+                        {
+                            static char label[8];
+                            ImFormatString(label, sizeof(label), "%d nm", static_cast<int>(nm));
+
+                            // Compute text size
+                            ImVec2 text_size = ImGui::CalcTextSize(label);
+
+                            // Offset text slightly along the normal direction from the tick end
+                            const float text_offset = 0.5f * text_size.y;
+                            ImVec2      text_pos    = tick_end + normal * text_offset;
+
+                            // Align text position continuously based on normal direction using ImLerp
+                            text_pos.x += ImLerp(-text_size.x, 0.f, 0.5f * (normal.x + 1.f));
+                            text_pos.y += ImLerp(-text_size.y, 0.f, 0.5f * (normal.y + 1.f));
+
+                            ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(border_color_fc), label);
+                            ImPlot::GetPlotDrawList()->AddText(text_pos - ImVec2{1.f, 1.f},
+                                                               ImGui::GetColorU32(border_color_f), label);
+                        }
+                    }
+                    ImGui::PopFont();
+                }
+
+                //
+                // draw the primaries, gamut triangle, whitepoint, and text labels
+                //
+                {
+                    Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
+                    ImVec4         colors[] = {
+                        {0.8f, 0.f, 0.f, 1.f}, {0.f, 0.8f, 0.f, 1.f}, {0.f, 0.f, 0.8f, 1.f}, {0.8f, 0.8f, 0.8f, 1.f}};
+                    const char *names[] = {"R", "G", "B", "W"};
+                    double2 primaries[] = {double2(gamut_chr.red), double2(gamut_chr.green), double2(gamut_chr.blue),
+                                           double2(gamut_chr.red)};
+
+                    ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
+                    ImPlot::SetNextLineStyle(text_color_f, 2.0f);
+                    ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, ImPlotLineFlags_None, 0,
+                                     sizeof(double2));
+
+                    primaries[3] = double2(gamut_chr.white);
+
+                    // ImPlot::PlotScatter draws ugly, unrounded, circles, so we use AddPolyline ourselves
+                    // Iterate over all entries in poly and map them to pixel coordinates
+                    std::array<ImVec2, 4> poly = {ImPlot::PlotToPixels(ImPlotPoint(primaries[0].x, primaries[0].y)),
+                                                  ImPlot::PlotToPixels(ImPlotPoint(primaries[1].x, primaries[1].y)),
+                                                  ImPlot::PlotToPixels(ImPlotPoint(primaries[2].x, primaries[2].y)),
+                                                  ImPlot::PlotToPixels(ImPlotPoint(primaries[3].x, primaries[3].y))};
+                    for (int i = 0; i < 4; ++i)
+                        ImPlot::GetPlotDrawList()->AddCircleFilled(poly[i], 5.f, ImGui::GetColorU32(text_color_f), 0);
+
+                    // ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 5.f);
+                    // ImPlot::SetNextLineStyle(ImVec4{0.f, 0.f, 0.f, 1.0f});
+                    // ImPlot::PlotScatter("##white_point", &primaries[3].x, &primaries[3].y, 1,
+                    // ImPlotScatterFlags_None,
+                    //                     0, sizeof(double2));
+
+                    ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 14.f / 10.f);
+                    for (int i = 0; i < 4; ++i)
+                    {
+                        if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 3.f,
+                                              ImPlotDragToolFlags_Delayed))
+                        {
+                            gamut_chr.red   = float2(primaries[0].x, primaries[0].y);
+                            gamut_chr.green = float2(primaries[1].x, primaries[1].y);
+                            gamut_chr.blue  = float2(primaries[2].x, primaries[2].y);
+                            gamut_chr.white = float2(primaries[3].x, primaries[3].y);
+                            chromaticities  = gamut_chr;
+                            compute_color_transform();
+                        }
+
+                        // draw text label shadow
+                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_fc));
+                        ImVec2 offset{8.f, -8.f};
+                        ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
+                        ImPlot::PopStyleColor();
+
+                        // draw text label
+                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_f));
+                        offset -= ImVec2{1.f, 1.f};
+                        ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
+                        ImPlot::PopStyleColor();
+                    }
+
+                    ImGui::PopFont();
+                }
+
+                //
+                // draw the hovered pixel in the chromaticity diagram
+                //
+                {
+                    auto &io      = ImGui::GetIO();
+                    auto  rgb2xyz = mul(M_RGB_to_XYZ, inverse(M_to_sRGB));
+                    ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 1.0f});
+                    ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                    if (hdrview()->vp_pos_in_viewport(hdrview()->vp_pos_at_app_pos(io.MousePos)))
+                    {
+                        auto   hovered_pixel = int2{hdrview()->pixel_at_app_pos(io.MousePos)};
+                        float4 color32       = hdrview()->pixel_value(hovered_pixel, false, 0);
+
+                        float3 XYZ = mul(rgb2xyz, color32.xyz());
+                        float2 xy  = XYZ.xy() / (XYZ.x + XYZ.y + XYZ.z);
+
+                        ImPlot::PlotScatter("##HoveredPixel", &xy.x, &xy.y, 1);
+                    }
+                    ImPlot::PopStyleColor();
+                    ImPlot::PopStyleVar();
+                }
+                ImPlot::PopPlotClipRect();
+
+                ImPlot::PopStyleColor();
+
+                ImPlot::EndPlot();
             }
+            ImGui::PopFont();
         }
 
         {
@@ -835,11 +1114,10 @@ void Image::draw_info()
 
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::SetNextItemAllowOverlap();
-            if (ImGui::InputTextWithHint(
-                    "##exif filter",
-                    ICON_MY_FILTER
-                    "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
-                    exr_filter.InputBuf, IM_ARRAYSIZE(exr_filter.InputBuf)))
+            if (ImGui::InputTextWithHint("##exif filter",
+                                         ICON_MY_FILTER "Filter (format: [include|-exclude][,...]; e.g. "
+                                                        "\"include_this,-but_not_this,also_include_this\")",
+                                         exr_filter.InputBuf, IM_ARRAYSIZE(exr_filter.InputBuf)))
                 exr_filter.Build();
             if (filter_active)
             {
@@ -884,11 +1162,10 @@ void Image::draw_info()
 
             ImGui::SetNextItemWidth(-FLT_MIN);
             ImGui::SetNextItemAllowOverlap();
-            if (ImGui::InputTextWithHint(
-                    "##exif filter",
-                    ICON_MY_FILTER
-                    "Filter (format: [include|-exclude][,...]; e.g. \"include_this,-but_not_this,also_include_this\")",
-                    exif_filter.InputBuf, IM_ARRAYSIZE(exif_filter.InputBuf)))
+            if (ImGui::InputTextWithHint("##exif filter",
+                                         ICON_MY_FILTER "Filter (format: [include|-exclude][,...]; e.g. "
+                                                        "\"include_this,-but_not_this,also_include_this\")",
+                                         exif_filter.InputBuf, IM_ARRAYSIZE(exif_filter.InputBuf)))
                 exif_filter.Build();
             if (filter_active)
             {

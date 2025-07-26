@@ -4,11 +4,15 @@
 // be found in the LICENSE.txt file.
 //
 
-#include "image.h"
+#include "fwd.h"
+
+#include "dear_widgets.h"
+
 #include "app.h"
 #include "colorspace.h"
 #include "common.h"
 #include "dithermatrix256.h"
+#include "image.h"
 #include "shader.h"
 #include "texture.h"
 #include "timer.h"
@@ -30,8 +34,9 @@ using namespace std;
 // static methods and member definitions
 //
 
-static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr;
-static atomic<int>         s_next_image_id = 1;
+static unique_ptr<Texture> s_white_texture = nullptr, s_black_texture = nullptr, s_dither_texture = nullptr,
+                           s_chromaticity_texture = nullptr;
+static atomic<int> s_next_image_id                = 1;
 
 pair<string, string> Channel::split(const string &channel)
 {
@@ -57,6 +62,7 @@ void Image::make_default_textures()
 {
     static constexpr float s_black{0.f};
     static constexpr float s_white{1.f};
+    static constexpr int   chr_w = 256;
     s_black_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
                                                  Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
@@ -66,9 +72,82 @@ void Image::make_default_textures()
     s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32,
                                                  int2{g_dither_matrix_w}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
+    s_chromaticity_texture = std::make_unique<Texture>(
+        Texture::PixelFormat::RGBA, Texture::ComponentFormat::Float32, int2{chr_w},
+        Texture::InterpolationMode::Bilinear, Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
+
+    auto createLocus = []()
+    {
+        constexpr int    chromeLineSamplesCount = 200;
+        ImVector<ImVec2> chromLine;
+        constexpr int    ptsCount = chromeLineSamplesCount;
+        chromLine.resize(ptsCount);
+
+        float wavelengthMin = 380.f;
+        float wavelengthMax = 700.f;
+
+        // Compute chromaticity line
+        for (int i = 0; i < chromeLineSamplesCount; ++i)
+        {
+            float const wavelength =
+                lerp(wavelengthMin, wavelengthMax, ((float)i) / ((float)(chromeLineSamplesCount - 1)));
+            chromLine[i] = ImWidgets::xyWavelengthChromaticity(wavelength);
+        }
+
+        return chromLine;
+    };
+
+    static ImVector<ImVec2> chromLine = createLocus();
+
+    // lambda to check if a point is inside a polygon using the ray-casting algorithm
+    auto is_inside = [](float2 point) -> bool
+    {
+        int n     = chromLine.size(); // Number of vertices in the polygon
+        int count = 0;                // Count of intersections
+
+        // Iterate through each edge of the polygon
+        for (int i = 0; i < n; i++)
+        {
+            ImVec2 p1 = chromLine[i];
+            ImVec2 p2 = chromLine[(i + 1) % n]; // Ensure the last point connects to the first point
+
+            // Check if the point's y-coordinate is within the edge's y-range and if the point is to the left of the
+            // edge
+            if ((point.y > min(p1.y, p2.y)) && (point.y <= max(p1.y, p2.y)) && (point.x <= max(p1.x, p2.x)))
+            {
+                // Calculate the x-coordinate of the intersection of the edge with a horizontal line through the point
+                auto xIntersect = (point.y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y) + p1.x;
+                // If the edge is vertical or the point's x-coordinate is less than or equal to the intersection
+                // x-coordinate, increment count
+                if (p1.x == p2.x || point.x <= xIntersect)
+                    count++;
+            }
+        }
+
+        return count % 2 == 1;
+    };
+
+    auto rgb2xyz = XYZ_to_RGB(Chromaticities{}, 1.f);
+
+    vector<float4> g_chromaticity_data(chr_w * chr_w);
+    for (int y = 0; y < chr_w; ++y)
+    {
+        for (int x = 0; x < chr_w; ++x)
+        {
+            float  xn = (x + 0.5f) / chr_w;
+            float  yn = (y + 0.5f) / chr_w;
+            float3 xyz{xn, yn, 1.f - xn - yn};
+            float3 rgb = mul(rgb2xyz, xyz);
+
+            g_chromaticity_data[y * chr_w + x] =
+                float4{linear_to_sRGB(rgb / la::maxelem(rgb)), is_inside(xyz.xy()) ? 1.0f : 0.0f};
+        }
+    }
+
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
     s_dither_texture->upload((const uint8_t *)g_dither_matrix);
+    s_chromaticity_texture->upload((const uint8_t *)g_chromaticity_data.data());
 }
 
 void Image::cleanup_default_textures()
@@ -81,6 +160,7 @@ void Image::cleanup_default_textures()
 Texture *Image::black_texture() { return s_black_texture.get(); }
 Texture *Image::white_texture() { return s_white_texture.get(); }
 Texture *Image::dither_texture() { return s_dither_texture.get(); }
+Texture *Image::chromaticity_texture() { return s_chromaticity_texture.get(); }
 
 const std::set<std::string> &Image::loadable_formats()
 {

@@ -19,6 +19,18 @@
 #include <map>
 #include <string>
 
+/**
+ * Computes the luminance as ``l = 0.299r + 0.587g + 0.144b + 0.0a``.  If
+ * the luminance is less than 0.5, white is returned.  If the luminance is
+ * greater than or equal to 0.5, black is returned.  Both returns will have
+ * an alpha component of 1.0.
+ */
+inline Color4 contrasting_color(const Color4 &c)
+{
+    float luminance = dot(c, Color4(0.299f, 0.587f, 0.144f, 0.f));
+    return Color4(Color3(luminance < 0.5f ? 1.f : 0.f), 1.f);
+}
+
 struct Chromaticities
 {
     // Default constructor produces chromaticities according to Rec. ITU-R BT.709-3 (sRGB)

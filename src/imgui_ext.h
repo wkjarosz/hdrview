@@ -39,15 +39,11 @@ public:
 
     void clear();
 
-    ImU32 get_default_color();
-    void  set_default_color(ImU32 color);
-
     void  set_level_color(spdlog::level::level_enum level, ImU32 color);
     ImU32 get_level_color(spdlog::level::level_enum level);
 
 protected:
     std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> m_sink;
-    ImU32                                                    m_default_color;
     std::array<ImU32, spdlog::level::n_levels>               m_level_colors;
     ImGuiTextFilter                                          m_filter;
     bool                                                     m_auto_scroll = true;

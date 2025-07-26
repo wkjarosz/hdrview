@@ -66,7 +66,7 @@ SpdLogWindow &GlobalSpdLogWindow()
 }
 
 SpdLogWindow::SpdLogWindow(int max_items) :
-    m_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)), m_default_color(white),
+    m_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
     m_level_colors({white, cyan, green, yellow, red, magenta, gray})
 {
 }
@@ -148,7 +148,6 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 1.0f));
         auto default_font = ImGui::GetFont();
         ImGui::PushFont(console_font, size);
-        ImGui::PushStyleColor(ImGuiCol_Text, m_default_color);
 
         int  item_num = 0;
         bool did_copy = false;
@@ -225,7 +224,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
             spdlog::trace("Copied a log item to clipboard"); // the log sink is locked during the iterate loop above, so
                                                              // this needs to happen outside
 
-        ImGui::PopStyleColor();
+        // ImGui::PopStyleColor();
 
         if (m_sink->has_new_items() && m_auto_scroll)
             ImGui::SetScrollHereY(1.f);
@@ -237,9 +236,6 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 }
 
 void SpdLogWindow::clear() { m_sink->clear_messages(); }
-
-ImU32 SpdLogWindow::get_default_color() { return m_default_color; }
-void  SpdLogWindow::set_default_color(ImU32 color) { m_default_color = color; }
 
 void SpdLogWindow::set_level_color(spdlog::level::level_enum level, ImU32 color)
 {

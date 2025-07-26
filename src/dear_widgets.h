@@ -820,6 +820,8 @@ namespace ImWidgets{
 							   ImWidgetsDrawType draw_type );
 #endif
 
+	IMGUI_API ImVec2 xyWavelengthChromaticity(float wavelength);
+
 	IMGUI_API void DrawChromaticityPlot( ImDrawList* draw,
 										 ImVec2 vpos,
 										 ImVec2 size,

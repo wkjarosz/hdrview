@@ -283,6 +283,7 @@ public:
     static Texture                     *black_texture();
     static Texture                     *white_texture();
     static Texture                     *dither_texture();
+    static Texture                     *chromaticity_texture();
 
     int id;
 
