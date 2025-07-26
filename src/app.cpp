@@ -99,7 +99,7 @@ static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, fal
 
 static HDRViewApp *g_hdrview = nullptr;
 
-static void apply_default_theme()
+static void apply_hdrview_dark_theme()
 {
     // Apply default style
     ImGuiStyle &style = ImGui::GetStyle();
@@ -287,6 +287,8 @@ static string theme_name(int t)
         return ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)t);
     else if (t == -1)
         return "HDRView dark";
+    else if (t == -2)
+        return "HDRView light";
     else
         return "Custom";
 }
@@ -309,7 +311,9 @@ static void apply_theme(int t)
         ImGuiTheme::ApplyTheme(theme);
     }
     else if (t == -1)
-        apply_default_theme();
+        apply_hdrview_dark_theme();
+    else if (t == -2)
+        apply_hdrview_light_theme();
 
     // otherwise, its a custom theme, and we keep the parameters that were read from the config file
 }
@@ -322,8 +326,10 @@ static void load_theme(json j)
         auto name = j["theme"].get<string>();
         if (name == "HDRView dark")
             g_theme = -1;
-        else if (name == "Custom")
+        else if (name == "HDRView light")
             g_theme = -2;
+        else if (name == "Custom")
+            g_theme = -3;
         else
             g_theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
                 ImGuiTheme::ImGuiTheme_FromName(name.c_str());
@@ -884,7 +890,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
                 if (ImGui::BeginCombo("Theme", theme_name(g_theme).c_str(), ImGuiComboFlags_HeightLargest))
                 {
-                    for (int t = -1; t < ImGuiTheme::ImGuiTheme_Count; ++t)
+                    for (int t = -2; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                     {
                         const bool is_selected = t == g_theme;
                         if (ImGui::Selectable(theme_name(t).c_str(), is_selected))
@@ -2021,7 +2027,7 @@ void HDRViewApp::draw_menus()
 
             ImGui::Separator();
 
-            int start = g_theme == -2 ? -2 : -1;
+            int start = g_theme == -3 ? -3 : -2;
             for (int t = start; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                 if (ImGui::MenuItem(theme_name(t).c_str(), nullptr, t == g_theme))
                     apply_theme(t);

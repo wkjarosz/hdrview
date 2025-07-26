@@ -669,7 +669,7 @@ void Image::draw_info()
 
         {
             static float2 vMin{-0.05f, -0.05f};
-            static float2 vMax{0.8f, 0.9f};
+            static float2 vMax{0.75f, 0.9f};
             static float2 vSize  = vMax - vMin;
             static float  aspect = vSize.x / vSize.y;
 
@@ -678,19 +678,16 @@ void Image::draw_info()
             ImGui::Indent();
             float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
 
-            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
-            if (ImPlot::BeginPlot("Chromaticity diagram", ImVec2(size, size / aspect),
-                                  ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend))
-            {
-                constexpr float wavelengthMin          = 380.f;
-                constexpr float wavelengthMax          = 700.f;
-                constexpr int   chromeLineSamplesCount = 200;
+            ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
 
-                auto text_color_f    = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-                auto border_color_f  = ImGui::GetStyleColorVec4(ImGuiCol_Border);
-                border_color_f.w     = 1.f;
-                auto text_color_fc   = ImVec4{contrasting_color(text_color_f)};
-                auto border_color_fc = ImVec4{contrasting_color(border_color_f)};
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.35f, 0.35f, 0.35f, 1.f});
+            if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect),
+                                  ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend |
+                                      ImPlotFlags_NoTitle))
+            {
+                static constexpr float wavelengthMin          = 380.f;
+                static constexpr float wavelengthMax          = 700.f;
+                static constexpr int   chromeLineSamplesCount = 200;
 
                 static Box2f plot_limits;
                 auto         createLocus = []()
@@ -742,7 +739,13 @@ void Image::draw_info()
                 };
                 const static ImVector<float4> tickMarks = createTicks();
 
-                ImPlot::PushStyleColor(ImPlotCol_AxisGrid, ImGui::GetColorU32(ImGuiCol_Text));
+                auto text_color_f = ImVec4{0.f, 0.f, 0.f, 1.f};
+                // auto border_color_f  = ImGui::GetStyleColorVec4(ImGuiCol_Border);
+                // border_color_f.w     = 1.f;
+                auto text_color_fc = ImVec4{contrasting_color(text_color_f)};
+                // auto border_color_fc = ImVec4{contrasting_color(border_color_f)};
+
+                ImPlot::PushStyleColor(ImPlotCol_AxisGrid, ImGui::GetColorU32(text_color_fc));
 
                 ImPlot::GetInputMap().ZoomRate = 0.03f;
                 ImPlot::SetupAxis(ImAxis_X1, "x", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_Foreground);
@@ -750,9 +753,9 @@ void Image::draw_info()
                 ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
                 ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
                 ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-                ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
+                ImPlot::SetupMouseText(ImPlotLocation_NorthEast, ImPlotMouseTextFlags_NoFormat);
 
-                ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+                ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
                 ImPlot::SetupFinish();
                 ImGui::PopFont();
 
@@ -762,20 +765,20 @@ void Image::draw_info()
                 // plot background texture
                 //
                 ImPlot::PlotImage("##chromaticity_image", (ImTextureRef)chromaticity_texture()->texture_handle(),
-                                  ImPlotPoint(plot_limits.min.x, plot_limits.min.y),
-                                  ImPlotPoint(plot_limits.max.x, plot_limits.max.y),
-                                  {plot_limits.min.x, plot_limits.max.y}, {plot_limits.max.x, plot_limits.min.y});
+                                  ImPlotPoint(0.0, 0.0), ImPlotPoint(plot_limits.max.x, plot_limits.max.y),
+                                  {0.f, plot_limits.max.y}, {plot_limits.max.x, 0.f});
 
                 //
                 // draw the spectral locus
                 //
-
+                float texel_width = 1.f;
                 {
-                    float2 plot_size   = ImPlot::GetPlotSize();
-                    auto   plot_rect   = ImPlot::GetPlotLimits();
-                    float  texel_width = length(
-                        1.f / 256.f / float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min) *
-                        plot_size);
+                    float2 plot_size = ImPlot::GetPlotSize();
+                    auto   plot_rect = ImPlot::GetPlotLimits();
+                    // compute width in pixels of a chromaticity texture texel
+                    texel_width = length(1.f / 256.f /
+                                         float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min) *
+                                         plot_size);
 
                     // ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, std::max(2.f, 1.5f * texel_width));
                     // ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 0.0f});
@@ -790,19 +793,19 @@ void Image::draw_info()
                     for (int i = 0; i < poly.Size; ++i) poly[i] = ImPlot::PlotToPixels({poly[i].x, poly[i].y});
 
                     ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size,
-                                                           ImGui::GetColorU32(border_color_f), ImDrawFlags_Closed,
-                                                           std::max(2.f, 1.2f * texel_width));
+                                                           ImGui::GetColorU32(text_color_f), ImDrawFlags_Closed,
+                                                           std::max(1.f, 1.2f * texel_width));
                 }
 
                 //
                 // draw wavelength tick marks
                 //
                 {
-                    ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+                    ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
                     // Draw tick marks stored in tickMarks
-                    constexpr float tick_length       = 4.0f;
-                    constexpr float major_tick_length = 8.0f;
-                    constexpr float border_thickness  = 2.f;
+                    const float tick_length       = std::max(1.f, 2.f * texel_width);
+                    const float major_tick_length = std::max(1.f, 3.f * texel_width);
+                    const float border_thickness  = std::max(1.f, 1.f * texel_width);
                     for (int i = 0; i < tickMarks.size(); ++i)
                     {
                         ImVec4 tick = tickMarks[i];
@@ -820,7 +823,7 @@ void Image::draw_info()
                         ImVec2 tick_end =
                             ImPlot::PlotToPixels(p) + normal * (is_major ? major_tick_length : tick_length);
 
-                        ImPlot::GetPlotDrawList()->AddLine(tick_start, tick_end, ImGui::GetColorU32(border_color_f),
+                        ImPlot::GetPlotDrawList()->AddLine(tick_start, tick_end, ImGui::GetColorU32(text_color_f),
                                                            is_major ? border_thickness : border_thickness * 0.5f);
 
                         // Add text label for major ticks (100 nm multiples)
@@ -840,9 +843,10 @@ void Image::draw_info()
                             text_pos.x += ImLerp(-text_size.x, 0.f, 0.5f * (normal.x + 1.f));
                             text_pos.y += ImLerp(-text_size.y, 0.f, 0.5f * (normal.y + 1.f));
 
-                            ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(border_color_fc), label);
-                            ImPlot::GetPlotDrawList()->AddText(text_pos - ImVec2{1.f, 1.f},
-                                                               ImGui::GetColorU32(border_color_f), label);
+                            // ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(text_color_f), label);
+                            // ImPlot::GetPlotDrawList()->AddText(text_pos - ImVec2{1.f, 1.f},
+                            //                                    ImGui::GetColorU32(text_color_fc), label);
+                            ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(text_color_f), label);
                         }
                     }
                     ImGui::PopFont();
@@ -852,15 +856,21 @@ void Image::draw_info()
                 // draw the primaries, gamut triangle, whitepoint, and text labels
                 //
                 {
+                    float          scale = std::clamp(texel_width * 1.2f, 1.f, 4.f);
                     Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
                     ImVec4         colors[] = {
-                        {0.8f, 0.f, 0.f, 1.f}, {0.f, 0.8f, 0.f, 1.f}, {0.f, 0.f, 0.8f, 1.f}, {0.8f, 0.8f, 0.8f, 1.f}};
-                    const char *names[] = {"R", "G", "B", "W"};
-                    double2 primaries[] = {double2(gamut_chr.red), double2(gamut_chr.green), double2(gamut_chr.blue),
-                                           double2(gamut_chr.red)};
+                        {0.8f, 0.f, 0.f, 1.f}, {0.f, 0.8f, 0.f, 1.f}, {0.f, 0.f, 0.8f, 1.f}, {0.5f, 0.5f, 0.5f, 1.f}};
+                    const char *names[]    = {"R", "G", "B", "W"};
+                    double2 primaries[]    = {double2(gamut_chr.red), double2(gamut_chr.green), double2(gamut_chr.blue),
+                                              double2(gamut_chr.red)};
+                    static bool clicked[4] = {false, false, false, false};
+                    static bool hovered[4] = {false, false, false, false};
+                    static bool held[4]    = {false, false, false, false};
+
+                    primaries[3] = double2(gamut_chr.red);
 
                     ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
-                    ImPlot::SetNextLineStyle(text_color_f, 2.0f);
+                    ImPlot::SetNextLineStyle(text_color_fc, scale);
                     ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, ImPlotLineFlags_None, 0,
                                      sizeof(double2));
 
@@ -873,7 +883,9 @@ void Image::draw_info()
                                                   ImPlot::PlotToPixels(ImPlotPoint(primaries[2].x, primaries[2].y)),
                                                   ImPlot::PlotToPixels(ImPlotPoint(primaries[3].x, primaries[3].y))};
                     for (int i = 0; i < 4; ++i)
-                        ImPlot::GetPlotDrawList()->AddCircleFilled(poly[i], 5.f, ImGui::GetColorU32(text_color_f), 0);
+                        ImPlot::GetPlotDrawList()->AddCircleFilled(
+                            poly[i], 2.5f * scale,
+                            ImGui::GetColorU32(clicked[i] || hovered[i] || held[i] ? text_color_f : text_color_fc), 0);
 
                     // ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 5.f);
                     // ImPlot::SetNextLineStyle(ImVec4{0.f, 0.f, 0.f, 1.0f});
@@ -881,11 +893,11 @@ void Image::draw_info()
                     // ImPlotScatterFlags_None,
                     //                     0, sizeof(double2));
 
-                    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
+                    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase * scale / 2.f);
                     for (int i = 0; i < 4; ++i)
                     {
-                        if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 3.f,
-                                              ImPlotDragToolFlags_Delayed))
+                        if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 1.5f * scale,
+                                              ImPlotDragToolFlags_Delayed, &clicked[i], &hovered[i], &held[i]))
                         {
                             gamut_chr.red   = float2(primaries[0].x, primaries[0].y);
                             gamut_chr.green = float2(primaries[1].x, primaries[1].y);
@@ -896,16 +908,21 @@ void Image::draw_info()
                         }
 
                         // draw text label shadow
-                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_fc));
-                        ImVec2 offset{8.f, -8.f};
+                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_f));
+                        ImVec2 offset{4.f * scale, -4.f * scale};
                         ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
                         ImPlot::PopStyleColor();
 
                         // draw text label
-                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_f));
+                        ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_fc));
                         offset -= ImVec2{1.f, 1.f};
                         ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
                         ImPlot::PopStyleColor();
+
+                        // ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_f));
+                        // ImVec2 offset{4.f * scale, -4.f * scale};
+                        // ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
+                        // ImPlot::PopStyleColor();
                     }
 
                     ImGui::PopFont();
@@ -936,8 +953,11 @@ void Image::draw_info()
 
                 ImPlot::PopStyleColor();
 
+                ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
                 ImPlot::EndPlot();
+                ImGui::PopFont();
             }
+            ImGui::PopStyleColor();
             ImGui::PopFont();
             ImGui::Unindent();
         }
