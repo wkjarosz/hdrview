@@ -73,8 +73,8 @@ void Image::make_default_textures()
                                                  int2{g_dither_matrix_w}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_chromaticity_texture = std::make_unique<Texture>(
-        Texture::PixelFormat::RGBA, Texture::ComponentFormat::Float32, int2{chr_w},
-        Texture::InterpolationMode::Bilinear, Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
+        Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2{chr_w}, Texture::InterpolationMode::Bilinear,
+        Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
 
     auto createLocus = []()
     {
@@ -129,7 +129,7 @@ void Image::make_default_textures()
 
     auto rgb2xyz = XYZ_to_RGB(Chromaticities{}, 1.f);
 
-    vector<float4> g_chromaticity_data(chr_w * chr_w);
+    vector<byte4> g_chromaticity_data(chr_w * chr_w);
     for (int y = 0; y < chr_w; ++y)
     {
         for (int x = 0; x < chr_w; ++x)
@@ -138,9 +138,11 @@ void Image::make_default_textures()
             float  yn = (y + 0.5f) / chr_w;
             float3 xyz{xn, yn, 1.f - xn - yn};
             float3 rgb = mul(rgb2xyz, xyz);
+            rgb        = linear_to_sRGB(rgb / la::maxelem(rgb));
+            byte4 rgba8{quantize_full<uint8_t>(rgb.x), quantize_full<uint8_t>(rgb.y), quantize_full<uint8_t>(rgb.z),
+                        is_inside(xyz.xy()) ? (uint8_t)255 : (uint8_t)0};
 
-            g_chromaticity_data[y * chr_w + x] =
-                float4{linear_to_sRGB(rgb / la::maxelem(rgb)), is_inside(xyz.xy()) ? 1.0f : 0.0f};
+            g_chromaticity_data[y * chr_w + x] = rgba8;
         }
     }
 

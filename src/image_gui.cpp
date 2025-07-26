@@ -673,14 +673,14 @@ void Image::draw_info()
             static float2 vSize  = vMax - vMin;
             static float  aspect = vSize.x / vSize.y;
 
-            property_name("Diagram");
-            ImGui::SameLine(label_size);
+            // property_name("Diagram");
+            // ImGui::SameLine(label_size);
+            ImGui::Indent();
             float const size = ImMax(ImGui::GetContentRegionAvail().x, min_w);
 
-            ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
-            if (ImPlot::BeginPlot("##ChromaticityDiagram", ImVec2(size, size / aspect),
-                                  ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend |
-                                      ImPlotFlags_NoTitle))
+            ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
+            if (ImPlot::BeginPlot("Chromaticity diagram", ImVec2(size, size / aspect),
+                                  ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend))
             {
                 constexpr float wavelengthMin          = 380.f;
                 constexpr float wavelengthMax          = 700.f;
@@ -749,10 +749,12 @@ void Image::draw_info()
                 ImPlot::SetupAxis(ImAxis_Y1, "y", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_Foreground);
                 ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear);
                 ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Linear);
-
                 ImPlot::SetupAxesLimits(vMin.x, vMax.x, vMin.y, vMax.y);
-
                 ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
+
+                ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+                ImPlot::SetupFinish();
+                ImGui::PopFont();
 
                 ImPlot::PushPlotClipRect();
 
@@ -796,7 +798,7 @@ void Image::draw_info()
                 // draw wavelength tick marks
                 //
                 {
-                    ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 10.f / 10.f);
+                    ImGui::PushFont(hdrview()->font("mono regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
                     // Draw tick marks stored in tickMarks
                     constexpr float tick_length       = 4.0f;
                     constexpr float major_tick_length = 8.0f;
@@ -879,7 +881,7 @@ void Image::draw_info()
                     // ImPlotScatterFlags_None,
                     //                     0, sizeof(double2));
 
-                    ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 14.f / 10.f);
+                    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
                     for (int i = 0; i < 4; ++i)
                     {
                         if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 3.f,
@@ -937,6 +939,7 @@ void Image::draw_info()
                 ImPlot::EndPlot();
             }
             ImGui::PopFont();
+            ImGui::Unindent();
         }
 
         {
