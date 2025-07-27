@@ -643,13 +643,14 @@ void Image::draw_info()
                 {
                     ImVector<float2> chromLine;
                     chromLine.resize(sample_count);
-                    auto illum = white_point_spectrum(WhitePoint_D65);
+                    auto &illum = white_point_spectrum(WhitePoint_D65);
+                    auto &XYZ   = CIE_XYZ_spectra();
 
                     // Compute chromaticity line
                     for (int i = 0; i < sample_count; ++i)
                     {
                         float wavelength = lerp(lambda_min, lambda_max, ((float)i) / ((float)(sample_count - 1)));
-                        auto  xyz        = wavelength_to_XYZ(wavelength) * illum.eval(wavelength);
+                        auto  xyz        = illum.eval(wavelength) * XYZ.eval(wavelength);
                         chromLine[i]     = xyz.xy() / la::sum(xyz);
                         plot_limits.enclose(chromLine[i]);
                     }
@@ -801,6 +802,34 @@ void Image::draw_info()
                         }
                     }
                     ImGui::PopFont();
+                }
+
+                //
+                // draw the locus of D (daylight) CCTs
+                //
+                {
+                    auto create_CCT_locus = []()
+                    {
+                        ImVector<float2> poly;
+                        poly.resize(sample_count);
+
+                        for (int i = 0; i < sample_count; ++i)
+                        {
+                            float T = lerp(4000.f, 25000.f, ((float)i) / ((float)(sample_count - 1)));
+                            poly[i] = CCT_to_xy(T);
+                        }
+
+                        return poly;
+                    };
+                    const static ImVector<float2> cct_locus = create_CCT_locus();
+                    // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves
+                    ImVector<float2> poly = cct_locus;
+                    // Iterate over all entries in poly and map them to pixel coordinates
+                    for (int i = 0; i < poly.Size; ++i) poly[i] = ImPlot::PlotToPixels({poly[i].x, poly[i].y});
+
+                    ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size,
+                                                           ImGui::GetColorU32(text_color_f), ImDrawFlags_None,
+                                                           std::clamp(texel_width * 1.2f, 1.f, 4.f));
                 }
 
                 //

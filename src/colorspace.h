@@ -186,20 +186,52 @@ const float3   &sRGB_Yw();
 const float3x3 &sRGB_to_XYZ();
 const float3x3 &XYZ_to_sRGB();
 
+template <typename T>
 struct TabulatedSpectrum
 {
-    const float *data           = nullptr;
-    const size_t size           = 0u;
-    const float  min_wavelength = 0.0f; //!< minimum wavelength in nm
-    const float  max_wavelength = 0.0f; //!< maximum wavelength in nm
+    std::vector<T> values;
+    float          min_wavelength = 380.f; //!< minimum wavelength in nm
+    float          max_wavelength = 830.f; //!< maximum wavelength in nm
 
-    float eval(float wavelength) const;
+    //! Return the location of the spanning bins (x,y components), and the lerp factor between them (z)
+    float3 find_interval(float wavelength) const
+    {
+        float t = saturate(lerp_factor(min_wavelength, max_wavelength, wavelength));
+
+        float width = (float)(values.size() - 1);
+        float i0    = std::floor(t * values.size());
+        float i1    = std::ceil(t * values.size());
+
+        float ti;
+        if (i0 != i1)
+            ti = (t * width - i0) / (i1 - i0);
+        else
+            ti = 1.0f;
+
+        return {i0, i1, ti};
+    }
+
+    T eval(float wavelength) const
+    {
+        auto i = find_interval(wavelength);
+        return lerp(values[(size_t)i.x], values[(size_t)i.y], i.z);
+    }
 };
 
-TabulatedSpectrum white_point_spectrum(WhitePoint wp = WhitePoint_D65);
-TabulatedSpectrum CIE_X_spectrum();
-TabulatedSpectrum CIE_Y_spectrum();
-TabulatedSpectrum CIE_Z_spectrum();
+/*! Compute Planckian locus from correlated color temperature (CCT) in Kelvin.
+
+    Based on Kim et al. (2002), valid for 1667K <= T <= 25000K.
+
+    See https://en.wikipedia.org/wiki/Planckian_locus#Approximation
+*/
+float2 Kelvin_to_xy(float T);
+/*! Compute CIE daylight chromaticity coordinates (xD, yD) from correlated color temperature (CCT) in Kelvin
+
+    See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
+*/
+float2                           CCT_to_xy(float T);
+const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint wp = WhitePoint_D65);
+const TabulatedSpectrum<float3> &CIE_XYZ_spectra();
 
 /*!
     Converts a wavelength in nanometers to an XYZ color value, using the D65 white point by default.

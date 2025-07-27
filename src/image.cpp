@@ -74,43 +74,42 @@ void Image::make_default_textures()
         Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2{chr_w}, Texture::InterpolationMode::Bilinear,
         Texture::InterpolationMode::Bilinear, Texture::WrapMode::ClampToEdge);
 
-    auto createLocus = []()
+    auto create_locus = []()
     {
-        constexpr int    chromeLineSamplesCount = 200;
-        ImVector<ImVec2> chromLine;
-        constexpr int    ptsCount = chromeLineSamplesCount;
-        chromLine.resize(ptsCount);
+        constexpr int    sample_count = 200;
+        ImVector<ImVec2> poly;
+        poly.resize(sample_count);
 
-        float wavelengthMin = 380.f;
-        float wavelengthMax = 700.f;
+        constexpr float wavelength_min = 380.f;
+        constexpr float wavelength_max = 700.f;
 
-        auto illum = white_point_spectrum(WhitePoint_D65);
+        auto &illum = white_point_spectrum(WhitePoint_D65);
+        auto &XYZ   = CIE_XYZ_spectra();
 
         // Compute chromaticity line
-        for (int i = 0; i < chromeLineSamplesCount; ++i)
+        for (int i = 0; i < sample_count; ++i)
         {
-            float wavelength = lerp(wavelengthMin, wavelengthMax, ((float)i) / ((float)(chromeLineSamplesCount - 1)));
-            auto  xyz        = wavelength_to_XYZ(wavelength) * illum.eval(wavelength);
-            spdlog::info(wavelength_to_XYZ(wavelength));
-            chromLine[i] = xyz.xy() / la::sum(xyz); // normalize
+            float wavelength = lerp(wavelength_min, wavelength_max, ((float)i) / ((float)(sample_count - 1)));
+            auto  xyz        = illum.eval(wavelength) * XYZ.eval(wavelength);
+            poly[i]          = xyz.xy() / la::sum(xyz); // normalize
         }
 
-        return chromLine;
+        return poly;
     };
 
-    static ImVector<ImVec2> chromLine = createLocus();
+    static const ImVector<ImVec2> locus = create_locus();
 
     // lambda to check if a point is inside a polygon using the ray-casting algorithm
     auto is_inside = [](float2 point) -> bool
     {
-        int n     = chromLine.size(); // Number of vertices in the polygon
-        int count = 0;                // Count of intersections
+        int n     = locus.size(); // Number of vertices in the polygon
+        int count = 0;            // Count of intersections
 
         // Iterate through each edge of the polygon
         for (int i = 0; i < n; i++)
         {
-            ImVec2 p1 = chromLine[i];
-            ImVec2 p2 = chromLine[(i + 1) % n]; // Ensure the last point connects to the first point
+            ImVec2 p1 = locus[i];
+            ImVec2 p2 = locus[(i + 1) % n]; // Ensure the last point connects to the first point
 
             // Check if the point's y-coordinate is within the edge's y-range and if the point is to the left of the
             // edge

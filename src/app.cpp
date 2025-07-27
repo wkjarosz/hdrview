@@ -987,11 +987,11 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         WhitePoint wp{n};
                         auto       spectrum = white_point_spectrum(wp);
-                        if (!spectrum.data)
+                        if (spectrum.values.empty())
                             continue;
                         const char *name = white_point_name(wp);
-                        ImPlot::PlotLine(name, spectrum.data, spectrum.size,
-                                         (spectrum.max_wavelength - spectrum.min_wavelength) / spectrum.size,
+                        ImPlot::PlotLine(name, spectrum.values.data(), spectrum.values.size(),
+                                         (spectrum.max_wavelength - spectrum.min_wavelength) / spectrum.values.size(),
                                          spectrum.min_wavelength);
                     }
                     ImPlot::PopStyleVar(3);
@@ -1006,17 +1006,15 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
                     ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
 
-                    auto X = CIE_X_spectrum();
-                    ImPlot::PlotLine("X", X.data, X.size, (X.max_wavelength - X.min_wavelength) / X.size,
-                                     X.min_wavelength);
+                    auto &xyz       = CIE_XYZ_spectra();
+                    auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
+                    ImPlot::PlotLine("X", ((const float *)xyz.values.data()), xyz.values.size(), increment,
+                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                    ImPlot::PlotLine("Y", ((const float *)xyz.values.data()) + 1, xyz.values.size(), increment,
+                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                    ImPlot::PlotLine("Z", ((const float *)xyz.values.data()) + 2, xyz.values.size(), increment,
+                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
 
-                    auto Y = CIE_Y_spectrum();
-                    ImPlot::PlotLine("Y", Y.data, Y.size, (Y.max_wavelength - Y.min_wavelength) / Y.size,
-                                     Y.min_wavelength);
-
-                    auto Z = CIE_Z_spectrum();
-                    ImPlot::PlotLine("Z", Z.data, Z.size, (Z.max_wavelength - Z.min_wavelength) / Z.size,
-                                     Z.min_wavelength);
                     ImPlot::PopStyleVar(3);
                     ImPlot::EndPlot();
                 }
