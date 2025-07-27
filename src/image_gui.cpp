@@ -668,9 +668,9 @@ void Image::draw_info()
 
                     for (int tickIdx = 0; tickIdx < tickCount; ++tickIdx)
                     {
-                        float λ = firstTick + tickIdx * 10.0f;
+                        float lambda = firstTick + tickIdx * 10.0f;
                         // spdlog::info("Tick {}: Wavelength = {}", tickIdx, nm);
-                        float t    = (λ - lambda_min) / (lambda_max - lambda_min);
+                        float t    = (lambda - lambda_min) / (lambda_max - lambda_min);
                         float fIdx = t * (sample_count - 1);
                         int   i0   = ImClamp((int)ImFloor(fIdx), 0, sample_count - 2);
                         int   i1   = i0 + 1;
