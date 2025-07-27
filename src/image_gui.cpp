@@ -634,8 +634,8 @@ void Image::draw_info()
                                   ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend |
                                       ImPlotFlags_NoTitle))
             {
-                static constexpr float λ_min        = 380.f;
-                static constexpr float λ_max        = 700.f;
+                static constexpr float lambda_min   = 380.f;
+                static constexpr float lambda_max   = 700.f;
                 static constexpr int   sample_count = 200;
 
                 static Box2f plot_limits;
@@ -648,7 +648,7 @@ void Image::draw_info()
                     // Compute chromaticity line
                     for (int i = 0; i < sample_count; ++i)
                     {
-                        float wavelength = lerp(λ_min, λ_max, ((float)i) / ((float)(sample_count - 1)));
+                        float wavelength = lerp(lambda_min, lambda_max, ((float)i) / ((float)(sample_count - 1)));
                         auto  xyz        = wavelength_to_XYZ(wavelength) * illum.eval(wavelength);
                         chromLine[i]     = xyz.xy() / la::sum(xyz);
                         plot_limits.enclose(chromLine[i]);
@@ -658,19 +658,19 @@ void Image::draw_info()
                 };
                 const static ImVector<float2> chromLine = createLocus();
 
-                static const float firstTick = (ImFloor(λ_min / 10.f) + 1.f) * 10.f;
+                static const float firstTick = (ImFloor(lambda_min / 10.f) + 1.f) * 10.f;
                 // Calculate number of tick marks at 10 nm intervals
                 auto createTicks = []()
                 {
                     ImVector<float4> tickMarks;
-                    int              tickCount = (int)ImFloor((λ_max - λ_min) / 10.0f) + 1;
+                    int              tickCount = (int)ImFloor((lambda_max - lambda_min) / 10.0f) + 1;
                     tickMarks.resize(tickCount); // Stores tick mark location and orientation
 
                     for (int tickIdx = 0; tickIdx < tickCount; ++tickIdx)
                     {
                         float λ = firstTick + tickIdx * 10.0f;
                         // spdlog::info("Tick {}: Wavelength = {}", tickIdx, nm);
-                        float t    = (λ - λ_min) / (λ_max - λ_min);
+                        float t    = (λ - lambda_min) / (lambda_max - lambda_min);
                         float fIdx = t * (sample_count - 1);
                         int   i0   = ImClamp((int)ImFloor(fIdx), 0, sample_count - 2);
                         int   i1   = i0 + 1;
