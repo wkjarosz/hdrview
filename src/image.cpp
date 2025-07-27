@@ -6,8 +6,6 @@
 
 #include "fwd.h"
 
-#include "dear_widgets.h"
-
 #include "app.h"
 #include "colorspace.h"
 #include "common.h"
@@ -86,12 +84,15 @@ void Image::make_default_textures()
         float wavelengthMin = 380.f;
         float wavelengthMax = 700.f;
 
+        auto illum = white_point_spectrum(WhitePoint_D65);
+
         // Compute chromaticity line
         for (int i = 0; i < chromeLineSamplesCount; ++i)
         {
-            float const wavelength =
-                lerp(wavelengthMin, wavelengthMax, ((float)i) / ((float)(chromeLineSamplesCount - 1)));
-            chromLine[i] = ImWidgets::xyWavelengthChromaticity(wavelength);
+            float wavelength = lerp(wavelengthMin, wavelengthMax, ((float)i) / ((float)(chromeLineSamplesCount - 1)));
+            auto  xyz        = wavelength_to_XYZ(wavelength) * illum.eval(wavelength);
+            spdlog::info(wavelength_to_XYZ(wavelength));
+            chromLine[i] = xyz.xy() / la::sum(xyz); // normalize
         }
 
         return chromLine;

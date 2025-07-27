@@ -842,8 +842,6 @@ hello_imgui_add_app(
   src/imageio/stb.cpp
   src/imageio/qoi.cpp
   src/imageio/uhdr.cpp
-  src/dear_widgets.cpp
-  src/dear_widgets.h
   src/app.cpp
   src/colormap.cpp
   src/colorspace.cpp

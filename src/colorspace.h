@@ -186,6 +186,31 @@ const float3   &sRGB_Yw();
 const float3x3 &sRGB_to_XYZ();
 const float3x3 &XYZ_to_sRGB();
 
+struct TabulatedSpectrum
+{
+    const float *data           = nullptr;
+    const size_t size           = 0u;
+    const float  min_wavelength = 0.0f; //!< minimum wavelength in nm
+    const float  max_wavelength = 0.0f; //!< maximum wavelength in nm
+
+    float eval(float wavelength) const;
+};
+
+TabulatedSpectrum white_point_spectrum(WhitePoint wp = WhitePoint_D65);
+TabulatedSpectrum CIE_X_spectrum();
+TabulatedSpectrum CIE_Y_spectrum();
+TabulatedSpectrum CIE_Z_spectrum();
+
+/*!
+    Converts a wavelength in nanometers to an XYZ color value, using the D65 white point by default.
+    \param wavelength
+        Wavelength in nanometers
+    \returns
+        XYZ color value corresponding to the given wavelength and white point.
+*/
+
+float3 wavelength_to_XYZ(float wavelength);
+
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
 
