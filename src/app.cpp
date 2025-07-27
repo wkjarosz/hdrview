@@ -975,27 +975,35 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     ImPlot::EndPlot();
                 }
 
-                if (ImPlot::BeginPlot("Illuminant relative spectral distributions"))
+                try
                 {
-                    ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-
-                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                    ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                    ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
-
-                    for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                    if (ImPlot::BeginPlot("Illuminant relative spectral distributions"))
                     {
-                        WhitePoint wp{n};
-                        auto       spectrum = white_point_spectrum(wp);
-                        if (spectrum.values.empty())
-                            continue;
-                        const char *name = white_point_name(wp);
-                        ImPlot::PlotLine(name, spectrum.values.data(), spectrum.values.size(),
-                                         (spectrum.max_wavelength - spectrum.min_wavelength) / spectrum.values.size(),
-                                         spectrum.min_wavelength);
+                        ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+
+                        for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                        {
+                            WhitePoint wp{n};
+                            auto       spectrum = white_point_spectrum(wp);
+                            if (spectrum.values.empty())
+                                continue;
+                            string name{white_point_name(wp)};
+                            ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
+                                             (spectrum.max_wavelength - spectrum.min_wavelength) /
+                                                 spectrum.values.size(),
+                                             spectrum.min_wavelength);
+                        }
+                        ImPlot::PopStyleVar(3);
+                        ImPlot::EndPlot();
                     }
-                    ImPlot::PopStyleVar(3);
-                    ImPlot::EndPlot();
+                }
+                catch (const std::exception &e)
+                {
+                    spdlog::error(e.what());
                 }
 
                 if (ImPlot::BeginPlot("CIE 1931 XYZ color matching functions"))
