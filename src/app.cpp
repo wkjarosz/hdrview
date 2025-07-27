@@ -82,6 +82,7 @@ static bool            g_show_help    = false;
 static bool            g_help_is_open = false;
 static json            g_settings;
 static int             g_theme                               = -1;
+static constexpr int   CUSTOM_THEME                          = -3; // Custom theme
 static bool            g_show_command_palette                = false;
 static bool            g_show_developer_menu                 = false;
 static bool            g_show_tweak_window                   = false;
@@ -329,7 +330,7 @@ static void load_theme(json j)
         else if (name == "HDRView light")
             g_theme = -2;
         else if (name == "Custom")
-            g_theme = -3;
+            g_theme = CUSTOM_THEME;
         else
             g_theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
                 ImGuiTheme::ImGuiTheme_FromName(name.c_str());
@@ -909,7 +910,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 bool theme_changed = memcmp(&previous, &ImGui::GetStyle(), sizeof(ImGuiStyle) - 2 * sizeof(float)) != 0;
 
                 if (theme_changed)
-                    g_theme = -2; // Custom theme
+                    g_theme = CUSTOM_THEME; // Custom theme
             }
             ImGui::End();
         }
@@ -2076,7 +2077,7 @@ void HDRViewApp::draw_menus()
 
             ImGui::Separator();
 
-            int start = g_theme == -3 ? -3 : -2;
+            int start = g_theme == CUSTOM_THEME ? CUSTOM_THEME : -2;
             for (int t = start; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                 if (ImGui::MenuItem(theme_name(t).c_str(), nullptr, t == g_theme))
                     apply_theme(t);
