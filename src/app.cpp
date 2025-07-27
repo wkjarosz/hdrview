@@ -985,7 +985,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
                         ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
 
-                        for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                        for (WhitePoint_ n = WhitePoint_D50; n <= WhitePoint_D93; ++n)
                         {
                             WhitePoint wp{n};
                             auto       spectrum = white_point_spectrum(wp);
