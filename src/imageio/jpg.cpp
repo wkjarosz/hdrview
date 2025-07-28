@@ -129,19 +129,21 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
             throw std::invalid_argument{"Failed to read JPEG header."};
 
+        bool cmyk = cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK;
+        // bool gray_scale = cinfo.jpeg_color_space == JCS_GRAYSCALE;
+
         // ICC profile extraction
-        // std::vector<uint8_t> icc_profile = read_icc_profile(&cinfo);
         std::vector<uint8_t> icc_profile;
         {
             unsigned char *icc_data = nullptr;
             unsigned int   icc_len  = 0;
             if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len))
+            {
+                spdlog::warn("Read in ICC profile from JPEG.");
                 icc_profile.assign(icc_data, icc_data + icc_len);
-            free(icc_data);
+                free(icc_data);
+            }
         }
-
-        bool cmyk = cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK;
-        // bool gray_scale = cinfo.jpeg_color_space == JCS_GRAYSCALE;
 
         if (cmyk)
             spdlog::warn("JPEG: CMYK color space detected. HDRView doesn't currently support CMYK JPEG files. Colors "
@@ -186,9 +188,17 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         {
             JSAMPROW row_pointer = row_buffer.data();
             jpeg_read_scanlines(&cinfo, &row_pointer, 1);
+
             for (int x = 0; x < size.x; ++x)
                 for (int c = 0; c < size.z; ++c)
-                    float_pixels[(y * size.x + x) * size.z + c] = row_buffer[x * size.z + c] / 255.0f;
+                {
+                    // lcms expects floating-point CMYK values to be in the range [0, 100]
+                    if (cmyk && !icc_profile.empty())
+                        float_pixels[(y * size.x + x) * size.z + c] =
+                            (1.f - row_buffer[x * size.z + c] / 255.f) * 100.f;
+                    else
+                        float_pixels[(y * size.x + x) * size.z + c] = row_buffer[x * size.z + c] / 255.f;
+                }
         }
         jpeg_finish_decompress(&cinfo);
 

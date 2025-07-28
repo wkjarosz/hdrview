@@ -74,28 +74,28 @@ enum WhitePoint : WhitePoint_
 {
     WhitePoint_FirstNamed = 0,
     WhitePoint_ACES       = WhitePoint_FirstNamed, // Academy Color Encoding System, ~6000k
-    WhitePoint_D50,                                //	horizon light, ICC profile PCS
-    WhitePoint_D55,                                //	mid-morning / mid-afternoon daylight
-    WhitePoint_D65,                                //	noon daylight: television, sRGB color space
-    WhitePoint_D75,                                //	North sky daylight
-    WhitePoint_D93,                                //	high-efficiency blue phosphor monitors, BT.2035
+    WhitePoint_D50,                                // horizon light, ICC profile PCS
+    WhitePoint_D55,                                // mid-morning / mid-afternoon daylight
+    WhitePoint_D65,                                // noon daylight: television, sRGB color space
+    WhitePoint_D75,                                // North sky daylight
+    WhitePoint_D93,                                // high-efficiency blue phosphor monitors, BT.2035
     WhitePoint_DCI,                                // ~6300 K
-    WhitePoint_F1,                                 //	daylight fluorescent
-    WhitePoint_F2,                                 //	cool white fluorescent
-    WhitePoint_F3,                                 //	white fluorescent
-    WhitePoint_F4,                                 //	warm white fluorescent
-    WhitePoint_F5,                                 //	daylight fluorescent
-    WhitePoint_F6,                                 //	light white fluorescent
-    WhitePoint_F7,                                 //	D65 simulator, daylight simulator
-    WhitePoint_F8,                                 //	D50 simulator, Sylvania F40 Design 50
-    WhitePoint_F9,                                 //	cool white deluxe fluorescent
-    WhitePoint_F10,                                //	Philips TL85, Ultralume 50
-    WhitePoint_F11,                                //	Philips TL84, Ultralume 40
-    WhitePoint_F12,                                //	Philips TL83, Ultralume 30
-    WhitePoint_A,                                  //	incandescent / tungsten
-    WhitePoint_B,                                  //	obsolete, direct sunlight at noon
-    WhitePoint_C,                                  //	obsolete, average / North sky daylight
-    WhitePoint_E,                                  //	equal energy
+    WhitePoint_F1,                                 // daylight fluorescent
+    WhitePoint_F2,                                 // cool white fluorescent
+    WhitePoint_F3,                                 // white fluorescent
+    WhitePoint_F4,                                 // warm white fluorescent
+    WhitePoint_F5,                                 // daylight fluorescent
+    WhitePoint_F6,                                 // light white fluorescent
+    WhitePoint_F7,                                 // D65 simulator, daylight simulator
+    WhitePoint_F8,                                 // D50 simulator, Sylvania F40 Design 50
+    WhitePoint_F9,                                 // cool white deluxe fluorescent
+    WhitePoint_F10,                                // Philips TL85, Ultralume 50
+    WhitePoint_F11,                                // Philips TL84, Ultralume 40
+    WhitePoint_F12,                                // Philips TL83, Ultralume 30
+    WhitePoint_A,                                  // incandescent / tungsten
+    WhitePoint_B,                                  // obsolete, direct sunlight at noon
+    WhitePoint_C,                                  // obsolete, average / North sky daylight
+    WhitePoint_E,                                  // equal energy
     WhitePoint_LastNamed = WhitePoint_E,
     WhitePoint_Unspecified, //!< unspecified, assuming D65
     WhitePoint_Custom,
@@ -210,6 +210,8 @@ struct TabulatedSpectrum
 
         return {i0, i1, ti};
     }
+
+    T eval(float3 i) const { return lerp(values[(size_t)i.x], values[(size_t)i.y], i.z); }
 
     T eval(float wavelength) const
     {

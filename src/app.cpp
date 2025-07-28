@@ -923,109 +923,120 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
             ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
             if (ImGui::Begin("Debug", &g_show_debug_window))
             {
-                static float            gamma = 2.2f;
-                static TransferFunction tf    = TransferFunction_Linear;
-                ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
-                if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
-                                      ImGuiComboFlags_HeightLargest))
+                if (ImGui::BeginTabBar("Debug tabs", ImGuiTabBarFlags_None))
                 {
-                    for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
+                    if (ImGui::BeginTabItem("Transfer functions"))
                     {
-                        const bool is_selected = (tf == n);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
-                                              is_selected))
-                            tf = (TransferFunction)n;
-
-                        // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                if (ImPlot::BeginPlot("Transfer functions"))
-                {
-                    ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-
-                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                    ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-
-                    auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
-                    auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
-
-                    const int    N = 101;
-                    static float xs1[N], ys1[N];
-                    for (int i = 0; i < N; ++i)
-                    {
-                        xs1[i] = i / float(N - 1);
-                        ys1[i] = f(xs1[i]);
-                    }
-                    static float xs2[N], ys2[N];
-                    for (int i = 0; i < N; ++i)
-                    {
-                        ys2[i] = lerp(0.0f, ys1[N - 1], i / float(N - 1));
-                        xs2[i] = g(ys2[i]);
-                    }
-
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                    ImPlot::PlotLine("to_linear", xs1, ys1, N);
-                    ImPlot::SetNextMarkerStyle(ImPlotMarker_Square);
-                    ImPlot::PlotLine("from_linear", xs2, ys2, N);
-
-                    ImPlot::PopStyleVar(2);
-                    ImPlot::EndPlot();
-                }
-
-                try
-                {
-                    if (ImPlot::BeginPlot("Illuminant relative spectral distributions"))
-                    {
-                        ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-
-                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
-
-                        for (WhitePoint_ n = WhitePoint_D50; n <= WhitePoint_D93; ++n)
+                        static float            gamma = 2.2f;
+                        static TransferFunction tf    = TransferFunction_Linear;
+                        ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
+                        if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
+                                              ImGuiComboFlags_HeightLargest))
                         {
-                            WhitePoint wp{n};
-                            auto       spectrum = white_point_spectrum(wp);
-                            if (spectrum.values.empty())
-                                continue;
-                            string name{white_point_name(wp)};
-                            ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
-                                             (spectrum.max_wavelength - spectrum.min_wavelength) /
-                                                 spectrum.values.size(),
-                                             spectrum.min_wavelength);
+                            for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
+                            {
+                                const bool is_selected = (tf == n);
+                                if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
+                                                      is_selected))
+                                    tf = (TransferFunction)n;
+
+                                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                                if (is_selected)
+                                    ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
                         }
-                        ImPlot::PopStyleVar(3);
-                        ImPlot::EndPlot();
+                        if (ImPlot::BeginPlot("Transfer functions"))
+                        {
+                            ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+
+                            auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
+                            auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
+
+                            const int    N = 101;
+                            static float xs1[N], ys1[N];
+                            for (int i = 0; i < N; ++i)
+                            {
+                                xs1[i] = i / float(N - 1);
+                                ys1[i] = f(xs1[i]);
+                            }
+                            static float xs2[N], ys2[N];
+                            for (int i = 0; i < N; ++i)
+                            {
+                                ys2[i] = lerp(0.0f, ys1[N - 1], i / float(N - 1));
+                                xs2[i] = g(ys2[i]);
+                            }
+
+                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+                            ImPlot::PlotLine("to_linear", xs1, ys1, N);
+                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Square);
+                            ImPlot::PlotLine("from_linear", xs2, ys2, N);
+
+                            ImPlot::PopStyleVar(2);
+                            ImPlot::EndPlot();
+                        }
+                        ImGui::EndTabItem();
+                    }
+
+                    if (ImGui::BeginTabItem("Illuminant spectra"))
+                    {
+                        if (ImPlot::BeginPlot("Illuminant spectra"))
+                        {
+                            ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit,
+                                              ImPlotAxisFlags_AutoFit);
+
+                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                            ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+
+                            for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                            {
+                                WhitePoint wp{n};
+                                auto       spectrum = white_point_spectrum(wp);
+                                if (spectrum.values.empty())
+                                    continue;
+                                string name{white_point_name(wp)};
+                                ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
+                                                 (spectrum.max_wavelength - spectrum.min_wavelength) /
+                                                     (spectrum.values.size() - 1),
+                                                 spectrum.min_wavelength);
+                            }
+                            ImPlot::PopStyleVar(3);
+                            ImPlot::EndPlot();
+                        }
+                        ImGui::EndTabItem();
+                    }
+
+                    if (ImGui::BeginTabItem("CIE 1931 XYZ"))
+                    {
+                        if (ImPlot::BeginPlot("CIE 1931 XYZ color matching functions"))
+                        {
+                            ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit,
+                                              ImPlotAxisFlags_AutoFit);
+
+                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                            ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+
+                            auto &xyz       = CIE_XYZ_spectra();
+                            auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
+                            ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, xyz.values.size(), increment,
+                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                            ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, xyz.values.size(), increment,
+                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                            ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, xyz.values.size(), increment,
+                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+
+                            ImPlot::PopStyleVar(3);
+                            ImPlot::EndPlot();
+                        }
+                        ImGui::EndTabItem();
                     }
                 }
-                catch (const std::exception &e)
-                {
-                    spdlog::error(e.what());
-                }
-
-                if (ImPlot::BeginPlot("CIE 1931 XYZ color matching functions"))
-                {
-                    ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-
-                    ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                    ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                    ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
-
-                    auto &xyz       = CIE_XYZ_spectra();
-                    auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
-                    ImPlot::PlotLine("X", ((const float *)xyz.values.data()), xyz.values.size(), increment,
-                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                    ImPlot::PlotLine("Y", ((const float *)xyz.values.data()) + 1, xyz.values.size(), increment,
-                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                    ImPlot::PlotLine("Z", ((const float *)xyz.values.data()) + 2, xyz.values.size(), increment,
-                                     xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-
-                    ImPlot::PopStyleVar(3);
-                    ImPlot::EndPlot();
-                }
+                ImGui::EndTabBar();
             }
 
             ImGui::End();

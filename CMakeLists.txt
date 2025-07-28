@@ -520,18 +520,18 @@ if(HDRVIEW_ENABLE_LIBJPEG)
 
     message(STATUS "Found libjpeg-turbo with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
 
-    set(JPEG_HEADER_FOUND FALSE)
-    foreach(JPEG_DIR ${JPEG_INCLUDE_DIRS})
-      if(EXISTS "${JPEG_DIR}/jpeglib.h")
-      file(READ "${JPEG_DIR}/jpeglib.h" JPEGLIB_H_CONTENTS)
-      message(STATUS "========== ${JPEG_DIR}/jpeglib.h ==========")
-      message(STATUS "${JPEGLIB_H_CONTENTS}")
-      set(JPEG_HEADER_FOUND TRUE)
-      endif()
-    endforeach()
-    if(NOT JPEG_HEADER_FOUND)
-      message(WARNING "Could not find jpeglib.h in any of: ${JPEG_INCLUDE_DIRS}")
-    endif()
+    # set(JPEG_HEADER_FOUND FALSE)
+    # foreach(JPEG_DIR ${JPEG_INCLUDE_DIRS})
+    #   if(EXISTS "${JPEG_DIR}/jpeglib.h")
+    #   file(READ "${JPEG_DIR}/jpeglib.h" JPEGLIB_H_CONTENTS)
+    #   message(STATUS "========== ${JPEG_DIR}/jpeglib.h ==========")
+    #   message(STATUS "${JPEGLIB_H_CONTENTS}")
+    #   set(JPEG_HEADER_FOUND TRUE)
+    #   endif()
+    # endforeach()
+    # if(NOT JPEG_HEADER_FOUND)
+    #   message(WARNING "Could not find jpeglib.h in any of: ${JPEG_INCLUDE_DIRS}")
+    # endif()
 
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
@@ -593,12 +593,12 @@ if(HDRVIEW_ENABLE_LIBJPEG)
         INSTALL_COMMAND ""
       )
 
-      ExternalProject_Add_Step(${JPEGTURBO_TARGET_NAME} print_jpeglib_h
-        COMMAND ${CMAKE_COMMAND} -E echo "========== src/jpeglib.h =========="
-        COMMAND ${CMAKE_COMMAND} -E cat ${JPEGTURBO_SOURCE_DIR}/src/jpeglib.h
-        DEPENDEES download
-        ALWAYS 1
-      )
+      # ExternalProject_Add_Step(${JPEGTURBO_TARGET_NAME} print_jpeglib_h
+      #   COMMAND ${CMAKE_COMMAND} -E echo "========== src/jpeglib.h =========="
+      #   COMMAND ${CMAKE_COMMAND} -E cat ${JPEGTURBO_SOURCE_DIR}/src/jpeglib.h
+      #   DEPENDEES download
+      #   ALWAYS 1
+      # )
     endif()
 
     # add_custom_command(

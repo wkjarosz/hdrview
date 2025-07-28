@@ -364,16 +364,7 @@ static const TabulatedSpectrum<float> s_Illuminant_C = {
     380.f,
     780.f};
 
-static const TabulatedSpectrum<float> s_Illuminant_E = {
-    {100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f,
-     100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f, 100.0f},
-    380.f,
-    830.f};
+static const TabulatedSpectrum<float> s_Illuminant_E = {{100.0f, 100.0f}, 300.f, 830.f};
 
 // Reference whites used in the common color spaces below
 static float2 s_white_point_values[] = {
@@ -923,43 +914,57 @@ float2 CCT_to_xy(float T)
 
 const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
 {
+    // The D-series illuminants are defined in terms of three basis functions stored in s_CIE_D_bases
+    // The weights are chosen based on the CCT.
+    // See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
+    auto DXX = [](float T)
+    {
+        TabulatedSpectrum<float> illum;
+
+        float2 xy = CCT_to_xy(T);
+        float  xD = xy.x, yD = xy.y;
+        float  M  = 0.0241f + 0.2562f * xD - 0.7341f * yD;
+        float  M1 = (-1.3515f - 1.7703f * xD + 5.9114f * yD) / M;
+        float  M2 = (0.0300f - 31.4424f * xD + 30.0717f * yD) / M;
+        illum.values.resize(s_CIE_D_bases.values.size());
+        illum.min_wavelength = s_CIE_D_bases.min_wavelength;
+        illum.max_wavelength = s_CIE_D_bases.max_wavelength;
+        for (size_t j = 0; j < s_CIE_D_bases.values.size(); ++j)
+        {
+            float S0        = s_CIE_D_bases.values[j][0];
+            float S1        = s_CIE_D_bases.values[j][1];
+            float S2        = s_CIE_D_bases.values[j][2];
+            illum.values[j] = S0 + M1 * S1 + M2 * S2;
+        }
+        return illum;
+    };
+
     switch (wp)
     {
     case WhitePoint_D50:
+    {
+        const static auto D50 = DXX(5000.f);
+        return D50;
+    }
     case WhitePoint_D55:
+    {
+        const static auto D55 = DXX(5500.f);
+        return D55;
+    }
     case WhitePoint_D65:
+    {
+        const static auto D65 = DXX(6500.f);
+        return D65;
+    }
     case WhitePoint_D75:
+    {
+        const static auto D75 = DXX(7500.f);
+        return D75;
+    }
     case WhitePoint_D93:
     {
-        // The D-series illuminants are defined in terms of three basis functions stored in s_CIE_D_bases
-        // The weights are chosen based on the CCT.
-        // See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
-        static const float              temps[] = {5000.f, 5500.f, 6500.f, 7500.f, 9300.f};
-        static TabulatedSpectrum<float> s_illuminant_D[5];
-        static bool                     initialized = false;
-        if (!initialized)
-        {
-            for (int i = 0; i < 5; ++i)
-            {
-                float2 xy = CCT_to_xy(temps[i]);
-                float  xD = xy.x, yD = xy.y;
-                float  M  = 0.0241f + 0.2562f * xD - 0.7341f * yD;
-                float  M1 = (-1.3515f - 1.7703f * xD + 5.9114f * yD) / M;
-                float  M2 = (0.0300f - 31.4424f * xD + 30.0717f * yD) / M;
-                s_illuminant_D[i].values.resize(s_CIE_D_bases.values.size());
-                s_illuminant_D[i].min_wavelength = s_CIE_D_bases.min_wavelength;
-                s_illuminant_D[i].max_wavelength = s_CIE_D_bases.max_wavelength;
-                for (size_t j = 0; j < s_CIE_D_bases.values.size(); ++j)
-                {
-                    float S0                    = s_CIE_D_bases.values[j][0];
-                    float S1                    = s_CIE_D_bases.values[j][1];
-                    float S2                    = s_CIE_D_bases.values[j][2];
-                    s_illuminant_D[i].values[j] = S0 + M1 * S1 + M2 * S2;
-                }
-            }
-            initialized = true;
-        }
-        return s_illuminant_D[(int)wp - (int)WhitePoint_D50];
+        const static auto D93 = DXX(9300.f);
+        return D93;
     }
     case WhitePoint_A: return s_Illuminant_A;
     case WhitePoint_B: return s_Illuminant_B;
