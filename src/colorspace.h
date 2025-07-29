@@ -231,19 +231,9 @@ float2 Kelvin_to_xy(float T);
 
     See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
 */
-float2                           CCT_to_xy(float T);
+float2                           daylight_to_xy(float T);
 const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint wp = WhitePoint_D65);
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra();
-
-/*!
-    Converts a wavelength in nanometers to an XYZ color value, using the D65 white point by default.
-    \param wavelength
-        Wavelength in nanometers
-    \returns
-        XYZ color value corresponding to the given wavelength and white point.
-*/
-
-float3 wavelength_to_XYZ(float wavelength);
 
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.

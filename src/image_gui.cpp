@@ -629,73 +629,28 @@ void Image::draw_info()
 
             ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
 
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.35f, 0.35f, 0.35f, 1.f});
-            if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect),
+            float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
+            if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect * 0.95f),
                                   ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend |
                                       ImPlotFlags_NoTitle))
             {
-                static constexpr float lambda_min   = 380.f;
-                static constexpr float lambda_max   = 700.f;
+                static constexpr float lambda_min   = 400.f;
+                static constexpr float lambda_max   = 680.f;
                 static constexpr int   sample_count = 200;
 
-                static Box2f plot_limits;
-                auto         createLocus = []()
+                auto &illum = white_point_spectrum(WhitePoint_D65);
+                auto &XYZ   = CIE_XYZ_spectra();
+
+                auto wavelength_to_xy = [&illum, &XYZ](float wavelength) -> float2
                 {
-                    ImVector<float2> chromLine;
-                    chromLine.resize(sample_count);
-                    auto &illum = white_point_spectrum(WhitePoint_D65);
-                    auto &XYZ   = CIE_XYZ_spectra();
-
-                    // Compute chromaticity line
-                    for (int i = 0; i < sample_count; ++i)
-                    {
-                        float wavelength = lerp(lambda_min, lambda_max, ((float)i) / ((float)(sample_count - 1)));
-                        auto  xyz        = illum.eval(wavelength) * XYZ.eval(wavelength);
-                        chromLine[i]     = xyz.xy() / la::sum(xyz);
-                        plot_limits.enclose(chromLine[i]);
-                    }
-
-                    return chromLine;
+                    auto   xyz = illum.eval(wavelength) * XYZ.eval(wavelength);
+                    float2 xy  = xyz.xy() / la::sum(xyz);
+                    return xy;
                 };
-                const static ImVector<float2> chromLine = createLocus();
 
-                static const float firstTick = (ImFloor(lambda_min / 10.f) + 1.f) * 10.f;
-                // Calculate number of tick marks at 10 nm intervals
-                auto createTicks = []()
-                {
-                    ImVector<float4> tickMarks;
-                    int              tickCount = (int)ImFloor((lambda_max - lambda_min) / 10.0f) + 1;
-                    tickMarks.resize(tickCount); // Stores tick mark location and orientation
-
-                    for (int tickIdx = 0; tickIdx < tickCount; ++tickIdx)
-                    {
-                        float lambda = firstTick + tickIdx * 10.0f;
-                        // spdlog::info("Tick {}: Wavelength = {}", tickIdx, nm);
-                        float t    = (lambda - lambda_min) / (lambda_max - lambda_min);
-                        float fIdx = t * (sample_count - 1);
-                        int   i0   = ImClamp((int)ImFloor(fIdx), 0, sample_count - 2);
-                        int   i1   = i0 + 1;
-                        float frac = fIdx - (float)i0;
-
-                        // Interpolate position between chromLine[i0] and chromLine[i1]
-                        float2 pos = lerp(chromLine[i0], chromLine[i1], frac);
-
-                        // Compute tangent direction between i0 and i1
-                        float2 tangent = (chromLine[i1] - chromLine[i0]);
-                        float2 normal(-tangent.y, tangent.x);
-                        normal /= length(normal); // Ensure normal is unit length
-
-                        tickMarks[tickIdx] = float4(pos.x, pos.y, normal.x, normal.y);
-                    }
-                    return tickMarks;
-                };
-                const static ImVector<float4> tickMarks = createTicks();
-
-                auto text_color_f = ImVec4{0.f, 0.f, 0.f, 1.f};
-                // auto border_color_f  = ImGui::GetStyleColorVec4(ImGuiCol_Border);
-                // border_color_f.w     = 1.f;
-                auto text_color_fc = ImVec4{contrasting_color(text_color_f)};
-                // auto border_color_fc = ImVec4{contrasting_color(border_color_f)};
+                auto text_color_f  = float4{0.f, 0.f, 0.f, 1.f};
+                auto text_color_fc = contrasting_color(text_color_f);
 
                 ImPlot::PushStyleColor(ImPlotCol_AxisGrid, ImGui::GetColorU32(text_color_fc));
 
@@ -717,36 +672,46 @@ void Image::draw_info()
                 // plot background texture
                 //
                 ImPlot::PlotImage("##chromaticity_image", (ImTextureRef)chromaticity_texture()->texture_handle(),
-                                  ImPlotPoint(0.0, 0.0), ImPlotPoint(plot_limits.max.x, plot_limits.max.y),
-                                  {0.f, plot_limits.max.y}, {plot_limits.max.x, 0.f});
+                                  ImPlotPoint(0.0, 0.0), ImPlotPoint(.73f, .83f), {0.f, .83f}, {.73f, 0.f});
+
+                auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2
+                {
+                    float2 p0            = ImPlot::PlotToPixels(0, 0);
+                    float2 tangent_px    = float2(ImPlot::PlotToPixels(tangent.x, tangent.y)) - p0;
+                    float2 normal_px     = pixel_length * normalize(float2{-tangent_px.y, tangent_px.x});
+                    auto   plot_tick_end = ImPlot::PixelsToPlot(p0 + normal_px);
+                    return float2(plot_tick_end.x, plot_tick_end.y);
+                };
 
                 //
                 // draw the spectral locus
                 //
-                float texel_width = 1.f;
+                float pixels_per_texel     = 1.f;
+                float pixels_per_plot_unit = 1.f;
+                float scale_factor         = 1.f;
                 {
-                    float2 plot_size = ImPlot::GetPlotSize();
-                    auto   plot_rect = ImPlot::GetPlotLimits();
+                    float2 plot_size     = ImPlot::GetPlotSize();
+                    auto   plot_rect     = ImPlot::GetPlotLimits();
+                    pixels_per_plot_unit = length(
+                        plot_size / float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min));
                     // compute width in pixels of a chromaticity texture texel
-                    texel_width = length(1.f / 256.f /
-                                         float2(plot_rect.X.Max - plot_rect.X.Min, plot_rect.Y.Max - plot_rect.Y.Min) *
-                                         plot_size);
-
-                    // ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, std::max(2.f, 1.5f * texel_width));
-                    // ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4{0.f, 0.f, 0.f, 0.0f});
-                    // ImPlot::PlotLine("##locus", &chromLine.Data->x, &chromLine.Data->y, chromLine.Size,
-                    //                  ImPlotLineFlags_Loop, 0, sizeof(ImVec2));
-                    // ImPlot::PopStyleColor();
-                    // ImPlot::PopStyleVar();
+                    pixels_per_texel = 1.f / 256.f * pixels_per_plot_unit;
+                    scale_factor     = std::clamp(pixels_per_texel * 1.2f, 1.f, 4.f);
 
                     // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves
-                    ImVector<float2> poly = chromLine;
+                    ImVector<float2> poly;
+                    poly.resize(sample_count);
                     // Iterate over all entries in poly and map them to pixel coordinates
-                    for (int i = 0; i < poly.Size; ++i) poly[i] = ImPlot::PlotToPixels({poly[i].x, poly[i].y});
+                    for (int i = 0; i < poly.Size; ++i)
+                    {
+                        float wavelength = lerp(lambda_min, lambda_max, ((float)i) / ((float)(sample_count - 1)));
+                        auto  pos        = wavelength_to_xy(wavelength);
+                        poly[i]          = ImPlot::PlotToPixels(pos.x, pos.y);
+                    }
 
                     ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size,
                                                            ImGui::GetColorU32(text_color_f), ImDrawFlags_Closed,
-                                                           std::max(1.f, 1.2f * texel_width));
+                                                           std::max(1.f, 1.2f * pixels_per_texel));
                 }
 
                 //
@@ -754,29 +719,33 @@ void Image::draw_info()
                 //
                 {
                     ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
-                    // Draw tick marks stored in tickMarks
-                    const float tick_length       = std::max(1.f, 2.f * texel_width);
-                    const float major_tick_length = std::max(1.f, 3.f * texel_width);
-                    const float border_thickness  = std::max(1.f, 1.f * texel_width);
-                    for (int i = 0; i < tickMarks.size(); ++i)
-                    {
-                        float4 tick = tickMarks[i];
-                        float2 p(tick.x, tick.y);
-                        float2 normal(-tick.z, tick.w);
+                    // Draw tick marks stored in tick_marks
+                    const float minor_tick_pixel_length = std::max(1.f, 2.f * pixels_per_texel);
+                    const float major_tick_pixel_length = std::max(1.f, 3.f * pixels_per_texel);
 
+                    static const float first_tick = (ImFloor(lambda_min / 10.f)) * 10.f;
+                    int                tick_count = (int)ImFloor((lambda_max - lambda_min) / 10.0f) + 1;
+                    for (int i = 0; i < tick_count; ++i)
+                    {
                         // Compute wavelength for this tick
-                        float nm = firstTick + i * 10.0f;
+                        float nm = first_tick + i * 10.0f;
                         // Check if tick is at a 100 nm multiple
                         bool is_major = (static_cast<int>(nm) % 100 == 0);
 
-                        // Already rescaled to screen coordinates above
-                        // Draw tick mark perpendicular to the curve
-                        float2 tick_start = ImPlot::PlotToPixels(ImVec2{p});
-                        float2 tick_end   = float2{ImPlot::PlotToPixels(ImVec2{p})} +
-                                          normal * (is_major ? major_tick_length : tick_length);
+                        float lambda = first_tick + i * 10.0f;
 
-                        ImPlot::GetPlotDrawList()->AddLine(tick_start, tick_end, ImGui::GetColorU32(text_color_f),
-                                                           is_major ? border_thickness : border_thickness * 0.5f);
+                        // Compute chromaticity at this wavelength
+                        float2 pos     = wavelength_to_xy(lambda);
+                        float2 tangent = wavelength_to_xy(lambda + 1) - wavelength_to_xy(lambda - 1);
+                        float2 normal  = -normal_to_plot_tangent(tangent, is_major ? major_tick_pixel_length
+                                                                                   : minor_tick_pixel_length);
+
+                        // Tick mark parameters
+                        float2 tick[2] = {pos, pos + normal};
+
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
+                        ImPlot::SetNextLineStyle({0.f, 0.f, 0.f, 1.f}, 0.5f * scale_factor);
+                        ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, 0, 0, sizeof(float2));
 
                         // Add text label for major ticks (100 nm multiples)
                         if (is_major)
@@ -784,21 +753,11 @@ void Image::draw_info()
                             static char label[8];
                             ImFormatString(label, sizeof(label), "%d nm", static_cast<int>(nm));
 
-                            // Compute text size
-                            ImVec2 text_size = ImGui::CalcTextSize(label);
+                            float4 bg = contrasting_color(contrasting_color(plot_bg));
+                            bg.w      = 0.5f;
 
-                            // Offset text slightly along the normal direction from the tick end
-                            const float text_offset = 0.5f * text_size.y;
-                            ImVec2      text_pos    = tick_end + normal * text_offset;
-
-                            // Align text position continuously based on normal direction using ImLerp
-                            text_pos.x += ImLerp(-text_size.x, 0.f, 0.5f * (normal.x + 1.f));
-                            text_pos.y += ImLerp(-text_size.y, 0.f, 0.5f * (normal.y + 1.f));
-
-                            // ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(text_color_f), label);
-                            // ImPlot::GetPlotDrawList()->AddText(text_pos - ImVec2{1.f, 1.f},
-                            //                                    ImGui::GetColorU32(text_color_fc), label);
-                            ImPlot::GetPlotDrawList()->AddText(text_pos, ImGui::GetColorU32(text_color_f), label);
+                            ImPlot::Annotation(tick[1].x, tick[1].y, bg, float2{1.f, -1.f} * round(normalize(normal)),
+                                               false, "%s", label);
                         }
                     }
                     ImGui::PopFont();
@@ -815,13 +774,14 @@ void Image::draw_info()
 
                         for (int i = 0; i < sample_count; ++i)
                         {
-                            float T = lerp(4000.f, 25000.f, ((float)i) / ((float)(sample_count - 1)));
-                            poly[i] = CCT_to_xy(T);
+                            float T = lerp(1668.f, 25000.f, ((float)i) / ((float)(sample_count - 1)));
+                            poly[i] = Kelvin_to_xy(T);
                         }
 
                         return poly;
                     };
                     const static ImVector<float2> cct_locus = create_CCT_locus();
+
                     // ImPlot::PlotLine draws ugly, unrounded, line segments, so we use AddPolyline ourselves
                     ImVector<float2> poly = cct_locus;
                     // Iterate over all entries in poly and map them to pixel coordinates
@@ -829,14 +789,58 @@ void Image::draw_info()
 
                     ImPlot::GetPlotDrawList()->AddPolyline((ImVec2 *)&poly[0], poly.Size,
                                                            ImGui::GetColorU32(text_color_f), ImDrawFlags_None,
-                                                           std::clamp(texel_width * 1.2f, 1.f, 4.f));
+                                                           scale_factor);
+
+                    const float label_font_scale = 1.0f;
+                    const float scale            = 1.f;
+                    ImGui::PushFont(hdrview()->font("sans regular"),
+                                    ImGui::GetStyle().FontSizeBase * label_font_scale * scale / 2.f);
+
+                    constexpr int temp_step = 1000;
+                    for (int temp = 2000; temp <= 25000; temp += temp_step)
+                    {
+                        float2 xy = Kelvin_to_xy((float)temp);
+                        char   label[8];
+                        snprintf(label, sizeof(label), "%dK", temp);
+                        float2 text_size = ImGui::CalcTextSize(label);
+
+                        // Compute tangent and normal
+                        float2 tangent = normalize(Kelvin_to_xy((float)(temp - 1)) - Kelvin_to_xy((float)(temp + 1)));
+                        float2 normal  = normal_to_plot_tangent(tangent, scale_factor * 2.f);
+
+                        // Tick mark parameters
+                        float2 tick[2] = {xy, xy + normal};
+
+                        // Only draw this tick if it doesn't overlap with the previous tick
+                        static float2 prev_tick_end = {-100000.f,
+                                                       -100000.f}; // large negative to ensure first tick is drawn
+                        const float   min_dist      = 5.0f;        // minimum pixel distance between ticks
+
+                        float2 tick_end_px      = ImPlot::PlotToPixels(ImPlotPoint(tick[1].x, tick[1].y));
+                        float2 prev_tick_end_px = ImPlot::PlotToPixels(ImPlotPoint(prev_tick_end.x, prev_tick_end.y));
+                        bool   draw             = length(tick_end_px - prev_tick_end_px) > min_dist &&
+                                    (2.f * text_size.y < abs(tick_end_px.y - prev_tick_end_px.y) ||
+                                     1.5f * text_size.x < abs(tick_end_px.x - prev_tick_end_px.x));
+
+                        if (draw)
+                        {
+                            ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
+                            ImPlot::SetNextLineStyle(text_color_f, 0.5f * scale_factor);
+                            ImPlot::PlotLine("##CCT_tick", &tick[0].x, &tick[0].y, 2, 0, 0, sizeof(float2));
+                            prev_tick_end = tick[1];
+
+                            ImPlot::Annotation(tick[1].x, tick[1].y, ImVec4(1, 1, 1, 0.5), ImVec2(1, 1), false, "%s",
+                                               label);
+                        }
+                    }
+
+                    ImGui::PopFont();
                 }
 
                 //
                 // draw the primaries, gamut triangle, whitepoint, and text labels
                 //
                 {
-                    float          scale = std::clamp(texel_width * 1.2f, 1.f, 4.f);
                     Chromaticities gamut_chr{chromaticities.value_or(Chromaticities{})};
                     ImVec4         colors[] = {
                         {0.8f, 0.f, 0.f, 1.f}, {0.f, 0.8f, 0.f, 1.f}, {0.f, 0.f, 0.8f, 1.f}, {0.5f, 0.5f, 0.5f, 1.f}};
@@ -850,7 +854,7 @@ void Image::draw_info()
                     primaries[3] = double2(gamut_chr.red);
 
                     ImPlot::SetNextMarkerStyle(ImPlotMarker_None);
-                    ImPlot::SetNextLineStyle(text_color_fc, scale);
+                    ImPlot::SetNextLineStyle(text_color_fc, scale_factor);
                     ImPlot::PlotLine("##gamut_triangle", &primaries[0].x, &primaries[0].y, 4, ImPlotLineFlags_None, 0,
                                      sizeof(double2));
 
@@ -864,7 +868,7 @@ void Image::draw_info()
                                                   ImPlot::PlotToPixels(ImPlotPoint(primaries[3].x, primaries[3].y))};
                     for (int i = 0; i < 4; ++i)
                         ImPlot::GetPlotDrawList()->AddCircleFilled(
-                            poly[i], 2.5f * scale,
+                            poly[i], 2.5f * scale_factor,
                             ImGui::GetColorU32(clicked[i] || hovered[i] || held[i] ? text_color_f : text_color_fc), 0);
 
                     // ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 5.f);
@@ -873,10 +877,10 @@ void Image::draw_info()
                     // ImPlotScatterFlags_None,
                     //                     0, sizeof(double2));
 
-                    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase * scale / 2.f);
+                    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase * scale_factor / 2.f);
                     for (int i = 0; i < 4; ++i)
                     {
-                        if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 1.5f * scale,
+                        if (ImPlot::DragPoint(i, &primaries[i].x, &primaries[i].y, colors[i], 1.5f * scale_factor,
                                               ImPlotDragToolFlags_Delayed, &clicked[i], &hovered[i], &held[i]))
                         {
                             gamut_chr.red   = float2(primaries[0].x, primaries[0].y);
@@ -889,7 +893,7 @@ void Image::draw_info()
 
                         // draw text label shadow
                         ImPlot::PushStyleColor(ImPlotCol_InlayText, ImGui::GetColorU32(text_color_f));
-                        float2 offset{4.f * scale, -4.f * scale};
+                        float2 offset{4.f * scale_factor, -4.f * scale_factor};
                         ImPlot::PlotText(names[i], primaries[i].x, primaries[i].y, offset);
                         ImPlot::PopStyleColor();
 

@@ -886,7 +886,7 @@ float2 Kelvin_to_xy(float T)
     return {xc, yc};
 }
 
-float2 CCT_to_xy(float T)
+float2 daylight_to_xy(float T)
 {
     // Rectify CCT as described in the spec
     T = T * (1.438776877f / 1.4380f);
@@ -921,7 +921,7 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
     {
         TabulatedSpectrum<float> illum;
 
-        float2 xy = CCT_to_xy(T);
+        float2 xy = daylight_to_xy(T);
         float  xD = xy.x, yD = xy.y;
         float  M  = 0.0241f + 0.2562f * xD - 0.7341f * yD;
         float  M1 = (-1.3515f - 1.7703f * xD + 5.9114f * yD) / M;
@@ -979,8 +979,6 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
 }
 
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra() { return s_CIE_xyz; }
-
-float3 wavelength_to_XYZ(float wavelength) { return s_CIE_xyz.eval(wavelength); }
 
 void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
 {
