@@ -121,47 +121,115 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     stbi_ldr_to_hdr_scale(1.0f);
     stbi_ldr_to_hdr_gamma(1.0f);
 
-    int3 size;
-    using FloatBuffer = std::unique_ptr<float[], void (*)(void *)>;
-    auto float_data =
-        FloatBuffer{stbi_loadf_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0), stbi_image_free};
-    if (!float_data)
-        throw invalid_argument{fmt::format("STB1: {}", stbi_failure_reason())};
+    bool is_hdr = stbi_is_hdr_from_callbacks(&stbi_callbacks, &is) != 0;
+    is.clear();
+    is.seekg(0);
+
+    using DataBuffer = std::unique_ptr<void, void (*)(void *)>;
+    DataBuffer data{nullptr, stbi_image_free};
+
+    int4 size{0, 0, 0, 1}; // width, height, channels, frames
+
+    if (is_hdr)
+        data = DataBuffer{(void *)stbi_loadf_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0),
+                          stbi_image_free};
+    else
+    {
+        stbi__context s;
+        stbi__start_callbacks(&s, (stbi_io_callbacks *)&stbi_callbacks, &is);
+        bool is_gif = stbi__gif_test(&s);
+        is.clear();
+        is.seekg(0);
+
+        if (is_gif)
+        {
+            stbi__start_callbacks(&s, (stbi_io_callbacks *)&stbi_callbacks, &is);
+            int *delays; // we'll just load all frames, and ignore delays
+            data = DataBuffer{stbi__load_gif_main(&s, &delays, &size.x, &size.y, &size.w, &size.z, 0), stbi_image_free};
+        }
+        else
+            data = DataBuffer{stbi_load_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0),
+                              stbi_image_free};
+    }
+
+    if (!data)
+        throw invalid_argument{fmt::format("STB: {}", stbi_failure_reason())};
 
     if (product(size) == 0)
         throw invalid_argument{"STB: Image has zero pixels."};
 
-    auto image                     = make_shared<Image>(size.xy(), size.z);
-    image->filename                = filename;
-    image->file_has_straight_alpha = true;
     json j;
-    if (supported_format(is, j))
-        image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
-    else
+    if (!supported_format(is, j))
         throw runtime_error{
             "STB: loaded the image, but then couldn't figure out the format (this should never happen)."};
+
     bool linearize = j["format"] != "hdr";
-    if (!linearize)
-        image->metadata["bit depth"] = "8:8:8:8 rgbe";
-    else if (stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is))
-        image->metadata["bit depth"] = "16 bpp";
-    else
-        image->metadata["bit depth"] = "8 bpc";
-
-    image->metadata["transfer function"] =
-        linearize ? transfer_function_name(TransferFunction_Unknown) : transfer_function_name(TransferFunction_Linear);
-
     if (linearize)
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
 
-    Timer timer;
-    for (int c = 0; c < size.z; ++c)
-        image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c, [linearize, c](float v)
-                                                 { return linearize && c != 3 ? sRGB_to_linear(v) : v; });
+    Timer            timer;
+    vector<ImagePtr> images(size.w);
+    void            *data_ptr = (void *)data.get();
+    for (int frame = 0; frame < size.w; ++frame)
+    {
+        auto &image = images[frame];
 
+        image                          = make_shared<Image>(size.xy(), size.z);
+        image->filename                = filename;
+        image->file_has_straight_alpha = true;
+        if (size.w > 1)
+            image->partname = fmt::format("frame {:04}", frame);
+        image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
+        bool is_16_bit            = stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is);
+        int  bpc                  = is_16_bit ? 16 : 8;
+
+        if (!linearize)
+            image->metadata["bit depth"] = "8:8:8:8 rgbe";
+        else if (is_16_bit)
+            image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", bpc * size.z, bpc);
+        else
+            image->metadata["bit depth"] = fmt::format("{} bbp", bpc);
+
+        image->metadata["transfer function"] = linearize ? transfer_function_name(TransferFunction_Unknown)
+                                                         : transfer_function_name(TransferFunction_Linear);
+
+        if (is_hdr)
+        {
+            for (int c = 0; c < size.z; ++c)
+                image->channels[c].copy_from_interleaved((float *)data_ptr, size.x, size.y, size.z, c,
+                                                         [](float v) { return v; });
+            data_ptr = (float *)data_ptr + size.x * size.y * size.z;
+        }
+        else
+        {
+            Timer timer;
+            if (is_16_bit)
+            {
+                for (int c = 0; c < size.z; ++c)
+                    image->channels[c].copy_from_interleaved((uint16_t *)data_ptr, size.x, size.y, size.z, c,
+                                                             [c](uint16_t v)
+                                                             {
+                                                                 float f = dequantize_full(v);
+                                                                 return c != 3 ? sRGB_to_linear(f) : f;
+                                                             });
+                data_ptr = (uint16_t *)data_ptr + size.x * size.y * size.z;
+            }
+            else
+            {
+                for (int c = 0; c < size.z; ++c)
+                    image->channels[c].copy_from_interleaved((uint8_t *)data_ptr, size.x, size.y, size.z, c,
+                                                             [c](uint8_t v)
+                                                             {
+                                                                 float f = dequantize_full(v);
+                                                                 return c != 3 ? sRGB_to_linear(f) : f;
+                                                             });
+                data_ptr = (uint8_t *)data_ptr + size.x * size.y * size.z;
+            }
+        }
+    }
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
-    return {image};
+    return images;
 }
 
 void save_stb_image(const Image &img, ostream &os, const string_view filename, float gain, bool sRGB, bool dither)
