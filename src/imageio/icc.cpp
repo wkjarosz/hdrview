@@ -183,6 +183,22 @@ string profile_description(const Profile &profile)
     return "";
 }
 
+bool is_cmyk(const vector<uint8_t> &icc_profile)
+{
+    if (icc_profile.empty())
+        return false;
+
+    auto profile = open_profile_from_mem(icc_profile);
+    if (!profile)
+    {
+        spdlog::error("Could not open ICC profile from memory.");
+        return false;
+    }
+
+    cmsColorSpaceSignature color_space = cmsGetColorSpace(profile.get());
+    return (color_space == cmsSigCmykData);
+}
+
 bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
                       Chromaticities *c)
 {

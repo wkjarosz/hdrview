@@ -13,6 +13,16 @@ namespace icc
 {
 
 /*!
+    \brief Check if the ICC profile is a CMYK profile.
+
+    \param icc_profile
+        A byte array containing the ICC profile to check.
+    \returns
+        True if the ICC profile is a CMYK profile, false otherwise.
+*/
+bool is_cmyk(const std::vector<uint8_t> &icc_profile);
+
+/*!
     \brief Linearize a (potentially interleaved) array of floating-point pixel values using the transfer function of the
     provided ICC profile.
 

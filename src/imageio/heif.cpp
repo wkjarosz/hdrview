@@ -322,7 +322,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                     image->metadata["transfer function"] = tf_description;
                 }
                 else
-                    image->metadata["transfer function"] = "unknown";
+                    image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
 
                 // copy the interleaved float pixels into the channels
                 for (int c = 0; c < cpp; ++c)

@@ -188,8 +188,11 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     std::vector<string>              extra_channel_names;
     int3                             size{0, 0, 0};
     string                           frame_name;
-    int                              frame_number = 0;
-    bool                             skip_color   = true;
+    int                              frame_number        = 0;
+    bool                             skip_color          = true;
+    int                              first_black_channel = -1;
+    bool                             is_cmyk             = false;
+    bool                             prefer_icc          = false;
 
     vector<ImagePtr> images;
     ImagePtr         image;
@@ -247,7 +250,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 count_thermal = 0;
             extra_channel_infos.resize(info.num_extra_channels);
             extra_channel_names.resize(info.num_extra_channels);
-            for (uint32_t i = 0; i < info.num_extra_channels; ++i)
+            for (size_t i = 0; i < extra_channel_infos.size(); ++i)
             {
                 auto &eci = extra_channel_infos[i];
                 if (JXL_DEC_SUCCESS != JxlDecoderGetExtraChannelInfo(dec.get(), i, &eci))
@@ -255,6 +258,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                     spdlog::error("JxlDecoderGetExtraChannelInfo failed");
                     continue;
                 }
+
+                // Check if there is a black channel (CMYK K channel) among the extra channels
+                if (first_black_channel < 0 && eci.type == JXL_CHANNEL_BLACK)
+                    first_black_channel = static_cast<int>(i);
 
                 vector<char> name(eci.name_length + 1, 0);
                 // first try to create the channel name from the name in the codestream
@@ -284,18 +291,6 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                         count_mask++;
                         break;
                     case JXL_CHANNEL_BLACK:
-                        // FIXME: While all the channels are accessible, libjxl's API makes it cumbersome to support
-                        // CMYK files at the moment: libjxl only supports a maximum of 3 color channels + alpha when
-                        // decoding. All other channels are treated as extra. The black (K) channel in a CMYK file is
-                        // hence an extra channel, and not decoded as part of the
-                        // <=4 color channels. This means that a CMYK file's ICC profile will fail to transform it to
-                        // RGB, and a CMYKA file will actually obtain CMYA, and treat the alpha channel as the K channel
-                        // when applying the ICC profile. See comments in libjxl/types.h for
-                        // JxlPixelFormat::num_channels. Until libjxl improves this handling, we will not support CMYK
-                        // jxl files.
-                        spdlog::warn("JPEG XL: Found a black channel. If this is a CMYK JPEG XL file, colors will "
-                                     "likely look incorrect. If this is just an extra black channel, you can ignore "
-                                     "this warning.");
                         type_name = fmt::format("black{}", count_black ? " (" + to_string(count_black) + ")" : "");
                         count_black++;
                         break;
@@ -344,7 +339,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                                                                   icc_profile.data(), icc_profile.size()))
                 throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
             else
-                spdlog::info("JPEG XL file has an ICC color profile");
+            {
+                is_cmyk = icc::is_cmyk(icc_profile);
+                spdlog::info("JPEG XL file has an {} ICC color profile", is_cmyk ? "CMYK" : "RGB");
+            }
 
             if (JXL_DEC_SUCCESS ==
                 JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &file_enc))
@@ -352,6 +350,12 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 has_encoded_profile = true;
                 spdlog::info("JPEG XL file has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
+
+            // only prefer the encoded profile if it exists and it specifies an HDR transfer function
+            prefer_icc = !icc_profile.empty() &&
+                         (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
+                                                   file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG));
+            spdlog::info("Will {}prefer ICC profile for linearization.", prefer_icc ? "" : "not ");
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
         {
@@ -442,11 +446,6 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 continue;
             }
 
-            // only prefer the encoded profile if it exists and it specifies an HDR transfer function
-            bool prefer_icc = !icc_profile.empty() &&
-                              (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
-                                                        file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG));
-
             string         tf_description;
             Chromaticities chr;
 
@@ -471,6 +470,38 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                              });
             }
 
+            vector<float> alpha_copy;
+
+            // If a black channel exists and there is an alpha channel in the interleaved array, swap alpha and black
+            spdlog::debug("prefer_icc: {}, is_cmyk: {}, first_black_channel: {}, size.z: {}", prefer_icc, is_cmyk,
+                          first_black_channel, size.z);
+
+            // This black/alpha copying nonsense is needed because libjxl's API makes it cumbersome to support
+            // CMYK files at the moment: libjxl only supports a maximum of 3 color channels + alpha when
+            // decoding. All other channels are treated as extra. The black (K) channel in a CMYK file is
+            // hence an extra channel, and not decoded as part of the <=4 color channels.
+            //
+            // We therefore swap the black channel for the alpha channel in the pixel array before applying the ICC
+            // profile, and then swap them back afterwards.
+            if (prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            {
+                size_t alpha_channel_idx = size.z - 1;
+                float *black_data        = image->channels[size.z + first_black_channel].data();
+                // Allocate and copy the alpha channel into alpha_copy
+                alpha_copy.resize(size.x * size.y);
+                for (int y = 0; y < size.y; ++y)
+                {
+                    for (int x = 0; x < size.x; ++x)
+                    {
+                        size_t idx            = (x + y * size.x) * size.z + alpha_channel_idx;
+                        size_t black_idx      = x + y * size.x;
+                        alpha_copy[black_idx] = pixels[idx];
+                        pixels[idx]           = black_data[black_idx];
+                    }
+                }
+                spdlog::info("Swapped alpha channel in interleaved array with black channel data.");
+            }
+
             if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
                 linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
             {
@@ -478,7 +509,24 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 image->metadata["transfer function"] = tf_description;
             }
             else
-                image->metadata["transfer function"] = "unknown";
+                image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
+
+            if (prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            {
+                size_t alpha_channel_idx = size.z - 1;
+                float *black_data        = image->channels[size.z + first_black_channel].data();
+                // Copy from alpha_copy back into the alpha channel
+                for (int y = 0; y < size.y; ++y)
+                {
+                    for (int x = 0; x < size.x; ++x)
+                    {
+                        size_t idx       = (x + y * size.x) * size.z + alpha_channel_idx;
+                        size_t black_idx = x + y * size.x;
+                        pixels[idx]      = alpha_copy[black_idx];
+                    }
+                }
+                spdlog::info("Swapped alpha channel in interleaved array back with black channel data.");
+            }
 
             // premultiply again
             if (info.alpha_premultiplied)
@@ -511,7 +559,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 auto &channel      = image->channels[i];
                 auto &channel_info = extra_channel_infos[i - size.z];
 
-                // alpha channels don't have transfer function applied
+                // alpha channels don't have transfer function applied, so skip them
+                // also skip the black channel if we already included it as a CMYK black channel
                 if (channel_info.type == JXL_CHANNEL_ALPHA)
                     continue;
 
@@ -545,6 +594,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 frame_name = fmt::format("frame {:04}", frame_number);
             else
                 frame_name = "";
+
             frame_number++;
         }
         else if (status == JXL_DEC_SUCCESS)
