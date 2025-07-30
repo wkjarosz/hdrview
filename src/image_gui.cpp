@@ -639,16 +639,6 @@ void Image::draw_info()
                 static constexpr float lambda_max   = 680.f;
                 static constexpr int   sample_count = 200;
 
-                auto &illum = white_point_spectrum(WhitePoint_D65);
-                auto &XYZ   = CIE_XYZ_spectra();
-
-                auto wavelength_to_xy = [&illum, &XYZ](float wavelength) -> float2
-                {
-                    auto   xyz = illum.eval(wavelength) * XYZ.eval(wavelength);
-                    float2 xy  = xyz.xy() / la::sum(xyz);
-                    return xy;
-                };
-
                 auto text_color_f  = float4{0.f, 0.f, 0.f, 1.f};
                 auto text_color_fc = contrasting_color(text_color_f);
 
@@ -1058,7 +1048,8 @@ void Image::draw_info()
         }
 
         {
-            property_name("Luminance weights");
+            property_name("Yw");
+            ImGui::WrappedTooltip("Channel weights to compute the luminance (Y) of a pixel.");
             // property_value(fmt::format("{:+8.2e}, {:+8.2e}, {:+8.2e}", luminance_weights.x, luminance_weights.y,
             //                            luminance_weights.z),
             //                mono_font);

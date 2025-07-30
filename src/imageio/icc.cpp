@@ -199,8 +199,12 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     // Detect profile color space
     cmsColorSpaceSignature color_space = cmsGetColorSpace(profile_in.get());
     bool                   is_cmyk     = (color_space == cmsSigCmykData);
+    bool                   is_cmy      = (color_space == cmsSigCmyData);
     bool                   is_rgb      = (color_space == cmsSigRgbData);
     bool                   is_gray     = (color_space == cmsSigGrayData);
+
+    spdlog::debug("ICC profile color space: {}\n\tCMYK: {}\n\tRGB: {}\n\tGray: {}\n\tCMY: {}", (int)color_space,
+                  is_cmyk, is_rgb, is_gray, is_cmy);
 
     cmsUInt32Number format_in = TYPE_GRAY_FLT, format_out = TYPE_GRAY_FLT;
     if (is_rgb)
@@ -228,6 +232,10 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
         spdlog::error("Unsupported ICC profile color space: {}", (int)color_space);
         return false;
     }
+
+    // If CMYK, lcms expects floating-point values in the range [0, 100]
+    if (is_cmyk)
+        for (int i = 0; i < size.x * size.y * size.z; ++i) pixels[i] = (1.0f - pixels[i]) * 100.0f;
 
     // Extract chromaticities/whitepoint for RGB, or set defaults for CMYK
     cmsCIExyY       whitepoint = {0.3127, 0.3290, 1.0};

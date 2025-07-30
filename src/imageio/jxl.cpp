@@ -75,6 +75,15 @@ static string color_encoding_info(const JxlColorEncoding &enc)
     case JXL_RENDERING_INTENT_ABSOLUTE: out += format_indented(4, "Rendering intent: absolute\n"); break;
     default: out += format_indented(4, "Rendering intent: unknown\n"); break;
     }
+
+    switch (enc.color_space)
+    {
+    case JXL_COLOR_SPACE_RGB: out += format_indented(4, "Color space: RGB\n"); break;
+    case JXL_COLOR_SPACE_GRAY: out += format_indented(4, "Color space: Gray\n"); break;
+    case JXL_COLOR_SPACE_XYB: out += format_indented(4, "Color space: XYB\n"); break;
+    case JXL_COLOR_SPACE_UNKNOWN: out += format_indented(4, "Color space: unknown\n"); break;
+    default: out += format_indented(4, "Color space: unknown ({})\n", (int)enc.color_space); break;
+    }
     return out;
 }
 
@@ -195,15 +204,22 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     if (JXL_DEC_SUCCESS != JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get()))
         throw invalid_argument{"JxlDecoderSetParallelRunner failed"};
 
+    if (JXL_DEC_SUCCESS != JxlDecoderSetDecompressBoxes(dec.get(), JXL_TRUE))
+        throw invalid_argument{"Failed to set decompress boxes."};
+
+    if (JXL_DEC_SUCCESS != JxlDecoderSetUnpremultiplyAlpha(dec.get(), JXL_FALSE))
+        throw invalid_argument{"Failed to set unpremultiply alpha."};
+
     JxlPixelFormat format;
 
-    JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size());
-    JxlDecoderCloseInput(dec.get());
+    if (JXL_DEC_SUCCESS !=
+        JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size()))
+        throw invalid_argument{"Failed to set input for decoder."};
 
     ImGuiTextFilter filter{string(channel_selector).c_str()};
     filter.Build();
 
-    for (;;)
+    while (true)
     {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
@@ -217,17 +233,15 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             if (JXL_DEC_SUCCESS != JxlDecoderGetBasicInfo(dec.get(), &info))
                 throw invalid_argument{"JxlDecoderGetBasicInfo failed"};
 
-            spdlog::info("JPEG XL {}x{} image with {} color channels and {} extra channels", info.xsize, info.ysize,
-                         info.num_color_channels, info.num_extra_channels);
-
-            size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels};
-
-            spdlog::info("size: {}x{}x{}", size.x, size.y, size.z);
-
             if (info.xsize * info.ysize * (info.num_color_channels + info.num_extra_channels) == 0)
                 throw invalid_argument{
                     fmt::format("{}x{} image with {} color channels and {} extra channels has zero pixels", info.xsize,
                                 info.ysize, info.num_color_channels, info.num_extra_channels)};
+
+            size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels + (info.alpha_bits ? 1 : 0)};
+
+            spdlog::info("JPEG XL {}x{} image with {} color channels ({} including alpha) and {} extra channels",
+                         size.x, size.y, info.num_color_channels, size.z, info.num_extra_channels);
 
             int count_alpha = 0, count_depth = 0, count_spot = 0, count_mask = 0, count_black = 0, count_cfa = 0,
                 count_thermal = 0;
@@ -270,6 +284,18 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                         count_mask++;
                         break;
                     case JXL_CHANNEL_BLACK:
+                        // FIXME: While all the channels are accessible, libjxl's API makes it cumbersome to support
+                        // CMYK files at the moment: libjxl only supports a maximum of 3 color channels + alpha when
+                        // decoding. All other channels are treated as extra. The black (K) channel in a CMYK file is
+                        // hence an extra channel, and not decoded as part of the
+                        // <=4 color channels. This means that a CMYK file's ICC profile will fail to transform it to
+                        // RGB, and a CMYKA file will actually obtain CMYA, and treat the alpha channel as the K channel
+                        // when applying the ICC profile. See comments in libjxl/types.h for
+                        // JxlPixelFormat::num_channels. Until libjxl improves this handling, we will not support CMYK
+                        // jxl files.
+                        spdlog::warn("JPEG XL: Found a black channel. If this is a CMYK JPEG XL file, colors will "
+                                     "likely look incorrect. If this is just an extra black channel, you can ignore "
+                                     "this warning.");
                         type_name = fmt::format("black{}", count_black ? " (" + to_string(count_black) + ")" : "");
                         count_black++;
                         break;
@@ -310,27 +336,22 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             // Get the ICC color profile of the pixel data
             size_t icc_size;
 
-            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &icc_size))
+            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
                 throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
 
             icc_profile.resize(icc_size);
-            if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL,
+            if (JXL_DEC_SUCCESS != JxlDecoderGetColorAsICCProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA,
                                                                   icc_profile.data(), icc_profile.size()))
                 throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
             else
                 spdlog::info("JPEG XL file has an ICC color profile");
 
-            if (JXL_DEC_SUCCESS != JxlDecoderGetICCProfileSize(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &icc_size))
-                throw invalid_argument{"JxlDecoderGetICCProfileSize failed"};
-
             if (JXL_DEC_SUCCESS ==
-                JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_ORIGINAL, &file_enc))
+                JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &file_enc))
             {
                 has_encoded_profile = true;
                 spdlog::info("JPEG XL file has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
-            else
-                spdlog::warn("JPEG XL file has no encoded color profile. Colors distortions may occur.");
         }
         else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER)
         {
@@ -338,15 +359,16 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
 
             spdlog::info("size: {}x{}x{}", size.x, size.y, size.z);
 
-            uint32_t num_channels = info.num_color_channels; // + (info.alpha_bits ? 1 : 0);
-            format                = {num_channels, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
+            spdlog::info("JPEG XL file has {} color channels", size.z);
+            format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
             image                          = make_shared<Image>(size.xy(), size.z);
             image->filename                = filename;
             image->partname                = frame_name;
             image->file_has_straight_alpha = info.alpha_bits && !info.alpha_premultiplied;
             image->metadata["loader"]      = "libjxl";
-            image->metadata["bit depth"]   = fmt::format("{} bits per sample", info.bits_per_sample);
+            image->metadata["bit depth"] =
+                fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
 
             skip_color = false;
             {
@@ -379,6 +401,10 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                                   channel_selector);
                     continue;
                 }
+
+                // skip alpha channels, since they are handled as part of the color channels above
+                if (extra_channel_infos[i].type == JXL_CHANNEL_ALPHA)
+                    continue;
 
                 spdlog::info("Adding extra channel buffer for channel {}: '{}'", i, extra_channel_names[i]);
                 image->channels.emplace_back(extra_channel_names[i], size.xy());
@@ -417,11 +443,34 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             }
 
             // only prefer the encoded profile if it exists and it specifies an HDR transfer function
-            bool prefer_icc = !has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
-                                                       file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG);
+            bool prefer_icc = !icc_profile.empty() &&
+                              (!has_encoded_profile || (file_enc.transfer_function != JXL_TRANSFER_FUNCTION_PQ &&
+                                                        file_enc.transfer_function != JXL_TRANSFER_FUNCTION_HLG));
 
             string         tf_description;
             Chromaticities chr;
+
+            // for premultiplied files, JPEGL-XL premultiplies by the non-linear alpha value, so we must unpremultiply
+            // before applying the inverse transfer function, then premultiply again
+            if (info.alpha_premultiplied)
+            {
+                int block_size = std::max(1, 1024 * 1024 / size.x);
+                parallel_for(blocked_range<int>(0, size.y, block_size),
+                             [&pixels, &size](int begin_y, int end_y, int, int)
+                             {
+                                 for (int y = begin_y; y < end_y; ++y)
+                                 {
+                                     for (int x = 0; x < size.x; ++x)
+                                     {
+                                         const size_t scanline = (x + y * size.x) * size.z;
+                                         const float  alpha    = pixels[scanline + size.z - 1];
+                                         const float  factor   = alpha == 0.0f ? 1.0f : 1.0f / alpha;
+                                         for (int c = 0; c < size.z - 1; ++c) pixels[scanline + c] *= factor;
+                                     }
+                                 }
+                             });
+            }
+
             if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
                 linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
             {
@@ -430,6 +479,26 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             }
             else
                 image->metadata["transfer function"] = "unknown";
+
+            // premultiply again
+            if (info.alpha_premultiplied)
+            {
+                int block_size = std::max(1, 1024 * 1024 / size.x);
+                parallel_for(blocked_range<int>(0, size.y, block_size),
+                             [&pixels, &size](int begin_y, int end_y, int, int)
+                             {
+                                 for (int y = begin_y; y < end_y; ++y)
+                                 {
+                                     for (int x = 0; x < size.x; ++x)
+                                     {
+                                         const size_t scanline = (x + y * size.x) * size.z;
+                                         const float  alpha    = pixels[scanline + size.z - 1];
+                                         const float  factor   = alpha == 0.0f ? 1.0f : alpha;
+                                         for (int c = 0; c < size.z - 1; ++c) pixels[scanline + c] *= factor;
+                                     }
+                                 }
+                             });
+            }
 
             // copy the interleaved float pixels into the channels
             for (int c = 0; c < size.z; ++c)
@@ -445,6 +514,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 // alpha channels don't have transfer function applied
                 if (channel_info.type == JXL_CHANNEL_ALPHA)
                     continue;
+
+                spdlog::info("Applying transfer function to extra channel '{}'", channel.name);
 
                 if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
                     linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
@@ -506,7 +577,6 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     JxlDecoderStatus status = JXL_DEC_SUCCESS;
     while (true)
     {
-        spdlog::info("Looking for exif metadata...");
         status = JxlDecoderProcessInput(dec.get());
         if (status != JXL_DEC_BOX)
             break;
@@ -515,6 +585,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
         if (JXL_DEC_SUCCESS != JxlDecoderGetBoxType(dec.get(), type, JXL_TRUE))
             throw invalid_argument{"Failed to get box type."};
 
+        spdlog::debug("Box type: {}", string{type, type + sizeof(type)});
         if (string{type, type + sizeof(type)} == "Exif")
         {
             spdlog::info("Got exif box.");

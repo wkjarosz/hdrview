@@ -235,6 +235,20 @@ float2                           daylight_to_xy(float T);
 const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint wp = WhitePoint_D65);
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra();
 
+/*! Convert a wavelength in nanometers to a CIE 1931 chromaticity value.
+
+    \param wavelength
+        Wavelength in nanometers, must be in the range [380, 830].
+    \returns
+        CIE 1931 xy chromaticity value.
+*/
+inline float2 wavelength_to_xy(float wavelength)
+{
+    auto   xyz = white_point_spectrum(WhitePoint_D65).eval(wavelength) * CIE_XYZ_spectra().eval(wavelength);
+    float2 xy  = xyz.xy() / la::sum(xyz);
+    return xy;
+}
+
 /*!
     Build a combined color space conversion matrix from the chromaticities defined in src to those of dst.
 

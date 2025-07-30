@@ -145,10 +145,6 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             }
         }
 
-        if (cmyk)
-            spdlog::warn("JPEG: CMYK color space detected. HDRView doesn't currently support CMYK JPEG files. Colors "
-                         "will likely look incorrect.");
-
         // EXIF extraction (APP1 marker)
         std::vector<uint8_t> exif_data;
         for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next)
@@ -191,14 +187,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 
             for (int x = 0; x < size.x; ++x)
                 for (int c = 0; c < size.z; ++c)
-                {
-                    // lcms expects floating-point CMYK values to be in the range [0, 100]
-                    if (cmyk && !icc_profile.empty())
-                        float_pixels[(y * size.x + x) * size.z + c] =
-                            (1.f - row_buffer[x * size.z + c] / 255.f) * 100.f;
-                    else
-                        float_pixels[(y * size.x + x) * size.z + c] = row_buffer[x * size.z + c] / 255.f;
-                }
+                    float_pixels[(y * size.x + x) * size.z + c] = dequantize_full(row_buffer[x * size.z + c]);
         }
         jpeg_finish_decompress(&cinfo);
 
@@ -217,6 +206,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         else if (tf != TransferFunction_Linear)
         {
+            tf_desc = transfer_function_name(TransferFunction_Unknown);
             // If no ICC profile, assume sRGB transfer function
             to_linear(float_pixels.data(), size, tf, 2.2f);
         }
