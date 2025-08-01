@@ -514,7 +514,6 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             if (prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
-                float *black_data        = image->channels[size.z + first_black_channel].data();
                 // Copy from alpha_copy back into the alpha channel
                 for (int y = 0; y < size.y; ++y)
                 {

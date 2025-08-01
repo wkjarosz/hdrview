@@ -848,6 +848,12 @@ inline float dequantize_full(T v)
     return (float(v) - min_val) * denom;
 }
 
+template <>
+inline float dequantize_full<float>(float v)
+{
+    return v;
+}
+
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>
 T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
@@ -865,6 +871,12 @@ inline float dequantize_narrow(T v)
 {
     constexpr float denom = 1.f / float(1u << (std::numeric_limits<T>::digits - 8));
     return (v * denom - 16.f) / 219.f;
+}
+
+template <>
+inline float dequantize_narrow<float>(float v)
+{
+    return v;
 }
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW
