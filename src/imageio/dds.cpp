@@ -683,11 +683,11 @@ bool is_dds_image(std::istream &is) noexcept
 {
     try
     {
-        char magic[4];
-        is.read(reinterpret_cast<char *>(magic), 4);
+        DDSFile dds;
+        auto    result = dds.Load(is);
         is.clear();
         is.seekg(0);
-        return std::memcmp(magic, DDSFile::Magic, 4) == 0;
+        return result == tinyddsloader::Result::Success;
     }
     catch (...)
     {
@@ -700,15 +700,12 @@ bool is_dds_image(std::istream &is) noexcept
 vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view channel_selector)
 {
     DDSFile dds;
-    Result  ret = dds.Load(is);
-    if (ret != tinyddsloader::Result::Success)
+    if (dds.Load(is) != tinyddsloader::Result::Success || dds.PopulateImageDatas() != tinyddsloader::Result::Success)
         throw std::runtime_error("Failed to load DDS.");
 
     // Detect normal map (for now, just BC5 or BC3 with user selector "normal")
     auto fmt       = dds.GetFormat();
-    bool is_normal = false;
-    // fmt == DDSFile::DXGIFormat::BC5_UNorm || fmt == DDSFile::DXGIFormat::BC5_SNorm ||
-    //     fmt == DDSFile::DXGIFormat::BC3_UNorm || fmt == DDSFile::DXGIFormat::BC3_UNorm_SRGB;
+    bool is_normal = (dds.GetHeader().pixelFormat.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
 
     spdlog::info("height = {}.", dds.GetHeight());
     spdlog::info("height = {}.", dds.GetHeight());

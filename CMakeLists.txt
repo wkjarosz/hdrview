@@ -787,8 +787,8 @@ list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
 CPMAddPackage(
   NAME tinyddsloader
-  GITHUB_REPOSITORY benikabocha/tinyddsloader
-  GIT_TAG a2ce2fdcef9c6c3687d1def2c8bb07ba27f4d1ba
+  GITHUB_REPOSITORY wkjarosz/tinyddsloader
+  GIT_TAG f72777a33e1c7342c8c9f1f415619254ac412d7b
   DOWNLOAD_ONLY YES
 )
 if(tinyddsloader_ADDED)
