@@ -970,7 +970,6 @@ float4 Image::rgba_pixel(int2 p, Target target) const
             {
                 value[3]    = value[1];
                 value.xyz() = YC_to_RGB(float3{0.f, value[0], 0.f}, luminance_weights);
-                spdlog::info("YA channel group: {}", value);
             }
             else
                 value[2] = 0.f;

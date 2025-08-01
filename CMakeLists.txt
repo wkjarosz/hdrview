@@ -785,6 +785,32 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
+CPMAddPackage(
+  NAME tinyddsloader
+  GITHUB_REPOSITORY benikabocha/tinyddsloader
+  GIT_TAG a2ce2fdcef9c6c3687d1def2c8bb07ba27f4d1ba
+  DOWNLOAD_ONLY YES
+)
+if(tinyddsloader_ADDED)
+  message(STATUS "tinyddsloader library added")
+  add_library(tinyddsloader INTERFACE IMPORTED)
+  target_include_directories(tinyddsloader INTERFACE "${tinyddsloader_SOURCE_DIR}")
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "tinyddsloader")
+
+CPMAddPackage(
+  NAME bcdec
+  GITHUB_REPOSITORY iOrange/bcdec
+  GIT_TAG 963c5e56b7a335e066cff7d16a3de75f4e8ad366
+  DOWNLOAD_ONLY YES
+)
+if(bcdec_ADDED)
+  message(STATUS "bcdec library added")
+  add_library(bcdec INTERFACE IMPORTED)
+  target_include_directories(bcdec INTERFACE "${bcdec_SOURCE_DIR}")
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "bcdec")
+
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
 # ============================================================================
@@ -831,6 +857,7 @@ hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
   src/imageio/image_loader.cpp
+  src/imageio/dds.cpp
   src/imageio/exr_header.cpp
   src/imageio/exif.cpp
   src/imageio/exr.cpp

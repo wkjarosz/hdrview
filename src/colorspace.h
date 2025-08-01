@@ -842,16 +842,21 @@ inline float4 blend(float4 top, float4 bottom, EBlendMode blend_mode)
 template <typename T>
 inline float dequantize_full(T v)
 {
-    constexpr float denom = 1.f / float(std::numeric_limits<T>::max());
-    return v * denom;
+    constexpr auto min_val = std::numeric_limits<T>::min();
+    constexpr auto max_val = std::numeric_limits<T>::max();
+    const float    denom   = 1.f / (float(max_val) - float(min_val));
+    return (float(v) - min_val) * denom;
 }
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_FULL
 template <typename T>
 T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
 {
-    constexpr float maximum = float(std::numeric_limits<T>::max());
-    return (T)std::clamp(v * maximum + 0.5f + (dither ? tent_dither(x, y) : 0.f), 0.0f, maximum);
+    constexpr auto min_val = std::numeric_limits<T>::min();
+    constexpr auto max_val = std::numeric_limits<T>::max();
+    const float    denom   = float(max_val) - float(min_val);
+    return (T)std::clamp(v * denom + min_val + 0.5f + (dither ? tent_dither(x, y) : 0.f), (float)min_val,
+                         (float)max_val);
 }
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW

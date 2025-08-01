@@ -79,16 +79,16 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
                                    {a->value().green.x, a->value().green.y},
                                    {a->value().blue.x, a->value().blue.y},
                                    {a->value().white.x, a->value().white.y}};
-        img->metadata["loader"]     = "OpenEXR";
-        img->metadata["exr header"] = exr_header_to_json(part.header());
+        img->metadata["loader"] = "OpenEXR";
+        img->metadata["header"] = exr_header_to_json(part.header());
 
-        img->metadata["exr header"]["version"] = {
+        img->metadata["header"]["version"] = {
             {"type", "version"},
             {"string", fmt::format("{}, flags 0x{:x}", Imf::getVersion(part.version()), Imf::getFlags(part.version()))},
             {"version", Imf::getVersion(part.version())},
             {"flags", fmt::format("0x{:x}", Imf::getFlags(part.version()))}};
 
-        // spdlog::debug("exr header: {}", img->metadata["exr header"].dump(2));
+        // spdlog::debug("exr header: {}", img->metadata["header"].dump(2));
 
         if (part.header().hasName())
             img->partname = part.header().name();

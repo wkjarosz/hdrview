@@ -12,7 +12,6 @@
 #include <fmt/core.h>
 #include <iostream>
 #include <memory>
-#include <setjmp.h>
 #include <stdexcept>
 #include <string>
 #include <vector>

@@ -1102,9 +1102,9 @@ void Image::draw_info()
         }
     }
 
-    if (metadata.contains("exr header") && metadata["exr header"].is_object())
+    if (metadata.contains("header") && metadata["header"].is_object())
     {
-        if (ImGui::CollapsingHeader("EXR header", ImGuiTreeNodeFlags_Framed))
+        if (ImGui::CollapsingHeader("Header", ImGuiTreeNodeFlags_Framed))
         {
             static ImGuiTextFilter exr_filter;
             const ImVec2           button_size   = ImGui::IconButtonSize();
@@ -1128,11 +1128,11 @@ void Image::draw_info()
 
             // calculate the label size based on the longest key
             size_t max_w = 0;
-            for (auto &field : metadata["exr header"].items()) max_w = std::max(field.key().length(), max_w);
+            for (auto &field : metadata["header"].items()) max_w = std::max(field.key().length(), max_w);
 
             label_size = HelloImGui::EmSize(0.55f) * (float)max_w;
 
-            for (auto &field : metadata["exr header"].items())
+            for (auto &field : metadata["header"].items())
             {
                 const std::string &key       = field.key();
                 const auto        &field_obj = field.value();

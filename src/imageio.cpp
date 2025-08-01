@@ -15,6 +15,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 
+#include "imageio/dds.h"
 #include "imageio/exr.h"
 #include "imageio/heif.h"
 #include "imageio/jpg.h"
@@ -62,6 +63,12 @@ vector<ImagePtr> Image::load(istream &is, string_view filename, string_view chan
         {
             spdlog::info("Detected JPEG XL image. Loading via libjxl.");
             images = load_jxl_image(is, filename, channel_selector);
+        }
+        // is_heif_image falsely claims many dds files are heif files, and then fails, so we put dds earlier
+        else if (is_dds_image(is))
+        {
+            spdlog::info("Detected dds-compatible image. Loading via tinyddsloader.");
+            images = load_dds_image(is, filename, channel_selector);
         }
         else if (is_heif_image(is))
         {
