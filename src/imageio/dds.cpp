@@ -206,7 +206,7 @@ inline uint8_t compute_normal_z(uint8_t x, uint8_t y)
     return (uint8_t)std::clamp(z, 0, 255);
 }
 
-// Helper: Expand BC5 RG to RGB normal map
+// expand from RG into RGB, computing B from RG
 void compute_normal_rg(uint8_t *rgba, int count)
 {
     for (int i = count - 1; i >= 0; --i)
@@ -219,7 +219,7 @@ void compute_normal_rg(uint8_t *rgba, int count)
     }
 }
 
-// Helper: Expand BC3 AG to RGB normal map
+// contract from RGBA (R & B unused) to RGB, computing B from GA
 void compute_normal_ag(uint8_t *rgba, int count)
 {
     for (int i = 0; i < count; ++i)
@@ -249,198 +249,198 @@ void get_channel_specs(DDSFile::DXGIFormat format, int &num_channels, int &bytes
     case DXGI::BC7_UNorm:
     case DXGI::BC7_UNorm_SRGB:
         num_channels      = 4;
-        type              = Types::UNorm8;
+        type              = UNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC3_UNorm:
     case DXGI::BC3_UNorm_SRGB:
         num_channels      = is_normal ? 3 : 4;
-        type              = Types::UNorm8;
+        type              = UNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC4_UNorm:
         num_channels      = 1;
-        type              = Types::UNorm8;
+        type              = UNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC4_SNorm:
         num_channels      = 1;
-        type              = Types::SNorm8;
+        type              = SNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC5_UNorm:
         num_channels      = is_normal ? 3 : 2;
-        type              = Types::UNorm8;
+        type              = UNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC5_SNorm:
         num_channels      = is_normal ? 3 : 2;
-        type              = Types::SNorm8;
+        type              = SNorm8;
         bytes_per_channel = 1;
         break;
     case DXGI::BC6H_UF16:
     case DXGI::BC6H_SF16:
         num_channels      = 3;
-        type              = Types::Float16;
+        type              = Float16;
         bytes_per_channel = 2;
         break;
 
     // Uncompressed formats
     case DXGI::R32G32B32A32_Float:
         num_channels = 4;
-        type         = Types::Float32;
+        type         = Float32;
         break;
     case DXGI::R32G32B32_Float:
         num_channels = 3;
-        type         = Types::Float32;
+        type         = Float32;
         break;
     case DXGI::R32G32_Float:
         num_channels = 2;
-        type         = Types::Float32;
+        type         = Float32;
         break;
     case DXGI::R32_Float:
     case DXGI::D32_Float:
         num_channels = 1;
-        type         = Types::Float32;
+        type         = Float32;
         break;
 
     case DXGI::R16G16B16A16_Float:
         num_channels = 4;
-        type         = Types::Float16;
+        type         = Float16;
         break;
     case DXGI::R16G16_Float:
         num_channels = 2;
-        type         = Types::Float16;
+        type         = Float16;
         break;
     case DXGI::R16_Float:
         num_channels = 1;
-        type         = Types::Float16;
+        type         = Float16;
         break;
 
     case DXGI::R32G32B32A32_UInt:
         num_channels = 4;
-        type         = Types::UInt32;
+        type         = UInt32;
         break;
     case DXGI::R32G32B32_UInt:
         num_channels = 3;
-        type         = Types::UInt32;
+        type         = UInt32;
         break;
     case DXGI::R32G32_UInt:
         num_channels = 2;
-        type         = Types::UInt32;
+        type         = UInt32;
         break;
     case DXGI::R32_UInt:
         num_channels = 1;
-        type         = Types::UInt32;
+        type         = UInt32;
         break;
 
     case DXGI::R16G16B16A16_UInt:
         num_channels = 4;
-        type         = Types::UInt16;
+        type         = UInt16;
         break;
     case DXGI::R16G16_UInt:
         num_channels = 2;
-        type         = Types::UInt16;
+        type         = UInt16;
         break;
     case DXGI::R16_UInt:
         num_channels = 1;
-        type         = Types::UInt16;
+        type         = UInt16;
         break;
 
     case DXGI::R8G8B8A8_UInt:
         num_channels = 4;
-        type         = Types::UInt8;
+        type         = UInt8;
         break;
     case DXGI::R8G8_UInt:
         num_channels = 2;
-        type         = Types::UInt8;
+        type         = UInt8;
         break;
     case DXGI::R8_UInt:
         num_channels = 1;
-        type         = Types::UInt8;
+        type         = UInt8;
         break;
 
     case DXGI::R32G32B32A32_SInt:
         num_channels = 4;
-        type         = Types::SInt32;
+        type         = SInt32;
         break;
     case DXGI::R32G32B32_SInt:
         num_channels = 3;
-        type         = Types::SInt32;
+        type         = SInt32;
         break;
     case DXGI::R32G32_SInt:
         num_channels = 2;
-        type         = Types::SInt32;
+        type         = SInt32;
         break;
     case DXGI::R32_SInt:
         num_channels = 1;
-        type         = Types::SInt32;
+        type         = SInt32;
         break;
 
     case DXGI::R16G16B16A16_SInt:
         num_channels = 4;
-        type         = Types::SInt16;
+        type         = SInt16;
         break;
     case DXGI::R16G16_SInt:
         num_channels = 2;
-        type         = Types::SInt16;
+        type         = SInt16;
         break;
     case DXGI::R16_SInt:
         num_channels = 1;
-        type         = Types::SInt16;
+        type         = SInt16;
         break;
 
     case DXGI::R8G8B8A8_SInt:
         num_channels = 4;
-        type         = Types::SInt8;
+        type         = SInt8;
         break;
     case DXGI::R8G8_SInt:
         num_channels = 2;
-        type         = Types::SInt8;
+        type         = SInt8;
         break;
     case DXGI::R8_SInt:
         num_channels = 1;
-        type         = Types::SInt8;
+        type         = SInt8;
         break;
 
     case DXGI::R16G16B16A16_SNorm:
         num_channels = 4;
-        type         = Types::SNorm16;
+        type         = SNorm16;
         break;
     case DXGI::R16G16_SNorm:
         num_channels = 2;
-        type         = Types::SNorm16;
+        type         = SNorm16;
         break;
     case DXGI::R16_SNorm:
         num_channels = 1;
-        type         = Types::SNorm16;
+        type         = SNorm16;
         break;
 
     case DXGI::R8G8B8A8_SNorm:
         num_channels = 4;
-        type         = Types::SNorm8;
+        type         = SNorm8;
         break;
     case DXGI::R8G8_SNorm:
         num_channels = 2;
-        type         = Types::SNorm8;
+        type         = SNorm8;
         break;
     case DXGI::R8_SNorm:
         num_channels = 1;
-        type         = Types::SNorm8;
+        type         = SNorm8;
         break;
 
     case DXGI::R16G16B16A16_UNorm:
         num_channels = 4;
-        type         = Types::UNorm16;
+        type         = UNorm16;
         break;
     case DXGI::R16G16_UNorm:
         num_channels = 2;
-        type         = Types::UNorm16;
+        type         = UNorm16;
         break;
     case DXGI::R16_UNorm:
     case DXGI::D16_UNorm:
         num_channels = 1;
-        type         = Types::UNorm16;
+        type         = UNorm16;
         break;
 
     case DXGI::R8G8B8A8_UNorm:
@@ -448,29 +448,29 @@ void get_channel_specs(DDSFile::DXGIFormat format, int &num_channels, int &bytes
     case DXGI::B8G8R8A8_UNorm:
     case DXGI::B8G8R8A8_UNorm_SRGB:
         num_channels = 4;
-        type         = Types::UNorm8;
+        type         = UNorm8;
         break;
     case DXGI::R8G8_UNorm:
         num_channels = 2;
-        type         = Types::UNorm8;
+        type         = UNorm8;
         break;
     case DXGI::R8_UNorm:
         num_channels = 1;
-        type         = Types::UNorm8;
+        type         = UNorm8;
         break;
     case DXGI::B8G8R8X8_UNorm:
         num_channels = 4;
-        type         = Types::UNorm8;
+        type         = UNorm8;
         break;
 
     case DXGI::R11G11B10_Float:
         num_channels = 3;
-        type         = Types::Float32;
+        type         = Float32;
         break;
 
     default:
         num_channels      = 0;
-        type              = Types::Typeless;
+        type              = Typeless;
         bytes_per_channel = 0;
         break;
     }
@@ -480,18 +480,18 @@ void get_channel_specs(DDSFile::DXGIFormat format, int &num_channels, int &bytes
     {
         switch (type)
         {
-        case Types::Float32:
-        case Types::UInt32:
-        case Types::SInt32: bytes_per_channel = 4; break;
-        case Types::Float16:
-        case Types::UInt16:
-        case Types::SInt16:
-        case Types::SNorm16:
-        case Types::UNorm16: bytes_per_channel = 2; break;
-        case Types::UInt8:
-        case Types::SInt8:
-        case Types::SNorm8:
-        case Types::UNorm8: bytes_per_channel = 1; break;
+        case Float32:
+        case UInt32:
+        case SInt32: bytes_per_channel = 4; break;
+        case Float16:
+        case UInt16:
+        case SInt16:
+        case SNorm16:
+        case UNorm16: bytes_per_channel = 2; break;
+        case UInt8:
+        case SInt8:
+        case SNorm8:
+        case UNorm8: bytes_per_channel = 1; break;
         default: bytes_per_channel = 0; break;
         }
     }
@@ -732,18 +732,18 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
     std::string bit_depth_str;
     switch (type)
     {
-    case Types::Float32: bit_depth_str = fmt::format("{}-bit float (32 bpc)", num_channels * 32); break;
-    case Types::Float16: bit_depth_str = fmt::format("{}-bit half (16 bpc)", num_channels * 16); break;
-    case Types::SInt8: bit_depth_str = fmt::format("{}-bit int8 (8 bpc)", num_channels * 8); break;
-    case Types::SInt16: bit_depth_str = fmt::format("{}-bit int16 (16 bpc)", num_channels * 16); break;
-    case Types::SInt32: bit_depth_str = fmt::format("{}-bit int32 (32 bpc)", num_channels * 32); break;
-    case Types::UInt8: bit_depth_str = fmt::format("{}-bit uint8 (8 bpc)", num_channels * 8); break;
-    case Types::UInt16: bit_depth_str = fmt::format("{}-bit uint16 (16 bpc)", num_channels * 16); break;
-    case Types::UInt32: bit_depth_str = fmt::format("{}-bit uint32 (32 bpc)", num_channels * 32); break;
-    case Types::SNorm8: bit_depth_str = fmt::format("{}-bit snorm8 (8 bpc)", num_channels * 8); break;
-    case Types::SNorm16: bit_depth_str = fmt::format("{}-bit snorm16 (16 bpc)", num_channels * 16); break;
-    case Types::UNorm8: bit_depth_str = fmt::format("{}-bit unorm8 (8 bpc)", num_channels * 8); break;
-    case Types::UNorm16: bit_depth_str = fmt::format("{}-bit unorm16 (16 bpc)", num_channels * 16); break;
+    case Float32: bit_depth_str = fmt::format("{}-bit float (32 bpc)", num_channels * 32); break;
+    case Float16: bit_depth_str = fmt::format("{}-bit half (16 bpc)", num_channels * 16); break;
+    case SInt8: bit_depth_str = fmt::format("{}-bit int8 (8 bpc)", num_channels * 8); break;
+    case SInt16: bit_depth_str = fmt::format("{}-bit int16 (16 bpc)", num_channels * 16); break;
+    case SInt32: bit_depth_str = fmt::format("{}-bit int32 (32 bpc)", num_channels * 32); break;
+    case UInt8: bit_depth_str = fmt::format("{}-bit uint8 (8 bpc)", num_channels * 8); break;
+    case UInt16: bit_depth_str = fmt::format("{}-bit uint16 (16 bpc)", num_channels * 16); break;
+    case UInt32: bit_depth_str = fmt::format("{}-bit uint32 (32 bpc)", num_channels * 32); break;
+    case SNorm8: bit_depth_str = fmt::format("{}-bit snorm8 (8 bpc)", num_channels * 8); break;
+    case SNorm16: bit_depth_str = fmt::format("{}-bit snorm16 (16 bpc)", num_channels * 16); break;
+    case UNorm8: bit_depth_str = fmt::format("{}-bit unorm8 (8 bpc)", num_channels * 8); break;
+    case UNorm16: bit_depth_str = fmt::format("{}-bit unorm16 (16 bpc)", num_channels * 16); break;
     default: bit_depth_str = "unknown"; break;
     }
 
