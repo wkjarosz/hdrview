@@ -520,58 +520,56 @@ size_t get_bc_block_size(DDSFile::DXGIFormat fmt)
     }
 }
 
-ImagePtr load_uncompressed(const DDSFile::ImageData *data, int num_channels, Types type, bool is_srgb)
+ImagePtr load_uncompressed(const DDSFile::ImageData *data, int nc, Types type, bool is_srgb)
 {
-    auto image = make_shared<Image>(int2(data->m_width, data->m_height), num_channels);
-    for (int c = 0; c < num_channels; ++c)
+    int  w     = data->m_width;
+    int  h     = data->m_height;
+    auto m     = data->m_mem;
+    auto image = make_shared<Image>(int2(w, h), nc);
+    for (int c = 0; c < nc; ++c)
     {
-        Channel &channel = image->channels[c];
-        if (type == Types::Float32)
-            channel.copy_from_interleaved((const float *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](float v) { return v; });
-        else if (type == Types::Float16)
-            channel.copy_from_interleaved((const half *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](half v) { return v; });
-        else if (type == Types::SInt32)
-            channel.copy_from_interleaved((const int32_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](int32_t v) { return dequantize_full(v); });
-        else if (type == Types::SInt16)
-            channel.copy_from_interleaved((const int16_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](int16_t v) { return dequantize_full(v); });
-        else if (type == Types::SInt8)
-            channel.copy_from_interleaved((const int8_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](int8_t v) { return dequantize_full(v); });
-        else if (type == Types::UInt32)
-            channel.copy_from_interleaved((const uint32_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](uint32_t v) { return dequantize_full(v); });
-        else if (type == Types::UInt16)
-            channel.copy_from_interleaved((const uint16_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](uint16_t v) { return dequantize_full(v); });
-        else if (type == Types::UInt8)
-            channel.copy_from_interleaved((const uint8_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](uint8_t v) { return dequantize_full(v); });
-        else if (type == Types::SNorm16)
-            channel.copy_from_interleaved((const int16_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](int16_t v) { return dequantize_full(v); });
-        else if (type == Types::SNorm8)
-            channel.copy_from_interleaved((const int8_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](int8_t v) { return dequantize_full(v); });
-        else if (type == Types::UNorm16)
-            channel.copy_from_interleaved((const uint16_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](uint16_t v) { return dequantize_full(v); });
-        else if (type == Types::UNorm8)
-            channel.copy_from_interleaved((const uint8_t *)data->m_mem, data->m_width, data->m_height, num_channels, c,
-                                          [](uint8_t v) { return dequantize_full(v); });
+        Channel &ch = image->channels[c];
+        switch (type)
+        {
+        case Float32: ch.copy_from_interleaved((const float *)m, w, h, nc, c, [](float v) { return v; }); break;
+        case Float16: ch.copy_from_interleaved((const half *)m, w, h, nc, c, [](half v) { return float(v); }); break;
+        case SInt32:
+            ch.copy_from_interleaved((const int32_t *)m, w, h, nc, c, [](int32_t v) { return float(v); });
+            break;
+        case SInt16:
+            ch.copy_from_interleaved((const int16_t *)m, w, h, nc, c, [](int16_t v) { return float(v); });
+            break;
+        case SInt8: ch.copy_from_interleaved((const int8_t *)m, w, h, nc, c, [](int8_t v) { return float(v); }); break;
+        case UInt32:
+            ch.copy_from_interleaved((const uint32_t *)m, w, h, nc, c, [](uint32_t v) { return float(v); });
+            break;
+        case UInt16:
+            ch.copy_from_interleaved((const uint16_t *)m, w, h, nc, c, [](uint16_t v) { return float(v); });
+            break;
+        case UInt8:
+            ch.copy_from_interleaved((const uint8_t *)m, w, h, nc, c, [](uint8_t v) { return float(v); });
+            break;
+        case SNorm16:
+            ch.copy_from_interleaved((const int16_t *)m, w, h, nc, c, [](int16_t v) { return dequantize_full(v); });
+            break;
+        case SNorm8:
+            ch.copy_from_interleaved((const int8_t *)m, w, h, nc, c, [](int8_t v) { return dequantize_full(v); });
+            break;
+        case UNorm16:
+            ch.copy_from_interleaved((const uint16_t *)m, w, h, nc, c, [](uint16_t v) { return dequantize_full(v); });
+            break;
+        case UNorm8:
+            ch.copy_from_interleaved((const uint8_t *)m, w, h, nc, c, [](uint8_t v) { return dequantize_full(v); });
+            break;
+        default: break;
+        }
     }
     // sRGB to linear for uncompressed sRGB formats
     if (is_srgb)
     {
         spdlog::info("Converting sRGB to linear for uncompressed image.");
-        for (int c = 0; c < std::min(3, num_channels); ++c)
-        {
-            Channel &channel = image->channels[c];
-            channel.apply([](float v, int, int) { return sRGB_to_linear(v); });
-        }
+        for (int c = 0; c < std::min(3, nc); ++c)
+            image->channels[c].apply([](float v, int, int) { return sRGB_to_linear(v); });
     }
     return image;
 }
