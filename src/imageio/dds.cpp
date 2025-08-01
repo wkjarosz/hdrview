@@ -575,7 +575,7 @@ ImagePtr load_uncompressed(const DDSFile::ImageData *data, int nc, Types type, b
 }
 
 ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DDSFile::DXGIFormat fmt, bool is_normal,
-                            bool is_srgb)
+                            bool is_srgb, bool is_rxgb)
 {
     int  width  = data->m_width;
     int  height = data->m_height;
@@ -588,11 +588,6 @@ ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DD
 
     bool is_float       = (fmt == DDSFile::DXGIFormat::BC6H_UF16 || fmt == DDSFile::DXGIFormat::BC6H_SF16);
     int  block_channels = is_float ? 3 : 4;
-
-    // RXGB swizzle detection: DXT5 + fourCC == 'RXGB'
-    bool is_rxgb = false;
-    // if (fmt == DDSFile::DXGIFormat::BC3_UNorm && data->m_fourcc == 'RXGB')
-    //     is_rxgb = true;
 
     parallel_for(blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_width),
                  [&](int start_y, int end_y, int, int)
@@ -607,23 +602,24 @@ ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DD
                              // Use separate buffers for float and uint8_t types
                              float   float_out[4 * 4 * 3] = {0};
                              uint8_t uint8_out[4 * 4 * 4] = {0};
-                             int     stride               = block_width * block_channels;
 
                              using DXGI = DDSFile::DXGIFormat;
                              switch (fmt)
                              {
                              case DXGI::BC1_UNorm:
-                             case DXGI::BC1_UNorm_SRGB: bcdec_bc1(block, uint8_out, stride); break;
+                             case DXGI::BC1_UNorm_SRGB: bcdec_bc1(block, uint8_out, block_width * 4); break;
                              case DXGI::BC2_UNorm:
-                             case DXGI::BC2_UNorm_SRGB: bcdec_bc2(block, uint8_out, stride); break;
+                             case DXGI::BC2_UNorm_SRGB: bcdec_bc2(block, uint8_out, block_width * 4); break;
                              case DXGI::BC3_UNorm:
-                             case DXGI::BC3_UNorm_SRGB: bcdec_bc3(block, uint8_out, stride); break;
-                             case DXGI::BC4_UNorm: bcdec_bc4(block, uint8_out, stride); break;
-                             case DXGI::BC5_UNorm: bcdec_bc5(block, uint8_out, stride); break;
-                             case DXGI::BC6H_UF16: bcdec_bc6h_float(block, float_out, stride, false); break;
-                             case DXGI::BC6H_SF16: bcdec_bc6h_float(block, float_out, stride, true); break;
-                             case DXGI::BC7_UNorm: bcdec_bc7(block, uint8_out, stride); break;
-                             case DXGI::BC7_UNorm_SRGB: bcdec_bc7(block, uint8_out, stride); break;
+                             case DXGI::BC3_UNorm_SRGB: bcdec_bc3(block, uint8_out, block_width * 4); break;
+                             case DXGI::BC4_UNorm: bcdec_bc4(block, uint8_out, block_width); break;
+                             case DXGI::BC5_UNorm: bcdec_bc5(block, uint8_out, block_width * 2); break;
+                             case DXGI::BC6H_UF16:
+                             case DXGI::BC6H_SF16:
+                                 bcdec_bc6h_float(block, float_out, block_width * 3, fmt == DXGI::BC6H_SF16);
+                                 break;
+                             case DXGI::BC7_UNorm:
+                             case DXGI::BC7_UNorm_SRGB: bcdec_bc7(block, uint8_out, block_width * 4); break;
                              default: throw std::invalid_argument("Unsupported BC format for decompression.");
                              }
 
@@ -752,6 +748,9 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
                     fmt == DDSFile::DXGIFormat::R8G8B8A8_UNorm_SRGB ||
                     fmt == DDSFile::DXGIFormat::B8G8R8A8_UNorm_SRGB || fmt == DDSFile::DXGIFormat::B8G8R8X8_UNorm_SRGB);
 
+    bool is_rxgb = (fmt == DDSFile::DXGIFormat::BC3_UNorm &&
+                    dds.GetHeader().pixelFormat.fourCC == DDSFile::MakeFourCC('R', 'X', 'G', 'B'));
+
     static const char *cubemap_face_names[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
 
     json header;
@@ -769,7 +768,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
 
         ImagePtr image;
         if (DDSFile::IsCompressed(fmt))
-            image = load_bc_compressed(data, num_channels, fmt, is_normal, is_srgb);
+            image = load_bc_compressed(data, num_channels, fmt, is_normal, is_srgb, is_rxgb);
         else
             image = load_uncompressed(data, num_channels, type, is_srgb);
 
