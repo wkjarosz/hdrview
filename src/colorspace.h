@@ -844,8 +844,13 @@ inline float dequantize_full(T v)
 {
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
-    const float    denom   = 1.f / (float(max_val) - float(min_val));
-    return (float(v) - min_val) * denom;
+    const float    denom   = 1.f / float(max_val - min_val);
+    if constexpr (std::is_signed<T>::value)
+        // signed normalized, map [min, max] to [-1, 1]
+        return (2.f * (float(v) - min_val) * denom) - 1.f;
+    else
+        // unsigned normalized, map [min, max] to [0, 1]
+        return (float(v) - min_val) * denom;
 }
 
 template <>
@@ -861,8 +866,18 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
     const float    denom   = float(max_val) - float(min_val);
-    return (T)std::clamp(v * denom + min_val + 0.5f + (dither ? tent_dither(x, y) : 0.f), (float)min_val,
-                         (float)max_val);
+    if constexpr (std::is_signed<T>::value)
+    {
+        // signed normalized, map [-1, 1] to [min, max]
+        float q = ((v + 1.f) * 0.5f) * denom + min_val + (dither ? tent_dither(x, y) : 0.f);
+        return (T)std::clamp(q, (float)min_val, (float)max_val);
+    }
+    else
+    {
+        // unsigned normalized, map [0, 1] to [min, max]
+        float q = v * denom + min_val + (dither ? tent_dither(x, y) : 0.f);
+        return (T)std::clamp(q, (float)min_val, (float)max_val);
+    }
 }
 
 //! see https://registry.khronos.org/DataFormat/specs/1.3/dataformat.1.3.inline.html#QUANTIZATION_NARROW

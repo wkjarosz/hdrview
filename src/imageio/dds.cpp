@@ -497,34 +497,11 @@ void get_channel_specs(DDSFile::DXGIFormat format, int &num_channels, int &bytes
     }
 }
 
-size_t get_bc_block_size(DDSFile::DXGIFormat fmt)
-{
-    using DXGI = DDSFile::DXGIFormat;
-    switch (fmt)
-    {
-    case DXGI::BC1_UNorm:
-    case DXGI::BC1_UNorm_SRGB:
-    case DXGI::BC4_UNorm:
-    case DXGI::BC4_SNorm: return 8;
-    case DXGI::BC2_UNorm:
-    case DXGI::BC2_UNorm_SRGB:
-    case DXGI::BC3_UNorm:
-    case DXGI::BC3_UNorm_SRGB:
-    case DXGI::BC5_UNorm:
-    case DXGI::BC5_SNorm:
-    case DXGI::BC6H_UF16:
-    case DXGI::BC6H_SF16:
-    case DXGI::BC7_UNorm:
-    case DXGI::BC7_UNorm_SRGB: return 16;
-    default: return 0;
-    }
-}
-
 ImagePtr load_uncompressed(const DDSFile::ImageData *data, int nc, Types type, bool is_srgb)
 {
-    int  w     = data->m_width;
-    int  h     = data->m_height;
-    auto m     = data->m_mem;
+    int  w     = data->width;
+    int  h     = data->height;
+    auto m     = data->mem;
     auto image = make_shared<Image>(int2(w, h), nc);
     for (int c = 0; c < nc; ++c)
     {
@@ -574,101 +551,95 @@ ImagePtr load_uncompressed(const DDSFile::ImageData *data, int nc, Types type, b
     return image;
 }
 
-ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DDSFile::DXGIFormat fmt, bool is_normal,
-                            bool is_srgb, bool is_rxgb)
+ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DDSFile::Compression cmp, bool is_signed,
+                            bool is_normal, bool is_srgb, bool is_rxgb)
 {
-    int  width  = data->m_width;
-    int  height = data->m_height;
+    int  width  = data->width;
+    int  height = data->height;
     auto image  = make_shared<Image>(int2{width, height}, num_channels);
 
     constexpr int block_width      = 4;
     const int     width_in_blocks  = (width + block_width - 1) / block_width;
     const int     height_in_blocks = (height + block_width - 1) / block_width;
-    const size_t  block_size       = get_bc_block_size(fmt);
+    const size_t  block_size       = cmp == DDSFile::Compression::DXT1 || cmp == DDSFile::Compression::BC4 ? 8 : 16;
 
-    bool is_float       = (fmt == DDSFile::DXGIFormat::BC6H_UF16 || fmt == DDSFile::DXGIFormat::BC6H_SF16);
-    int  block_channels = is_float ? 3 : 4;
+    bool is_float = (cmp == DDSFile::Compression::BC6HU || cmp == DDSFile::Compression::BC6HS);
 
-    parallel_for(blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_width),
-                 [&](int start_y, int end_y, int, int)
-                 {
-                     for (int by = start_y; by < end_y; ++by)
-                     {
-                         for (int bx = 0; bx < width_in_blocks; ++bx)
-                         {
-                             const uint8_t *block =
-                                 static_cast<const uint8_t *>(data->m_mem) + (by * width_in_blocks + bx) * block_size;
+    parallel_for(
+        blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_width),
+        [&](int start_y, int end_y, int, int)
+        {
+            for (int by = start_y; by < end_y; ++by)
+            {
+                for (int bx = 0; bx < width_in_blocks; ++bx)
+                {
+                    const uint8_t *block =
+                        static_cast<const uint8_t *>(data->mem) + (by * width_in_blocks + bx) * block_size;
 
-                             // Use separate buffers for float and uint8_t types
-                             float   float_out[4 * 4 * 3] = {0};
-                             uint8_t uint8_out[4 * 4 * 4] = {0};
+                    // Use separate buffers for float and uint8_t types
+                    float   float_out[4 * 4 * 3] = {0};
+                    uint8_t uint8_out[4 * 4 * 4] = {0};
 
-                             using DXGI = DDSFile::DXGIFormat;
-                             switch (fmt)
-                             {
-                             case DXGI::BC1_UNorm:
-                             case DXGI::BC1_UNorm_SRGB: bcdec_bc1(block, uint8_out, block_width * 4); break;
-                             case DXGI::BC2_UNorm:
-                             case DXGI::BC2_UNorm_SRGB: bcdec_bc2(block, uint8_out, block_width * 4); break;
-                             case DXGI::BC3_UNorm:
-                             case DXGI::BC3_UNorm_SRGB: bcdec_bc3(block, uint8_out, block_width * 4); break;
-                             case DXGI::BC4_UNorm: bcdec_bc4(block, uint8_out, block_width); break;
-                             case DXGI::BC5_UNorm: bcdec_bc5(block, uint8_out, block_width * 2); break;
-                             case DXGI::BC6H_UF16:
-                             case DXGI::BC6H_SF16:
-                                 bcdec_bc6h_float(block, float_out, block_width * 3, fmt == DXGI::BC6H_SF16);
-                                 break;
-                             case DXGI::BC7_UNorm:
-                             case DXGI::BC7_UNorm_SRGB: bcdec_bc7(block, uint8_out, block_width * 4); break;
-                             default: throw std::invalid_argument("Unsupported BC format for decompression.");
-                             }
+                    switch (cmp)
+                    {
+                    case DDSFile::Compression::DXT1: bcdec_bc1(block, uint8_out, block_width * 4); break;
+                    case DDSFile::Compression::DXT2:
+                    case DDSFile::Compression::DXT3: bcdec_bc2(block, uint8_out, block_width * 4); break;
+                    case DDSFile::Compression::DXT4:
+                    case DDSFile::Compression::DXT5: bcdec_bc3(block, uint8_out, block_width * 4); break;
+                    case DDSFile::Compression::BC4: bcdec_bc4(block, uint8_out, block_width); break;
+                    case DDSFile::Compression::BC5: bcdec_bc5(block, uint8_out, block_width * 2); break;
+                    case DDSFile::Compression::BC6HU:
+                    case DDSFile::Compression::BC6HS:
+                        bcdec_bc6h_float(block, float_out, block_width * 3, cmp == DDSFile::Compression::BC6HS);
+                        break;
+                    case DDSFile::Compression::BC7: bcdec_bc7(block, uint8_out, block_width * 4); break;
+                    default: throw std::invalid_argument("Unsupported BC format for decompression.");
+                    }
 
-                             // RXGB swizzle: swap R and A channels for each pixel in the block
-                             if (!is_float && is_rxgb)
-                             {
-                                 for (int i = 0; i < block_width * block_width; ++i)
-                                     std::swap(uint8_out[i * 4 + 0], uint8_out[i * 4 + 3]);
-                             }
+                    // RXGB swizzle: swap R and A channels for each pixel in the block
+                    if (is_rxgb)
+                    {
+                        for (int i = 0; i < block_width * block_width; ++i)
+                            std::swap(uint8_out[i * 4 + 0], uint8_out[i * 4 + 3]);
+                    }
 
-                             // If normal map, convert to RGB normal map in-place
-                             if (!is_float && is_normal)
-                             {
-                                 if (fmt == DXGI::BC5_UNorm || fmt == DXGI::BC5_SNorm)
-                                     compute_normal_rg(uint8_out, block_width * block_width);
-                                 else if (fmt == DXGI::BC3_UNorm || fmt == DXGI::BC3_UNorm_SRGB)
-                                     compute_normal_ag(uint8_out, block_width * block_width);
-                             }
+                    // If normal map, convert to RGB normal map in-place
+                    if (!is_float && is_normal)
+                    {
+                        if (cmp == DDSFile::Compression::BC5)
+                            compute_normal_rg(uint8_out, block_width * block_width);
+                        else if (cmp == DDSFile::Compression::DXT5)
+                            compute_normal_ag(uint8_out, block_width * block_width);
+                    }
 
-                             for (int py = 0; py < block_width; ++py)
-                             {
-                                 int y = by * block_width + py;
-                                 if (y >= height)
-                                     continue;
-                                 for (int px = 0; px < block_width; ++px)
-                                 {
-                                     int x = bx * block_width + px;
-                                     if (x >= width)
-                                         continue;
-                                     int src_idx = (py * block_width + px) * block_channels;
-                                     int dst_idx = y * width + x;
-                                     if (is_float)
-                                     {
-                                         for (int c = 0; c < num_channels; ++c)
-                                             image->channels[c](dst_idx) = float_out[src_idx + c];
-                                     }
-                                     else
-                                     {
-                                         for (int c = 0; c < num_channels; ++c)
-                                         {
-                                             float f                     = dequantize_full(uint8_out[src_idx + c]);
-                                             image->channels[c](dst_idx) = (is_srgb && c < 3) ? sRGB_to_linear(f) : f;
-                                         }
-                                     }
-                                 }
-                             }
-                         }
-                     }
-                 });
+                    for (int py = 0; py < block_width; ++py)
+                    {
+                        int y = by * block_width + py;
+                        if (y >= height)
+                            continue;
+                        for (int px = 0; px < block_width; ++px)
+                        {
+                            int x = bx * block_width + px;
+                            if (x >= width)
+                                continue;
+                            int src_idx = (py * block_width + px) * num_channels;
+                            int dst_idx = y * width + x;
+                            for (int c = 0; c < num_channels; ++c)
+                                if (is_float)
+                                    image->channels[c](dst_idx) = float_out[src_idx + c];
+                                else
+                                {
+                                    float f                     = is_signed
+                                                                      ? dequantize_full(reinterpret_cast<int8_t *>(uint8_out)[src_idx + c])
+                                                                      : dequantize_full(uint8_out[src_idx + c]);
+                                    image->channels[c](dst_idx) = (is_srgb && c < 3) ? sRGB_to_linear(f) : f;
+                                }
+                        }
+                    }
+                }
+            }
+        });
 
     return image;
 }
@@ -699,9 +670,18 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
     if (dds.Load(is) != tinyddsloader::Result::Success || dds.PopulateImageDatas() != tinyddsloader::Result::Success)
         throw std::runtime_error("Failed to load DDS.");
 
-    // Detect normal map (for now, just BC5 or BC3 with user selector "normal")
-    auto fmt       = dds.GetFormat();
-    bool is_normal = (dds.GetHeader().pixelFormat.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
+    auto hdr      = dds.GetHeader();
+    auto dxt10hdr = dds.GetHeaderDXT10();
+    auto fmt      = dds.GetFormat();
+    auto cmp      = dds.GetCompression();
+
+    bool is_normal = (hdr.pixelFormat.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
+    bool is_srgb   = (fmt == DDSFile::DXGIFormat::BC1_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC2_UNorm_SRGB ||
+                    fmt == DDSFile::DXGIFormat::BC3_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC7_UNorm_SRGB ||
+                    fmt == DDSFile::DXGIFormat::R8G8B8A8_UNorm_SRGB ||
+                    fmt == DDSFile::DXGIFormat::B8G8R8A8_UNorm_SRGB || fmt == DDSFile::DXGIFormat::B8G8R8X8_UNorm_SRGB);
+    bool is_rxgb   = (cmp == DDSFile::Compression::DXT5 && hdr.pixelFormat.fourCC == DDSFile::RXGB_4CC);
+    bool is_signed = dxt10hdr.format == DDSFile::BC5_SNorm || dxt10hdr.format == DDSFile::BC4_SNorm;
 
     spdlog::info("height = {}.", dds.GetHeight());
     spdlog::info("height = {}.", dds.GetHeight());
@@ -712,6 +692,15 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
     spdlog::info("format = {}.", (uint32_t)fmt);
     spdlog::info("isCubeMap = {}.", (uint32_t)dds.IsCubemap());
     spdlog::info("isCompressed = {}.", (uint32_t)dds.IsCompressed(fmt));
+    spdlog::info("isNormalMap = {}.", is_normal);
+    spdlog::info("isSRGB = {}.", is_srgb);
+    spdlog::info("isRXGB = {}.", is_rxgb);
+    spdlog::info("pixelFormat.size = {}.", hdr.pixelFormat.size);
+    spdlog::info("pixelFormat.flags = {:#010x}.", hdr.pixelFormat.flags);
+    spdlog::info("pixelFormat.fourCC = {:#010x}.", hdr.pixelFormat.fourCC);
+    spdlog::info("pixelFormat.bitCount = {}.", hdr.pixelFormat.bitCount);
+    spdlog::info("pixelFormat.masks = {:#010x}:{:#010x}:{:#010x}:{:#010x}.", hdr.pixelFormat.masks[0],
+                 hdr.pixelFormat.masks[1], hdr.pixelFormat.masks[2], hdr.pixelFormat.masks[3]);
 
     int   num_channels      = 0;
     int   bytes_per_channel = 0;
@@ -742,23 +731,29 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
 
     vector<ImagePtr> images;
 
-    // Detect if this is an sRGB format
-    bool is_srgb = (fmt == DDSFile::DXGIFormat::BC1_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC2_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::BC3_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC7_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::R8G8B8A8_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::B8G8R8A8_UNorm_SRGB || fmt == DDSFile::DXGIFormat::B8G8R8X8_UNorm_SRGB);
-
-    bool is_rxgb = (fmt == DDSFile::DXGIFormat::BC3_UNorm &&
-                    dds.GetHeader().pixelFormat.fourCC == DDSFile::MakeFourCC('R', 'X', 'G', 'B'));
-
     static const char *cubemap_face_names[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
 
     json header;
     header["isCubemap"] = {{"value", dds.IsCubemap()}, {"string", dds.IsCubemap() ? "yes" : "no"}, {"type", "boolean"}};
-    header["isCompressed"] = {{"value", DDSFile::IsCompressed(fmt)},
-                              {"string", DDSFile::IsCompressed(fmt) ? "yes" : "no"},
-                              {"type", "boolean"}};
-    header["format"]       = dxgi_format_to_json(fmt);
+
+    string cmp_str = "None";
+    switch (cmp)
+    {
+    case DDSFile::Compression::None: break;
+    case DDSFile::Compression::DXT1: cmp_str = "DXT1"; break;
+    case DDSFile::Compression::DXT2: cmp_str = "DXT2"; break;
+    case DDSFile::Compression::DXT3: cmp_str = "DXT3"; break;
+    case DDSFile::Compression::DXT4: cmp_str = "DXT4"; break;
+    case DDSFile::Compression::DXT5: cmp_str = "DXT5"; break;
+    case DDSFile::Compression::BC4: cmp_str = "BC4"; break;
+    case DDSFile::Compression::BC5: cmp_str = "BC5"; break;
+    case DDSFile::Compression::BC6HU: cmp_str = "BC6HU"; break;
+    case DDSFile::Compression::BC6HS: cmp_str = "BC6HS"; break;
+    case DDSFile::Compression::BC7: cmp_str = "BC7"; break;
+    }
+
+    header["compression"] = {{"value", cmp}, {"string", cmp_str}, {"type", "enum"}};
+    header["format"]      = dxgi_format_to_json(fmt);
 
     for (uint32_t p = 0; p < dds.GetArraySize(); ++p)
     {
@@ -768,7 +763,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
 
         ImagePtr image;
         if (DDSFile::IsCompressed(fmt))
-            image = load_bc_compressed(data, num_channels, fmt, is_normal, is_srgb, is_rxgb);
+            image = load_bc_compressed(data, num_channels, cmp, is_signed, is_normal, is_srgb, is_rxgb);
         else
             image = load_uncompressed(data, num_channels, type, is_srgb);
 
