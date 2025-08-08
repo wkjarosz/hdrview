@@ -156,7 +156,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         // special cases
         if (fmt == DXGI::R9G9B9E5_SHAREDEXP)
         {
-            if (nc != 3 or image->channels.size() != 3)
+            if (nc != 3 || image->channels.size() != 3)
                 throw logic_error("R11G11B10_Float format must have 3 channels");
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
@@ -195,7 +195,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         }
         else if (fmt == DXGI::R11G11B10_Float)
         {
-            if (nc != 3 or image->channels.size() != 3)
+            if (nc != 3 || image->channels.size() != 3)
                 throw logic_error("R11G11B10_Float format must have 3 channels");
             for (int i = 0; i < w * h; ++i)
             {
@@ -207,7 +207,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
         }
         else if (fmt == DXGI::R10G10B10_XR_BIAS_A2_UNorm)
         {
-            if (nc != 4 or image->channels.size() != 4)
+            if (nc != 4 || image->channels.size() != 4)
                 throw logic_error("R10G10B10_XR_BIAS_A2_UNorm format must have 4 channels");
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
