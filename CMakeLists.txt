@@ -814,7 +814,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "bcdec")
 CPMAddPackage(
   NAME astc_dec
   GITHUB_REPOSITORY wkjarosz/astc_dec
-  GIT_TAG b565d6416d2e05ac20af66ca05255d0ca80afea0
+  GIT_TAG d1999b2d8d379ba952931f1969c7ec048aa47d08
   DOWNLOAD_ONLY YES
 )
 if(astc_dec_ADDED)
