@@ -26,6 +26,7 @@
 #include <ImfHeader.h>
 #include <ImfThreading.h>
 
+#include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 
 #include <cmath>
@@ -3611,6 +3612,7 @@ void HDRViewApp::draw_top_toolbar()
 void HDRViewApp::draw_background()
 {
     using namespace std::literals;
+    spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
     process_shortcuts();
 
     // If watching files for changes, do so every 250ms
@@ -3976,12 +3978,11 @@ void HDRViewApp::process_shortcuts()
 {
     if (ImGui::GetIO().WantCaptureKeyboard)
     {
-        spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard (frame: {})",
-                      ImGui::GetFrameCount());
+        spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard");
         return;
     }
 
-    spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
+    // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
         if (a.chord)
@@ -4206,7 +4207,9 @@ void HDRViewApp::draw_about_dialog()
                                          "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
                                          "https://github.com/samhocevar/portable-file-dialogs");
 #endif
-                    item_and_description("stb_image/write", "Single-Header libraries for loading/writing images.",
+                    item_and_description("smalldds", "Single-header library for loading DDS images.",
+                                         "https://github.com/wkjarosz/smalldds");
+                    item_and_description("stb_image/write", "Single-header libraries for loading/writing images.",
                                          "https://github.com/nothings/stb");
                     item_and_description("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");

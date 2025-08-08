@@ -67,7 +67,7 @@ vector<ImagePtr> Image::load(istream &is, string_view filename, string_view chan
         // is_heif_image falsely claims many dds files are heif files, and then fails, so we put dds earlier
         else if (is_dds_image(is))
         {
-            spdlog::info("Detected dds-compatible image. Loading via tinyddsloader.");
+            spdlog::info("Detected dds-compatible image. Loading via smalldds.");
             images = load_dds_image(is, filename, channel_selector);
         }
         else if (is_heif_image(is))

@@ -66,9 +66,11 @@ SpdLogWindow &GlobalSpdLogWindow()
 }
 
 SpdLogWindow::SpdLogWindow(int max_items) :
-    m_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
+    m_filter_sink(make_shared<spdlog::sinks::dup_filter_sink_mt>(std::chrono::seconds(5), spdlog::level::info)),
+    m_ringbuffer_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
     m_level_colors({white, cyan, green, yellow, red, magenta, gray})
 {
+    m_filter_sink->add_sink(m_ringbuffer_sink);
 }
 
 void SpdLogWindow::set_pattern(const string &pattern)
@@ -76,14 +78,14 @@ void SpdLogWindow::set_pattern(const string &pattern)
     // add support for custom level icon flag to formatter
     auto formatter = std::make_unique<spdlog::pattern_formatter>();
     formatter->add_flag<level_icon_formatter_flag>('*').set_pattern(pattern);
-    m_sink->set_formatter(std::move(formatter));
+    m_filter_sink->set_formatter(std::move(formatter));
 }
 
 void SpdLogWindow::draw(ImFont *console_font, float size)
 {
     static const spdlog::string_view_t level_names[] = SPDLOG_LEVEL_NAMES;
 
-    auto         current_level = m_sink->level();
+    auto         current_level = m_ringbuffer_sink->level();
     const ImVec2 button_size   = IconButtonSize();
     bool         filter_active = m_filter.IsActive(); // save here to avoid flicker
 
@@ -116,7 +118,8 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
                         .c_str(),
                     current_level == i))
             {
-                m_sink->set_level(spdlog::level::level_enum(i));
+                m_filter_sink->set_level(spdlog::level::level_enum(i));
+                m_ringbuffer_sink->set_level(spdlog::level::level_enum(i));
                 spdlog::set_level(spdlog::level::level_enum(i));
                 spdlog::info("Setting verbosity threshold to level {:d}.", i);
             }
@@ -128,7 +131,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
     ImGui::WrappedTooltip("Click to choose the verbosity level.");
     ImGui::SameLine();
     if (ImGui::IconButton(ICON_MY_TRASH_CAN))
-        m_sink->clear_messages();
+        m_ringbuffer_sink->clear_messages();
     ImGui::WrappedTooltip("Clear all messages.");
     ImGui::SameLine();
     if (ImGui::IconButton(m_auto_scroll ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN))
@@ -151,12 +154,12 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 
         int  item_num = 0;
         bool did_copy = false;
-        m_sink->iterate(
+        m_ringbuffer_sink->iterate(
             [this, &item_num, &did_copy,
              default_font](const typename spdlog::sinks::ringbuffer_color_sink_mt::LogItem &msg) -> bool
             {
                 ++item_num;
-                if (!m_sink->should_log(msg.level) ||
+                if (!m_ringbuffer_sink->should_log(msg.level) ||
                     !m_filter.PassFilter(msg.message.c_str(), msg.message.c_str() + msg.message.size()))
                     return true;
 
@@ -226,7 +229,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
 
         // ImGui::PopStyleColor();
 
-        if (m_sink->has_new_items() && m_auto_scroll)
+        if (m_ringbuffer_sink->has_new_items() && m_auto_scroll)
             ImGui::SetScrollHereY(1.f);
 
         ImGui::PopFont();
@@ -235,7 +238,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
     ImGui::EndChild();
 }
 
-void SpdLogWindow::clear() { m_sink->clear_messages(); }
+void SpdLogWindow::clear() { m_ringbuffer_sink->clear_messages(); }
 
 void SpdLogWindow::set_level_color(spdlog::level::level_enum level, ImU32 color)
 {

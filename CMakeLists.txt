@@ -786,17 +786,17 @@ endif()
 list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
 CPMAddPackage(
-  NAME tinyddsloader
-  GITHUB_REPOSITORY wkjarosz/tinyddsloader
-  GIT_TAG c1b27b1899c48c112bd486867a33d6de3bc4aaa8
+  NAME smalldds
+  GITHUB_REPOSITORY wkjarosz/smalldds
+  GIT_TAG 18555291f7351831534ef6ecc28792b843d3bdc0
   DOWNLOAD_ONLY YES
 )
-if(tinyddsloader_ADDED)
-  message(STATUS "tinyddsloader library added")
-  add_library(tinyddsloader INTERFACE IMPORTED)
-  target_include_directories(tinyddsloader INTERFACE "${tinyddsloader_SOURCE_DIR}")
+if(smalldds_ADDED)
+  message(STATUS "smalldds library added")
+  add_library(smalldds INTERFACE IMPORTED)
+  target_include_directories(smalldds INTERFACE "${smalldds_SOURCE_DIR}")
 endif()
-list(APPEND HDRVIEW_DEPENDENCIES "tinyddsloader")
+list(APPEND HDRVIEW_DEPENDENCIES "smalldds")
 
 CPMAddPackage(
   NAME bcdec
@@ -810,6 +810,21 @@ if(bcdec_ADDED)
   target_include_directories(bcdec INTERFACE "${bcdec_SOURCE_DIR}")
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "bcdec")
+
+CPMAddPackage(
+  NAME astc_dec
+  GITHUB_REPOSITORY wkjarosz/astc_dec
+  GIT_TAG b565d6416d2e05ac20af66ca05255d0ca80afea0
+  DOWNLOAD_ONLY YES
+)
+if(astc_dec_ADDED)
+  message(STATUS "astc_dec library added")
+  add_library(astc_dec "${astc_dec_SOURCE_DIR}/astc_decomp.cpp" "${astc_dec_SOURCE_DIR}/astc_decomp.h")
+  target_compile_features(astc_dec PUBLIC cxx_std_11)
+  target_include_directories(astc_dec PUBLIC ${astc_dec_SOURCE_DIR})
+
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "astc_dec")
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on
@@ -856,6 +871,7 @@ endif()
 hello_imgui_add_app(
   HDRView
   ${CMAKE_CURRENT_BINARY_DIR}/src/version.cpp
+  src/imageio/nvcore/nv_dds.cpp
   src/imageio/image_loader.cpp
   src/imageio/dds.cpp
   src/imageio/exr_header.cpp

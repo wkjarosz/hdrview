@@ -173,8 +173,8 @@ const std::set<std::string> &Image::loadable_formats()
 #ifdef HDRVIEW_ENABLE_HEIF
                                                   "heic", "heif", "avif", "avifs",
 #endif
-                                                  "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "psd",
-                                                  "pfm",  "tga",  "gif",  "hdr",   "exr", "qoi"};
+                                                  "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "dds",
+                                                  "psd",  "pfm",  "tga",  "gif",   "hdr", "exr", "qoi"};
     return formats;
 }
 
@@ -381,6 +381,7 @@ float4x4 ChannelGroup::colors() const
     {
     case RGBA_Channels:
     case RGB_Channels:
+    case UVorXY_Channels:
         // We'd ideally like to do additive blending, but dear imgui seemingly doesn't support it.
         // Setting the alpha values to 1/(c+1) would ensure that where all three R,G,B histograms overlap we get a
         // neutral gray, but then red is fully opaque, while blue is 2/3 transparent. We instead manually choose values
@@ -396,7 +397,6 @@ float4x4 ChannelGroup::colors() const
     case YA_Channels:
     case XYZA_Channels:
     case XYZ_Channels:
-    case UVorXY_Channels:
     case Z_Channel:
     case Single_Channel:
     default:
@@ -552,7 +552,7 @@ void Image::set_as_texture(Target target)
         else
         {
             // for other x-channel groups, set 3rd channel to black, and set A=1
-            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[0]].get_texture());
+            s->set_texture(fmt::format("{}_{}_texture", t, 1), channels[group.channels[1]].get_texture());
             s->set_texture(fmt::format("{}_{}_texture", t, 2), Image::black_texture());
             s->set_texture(fmt::format("{}_{}_texture", t, 3), Image::white_texture());
         }

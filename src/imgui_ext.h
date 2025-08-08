@@ -2,6 +2,7 @@
 
 #include "fwd.h"
 
+#include <spdlog/sinks/dup_filter_sink.h>
 #include <spdlog/spdlog.h>
 
 #include "imgui.h"
@@ -31,7 +32,7 @@ public:
 
     void draw(ImFont *console_font = nullptr, float size = 0.f);
 
-    std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> &sink() { return m_sink; }
+    std::shared_ptr<spdlog::sinks::dup_filter_sink_mt> &sink() { return m_filter_sink; }
 
     /// set the pattern of the underlying spdlog sink.
     /// also adds support for the custom flag %* to show the log level icon.
@@ -43,7 +44,8 @@ public:
     ImU32 get_level_color(spdlog::level::level_enum level);
 
 protected:
-    std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> m_sink;
+    std::shared_ptr<spdlog::sinks::dup_filter_sink_mt>       m_filter_sink;
+    std::shared_ptr<spdlog::sinks::ringbuffer_color_sink_mt> m_ringbuffer_sink;
     std::array<ImU32, spdlog::level::n_levels>               m_level_colors;
     ImGuiTextFilter                                          m_filter;
     bool                                                     m_auto_scroll = true;

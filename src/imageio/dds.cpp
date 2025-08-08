@@ -19,11 +19,13 @@
 #pragma warning(push, 0)
 #endif
 
-#define TINYDDSLOADER_IMPLEMENTATION
-#include "tinyddsloader.h"
+#define SMALLDDS_IMPLEMENTATION
+#include "smalldds.h"
 
 #define BCDEC_IMPLEMENTATION
 #include "bcdec.h"
+
+#include "astc_decomp.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -34,166 +36,11 @@
 #endif
 
 using namespace std;
-using namespace tinyddsloader;
+using namespace smalldds;
+using namespace basisu;
 
 namespace
 {
-
-enum Types
-{
-    Float32,
-    Float16,
-    SInt8,
-    SInt16,
-    SInt32,
-    UInt8,
-    UInt16,
-    UInt32,
-    SNorm8,
-    SNorm16,
-    UNorm8,
-    UNorm16,
-    Typeless,
-};
-
-json dxgi_format_to_json(DDSFile::DXGIFormat fmt)
-{
-    static const char *dxgi_format_names[] = {"Unknown",
-                                              "R32G32B32A32_Typeless",
-                                              "R32G32B32A32_Float",
-                                              "R32G32B32A32_UInt",
-                                              "R32G32B32A32_SInt",
-                                              "R32G32B32_Typeless",
-                                              "R32G32B32_Float",
-                                              "R32G32B32_UInt",
-                                              "R32G32B32_SInt",
-                                              "R16G16B16A16_Typeless",
-                                              "R16G16B16A16_Float",
-                                              "R16G16B16A16_UNorm",
-                                              "R16G16B16A16_UInt",
-                                              "R16G16B16A16_SNorm",
-                                              "R16G16B16A16_SInt",
-                                              "R32G32_Typeless",
-                                              "R32G32_Float",
-                                              "R32G32_UInt",
-                                              "R32G32_SInt",
-                                              "R32G8X24_Typeless",
-                                              "D32_Float_S8X24_UInt",
-                                              "R32_Float_X8X24_Typeless",
-                                              "X32_Typeless_G8X24_UInt",
-                                              "R10G10B10A2_Typeless",
-                                              "R10G10B10A2_UNorm",
-                                              "R10G10B10A2_UInt",
-                                              "R11G11B10_Float",
-                                              "R8G8B8A8_Typeless",
-                                              "R8G8B8A8_UNorm",
-                                              "R8G8B8A8_UNorm_SRGB",
-                                              "R8G8B8A8_UInt",
-                                              "R8G8B8A8_SNorm",
-                                              "R8G8B8A8_SInt",
-                                              "R16G16_Typeless",
-                                              "R16G16_Float",
-                                              "R16G16_UNorm",
-                                              "R16G16_UInt",
-                                              "R16G16_SNorm",
-                                              "R16G16_SInt",
-                                              "R32_Typeless",
-                                              "D32_Float",
-                                              "R32_Float",
-                                              "R32_UInt",
-                                              "R32_SInt",
-                                              "R24G8_Typeless",
-                                              "D24_UNorm_S8_UInt",
-                                              "R24_UNorm_X8_Typeless",
-                                              "X24_Typeless_G8_UInt",
-                                              "R8G8_Typeless",
-                                              "R8G8_UNorm",
-                                              "R8G8_UInt",
-                                              "R8G8_SNorm",
-                                              "R8G8_SInt",
-                                              "R16_Typeless",
-                                              "R16_Float",
-                                              "D16_UNorm",
-                                              "R16_UNorm",
-                                              "R16_UInt",
-                                              "R16_SNorm",
-                                              "R16_SInt",
-                                              "R8_Typeless",
-                                              "R8_UNorm",
-                                              "R8_UInt",
-                                              "R8_SNorm",
-                                              "R8_SInt",
-                                              "A8_UNorm",
-                                              "R1_UNorm",
-                                              "R9G9B9E5_SHAREDEXP",
-                                              "R8G8_B8G8_UNorm",
-                                              "G8R8_G8B8_UNorm",
-                                              "BC1_Typeless",
-                                              "BC1_UNorm",
-                                              "BC1_UNorm_SRGB",
-                                              "BC2_Typeless",
-                                              "BC2_UNorm",
-                                              "BC2_UNorm_SRGB",
-                                              "BC3_Typeless",
-                                              "BC3_UNorm",
-                                              "BC3_UNorm_SRGB",
-                                              "BC4_Typeless",
-                                              "BC4_UNorm",
-                                              "BC4_SNorm",
-                                              "BC5_Typeless",
-                                              "BC5_UNorm",
-                                              "BC5_SNorm",
-                                              "B5G6R5_UNorm",
-                                              "B5G5R5A1_UNorm",
-                                              "B8G8R8A8_UNorm",
-                                              "B8G8R8X8_UNorm",
-                                              "R10G10B10_XR_BIAS_A2_UNorm",
-                                              "B8G8R8A8_Typeless",
-                                              "B8G8R8A8_UNorm_SRGB",
-                                              "B8G8R8X8_Typeless",
-                                              "B8G8R8X8_UNorm_SRGB",
-                                              "BC6H_Typeless",
-                                              "BC6H_UF16",
-                                              "BC6H_SF16",
-                                              "BC7_Typeless",
-                                              "BC7_UNorm",
-                                              "BC7_UNorm_SRGB",
-                                              "AYUV",
-                                              "Y410",
-                                              "Y416",
-                                              "NV12",
-                                              "P010",
-                                              "P016",
-                                              "YUV420_OPAQUE",
-                                              "YUY2",
-                                              "Y210",
-                                              "Y216",
-                                              "NV11",
-                                              "AI44",
-                                              "IA44",
-                                              "P8",
-                                              "A8P8",
-                                              "B4G4R4A4_UNorm"};
-
-    uint32_t    value = static_cast<uint32_t>(fmt);
-    std::string name;
-    if (value <= 115)
-        name = dxgi_format_names[value];
-    else if (value == 130)
-        name = "P208";
-    else if (value == 131)
-        name = "V208";
-    else if (value == 132)
-        name = "V408";
-    else
-        name = "Unknown";
-
-    json j;
-    j["value"]  = value;
-    j["type"]   = "int";
-    j["string"] = name;
-    return j;
-}
 
 // Helper: Compute normal Z from X/Y (as in OIIO)
 inline uint8_t compute_normal_z(uint8_t x, uint8_t y)
@@ -232,416 +79,635 @@ void compute_normal_ag(uint8_t *rgba, int count)
     }
 }
 
-void get_channel_specs(DDSFile::DXGIFormat format, int &num_channels, int &bytes_per_channel, Types &type,
-                       bool is_normal)
+void name_channels(const ImagePtr &image, const DDSFile &dds)
 {
     using DXGI = DDSFile::DXGIFormat;
-
-    bytes_per_channel = 0;
-
-    switch (format)
+    auto fmt   = dds.format();
+    if (image->channels.size() == 1 && dds.color_transform != DDSFile::ColorTransform::eLuminance)
     {
-    // Compressed formats
+        string name = "Y";
+        switch (fmt)
+        {
+        default:
+        case DXGI::R32_Float:
+        case DXGI::R32_UInt:
+        case DXGI::R16_UInt:
+        case DXGI::R32_SInt:
+        case DXGI::R16_SInt:
+        case DXGI::R8_SInt:
+        case DXGI::R16_SNorm:
+        case DXGI::R8_SNorm:
+        case DXGI::R16_UNorm:
+        case DXGI::R8_UInt:
+        case DXGI::R8_UNorm: name = "R"; break;
+
+        case DXGI::D32_Float:
+        case DXGI::D16_UNorm: name = "D"; break;
+
+        case DXGI::A8_UNorm: name = "A"; break;
+
+        case DXGI::BC4_UNorm: name = "R"; break;
+        case DXGI::BC4_SNorm: name = "R"; break;
+        }
+
+        if (dds.bitmasked && !dds.bitmask_has_rgb && dds.bitmask_has_alpha)
+            name = "A"; // if we have a bitmask, we assume it's alpha
+
+        if (name != "Y")
+            image->channels[0].name = name;
+    }
+    else if (image->channels.size() == 2)
+    {
+        if (fmt == DDSFile::R8G8_UInt || fmt == DDSFile::R8G8_SInt || fmt == DDSFile::R8G8_UNorm ||
+            fmt == DDSFile::R8G8_SNorm || fmt == DDSFile::R8G8_Typeless || fmt == DDSFile::R32G32_Float ||
+            fmt == DDSFile::R16G16_Float || fmt == DDSFile::R16G16_UNorm || fmt == DDSFile::R16G16_SNorm ||
+            fmt == DDSFile::R16G16_UInt)
+        {
+            image->channels[0].name = "u";
+            image->channels[1].name = "v";
+        }
+        // else if (fmt == DDSFile::R32G32_Float)
+        // {
+        //     image->channels[0].name = "R";
+        //     image->channels[1].name = "G";
+        // }
+    }
+}
+
+vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds, DDSFile::DataType type)
+{
+    using Type = DDSFile::DataType;
+    int nc     = dds.num_channels;
+
+    int  w     = data->width;
+    int  h     = data->height;
+    auto m     = data->bytes.data();
+    auto image = make_shared<Image>(int2(w, h), nc);
+
+    using DXGI = DDSFile::DXGIFormat;
+    auto fmt   = dds.format();
+
+    int Bpp = (dds.header.pixel_format.bit_count + 7) / 8;
+
+    if (type == Type::Packed || dds.bitmasked)
+    {
+        auto masks  = dds.header.pixel_format.masks;
+        auto shifts = dds.right_shifts;
+        // special cases
+        if (fmt == DXGI::R9G9B9E5_SHAREDEXP)
+        {
+            if (nc != 3 or image->channels.size() != 3)
+                throw logic_error("R11G11B10_Float format must have 3 channels");
+            int u8_index = 0;
+            for (int i = 0; i < w * h; ++i, u8_index += Bpp)
+            {
+                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+                auto     r      = (packed & masks[0]) >> shifts[0];
+                auto     g      = (packed & masks[1]) >> shifts[1];
+                auto     b      = (packed & masks[2]) >> shifts[2];
+                auto     e      = (packed & masks[3]) >> shifts[3];
+
+                float fr = decode_float9_exp_5(r, e);
+                float fg = decode_float9_exp_5(g, e);
+                float fb = decode_float9_exp_5(b, e);
+
+                image->channels[0](i) = fr;
+                image->channels[1](i) = fg;
+                image->channels[2](i) = fb;
+            }
+        }
+        else if (fmt == DXGI::R1_UNorm)
+        {
+            // each row must be at least 1 byte, and must start on a byte boundary
+            int w_bytes = (w + 7) / 8; // number of bytes needed to store the bits
+            for (int y = 0; y < h; ++y)
+            {
+                for (int x = 0; x < w_bytes; ++x)
+                {
+                    uint8_t byte = data->bytes[y * w_bytes + x];
+                    for (int bit_idx = 0; bit_idx < 8 && (x * 8 + bit_idx) < w; ++bit_idx)
+                    {
+                        int idx                 = y * w + (x * 8 + bit_idx);
+                        image->channels[0](idx) = (byte >> (7 - bit_idx)) & 0x1;
+                    }
+                }
+            }
+        }
+        else if (fmt == DXGI::R11G11B10_Float)
+        {
+            if (nc != 3 or image->channels.size() != 3)
+                throw logic_error("R11G11B10_Float format must have 3 channels");
+            for (int i = 0; i < w * h; ++i)
+            {
+                auto packed           = reinterpret_cast<const uint32_t *>(m)[i];
+                image->channels[0](i) = decode_float11((packed >> 0) & 0x7FF);  // 11 bits for red
+                image->channels[1](i) = decode_float11((packed >> 11) & 0x7FF); // 11 bits for green
+                image->channels[2](i) = decode_float10((packed >> 22) & 0x3FF); // 10 bits for blue
+            }
+        }
+        else if (fmt == DXGI::R10G10B10_XR_BIAS_A2_UNorm)
+        {
+            if (nc != 4 or image->channels.size() != 4)
+                throw logic_error("R10G10B10_XR_BIAS_A2_UNorm format must have 4 channels");
+            int u8_index = 0;
+            for (int i = 0; i < w * h; ++i, u8_index += Bpp)
+            {
+                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+
+                image->channels[0](i) = xr_bias_to_float((packed & masks[0]) >> shifts[0]);
+                image->channels[1](i) = xr_bias_to_float((packed & masks[1]) >> shifts[1]);
+                image->channels[2](i) = xr_bias_to_float((packed & masks[2]) >> shifts[2]);
+                image->channels[3](i) = ((packed & masks[3]) >> shifts[3]) / 3.f;
+            }
+        }
+        else if (dds.bitmasked)
+        {
+            int mask_c = 0;
+            for (int c = 0; c < nc; ++c, ++mask_c)
+            {
+                Channel &ch       = image->channels[c];
+                int      u8_index = 0;
+
+                // there might be empty channel masks, so find the c-th non-empty channel
+                // mask_c = max(c, mask_c);
+                while (mask_c < 4 && masks[mask_c] == 0) ++mask_c;
+
+                bool snorm = dds.bitmask_was_bump_du_dv;
+
+                float multiplier = snorm ? 1.f / float((1 << (dds.bit_counts[mask_c] - 1)) - 1)
+                                         : 1.f / float((1 << (dds.bit_counts[mask_c])) - 1);
+
+                for (int i = 0; i < w * h; ++i, u8_index += Bpp)
+                {
+                    uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+
+                    // shift everything to the right end of a 32-bit int
+                    auto shifted = (packed & masks[mask_c]) << (32 - shifts[mask_c] - dds.bit_counts[mask_c]);
+                    if (snorm)
+                    {
+                        auto value = reinterpret_cast<const int32_t *>(&shifted)[0];
+                        value      = arithmetic_right_shift(value, 32 - dds.bit_counts[mask_c]);
+                        ch(i)      = std::max(-1.f, multiplier * value);
+                    }
+                    else
+                    {
+                        auto value = reinterpret_cast<const uint32_t *>(&shifted)[0];
+                        value      = arithmetic_right_shift(value, 32 - dds.bit_counts[mask_c]);
+                        ch(i)      = multiplier * value;
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        int file_nc = (dds.bpp == 0) ? dds.num_channels : dds.bpp / 8 / DDSFile::data_type_size(type);
+        for (int c = 0; c < nc; ++c)
+        {
+            Channel &ch = image->channels[c];
+            switch (type)
+            {
+            case Type::Float32:
+                spdlog::warn("Handling Float32 format.");
+                ch.copy_from_interleaved((const float *)m, w, h, file_nc, c, [](float v) { return v; });
+                break;
+            case Type::Float16:
+                spdlog::warn("Handling Float16 format.");
+                ch.copy_from_interleaved((const half *)m, w, h, file_nc, c, [](half v) { return float(v); });
+                break;
+            case Type::SInt32:
+                ch.copy_from_interleaved((const int32_t *)m, w, h, file_nc, c, [](int32_t v) { return float(v); });
+                break;
+            case Type::SInt16:
+                ch.copy_from_interleaved((const int16_t *)m, w, h, file_nc, c, [](int16_t v) { return float(v); });
+                break;
+            case Type::SInt8:
+                ch.copy_from_interleaved((const int8_t *)m, w, h, file_nc, c, [](int8_t v) { return float(v); });
+                break;
+            case Type::UInt32:
+                ch.copy_from_interleaved((const uint32_t *)m, w, h, file_nc, c, [](uint32_t v) { return float(v); });
+                break;
+            case Type::UInt16:
+                ch.copy_from_interleaved((const uint16_t *)m, w, h, file_nc, c, [](uint16_t v) { return float(v); });
+                break;
+            case Type::UInt8:
+                ch.copy_from_interleaved((const uint8_t *)m, w, h, file_nc, c, [](uint8_t v) { return float(v); });
+                break;
+            case Type::SNorm16:
+                ch.copy_from_interleaved((const int16_t *)m, w, h, file_nc, c,
+                                         [](int16_t v) { return dequantize_full(v); });
+                break;
+            case Type::SNorm8:
+                ch.copy_from_interleaved((const int8_t *)m, w, h, file_nc, c,
+                                         [](int8_t v) { return dequantize_full(v); });
+                break;
+            case Type::UNorm16:
+                ch.copy_from_interleaved((const uint16_t *)m, w, h, file_nc, c,
+                                         [](uint16_t v) { return dequantize_full(v); });
+                break;
+            case Type::UNorm8:
+                ch.copy_from_interleaved((const uint8_t *)m, w, h, file_nc, c,
+                                         [](uint8_t v) { return dequantize_full(v); });
+                break;
+            default: break;
+            }
+        }
+    }
+
+    // swap the R and G channels
+    if (dds.color_transform == DDSFile::ColorTransform::eSwapRG && nc >= 2)
+    {
+        spdlog::info("Swapping R and G channels.");
+        std::swap(image->channels[0], image->channels[1]);
+        std::swap(image->channels[0].name, image->channels[1].name);
+    }
+    else if (dds.color_transform == DDSFile::ColorTransform::eSwapRB && nc >= 3)
+    {
+        spdlog::info("Swapping R and B channels.");
+        std::swap(image->channels[0], image->channels[2]);
+        std::swap(image->channels[0].name, image->channels[2].name);
+    }
+    return {image};
+}
+
+vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &dds, bool is_signed, bool is_normal)
+{
+    int  num_channels = dds.num_channels;
+    int  width        = data->width;
+    int  height       = data->height;
+    int  depth        = dds.depth();
+    auto cmp          = dds.compression;
+
+    int file_num_channels = num_channels;
+    switch (cmp)
+    {
+    case DDSFile::Compression::BC1_DXT1:
+    case DDSFile::Compression::BC2_DXT2:
+    case DDSFile::Compression::BC2_DXT3:
+    case DDSFile::Compression::BC7: file_num_channels = 4; break;
+    case DDSFile::Compression::BC3_DXT4:
+    case DDSFile::Compression::BC3_DXT5: file_num_channels = is_normal ? 3 : 4; break;
+    case DDSFile::Compression::BC4: file_num_channels = 1; break;
+    case DDSFile::Compression::BC5: file_num_channels = 2; break;
+    case DDSFile::Compression::BC6HS:
+    case DDSFile::Compression::BC6HU: file_num_channels = 3; break;
+    case DDSFile::Compression::ASTC: file_num_channels = 4; break;
+    default: throw std::invalid_argument("Unsupported BC format for decompression.");
+    }
+
+    int block_width  = dds.block_width();
+    int block_height = dds.block_height();
+
+    if (block_width <= 1 || block_height <= 1)
+        throw std::invalid_argument("Invalid block size for compression.");
+
+    const int    width_in_blocks  = (width + block_width - 1) / block_width;
+    const int    height_in_blocks = (height + block_height - 1) / block_height;
+    const size_t block_size       = cmp == DDSFile::Compression::BC1_DXT1 || cmp == DDSFile::Compression::BC4 ? 8 : 16;
+
+    bool is_float = (cmp == DDSFile::Compression::BC6HU || cmp == DDSFile::Compression::BC6HS);
+
+    // Use separate buffers for float and uint8_t types
+    vector<float>   float_out(block_width * block_height * 3, 0);
+    vector<uint8_t> uint8_out(block_width * block_height * 4, 0);
+
+    vector<ImagePtr> images;
+
+    for (int d = 0; d < depth; ++d)
+    {
+        auto image = make_shared<Image>(int2{width, height}, num_channels);
+
+        if (depth > 1)
+        {
+            spdlog::info("Decompressing depth slice {}/{}", d + 1, depth);
+            image->partname = fmt::format("z={}", d);
+        }
+
+        if (cmp == DDSFile::Compression::BC5)
+        {
+            if (is_normal && num_channels == 3)
+            {
+                image->channels[0].name = "x";
+                image->channels[1].name = "y";
+                image->channels[2].name = "z";
+            }
+            else if (num_channels == 2)
+            {
+                image->channels[0].name = "u";
+                image->channels[1].name = "v";
+            }
+        }
+
+        auto start_of_slice = data->bytes.data() + d * (height_in_blocks * width_in_blocks * block_size);
+
+        parallel_for(
+            blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_height),
+            [&](int start_y, int end_y, int, int)
+            {
+                for (int by = start_y; by < end_y; ++by)
+                {
+                    for (int bx = 0; bx < width_in_blocks; ++bx)
+                    {
+                        const uint8_t *block = start_of_slice + (by * width_in_blocks + bx) * block_size;
+
+                        switch (cmp)
+                        {
+                        case DDSFile::Compression::BC1_DXT1: bcdec_bc1(block, uint8_out.data(), block_width * 4); break;
+                        case DDSFile::Compression::BC2_DXT2:
+                        case DDSFile::Compression::BC2_DXT3: bcdec_bc2(block, uint8_out.data(), block_width * 4); break;
+                        case DDSFile::Compression::BC3_DXT4:
+                        case DDSFile::Compression::BC3_DXT5: bcdec_bc3(block, uint8_out.data(), block_width * 4); break;
+                        case DDSFile::Compression::BC4: bcdec_bc4(block, uint8_out.data(), block_width); break;
+                        case DDSFile::Compression::BC5: bcdec_bc5(block, uint8_out.data(), block_width * 2); break;
+                        case DDSFile::Compression::BC6HU:
+                        case DDSFile::Compression::BC6HS:
+                            bcdec_bc6h_float(block, float_out.data(), block_width * 3,
+                                             cmp == DDSFile::Compression::BC6HS);
+                            break;
+                        case DDSFile::Compression::BC7: bcdec_bc7(block, uint8_out.data(), block_width * 4); break;
+                        case DDSFile::Compression::ASTC:
+                            astc::decompress(uint8_out.data(), block, dds.is_sRGB(), block_width, block_height);
+                            break;
+                        default: throw std::invalid_argument("Unsupported format for decompression.");
+                        }
+
+                        // swap the R and G channels
+                        if (dds.color_transform == DDSFile::ColorTransform::eSwapRG && file_num_channels >= 2)
+                        {
+                            for (int i = 0; i < block_width * block_height; ++i)
+                                std::swap(uint8_out[i * 2 + 0], uint8_out[i * 2 + 1]);
+                        }
+                        // swap the R and B channels
+                        else if (dds.color_transform == DDSFile::ColorTransform::eSwapRB && file_num_channels >= 3)
+                        {
+                            for (int i = 0; i < block_width * block_height; ++i)
+                                std::swap(uint8_out[i * file_num_channels + 0], uint8_out[i * file_num_channels + 2]);
+                        }
+                        // RXGB swizzle: swap R and A channels
+                        else if (dds.color_transform == DDSFile::ColorTransform::eAGBR && file_num_channels == 4)
+                        {
+                            for (int i = 0; i < block_width * block_height; ++i)
+                                std::swap(uint8_out[i * 4 + 0], uint8_out[i * 4 + 3]);
+                        }
+
+                        // If normal map, convert to RGB normal map in-place
+                        if (is_normal)
+                        {
+                            if (cmp == DDSFile::Compression::BC5)
+                                compute_normal_rg(uint8_out.data(), block_width * block_height);
+                            else if (cmp == DDSFile::Compression::BC3_DXT5)
+                                compute_normal_ag(uint8_out.data(), block_width * block_height);
+                        }
+
+                        for (int py = 0; py < block_height; ++py)
+                        {
+                            int y = by * block_height + py;
+                            if (y >= height)
+                                continue;
+                            for (int px = 0; px < block_width; ++px)
+                            {
+                                int x = bx * block_width + px;
+                                if (x >= width)
+                                    continue;
+                                int src_idx = (py * block_width + px) * (is_normal ? 3 : file_num_channels);
+                                int dst_idx = y * width + x;
+                                for (int c = 0; c < num_channels; ++c)
+                                    if (is_float)
+                                        image->channels[c](dst_idx) = float_out[src_idx + c];
+                                    else
+                                    {
+                                        float f = is_signed ? dequantize_full(reinterpret_cast<int8_t *>(
+                                                                  uint8_out.data())[src_idx + c])
+                                                            : dequantize_full(uint8_out[src_idx + c]);
+                                        image->channels[c](dst_idx) = f;
+                                    }
+                            }
+                        }
+                    }
+                }
+            });
+        images.push_back(image);
+    }
+
+    return images;
+}
+
+json set_metadata(const DDSFile &dds)
+{
+    json header;
+
+    auto       &hdr                 = dds.header;
+    auto       &dxt10hdr            = dds.header_DXT10;
+    auto        cmp                 = dds.compression;
+    string      cmp_str             = compression_name(cmp);
+    std::string alpha_mode_str      = alpha_mode_name(dds.alpha_mode);
+    std::string color_transform_str = color_transform_name(dds.color_transform);
+
+    header["is cubemap"]  = {{"value", dds.is_cubemap}, {"string", dds.is_cubemap ? "yes" : "no"}, {"type", "boolean"}};
+    header["compression"] = {{"value", cmp}, {"string", cmp_str}, {"type", "enum"}};
+
+    header["pf.flags"]   = {{"value", hdr.pixel_format.flags},
+                            {"string", fmt::format("{:#010x}", hdr.pixel_format.flags)},
+                            {"type", "uint32"}};
+    header["has fourCC"] = {
+        {"value", (hdr.pixel_format.flags & uint32_t(DDSFile::PixelFormatFlagBits::FourCC)) != 0},
+        {"string", (hdr.pixel_format.flags & uint32_t(DDSFile::PixelFormatFlagBits::FourCC)) != 0 ? "yes" : "no"},
+        {"type", "boolean"}};
+    header["pf.fourCC"] = {
+        {"value", hdr.pixel_format.fourCC},
+        {"string", fmt::format("{:#010x} ({})", hdr.pixel_format.fourCC, fourCC_to_string(hdr.pixel_format.fourCC))},
+        {"type", "uint32"}};
+    header["pf.bit_count"] = {{"value", hdr.pixel_format.bit_count},
+                              {"string", fmt::format("{}", hdr.pixel_format.bit_count)},
+                              {"type", "uint32"}};
+
+    header["flags"]  = {{"value", hdr.flags}, {"string", fmt::format("{:#010x}", hdr.flags)}, {"type", "uint32"}};
+    header["height"] = {{"value", hdr.height}, {"string", fmt::format("{}", hdr.height)}, {"type", "uint32"}};
+    header["width"]  = {{"value", hdr.width}, {"string", fmt::format("{}", hdr.width)}, {"type", "uint32"}};
+    header["pitch or linear size"] = {{"value", hdr.pitch_or_linear_size},
+                                      {"string", fmt::format("{}", hdr.pitch_or_linear_size)},
+                                      {"type", "uint32"}};
+    header["depth"]        = {{"value", hdr.depth}, {"string", fmt::format("{}", hdr.depth)}, {"type", "uint32"}};
+    header["mipmap count"] = {
+        {"value", hdr.mipmap_count}, {"string", fmt::format("{}", hdr.mipmap_count)}, {"type", "uint32"}};
+    // for (int i = 0; i < 11; ++i)
+    //     header[fmt::format("reserved1[{}]", i)] = {
+    //         {"value", hdr.reserved1[i]}, {"string", fmt::format("{:#010x}", hdr.reserved1[i])}, {"type", "uint32"}};
+
+    header["caps1"] = {{"value", hdr.caps1}, {"string", fmt::format("{:#010x}", hdr.caps1)}, {"type", "uint32"}};
+    header["caps2"] = {{"value", hdr.caps2}, {"string", fmt::format("{:#010x}", hdr.caps2)}, {"type", "uint32"}};
+    header["caps3"] = {{"value", hdr.caps3}, {"string", fmt::format("{:#010x}", hdr.caps3)}, {"type", "uint32"}};
+    header["caps4"] = {{"value", hdr.caps4}, {"string", fmt::format("{:#010x}", hdr.caps4)}, {"type", "uint32"}};
+    // header["reserved2"] = {
+    //     {"value", hdr.reserved2}, {"string", fmt::format("{:#010x}", hdr.reserved2)}, {"type", "uint32"}};
+    header["alpha mode"]      = {{"value", dds.alpha_mode}, {"string", alpha_mode_str}, {"type", "enum"}};
+    header["color transform"] = {{"value", dds.color_transform}, {"string", color_transform_str}, {"type", "enum"}};
+    header["DXT10 header"]    = {
+        {"value", dds.has_DXT10_header}, {"string", dds.has_DXT10_header ? "yes" : "no"}, {"type", "boolean"}};
+
+    header["DXT10.format"] = {
+        {"value", dxt10hdr.format},
+        {"string", fmt::format("{}: '{}'", (uint32_t)dxt10hdr.format, format_name(dxt10hdr.format))},
+        {"type", "enum"}};
+    header["DXT10.resource_dimension"] = {{"value", dxt10hdr.resource_dimension},
+                                          {"string", fmt::format("{}", static_cast<int>(dxt10hdr.resource_dimension))},
+                                          {"type", "enum"}};
+    header["DXT10.misc_flag"]          = {
+        {"value", dxt10hdr.misc_flag}, {"string", fmt::format("{:#010x}", dxt10hdr.misc_flag)}, {"type", "uint32"}};
+    header["DXT10.array_size"] = {
+        {"value", dxt10hdr.array_size}, {"string", fmt::format("{}", dxt10hdr.array_size)}, {"type", "uint32"}};
+    header["DXT10.misc_flag2"] = {
+        {"value", dxt10hdr.misc_flag2}, {"string", fmt::format("{:#010x}", dxt10hdr.misc_flag2)}, {"type", "uint32"}};
+
+    header["bitmasked"] = {{"value", dds.bitmasked}, {"string", dds.bitmasked ? "yes" : "no"}, {"type", "boolean"}};
+    header["bitmask_has_alpha"] = {
+        {"value", dds.bitmask_has_alpha}, {"string", dds.bitmask_has_alpha ? "yes" : "no"}, {"type", "boolean"}};
+    header["bitmask_has_rgb"] = {
+        {"value", dds.bitmask_has_rgb}, {"string", dds.bitmask_has_rgb ? "yes" : "no"}, {"type", "boolean"}};
+    header["bitmask_was_bump_du_dv"] = {{"value", dds.bitmask_was_bump_du_dv},
+                                        {"string", dds.bitmask_was_bump_du_dv ? "yes" : "no"},
+                                        {"type", "boolean"}};
+    header["bit_counts"]   = {{"value", std::vector<uint32_t>(std::begin(dds.bit_counts), std::end(dds.bit_counts))},
+                              {"string", fmt::format("[{}, {}, {}, {}]", dds.bit_counts[0], dds.bit_counts[1],
+                                                     dds.bit_counts[2], dds.bit_counts[3])},
+                              {"type", "array"}};
+    header["right_shifts"] = {
+        {"value", std::vector<uint32_t>(std::begin(dds.right_shifts), std::end(dds.right_shifts))},
+        {"string", fmt::format("[{}, {}, {}, {}]", dds.right_shifts[0], dds.right_shifts[1], dds.right_shifts[2],
+                               dds.right_shifts[3])},
+        {"type", "array"}};
+    header["num_channels"] = {
+        {"value", dds.num_channels}, {"string", fmt::format("{}", dds.num_channels)}, {"type", "uint32"}};
+
+    bool is_normal    = (hdr.pixel_format.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
+    int  num_channels = dds.num_channels;
+
+    // Now, determine num_channels
+    using DXGI = DDSFile::DXGIFormat;
+    switch (dds.format())
+    {
+    // 4-channel formats
     case DXGI::BC1_UNorm:
     case DXGI::BC1_UNorm_SRGB:
     case DXGI::BC2_UNorm:
     case DXGI::BC2_UNorm_SRGB:
     case DXGI::BC7_UNorm:
     case DXGI::BC7_UNorm_SRGB:
-        num_channels      = 4;
-        type              = UNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC3_UNorm:
-    case DXGI::BC3_UNorm_SRGB:
-        num_channels      = is_normal ? 3 : 4;
-        type              = UNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC4_UNorm:
-        num_channels      = 1;
-        type              = UNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC4_SNorm:
-        num_channels      = 1;
-        type              = SNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC5_UNorm:
-        num_channels      = is_normal ? 3 : 2;
-        type              = UNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC5_SNorm:
-        num_channels      = is_normal ? 3 : 2;
-        type              = SNorm8;
-        bytes_per_channel = 1;
-        break;
-    case DXGI::BC6H_UF16:
-    case DXGI::BC6H_SF16:
-        num_channels      = 3;
-        type              = Float16;
-        bytes_per_channel = 2;
-        break;
-
-    // Uncompressed formats
     case DXGI::R32G32B32A32_Float:
-        num_channels = 4;
-        type         = Float32;
-        break;
-    case DXGI::R32G32B32_Float:
-        num_channels = 3;
-        type         = Float32;
-        break;
-    case DXGI::R32G32_Float:
-        num_channels = 2;
-        type         = Float32;
-        break;
-    case DXGI::R32_Float:
-    case DXGI::D32_Float:
-        num_channels = 1;
-        type         = Float32;
-        break;
-
     case DXGI::R16G16B16A16_Float:
-        num_channels = 4;
-        type         = Float16;
-        break;
-    case DXGI::R16G16_Float:
-        num_channels = 2;
-        type         = Float16;
-        break;
-    case DXGI::R16_Float:
-        num_channels = 1;
-        type         = Float16;
-        break;
-
     case DXGI::R32G32B32A32_UInt:
-        num_channels = 4;
-        type         = UInt32;
-        break;
-    case DXGI::R32G32B32_UInt:
-        num_channels = 3;
-        type         = UInt32;
-        break;
-    case DXGI::R32G32_UInt:
-        num_channels = 2;
-        type         = UInt32;
-        break;
-    case DXGI::R32_UInt:
-        num_channels = 1;
-        type         = UInt32;
-        break;
-
     case DXGI::R16G16B16A16_UInt:
-        num_channels = 4;
-        type         = UInt16;
-        break;
-    case DXGI::R16G16_UInt:
-        num_channels = 2;
-        type         = UInt16;
-        break;
-    case DXGI::R16_UInt:
-        num_channels = 1;
-        type         = UInt16;
-        break;
-
     case DXGI::R8G8B8A8_UInt:
-        num_channels = 4;
-        type         = UInt8;
-        break;
-    case DXGI::R8G8_UInt:
-        num_channels = 2;
-        type         = UInt8;
-        break;
-    case DXGI::R8_UInt:
-        num_channels = 1;
-        type         = UInt8;
-        break;
-
     case DXGI::R32G32B32A32_SInt:
-        num_channels = 4;
-        type         = SInt32;
-        break;
-    case DXGI::R32G32B32_SInt:
-        num_channels = 3;
-        type         = SInt32;
-        break;
-    case DXGI::R32G32_SInt:
-        num_channels = 2;
-        type         = SInt32;
-        break;
-    case DXGI::R32_SInt:
-        num_channels = 1;
-        type         = SInt32;
-        break;
-
     case DXGI::R16G16B16A16_SInt:
-        num_channels = 4;
-        type         = SInt16;
-        break;
-    case DXGI::R16G16_SInt:
-        num_channels = 2;
-        type         = SInt16;
-        break;
-    case DXGI::R16_SInt:
-        num_channels = 1;
-        type         = SInt16;
-        break;
-
     case DXGI::R8G8B8A8_SInt:
-        num_channels = 4;
-        type         = SInt8;
-        break;
-    case DXGI::R8G8_SInt:
-        num_channels = 2;
-        type         = SInt8;
-        break;
-    case DXGI::R8_SInt:
-        num_channels = 1;
-        type         = SInt8;
-        break;
-
     case DXGI::R16G16B16A16_SNorm:
-        num_channels = 4;
-        type         = SNorm16;
-        break;
-    case DXGI::R16G16_SNorm:
-        num_channels = 2;
-        type         = SNorm16;
-        break;
-    case DXGI::R16_SNorm:
-        num_channels = 1;
-        type         = SNorm16;
-        break;
-
     case DXGI::R8G8B8A8_SNorm:
-        num_channels = 4;
-        type         = SNorm8;
-        break;
-    case DXGI::R8G8_SNorm:
-        num_channels = 2;
-        type         = SNorm8;
-        break;
-    case DXGI::R8_SNorm:
-        num_channels = 1;
-        type         = SNorm8;
-        break;
-
+    case DXGI::B5G5R5A1_UNorm:
     case DXGI::R16G16B16A16_UNorm:
-        num_channels = 4;
-        type         = UNorm16;
-        break;
-    case DXGI::R16G16_UNorm:
-        num_channels = 2;
-        type         = UNorm16;
-        break;
-    case DXGI::R16_UNorm:
-    case DXGI::D16_UNorm:
-        num_channels = 1;
-        type         = UNorm16;
-        break;
-
     case DXGI::R8G8B8A8_UNorm:
     case DXGI::R8G8B8A8_UNorm_SRGB:
     case DXGI::B8G8R8A8_UNorm:
     case DXGI::B8G8R8A8_UNorm_SRGB:
-        num_channels = 4;
-        type         = UNorm8;
-        break;
-    case DXGI::R8G8_UNorm:
-        num_channels = 2;
-        type         = UNorm8;
-        break;
-    case DXGI::R8_UNorm:
-        num_channels = 1;
-        type         = UNorm8;
-        break;
-    case DXGI::B8G8R8X8_UNorm:
-        num_channels = 4;
-        type         = UNorm8;
-        break;
+    case DXGI::R10G10B10A2_Typeless:
+    case DXGI::R10G10B10A2_UNorm:
+    case DXGI::R10G10B10A2_UInt:
+    case DXGI::B4G4R4A4_UNorm:
+    case DXGI::A4B4G4R4_UNorm: num_channels = 4; break;
 
+    case DXGI::BC3_UNorm:
+    case DXGI::BC3_UNorm_SRGB: num_channels = is_normal ? 3 : 4; break;
+
+    // 3-channel formats
+    case DXGI::R32G32B32_Float:
+    case DXGI::R32G32B32_UInt:
+    case DXGI::R32G32B32_SInt:
+    case DXGI::BC6H_UF16:
+    case DXGI::BC6H_SF16:
     case DXGI::R11G11B10_Float:
-        num_channels = 3;
-        type         = Float32;
-        break;
+    case DXGI::Format_Unknown:
+    case DXGI::B5G6R5_UNorm:
+    case DXGI::B8G8R8X8_Typeless:
+    case DXGI::B8G8R8X8_UNorm:
+    case DXGI::B8G8R8X8_UNorm_SRGB:
+    case DXGI::R9G9B9E5_SHAREDEXP: num_channels = 3; break;
 
-    default:
-        num_channels      = 0;
-        type              = Typeless;
-        bytes_per_channel = 0;
-        break;
+    // 2-channel formats
+    case DXGI::R32G32_Float:
+    case DXGI::R32G32_UInt:
+    case DXGI::R32G32_SInt:
+    case DXGI::R16G16_Float:
+    case DXGI::R16G16_UInt:
+    case DXGI::R8G8_UInt:
+    case DXGI::R16G16_SInt:
+    case DXGI::R8G8_SInt:
+    case DXGI::R16G16_SNorm:
+    case DXGI::R8G8_SNorm:
+    case DXGI::R16G16_UNorm:
+    case DXGI::R8G8_UNorm: num_channels = 2; break;
+
+    case DXGI::BC5_UNorm: num_channels = is_normal ? 3 : 2; break;
+    case DXGI::BC5_SNorm: num_channels = is_normal ? 3 : 2; break;
+
+    // 1-channel formats
+    case DXGI::R16_Float:
+    case DXGI::R32_Float:
+    case DXGI::D32_Float:
+    case DXGI::R32_UInt:
+    case DXGI::R16_UInt:
+    case DXGI::R8_UInt:
+    case DXGI::R32_SInt:
+    case DXGI::R16_SInt:
+    case DXGI::R8_SInt:
+    case DXGI::R16_SNorm:
+    case DXGI::R8_SNorm:
+    case DXGI::R16_UNorm:
+    case DXGI::D16_UNorm:
+    case DXGI::A8_UNorm:
+    case DXGI::R8_UNorm:
+    case DXGI::BC4_UNorm:
+    case DXGI::BC4_SNorm: num_channels = 1; break;
+
+    default: num_channels = 0; break;
     }
 
-    // Set bytes_per_channel for uncompressed formats based on type
-    if (bytes_per_channel == 0 && num_channels > 0)
+    header["num_channels2"] = {
+        {"value", num_channels}, {"string", fmt::format("{}", num_channels)}, {"type", "uint32"}};
+
+    if (dds.bitmasked)
     {
-        switch (type)
+        std::string bitmask_str;
+        struct ChannelInfo
         {
-        case Float32:
-        case UInt32:
-        case SInt32: bytes_per_channel = 4; break;
-        case Float16:
-        case UInt16:
-        case SInt16:
-        case SNorm16:
-        case UNorm16: bytes_per_channel = 2; break;
-        case UInt8:
-        case SInt8:
-        case SNorm8:
-        case UNorm8: bytes_per_channel = 1; break;
-        default: bytes_per_channel = 0; break;
-        }
+            char     letter;
+            uint32_t mask;
+            uint32_t bit_count;
+        };
+        ChannelInfo channels[4] = {
+            {'R', dds.header.pixel_format.masks[0], dds.bit_counts[0]},
+            {'G', dds.header.pixel_format.masks[1], dds.bit_counts[1]},
+            {'B', dds.header.pixel_format.masks[2], dds.bit_counts[2]},
+            {'A', dds.header.pixel_format.masks[3], dds.bit_counts[3]},
+        };
+        if (dds.color_transform == DDSFile::ColorTransform::eLuminance)
+            channels[0].letter = 'L';
+        // Sort channels by mask (left-most = highest bit index)
+        std::vector<ChannelInfo> sorted;
+        for (int i = 0; i < 4; ++i)
+            if (channels[i].bit_count > 0)
+                sorted.push_back(channels[i]);
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const ChannelInfo &a, const ChannelInfo &b) { return a.mask > b.mask; });
+        for (const auto &ch : sorted) bitmask_str += fmt::format("{}{}", ch.letter, ch.bit_count);
+        header["bitmask_string"] = {{"value", bitmask_str}, {"string", bitmask_str}, {"type", "string"}};
     }
-}
-
-ImagePtr load_uncompressed(const DDSFile::ImageData *data, int nc, Types type, bool is_srgb)
-{
-    int  w     = data->width;
-    int  h     = data->height;
-    auto m     = data->mem;
-    auto image = make_shared<Image>(int2(w, h), nc);
-    for (int c = 0; c < nc; ++c)
-    {
-        Channel &ch = image->channels[c];
-        switch (type)
-        {
-        case Float32: ch.copy_from_interleaved((const float *)m, w, h, nc, c, [](float v) { return v; }); break;
-        case Float16: ch.copy_from_interleaved((const half *)m, w, h, nc, c, [](half v) { return float(v); }); break;
-        case SInt32:
-            ch.copy_from_interleaved((const int32_t *)m, w, h, nc, c, [](int32_t v) { return float(v); });
-            break;
-        case SInt16:
-            ch.copy_from_interleaved((const int16_t *)m, w, h, nc, c, [](int16_t v) { return float(v); });
-            break;
-        case SInt8: ch.copy_from_interleaved((const int8_t *)m, w, h, nc, c, [](int8_t v) { return float(v); }); break;
-        case UInt32:
-            ch.copy_from_interleaved((const uint32_t *)m, w, h, nc, c, [](uint32_t v) { return float(v); });
-            break;
-        case UInt16:
-            ch.copy_from_interleaved((const uint16_t *)m, w, h, nc, c, [](uint16_t v) { return float(v); });
-            break;
-        case UInt8:
-            ch.copy_from_interleaved((const uint8_t *)m, w, h, nc, c, [](uint8_t v) { return float(v); });
-            break;
-        case SNorm16:
-            ch.copy_from_interleaved((const int16_t *)m, w, h, nc, c, [](int16_t v) { return dequantize_full(v); });
-            break;
-        case SNorm8:
-            ch.copy_from_interleaved((const int8_t *)m, w, h, nc, c, [](int8_t v) { return dequantize_full(v); });
-            break;
-        case UNorm16:
-            ch.copy_from_interleaved((const uint16_t *)m, w, h, nc, c, [](uint16_t v) { return dequantize_full(v); });
-            break;
-        case UNorm8:
-            ch.copy_from_interleaved((const uint8_t *)m, w, h, nc, c, [](uint8_t v) { return dequantize_full(v); });
-            break;
-        default: break;
-        }
-    }
-    // sRGB to linear for uncompressed sRGB formats
-    if (is_srgb)
-    {
-        spdlog::info("Converting sRGB to linear for uncompressed image.");
-        for (int c = 0; c < std::min(3, nc); ++c)
-            image->channels[c].apply([](float v, int, int) { return sRGB_to_linear(v); });
-    }
-    return image;
-}
-
-ImagePtr load_bc_compressed(const DDSFile::ImageData *data, int num_channels, DDSFile::Compression cmp, bool is_signed,
-                            bool is_normal, bool is_srgb, bool is_rxgb)
-{
-    int  width  = data->width;
-    int  height = data->height;
-    auto image  = make_shared<Image>(int2{width, height}, num_channels);
-
-    constexpr int block_width      = 4;
-    const int     width_in_blocks  = (width + block_width - 1) / block_width;
-    const int     height_in_blocks = (height + block_width - 1) / block_width;
-    const size_t  block_size       = cmp == DDSFile::Compression::DXT1 || cmp == DDSFile::Compression::BC4 ? 8 : 16;
-
-    bool is_float = (cmp == DDSFile::Compression::BC6HU || cmp == DDSFile::Compression::BC6HS);
-
-    parallel_for(
-        blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_width),
-        [&](int start_y, int end_y, int, int)
-        {
-            for (int by = start_y; by < end_y; ++by)
-            {
-                for (int bx = 0; bx < width_in_blocks; ++bx)
-                {
-                    const uint8_t *block =
-                        static_cast<const uint8_t *>(data->mem) + (by * width_in_blocks + bx) * block_size;
-
-                    // Use separate buffers for float and uint8_t types
-                    float   float_out[4 * 4 * 3] = {0};
-                    uint8_t uint8_out[4 * 4 * 4] = {0};
-
-                    switch (cmp)
-                    {
-                    case DDSFile::Compression::DXT1: bcdec_bc1(block, uint8_out, block_width * 4); break;
-                    case DDSFile::Compression::DXT2:
-                    case DDSFile::Compression::DXT3: bcdec_bc2(block, uint8_out, block_width * 4); break;
-                    case DDSFile::Compression::DXT4:
-                    case DDSFile::Compression::DXT5: bcdec_bc3(block, uint8_out, block_width * 4); break;
-                    case DDSFile::Compression::BC4: bcdec_bc4(block, uint8_out, block_width); break;
-                    case DDSFile::Compression::BC5: bcdec_bc5(block, uint8_out, block_width * 2); break;
-                    case DDSFile::Compression::BC6HU:
-                    case DDSFile::Compression::BC6HS:
-                        bcdec_bc6h_float(block, float_out, block_width * 3, cmp == DDSFile::Compression::BC6HS);
-                        break;
-                    case DDSFile::Compression::BC7: bcdec_bc7(block, uint8_out, block_width * 4); break;
-                    default: throw std::invalid_argument("Unsupported BC format for decompression.");
-                    }
-
-                    // RXGB swizzle: swap R and A channels for each pixel in the block
-                    if (is_rxgb)
-                    {
-                        for (int i = 0; i < block_width * block_width; ++i)
-                            std::swap(uint8_out[i * 4 + 0], uint8_out[i * 4 + 3]);
-                    }
-
-                    // If normal map, convert to RGB normal map in-place
-                    if (!is_float && is_normal)
-                    {
-                        if (cmp == DDSFile::Compression::BC5)
-                            compute_normal_rg(uint8_out, block_width * block_width);
-                        else if (cmp == DDSFile::Compression::DXT5)
-                            compute_normal_ag(uint8_out, block_width * block_width);
-                    }
-
-                    for (int py = 0; py < block_width; ++py)
-                    {
-                        int y = by * block_width + py;
-                        if (y >= height)
-                            continue;
-                        for (int px = 0; px < block_width; ++px)
-                        {
-                            int x = bx * block_width + px;
-                            if (x >= width)
-                                continue;
-                            int src_idx = (py * block_width + px) * num_channels;
-                            int dst_idx = y * width + x;
-                            for (int c = 0; c < num_channels; ++c)
-                                if (is_float)
-                                    image->channels[c](dst_idx) = float_out[src_idx + c];
-                                else
-                                {
-                                    float f                     = is_signed
-                                                                      ? dequantize_full(reinterpret_cast<int8_t *>(uint8_out)[src_idx + c])
-                                                                      : dequantize_full(uint8_out[src_idx + c]);
-                                    image->channels[c](dst_idx) = (is_srgb && c < 3) ? sRGB_to_linear(f) : f;
-                                }
-                        }
-                    }
-                }
-            }
-        });
-
-    return image;
+    else
+        spdlog::info("No bitmask detected in DDS file.");
+    for (int i = 0; i < 4; ++i)
+        header[fmt::format("pf.masks[{}]", i)] = {{"value", hdr.pixel_format.masks[i]},
+                                                  {"string", fmt::format("{:#010x}", hdr.pixel_format.masks[i])},
+                                                  {"type", "uint32"}};
+    return header;
 }
 
 } // namespace
@@ -651,10 +717,10 @@ bool is_dds_image(std::istream &is) noexcept
     try
     {
         DDSFile dds;
-        auto    result = dds.Load(is);
+        auto    result = dds.load(is);
         is.clear();
         is.seekg(0);
-        return result == tinyddsloader::Result::Success;
+        return result.type != Result::Error;
     }
     catch (...)
     {
@@ -667,118 +733,101 @@ bool is_dds_image(std::istream &is) noexcept
 vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view channel_selector)
 {
     DDSFile dds;
-    if (dds.Load(is) != tinyddsloader::Result::Success || dds.PopulateImageDatas() != tinyddsloader::Result::Success)
-        throw std::runtime_error("Failed to load DDS.");
+    auto    result = dds.load(is);
+    if (result.type == Result::Error)
+        throw std::invalid_argument(result.message);
+    else if (result.type == Result::Warning)
+        spdlog::warn(result.message);
+    else if (result.type == Result::Info)
+        spdlog::info(result.message);
 
-    auto hdr      = dds.GetHeader();
-    auto dxt10hdr = dds.GetHeaderDXT10();
-    auto fmt      = dds.GetFormat();
-    auto cmp      = dds.GetCompression();
+    result = dds.populate_image_data();
+    if (result.type == Result::Error)
+        throw std::invalid_argument(result.message);
+    else if (result.type == Result::Warning)
+        spdlog::warn(result.message);
+    else if (result.type == Result::Info)
+        spdlog::info(result.message);
 
-    bool is_normal = (hdr.pixelFormat.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
-    bool is_srgb   = (fmt == DDSFile::DXGIFormat::BC1_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC2_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::BC3_UNorm_SRGB || fmt == DDSFile::DXGIFormat::BC7_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::R8G8B8A8_UNorm_SRGB ||
-                    fmt == DDSFile::DXGIFormat::B8G8R8A8_UNorm_SRGB || fmt == DDSFile::DXGIFormat::B8G8R8X8_UNorm_SRGB);
-    bool is_rxgb   = (cmp == DDSFile::Compression::DXT5 && hdr.pixelFormat.fourCC == DDSFile::RXGB_4CC);
+    auto &hdr      = dds.header;
+    auto &dxt10hdr = dds.header_DXT10;
+    auto  fmt      = dds.format();
+
+    bool is_normal = (hdr.pixel_format.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
     bool is_signed = dxt10hdr.format == DDSFile::BC5_SNorm || dxt10hdr.format == DDSFile::BC4_SNorm;
 
-    spdlog::info("height = {}.", dds.GetHeight());
-    spdlog::info("height = {}.", dds.GetHeight());
-    spdlog::info("depth = {}.", dds.GetDepth());
-    spdlog::info("mipCount = {}.", dds.GetMipCount());
-    spdlog::info("arraySize = {}.", dds.GetArraySize());
-    spdlog::info("bits per pixel = {}.", dds.GetBitsPerPixel(fmt));
-    spdlog::info("format = {}.", (uint32_t)fmt);
-    spdlog::info("isCubeMap = {}.", (uint32_t)dds.IsCubemap());
-    spdlog::info("isCompressed = {}.", (uint32_t)dds.IsCompressed(fmt));
-    spdlog::info("isNormalMap = {}.", is_normal);
-    spdlog::info("isSRGB = {}.", is_srgb);
-    spdlog::info("isRXGB = {}.", is_rxgb);
-    spdlog::info("pixelFormat.size = {}.", hdr.pixelFormat.size);
-    spdlog::info("pixelFormat.flags = {:#010x}.", hdr.pixelFormat.flags);
-    spdlog::info("pixelFormat.fourCC = {:#010x}.", hdr.pixelFormat.fourCC);
-    spdlog::info("pixelFormat.bitCount = {}.", hdr.pixelFormat.bitCount);
-    spdlog::info("pixelFormat.masks = {:#010x}:{:#010x}:{:#010x}:{:#010x}.", hdr.pixelFormat.masks[0],
-                 hdr.pixelFormat.masks[1], hdr.pixelFormat.masks[2], hdr.pixelFormat.masks[3]);
+    DDSFile::DataType type = DDSFile::data_type(fmt);
 
-    int   num_channels      = 0;
-    int   bytes_per_channel = 0;
-    Types type              = Typeless;
-    get_channel_specs(fmt, num_channels, bytes_per_channel, type, is_normal);
+    // deduce bitmasks for packed types
 
-    if (num_channels == 0 || bytes_per_channel == 0)
-        throw std::invalid_argument("DDS: Unsupported format or no channels detected.");
-
-    // Set bit depth metadata based on type and number of channels
-    std::string bit_depth_str;
-    switch (type)
+    if (type == DDSFile::DataType::Packed)
     {
-    case Float32: bit_depth_str = fmt::format("{}-bit float (32 bpc)", num_channels * 32); break;
-    case Float16: bit_depth_str = fmt::format("{}-bit half (16 bpc)", num_channels * 16); break;
-    case SInt8: bit_depth_str = fmt::format("{}-bit int8 (8 bpc)", num_channels * 8); break;
-    case SInt16: bit_depth_str = fmt::format("{}-bit int16 (16 bpc)", num_channels * 16); break;
-    case SInt32: bit_depth_str = fmt::format("{}-bit int32 (32 bpc)", num_channels * 32); break;
-    case UInt8: bit_depth_str = fmt::format("{}-bit uint8 (8 bpc)", num_channels * 8); break;
-    case UInt16: bit_depth_str = fmt::format("{}-bit uint16 (16 bpc)", num_channels * 16); break;
-    case UInt32: bit_depth_str = fmt::format("{}-bit uint32 (32 bpc)", num_channels * 32); break;
-    case SNorm8: bit_depth_str = fmt::format("{}-bit snorm8 (8 bpc)", num_channels * 8); break;
-    case SNorm16: bit_depth_str = fmt::format("{}-bit snorm16 (16 bpc)", num_channels * 16); break;
-    case UNorm8: bit_depth_str = fmt::format("{}-bit unorm8 (8 bpc)", num_channels * 8); break;
-    case UNorm16: bit_depth_str = fmt::format("{}-bit unorm16 (16 bpc)", num_channels * 16); break;
-    default: bit_depth_str = "unknown"; break;
+        if (!dds.bitmasked)
+            spdlog::error("Encountered packed format but no bitmasks are present!");
+
+        spdlog::warn("masks: {:08x} {:08x} {:08x} {:08x}", dds.header.pixel_format.masks[0],
+                     dds.header.pixel_format.masks[1], dds.header.pixel_format.masks[2],
+                     dds.header.pixel_format.masks[3]);
     }
 
-    vector<ImagePtr> images;
+    json header = set_metadata(dds);
+
+    if (dds.num_channels == 0)
+    {
+        spdlog::debug("DDS: file '{}': Unsupported format or no channels detected. This was the header:\n{}", filename,
+                      header.dump(2));
+        throw std::invalid_argument("DDS: Unsupported format or no channels detected.");
+    }
 
     static const char *cubemap_face_names[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-
-    json header;
-    header["isCubemap"] = {{"value", dds.IsCubemap()}, {"string", dds.IsCubemap() ? "yes" : "no"}, {"type", "boolean"}};
-
-    string cmp_str = "None";
-    switch (cmp)
+    vector<ImagePtr>   images;
+    spdlog::debug("Loading {} images from DDS file: {}", dds.array_size(), filename);
+    for (uint32_t p = 0; p < dds.array_size(); ++p)
     {
-    case DDSFile::Compression::None: break;
-    case DDSFile::Compression::DXT1: cmp_str = "DXT1"; break;
-    case DDSFile::Compression::DXT2: cmp_str = "DXT2"; break;
-    case DDSFile::Compression::DXT3: cmp_str = "DXT3"; break;
-    case DDSFile::Compression::DXT4: cmp_str = "DXT4"; break;
-    case DDSFile::Compression::DXT5: cmp_str = "DXT5"; break;
-    case DDSFile::Compression::BC4: cmp_str = "BC4"; break;
-    case DDSFile::Compression::BC5: cmp_str = "BC5"; break;
-    case DDSFile::Compression::BC6HU: cmp_str = "BC6HU"; break;
-    case DDSFile::Compression::BC6HS: cmp_str = "BC6HS"; break;
-    case DDSFile::Compression::BC7: cmp_str = "BC7"; break;
-    }
-
-    header["compression"] = {{"value", cmp}, {"string", cmp_str}, {"type", "enum"}};
-    header["format"]      = dxgi_format_to_json(fmt);
-
-    for (uint32_t p = 0; p < dds.GetArraySize(); ++p)
-    {
-        const DDSFile::ImageData *data = dds.GetImageData(0, p);
+        const DDSFile::ImageData *data = dds.get_image_data(0, p);
         if (!data)
-            throw std::runtime_error("DDS: No image data found for the specified array index.");
+            throw std::runtime_error(fmt::format("DDS: No image data found for array index {}.", p));
 
-        ImagePtr image;
-        if (DDSFile::IsCompressed(fmt))
-            image = load_bc_compressed(data, num_channels, cmp, is_signed, is_normal, is_srgb, is_rxgb);
+        vector<ImagePtr> new_images;
+        if (dds.compression != DDSFile::Compression::None)
+            new_images = load_compressed(data, dds, is_signed, is_normal);
         else
-            image = load_uncompressed(data, num_channels, type, is_srgb);
+            new_images = load_uncompressed(data, dds, type);
 
-        // Set shared metadata after image creation
-        image->filename                = filename;
-        image->partname                = dds.GetArraySize() > 1 ? cubemap_face_names[p % 6] : "";
-        image->file_has_straight_alpha = num_channels == 2 || num_channels == 4;
-        image->metadata["loader"]      = "tinyddsloader";
-        image->metadata["bit depth"]   = bit_depth_str;
-        image->metadata["transfer function"] =
-            transfer_function_name(is_srgb ? TransferFunction_sRGB : TransferFunction_Linear);
-        image->metadata["header"] = header;
+        for (size_t i = 0; i < new_images.size(); ++i)
+        {
+            ImagePtr image = new_images[i];
 
-        images.push_back(image);
+            // sRGB to linear for uncompressed sRGB formats
+            if (dds.is_sRGB())
+            {
+                spdlog::info("Converting sRGB to linear for uncompressed image.");
+                for (int c = 0; c < std::min(3, dds.num_channels); ++c)
+                    image->channels[c].apply([](float v, int, int) { return sRGB_to_linear(v); });
+            }
+
+            // rename the channels according to the format type
+            name_channels(image, dds);
+
+            // Set shared metadata after image creation
+            image->filename = filename;
+            if (image->partname.empty())
+                image->partname = dds.array_size() > 1 ? cubemap_face_names[p % 6] : "";
+            image->file_has_straight_alpha =
+                dds.alpha_mode != DDSFile::ALPHA_MODE_PREMULTIPLIED && image->channels.size() >= 4;
+            image->metadata["loader"] = "smalldds";
+            image->metadata["bit depth"] =
+                dds.bitmasked ? header["bitmask_string"]["string"].get<string>()
+                              : fmt::format("{} ({})", format_name(dxt10hdr.format), (uint32_t)dxt10hdr.format);
+            image->metadata["transfer function"] =
+                transfer_function_name(dds.is_sRGB() ? TransferFunction_sRGB : TransferFunction_Linear);
+
+            image->metadata["header"] = header;
+
+            images.push_back(image);
+        }
     }
+    spdlog::debug("Loaded {} images from DDS file: {}", images.size(), filename);
 
     return images;
 }
