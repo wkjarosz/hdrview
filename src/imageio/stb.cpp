@@ -124,6 +124,9 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     bool is_hdr = stbi_is_hdr_from_callbacks(&stbi_callbacks, &is) != 0;
     is.clear();
     is.seekg(0);
+    bool is_16_bit = stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is);
+    is.clear();
+    is.seekg(0);
 
     using DataBuffer = std::unique_ptr<void, void (*)(void *)>;
     DataBuffer data{nullptr, stbi_image_free};
@@ -147,6 +150,9 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
             int *delays; // we'll just load all frames, and ignore delays
             data = DataBuffer{stbi__load_gif_main(&s, &delays, &size.x, &size.y, &size.w, &size.z, 0), stbi_image_free};
         }
+        else if (is_16_bit)
+            data = DataBuffer{(void *)stbi_load_16_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0),
+                              stbi_image_free};
         else
             data = DataBuffer{stbi_load_from_callbacks(&stbi_callbacks, &is, &size.x, &size.y, &size.z, 0),
                               stbi_image_free};
@@ -180,8 +186,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
-        bool is_16_bit            = stbi_is_16_bit_from_callbacks(&stbi_callbacks, &is);
-        int  bpc                  = is_16_bit ? 16 : 8;
+        int bpc                   = is_16_bit ? 16 : 8;
 
         if (!linearize)
             image->metadata["bit depth"] = "8:8:8:8 rgbe";

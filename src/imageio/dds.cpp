@@ -141,7 +141,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
 
     int  w     = data->width;
     int  h     = data->height;
-    auto m     = data->bytes.data();
+    auto m     = data->bytes();
     auto image = make_shared<Image>(int2(w, h), nc);
 
     using DXGI = DDSFile::DXGIFormat;
@@ -161,7 +161,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
                 auto     r      = (packed & masks[0]) >> shifts[0];
                 auto     g      = (packed & masks[1]) >> shifts[1];
                 auto     b      = (packed & masks[2]) >> shifts[2];
@@ -184,7 +184,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             {
                 for (int x = 0; x < w_bytes; ++x)
                 {
-                    uint8_t byte = data->bytes[y * w_bytes + x];
+                    uint8_t byte = data->bytes()[y * w_bytes + x];
                     for (int bit_idx = 0; bit_idx < 8 && (x * 8 + bit_idx) < w; ++bit_idx)
                     {
                         int idx                 = y * w + (x * 8 + bit_idx);
@@ -212,7 +212,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
             int u8_index = 0;
             for (int i = 0; i < w * h; ++i, u8_index += Bpp)
             {
-                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+                uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
 
                 image->channels[0](i) = xr_bias_to_float((packed & masks[0]) >> shifts[0]);
                 image->channels[1](i) = xr_bias_to_float((packed & masks[1]) >> shifts[1]);
@@ -239,7 +239,7 @@ vector<ImagePtr> load_uncompressed(const DDSFile::ImageData *data, DDSFile &dds,
 
                 for (int i = 0; i < w * h; ++i, u8_index += Bpp)
                 {
-                    uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes.data() + u8_index)[0];
+                    uint32_t packed = reinterpret_cast<const uint32_t *>(data->bytes() + u8_index)[0];
 
                     // shift everything to the right end of a 32-bit int
                     auto shifted = (packed & masks[mask_c]) << (32 - shifts[mask_c] - dds.bit_counts[mask_c]);
@@ -398,7 +398,7 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
             }
         }
 
-        auto start_of_slice = data->bytes.data() + d * (height_in_blocks * width_in_blocks * block_size);
+        auto start_of_slice = data->bytes() + d * (height_in_blocks * width_in_blocks * block_size);
 
         parallel_for(
             blocked_range<int>(0, height_in_blocks, 1024 * 1024 / block_width / block_height),
@@ -408,7 +408,7 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
                 {
                     for (int bx = 0; bx < width_in_blocks; ++bx)
                     {
-                        const uint8_t *block = start_of_slice + (by * width_in_blocks + bx) * block_size;
+                        auto block = start_of_slice + (by * width_in_blocks + bx) * block_size;
 
                         switch (cmp)
                         {
