@@ -633,11 +633,24 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     info_window.dockSpaceName     = "RightSpace";
     info_window.isVisible         = true;
     info_window.rememberIsVisible = true;
-    info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
-    info_window.GuiFunction       = [this]
+    // info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar;
+    info_window.GuiFunction = [this]
     {
         if (auto img = current_image())
             return img->draw_info();
+    };
+
+    HelloImGui::DockableWindow colorspace_window;
+    colorspace_window.label             = "Colorspace";
+    colorspace_window.dockSpaceName     = "RightSpace";
+    colorspace_window.isVisible         = true;
+    colorspace_window.rememberIsVisible = true;
+    colorspace_window.imGuiWindowFlags =
+        ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
+    colorspace_window.GuiFunction = [this]
+    {
+        if (auto img = current_image())
+            return img->draw_colorspace();
     };
 
     HelloImGui::DockableWindow pixel_inspector_window;
@@ -696,23 +709,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window, channel_stats_window,    file_window,
-                                              info_window,      pixel_inspector_window,  channel_window,
-                                              log_window,       advanced_settings_window};
+    m_params.dockingParams.dockableWindows = {histogram_window, channel_stats_window, file_window,
+                                              info_window,      colorspace_window,    pixel_inspector_window,
+                                              channel_window,   log_window,           advanced_settings_window};
     struct DockableWindowExtraInfo
     {
         ImGuiKeyChord chord = ImGuiKey_None;
         const char   *icon  = nullptr;
     };
-    vector<DockableWindowExtraInfo> window_info = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
-                                                   {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
-                                                   {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
-                                                   {ImGuiKey_F8, ICON_MY_INFO_WINDOW},
-                                                   {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
-                                                   {ImGuiKey_F10, ICON_MY_CHANNELS_WINDOW},
-                                                   {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW},
-                                                   {ImGuiKey_F11, ICON_MY_SETTINGS_WINDOW}};
-    m_params.dockingParams.dockingSplits        = {
+    vector<DockableWindowExtraInfo> window_info = {
+        {ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},  {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
+        {ImGuiKey_F7, ICON_MY_FILES_WINDOW},      {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
+        {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW}, {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
+        {ImGuiKey_F10, ICON_MY_CHANNELS_WINDOW},  {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW},
+        {ImGuiKey_F11, ICON_MY_SETTINGS_WINDOW}};
+    m_params.dockingParams.dockingSplits = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
         HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},

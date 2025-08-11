@@ -8,6 +8,9 @@
 
 #include "imgui_internal.h"
 
+#include "hello_imgui/dpi_aware.h"
+#include "nvgui/property_editor.hpp"
+
 #include <array>
 
 using namespace std;
@@ -579,5 +582,29 @@ void Checkbox(const Action &a)
         ImGui::WrappedTooltip(tooltip.c_str());
     }
 }
+
+void WrappedTextProperty(const string &property_name, const string &value, const string &tooltip, ImFont *font)
+{
+    nvgui::PropertyEditor::entry(
+        property_name,
+        [&]
+        {
+            ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
+
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x +
+                                   std::max(HelloImGui::EmSize(8.f), ImGui::GetContentRegionAvail().x));
+
+            ImGui::TextUnformatted(value);
+            if (ImGui::IsItemClicked())
+                ImGui::SetClipboardText(value.c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+            ImGui::PopTextWrapPos();
+            ImGui::PopFont();
+            return false; // no change
+        },
+        tooltip);
+};
 
 } // namespace ImGui

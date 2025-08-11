@@ -332,7 +332,7 @@ if(spdlog_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "spdlog::spdlog")
 
-CPMAddPackage("gh:nothings/stb#a0a939058c579ddefd4c5671b046f29d12aeae01")
+CPMAddPackage("gh:wkjarosz/stb#491e9c3ac2add5bda0fffb5a8cb99868c483506b")
 if(stb_ADDED)
   message(STATUS "stb library added")
   add_library(stb INTERFACE IMPORTED)
@@ -824,7 +824,24 @@ if(astc_dec_ADDED)
   target_include_directories(astc_dec PUBLIC ${astc_dec_SOURCE_DIR})
 
 endif()
-list(APPEND HDRVIEW_DEPENDENCIES "astc_dec")
+list(APPEND HDRVIEW_DEPENDENCIES astc_dec)
+
+CPMAddPackage(
+  NAME nvpro_core2
+  GITHUB_REPOSITORY nvpro-samples/nvpro_core2
+  GIT_TAG d3fea22dabed0432ab02224aa94bc3dbe3f48dd4
+  DOWNLOAD_ONLY YES
+)
+if(nvpro_core2_ADDED)
+  message(STATUS "nvgui library added")
+  add_library(nvgui ${nvpro_core2_SOURCE_DIR}/nvgui/property_editor.cpp ${nvpro_core2_SOURCE_DIR}/nvgui/tooltip.cpp)
+  target_compile_features(nvgui PUBLIC cxx_std_11)
+  target_include_directories(nvgui PUBLIC ${nvpro_core2_SOURCE_DIR})
+  # nvgui includes imgui.h as <imgui/imgui.h>, so add its parent include directory
+  target_include_directories(nvgui PUBLIC ${hello_imgui_SOURCE_DIR}/external)
+
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES nvgui)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on

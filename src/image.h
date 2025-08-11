@@ -417,6 +417,7 @@ public:
     int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference);
     void draw_channels_list(bool is_reference, bool is_current = true);
     void draw_info();
+    void draw_colorspace();
     void draw_channel_stats();
 
 private:

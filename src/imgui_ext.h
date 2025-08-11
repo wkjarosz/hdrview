@@ -123,6 +123,9 @@ inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
     ImGui::TextUnformatted(str.c_str());
 }
 
+void WrappedTextProperty(const std::string &property_name, const std::string &value, const std::string &tooltip,
+                         ImFont *font = nullptr);
+
 // return true when activated.
 inline bool MenuItem(const std::string &label, const std::string &shortcut = "", bool selected = false,
                      bool enabled = true)

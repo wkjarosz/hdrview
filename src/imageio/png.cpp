@@ -231,6 +231,75 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 
     json metadata = json::object();
 
+#if defined(PNG_TEXT_SUPPORTED)
+    /* png_get_text also returns the number of text chunks in *num_text */
+    png_textp *text_ptr = nullptr;
+    spdlog::info("Text supported!!!!!!!!!!!!!!!!!!!!!");
+    int num_text = png_get_text(png_ptr, info_ptr.get(), text_ptr, nullptr);
+    for (int t = 0; t < num_text; ++t)
+    {
+        spdlog::info("text {} : {}", text_ptr[t]->key, text_ptr[t]->text);
+        metadata["header"][text_ptr[t]->key] = {
+            {"value", text_ptr[t]->text}, {"string", text_ptr[t]->text}, {"type", "string"}};
+    }
+#endif
+
+#if defined(PNG_EASY_ACCESS_SUPPORTED)
+    {
+        auto color_type_name = [](png_byte t)
+        {
+            switch (t)
+            {
+            case PNG_COLOR_TYPE_GRAY: return "Gray";
+            case PNG_COLOR_TYPE_PALETTE: return "Palette";
+            case PNG_COLOR_TYPE_RGB: return "RGB";
+            case PNG_COLOR_TYPE_RGB_ALPHA: return "RGB+Alpha";
+            case PNG_COLOR_TYPE_GRAY_ALPHA: return "Gray+Alpha";
+            default: return "Unknown";
+            }
+        };
+        auto b                           = png_get_color_type(png_ptr, info_ptr.get());
+        metadata["header"]["color type"] = {
+            {"value", b}, {"string", fmt::format("{} ({})", color_type_name(b), b)}, {"type", "int"}};
+
+        b                                 = png_get_filter_type(png_ptr, info_ptr.get());
+        metadata["header"]["filter type"] = {
+            {"value", b},
+            {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
+            {"type", "int"}};
+
+        // b                                      = png_get_compression_type(png_ptr, info_ptr.get());
+        // metadata["header"]["compression type"] = {
+        //     {"value", b},
+        //     {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
+        //     {"type", "int"}};
+
+        b                                    = png_get_interlace_type(png_ptr, info_ptr.get());
+        metadata["header"]["interlace type"] = {
+            {"value", b},
+            {"string", fmt::format("{} ({})", b == PNG_INTERLACE_NONE ? "None" : "Adam7", b)},
+            {"type", "int"}};
+
+        auto u32                                 = png_get_x_pixels_per_meter(png_ptr, info_ptr.get());
+        metadata["header"]["x pixels per meter"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+        u32                                      = png_get_y_pixels_per_meter(png_ptr, info_ptr.get());
+        metadata["header"]["y pixels per meter"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+
+        u32                                   = png_get_x_offset_pixels(png_ptr, info_ptr.get());
+        metadata["header"]["x offset pixels"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+        u32                                   = png_get_y_offset_pixels(png_ptr, info_ptr.get());
+        metadata["header"]["y offset pixels"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+
+        u32                                    = png_get_x_offset_microns(png_ptr, info_ptr.get());
+        metadata["header"]["x offset microns"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+        u32                                    = png_get_y_offset_microns(png_ptr, info_ptr.get());
+        metadata["header"]["y offset microns"] = {{"value", u32}, {"string", to_string(u32)}, {"type", "int"}};
+
+        auto f                                   = png_get_pixel_aspect_ratio(png_ptr, info_ptr.get());
+        metadata["header"]["pixel aspect ratio"] = {{"value", f}, {"string", to_string(f)}, {"type", "float"}};
+    }
+#endif
+
 #if defined(PNG_eXIf_SUPPORTED)
     png_bytep   exif_ptr = nullptr;
     png_uint_32 exif_len = 0;

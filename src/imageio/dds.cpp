@@ -380,7 +380,7 @@ vector<ImagePtr> load_compressed(const DDSFile::ImageData *data, const DDSFile &
         if (depth > 1)
         {
             spdlog::info("Decompressing depth slice {}/{}", d + 1, depth);
-            image->partname = fmt::format("z={}", d);
+            image->partname = fmt::format("z={:0>{}}", d, int(ceil(std::log10(depth))));
         }
 
         if (cmp == DDSFile::Compression::BC5)
