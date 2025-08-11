@@ -115,7 +115,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
             auto name = channel_name(c);
             if (!filter.PassFilter(&name[0], &name[0] + name.size()))
             {
-                spdlog::debug("Skipping EXR channel '{}' in part {}: '{}'", name, p);
+                spdlog::debug("Skipping EXR channel '{}' in part {}: '{}'", name, p, c.name());
                 continue;
             }
             else

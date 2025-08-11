@@ -731,7 +731,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         HelloImGui::DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
 
 #if defined(HELLOIMGUI_USE_GLFW3)
-    m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this]
+    m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]
     {
         spdlog::trace("Registering glfw drop callback");
         // spdlog::trace("m_params.backendPointers.glfwWindow: {}", m_params.backendPointers.glfwWindow);
@@ -752,13 +752,18 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // initialized first)
 
         // 1) Check if any filenames were passed via the NS api when the first instance of HDRView is launched.
-        const char *const *opened_files = glfwGetCocoaOpenedFilenames();
-        if (opened_files)
+        // However, this also seemingly returns (just the last) command-line argument, so if in_files is not empty, we
+        // ignore it and rely on that mechanism to load the files
+        if (in_files.empty())
         {
-            spdlog::debug("Passing files in through the NS api...");
-            vector<string> args;
-            for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
-            load_images(args);
+            const char *const *opened_files = glfwGetCocoaOpenedFilenames();
+            if (opened_files)
+            {
+                spdlog::debug("Passing files in through the NS api...");
+                vector<string> args;
+                for (auto p = opened_files; *p; ++p) { args.emplace_back(string(*p)); }
+                load_images(args);
+            }
         }
 
         // 2) Register a callback on the running instance of HDRView for when the user:
@@ -2216,7 +2221,19 @@ void HDRViewApp::export_as(const string &filename) const
 
 void HDRViewApp::load_images(const vector<string> &filenames)
 {
-    for (size_t i = 0; i < filenames.size(); ++i) load_image(filenames[i], {}, i == 0);
+    string channel_selector = "";
+    spdlog::info("Loading {} images...", filenames.size());
+    for (size_t i = 0; i < filenames.size(); ++i)
+    {
+        if (filenames[i][0] == ':')
+        {
+            channel_selector = filenames[i].substr(1);
+            spdlog::info("Channel selector set to: {}", channel_selector);
+            continue;
+        }
+
+        load_image(filenames[i], {}, i == 0, channel_selector);
+    }
 }
 
 void HDRViewApp::open_image()
@@ -2259,9 +2276,10 @@ void HDRViewApp::open_folder()
 }
 
 // Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select)
+void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select,
+                            const string channel_selector)
 {
-    m_image_loader.background_load(filename, buffer, should_select);
+    m_image_loader.background_load(filename, buffer, should_select, nullptr, channel_selector);
 }
 
 void HDRViewApp::load_url(const string_view url)

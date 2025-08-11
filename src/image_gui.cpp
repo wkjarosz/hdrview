@@ -587,7 +587,6 @@ void Image::draw_info()
 void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
-    auto mono_font = hdrview()->font("mono regular");
 
     namespace PE = nvgui::PropertyEditor;
 

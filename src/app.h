@@ -51,7 +51,8 @@ public:
     void open_image();
     void open_folder();
     void load_images(const vector<string> &filenames);
-    void load_image(const string filename, const string_view buffer = string_view{}, bool should_select = true);
+    void load_image(const string filename, const string_view buffer = string_view{}, bool should_select = true,
+                    const string channel_selector = "");
     void load_url(const string_view url);
     void save_as(const string &filename) const;
     void export_as(const string &filename) const;
