@@ -21,11 +21,11 @@
 - [ ] command palette/improved hotkey support
 - [ ] save as support for OpenEXR
 - [ ] handle multi-view EXRs better
-- [ ] pinch-zoom and pan support in emscripten with SDL
+- [x] pinch-zoom and pan support in emscripten with SDL
 - [ ] move shader, texture, renderpass and others into separate library
 - [ ] merge metal/glsl shaders + C++ colorspace stuff?
 - [ ] express app/viewport/image coordinate transforms using 2x2 matrices
-- [ ] flip and mirror image view
+- [x] flip and mirror image view
 
 
 ## Old

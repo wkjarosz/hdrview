@@ -196,7 +196,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             {"value", cinfo.arith_code}, {"string", cinfo.arith_code ? "Arithmetic" : "Huffman"}, {"type", "bool"}};
 
         image->metadata["header"]["JFIF version"] = {
-            {"value", cinfo.JFIF_major_version + cinfo.JFIF_minor_version * 0.01f},
+            {"value", 100 * cinfo.JFIF_major_version + cinfo.JFIF_minor_version},
             {"type", "float"},
             {"string", fmt::format("{}.{}", cinfo.JFIF_major_version, cinfo.JFIF_minor_version)}};
         image->metadata["header"]["density unit"] = {{"value", cinfo.density_unit},

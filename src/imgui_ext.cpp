@@ -564,12 +564,14 @@ void MenuItem(const Action &a)
 
 void IconButton(const Action &a)
 {
+    ImGui::BeginDisabled(a.enabled() == false);
     if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
         a.callback();
     if (a.chord)
         ImGui::WrappedTooltip(fmt::format("{} ({})", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
     else
         ImGui::WrappedTooltip(fmt::format("{}", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
+    ImGui::EndDisabled();
 }
 
 void Checkbox(const Action &a)

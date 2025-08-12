@@ -96,6 +96,8 @@ static bool            g_request_sort                        = false;
 static bool            g_short_names                         = false;
 static MouseMode_      g_mouse_mode                          = MouseMode_PanZoom;
 static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+static int             g_playback_direction                  = 0;
+static float           g_playback_speed                      = 24.f;
 
 #define g_blank_icon ""
 
@@ -680,27 +682,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     log_window.GuiFunction       = [this]
     { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); };
 
-    HelloImGui::DockableWindow advanced_settings_window;
-    advanced_settings_window.label             = "Advanced settings";
-    advanced_settings_window.dockSpaceName     = "RightSpace";
-    advanced_settings_window.isVisible         = false;
-    advanced_settings_window.rememberIsVisible = true;
-    advanced_settings_window.GuiFunction       = [this]
-    {
-        // if (ImGui::TreeNode("Clip warnings"))
-        {
-            ImGui::Checkbox("##Draw clip warning", &m_draw_clip_warnings);
-            ImGui::SameLine();
-            ImGui::PushItemWidth(-5 * HelloImGui::EmSize());
-            ImGui::BeginDisabled(!m_draw_clip_warnings);
-            ImGui::DragFloatRange2("Clip warning", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.1f",
-                                   "max: %.1f");
-            ImGui::EndDisabled();
-            ImGui::PopItemWidth();
-            // ImGui::TreePop();
-        }
-    };
-
 #ifdef _WIN32
     ImGuiKey modKey = ImGuiMod_Alt;
 #else
@@ -709,9 +690,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window, channel_stats_window, file_window,
-                                              info_window,      colorspace_window,    pixel_inspector_window,
-                                              channel_window,   log_window,           advanced_settings_window};
+    m_params.dockingParams.dockableWindows = {histogram_window,  channel_stats_window,   file_window,    info_window,
+                                              colorspace_window, pixel_inspector_window, channel_window, log_window};
     struct DockableWindowExtraInfo
     {
         ImGuiKeyChord chord = ImGuiKey_None;
@@ -1209,35 +1189,12 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_gamma_live = m_gamma = 1.0f;
                         m_tonemap              = Tonemap_Gamma;
                     }});
-        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0, [this]()
-                    {
-                        if (auto img = current_image())
-                        {
-                            float m     = 0.f;
-                            auto &group = img->groups[img->selected_group];
-
-                            bool3 should_include[NUM_CHANNELS] = {
-                                {true, true, true},   // RGB
-                                {true, false, false}, // RED
-                                {false, true, false}, // GREEN
-                                {false, false, true}, // BLUE
-                                {true, true, true},   // ALPHA
-                                {true, true, true}    // Y
-                            };
-                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
-                            {
-                                if (group.num_channels >= 3 && !should_include[m_channel][c])
-                                    continue;
-                                m = std::max(m, img->channels[group.channels[c]].get_stats()->summary.maximum);
-                            }
-
-                            m_exposure_live = m_exposure = log2(1.f / m);
-                        }
-                    }});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
         add_action({"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
+        add_action(
+            {"Clip warnings", ICON_MY_ZEBRA_STRIPES, 0, 0, []() {}, always_enabled, false, &m_draw_clip_warnings});
 
         add_action({"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
                     &m_draw_grid});
@@ -1308,6 +1265,54 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
+        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
+                    [this]()
+                    {
+                        if (auto img = current_image())
+                        {
+                            float m     = 0.f;
+                            auto &group = img->groups[img->selected_group];
+
+                            bool3 should_include[NUM_CHANNELS] = {
+                                {true, true, true},   // RGB
+                                {true, false, false}, // RED
+                                {false, true, false}, // GREEN
+                                {false, false, true}, // BLUE
+                                {true, true, true},   // ALPHA
+                                {true, true, true}    // Y
+                            };
+                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
+                            {
+                                if (group.num_channels >= 3 && !should_include[m_channel][c])
+                                    continue;
+                                m = std::max(m, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                            }
+
+                            m_exposure_live = m_exposure = log2(1.f / m);
+                        }
+                    },
+                    if_img});
+        add_action({"Play forward", ICON_MY_PLAY_FORWARD, 0, 0,
+                    [this]
+                    {
+                        g_playback_direction            = 1;
+                        m_params.fpsIdling.enableIdling = false;
+                    },
+                    [] { return g_playback_direction != 1; }});
+        add_action({"Stop", ICON_MY_STOP, 0, 0,
+                    [this]
+                    {
+                        g_playback_direction            = 0;
+                        m_params.fpsIdling.enableIdling = true;
+                    },
+                    [] { return g_playback_direction != 0; }});
+        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, 0, 0,
+                    [this]
+                    {
+                        g_playback_direction            = -1;
+                        m_params.fpsIdling.enableIdling = false;
+                    },
+                    [] { return g_playback_direction != -1; }});
         add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
                     [this]() { reload_image(current_image()); }, if_img});
         add_action({"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
@@ -2060,6 +2065,18 @@ void HDRViewApp::draw_menus()
             MenuItem(action("Clamp to LDR"));
         MenuItem(action("Dither"));
 
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
+        ImGui::TextUnformatted(ICON_MY_ZEBRA_STRIPES);
+        ImGui::SameLine();
+        ImGui::TextUnformatted("Clip warnings");
+        ImGui::SameLine();
+        ImGui::Checkbox("##Draw clip warnings", &m_draw_clip_warnings);
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::BeginDisabled(!m_draw_clip_warnings);
+        ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.1f",
+                               "max: %.1f");
+        ImGui::EndDisabled();
+        ImGui::PopStyleVar();
         ImGui::EndMenu();
     }
 
@@ -2752,7 +2769,6 @@ void HDRViewApp::update_visibility()
 
 void HDRViewApp::draw_file_window()
 {
-    ImGui::BeginDisabled(!current_image());
     if (ImGui::BeginCombo("Mode", blend_mode_names()[m_blend_mode].c_str(), ImGuiComboFlags_HeightLargest))
     {
         for (int n = 0; n < NUM_BLEND_MODES; ++n)
@@ -2788,10 +2804,9 @@ void HDRViewApp::draw_file_window()
         }
         ImGui::EndCombo();
     }
-    ImGui::EndDisabled();
 
-    if (!num_images())
-        return;
+    // if (!num_images())
+    //     return;
 
     const ImVec2 button_size = ImGui::IconButtonSize();
 
@@ -2868,7 +2883,9 @@ void HDRViewApp::draw_file_window()
                                                    ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
                                                    ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH |
                                                    ImGuiTableFlags_ScrollY;
-    if (ImGui::BeginTable("ImageList", 2, table_flags))
+    if (ImGui::BeginTable("ImageList", 2, table_flags,
+                          ImVec2(0.f, ImGui::GetContentRegionAvail().y - HelloImGui::EmSize(1.f) -
+                                          2.f * ImGui::GetStyle().FramePadding.y - ImGui::GetStyle().ItemSpacing.y)))
     {
         const float icon_width = ImGui::IconSize().x;
 
@@ -3103,6 +3120,42 @@ void HDRViewApp::draw_file_window()
 
         ImGui::EndTable();
     }
+
+    {
+        auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
+        auto fb = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        auto ba = ImGui::GetColorU32(ImGuiCol_ButtonActive);
+        auto b  = ImGui::GetColorU32(ImGuiCol_Button);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == -1 ? ba : bh);
+        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == -1 ? ba : b);
+        IconButton(action("Play backward"));
+        ImGui::PopStyleColor(2);
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == 0 ? ba : bh);
+        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == 0 ? ba : b);
+        IconButton(action("Stop"));
+        ImGui::PopStyleColor(2);
+
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == 1 ? ba : bh);
+        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == 1 ? ba : b);
+        IconButton(action("Play forward"));
+        ImGui::PopStyleColor(3);
+
+        ImGui::SameLine();
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        if (ImGui::SliderFloat("##Playback speed", &g_playback_speed, 0.1f, 60.f, "%.1f fps",
+                               ImGuiInputTextFlags_EnterReturnsTrue))
+            g_playback_speed = std::clamp(g_playback_speed, 1.f / 20.f, 60.f);
+    }
+    // ImGui::EndDisabled();
 }
 
 void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
@@ -3556,13 +3609,12 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    ImGui::BeginDisabled(!img);
     IconButton(action("Normalize exposure"));
-    ImGui::EndDisabled();
 
     ImGui::SameLine();
 
     IconButton(action("Reset tonemapping"));
+
     ImGui::SameLine();
 
     ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
@@ -3641,17 +3693,26 @@ void HDRViewApp::draw_background()
 {
     using namespace std::literals;
     spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
+
+    static auto prev_frame = std::chrono::steady_clock::now();
+    auto        this_frame = std::chrono::steady_clock::now();
+
+    if (g_playback_direction != 0 && this_frame - prev_frame >= std::chrono::milliseconds(int(1000 / g_playback_speed)))
+    {
+        set_current_image_index(next_visible_image_index(m_current, g_playback_direction < 0 ? Backward : Forward));
+        prev_frame = this_frame;
+    }
+
     process_shortcuts();
 
     // If watching files for changes, do so every 250ms
     if (m_watch_files_for_changes)
     {
-        auto now = std::chrono::steady_clock::now();
-        if (now - m_last_file_changes_check_time >= 250ms)
+        if (this_frame - m_last_file_changes_check_time >= 250ms)
         {
             reload_modified_files();
             m_image_loader.load_new_files();
-            m_last_file_changes_check_time = now;
+            m_last_file_changes_check_time = this_frame;
         }
     }
 
