@@ -185,10 +185,10 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         image->metadata["pixel format"] =
             fmt::format("{} ({} channel{}, {} bpc)", color_space_name(cinfo.jpeg_color_space), cinfo.num_components,
                         cinfo.num_components > 1 ? "s" : "", cinfo.data_precision);
-
+#if JPEG_LIB_VERSION >= 80
         image->metadata["header"]["baseline"] = {
             {"value", cinfo.is_baseline}, {"string", cinfo.is_baseline ? "true" : "false"}, {"type", "bool"}};
-
+#endif
         image->metadata["header"]["progressive"] = {
             {"value", cinfo.progressive_mode}, {"string", cinfo.progressive_mode ? "true" : "false"}, {"type", "bool"}};
 
