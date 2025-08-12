@@ -320,9 +320,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 
     metadata["loader"] = "libpng";
     if (color_type == PNG_COLOR_TYPE_PALETTE)
-        metadata["bit depth"] = fmt::format("{}-bit indexed color", file_bit_depth);
+        metadata["pixel format"] = fmt::format("{}-bit indexed color", file_bit_depth);
     else
-        metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", channels * file_bit_depth, file_bit_depth);
+        metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", channels * file_bit_depth, file_bit_depth);
 
     png_uint_32 num_frames = 0, num_plays = 0;
     bool        animation = false;

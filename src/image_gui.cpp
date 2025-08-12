@@ -504,7 +504,7 @@ void Image::draw_info()
         filtered_property("Part name", partname.empty() ? "<none>" : partname.c_str());
         filtered_property("Channel selector", channel_selector.empty() ? "<none>" : channel_selector.c_str());
         filtered_property("Loader", metadata.value<string>("loader", "unknown"));
-        filtered_property("File's bit depth", metadata.value<string>("bit depth", "unknown"));
+        filtered_property("Pixel format", metadata.value<string>("pixel format", "unknown"));
         filtered_property("Resolution", fmt::format("{} {} {}", size().x, ICON_MY_TIMES, size().y));
         filtered_property("Data window", fmt::format("[{}, {}) {} [{}, {})", data_window.min.x, data_window.max.x,
                                                      ICON_MY_TIMES, data_window.min.y, data_window.max.y));

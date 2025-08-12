@@ -123,9 +123,11 @@ The default is 2 (info).)")
 
         app.set_help_flag("-h, --help", "Print this help message and exit.")->group("Misc");
 
-        app.add_option("IMAGES", in_files, "The image files to load.")
-            // ->check(CLI::ExistingPath)
-            ->option_text("PATH(existing) ...");
+        app.add_option("IMAGES", in_files,
+                       R"(The image files to load. If an entry starts with a colon (:),
+it is treated as a channel selector for the subsequent images
+until another channel selector is encountered.)")
+            ->option_text("path ...");
 #if defined(__EMSCRIPTEN__)
         app.add_option("--url", url, "URL of an image to download and open");
 #endif

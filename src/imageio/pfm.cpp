@@ -132,7 +132,7 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename)
     auto float_data                      = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
     auto image                           = make_shared<Image>(size.xy(), size.z);
     image->filename                      = filename;
-    image->metadata["bit depth"]         = fmt::format("{}-bit (32 bpc)", size.z * 32);
+    image->metadata["pixel format"]      = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
     image->metadata["transfer function"] = transfer_function_name(TransferFunction_Linear);
 
     Timer timer;

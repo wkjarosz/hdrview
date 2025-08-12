@@ -186,14 +186,13 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
-        int bpc                   = is_16_bit ? 16 : 8;
 
         if (!linearize)
-            image->metadata["bit depth"] = "8:8:8:8 rgbe";
+            image->metadata["pixel format"] = "8:8:8:8 rgbe";
         else if (is_16_bit)
-            image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", bpc * size.z, bpc);
+            image->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", 16 * size.z, 16);
         else
-            image->metadata["bit depth"] = fmt::format("{} bbp", bpc);
+            image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
         image->metadata["transfer function"] = linearize ? transfer_function_name(TransferFunction_Unknown)
                                                          : transfer_function_name(TransferFunction_Linear);

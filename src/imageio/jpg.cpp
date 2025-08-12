@@ -128,9 +128,6 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
             throw std::invalid_argument{"Failed to read JPEG header."};
 
-        bool cmyk = cinfo.jpeg_color_space == JCS_CMYK || cinfo.jpeg_color_space == JCS_YCCK;
-        // bool gray_scale = cinfo.jpeg_color_space == JCS_GRAYSCALE;
-
         // ICC profile extraction
         std::vector<uint8_t> icc_profile;
         {
@@ -162,7 +159,65 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         image->filename                = filename;
         image->file_has_straight_alpha = false;
         image->metadata["loader"]      = "libjpeg-turbo";
-        image->metadata["bit depth"]   = "8-bit";
+        auto color_space_name          = [](J_COLOR_SPACE cp)
+        {
+            switch (cp)
+            {
+            case JCS_UNKNOWN: return "Unknown";
+            case JCS_GRAYSCALE: return "Grayscale";
+            case JCS_RGB: return "RGB";
+            case JCS_YCbCr: return "YCbCr";
+            case JCS_CMYK: return "CMYK";
+            case JCS_YCCK: return "YCCK";
+            case JCS_EXT_RGB: return "Extended RGB";
+            case JCS_EXT_RGBX: return "Extended RGBX";
+            case JCS_EXT_BGR: return "Extended BGR";
+            case JCS_EXT_BGRX: return "Extended BGRX";
+            case JCS_EXT_XBGR: return "Extended XBGR";
+            case JCS_EXT_XRGB: return "Extended XRGB";
+            case JCS_EXT_RGBA: return "Extended RGBA";
+            case JCS_EXT_BGRA: return "Extended BGRA";
+            case JCS_EXT_ABGR: return "Extended ABGR";
+            case JCS_EXT_ARGB: return "Extended ARGB";
+            case JCS_RGB565: return "RGB565";
+            }
+        };
+        image->metadata["pixel format"] =
+            fmt::format("{} ({} channel{}, {} bpc)", color_space_name(cinfo.jpeg_color_space), cinfo.num_components,
+                        cinfo.num_components > 1 ? "s" : "", cinfo.data_precision);
+
+        image->metadata["header"]["baseline"] = {
+            {"value", cinfo.is_baseline}, {"string", cinfo.is_baseline ? "true" : "false"}, {"type", "bool"}};
+
+        image->metadata["header"]["progressive"] = {
+            {"value", cinfo.progressive_mode}, {"string", cinfo.progressive_mode ? "true" : "false"}, {"type", "bool"}};
+
+        image->metadata["header"]["coding"] = {
+            {"value", cinfo.arith_code}, {"string", cinfo.arith_code ? "Arithmetic" : "Huffman"}, {"type", "bool"}};
+
+        image->metadata["header"]["JFIF version"] = {
+            {"value", cinfo.JFIF_major_version + cinfo.JFIF_minor_version * 0.01f},
+            {"type", "float"},
+            {"string", fmt::format("{}.{}", cinfo.JFIF_major_version, cinfo.JFIF_minor_version)}};
+        image->metadata["header"]["density unit"] = {{"value", cinfo.density_unit},
+                                                     {"string", cinfo.density_unit == 1   ? "dots/inch"
+                                                                : cinfo.density_unit == 2 ? "dots/cm"
+                                                                                          : "unknown"},
+                                                     {"type", "uint8"}};
+        image->metadata["header"]["X density"]    = {
+            {"value", cinfo.X_density}, {"string", to_string(cinfo.X_density)}, {"type", "uint16"}};
+        image->metadata["header"]["Y density"] = {
+            {"value", cinfo.Y_density}, {"string", to_string(cinfo.Y_density)}, {"type", "uint16"}};
+        image->metadata["header"]["has Adobe marker"] = {{"value", cinfo.saw_Adobe_marker != 0},
+                                                         {"string", cinfo.saw_Adobe_marker ? "true" : "false"},
+                                                         {"type", "bool"}};
+        if (cinfo.saw_Adobe_marker)
+            image->metadata["header"]["Adobe transform"] = {{"value", cinfo.Adobe_transform},
+                                                            {"string", cinfo.Adobe_transform == 1 ? "YCbCr"
+                                                                       : cinfo.Adobe_transform == 2
+                                                                           ? "YCCK"
+                                                                           : "Unknown (RGB or CMYK)"},
+                                                            {"type", "uint8"}};
 
         if (!exif_data.empty())
         {

@@ -2222,13 +2222,12 @@ void HDRViewApp::export_as(const string &filename) const
 void HDRViewApp::load_images(const vector<string> &filenames)
 {
     string channel_selector = "";
-    spdlog::info("Loading {} images...", filenames.size());
     for (size_t i = 0; i < filenames.size(); ++i)
     {
         if (filenames[i][0] == ':')
         {
             channel_selector = filenames[i].substr(1);
-            spdlog::info("Channel selector set to: {}", channel_selector);
+            spdlog::debug("Channel selector set to: {}", channel_selector);
             continue;
         }
 

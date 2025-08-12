@@ -579,101 +579,6 @@ json set_metadata(const DDSFile &dds)
     header["num_channels"] = {
         {"value", dds.num_channels}, {"string", fmt::format("{}", dds.num_channels)}, {"type", "uint32"}};
 
-    bool is_normal    = (hdr.pixel_format.flags & uint32_t(DDSFile::PixelFormatFlagBits::Normal)) != 0;
-    int  num_channels = dds.num_channels;
-
-    // Now, determine num_channels
-    using DXGI = DDSFile::DXGIFormat;
-    switch (dds.format())
-    {
-    // 4-channel formats
-    case DXGI::BC1_UNorm:
-    case DXGI::BC1_UNorm_SRGB:
-    case DXGI::BC2_UNorm:
-    case DXGI::BC2_UNorm_SRGB:
-    case DXGI::BC7_UNorm:
-    case DXGI::BC7_UNorm_SRGB:
-    case DXGI::R32G32B32A32_Float:
-    case DXGI::R16G16B16A16_Float:
-    case DXGI::R32G32B32A32_UInt:
-    case DXGI::R16G16B16A16_UInt:
-    case DXGI::R8G8B8A8_UInt:
-    case DXGI::R32G32B32A32_SInt:
-    case DXGI::R16G16B16A16_SInt:
-    case DXGI::R8G8B8A8_SInt:
-    case DXGI::R16G16B16A16_SNorm:
-    case DXGI::R8G8B8A8_SNorm:
-    case DXGI::B5G5R5A1_UNorm:
-    case DXGI::R16G16B16A16_UNorm:
-    case DXGI::R8G8B8A8_UNorm:
-    case DXGI::R8G8B8A8_UNorm_SRGB:
-    case DXGI::B8G8R8A8_UNorm:
-    case DXGI::B8G8R8A8_UNorm_SRGB:
-    case DXGI::R10G10B10A2_Typeless:
-    case DXGI::R10G10B10A2_UNorm:
-    case DXGI::R10G10B10A2_UInt:
-    case DXGI::B4G4R4A4_UNorm:
-    case DXGI::A4B4G4R4_UNorm: num_channels = 4; break;
-
-    case DXGI::BC3_UNorm:
-    case DXGI::BC3_UNorm_SRGB: num_channels = is_normal ? 3 : 4; break;
-
-    // 3-channel formats
-    case DXGI::R32G32B32_Float:
-    case DXGI::R32G32B32_UInt:
-    case DXGI::R32G32B32_SInt:
-    case DXGI::BC6H_UF16:
-    case DXGI::BC6H_SF16:
-    case DXGI::R11G11B10_Float:
-    case DXGI::Format_Unknown:
-    case DXGI::B5G6R5_UNorm:
-    case DXGI::B8G8R8X8_Typeless:
-    case DXGI::B8G8R8X8_UNorm:
-    case DXGI::B8G8R8X8_UNorm_SRGB:
-    case DXGI::R9G9B9E5_SHAREDEXP: num_channels = 3; break;
-
-    // 2-channel formats
-    case DXGI::R32G32_Float:
-    case DXGI::R32G32_UInt:
-    case DXGI::R32G32_SInt:
-    case DXGI::R16G16_Float:
-    case DXGI::R16G16_UInt:
-    case DXGI::R8G8_UInt:
-    case DXGI::R16G16_SInt:
-    case DXGI::R8G8_SInt:
-    case DXGI::R16G16_SNorm:
-    case DXGI::R8G8_SNorm:
-    case DXGI::R16G16_UNorm:
-    case DXGI::R8G8_UNorm: num_channels = 2; break;
-
-    case DXGI::BC5_UNorm: num_channels = is_normal ? 3 : 2; break;
-    case DXGI::BC5_SNorm: num_channels = is_normal ? 3 : 2; break;
-
-    // 1-channel formats
-    case DXGI::R16_Float:
-    case DXGI::R32_Float:
-    case DXGI::D32_Float:
-    case DXGI::R32_UInt:
-    case DXGI::R16_UInt:
-    case DXGI::R8_UInt:
-    case DXGI::R32_SInt:
-    case DXGI::R16_SInt:
-    case DXGI::R8_SInt:
-    case DXGI::R16_SNorm:
-    case DXGI::R8_SNorm:
-    case DXGI::R16_UNorm:
-    case DXGI::D16_UNorm:
-    case DXGI::A8_UNorm:
-    case DXGI::R8_UNorm:
-    case DXGI::BC4_UNorm:
-    case DXGI::BC4_SNorm: num_channels = 1; break;
-
-    default: num_channels = 0; break;
-    }
-
-    header["num_channels2"] = {
-        {"value", num_channels}, {"string", fmt::format("{}", num_channels)}, {"type", "uint32"}};
-
     if (dds.bitmasked)
     {
         std::string bitmask_str;
@@ -816,7 +721,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
             image->file_has_straight_alpha =
                 dds.alpha_mode != DDSFile::ALPHA_MODE_PREMULTIPLIED && image->channels.size() >= 4;
             image->metadata["loader"] = "smalldds";
-            image->metadata["bit depth"] =
+            image->metadata["pixel format"] =
                 dds.bitmasked ? header["bitmask_string"]["string"].get<string>()
                               : fmt::format("{} ({})", format_name(dxt10hdr.format), (uint32_t)dxt10hdr.format);
             image->metadata["transfer function"] =

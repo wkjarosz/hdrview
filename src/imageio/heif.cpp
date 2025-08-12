@@ -287,7 +287,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                 if (bpp_storage != cpp * 16 && bpp_storage != cpp * 8)
                     throw runtime_error(fmt::format("Unsupported bits per pixel: {}", bpp_storage));
                 if (p == 0)
-                    image->metadata["bit depth"] = fmt::format("{}-bit ({} bpc)", size.z * bpc, bpc);
+                    image->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", size.z * bpc, bpc);
                 float bpc_div = 1.f / ((1 << bpc) - 1);
 
                 // copy pixels into a contiguous float buffer and normalize values to [0,1]

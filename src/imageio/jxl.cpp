@@ -371,7 +371,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             image->partname                = frame_name;
             image->file_has_straight_alpha = info.alpha_bits && !info.alpha_premultiplied;
             image->metadata["loader"]      = "libjxl";
-            image->metadata["bit depth"] =
+            image->metadata["pixel format"] =
                 fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
 
             skip_color = false;
