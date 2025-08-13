@@ -137,12 +137,10 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
         m_ringbuffer_sink->clear_messages();
     ImGui::WrappedTooltip("Clear all messages.");
     ImGui::SameLine();
-    if (ImGui::IconButton(m_auto_scroll ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN))
-        m_auto_scroll = !m_auto_scroll;
+    ImGui::IconButton(m_auto_scroll ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, &m_auto_scroll);
     ImGui::WrappedTooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
     ImGui::SameLine();
-    if (ImGui::IconButton(m_wrap_text ? ICON_MY_TEXT_WRAP_ON : ICON_MY_TEXT_WRAP_OFF))
-        m_wrap_text = !m_wrap_text;
+    ImGui::IconButton(m_wrap_text ? ICON_MY_TEXT_WRAP_ON : ICON_MY_TEXT_WRAP_OFF, &m_wrap_text);
     ImGui::WrappedTooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
 
     auto window_flags = m_wrap_text
@@ -260,16 +258,36 @@ ImVec2 IconButtonSize()
     // return {IconSize().x + 2 * ImGui::GetStyle().ItemInnerSpacing.x, 0.f};
 }
 
-bool IconButton(const char *icon, const ImVec2 &size)
+bool IconButton(const char *icon, bool *v, const ImVec2 &size)
 {
     auto sz = (size.x == 0 && size.y == 0) ? IconButtonSize() : size;
     // Remove frame padding and spacing
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
-    // ImGui::PushID(icon);
+
+    bool toggle = v != nullptr;
+    if (toggle)
+    {
+        auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
+        auto ba = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        auto fb = ImGui::GetColorU32(ImGuiCol_ButtonActive);
+        auto b  = ImGui::GetColorU32(ImGuiCol_Button);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, *v ? ba : bh);
+        ImGui::PushStyleColor(ImGuiCol_Button, *v ? ba : b);
+    }
+
     bool ret = ImGui::Button(icon, sz);
+
+    if (v && ret)
+        *v = !*v;
+
     ImGui::PopStyleVar(2);
-    // ImGui::PopID();
+
+    if (toggle)
+        ImGui::PopStyleColor(3);
+
     return ret;
 }
 
@@ -566,29 +584,8 @@ void IconButton(const Action &a)
 {
     ImGui::BeginDisabled(a.enabled() == false);
 
-    bool toggle = a.p_selected != nullptr;
-    if (toggle)
-    {
-        auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
-        auto ba = ImGui::GetColorU32(ImGuiCol_FrameBg);
-        auto fb = ImGui::GetColorU32(ImGuiCol_ButtonActive);
-        auto b  = ImGui::GetColorU32(ImGuiCol_Button);
-
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
-
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, *a.p_selected ? ba : bh);
-        ImGui::PushStyleColor(ImGuiCol_Button, *a.p_selected ? ba : b);
-    }
-
-    if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
-    {
+    if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str(), a.p_selected))
         a.callback();
-        if (a.p_selected)
-            *a.p_selected = !*a.p_selected;
-    }
-
-    if (toggle)
-        ImGui::PopStyleColor(3);
 
     if (a.chord)
         ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),

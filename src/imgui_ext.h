@@ -57,7 +57,7 @@ SpdLogWindow &GlobalSpdLogWindow();
 
 ImVec2 IconSize();
 ImVec2 IconButtonSize();
-bool   IconButton(const char *icon, const ImVec2 &size = ImVec2(0, 0));
+bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(0, 0));
 
 //! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action

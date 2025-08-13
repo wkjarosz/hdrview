@@ -96,7 +96,9 @@ static bool            g_request_sort                        = false;
 static bool            g_short_names                         = false;
 static MouseMode_      g_mouse_mode                          = MouseMode_PanZoom;
 static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
-static int             g_playback_direction                  = 0;
+static bool            g_play_forward                        = false;
+static bool            g_play_backward                       = false;
+static bool            g_play_stopped                        = true;
 static float           g_playback_speed                      = 24.f;
 static int             g_status_color_mode                   = 0;
 static bool            g_reverse_colormap                    = false;
@@ -1310,24 +1312,27 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Play forward", ICON_MY_PLAY_FORWARD, 0, 0,
                     [this]
                     {
-                        g_playback_direction            = 1;
+                        g_play_backward &= !g_play_forward;
+                        g_play_stopped                  = !(g_play_forward || g_play_backward);
                         m_params.fpsIdling.enableIdling = false;
                     },
-                    [] { return g_playback_direction != 1; }});
+                    always_enabled, false, &g_play_forward});
         add_action({"Stop playback", ICON_MY_STOP, 0, 0,
                     [this]
                     {
-                        g_playback_direction            = 0;
+                        g_play_forward &= !g_play_stopped;
+                        g_play_backward &= !g_play_stopped;
                         m_params.fpsIdling.enableIdling = true;
                     },
-                    [] { return g_playback_direction != 0; }});
+                    [] { return g_play_forward || g_play_backward; }, false, &g_play_stopped});
         add_action({"Play backward", ICON_MY_PLAY_BACKWARD, 0, 0,
                     [this]
                     {
-                        g_playback_direction            = -1;
+                        g_play_forward &= !g_play_backward;
+                        g_play_stopped                  = !(g_play_forward || g_play_backward);
                         m_params.fpsIdling.enableIdling = false;
                     },
-                    [] { return g_playback_direction != -1; }});
+                    always_enabled, false, &g_play_backward});
         add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
                     [this]() { reload_image(current_image()); }, if_img});
         add_action({"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
@@ -3137,31 +3142,15 @@ void HDRViewApp::draw_file_window()
     }
 
     {
-        auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
-        auto ba = ImGui::GetColorU32(ImGuiCol_FrameBg);
-        auto fb = ImGui::GetColorU32(ImGuiCol_ButtonActive);
-        auto b  = ImGui::GetColorU32(ImGuiCol_Button);
-
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
-
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == -1 ? ba : bh);
-        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == -1 ? ba : b);
         IconButton(action("Play backward"));
-        ImGui::PopStyleColor(2);
 
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == 0 ? ba : bh);
-        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == 0 ? ba : b);
         IconButton(action("Stop playback"));
-        ImGui::PopStyleColor(2);
 
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == 1 ? ba : bh);
-        ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == 1 ? ba : b);
         IconButton(action("Play forward"));
-        ImGui::PopStyleColor(3);
 
         ImGui::SameLine();
 
@@ -3731,9 +3720,10 @@ void HDRViewApp::draw_background()
     static auto prev_frame = std::chrono::steady_clock::now();
     auto        this_frame = std::chrono::steady_clock::now();
 
-    if (g_playback_direction != 0 && this_frame - prev_frame >= std::chrono::milliseconds(int(1000 / g_playback_speed)))
+    if ((g_play_forward || g_play_backward) &&
+        this_frame - prev_frame >= std::chrono::milliseconds(int(1000 / g_playback_speed)))
     {
-        set_current_image_index(next_visible_image_index(m_current, g_playback_direction < 0 ? Backward : Forward));
+        set_current_image_index(next_visible_image_index(m_current, g_play_forward ? Forward : Backward));
         set_image_textures();
         prev_frame = this_frame;
     }
