@@ -568,9 +568,12 @@ void IconButton(const Action &a)
     if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
         a.callback();
     if (a.chord)
-        ImGui::WrappedTooltip(fmt::format("{} ({})", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
+        ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
+                                          a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                                  .c_str());
     else
-        ImGui::WrappedTooltip(fmt::format("{}", a.name, ImGui::GetKeyChordNameTranslated(a.chord)).c_str());
+        ImGui::WrappedTooltip(
+            fmt::format("{}{}", a.name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
     ImGui::EndDisabled();
 }
 

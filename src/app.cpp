@@ -1183,12 +1183,15 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
         add_action({"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure += 0.25f; }});
-        add_action({"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0, [this]()
+        add_action({"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0,
+                    [this]()
                     {
-                        m_exposure_live = m_exposure = 0.0f;
-                        m_gamma_live = m_gamma = 1.0f;
+                        m_exposure_live = m_exposure = 0.f;
+                        m_offset_live = m_offset = 0.f;
+                        m_gamma_live = m_gamma = 1.f;
                         m_tonemap              = Tonemap_Gamma;
-                    }});
+                    },
+                    always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
@@ -1270,8 +1273,9 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         if (auto img = current_image())
                         {
-                            float m     = 0.f;
-                            auto &group = img->groups[img->selected_group];
+                            float minimum = std::numeric_limits<float>::max();
+                            float maximum = std::numeric_limits<float>::min();
+                            auto &group   = img->groups[img->selected_group];
 
                             bool3 should_include[NUM_CHANNELS] = {
                                 {true, true, true},   // RGB
@@ -1285,13 +1289,20 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                             {
                                 if (group.num_channels >= 3 && !should_include[m_channel][c])
                                     continue;
-                                m = std::max(m, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                                minimum =
+                                    std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
+                                maximum =
+                                    std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
                             }
 
-                            m_exposure_live = m_exposure = log2(1.f / m);
+                            float factor    = 1.0f / (maximum - minimum);
+                            m_exposure_live = m_exposure = log2(factor);
+                            m_offset_live = m_offset = -minimum * factor;
                         }
                     },
-                    if_img});
+                    if_img, false, nullptr,
+                    "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
+
         add_action({"Play forward", ICON_MY_PLAY_FORWARD, 0, 0,
                     [this]
                     {
@@ -1299,7 +1310,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_params.fpsIdling.enableIdling = false;
                     },
                     [] { return g_playback_direction != 1; }});
-        add_action({"Stop", ICON_MY_STOP, 0, 0,
+        add_action({"Stop playback", ICON_MY_STOP, 0, 0,
                     [this]
                     {
                         g_playback_direction            = 0;
@@ -2073,8 +2084,8 @@ void HDRViewApp::draw_menus()
         ImGui::Checkbox("##Draw clip warnings", &m_draw_clip_warnings);
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::BeginDisabled(!m_draw_clip_warnings);
-        ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.1f",
-                               "max: %.1f");
+        ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.01f",
+                               "max: %.01f");
         ImGui::EndDisabled();
         ImGui::PopStyleVar();
         ImGui::EndMenu();
@@ -3158,8 +3169,6 @@ void HDRViewApp::draw_file_window()
     // ImGui::EndDisabled();
 }
 
-void HDRViewApp::center() { m_offset = float2(0.f, 0.f); }
-
 void HDRViewApp::fit_display_window()
 {
     if (auto img = current_image())
@@ -3244,7 +3253,7 @@ void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
         pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
 
     // Calculate where the new offset must be in order to satisfy the image position equation.
-    m_offset = position - (pixel * m_zoom) - center_offset();
+    m_translate = position - (pixel * m_zoom) - center_offset();
 }
 
 Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
@@ -3285,7 +3294,7 @@ float2 HDRViewApp::image_position(ConstImagePtr img) const
 {
     auto   dw  = scaled_data_window(img);
     auto   dsw = scaled_display_window(img);
-    float2 pos = m_offset + center_offset() + select(m_flip, dsw.max - dw.min, dw.min);
+    float2 pos = m_translate + center_offset() + select(m_flip, dsw.max - dw.min, dw.min);
 
     // Adjust for flipping: move the image to the opposite side if flipped
     // if (img)
@@ -3554,6 +3563,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("clip_range", m_clip_range);
         m_shader->set_uniform("randomness", randomness);
         m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
+        m_shader->set_uniform("offset", m_offset_live);
         m_shader->set_uniform("gamma", m_gamma_live);
         m_shader->set_uniform("tonemap_mode", (int)m_tonemap);
         m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
@@ -3597,15 +3607,34 @@ void HDRViewApp::draw_top_toolbar()
 {
     auto img = current_image();
 
+    ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
     ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
     ImGui::TextUnformatted(ICON_MY_EXPOSURE);
     ImGui::PopFont();
-    ImGui::SameLine();
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
-    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "%5.2f");
+    ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "Exposure: %+5.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Increasing (Shift+E) or decreasing (e) the exposure multiplies the displayed brightness of "
+                          "the image by 2^exposure.");
+
+    ImGui::SameLine();
+
+    ImGui::BeginGroup();
+    ImGui::AlignTextToFramePadding();
+    ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
+    ImGui::TextUnformatted(ICON_MY_OFFSET);
+    ImGui::PopFont();
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+    ImGui::SliderFloat("##OffsetSlider", &m_offset_live, -1.f, 1.f, "Offset: %+1.2f");
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        m_offset = m_offset_live;
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Increase/decrease the blackpoint offset, which is applied after exposure.");
 
     ImGui::SameLine();
 
@@ -3619,7 +3648,11 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
     ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "Gamma\0Colormap (+)\0Colormap (±)\0");
-    ImGui::SetItemTooltip("Set the tonemapping mode.");
+    ImGui::WrappedTooltip("Set the tonemapping mode.\n\n"
+                          "Gamma: Raise the pixel values to this exponent before display.\n"
+                          "Colormap (+): Falsecolor with colormap range set to [0,1].\n"
+                          "Colormap (±): Falsecolor with colormap range set to [-1,+1] (choosing a diverging "
+                          "colormap like IceFire can help visualize positive/negative values).");
 
     switch (m_tonemap)
     {
@@ -3628,7 +3661,7 @@ void HDRViewApp::draw_top_toolbar()
     {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
-        ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "%5.3f");
+        ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "Gamma: %5.3f");
         if (ImGui::IsItemDeactivatedAfterEdit())
             m_gamma = m_gamma_live;
         ImGui::SetItemTooltip("Set the exponent for gamma correction.");
@@ -3676,17 +3709,17 @@ void HDRViewApp::draw_top_toolbar()
     }
     ImGui::SameLine();
 
-    if (m_params.rendererBackendOptions.requestFloatBuffer)
-    {
-        Checkbox(action("Clamp to LDR"));
-        ImGui::SameLine();
-    }
+    // if (m_params.rendererBackendOptions.requestFloatBuffer)
+    // {
+    //     Checkbox(action("Clamp to LDR"));
+    //     ImGui::SameLine();
+    // }
 
-    Checkbox(action("Draw pixel grid"));
-    ImGui::SameLine();
+    // Checkbox(action("Draw pixel grid"));
+    // ImGui::SameLine();
 
-    Checkbox(action("Draw pixel values"));
-    ImGui::SameLine();
+    // Checkbox(action("Draw pixel values"));
+    // ImGui::SameLine();
 }
 
 void HDRViewApp::draw_background()
@@ -3700,6 +3733,7 @@ void HDRViewApp::draw_background()
     if (g_playback_direction != 0 && this_frame - prev_frame >= std::chrono::milliseconds(int(1000 / g_playback_speed)))
     {
         set_current_image_index(next_visible_image_index(m_current, g_playback_direction < 0 ? Backward : Forward));
+        set_image_textures();
         prev_frame = this_frame;
     }
 

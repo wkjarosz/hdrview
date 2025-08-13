@@ -48,6 +48,7 @@ uniform vec2  randomness;
 uniform int   blend_mode;
 uniform int   channel;
 uniform float gain;
+uniform float offset;
 uniform float gamma;
 uniform int   tonemap_mode;
 uniform bool  clamp_to_LDR;
@@ -219,7 +220,7 @@ void main()
         value = blend(value, reference_val);
     }
 
-    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0);
+    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0) + vec4(vec3(offset), 0.0);
     vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, clip_range.xxx);

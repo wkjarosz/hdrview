@@ -99,7 +99,7 @@ public:
     /// Calculates the image pixel coordinates of the given position in the viewport
     float2 pixel_at_vp_pos(float2 vp_pos) const
     {
-        float2 pixel = (vp_pos - (m_offset + center_offset())) / m_zoom;
+        float2 pixel = (vp_pos - (m_translate + center_offset())) / m_zoom;
         if (auto img = current_image())
             pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
         return pixel;
@@ -110,7 +110,7 @@ public:
         if (auto img = current_image())
             pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
 
-        return m_zoom * pixel + (m_offset + center_offset());
+        return m_zoom * pixel + (m_translate + center_offset());
     }
     /// Calculates the app position at the given image pixel coordinate.
     float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
@@ -138,7 +138,7 @@ public:
     // Higher-level functions that modify the placement and zooming of the image
     //-----------------------------------------------------------------------------
     /// Centers the image without affecting the scaling factor.
-    void center();
+    void center() { m_translate = float2(0.f, 0.f); }
     /// Centers and zooms the view so that the image's display window fits inside the viewport.
     void fit_display_window();
     /// Centers and zooms the view so that the image's data window fits inside the viewport.
@@ -228,7 +228,8 @@ private:
 
     int m_remaining_download = 0;
 
-    float      m_exposure = 0.f, m_exposure_live = 0.f, m_gamma = 1.0f, m_gamma_live = 1.0f;
+    float m_exposure = 0.f, m_exposure_live = 0.f, m_offset = 0.f, m_offset_live = 0.f, m_gamma = 1.0f,
+          m_gamma_live   = 1.0f;
     AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
     bool       m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
@@ -246,7 +247,7 @@ private:
     bool     m_auto_fit_selection       = false; ///< Continually keep the selection box fit within the viewport
     bool2    m_flip                     = {false, false}; ///< Whether to flip the image horizontally and/or vertically
     float    m_zoom                     = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
-    float2   m_offset                   = {0.f, 0.f};     ///< The panning offset of the image
+    float2   m_translate                = {0.f, 0.f};     ///< The panning offset of the image
     EChannel m_channel                  = EChannel::RGB;  ///< Which channel to display
     Tonemap  m_tonemap                  = Tonemap_Gamma;
     const vector<Colormap_> m_colormaps = {Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,

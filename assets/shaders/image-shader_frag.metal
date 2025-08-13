@@ -143,6 +143,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               const constant int &blend_mode,
                               const constant int &channel,
                               const constant float &gain,
+                              const constant float &offset,
                               const constant int &tonemap_mode,
                               const constant float &gamma,
                               const constant bool &clamp_to_LDR,
@@ -229,7 +230,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0);
+    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0) + float4(float3(offset), 0.0);
     float4 tonemapped = tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler) + background*(1-foreground.a);
     bool3 clipped = draw_clip_warnings and foreground.rgb > clip_range.y;
     bool3 crushed = draw_clip_warnings and foreground.rgb < clip_range.x;
