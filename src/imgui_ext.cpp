@@ -565,8 +565,31 @@ void MenuItem(const Action &a)
 void IconButton(const Action &a)
 {
     ImGui::BeginDisabled(a.enabled() == false);
+
+    bool toggle = a.p_selected != nullptr;
+    if (toggle)
+    {
+        auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
+        auto ba = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        auto fb = ImGui::GetColorU32(ImGuiCol_ButtonActive);
+        auto b  = ImGui::GetColorU32(ImGuiCol_Button);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
+
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, *a.p_selected ? ba : bh);
+        ImGui::PushStyleColor(ImGuiCol_Button, *a.p_selected ? ba : b);
+    }
+
     if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str()))
+    {
         a.callback();
+        if (a.p_selected)
+            *a.p_selected = !*a.p_selected;
+    }
+
+    if (toggle)
+        ImGui::PopStyleColor(3);
+
     if (a.chord)
         ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
                                           a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))

@@ -50,7 +50,7 @@ struct VertexOut
     float2 secondary_uv;
 };
 
-float4 tonemap(const float4 color, const int mode, const float gamma, texture2d<float, access::sample> colormap, sampler colormap_sampler)
+float4 tonemap(const float4 color, const int mode, const float gamma, texture2d<float, access::sample> colormap, sampler colormap_sampler, const bool reverse_colormap)
 {
     switch (mode)
     {
@@ -60,12 +60,16 @@ float4 tonemap(const float4 color, const int mode, const float gamma, texture2d<
         {
             int cmap_size = colormap.get_width(0);
             float t = mix(0.5/cmap_size, (cmap_size-0.5)/cmap_size, dot(color.rgb, float3(1.0/3.0)));
+            if (reverse_colormap)
+                t = 1.0 - t;
             return float4(sRGBToLinear(colormap.sample(colormap_sampler, float2(t, 0.5)).rgb) * color.a, color.a);
         }
         case Tonemap_PositiveNegative: 
         {
             int cmap_size = colormap.get_width(0);
             float t = mix(0.5/cmap_size, (cmap_size-0.5)/cmap_size, 0.5 * dot(color.rgb, float3(1.0/3.0)) + 0.5);
+            if (reverse_colormap)
+                t = 1.0 - t;
             return float4(sRGBToLinear(colormap.sample(colormap_sampler, float2(t, 0.5)).rgb) * color.a, color.a);
         }
     }
@@ -153,6 +157,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                               sampler dither_sampler,
                               texture2d<float, access::sample> colormap,
                               sampler colormap_sampler,
+                              const constant bool &reverse_colormap,
                               texture2d<float, access::sample> primary_0_texture,
                               texture2d<float, access::sample> primary_1_texture,
                               texture2d<float, access::sample> primary_2_texture,
@@ -231,7 +236,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     }
 
     float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0) + float4(float3(offset), 0.0);
-    float4 tonemapped = tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler) + background*(1-foreground.a);
+    float4 tonemapped = tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler, reverse_colormap) + background*(1-foreground.a);
     bool3 clipped = draw_clip_warnings and foreground.rgb > clip_range.y;
     bool3 crushed = draw_clip_warnings and foreground.rgb < clip_range.x;
     float4 blended = linearToSRGB(tonemapped);

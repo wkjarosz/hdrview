@@ -56,6 +56,7 @@ uniform int   bg_mode;
 uniform vec4  bg_color;
 
 uniform sampler2D colormap;
+uniform bool      reverse_colormap;
 
 uniform sampler2D dither_texture;
 
@@ -91,12 +92,16 @@ vec4 tonemap(vec4 color)
     {
         float cmap_size = float(textureSize(colormap, 0).x);
         float t         = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, dot(color.rgb, vec3(1.0 / 3.0)));
+        if (reverse_colormap)
+            t = 1.f - t;
         return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
     }
     case Tonemap_PositiveNegative:
     {
         float cmap_size = float(textureSize(colormap, 0).x);
         float t = mix(0.5 / cmap_size, (cmap_size - 0.5) / cmap_size, 0.5 * dot(color.rgb, vec3(1.0 / 3.0)) + 0.5);
+        if (reverse_colormap)
+            t = 1.f - t;
         return vec4(sRGBToLinear(texture(colormap, vec2(t, 0.5)).rgb) * color.a, color.a);
     }
     }

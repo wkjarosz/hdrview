@@ -250,14 +250,14 @@ private:
     float2   m_translate                = {0.f, 0.f};     ///< The panning offset of the image
     EChannel m_channel                  = EChannel::RGB;  ///< Which channel to display
     Tonemap  m_tonemap                  = Tonemap_Gamma;
-    const vector<Colormap_> m_colormaps = {Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,
-                                           Colormap_Cool,    Colormap_Pink,     Colormap_Jet,      Colormap_Spectral,
-                                           Colormap_Turbo,   Colormap_Twilight, Colormap_RdBu,     Colormap_BrBG,
-                                           Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys};
-    int                     m_colormap_index = 1;
-    EBlendMode              m_blend_mode = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
-    EBGMode m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4  m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    const vector<Colormap_> m_colormaps = {
+        Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
+        Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
+        Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys,    Colormap_AbsGreys};
+    int        m_colormap_index = 1;
+    EBlendMode m_blend_mode     = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
+    EBGMode    m_bg_mode        = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
+    float4     m_bg_color       = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     float2 m_viewport_min, m_viewport_size;
 

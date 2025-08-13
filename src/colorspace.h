@@ -25,11 +25,19 @@
  * greater than or equal to 0.5, black is returned.  Both returns will have
  * an alpha component of 1.0.
  */
-inline Color4 contrasting_color(const Color4 &c)
+inline Color3 contrasting_color(const Color3 &c)
 {
-    float luminance = dot(c, Color4(0.299f, 0.587f, 0.144f, 0.f));
-    return Color4(Color3(luminance < 0.5f ? 1.f : 0.f), 1.f);
+    float luminance = dot(c, Color3(0.299f, 0.587f, 0.144f));
+    return Color3(luminance < 0.5f ? 1.f : 0.f);
 }
+
+/**
+ * Computes the luminance as ``l = 0.299r + 0.587g + 0.144b + 0.0a``.  If
+ * the luminance is less than 0.5, white is returned.  If the luminance is
+ * greater than or equal to 0.5, black is returned.  Both returns will have
+ * an alpha component of 1.0.
+ */
+inline Color4 contrasting_color(const Color4 &c) { return {contrasting_color(c.xyz()), 1.f}; }
 
 struct Chromaticities
 {
@@ -760,7 +768,7 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
 
 void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
 
-inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap)
+inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
     switch (tonemap_mode)
     {
@@ -773,13 +781,15 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
         float avg       = dot(color, float3(1.f / 3.f));
         float cmap_size = Colormap::values(colormap).size();
         float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
+        if (reverse_colormap)
+            t = 1.f - t;
         return sRGB_to_linear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz());
     }
     }
 }
-inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap)
+inline Color4 tonemap(const Color4 color, float gamma, Tonemap tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
-    return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap), color.w);
+    return Color4(tonemap(color.xyz(), gamma, tonemap_mode, colormap, reverse_colormap), color.w);
 }
 
 inline float2 blend(float2 top, float2 bottom, EBlendMode blend_mode)

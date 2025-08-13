@@ -98,6 +98,8 @@ static MouseMode_      g_mouse_mode                          = MouseMode_PanZoom
 static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 static int             g_playback_direction                  = 0;
 static float           g_playback_speed                      = 24.f;
+static int             g_status_color_mode                   = 0;
+static bool            g_reverse_colormap                    = false;
 
 #define g_blank_icon ""
 
@@ -1192,6 +1194,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_tonemap              = Tonemap_Gamma;
                     },
                     always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
+        add_action(
+            {"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &g_reverse_colormap});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
@@ -1952,9 +1956,8 @@ void HDRViewApp::draw_status_bar()
         sized_text(0.5f, "=", 0.5f);
 
         ImGui::PushID("Current");
-        static int color_mode = 0;
         ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, color_mode, 2, false, HelloImGui::EmSize(25.f));
+        pixel_color_widget(hovered_pixel, g_status_color_mode, 2, false, HelloImGui::EmSize(25.f));
         ImGui::PopID();
 
         float real_zoom = m_zoom * pixel_ratio();
@@ -2084,6 +2087,7 @@ void HDRViewApp::draw_menus()
         ImGui::Checkbox("##Draw clip warnings", &m_draw_clip_warnings);
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::BeginDisabled(!m_draw_clip_warnings);
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.01f",
                                "max: %.01f");
         ImGui::EndDisabled();
@@ -2555,8 +2559,8 @@ float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
     }
 
     return raw ? value
-               : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz(), value.w}, m_gamma_live, m_tonemap,
-                           m_colormaps[m_colormap_index]);
+               : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz() + m_offset_live, value.w}, m_gamma_live,
+                           m_tonemap, m_colormaps[m_colormap_index], g_reverse_colormap);
 }
 
 void HDRViewApp::draw_pixel_inspector_window()
@@ -3134,8 +3138,8 @@ void HDRViewApp::draw_file_window()
 
     {
         auto bh = ImGui::GetColorU32(ImGuiCol_ButtonHovered);
-        auto fb = ImGui::GetColorU32(ImGuiCol_FrameBg);
-        auto ba = ImGui::GetColorU32(ImGuiCol_ButtonActive);
+        auto ba = ImGui::GetColorU32(ImGuiCol_FrameBg);
+        auto fb = ImGui::GetColorU32(ImGuiCol_ButtonActive);
         auto b  = ImGui::GetColorU32(ImGuiCol_Button);
 
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, fb);
@@ -3149,7 +3153,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, g_playback_direction == 0 ? ba : bh);
         ImGui::PushStyleColor(ImGuiCol_Button, g_playback_direction == 0 ? ba : b);
-        IconButton(action("Stop"));
+        IconButton(action("Stop playback"));
         ImGui::PopStyleColor(2);
 
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
@@ -3374,11 +3378,9 @@ void HDRViewApp::draw_pixel_info() const
 
     auto ref = reference_image();
 
-    static constexpr float2 align     = {0.5f, 0.5f};
-    auto                    mono_font = m_mono_bold;
+    static constexpr float2 align = {0.5f, 0.5f};
 
-    auto  &group  = img->groups[img->selected_group];
-    auto   colors = group.colors();
+    auto  &group = img->groups[img->selected_group];
     string names[4];
     string longest_name;
     for (int c = 0; c < group.num_channels; ++c)
@@ -3389,10 +3391,10 @@ void HDRViewApp::draw_pixel_info() const
             longest_name = names[c];
     }
 
-    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
+    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
     static float line_height = ImGui::CalcTextSize("").y;
     const float2 channel_threshold2 =
-        float2{ImGui::CalcTextSize((longest_name + ": 31.000").c_str()).x, group.num_channels * line_height};
+        float2{ImGui::CalcTextSize((longest_name + ": 31.00000").c_str()).x, group.num_channels * line_height};
     const float2 coord_threshold2  = channel_threshold2 + float2{0.f, 2.f * line_height};
     const float  channel_threshold = maxelem(channel_threshold2);
     const float  coord_threshold   = maxelem(coord_threshold2);
@@ -3414,7 +3416,7 @@ void HDRViewApp::draw_pixel_info() const
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
 
-    ImGui::PushFont(mono_font, ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
+    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
 
     auto bounds =
         Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
@@ -3423,32 +3425,26 @@ void HDRViewApp::draw_pixel_info() const
     {
         for (int x = bounds.min.x; x < bounds.max.x; ++x)
         {
-            auto   pos   = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-            float4 top   = img->raw_pixel({x, y});
-            float4 pixel = top;
-            if (ref && ref->data_window.contains({x, y}))
-            {
-                float4 bottom = ref->raw_pixel({x, y});
-                // blend with reference image if available
-                pixel = float4{blend(top.x, bottom.x, m_blend_mode), blend(top.y, bottom.y, m_blend_mode),
-                               blend(top.z, bottom.z, m_blend_mode), blend(top.w, bottom.w, m_blend_mode)};
-            }
+            auto   pos        = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
+            float4 r_pixel    = pixel_value({x, y}, true, 2);
+            float4 t_pixel    = linear_to_sRGB(pixel_value({x, y}, false, 2));
+            float4 pixel      = g_status_color_mode == 0 ? r_pixel : t_pixel;
+            float3 text_color = contrasting_color(t_pixel.xyz());
+            float3 shadow     = contrasting_color(text_color);
             if (alpha2 > 0.f)
             {
                 float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
                 auto   text  = fmt::format("({},{})", x, y);
-                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha2), text,
-                                      align);
-                ImGui::AddTextAligned(draw_list, c_pos, ImGui::GetColorU32(IM_COL32_WHITE, alpha2), text, align);
+                ImGui::AddTextAligned(draw_list, c_pos + 1.f, ImColor(float4{shadow, alpha2}), text, align);
+                ImGui::AddTextAligned(draw_list, c_pos, ImColor(float4{text_color, alpha2}), text, align);
             }
 
             for (int c = 0; c < group.num_channels; ++c)
             {
                 float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
-                auto   text  = fmt::format("{:>2s}:{: > 7.3f}", names[c], pixel[c]);
-                ImGui::AddTextAligned(draw_list, c_pos + int2{1, 2}, ImGui::GetColorU32(IM_COL32_BLACK, alpha), text,
-                                      align);
-                ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{colors[c].xyz(), alpha}}, text, align);
+                auto   text  = fmt::format("{:>2s}:{: > 9.5f}", names[c], pixel[c]);
+                ImGui::AddTextAligned(draw_list, c_pos + 1.f, ImColor(float4{shadow, alpha2}), text, align);
+                ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{text_color, alpha2}}, text, align);
             }
         }
     }
@@ -3578,6 +3574,7 @@ void HDRViewApp::draw_image() const
         m_shader->set_uniform("bg_color", m_bg_color);
 
         m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
+        m_shader->set_uniform("reverse_colormap", g_reverse_colormap);
 
         if (reference_image())
         {
@@ -3618,8 +3615,8 @@ void HDRViewApp::draw_top_toolbar()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Increasing (Shift+E) or decreasing (e) the exposure multiplies the displayed brightness of "
-                          "the image by 2^exposure.");
+    ImGui::WrappedTooltip("Increasing (Shift+E) or decreasing (e) the exposure. The displayed brightness of "
+                          "the image is multiplied by 2^exposure.");
 
     ImGui::SameLine();
 
@@ -3634,7 +3631,8 @@ void HDRViewApp::draw_top_toolbar()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Increase/decrease the blackpoint offset, which is applied after exposure.");
+    ImGui::WrappedTooltip(
+        "Increase/decrease the blackpoint offset. The offset is added to the pixel value after exposure is applied.");
 
     ImGui::SameLine();
 
@@ -3648,11 +3646,12 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
     ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "Gamma\0Colormap (+)\0Colormap (±)\0");
-    ImGui::WrappedTooltip("Set the tonemapping mode.\n\n"
-                          "Gamma: Raise the pixel values to this exponent before display.\n"
-                          "Colormap (+): Falsecolor with colormap range set to [0,1].\n"
-                          "Colormap (±): Falsecolor with colormap range set to [-1,+1] (choosing a diverging "
-                          "colormap like IceFire can help visualize positive/negative values).");
+    ImGui::WrappedTooltip(
+        "Set the tonemapping mode, which is applied to the pixel values after exposure and blackpoint offset.\n\n"
+        "Gamma: Raise the pixel values to this exponent before display.\n"
+        "Colormap (+): Falsecolor with colormap range set to [0,1].\n"
+        "Colormap (±): Falsecolor with colormap range set to [-1,+1] (choosing a diverging "
+        "colormap like IceFire can help visualize positive/negative values).");
 
     switch (m_tonemap)
     {
@@ -3704,6 +3703,8 @@ void HDRViewApp::draw_top_toolbar()
             }
             ImGui::EndPopup();
         }
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        IconButton(action("Reverse colormap"));
     }
     break;
     }

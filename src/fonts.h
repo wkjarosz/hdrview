@@ -334,6 +334,7 @@
 #define ICON_MY_STOP               ICON_MS_STOP
 #define ICON_MY_ZEBRA_STRIPES      ICON_MS_TEXTURE
 #define ICON_MY_OFFSET             ICON_MS_TONALITY
+#define ICON_MY_INVERT_COLORMAP    ICON_MS_COMPARE_ARROWS
 
 #elif defined(HDRVIEW_ICONSET_MD)
 // https://fonts.google.com/icons?icon.set=Material+Icons

@@ -30,6 +30,7 @@ enum EColormap : Colormap_
     Colormap_Turbo,
     Colormap_IceFire,
     Colormap_CoolWarm,
+    Colormap_AbsGreys, // white/black/white                     (qual=false, n=3 )
     Colormap_COUNT
 };
 

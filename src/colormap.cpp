@@ -386,6 +386,10 @@ void Colormap::initialize()
     };
     ImPlot::AddColormap("CoolWarm", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
 
+    cmap           = Colormap_AbsGreys;
+    s_values[cmap] = {IM_COL32(255, 255, 255, 255), IM_COL32(0, 0, 0, 255), IM_COL32(255, 255, 255, 255)};
+    ImPlot::AddColormap("Abs Grey", (const ImU32 *)s_values[cmap].data(), s_values[cmap].size(), false);
+
     for (cmap = 0; cmap < Colormap_COUNT; ++cmap)
     {
         s_textures[cmap] = std::make_unique<Texture>(
