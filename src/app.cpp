@@ -1183,7 +1183,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         []() {}, [&w]() { return w.canBeClosed; }, false, &w.isVisible});
         }
 
-        add_action({"Decrease exposure", ICON_MY_REDUCE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
+        add_action({"Decrease exposure", ICON_MY_DECREASE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure -= 0.25f; }});
         add_action({"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
                     [this]() { m_exposure_live = m_exposure += 0.25f; }});
@@ -1215,7 +1215,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         add_action({"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_draw_display_window});
 
-        add_action({"Decrease gamma/Previous colormap", g_blank_icon, ImGuiKey_G, ImGuiInputFlags_Repeat,
+        add_action({"Decrease gamma/Previous colormap", ICON_MY_DECREASE_GAMMA, ImGuiKey_G, ImGuiInputFlags_Repeat,
                     [this]()
                     {
                         switch (m_tonemap)
@@ -1229,7 +1229,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         }
                     },
                     always_enabled});
-        add_action({"Increase gamma/Next colormap", g_blank_icon, ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_Repeat,
+        add_action({"Increase gamma/Next colormap", ICON_MY_INCREASE_GAMMA, ImGuiMod_Shift | ImGuiKey_G,
+                    ImGuiInputFlags_Repeat,
                     [this]()
                     {
                         switch (m_tonemap)
@@ -1244,7 +1245,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     },
                     always_enabled});
 
-        add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_Space, 0,
+        add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_P, 0,
                     []()
                     {
                         for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
@@ -1309,7 +1310,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     if_img, false, nullptr,
                     "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
 
-        add_action({"Play forward", ICON_MY_PLAY_FORWARD, 0, 0,
+        add_action({"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
                     [this]
                     {
                         g_play_backward &= !g_play_forward;
@@ -1317,7 +1318,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_params.fpsIdling.enableIdling = false;
                     },
                     always_enabled, false, &g_play_forward});
-        add_action({"Stop playback", ICON_MY_STOP, 0, 0,
+        add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
                     [this]
                     {
                         g_play_forward &= !g_play_stopped;
@@ -1325,7 +1326,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         m_params.fpsIdling.enableIdling = true;
                     },
                     [] { return g_play_forward || g_play_backward; }, false, &g_play_stopped});
-        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, 0, 0,
+        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
                     [this]
                     {
                         g_play_forward &= !g_play_backward;
@@ -1698,6 +1699,7 @@ void HDRViewApp::load_settings()
         m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
         m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
         m_clip_range           = j.value<float2>("clip range", m_clip_range);
+        g_playback_speed       = j.value<float>("playback speed", g_playback_speed);
 
         g_show_developer_menu = j.value<bool>("show developer menu", g_show_developer_menu);
 
@@ -1737,6 +1739,7 @@ void HDRViewApp::save_settings()
     j["show FPS"]                = m_show_FPS;
     j["clip range"]              = m_clip_range;
     j["show developer menu"]     = g_show_developer_menu;
+    j["playback speed"]          = g_playback_speed;
 
     save_theme(j);
 
@@ -3661,9 +3664,11 @@ void HDRViewApp::draw_top_toolbar()
         ImGui::SameLine();
         auto p = ImGui::GetCursorScreenPos();
 
-        if (ImPlot::ColormapButton(Colormap::name(m_colormaps[m_colormap_index]),
-                                   ImVec2(HelloImGui::EmSize(8), ImGui::GetFrameHeight()),
-                                   m_colormaps[m_colormap_index]))
+        if (ImPlot::ColormapButton(
+                Colormap::name(m_colormaps[m_colormap_index]),
+                ImVec2(HelloImGui::EmSize(8) - ImGui::IconButtonSize().x - ImGui::GetStyle().ItemInnerSpacing.x,
+                       ImGui::GetFrameHeight()),
+                m_colormaps[m_colormap_index]))
             ImGui::OpenPopup("colormap_dropdown");
         ImGui::SetItemTooltip("Click to choose a colormap.");
 
@@ -3699,17 +3704,17 @@ void HDRViewApp::draw_top_toolbar()
     }
     ImGui::SameLine();
 
-    // if (m_params.rendererBackendOptions.requestFloatBuffer)
-    // {
-    //     Checkbox(action("Clamp to LDR"));
-    //     ImGui::SameLine();
-    // }
+    if (m_params.rendererBackendOptions.requestFloatBuffer)
+    {
+        IconButton(action("Clamp to LDR"));
+        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    }
 
-    // Checkbox(action("Draw pixel grid"));
-    // ImGui::SameLine();
+    IconButton(action("Draw pixel grid"));
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-    // Checkbox(action("Draw pixel values"));
-    // ImGui::SameLine();
+    IconButton(action("Draw pixel values"));
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
 void HDRViewApp::draw_background()

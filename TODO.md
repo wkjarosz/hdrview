@@ -7,7 +7,7 @@
 - [x] have spdlog output to the log window
 - [x] add image and channel list filtering
 - [x] load images asynchronously
-- [ ] load multiple images/entire directories
+- [x] load multiple images/entire directories
   - [x] drop event to load files for GLFW
   - [x] multi-select on desktop
 - [x] fix reference image index when closing image
