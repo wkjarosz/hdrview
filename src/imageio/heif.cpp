@@ -69,6 +69,40 @@ static bool linearize_colors(float *pixels, int3 size, heif_color_profile_nclx *
     return true;
 }
 
+// Add preferred colorspace to header
+static auto colorspace_name(heif_colorspace cs)
+{
+    switch (cs)
+    {
+    case heif_colorspace_YCbCr: return "YCbCr";
+    case heif_colorspace_RGB: return "RGB";
+    case heif_colorspace_monochrome: return "Monochrome";
+    case heif_colorspace_nonvisual: return "Nonvisual";
+    case heif_colorspace_undefined: return "Undefined";
+    default: return "Unknown";
+    }
+};
+
+// Add preferred chroma to header
+static auto chroma_name(heif_chroma ch)
+{
+    switch (ch)
+    {
+    case heif_chroma_monochrome: return "Monochrome";
+    case heif_chroma_420: return "4:2:0";
+    case heif_chroma_422: return "4:2:2";
+    case heif_chroma_444: return "4:4:4";
+    case heif_chroma_interleaved_RGB: return "Interleaved RGB";
+    case heif_chroma_interleaved_RGBA: return "Interleaved RGBA";
+    case heif_chroma_interleaved_RRGGBB_BE: return "Interleaved RRGGBB (BE)";
+    case heif_chroma_interleaved_RRGGBBAA_BE: return "Interleaved RRGGBBAA (BE)";
+    case heif_chroma_interleaved_RRGGBB_LE: return "Interleaved RRGGBB (LE)";
+    case heif_chroma_interleaved_RRGGBBAA_LE: return "Interleaved RRGGBBAA (LE)";
+    case heif_chroma_undefined: return "Undefined";
+    default: return "Unknown";
+    }
+};
+
 vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view channel_selector)
 {
     // calculate size of stream
@@ -113,7 +147,14 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
         for (int subimage = 0; subimage < num_subimages; ++subimage)
         {
             spdlog::info("HEIF: Loading subimage {}...", subimage);
-            auto                     id          = (subimage == 0) ? primary_id : item_ids[subimage - 1];
+            auto id = (subimage == 0) ? primary_id : item_ids[subimage - 1];
+
+            if (auto name = fmt::format("{:d}.R,G,B", id); !filter.PassFilter(name.c_str()))
+            {
+                spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, channel_selector);
+                continue;
+            }
+
             auto                     ihandle     = ctx->get_image_handle(id);
             auto                     raw_ihandle = ihandle.get_raw_image_handle();
             heif_color_profile_nclx *nclx        = nullptr;
@@ -179,15 +220,20 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
             image->partname                = fmt::format("{:d}", id);
             image->file_has_straight_alpha = has_alpha && !ihandle.is_premultiplied_alpha();
             image->metadata["loader"]      = "libheif";
-
-            {
-                auto name = (image->partname.empty()) ? string("R,G,B") : image->partname + "." + string("R,G,B");
-                if (!filter.PassFilter(&name[0], &name[0] + name.size()))
-                {
-                    spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, channel_selector);
-                    continue;
-                }
-            }
+            image->metadata["header"]["nclx profile"] =
+                nclx ? json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}}
+                     : json{{"value", 0}, {"string", "missing"}, {"type", "enum"}};
+            image->metadata["header"]["icc profile"] =
+                icc_profile.size() ? json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}}
+                                   : json{{"value", 0}, {"string", "missing"}, {"type", "enum"}};
+            image->metadata["header"]["preferred colorspace"] = {
+                {"value", int(preferred_colorspace)},
+                {"string", fmt::format("{} ({})", colorspace_name(preferred_colorspace), int(preferred_colorspace))},
+                {"type", "int"}};
+            image->metadata["header"]["preferred chroma"] = {
+                {"value", int(preferred_chroma)},
+                {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
+                {"type", "int"}};
 
             // try to get exif metadata
             int num_metadata_blocks = heif_image_handle_get_number_of_metadata_blocks(raw_ihandle, "Exif");
@@ -240,8 +286,17 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                 size.y = himage.get_height(out_planes[0]);
             }
 
-            spdlog::info("Decoded colorspace: {}, chroma: {}", (int)himage.get_colorspace(),
-                         (int)himage.get_chroma_format());
+            image->metadata["header"]["decoded colorspace"] = {
+                {"value", int(himage.get_colorspace())},
+                {"string",
+                 fmt::format("{} ({})", colorspace_name(himage.get_colorspace()), int(himage.get_colorspace()))},
+                {"type", "int"}};
+
+            image->metadata["header"]["decoded chroma"] = {
+                {"value", int(himage.get_chroma_format())},
+                {"string",
+                 fmt::format("{} ({})", chroma_name(himage.get_chroma_format()), int(himage.get_chroma_format()))},
+                {"type", "int"}};
 
             // A tricky bit is that the C++ API doesn't give us a direct way to get the image ptr, we need to resort
             // to some casting trickery, with knowledge that the C++ heif::Image class consists solely of a
@@ -255,12 +310,14 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                 if (err.code == heif_error_Color_profile_does_not_exist)
                     spdlog::warn(
                         "HEIF: No image-level nclx color profile found. Will assume sRGB/IEC 61966-2-1 colorspace.");
+                else if (err.code == heif_error_Ok)
+                    image->metadata["header"]["nclx profile"] =
+                        json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
             }
             if (icc_profile.empty())
             {
                 if (size_t icc_size = heif_image_get_raw_color_profile_size(raw_image); icc_size != 0)
                 {
-                    spdlog::info("HEIF: File contains an image-level ICC profile.");
                     icc_profile.resize(icc_size);
                     err = heif_image_get_raw_color_profile(raw_image, reinterpret_cast<void *>(icc_profile.data()));
                     if (err.code != heif_error_Ok)
@@ -268,12 +325,14 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                         spdlog::info("HEIF: Could not read image-level ICC profile");
                         icc_profile.clear();
                     }
+                    else
+                        image->metadata["header"]["icc profile"] =
+                            json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
                 }
             }
 
             spdlog::info("Copying image channels...");
             Timer timer;
-            spdlog::info("Number of planes: {}", num_planes);
             // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
             for (int p = 0; p < num_planes; ++p)
             {
