@@ -1275,65 +1275,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
-        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
-                    [this]()
-                    {
-                        if (auto img = current_image())
-                        {
-                            float minimum = std::numeric_limits<float>::max();
-                            float maximum = std::numeric_limits<float>::min();
-                            auto &group   = img->groups[img->selected_group];
-
-                            bool3 should_include[NUM_CHANNELS] = {
-                                {true, true, true},   // RGB
-                                {true, false, false}, // RED
-                                {false, true, false}, // GREEN
-                                {false, false, true}, // BLUE
-                                {true, true, true},   // ALPHA
-                                {true, true, true}    // Y
-                            };
-                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
-                            {
-                                if (group.num_channels >= 3 && !should_include[m_channel][c])
-                                    continue;
-                                minimum =
-                                    std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
-                                maximum =
-                                    std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
-                            }
-
-                            float factor    = 1.0f / (maximum - minimum);
-                            m_exposure_live = m_exposure = log2(factor);
-                            m_offset_live = m_offset = -minimum * factor;
-                        }
-                    },
-                    if_img, false, nullptr,
-                    "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
-
-        add_action({"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        g_play_backward &= !g_play_forward;
-                        g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = false;
-                    },
-                    always_enabled, false, &g_play_forward});
-        add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        g_play_forward &= !g_play_stopped;
-                        g_play_backward &= !g_play_stopped;
-                        m_params.fpsIdling.enableIdling = true;
-                    },
-                    [] { return g_play_forward || g_play_backward; }, false, &g_play_stopped});
-        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        g_play_forward &= !g_play_backward;
-                        g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = false;
-                    },
-                    always_enabled, false, &g_play_backward});
         add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
                     [this]() { reload_image(current_image()); }, if_img});
         add_action({"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
@@ -1416,6 +1357,66 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     },
                     if_img, true});
 #endif
+
+        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
+                    [this]()
+                    {
+                        if (auto img = current_image())
+                        {
+                            float minimum = std::numeric_limits<float>::max();
+                            float maximum = std::numeric_limits<float>::min();
+                            auto &group   = img->groups[img->selected_group];
+
+                            bool3 should_include[NUM_CHANNELS] = {
+                                {true, true, true},   // RGB
+                                {true, false, false}, // RED
+                                {false, true, false}, // GREEN
+                                {false, false, true}, // BLUE
+                                {true, true, true},   // ALPHA
+                                {true, true, true}    // Y
+                            };
+                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
+                            {
+                                if (group.num_channels >= 3 && !should_include[m_channel][c])
+                                    continue;
+                                minimum =
+                                    std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
+                                maximum =
+                                    std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                            }
+
+                            float factor    = 1.0f / (maximum - minimum);
+                            m_exposure_live = m_exposure = log2(factor);
+                            m_offset_live = m_offset = -minimum * factor;
+                        }
+                    },
+                    if_img, false, nullptr,
+                    "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
+
+        add_action({"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
+                    [this]
+                    {
+                        g_play_backward &= !g_play_forward;
+                        g_play_stopped                  = !(g_play_forward || g_play_backward);
+                        m_params.fpsIdling.enableIdling = false;
+                    },
+                    always_enabled, false, &g_play_forward});
+        add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
+                    [this]
+                    {
+                        g_play_forward &= !g_play_stopped;
+                        g_play_backward &= !g_play_stopped;
+                        m_params.fpsIdling.enableIdling = true;
+                    },
+                    [] { return g_play_forward || g_play_backward; }, false, &g_play_stopped});
+        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
+                    [this]
+                    {
+                        g_play_forward &= !g_play_backward;
+                        g_play_stopped                  = !(g_play_forward || g_play_backward);
+                        m_params.fpsIdling.enableIdling = false;
+                    },
+                    always_enabled, false, &g_play_backward});
 
         // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
