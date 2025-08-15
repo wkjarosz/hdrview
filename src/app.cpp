@@ -59,8 +59,7 @@
 #endif
 #endif
 
-using std::to_string;
-using std::unique_ptr;
+using namespace std;
 
 #if defined(__EMSCRIPTEN__)
 static float g_scroll_multiplier = 10.0f;
@@ -76,14 +75,16 @@ struct WatchedPixel
 
 static vector<WatchedPixel> g_watched_pixels;
 
-static std::mt19937    g_rand(53);
+static mt19937         g_rand(53);
 static constexpr float MIN_ZOOM       = 0.01f;
 static constexpr float MAX_ZOOM       = 512.f;
 static bool            g_show_help    = false;
 static bool            g_help_is_open = false;
 static json            g_settings;
-static int             g_theme                               = -1;
+static constexpr int   DARK_THEME                            = -1; // Dark theme
+static constexpr int   LIGHT_THEME                           = -2; // Light theme
 static constexpr int   CUSTOM_THEME                          = -3; // Custom theme
+static int             g_theme                               = DARK_THEME;
 static bool            g_show_command_palette                = false;
 static bool            g_show_developer_menu                 = false;
 static bool            g_show_tweak_window                   = false;
@@ -293,9 +294,9 @@ static string theme_name(int t)
 {
     if (t >= 0 && t < ImGuiTheme::ImGuiTheme_Count)
         return ImGuiTheme::ImGuiTheme_Name((ImGuiTheme::ImGuiTheme_)t);
-    else if (t == -1)
+    else if (t == DARK_THEME)
         return "HDRView dark";
-    else if (t == -2)
+    else if (t == LIGHT_THEME)
         return "HDRView light";
     else
         return "Custom";
@@ -307,7 +308,7 @@ static void apply_theme(int t)
     if (t >= ImGuiTheme::ImGuiTheme_Count)
     {
         spdlog::error("Invalid theme index: {}. Using default theme.", t);
-        t = -1;
+        t = DARK_THEME;
     }
 
     g_theme = t;
@@ -318,9 +319,9 @@ static void apply_theme(int t)
         HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = theme;
         ImGuiTheme::ApplyTheme(theme);
     }
-    else if (t == -1)
+    else if (t == DARK_THEME)
         apply_hdrview_dark_theme();
-    else if (t == -2)
+    else if (t == LIGHT_THEME)
         apply_hdrview_light_theme();
 
     // otherwise, its a custom theme, and we keep the parameters that were read from the config file
@@ -330,12 +331,12 @@ static void load_theme(json j)
 {
     if (j.contains("theme"))
     {
-        spdlog::info("Restoring theme: '{}'", j["theme"].get<string>());
         auto name = j["theme"].get<string>();
+        spdlog::info("Restoring theme: '{}'", name);
         if (name == "HDRView dark")
-            g_theme = -1;
+            g_theme = DARK_THEME;
         else if (name == "HDRView light")
-            g_theme = -2;
+            g_theme = LIGHT_THEME;
         else if (name == "Custom")
             g_theme = CUSTOM_THEME;
         else
@@ -343,12 +344,12 @@ static void load_theme(json j)
                 ImGuiTheme::ImGuiTheme_FromName(name.c_str());
     }
     else
-        g_theme = -1;
+        g_theme = DARK_THEME; // default to dark theme
 
     if (g_theme >= 0)
         ApplyTweakedTheme(HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme);
 
-    if (g_theme == -2 && j.contains("style"))
+    if (g_theme == CUSTOM_THEME && j.contains("style"))
     {
         spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
         json   &j_style    = j["style"];
@@ -434,7 +435,7 @@ static void save_theme(json &j)
     // Save ImGui theme tweaks
     j["theme"] = theme_name(g_theme);
 
-    if (g_theme != -2)
+    if (g_theme != CUSTOM_THEME)
         return;
 
     auto   &j_style = j["style"];
@@ -495,8 +496,8 @@ static void save_theme(json &j)
     spdlog::debug("Saved custom ImGui style values to settings:\n{}", j["style"].dump(2));
 }
 
-void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-                  std::optional<bool> force_sdr, std::optional<bool> apple_keys, const vector<string> &in_files)
+void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
+                  optional<bool> apple_keys, const vector<string> &in_files)
 {
     if (g_hdrview)
     {
@@ -518,9 +519,8 @@ void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std
 
 HDRViewApp *hdrview() { return g_hdrview; }
 
-HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float> force_gamma,
-                       std::optional<bool> force_dither, std::optional<bool> force_sdr,
-                       std::optional<bool> force_apple_keys, vector<string> in_files)
+HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gamma, optional<bool> force_dither,
+                       optional<bool> force_sdr, optional<bool> force_apple_keys, vector<string> in_files)
 {
 #if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
     // if threading is disabled, create no threads
@@ -529,7 +529,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     // if threading is enabled in emscripten, then use just 1 thread
     unsigned threads = 1;
 #else
-    unsigned threads = std::thread::hardware_concurrency();
+    unsigned threads = thread::hardware_concurrency();
 #endif
 
     spdlog::debug("Setting global OpenEXR thread count to {}", threads);
@@ -666,17 +666,6 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
     pixel_inspector_window.rememberIsVisible = true;
     pixel_inspector_window.GuiFunction       = [this] { draw_pixel_inspector_window(); };
 
-    HelloImGui::DockableWindow channel_window;
-    channel_window.label             = "Channels";
-    channel_window.dockSpaceName     = "ImagesSpace";
-    channel_window.isVisible         = true;
-    channel_window.rememberIsVisible = true;
-    channel_window.GuiFunction       = [this]
-    {
-        if (auto img = current_image())
-            img->draw_channels_list(m_reference == m_current, true);
-    };
-
     // the window showing the spdlog messages
     HelloImGui::DockableWindow log_window;
     log_window.label             = "Log";
@@ -694,20 +683,21 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window,  channel_stats_window,   file_window,    info_window,
-                                              colorspace_window, pixel_inspector_window, channel_window, log_window};
+    m_params.dockingParams.dockableWindows = {histogram_window,  channel_stats_window,   file_window, info_window,
+                                              colorspace_window, pixel_inspector_window, log_window};
     struct DockableWindowExtraInfo
     {
         ImGuiKeyChord chord = ImGuiKey_None;
         const char   *icon  = nullptr;
     };
-    vector<DockableWindowExtraInfo> window_info = {
-        {ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},  {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
-        {ImGuiKey_F7, ICON_MY_FILES_WINDOW},      {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
-        {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW}, {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
-        {ImGuiKey_F10, ICON_MY_CHANNELS_WINDOW},  {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW},
-        {ImGuiKey_F11, ICON_MY_SETTINGS_WINDOW}};
-    m_params.dockingParams.dockingSplits = {
+    DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
+                                             {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
+                                             {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
+                                             {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
+                                             {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
+                                             {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
+                                             {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}};
+    m_params.dockingParams.dockingSplits  = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
         HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
@@ -892,7 +882,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                 ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
                 if (ImGui::BeginCombo("Theme", theme_name(g_theme).c_str(), ImGuiComboFlags_HeightLargest))
                 {
-                    for (int t = -2; t < ImGuiTheme::ImGuiTheme_Count; ++t)
+                    for (int t = LIGHT_THEME; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                     {
                         const bool is_selected = t == g_theme;
                         if (ImGui::Selectable(theme_name(t).c_str(), is_selected))
@@ -1077,8 +1067,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     always_enabled, true});
 #endif
 
-        add_action(
-            {"Help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false, &g_show_help});
+        add_action({"Show help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false,
+                    &g_show_help});
         add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
@@ -1172,7 +1162,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     &g_show_developer_menu});
         add_action(
             {"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &g_show_demo_window});
-        add_action({"Show debug window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &g_show_debug_window});
+        add_action(
+            {"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false, &g_show_debug_window});
         add_action(
             {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
@@ -1224,7 +1215,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); break;
                         case Tonemap_FalseColor: [[fallthrough]];
                         case Tonemap_PositiveNegative:
-                            m_colormap_index = mod(m_colormap_index - 1, (int)m_colormaps.size());
+                            m_colormap_index = mod(m_colormap_index - 1, (int)std::size(m_colormaps));
                             break;
                         }
                     },
@@ -1239,7 +1230,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                         case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); break;
                         case Tonemap_FalseColor: [[fallthrough]];
                         case Tonemap_PositiveNegative:
-                            m_colormap_index = mod(m_colormap_index + 1, (int)m_colormaps.size());
+                            m_colormap_index = mod(m_colormap_index + 1, (int)std::size(m_colormaps));
                             break;
                         }
                     },
@@ -1363,8 +1354,8 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         if (auto img = current_image())
                         {
-                            float minimum = std::numeric_limits<float>::max();
-                            float maximum = std::numeric_limits<float>::min();
+                            float minimum = numeric_limits<float>::max();
+                            float maximum = numeric_limits<float>::min();
                             auto &group   = img->groups[img->selected_group];
 
                             bool3 should_include[NUM_CHANNELS] = {
@@ -1398,7 +1389,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         g_play_backward &= !g_play_forward;
                         g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = false;
+                        m_params.fpsIdling.enableIdling = g_play_stopped;
                     },
                     always_enabled, false, &g_play_forward});
         add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
@@ -1414,7 +1405,7 @@ HDRViewApp::HDRViewApp(std::optional<float> force_exposure, std::optional<float>
                     {
                         g_play_forward &= !g_play_backward;
                         g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = false;
+                        m_params.fpsIdling.enableIdling = g_play_stopped;
                     },
                     always_enabled, false, &g_play_backward});
 
@@ -1657,7 +1648,7 @@ void HDRViewApp::setup_rendering()
         set_image_textures();
         spdlog::info("Successfully initialized graphics API!");
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
     }
@@ -1680,7 +1671,7 @@ void HDRViewApp::load_settings()
         spdlog::debug("Restoring recent file list...");
         m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
         m_bg_mode =
-            (EBGMode)std::clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
+            (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
         m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
 
         m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
@@ -1701,6 +1692,7 @@ void HDRViewApp::load_settings()
         m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
         m_clip_range           = j.value<float2>("clip range", m_clip_range);
         g_playback_speed       = j.value<float>("playback speed", g_playback_speed);
+        m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
 
         g_show_developer_menu = j.value<bool>("show developer menu", g_show_developer_menu);
 
@@ -1741,6 +1733,7 @@ void HDRViewApp::save_settings()
     j["clip range"]              = m_clip_range;
     j["show developer menu"]     = g_show_developer_menu;
     j["playback speed"]          = g_playback_speed;
+    j["colormap index"]          = m_colormap_index;
 
     save_theme(j);
 
@@ -2152,7 +2145,7 @@ void HDRViewApp::draw_menus()
 
             ImGui::Separator();
 
-            int start = g_theme == CUSTOM_THEME ? CUSTOM_THEME : -2;
+            int start = g_theme == CUSTOM_THEME ? CUSTOM_THEME : LIGHT_THEME;
             for (int t = start; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                 if (ImGui::MenuItem(theme_name(t).c_str(), nullptr, t == g_theme))
                     apply_theme(t);
@@ -2172,15 +2165,20 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    auto posX = (ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (2.f * (HelloImGui::EmSize(1.9f))));
-    if (posX > ImGui::GetCursorPosX())
-        ImGui::SetCursorPosX(posX);
+    auto  a      = action("Show Log window");
+    float text_w = ImGui::CalcTextSize(a.icon.c_str(), NULL).x;
 
-    auto a = action("Show Log window");
+    auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2.f * text_w -
+                 3.5f * ImGui::GetStyle().ItemSpacing.x + 0.5f * ImGui::GetStyle().WindowPadding.x - 2.f;
+    if (pos_x > ImGui::GetCursorPosX())
+        ImGui::SetCursorPosX(pos_x);
+
     ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected);
-    a = action("Help");
+    ImGui::WrappedTooltip(a.name.c_str());
+    a = action("Show help");
     if (ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), &g_help_is_open))
         g_show_help = true;
+    ImGui::WrappedTooltip(a.name.c_str());
 }
 
 void HDRViewApp::save_as(const string &filename) const
@@ -2188,10 +2186,10 @@ void HDRViewApp::save_as(const string &filename) const
     try
     {
 #if !defined(__EMSCRIPTEN__)
-        std::ofstream os{filename, std::ios_base::binary};
+        ofstream os{filename, ios_base::binary};
         current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
 #else
-        std::ostringstream os;
+        ostringstream os;
         current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
@@ -2202,7 +2200,7 @@ void HDRViewApp::save_as(const string &filename) const
         );
 #endif
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
     }
@@ -2236,10 +2234,10 @@ void HDRViewApp::export_as(const string &filename) const
                      });
 
 #if !defined(__EMSCRIPTEN__)
-        std::ofstream os{filename, std::ios_base::binary};
+        ofstream os{filename, ios_base::binary};
         img.save(os, filename, 1.f, true, m_dither);
 #else
-        std::ostringstream os;
+        ostringstream os;
         img.save(os, filename, 1.f, true, m_dither);
         string buffer = os.str();
         emscripten_browser_file::download(
@@ -2250,7 +2248,7 @@ void HDRViewApp::export_as(const string &filename) const
         );
 #endif
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         spdlog::error("An error occurred while exporting to '{}':\n\t{}.", filename, e.what());
     }
@@ -2452,7 +2450,7 @@ void HDRViewApp::set_image_textures()
         else
             Image::set_null_texture(Target_Secondary);
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
     }
@@ -2543,7 +2541,7 @@ ImFont *HDRViewApp::font(const string &name) const
     else if (name == "mono bold")
         return m_mono_bold;
     else
-        throw std::runtime_error(fmt::format("Font with name '{}' was not loaded.", name));
+        throw runtime_error(fmt::format("Font with name '{}' was not loaded.", name));
 }
 
 HDRViewApp::~HDRViewApp() {}
@@ -2884,7 +2882,7 @@ void HDRViewApp::draw_file_window()
     ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
                                         : "Click to show only the unique portion of each file name.");
 
-    static const std::string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
+    static const string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
     ImGui::SameLine();
     if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[g_file_list_mode].data()))
@@ -2899,13 +2897,13 @@ void HDRViewApp::draw_file_window()
                               g_file_list_mode == 2))
             g_file_list_mode = 2;
 
-        ImGui::EndComboButton();
+        ImGui::EndCombo();
     }
     ImGui::WrappedTooltip("Choose how the images and layers are listed below");
 
     static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate |
                                                    ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
-                                                   ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH |
+                                                   ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg |
                                                    ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("ImageList", 2, table_flags,
                           ImVec2(0.f, ImGui::GetContentRegionAvail().y - HelloImGui::EmSize(1.f) -
@@ -2935,31 +2933,30 @@ void HDRViewApp::draw_file_window()
                     spdlog::info("Sorting {}", (int)direction);
                     auto old_current   = current_image();
                     auto old_reference = reference_image();
-                    std::sort(m_images.begin(), m_images.end(),
-                              [direction](const ImagePtr &a, const ImagePtr &b)
-                              {
-                                  return (direction == ImGuiSortDirection_Ascending)
-                                             ? a->file_and_partname() < b->file_and_partname()
-                                             : a->file_and_partname() > b->file_and_partname();
-                              });
+                    sort(m_images.begin(), m_images.end(),
+                         [direction](const ImagePtr &a, const ImagePtr &b)
+                         {
+                             return (direction == ImGuiSortDirection_Ascending)
+                                        ? a->file_and_partname() < b->file_and_partname()
+                                        : a->file_and_partname() > b->file_and_partname();
+                         });
 
                     // restore selection
                     if (old_current)
-                        m_current = int(std::find(m_images.begin(), m_images.end(), old_current) - m_images.begin());
+                        m_current = int(find(m_images.begin(), m_images.end(), old_current) - m_images.begin());
                     if (old_reference)
-                        m_reference =
-                            int(std::find(m_images.begin(), m_images.end(), old_reference) - m_images.begin());
+                        m_reference = int(find(m_images.begin(), m_images.end(), old_reference) - m_images.begin());
                 }
 
                 sort_specs->SpecsDirty = g_request_sort = false;
             }
 
-        static ImGuiTreeNodeFlags base_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen |
-                                                    ImGuiTreeNodeFlags_OpenOnDoubleClick |
-                                                    ImGuiTreeNodeFlags_OpenOnArrow;
+        static constexpr ImGuiTreeNodeFlags base_node_flags =
+            ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick |
+            ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DrawLinesFull;
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 0.5f * icon_width);
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
         int id                 = 0;
         int visible_img_number = 0;
         int hidden_images      = 0;
@@ -2987,12 +2984,6 @@ void HDRViewApp::draw_file_window()
             ImGui::TableNextColumn();
             ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
             ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
-
-            // ImGui::TableNextColumn();
-            // auto tmp_pos = ImGui::GetCursorScreenPos();
-            // ImGui::TextUnformatted(is_current ? ICON_MY_VISIBILITY : "");
-            // ImGui::SetCursorScreenPos(tmp_pos);
-            // ImGui::TextUnformatted(is_reference ? ICON_MY_REFERENCE_IMAGE : "");
 
             ImGui::TableNextColumn();
 
@@ -3073,9 +3064,9 @@ void HDRViewApp::draw_file_window()
 
                         // move image at payload_i to i, and shift all images in between
                         if (payload_i < i)
-                            for (int j = payload_i; j < i; ++j) std::swap(m_images[j], m_images[j + 1]);
+                            for (int j = payload_i; j < i; ++j) swap(m_images[j], m_images[j + 1]);
                         else
-                            for (int j = payload_i; j > i; --j) std::swap(m_images[j], m_images[j - 1]);
+                            for (int j = payload_i; j > i; --j) swap(m_images[j], m_images[j - 1]);
 
                         // maintain the current and reference images
                         if (m_current == payload_i)
@@ -3161,7 +3152,7 @@ void HDRViewApp::draw_file_window()
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         if (ImGui::SliderFloat("##Playback speed", &g_playback_speed, 0.1f, 60.f, "%.1f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
-            g_playback_speed = std::clamp(g_playback_speed, 1.f / 20.f, 60.f);
+            g_playback_speed = clamp(g_playback_speed, 1.f / 20.f, 60.f);
     }
     // ImGui::EndDisabled();
 }
@@ -3203,7 +3194,7 @@ float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(
 
 void HDRViewApp::set_zoom_level(float level)
 {
-    m_zoom = std::clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
+    m_zoom = clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
 }
 
 void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
@@ -3213,7 +3204,7 @@ void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
 
     auto  focused_pixel = pixel_at_vp_pos(focus_vp_pos); // save focused pixel coord before modifying zoom
     float scale_factor  = std::pow(m_zoom_sensitivity, amount);
-    m_zoom              = std::clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
+    m_zoom              = clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
     // reposition so focused_pixel is still under focus_app_pos
     reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
 }
@@ -3225,9 +3216,9 @@ void HDRViewApp::zoom_in()
     auto center_pixel = pixel_at_vp_pos(center_pos);
 
     // determine next higher power of 2 zoom level
-    float level_for_sensitivity = std::ceil(log(m_zoom) / log(2.f) + 0.5f);
+    float level_for_sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
@@ -3240,7 +3231,7 @@ void HDRViewApp::zoom_out()
     // determine next lower power of 2 zoom level
     float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
     float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = std::clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
+    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
     reposition_pixel_to_vp_pos(center_pos, center_pixel);
 }
 
@@ -3330,7 +3321,7 @@ void HDRViewApp::draw_pixel_grid() const
     if (!m_draw_grid || (s_grid_threshold == -1) || (m_zoom <= s_grid_threshold))
         return;
 
-    float factor = std::clamp((m_zoom - s_grid_threshold) / (2 * s_grid_threshold), 0.f, 1.f);
+    float factor = clamp((m_zoom - s_grid_threshold) / (2 * s_grid_threshold), 0.f, 1.f);
     float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
 
     if (alpha <= 0.0f)
@@ -3397,14 +3388,14 @@ void HDRViewApp::draw_pixel_info() const
         return;
 
     // fade value for the channel values shown at sufficient zoom
-    float factor = std::clamp((m_zoom - channel_threshold) / (1.25f * channel_threshold), 0.f, 1.f);
+    float factor = clamp((m_zoom - channel_threshold) / (1.25f * channel_threshold), 0.f, 1.f);
     float alpha  = smoothstep(0.0f, 1.0f, factor);
 
     if (alpha <= 0.0f)
         return;
 
     // fade value for the (x,y) coordinates shown at further zoom
-    float factor2 = std::clamp((m_zoom - coord_threshold) / (1.25f * coord_threshold), 0.f, 1.f);
+    float factor2 = clamp((m_zoom - coord_threshold) / (1.25f * coord_threshold), 0.f, 1.f);
     float alpha2  = smoothstep(0.0f, 1.0f, factor2);
 
     ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
@@ -3544,8 +3535,7 @@ void HDRViewApp::draw_image() const
 
     if (current_image() && !current_image()->data_window.is_empty())
     {
-        float2 randomness(std::generate_canonical<float, 10>(g_rand) * 255,
-                          std::generate_canonical<float, 10>(g_rand) * 255);
+        float2 randomness(generate_canonical<float, 10>(g_rand) * 255, generate_canonical<float, 10>(g_rand) * 255);
 
         m_shader->set_uniform("time", (float)ImGui::GetTime());
         m_shader->set_uniform("draw_clip_warnings", m_draw_clip_warnings);
@@ -3619,7 +3609,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::TextUnformatted(ICON_MY_OFFSET);
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(6));
     ImGui::SliderFloat("##OffsetSlider", &m_offset_live, -1.f, 1.f, "Offset: %+1.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
@@ -3631,28 +3621,45 @@ void HDRViewApp::draw_top_toolbar()
 
     IconButton(action("Normalize exposure"));
 
-    ImGui::SameLine();
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
     IconButton(action("Reset tonemapping"));
 
     ImGui::SameLine();
 
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(7.5));
-    ImGui::Combo("##Tonemapping", (int *)&m_tonemap, "Gamma\0Colormap (+)\0Colormap (±)\0");
+    ImGui::SetNextItemWidth(HelloImGui::EmSize(4));
+    static const char *items[] = {ICON_MY_TONEMAPPING ": γ", ICON_MY_TONEMAPPING ": +", ICON_MY_TONEMAPPING ": ±"};
+    if (ImGui::BeginCombo("##Tonemapping", items[m_tonemap]))
+    {
+        static const char *items[] = {"Gamma", "Colormap [0,1]", "Colormap [-1,1]"};
+        for (int n = 0; n < IM_ARRAYSIZE(items); n++)
+        {
+            const bool is_selected = (m_tonemap == n);
+            if (ImGui::Selectable(items[n], is_selected))
+                m_tonemap = (Tonemap)n;
+
+            // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
     ImGui::WrappedTooltip(
         "Set the tonemapping mode, which is applied to the pixel values after exposure and blackpoint offset.\n\n"
         "Gamma: Raise the pixel values to this exponent before display.\n"
-        "Colormap (+): Falsecolor with colormap range set to [0,1].\n"
-        "Colormap (±): Falsecolor with colormap range set to [-1,+1] (choosing a diverging "
+        "Colormap [0,1]: Falsecolor with colormap range set to [0,1].\n"
+        "Colormap [-1,1]: Falsecolor with colormap range set to [-1,+1] (choosing a diverging "
         "colormap like IceFire can help visualize positive/negative values).");
 
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+    const auto tonemap_width = HelloImGui::EmSize(7);
     switch (m_tonemap)
     {
     default: [[fallthrough]];
     case Tonemap_Gamma:
     {
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+        ImGui::SetNextItemWidth(tonemap_width);
         ImGui::SliderFloat("##GammaSlider", &m_gamma_live, 0.02f, 9.f, "Gamma: %5.3f");
         if (ImGui::IsItemDeactivatedAfterEdit())
             m_gamma = m_gamma_live;
@@ -3662,24 +3669,15 @@ void HDRViewApp::draw_top_toolbar()
     case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
     {
-        ImGui::SameLine();
-        auto p = ImGui::GetCursorScreenPos();
+        ImGui::SetNextItemWidth(tonemap_width - ImGui::IconButtonSize().x - ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGuiComboFlags combo_flags = ImGuiComboFlags_HeightLargest | ImGuiComboFlags_NoArrowButton;
 
-        if (ImPlot::ColormapButton(
-                Colormap::name(m_colormaps[m_colormap_index]),
-                ImVec2(HelloImGui::EmSize(8) - ImGui::IconButtonSize().x - ImGui::GetStyle().ItemInnerSpacing.x,
-                       ImGui::GetFrameHeight()),
-                m_colormaps[m_colormap_index]))
-            ImGui::OpenPopup("colormap_dropdown");
+        auto colormap = m_colormaps[m_colormap_index];
+        auto ret      = ImGui::BeginCombo("##Colormap", "", combo_flags);
         ImGui::SetItemTooltip("Click to choose a colormap.");
-
-        ImGui::SetNextWindowPos(ImVec2{p.x, p.y + ImGui::GetFrameHeight()});
-        ImGui::PushStyleVarX(ImGuiStyleVar_WindowPadding, ImGui::GetStyle().FramePadding.x);
-        auto tmp = ImGui::BeginPopup("colormap_dropdown");
-        ImGui::PopStyleVar();
-        if (tmp)
+        if (ret)
         {
-            for (int n = 0; n < (int)m_colormaps.size(); n++)
+            for (int n = 0; n < (int)std::size(m_colormaps); n++)
             {
                 const bool is_selected = (m_colormap_index == n);
                 if (ImGui::Selectable((string("##") + Colormap::name(m_colormaps[n])).c_str(), is_selected, 0,
@@ -3689,20 +3687,37 @@ void HDRViewApp::draw_top_toolbar()
 
                 ImPlot::ColormapButton(
                     Colormap::name(m_colormaps[n]),
-                    ImVec2(HelloImGui::EmSize(8) - ImGui::GetStyle().WindowPadding.x, ImGui::GetFrameHeight()),
+                    ImVec2(tonemap_width - ImGui::IconButtonSize().x - ImGui::GetStyle().ItemInnerSpacing.x,
+                           ImGui::GetFrameHeight()),
                     m_colormaps[n]);
 
                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
                 if (is_selected)
                     ImGui::SetItemDefaultFocus();
             }
-            ImGui::EndPopup();
+            ImGui::EndCombo();
         }
+        const auto bb_min = float2{ImGui::GetItemRectMin()} + ImGui::GetStyle().FrameRounding;
+        const auto bb_max = float2{ImGui::GetItemRectMax()} - float2(combo_flags & ImGuiComboFlags_NoArrowButton
+                                                                         ? ImGui::GetStyle().FrameRounding
+                                                                         : ImGui::GetFrameHeight(),
+                                                                     ImGui::GetStyle().FrameRounding);
+        const float cmap_size = Colormap::values(colormap).size();
+        ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)Colormap::texture(colormap)->texture_handle(),
+                                             bb_min, bb_max, ImVec2(0.5f / cmap_size, 0.5f),
+                                             ImVec2((cmap_size - 0.5f) / cmap_size, 0.5f));
+
+        const auto text_c = contrasting_color(Colormap::sample(colormap, 0.5f));
+        ImGui::AddTextAligned(ImGui::GetWindowDrawList(), (bb_min + bb_max) / 2.f, ImColor(text_c),
+                              Colormap::name(m_colormaps[m_colormap_index]), ImVec2{0.5f, 0.5f});
+
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+
         IconButton(action("Reverse colormap"));
     }
     break;
     }
+
     ImGui::SameLine();
 
     if (m_params.rendererBackendOptions.requestFloatBuffer)
@@ -3720,14 +3735,14 @@ void HDRViewApp::draw_top_toolbar()
 
 void HDRViewApp::draw_background()
 {
-    using namespace std::literals;
+    using namespace literals;
     spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
 
-    static auto prev_frame = std::chrono::steady_clock::now();
-    auto        this_frame = std::chrono::steady_clock::now();
+    static auto prev_frame = chrono::steady_clock::now();
+    auto        this_frame = chrono::steady_clock::now();
 
     if ((g_play_forward || g_play_backward) &&
-        this_frame - prev_frame >= std::chrono::milliseconds(int(1000 / g_playback_speed)))
+        this_frame - prev_frame >= chrono::milliseconds(int(1000 / g_playback_speed)))
     {
         set_current_image_index(next_visible_image_index(m_current, g_play_forward ? Forward : Backward));
         set_image_textures();
@@ -3878,7 +3893,7 @@ void HDRViewApp::draw_background()
             ImGui::PopFont();
         }
     }
-    catch (const std::exception &e)
+    catch (const exception &e)
     {
         spdlog::error("Drawing failed:\n\t{}.", e.what());
     }
@@ -4008,8 +4023,8 @@ void HDRViewApp::draw_command_palette()
             ImCmd::AddCommand({"Set logging verbosity",
                                []()
                                {
-                                   ImCmd::Prompt(std::vector<std::string>{"0: trace", "1: debug", "2: info", "3: warn",
-                                                                          "4: err", "5: critical", "6: off"});
+                                   ImCmd::Prompt(vector<string>{"0: trace", "1: debug", "2: info", "3: warn", "4: err",
+                                                                "5: critical", "6: off"});
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [](int selected_option)
@@ -4024,14 +4039,13 @@ void HDRViewApp::draw_command_palette()
             ImCmd::AddCommand({"Set background color",
                                []()
                                {
-                                   ImCmd::Prompt(std::vector<std::string>{"0: black", "1: white", "2: dark checker",
-                                                                          "3: light checker", "4: custom..."});
+                                   ImCmd::Prompt(vector<string>{"0: black", "1: white", "2: dark checker",
+                                                                "3: light checker", "4: custom..."});
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
                                [this](int selected_option)
                                {
-                                   m_bg_mode =
-                                       (EBGMode)std::clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 1);
+                                   m_bg_mode = (EBGMode)clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 1);
                                    if (m_bg_mode == BG_CUSTOM_COLOR)
                                        g_show_bg_color_picker = true;
                                },
@@ -4138,13 +4152,14 @@ void HDRViewApp::draw_about_dialog()
                             ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowFocus();
-    constexpr float icon_size = 128.f;
-    float2          col_width = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
-    col_width[1]              = std::clamp(col_width[1], 5 * HelloImGui::EmSize(),
-                                           io.DisplaySize.x - ImGui::GetStyle().WindowPadding.x -
-                                               2 * ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().ScrollbarSize - col_width[0]);
-
-    ImGui::SetNextWindowContentSize(float2{col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x, 0});
+    constexpr float icon_size     = 128.f;
+    float2          col_width     = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
+    float           content_width = col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetNextWindowContentSize(float2{content_width, 0.f});
+    ImGui::SetNextWindowSizeConstraints(
+        ImVec2{2 * icon_size, icon_size},
+        float2{content_width + 2.f * ImGui::GetStyle().WindowPadding.x + ImGui::GetStyle().ScrollbarSize,
+               io.DisplaySize.y - 7.f * HelloImGui::EmSize()});
 
     if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_AlwaysAutoResize))
@@ -4286,24 +4301,6 @@ void HDRViewApp::draw_about_dialog()
 
                     item_and_description("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
-#ifdef HDRVIEW_ENABLE_UHDR
-                    item_and_description("libuhdr", "For loading Ultra HDR JPEG files.",
-                                         "https://github.com/google/libultrahdr");
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
-                    item_and_description("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
-#endif
-#ifdef HDRVIEW_ENABLE_HEIF
-                    item_and_description("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
-                                         "https://github.com/strukturag/libheif");
-#endif
-#ifdef HDRVIEW_ENABLE_LIBPNG
-                    item_and_description("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
-#endif
-#ifdef HDRVIEW_ENABLE_LCMS2
-                    item_and_description("lcms2", "LittleCMS color management engine.",
-                                         "https://github.com/mm2/Little-CMS");
-#endif
 #ifdef __EMSCRIPTEN__
                     item_and_description("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.",
                                          "https://github.com/emscripten-core/emscripten");
@@ -4315,11 +4312,31 @@ void HDRViewApp::draw_about_dialog()
                     item_and_description("{fmt}", "A modern formatting library.", "https://github.com/fmtlib/fmt");
                     item_and_description("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.",
                                          "https://github.com/pthom/hello_imgui");
+#ifdef HDRVIEW_ENABLE_LCMS2
+                    item_and_description("lcms2", "LittleCMS color management engine.",
+                                         "https://github.com/mm2/Little-CMS");
+#endif
+#ifdef HDRVIEW_ENABLE_HEIF
+                    item_and_description("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
+                                         "https://github.com/strukturag/libheif");
+#endif
+#ifdef HDRVIEW_ENABLE_JPEGXL
+                    item_and_description("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
+#endif
+#ifdef HDRVIEW_ENABLE_LIBPNG
+                    item_and_description("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
+#endif
+#ifdef HDRVIEW_ENABLE_UHDR
+                    item_and_description("libuhdr", "For loading Ultra HDR JPEG files.",
+                                         "https://github.com/google/libultrahdr");
+#endif
                     item_and_description(
                         "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.",
                         "https://github.com/sgorsten/linalg");
                     item_and_description("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.",
                                          "https://github.com/mitsuba-renderer/nanogui");
+                    item_and_description("nvgui", "GUI components (property editor) from nvpro_core2",
+                                         "https://github.com/nvpro-samples/nvpro_core2");
                     item_and_description("OpenEXR", "High Dynamic-Range (HDR) image file format.",
                                          "https://github.com/AcademySoftwareFoundation/openexr");
 #ifndef __EMSCRIPTEN__

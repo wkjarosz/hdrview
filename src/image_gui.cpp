@@ -37,18 +37,30 @@ void Image::draw_histogram()
             std::max(HelloImGui::EmSize(5.f),
                      0.5f * (ImGui::GetContentRegionAvail().x - button_size.x - 2.f * ImGui::GetStyle().ItemSpacing.x) -
                          (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
+        ImGui::BeginGroup();
         ImGui::AlignTextToFramePadding();
         ImGui::Text("Y:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
         ImGui::Combo("##Y-axis type", &hdrview()->histogram_y_scale(), "Linear\0Log\0\0");
+        ImGui::EndGroup();
+        ImGui::WrappedTooltip("Set the Y-axis scale type.\n\n"
+                              "Linear: linear scale.\n"
+                              "Log: logarithmic scale.");
         ImGui::SameLine();
 
+        ImGui::BeginGroup();
         ImGui::AlignTextToFramePadding();
         ImGui::Text("X:");
         ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(combo_width);
         ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0");
+        ImGui::EndGroup();
+        ImGui::WrappedTooltip("Set the X-axis scale type.\n\n"
+                              "Linear: linear scale.\n"
+                              "sRGB: sRGB gamma curve.\n"
+                              "Asinh: a log-like scale that smoothly handles the transition from negative to "
+                              "positive values. Useful for high dynamic range values.");
 
         ImGui::SameLine();
 
@@ -299,7 +311,9 @@ void Image::draw_histogram()
 void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
                               bool short_names, int &visible_group)
 {
-    static ImGuiTreeNodeFlags tree_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen;
+    static constexpr ImGuiTreeNodeFlags tree_node_flags =
+        ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Leaf |
+        ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_DrawLinesFull;
     for (size_t g = 0; g < layer.groups.size(); ++g)
     {
         auto  &group      = groups[layer.groups[g]];
@@ -328,7 +342,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
 
             ImGui::TableNextColumn();
             ImGui::TreeNodeEx((void *)(intptr_t)id++,
-                              tree_node_flags | ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen |
+                              tree_node_flags |
                                   (is_selected_channel || is_reference_channel ? ImGuiTreeNodeFlags_Selected
                                                                                : ImGuiTreeNodeFlags_None),
                               "%s", name.c_str());
@@ -371,7 +385,8 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
 void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
                             int &visible_group)
 {
-    static ImGuiTreeNodeFlags tree_node_flags = ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen;
+    static constexpr ImGuiTreeNodeFlags tree_node_flags =
+        ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull;
 
     if (node.leaf_layer >= 0)
         // draw this node's leaf channel groups
@@ -411,53 +426,6 @@ int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_refe
         draw_layer_groups(layers[l], img_idx, id, is_current, is_reference, false, visible_group);
 
     return visible_group;
-}
-
-void Image::draw_channels_list(bool is_reference, bool is_current)
-{
-    static int                       tree_view = 1;
-    static constexpr ImGuiTableFlags table_flags =
-        ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH;
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Show channels as a"), ImGui::SameLine();
-    ImGui::RadioButton("tree", &tree_view, 1), ImGui::SameLine();
-    ImGui::RadioButton("flat list", &tree_view, 0);
-
-    if (ImGui::BeginTable("ChannelList", 2, table_flags))
-    {
-        const float icon_width = ImGui::IconSize().x;
-
-        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-                                1.25f * icon_width);
-        // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
-        //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable, icon_width);
-        ImGui::TableSetupColumn(tree_view ? "Layer or channel group name" : "Layer.channel group name",
-                                ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
-        ImGui::TableHeadersRow();
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
-        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, 0.5f * icon_width);
-
-        int id = 0;
-
-        if (tree_view)
-        {
-            // ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-            draw_channel_tree(hdrview()->current_image_index(), id, is_current, is_reference);
-            // ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
-        }
-        else
-        {
-            ImGui::Unindent(1.f * ImGui::GetTreeNodeToLabelSpacing());
-            draw_channel_rows(hdrview()->current_image_index(), id, is_current, is_reference);
-            ImGui::Indent(1.f * ImGui::GetTreeNodeToLabelSpacing());
-        }
-
-        ImGui::PopStyleVar(2);
-
-        ImGui::EndTable();
-    }
 }
 
 template <typename Type>
@@ -516,7 +484,7 @@ void Image::draw_info()
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::AlignTextToFramePadding();
-        if (ImGui::TreeNodeEx("Header", ImGuiTreeNodeFlags_SpanAllColumns))
+        if (ImGui::TreeNodeEx("Header", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
         {
             if (metadata.contains("header") && metadata["header"].is_object())
             {
@@ -541,7 +509,7 @@ void Image::draw_info()
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
-                if (ImGui::TreeNodeEx("EXIF", ImGuiTreeNodeFlags_SpanAllColumns))
+                if (ImGui::TreeNodeEx("EXIF", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
                 {
                     for (auto &exif_entry : metadata["exif"].items())
                     {
@@ -552,8 +520,9 @@ void Image::draw_info()
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
                         ImGui::AlignTextToFramePadding();
-                        if (ImGui::TreeNodeEx(exif_entry.key().c_str(),
-                                              ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen))
+                        if (ImGui::TreeNodeEx(exif_entry.key().c_str(), ImGuiTreeNodeFlags_SpanAllColumns |
+                                                                            ImGuiTreeNodeFlags_DefaultOpen |
+                                                                            ImGuiTreeNodeFlags_DrawLinesFull))
                         {
                             for (auto &field : table_obj.items())
                             {

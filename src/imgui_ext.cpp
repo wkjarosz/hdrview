@@ -3,6 +3,7 @@
 #include "box.h"
 #include "colorspace.h"
 #include "spdlog/pattern_formatter.h"
+#include "texture.h"
 
 #include "fonts.h"
 
@@ -128,7 +129,7 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
             }
             ImGui::PopStyleColor();
         }
-        ImGui::EndComboButton();
+        ImGui::EndCombo();
     }
     ImGui::PopStyleColor();
     ImGui::WrappedTooltip("Click to choose the verbosity level.");

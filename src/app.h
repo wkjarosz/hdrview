@@ -242,15 +242,15 @@ private:
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    bool     m_auto_fit_display         = false; ///< Continually keep the image display window fit within the viewport
-    bool     m_auto_fit_data            = false; ///< Continually keep the image data window fit within the viewport
-    bool     m_auto_fit_selection       = false; ///< Continually keep the selection box fit within the viewport
-    bool2    m_flip                     = {false, false}; ///< Whether to flip the image horizontally and/or vertically
-    float    m_zoom                     = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
-    float2   m_translate                = {0.f, 0.f};     ///< The panning offset of the image
-    EChannel m_channel                  = EChannel::RGB;  ///< Which channel to display
-    Tonemap  m_tonemap                  = Tonemap_Gamma;
-    const vector<Colormap_> m_colormaps = {
+    bool     m_auto_fit_display   = false; ///< Continually keep the image display window fit within the viewport
+    bool     m_auto_fit_data      = false; ///< Continually keep the image data window fit within the viewport
+    bool     m_auto_fit_selection = false; ///< Continually keep the selection box fit within the viewport
+    bool2    m_flip               = {false, false}; ///< Whether to flip the image horizontally and/or vertically
+    float    m_zoom               = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
+    float2   m_translate          = {0.f, 0.f};     ///< The panning offset of the image
+    EChannel m_channel            = EChannel::RGB;  ///< Which channel to display
+    Tonemap  m_tonemap            = Tonemap_Gamma;
+    static constexpr Colormap_ m_colormaps[] = {
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
         Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
         Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys,    Colormap_AbsGreys};

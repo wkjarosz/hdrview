@@ -777,13 +777,12 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap tonemap_mode, Col
     case Tonemap_FalseColor: [[fallthrough]];
     case Tonemap_PositiveNegative:
     {
-        auto  xform     = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg       = dot(color, float3(1.f / 3.f));
-        float cmap_size = Colormap::values(colormap).size();
-        float t         = lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, xform.x * avg + xform.y);
+        auto  xform = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
+        float avg   = dot(color, float3(1.f / 3.f));
+        float t     = xform.x * avg + xform.y;
         if (reverse_colormap)
             t = 1.f - t;
-        return sRGB_to_linear(float4{ImPlot::SampleColormap(saturate(t), colormap)}.xyz());
+        return sRGB_to_linear(float4{Colormap::sample(colormap, t)}.xyz());
     }
     }
 }

@@ -418,3 +418,9 @@ const std::vector<ImU32> &Colormap::values(Colormap_ idx)
         throw std::invalid_argument(fmt::format("Invalid colormap index: {}", idx));
     return s_values[idx];
 }
+
+ImVec4 Colormap::sample(Colormap_ idx, float t)
+{
+    float cmap_size = Colormap::values(idx).size();
+    return ImPlot::SampleColormap(saturate(lerp(0.5f / cmap_size, (cmap_size - 0.5f) / cmap_size, t)), idx);
+}

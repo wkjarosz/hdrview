@@ -5,6 +5,7 @@
 #include <spdlog/sinks/dup_filter_sink.h>
 #include <spdlog/spdlog.h>
 
+#include "colormap.h"
 #include "imgui.h"
 #include "ringbuffer_color_sink.h"
 
@@ -93,8 +94,6 @@ inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComb
     ImGui::PopStyleVar();
     return ret;
 }
-
-inline void EndComboButton() { ImGui::EndCombo(); }
 
 inline bool ToggleButton(const char *label, bool *active, const ImVec2 &size = ImVec2(0, 0))
 {
