@@ -168,6 +168,8 @@ public:
     float      &gamma() { return m_gamma; }
     float      &exposure_live() { return m_exposure_live; }
     float      &exposure() { return m_exposure; }
+    float      &offset_live() { return m_offset_live; }
+    float      &offset() { return m_offset; }
     Tonemap    &tonemap() { return m_tonemap; }
     Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
     EBlendMode &blend_mode() { return m_blend_mode; }
@@ -179,6 +181,8 @@ public:
     AxisScale_ &histogram_y_scale() { return m_y_scale; }
     Box2i      &roi_live() { return m_roi_live; }
     Box2i      &roi() { return m_roi; }
+    bool       &draw_clip_warnings() { return m_draw_clip_warnings; }
+    float2     &clip_range() { return m_clip_range; }
 
 private:
     void load_fonts();

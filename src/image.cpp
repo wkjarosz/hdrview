@@ -191,19 +191,12 @@ const std::set<std::string> &Image::savable_formats()
 
 float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 {
-    bool LDR_scale = scale == AxisScale_Linear || scale == AxisScale_SRGB;
-
     float2 ret;
     ret[1] = pow(2.f, -e);
-    if (summary.minimum < 0.f)
+    if (summary.minimum < -summary.maximum / 255.f)
         ret[0] = -ret[1];
     else
-    {
-        if (LDR_scale)
-            ret[0] = 0.f;
-        else
-            ret[0] = ret[1] / 10000.f;
-    }
+        ret[0] = ret[1] / 10000.f;
 
     return ret;
 }
@@ -317,15 +310,9 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         //
         // compute histograms
 
-        bool LDR_scale = settings.x_scale == AxisScale_Linear || settings.x_scale == AxisScale_SRGB;
-
-        auto hist_x_limits = x_limits(settings.exposure, settings.x_scale);
-
-        hist_normalization[0] =
-            (float)axis_scale_fwd_xform(LDR_scale ? hist_x_limits[0] : summary.minimum, &settings.x_scale);
-        hist_normalization[1] =
-            (float)axis_scale_fwd_xform(LDR_scale ? hist_x_limits[1] : summary.maximum, &settings.x_scale) -
-            hist_normalization[0];
+        static constexpr int x_scale = AxisScale_Asinh;
+        hist_normalization[0]        = (float)axis_scale_fwd_xform(summary.minimum, (void *)&x_scale);
+        hist_normalization[1] = (float)axis_scale_fwd_xform(summary.maximum, (void *)&x_scale) - hist_normalization[0];
 
         // compute bin center values
         for (int i = 0; i < NUM_BINS; ++i) hist_xs[i] = (float)bin_to_value(i + 0.5);
@@ -340,30 +327,45 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
 
         // normalize histogram density by dividing bin counts by bin sizes
         hist_y_limits[0] = std::numeric_limits<float>::infinity();
+        std::array<float, NUM_BINS> bin_sizes;
         for (int i = 0; i < NUM_BINS; ++i)
         {
-            float bin_width = float(bin_to_value(i + 1) - bin_to_value(i));
-            hist_ys[i] /= bin_width;
-            hist_y_limits[0] = min(hist_y_limits[0], bin_width);
+            bin_sizes[i] = float(bin_to_value(i + 1) - bin_to_value(i));
+            hist_ys[i] /= bin_sizes[i];
+            hist_y_limits[0] = min(hist_y_limits[0], bin_sizes[i]);
         }
 
         // Compute y limit for each histogram according to its 10th-largest bin
-        auto ys  = hist_ys; // make a copy, which we partially sort
-        auto idx = 10;
-        // put the 10th largest value in index 10
-        std::nth_element(ys.begin(), ys.begin() + idx, ys.end(), std::greater<float>());
+        std::array<int, NUM_BINS> indices;
+        std::iota(indices.begin(), indices.end(), 0);
+        // Partially sort indices by descending hist_ys value
+        // auto idx = int(0.1 * NUM_BINS);
+        std::sort(indices.begin(), indices.end(), [&](int a, int b) { return hist_ys[a] < hist_ys[b]; });
         // for logarithmic y-axis, we need a non-zero lower y-limit, so use half the smallest possible value
-        hist_y_limits[0] = settings.y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0]; // / 2.f;
-        // for upper y-limit, use the 10th largest value if its non-zero, then the largest, then just 1
-        if (ys[idx] != 0.f)
-            hist_y_limits[1] = ys[idx] * 1.15f;
-        else if (ys.back() != 0.f)
-            hist_y_limits[1] = ys.back() * 1.15f;
-        else
+        hist_y_limits[0] = settings.y_scale == AxisScale_Linear ? 0.f : hist_y_limits[0];
+        // for upper y-limit, accumulate bins in descending order until reaching perc% of total area
+
+        float total_area    = croi.volume();
+        float required_area = 0.99f * total_area; // percentage of total area to accumulate
+
+        double accum_area = 0.0;
+        hist_y_limits[1]  = 1.f;
+        int i;
+        for (i = 0; i < int(0.95f * NUM_BINS); ++i)
+        {
+            int bin_idx = indices[i]; // sorted by descending hist_ys
+            accum_area += hist_ys[bin_idx] * bin_sizes[bin_idx];
+            if (accum_area >= required_area)
+                break;
+        }
+        hist_y_limits[1] = hist_ys[indices[i]];
+
+        // fallback if all bins are zero
+        if (hist_y_limits[1] == 0.f)
             hist_y_limits[1] = 1.f;
 
-        spdlog::trace("Histogram computed in {} ms:\nx_limits: {}\ny_limits: {}", timer.lap(), hist_x_limits,
-                      hist_y_limits);
+        spdlog::trace("Histogram computed in {} ms:\nx_limits: {}\ny_limits: {}", timer.lap(),
+                      float2{summary.minimum, summary.maximum}, hist_y_limits);
 
         computed = true;
     }
@@ -434,9 +436,7 @@ Texture *Channel::get_texture()
 bool PixelStats::Settings::match(const Settings &other) const
 {
     return (blend_mode == other.blend_mode && ref_id == other.ref_id && ref_group == other.ref_group) &&
-           other.roi == roi &&
-           ((other.x_scale == x_scale && other.exposure == exposure) ||
-            (other.x_scale == x_scale && (x_scale == AxisScale_SymLog || x_scale == AxisScale_Asinh)));
+           other.roi == roi;
 }
 
 PixelStats *Channel::get_stats()

@@ -73,7 +73,7 @@ struct Channel;
 
 struct PixelStats
 {
-    static constexpr int NUM_BINS = 256;
+    static constexpr int NUM_BINS = 512;
     using Ptr                     = std::shared_ptr<PixelStats>;
 
     struct Settings
@@ -124,15 +124,16 @@ struct PixelStats
 
     int value_to_bin(double value) const
     {
-        return int(std::floor((axis_scale_fwd_xform(value, (void *)&settings.x_scale) - hist_normalization[0]) /
+        static constexpr int x_scale = AxisScale_Asinh;
+        return int(std::floor((axis_scale_fwd_xform(value, (void *)&x_scale) - hist_normalization[0]) /
                               hist_normalization[1] * NUM_BINS));
     }
 
     double bin_to_value(double value)
     {
+        static constexpr int   x_scale  = AxisScale_Asinh;
         static constexpr float inv_bins = 1.f / NUM_BINS;
-        return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0],
-                                    (void *)&settings.x_scale);
+        return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0], (void *)&x_scale);
     }
 
     float2 x_limits(float exposure, AxisScale_ x_scale) const;

@@ -907,7 +907,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         }
 
         if (g_show_demo_window)
+        {
             ImGui::ShowDemoWindow(&g_show_demo_window);
+            ImPlot::ShowMetricsWindow(&g_show_demo_window);
+            ImPlot::ShowDemoWindow(&g_show_demo_window);
+        }
 
         if (g_show_debug_window)
         {

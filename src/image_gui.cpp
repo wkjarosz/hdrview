@@ -31,45 +31,40 @@ void Image::draw_histogram()
 {
     static int        bin_type  = 1;
     static ImPlotCond plot_cond = ImPlotCond_Always;
-    {
-        const ImVec2 button_size = ImGui::IconButtonSize();
-        float        combo_width =
-            std::max(HelloImGui::EmSize(5.f),
-                     0.5f * (ImGui::GetContentRegionAvail().x - button_size.x - 2.f * ImGui::GetStyle().ItemSpacing.x) -
-                         (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
-        ImGui::BeginGroup();
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("Y:");
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##Y-axis type", &hdrview()->histogram_y_scale(), "Linear\0Log\0\0");
-        ImGui::EndGroup();
-        ImGui::WrappedTooltip("Set the Y-axis scale type.\n\n"
-                              "Linear: linear scale.\n"
-                              "Log: logarithmic scale.");
-        ImGui::SameLine();
+    float             combo_width =
+        std::max(HelloImGui::EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                                  2.f * ImGui::GetStyle().ItemSpacing.x) -
+                                              (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
+    ImGui::BeginGroup();
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Y:");
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(combo_width);
+    ImGui::Combo("##Y-axis type", &hdrview()->histogram_y_scale(), "Linear\0Log\0\0");
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Set the Y-axis scale type.\n\n"
+                          "Linear: linear scale.\n"
+                          "Log: logarithmic scale.");
+    ImGui::SameLine();
 
-        ImGui::BeginGroup();
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("X:");
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetNextItemWidth(combo_width);
-        ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0");
-        ImGui::EndGroup();
-        ImGui::WrappedTooltip("Set the X-axis scale type.\n\n"
-                              "Linear: linear scale.\n"
-                              "sRGB: sRGB gamma curve.\n"
-                              "Asinh: a log-like scale that smoothly handles the transition from negative to "
-                              "positive values. Useful for high dynamic range values.");
+    ImGui::BeginGroup();
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("X:");
+    ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::SetNextItemWidth(combo_width);
+    ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0");
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Set the X-axis scale type.\n\n"
+                          "Linear: linear scale.\n"
+                          "sRGB: sRGB gamma curve.\n"
+                          "Asinh: a log-like scale that smoothly handles the transition from negative to "
+                          "positive values. Useful for high dynamic range values.");
+    ImGui::SameLine();
 
-        ImGui::SameLine();
-
-        if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_MY_FIT_AXES : ICON_MY_MANUAL_AXES))
-            plot_cond = (plot_cond == ImPlotCond_Always) ? ImPlotCond_Once : ImPlotCond_Always;
-        ImGui::WrappedTooltip((plot_cond == ImPlotCond_Always)
-                                  ? "Click to allow manually panning/zooming in histogram"
-                                  : "Click to auto-fit histogram axes based on the exposure.");
-    }
+    if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_MY_FIT_AXES : ICON_MY_MANUAL_AXES))
+        plot_cond = (plot_cond == ImPlotCond_Always) ? ImPlotCond_Once : ImPlotCond_Always;
+    ImGui::WrappedTooltip((plot_cond == ImPlotCond_Always) ? "Click to allow manually panning/zooming in histogram"
+                                                           : "Click to auto-fit histogram axes based on the exposure.");
 
     auto        hovered_pixel = int2{hdrview()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
     float4      color32       = raw_pixel(hovered_pixel);
@@ -96,6 +91,9 @@ void Image::draw_histogram()
     ImPlot::GetStyle().PlotMinSize = {100, 100};
 
     ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase * 10.f / 14.f);
+    ImPlot::PushStyleVar(ImPlotStyleVar_AnnotationPadding, ImVec2{2.0, 0.0});
+    // float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
+    // ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
     if (ImPlot::BeginPlot("##Histogram", ImVec2(-1, -1)))
     {
         ImPlot::GetInputMap().ZoomRate = 0.03f;
@@ -119,73 +117,11 @@ void Image::draw_histogram()
             return int(result.size);
         };
 
-        auto powers_of_10_ticks = [&x_limits, &format_power_of_10](int num_orders = 10)
-        {
-            float avail_width = std::max(ImPlot::GetStyle().PlotMinSize.x, ImGui::GetContentRegionAvail().x) -
-                                2.f * ImPlot::GetStyle().PlotPadding.x;
-            // auto p_limits = ImPlot::GetPlotLimits();
-            // float2 x_limits = float2{p_limits.X.Min, p_limits.X.Max};
-
-            auto calc_pixel = [x_limits, avail_width](float plt)
-            {
-                float scaleToPixels = avail_width / (x_limits[1] - x_limits[0]);
-                float scaleMin      = (float)axis_scale_fwd_xform(x_limits[0], &hdrview()->histogram_x_scale());
-                float scaleMax      = (float)axis_scale_fwd_xform(x_limits[1], &hdrview()->histogram_x_scale());
-                float s             = (float)axis_scale_fwd_xform(plt, &hdrview()->histogram_x_scale());
-                float t             = (s - scaleMin) / (scaleMax - scaleMin);
-                plt                 = lerp(x_limits[0], x_limits[1], t);
-
-                return (float)(0 + scaleToPixels * (plt - x_limits[0]));
-            };
-
-            auto add_ticks = [num_orders, &format_power_of_10, &calc_pixel](vector<double> &ticks, float limit)
-            {
-                std::array<char, 64> buff;
-                float                sgn     = limit < 0 ? -1.f : 1.f;
-                int                  log_max = int(floor(log10(fabs(limit))));
-                int                  log_min = log_max - num_orders;
-
-                float prev_pixel = 0.f;
-                float prev_width = 0.f;
-                float origin     = calc_pixel(0.f);
-                for (int i = log_max; i >= log_min; --i)
-                {
-                    float value = sgn * pow(10.f, float(i));
-                    (void)format_power_of_10(value, buff.data(), (int)buff.size(), nullptr);
-                    float pixel          = calc_pixel(value);
-                    float dist_from_prev = fabs(pixel - prev_pixel);
-                    float dist_to_origin = fabs(pixel - origin);
-                    float text_width     = ImGui::CalcTextSize(buff.data()).x;
-
-                    if ((0.5f * (text_width + prev_width) < dist_from_prev && text_width < dist_to_origin) ||
-                        i == log_max)
-                    {
-                        ticks.push_back(value);
-                        prev_pixel = pixel;
-                        prev_width = text_width;
-                    }
-                }
-            };
-
-            vector<double> ticks;
-            ticks.reserve(1 + 2 * (num_orders + 1)); // conservative size estimate
-
-            ticks.push_back(0.f);
-
-            // add num_orders orders of magnitude on either size of the origin
-            if (x_limits[1] > 0)
-                add_ticks(ticks, x_limits[1]);
-
-            if (x_limits[0] < 0)
-                add_ticks(ticks, x_limits[0]);
-            return ticks;
-        };
-
         if (x_limits[0] == 0)
             x_limits[0] = 1e-14f;
 
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
         ImPlot::SetupAxesLimits(x_limits[0], x_limits[1], y_limits[0], y_limits[1], plot_cond);
-        // ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, 0, INFINITY);
 
         ImPlot::SetupMouseText(ImPlotLocation_SouthEast, ImPlotMouseTextFlags_NoFormat);
         switch (hdrview()->histogram_x_scale())
@@ -193,34 +129,17 @@ void Image::draw_histogram()
         case AxisScale_Linear: ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Linear); break;
         case AxisScale_SRGB:
         {
-            auto ticks = powers_of_10_ticks();
             ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform,
                                    &hdrview()->histogram_x_scale());
-            ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), (int)ticks.size());
             break;
         }
         case AxisScale_Asinh:
         case AxisScale_SymLog:
         {
-            bool crosses_zero = x_limits[0] * x_limits[1] < 0;
-
-            // Hack: for purely positive, log-like x-axes, the internal ImPlot logarithmic ticks look nice, but we still
-            // want to use our own forward and inverse xforms. Setting the axis to ImPlotScale_Log10 sets the
-            // logarithmic tick locator, which ImPlot keeps even after the subsequent ImPlot::SetupAxisScale call with
-            // our own xforms
-            if (!crosses_zero)
-                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-
+            ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_SymLog);
+            // ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, -INFINITY, INFINITY);
             ImPlot::SetupAxisScale(ImAxis_X1, axis_scale_fwd_xform, axis_scale_inv_xform,
                                    &hdrview()->histogram_x_scale());
-
-            if (crosses_zero) // crosses zero
-            {
-                auto ticks = powers_of_10_ticks();
-                ImPlot::SetupAxisTicks(ImAxis_X1, ticks.data(), (int)ticks.size());
-                ImPlot::SetupAxisFormat(ImAxis_X1, format_power_of_10);
-            }
-
             break;
         }
         }
@@ -254,28 +173,6 @@ void Image::draw_histogram()
             ImPlot::PopStyleColor(2);
         }
 
-        for (int c = 0; c < std::min(4, group.num_channels); ++c)
-        {
-            ImPlot::PushStyleColor(ImPlotCol_InlayText, float4{colors[c].xyz(), 1.0f});
-            ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
-
-            ImPlot::PlotInfLines("##min", &stats[c]->summary.minimum, 1);
-            ImPlot::PlotText(fmt::format("min({})", names[c]).c_str(), stats[c]->summary.minimum,
-                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
-                             ImPlotTextFlags_Vertical);
-
-            ImPlot::PlotInfLines("##min", &stats[c]->summary.average, 1);
-            ImPlot::PlotText(fmt::format("avg({})", names[c]).c_str(), stats[c]->summary.average,
-                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
-                             ImPlotTextFlags_Vertical);
-
-            ImPlot::PlotInfLines("##max", &stats[c]->summary.maximum, 1);
-            ImPlot::PlotText(fmt::format("max({})", names[c]).c_str(), stats[c]->summary.maximum,
-                             lerp(y_limits[0], y_limits[1], 0.5f), {-HelloImGui::EmSize(), 0.f},
-                             ImPlotTextFlags_Vertical);
-            ImPlot::PopStyleColor(2);
-        }
-
         if (contains(hovered_pixel) && hdrview()->app_pos_in_viewport(ImGui::GetIO().MousePos))
         {
             for (int c = 0; c < std::min(4, group.num_channels); ++c)
@@ -283,28 +180,71 @@ void Image::draw_histogram()
                 ImPlot::PushStyleColor(ImPlotCol_Fill, float4{0.f});
                 ImPlot::PushStyleColor(ImPlotCol_Line, float4{colors[c].xyz(), 1.0f});
 
-                float marker_size = 6.f;
-
-                float c_bin = (float)stats[c]->value_to_bin(color32[c]);
-                float y1    = stats[c]->bin_y((int)c_bin);
-
-                // calculate the height of the up marker so that it sits just above the x axis.
-                float2 pixel = ImPlot::PlotToPixels(ImPlotPoint(stats[c]->bin_x((int)c_bin), y_limits[0]));
-                pixel.y -= 0.66f * marker_size; // roughly the
-                auto  bottom = ImPlot::PixelsToPlot(pixel);
-                float y0     = (float)bottom.y;
-
-                ImPlot::SetNextMarkerStyle(ImPlotMarker_Up, marker_size);
-                ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c], &y0, 1, y1);
                 ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 2.f);
-                ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c], &y1, 1, y0);
+                ImPlot::PlotStems(fmt::format("##hover_{}", c).c_str(), &color32[c],
+                                  &stats[c]->bin_y(stats[c]->value_to_bin(color32[c])), 1, 0);
+
+                ImPlot::TagX(color32[c], float4{colors[c].xyz(), 1.0f}, "");
 
                 ImPlot::PopStyleColor(2);
             }
         }
 
+        Box1d xrange{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
+                     (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
+
+        auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
+        ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
+                         ImVec4(0.0, 0.0, 0.0, 1.0), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
+        ImPlot::DragRect(0, &xrange.max.x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
+                         ImVec4(0.0, 0.0, 0.0, 1.0), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
+
+        // Displayed values (d) are related to stored values (p) via the exposure and offset:
+        // d = p * (2 ^ e) + o;
+        // White is d = 1, and black is d = 0.
+        // When dragging the white and black point handles we solve the 2x2 linear system for e and o
+        bool2 released{false, false};
+        if (ImPlot::DragLineX(0, &xrange.min.x, ImVec4(0, 0, 0, 1), 2,
+                              ImPlotDragToolFlags_NoFit | ImPlotDragToolFlags_Delayed, &released.x))
+        {
+            double range               = max(xrange.size().x, 1e-10);
+            hdrview()->exposure_live() = -log2(range);
+            // if invalid, drag white handle with black handle
+            hdrview()->offset_live() = -xrange.min.x / range;
+        }
+        if (ImPlot::DragLineX(1, &xrange.max.x, ImVec4(1, 1, 1, 1), 2,
+                              ImPlotDragToolFlags_NoFit | ImPlotDragToolFlags_Delayed, &released.y))
+        {
+            double range               = max(xrange.size().x, 1e-10);
+            hdrview()->exposure_live() = -log2(range);
+            // if invalid, drag black handle with white handle
+            hdrview()->offset_live() = -(xrange.max.x - range) / range;
+        }
+        if (la::any(released))
+            hdrview()->exposure() = hdrview()->exposure_live();
+
+        xrange = Box1d{-hdrview()->offset_live() * pow(2.f, -hdrview()->exposure_live()),
+                       (1.0 - hdrview()->offset_live()) * pow(2.f, -hdrview()->exposure_live())};
+
+        ImPlot::TagX(xrange.min.x, ImVec4(0, 0, 0, 1), "0");
+        ImPlot::TagX(xrange.max.x, ImVec4(1, 1, 1, 1), "1");
+
+        if (hdrview()->draw_clip_warnings())
+        {
+            auto gain       = pow(2.f, hdrview()->exposure_live());
+            auto clip_range = double2(hdrview()->clip_range() / gain);
+            if (ImPlot::DragLineX(2, &clip_range.x, ImVec4(0, 0, 0, 1), 1, ImPlotDragToolFlags_Delayed))
+                hdrview()->clip_range().x = clip_range.x * gain;
+            if (ImPlot::DragLineX(3, &clip_range.y, ImVec4(1, 1, 1, 1), 1, ImPlotDragToolFlags_Delayed))
+                hdrview()->clip_range().y = clip_range.y * gain;
+            ImPlot::TagX(clip_range.x, ImVec4(0, 0, 0, 1), "clip");
+            ImPlot::TagX(clip_range.y, ImVec4(1, 1, 1, 1), "clip");
+        }
+
         ImPlot::EndPlot();
     }
+    // ImGui::PopStyleColor();
+    ImPlot::PopStyleVar();
     ImGui::PopFont();
 }
 
@@ -766,7 +706,7 @@ void Image::draw_colorspace()
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
 
-        float4 plot_bg{0.35f, 0.35f, 0.35f, 1.f};
+        float4 plot_bg = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg); //{0.35f, 0.35f, 0.35f, 1.f};
         ImGui::PushStyleColor(ImGuiCol_WindowBg, plot_bg);
         if (ImPlot::BeginPlot("##Chromaticity diagram", ImVec2(size, size / aspect * 0.95f),
                               ImPlotFlags_Crosshairs | ImPlotFlags_Equal | ImPlotFlags_NoLegend | ImPlotFlags_NoTitle))
