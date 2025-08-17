@@ -3124,50 +3124,49 @@ void HDRViewApp::draw_file_window()
 
             ImGui::PopStyleColor(3);
 
-            if (direction == ImGuiSortDirection_None)
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
             {
-                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                // Set payload to carry the index of our item
+                ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
+
+                // Display preview
+                ImGui::TextUnformatted("Move here");
+                if (ImGui::BeginTable("ImageList", 2, table_flags))
                 {
-                    // Set payload to carry the index of our item
-                    ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
+                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
+                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
 
-                    // Display preview
-                    ImGui::TextUnformatted("Move here");
-                    if (ImGui::BeginTable("ImageList", 2, table_flags))
-                    {
-                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
-                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
-                        ImGui::TableNextColumn();
-                        ImGui::Text(icon + ellipsis + filename);
-                        ImGui::EndTable();
-                    }
-                    ImGui::EndDragDropSource();
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
+                    ImGui::TableNextColumn();
+                    ImGui::Text(icon + ellipsis + filename);
+                    ImGui::EndTable();
                 }
-                if (ImGui::BeginDragDropTarget())
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
                 {
-                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
-                    {
-                        IM_ASSERT(payload->DataSize == sizeof(int));
-                        int payload_i = *(const int *)payload->Data;
+                    IM_ASSERT(payload->DataSize == sizeof(int));
+                    int payload_i = *(const int *)payload->Data;
 
-                        // move image at payload_i to i, and shift all images in between
-                        if (payload_i < i)
-                            for (int j = payload_i; j < i; ++j) swap(m_images[j], m_images[j + 1]);
-                        else
-                            for (int j = payload_i; j > i; --j) swap(m_images[j], m_images[j - 1]);
+                    // move image at payload_i to i, and shift all images in between
+                    if (payload_i < i)
+                        for (int j = payload_i; j < i; ++j) swap(m_images[j], m_images[j + 1]);
+                    else
+                        for (int j = payload_i; j > i; --j) swap(m_images[j], m_images[j - 1]);
 
-                        // maintain the current and reference images
-                        if (m_current == payload_i)
-                            m_current = i;
-                        if (m_reference == payload_i)
-                            m_reference = i;
-                    }
-                    ImGui::EndDragDropTarget();
+                    // maintain the current and reference images
+                    if (m_current == payload_i)
+                        m_current = i;
+                    if (m_reference == payload_i)
+                        m_reference = i;
+
+                    ImGui::TableSetColumnSortDirection(0, ImGuiSortDirection_None, false);
                 }
+                ImGui::EndDragDropTarget();
             }
 
             if (open)
