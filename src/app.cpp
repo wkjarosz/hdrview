@@ -103,6 +103,7 @@ static bool            g_play_stopped                        = true;
 static float           g_playback_speed                      = 24.f;
 static int             g_status_color_mode                   = 0;
 static bool            g_reverse_colormap                    = false;
+static float           g_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
 
 #define g_blank_icon ""
 
@@ -228,46 +229,46 @@ static void apply_hdrview_light_theme()
     style.FramePadding             = ImVec2(4, 4);
 
     ImVec4 *colors                             = style.Colors;
-    colors[ImGuiCol_Text]                      = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-    colors[ImGuiCol_WindowBg]                  = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    colors[ImGuiCol_Text]                      = ImVec4(1.00f, 1.00f, 1.00f, 0.71f);
+    colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 0.71f);
+    colors[ImGuiCol_WindowBg]                  = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
     colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);
-    colors[ImGuiCol_PopupBg]                   = ImVec4(0.78f, 0.78f, 0.78f, 1.00f);
-    colors[ImGuiCol_Border]                    = ImVec4(0.20f, 0.20f, 0.20f, 0.43f);
-    colors[ImGuiCol_BorderShadow]              = ImVec4(0.00f, 0.00f, 0.00f, 0.20f);
-    colors[ImGuiCol_FrameBg]                   = ImVec4(1.00f, 1.00f, 1.00f, 0.29f);
-    colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.39f);
-    colors[ImGuiCol_FrameBgActive]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
-    colors[ImGuiCol_TitleBg]                   = ImVec4(0.00f, 0.00f, 0.00f, 0.16f);
-    colors[ImGuiCol_TitleBgActive]             = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    colors[ImGuiCol_PopupBg]                   = ImVec4(0.15f, 0.15f, 0.15f, 1.00f);
+    colors[ImGuiCol_Border]                    = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    colors[ImGuiCol_BorderShadow]              = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    colors[ImGuiCol_FrameBg]                   = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.20f);
+    colors[ImGuiCol_FrameBgActive]             = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_TitleBg]                   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]             = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
     colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
-    colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.65f, 0.65f, 0.65f, 1.00f);
-    colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 0.00f);
-    colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
-    colors[ImGuiCol_CheckMark]                 = ImVec4(0.32f, 0.51f, 0.75f, 1.00f);
+    colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    colors[ImGuiCol_CheckMark]                 = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
     colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
     colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-    colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.55f);
-    colors[ImGuiCol_ButtonHovered]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
+    colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_ButtonHovered]             = ImVec4(1.00f, 1.00f, 1.00f, 0.13f);
     colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
-    colors[ImGuiCol_Header]                    = ImVec4(0.44f, 0.55f, 0.72f, 1.00f);
-    colors[ImGuiCol_HeaderHovered]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
+    colors[ImGuiCol_Header]                    = ImVec4(0.18f, 0.34f, 0.59f, 1.00f);
+    colors[ImGuiCol_HeaderHovered]             = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_HeaderActive]              = ImVec4(0.29f, 0.58f, 1.00f, 1.00f);
-    colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+    colors[ImGuiCol_Separator]                 = ImVec4(1.00f, 1.00f, 1.00f, 0.12f);
     colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
     colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
     colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
     colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_InputTextCursor]           = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    colors[ImGuiCol_TabHovered]                = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
-    colors[ImGuiCol_Tab]                       = ImVec4(0.53f, 0.53f, 0.53f, 1.00f);
-    colors[ImGuiCol_TabSelected]               = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    colors[ImGuiCol_TabHovered]                = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
+    colors[ImGuiCol_Tab]                       = ImVec4(0.33f, 0.33f, 0.33f, 1.00f);
+    colors[ImGuiCol_TabSelected]               = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
-    colors[ImGuiCol_TabDimmed]                 = ImVec4(0.53f, 0.53f, 0.53f, 1.00f);
-    colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    colors[ImGuiCol_TabDimmed]                 = ImVec4(0.27f, 0.27f, 0.27f, 1.00f);
+    colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
     colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
@@ -275,11 +276,11 @@ static void apply_hdrview_light_theme()
     colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
     colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
     colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.64f, 0.64f, 0.64f, 1.00f);
-    colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 0.39f);
-    colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 0.06f);
-    colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.04f);
-    colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.04f);
+    colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
+    colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+    colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
+    colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.08f);
     colors[ImGuiCol_TextLink]                  = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
     colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
     colors[ImGuiCol_TreeLines]                 = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
@@ -288,6 +289,68 @@ static void apply_hdrview_light_theme()
     colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
     colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
     colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+
+    // ImVec4 *colors                             = style.Colors;
+    // colors[ImGuiCol_Text]                      = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
+    // colors[ImGuiCol_TextDisabled]              = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    // colors[ImGuiCol_WindowBg]                  = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    // colors[ImGuiCol_ChildBg]                   = ImVec4(0.04f, 0.04f, 0.04f, 0.20f);
+    // colors[ImGuiCol_PopupBg]                   = ImVec4(0.78f, 0.78f, 0.78f, 1.00f);
+    // colors[ImGuiCol_Border]                    = ImVec4(0.20f, 0.20f, 0.20f, 0.43f);
+    // colors[ImGuiCol_BorderShadow]              = ImVec4(0.00f, 0.00f, 0.00f, 0.20f);
+    // colors[ImGuiCol_FrameBg]                   = ImVec4(1.00f, 1.00f, 1.00f, 0.29f);
+    // colors[ImGuiCol_FrameBgHovered]            = ImVec4(1.00f, 1.00f, 1.00f, 0.39f);
+    // colors[ImGuiCol_FrameBgActive]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
+    // colors[ImGuiCol_TitleBg]                   = ImVec4(0.00f, 0.00f, 0.00f, 0.16f);
+    // colors[ImGuiCol_TitleBgActive]             = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    // colors[ImGuiCol_TitleBgCollapsed]          = ImVec4(0.08f, 0.08f, 0.08f, 1.00f);
+    // colors[ImGuiCol_MenuBarBg]                 = ImVec4(0.65f, 0.65f, 0.65f, 1.00f);
+    // colors[ImGuiCol_ScrollbarBg]               = ImVec4(0.20f, 0.20f, 0.20f, 0.00f);
+    // colors[ImGuiCol_ScrollbarGrab]             = ImVec4(0.49f, 0.49f, 0.49f, 1.00f);
+    // colors[ImGuiCol_ScrollbarGrabHovered]      = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
+    // colors[ImGuiCol_ScrollbarGrabActive]       = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    // colors[ImGuiCol_CheckMark]                 = ImVec4(0.32f, 0.51f, 0.75f, 1.00f);
+    // colors[ImGuiCol_SliderGrab]                = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    // colors[ImGuiCol_SliderGrabActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_Button]                    = ImVec4(1.00f, 1.00f, 1.00f, 0.55f);
+    // colors[ImGuiCol_ButtonHovered]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
+    // colors[ImGuiCol_ButtonActive]              = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_Header]                    = ImVec4(0.44f, 0.55f, 0.72f, 1.00f);
+    // colors[ImGuiCol_HeaderHovered]             = ImVec4(0.34f, 0.50f, 0.76f, 1.00f);
+    // colors[ImGuiCol_HeaderActive]              = ImVec4(0.29f, 0.58f, 1.00f, 1.00f);
+    // colors[ImGuiCol_Separator]                 = ImVec4(0.00f, 0.00f, 0.00f, 0.39f);
+    // colors[ImGuiCol_SeparatorHovered]          = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    // colors[ImGuiCol_SeparatorActive]           = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_ResizeGrip]                = ImVec4(1.00f, 1.00f, 1.00f, 0.25f);
+    // colors[ImGuiCol_ResizeGripHovered]         = ImVec4(0.39f, 0.39f, 0.39f, 1.00f);
+    // colors[ImGuiCol_ResizeGripActive]          = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_InputTextCursor]           = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    // colors[ImGuiCol_TabHovered]                = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    // colors[ImGuiCol_Tab]                       = ImVec4(0.53f, 0.53f, 0.53f, 1.00f);
+    // colors[ImGuiCol_TabSelected]               = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    // colors[ImGuiCol_TabSelectedOverline]       = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+    // colors[ImGuiCol_TabDimmed]                 = ImVec4(0.53f, 0.53f, 0.53f, 1.00f);
+    // colors[ImGuiCol_TabDimmedSelected]         = ImVec4(0.70f, 0.70f, 0.70f, 1.00f);
+    // colors[ImGuiCol_TabDimmedSelectedOverline] = ImVec4(0.30f, 0.58f, 1.00f, 0.00f);
+    // colors[ImGuiCol_DockingPreview]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_DockingEmptyBg]            = ImVec4(0.18f, 0.18f, 0.18f, 1.00f);
+    // colors[ImGuiCol_PlotLines]                 = ImVec4(0.47f, 0.47f, 0.47f, 1.00f);
+    // colors[ImGuiCol_PlotLinesHovered]          = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+    // colors[ImGuiCol_PlotHistogram]             = ImVec4(0.59f, 0.59f, 0.59f, 1.00f);
+    // colors[ImGuiCol_PlotHistogramHovered]      = ImVec4(1.00f, 0.39f, 0.00f, 1.00f);
+    // colors[ImGuiCol_TableHeaderBg]             = ImVec4(0.64f, 0.64f, 0.64f, 1.00f);
+    // colors[ImGuiCol_TableBorderStrong]         = ImVec4(0.12f, 0.12f, 0.12f, 0.39f);
+    // colors[ImGuiCol_TableBorderLight]          = ImVec4(0.24f, 0.24f, 0.24f, 0.06f);
+    // colors[ImGuiCol_TableRowBg]                = ImVec4(0.00f, 0.00f, 0.00f, 0.04f);
+    // colors[ImGuiCol_TableRowBgAlt]             = ImVec4(1.00f, 1.00f, 1.00f, 0.04f);
+    // colors[ImGuiCol_TextLink]                  = ImVec4(0.30f, 0.58f, 1.00f, 1.00f);
+    // colors[ImGuiCol_TextSelectedBg]            = ImVec4(1.00f, 1.00f, 1.00f, 0.16f);
+    // colors[ImGuiCol_TreeLines]                 = ImVec4(0.43f, 0.43f, 0.50f, 0.50f);
+    // colors[ImGuiCol_DragDropTarget]            = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_NavCursor]                 = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_NavWindowingHighlight]     = ImVec4(0.24f, 0.47f, 0.81f, 1.00f);
+    // colors[ImGuiCol_NavWindowingDimBg]         = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
+    // colors[ImGuiCol_ModalWindowDimBg]          = ImVec4(0.00f, 0.00f, 0.00f, 0.59f);
 }
 
 static string theme_name(int t)
@@ -1416,7 +1479,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
             add_action({fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
-                        [this, n]() { set_current_image_index(nth_visible_image_index(mod(n - 1, 10))); },
+                        [this, n]()
+                        {
+                            set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
+                            g_scroll_to_next_frame = 0.5f;
+                        },
                         [this, n]()
                         {
                             auto i = nth_visible_image_index(mod(n - 1, 10));
@@ -1447,8 +1514,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                         modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
                         [this, n]()
                         {
-                            auto img            = current_image();
-                            img->selected_group = img->nth_visible_group_index(mod(n - 1, 10));
+                            auto img               = current_image();
+                            img->selected_group    = img->nth_visible_group_index(mod(n - 1, 10));
+                            g_scroll_to_next_frame = 0.5f;
                         },
                         [this, n]()
                         {
@@ -1494,14 +1562,22 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                     [this]() { close_all_images(); }, if_img});
 
         add_action({"Go to next image", g_blank_icon, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
-                    [this]() { set_current_image_index(next_visible_image_index(m_current, Forward)); },
+                    [this]()
+                    {
+                        set_current_image_index(next_visible_image_index(m_current, Forward));
+                        g_scroll_to_next_frame = 1.f;
+                    },
                     [this]()
                     {
                         auto i = next_visible_image_index(m_current, Forward);
                         return is_valid(i) && i != m_current;
                     }});
         add_action({"Go to previous image", g_blank_icon, ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
-                    [this]() { set_current_image_index(next_visible_image_index(m_current, Backward)); },
+                    [this]()
+                    {
+                        set_current_image_index(next_visible_image_index(m_current, Backward));
+                        g_scroll_to_next_frame = 0.f;
+                    },
                     [this]()
                     {
                         auto i = next_visible_image_index(m_current, Backward);
@@ -1526,15 +1602,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add_action({"Go to next channel group", g_blank_icon, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
                     [this]()
                     {
-                        auto img            = current_image();
-                        img->selected_group = img->next_visible_group_index(img->selected_group, Forward);
+                        auto img               = current_image();
+                        img->selected_group    = img->next_visible_group_index(img->selected_group, Forward);
+                        g_scroll_to_next_frame = 1.f;
                     },
                     [this]() { return current_image() != nullptr; }});
         add_action({"Go to previous channel group", g_blank_icon, ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
                     [this]()
                     {
-                        auto img            = current_image();
-                        img->selected_group = img->next_visible_group_index(img->selected_group, Backward);
+                        auto img               = current_image();
+                        img->selected_group    = img->next_visible_group_index(img->selected_group, Backward);
+                        g_scroll_to_next_frame = 0.f;
                     },
                     [this]() { return current_image() != nullptr; }});
         add_action({"Go to next channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_RightArrow,
@@ -2587,19 +2665,25 @@ void HDRViewApp::draw_pixel_inspector_window()
         ImGui::BeginDisabled(p_visible == nullptr);
         // slightly convoluted process to show the coordinates as drag elements within the header
         ImGui::SameLine();
-        auto  fpy = ImGui::GetStyle().FramePadding.y;
         float drag_size =
             0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
-        ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
-        auto y = ImGui::GetCursorPosY();
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel x coordinates", &pixel.x, 1.f, 0, 0, "X: %d", flags);
-        ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::SetCursorPosY(y + fpy);
-        ImGui::SetNextItemWidth(drag_size);
-        ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
-        ImGui::PopStyleVar();
+        if (drag_size > HelloImGui::EmSize(1.f))
+        {
+            auto fpy = ImGui::GetStyle().FramePadding.y;
+            ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
+            auto y = ImGui::GetCursorPosY();
+            ImGui::SetCursorPosY(y + fpy);
+            ImGui::SetNextItemWidth(drag_size);
+            ImGui::DragInt("##pixel x coordinates", &pixel.x, 1.f, 0, 0, "X: %d", flags);
+            ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::SetCursorPosY(y + fpy);
+            ImGui::SetNextItemWidth(drag_size);
+            ImGui::DragInt("##pixel y coordinates", &pixel.y, 1.f, 0, 0, "Y: %d", flags);
+            ImGui::PopStyleVar();
+        }
+        else
+            ImGui::NewLine();
+
         ImGui::EndDisabled();
 
         return open;
@@ -2891,6 +2975,7 @@ void HDRViewApp::draw_file_window()
     ImGui::SameLine();
     if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[g_file_list_mode].data()))
     {
+        auto old_mode = g_file_list_mode;
         if (ImGui::Selectable((s_view_mode_icons[0] + " Only images (do not list channel groups)").c_str(),
                               g_file_list_mode == 0))
             g_file_list_mode = 0;
@@ -2900,6 +2985,9 @@ void HDRViewApp::draw_file_window()
         if (ImGui::Selectable((s_view_mode_icons[2] + " Tree view of layers and channels").c_str(),
                               g_file_list_mode == 2))
             g_file_list_mode = 2;
+
+        if (old_mode != g_file_list_mode)
+            g_scroll_to_next_frame = 0.5f;
 
         ImGui::EndCombo();
     }
@@ -3087,17 +3175,25 @@ void HDRViewApp::draw_file_window()
                 ImGui::PushFont(m_sans_regular, 0.f);
                 int visible_groups = 1;
                 if (g_file_list_mode == 0)
+                {
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                    if (is_current && g_scroll_to_next_frame >= -0.5f)
+                    {
+                        if (!ImGui::IsItemVisible())
+                            ImGui::SetScrollHereY(g_scroll_to_next_frame);
+                        g_scroll_to_next_frame = -1.f;
+                    }
+                }
                 else if (g_file_list_mode == 1)
                 {
-                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference);
+                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference, g_scroll_to_next_frame);
                     MY_ASSERT(visible_groups == img->root.visible_groups,
                               "Unexpected number of visible groups; {} != {}", visible_groups,
                               img->root.visible_groups);
                 }
                 else
                 {
-                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference);
+                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference, g_scroll_to_next_frame);
                     MY_ASSERT(visible_groups == img->root.visible_groups,
                               "Unexpected number of visible groups; {} != {}", visible_groups,
                               img->root.visible_groups);
@@ -3153,10 +3249,16 @@ void HDRViewApp::draw_file_window()
 
         ImGui::SameLine();
 
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        ImGui::SetNextItemWidth(
+            std::max(HelloImGui::EmSize(1.f),
+                     ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x - ImGui::IconButtonSize().x));
         if (ImGui::SliderFloat("##Playback speed", &g_playback_speed, 0.1f, 60.f, "%.1f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
             g_playback_speed = clamp(g_playback_speed, 1.f / 20.f, 60.f);
+
+        ImGui::SameLine();
+
+        ImGui::IconButton(action("Watch folders for changes"));
     }
     // ImGui::EndDisabled();
 }

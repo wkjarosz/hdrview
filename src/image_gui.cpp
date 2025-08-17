@@ -249,7 +249,7 @@ void Image::draw_histogram()
 }
 
 void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
-                              bool short_names, int &visible_group)
+                              bool short_names, int &visible_group, float &scroll_to)
 {
     static constexpr ImGuiTreeNodeFlags tree_node_flags =
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Leaf |
@@ -313,6 +313,12 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
                     set_as_texture(Target_Primary);
                 }
             }
+            else if (is_selected_channel && scroll_to >= -0.5f)
+            {
+                if (!ImGui::IsItemVisible())
+                    ImGui::SetScrollHereY(scroll_to);
+                scroll_to = -1.f;
+            }
         }
         ImGui::PopStyleColor(3);
         ++visible_group;
@@ -323,14 +329,15 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
 
 */
 void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
-                            int &visible_group)
+                            int &visible_group, float &scroll_to)
 {
     static constexpr ImGuiTreeNodeFlags tree_node_flags =
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull;
 
     if (node.leaf_layer >= 0)
         // draw this node's leaf channel groups
-        draw_layer_groups(layers[node.leaf_layer], img_idx, id, is_current, is_reference, true, visible_group);
+        draw_layer_groups(layers[node.leaf_layer], img_idx, id, is_current, is_reference, true, visible_group,
+                          scroll_to);
 
     for (auto &c : node.children)
     {
@@ -348,7 +355,7 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
         ImGui::PopStyleColor(3);
         if (open)
         {
-            draw_layer_node(child_node, img_idx, id, is_current, is_reference, visible_group);
+            draw_layer_node(child_node, img_idx, id, is_current, is_reference, visible_group, scroll_to);
             ImGui::TreePop();
         }
         else
@@ -359,11 +366,11 @@ void Image::draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, boo
     }
 }
 
-int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference)
+int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to)
 {
     int visible_group = 0;
     for (size_t l = 0; l < layers.size(); ++l)
-        draw_layer_groups(layers[l], img_idx, id, is_current, is_reference, false, visible_group);
+        draw_layer_groups(layers[l], img_idx, id, is_current, is_reference, false, visible_group, scroll_to);
 
     return visible_group;
 }

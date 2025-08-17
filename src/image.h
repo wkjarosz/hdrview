@@ -395,13 +395,13 @@ public:
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
-                           bool short_names, int &visible_group);
+                           bool short_names, int &visible_group, float &scroll_to);
     void draw_layer_node(const LayerTreeNode &node, int img_idx, int &id, bool is_current, bool is_reference,
-                         int &visible_group);
-    int  draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference)
+                         int &visible_group, float &scroll_to);
+    int  draw_channel_tree(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to)
     {
         int visible_group = 0;
-        draw_layer_node(root, img_idx, id, is_current, is_reference, visible_group);
+        draw_layer_node(root, img_idx, id, is_current, is_reference, visible_group, scroll_to);
         return visible_group;
     }
 
@@ -415,7 +415,7 @@ public:
         \param is_reference Is this the reference image in HDRViewApp?
         \returns The number of displayed channel groups.
     */
-    int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference);
+    int  draw_channel_rows(int img_idx, int &id, bool is_current, bool is_reference, float &scroll_to);
     void draw_info();
     void draw_colorspace();
     void draw_channel_stats();
