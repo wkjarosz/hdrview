@@ -198,11 +198,8 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
     float zebra1 = (fmod(float(int(floor((vert.position.x + vert.position.y - 30.0*time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
     float zebra2 = (fmod(float(int(floor((vert.position.x - vert.position.y - 30.0*time) / 8.0))), 2.0) == 0.0) ? 0.0 : 1.0;
 
-    bool in_img = all(vert.primary_uv < 1.0) and all(vert.primary_uv > 0.0);
-    bool in_ref = all(vert.secondary_uv < 1.0) and all(vert.secondary_uv > 0.0);
-
-    if (!in_img and !(in_ref and has_reference))
-        return linearToSRGB(background);
+    bool in_img = all(vert.primary_uv <= 1.0) and all(vert.primary_uv >= 0.0);
+    bool in_ref = all(vert.secondary_uv <= 1.0) and all(vert.secondary_uv >= 0.0);
 
     float4 value = float4(sample_channel(primary_0_texture, primary_0_sampler, vert.primary_uv, in_img),
                           sample_channel(primary_1_texture, primary_1_sampler, vert.primary_uv, in_img),

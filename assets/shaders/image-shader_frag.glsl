@@ -191,12 +191,6 @@ void main()
     bool in_img = primary_uv.x < 1.0 && primary_uv.y < 1.0 && primary_uv.x > 0.0 && primary_uv.y > 0.0;
     bool in_ref = secondary_uv.x < 1.0 && secondary_uv.y < 1.0 && secondary_uv.x > 0.0 && secondary_uv.y > 0.0;
 
-    if (!in_img && !(in_ref && has_reference))
-    {
-        frag_color = linearToSRGB(background);
-        return;
-    }
-
     vec4 value = vec4(
         sample_channel(primary_0_texture, primary_uv, in_img), sample_channel(primary_1_texture, primary_uv, in_img),
         sample_channel(primary_2_texture, primary_uv, in_img), sample_channel(primary_3_texture, primary_uv, in_img));
