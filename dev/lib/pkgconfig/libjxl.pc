@@ -1,0 +1,13 @@
+prefix=/Users/runner/work/hdrview/hdrview/build/deploy
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libjxl
+Description: Loads and saves JPEG XL files
+Version: 0.11.1
+Requires: libhwy libbrotlienc libbrotlidec libjxl_cms
+Libs: -L${libdir} -ljxl -lm -lc++
+Libs.private: 
+Cflags: -I${includedir}
+Cflags.private: -DJXL_STATIC_DEFINE
