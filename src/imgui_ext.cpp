@@ -262,9 +262,6 @@ ImVec2 IconButtonSize()
 bool IconButton(const char *icon, bool *v, const ImVec2 &size)
 {
     auto sz = (size.x == 0 && size.y == 0) ? IconButtonSize() : size;
-    // Remove frame padding and spacing
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2(0, 0));
 
     bool toggle = v != nullptr;
     if (toggle)
@@ -283,8 +280,6 @@ bool IconButton(const char *icon, bool *v, const ImVec2 &size)
 
     if (v && ret)
         *v = !*v;
-
-    ImGui::PopStyleVar(2);
 
     if (toggle)
         ImGui::PopStyleColor(3);

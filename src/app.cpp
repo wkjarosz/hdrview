@@ -2998,8 +2998,8 @@ void HDRViewApp::draw_file_window()
                                                    ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg |
                                                    ImGuiTableFlags_ScrollY;
     if (ImGui::BeginTable("ImageList", 2, table_flags,
-                          ImVec2(0.f, ImGui::GetContentRegionAvail().y - HelloImGui::EmSize(1.f) -
-                                          2.f * ImGui::GetStyle().FramePadding.y - ImGui::GetStyle().ItemSpacing.y)))
+                          ImVec2(0.f, ImGui::GetContentRegionAvail().y - ImGui::IconButtonSize().y -
+                                          ImGui::GetStyle().ItemSpacing.y)))
     {
         const float icon_width = ImGui::IconSize().x;
 
