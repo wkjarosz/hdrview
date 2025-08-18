@@ -153,7 +153,7 @@ jobs:
     steps:
       - name: Install dependencies
         run: |
-          brew install ninja emscripten
+          brew install ninja emscripten libpng
 
       - uses: actions/checkout@v4
         with:
@@ -170,7 +170,7 @@ jobs:
 
       - name: Configure CMake
         run: |
-          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy
+          emcmake cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=MinSizeRel -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/build/deploy -DHDRVIEW_ENABLE_HEIF=OFF
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --parallel
