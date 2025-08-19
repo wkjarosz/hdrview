@@ -589,9 +589,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     // Toolbars
     //
-    // ImGui::GetFrameHeight() * 1.4f
-    m_top_toolbar_options.sizeEm = 2.2f;
-    // HelloImGui::PixelSizeToEm(ImGui::GetFrameHeight());
+    m_top_toolbar_options.sizeEm          = 2.3f;
     m_top_toolbar_options.WindowPaddingEm = ImVec2(0.7f, 0.35f);
     m_params.callbacks.AddEdgeToolbar(
         HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
