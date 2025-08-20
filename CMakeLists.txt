@@ -913,7 +913,6 @@ hello_imgui_add_app(
   src/imageio.cpp
   src/imgui_ext.cpp
   src/image_gui.cpp
-  src/progress.cpp
   src/opengl_check.cpp
   src/scheduler.cpp
   src/shader.cpp
@@ -1010,6 +1009,7 @@ set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 
 if(APPLE)
+  install(TARGETS HDRView BUNDLE DESTINATION ${CMAKE_INSTALL_PREFIX})
   set(CPACK_GENERATOR "DragNDrop")
 endif()
 

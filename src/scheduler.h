@@ -37,7 +37,6 @@
 
 #pragma once
 
-#include "progress.h"
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -397,6 +396,14 @@ inline size_t estimate_threads(size_t workload_size, size_t min_unit_size, const
     return std::min<size_t>(chunks, scheduler.size());
 }
 
+/** Represents a contiguous integer range split into fixed-size blocks.
+
+   @tparam Int An integer type (e.g. int, long).
+
+   The blocked_range encapsulates [begin, end) and a block size used by the scheduler
+   to partition work into coarse-grained chunks. It provides a simple iterator over
+   element indices and helpers for computing the number of blocks and the block size.
+*/
 template <typename Int>
 struct blocked_range
 {
@@ -417,11 +424,21 @@ public:
         bool operator!=(const iterator &it) { return value != it.value; }
     };
 
+    /** Number of blocks of size block_size needed to cover [begin,end).
+
+        This is computed as ceil((end-begin)/block_size). The value is suitable for
+        use with AtomicLoadBalance which atomically hands out block indices to threads.
+     */
     uint32_t blocks() const { return (uint32_t)((m_end - m_begin + m_block_size - 1) / m_block_size); }
 
     iterator begin() const { return iterator(m_begin); }
     iterator end() const { return iterator(m_end); }
-    Int      block_size() const { return m_block_size; }
+
+    /** Size of each block used to split the overall range.
+
+        A block represents a contiguous sub-range of elements that will be handed to a worker.
+     */
+    Int block_size() const { return m_block_size; }
 
 private:
     Int m_begin;
@@ -429,6 +446,29 @@ private:
     Int m_block_size;
 };
 
+/** Helper to atomically load-balance blocked_range work between threads.
+
+    AtomicLoadBalance wraps an atomic<uint32_t> counter (shared among workers) and a
+    blocked_range. Threads repeatedly call advance() to obtain the next block to process.
+
+    Usage pattern:
+    - Construct with a shared atomic counter and the target blocked_range.
+    - Repeatedly call advance(); when it returns true, the public members 'begin' and 'end'
+        describe the next [begin,end) sub-range to process. When advance() returns false,
+        there is no more work.
+
+    Thread-safety: advance() performs an atomic increment on the provided counter and is
+    safe to call concurrently from multiple threads.
+
+    Example:
+    @code
+    std::atomic<uint32_t> counter{0};
+    AtomicLoadBalance<int> workload(counter, range);
+    while (workload.advance()) {
+        process(workload.begin, workload.end);
+    }
+    @endcode
+*/
 template <typename Int>
 struct AtomicLoadBalance
 {
@@ -456,6 +496,30 @@ public:
     }
 };
 
+/** Parallelize work over a blocked_range by repeatedly invoking a user provided callable.
+
+    The callable must be invokable as:
+    void func(Int begin, Int end, int unit_index, int thread_index)
+
+    @tparam Int Integer type used for the blocked_range.
+    @tparam Func Callable type.
+    @param range Range of work to split into blocks (see \ref blocked_range).
+    @param func Callable invoked by each worker for each assigned block. Signature: (begin,end,unit_index,thread_index).
+    @param num_threads Number of threads to use. Defaults to Scheduler::k_all (use scheduler size).
+    @param scheduler Optional Scheduler pointer; when null Scheduler::singleton() is used.
+
+    Example:
+    @code{.cpp}
+    // compute over rows [0, height) in blocks of block_size using num_threads:
+    parallel_for(blocked_range<int>(0, height, block_size),
+                [&](int begin, int end, int unit_index, int thread_index)
+                {
+                    for (int y = begin; y < end; ++y)
+                        // process row y
+                },
+                (int)num_threads);
+    @endcode
+*/
 template <typename Int, typename Func>
 void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads = Scheduler::k_all,
                   Scheduler *scheduler = nullptr)
@@ -483,6 +547,43 @@ void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads 
     scheduler->parallelize(num_threads, &payload, callback);
 }
 
+/** Asynchronously run a parallel_for with an epilogue.
+
+    The main callable must be invokable as:
+    void func(Int begin, Int end, int unit_index, int thread_index)
+
+    The epilogue must be invokable as:
+    void epilogue(int num_units, int thread_index)
+
+    @tparam Int Integer type for blocked_range.
+    @tparam Func1 Main callable type.
+    @tparam Func2 Epilogue callable type.
+    @param range Range to process.
+    @param func Main callable (copied into heap payload).
+    @param epilogue Epilogue callable to run when task completes (copied into heap payload).
+    @param num_threads Number of threads or Scheduler::k_all.
+    @param scheduler Optional scheduler pointer (defaults to Scheduler::singleton()).
+    @return Scheduler::TaskTracker A TaskTracker that can be waited on.
+
+    Example:
+    @code{.cpp}
+    auto tracker = parallel_for_async(blocked_range<int>(0, N, block_size),
+        [=](int b, int e, int unit, int thread)
+        {
+            for (int i = b; i < e; ++i)
+                // process element i
+        },
+        [](int num_units, int thread)
+        {
+            // final reduce / cleanup
+        },
+        (int)num_threads);
+
+    // perform some other tasks concurrently to the above async loop
+
+    tracker.wait(); // wait for the parallel_for_async to complete
+    @endcode
+*/
 template <typename Int, typename Func1, typename Func2>
 Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func, Func2 &&epilogue,
                                           int num_threads = Scheduler::k_all, Scheduler *scheduler = nullptr)
@@ -520,6 +621,17 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
     return scheduler->parallelize_async(num_threads, payload, callback, deleter);
 }
 
+/** Convenience overload: async parallel_for without an epilogue.
+
+    @tparam Int Integer type for blocked_range.
+    @tparam Func1 Main callable type.
+    @param range Range to process.
+    @param func Main callable.
+    @param num_threads Number of threads or Scheduler::k_all.
+    @param scheduler Optional scheduler pointer.
+
+    @see parallel_for_async(range, func, epilogue, ...)
+*/
 template <typename Int, typename Func1>
 Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func,
                                           int num_threads = Scheduler::k_all, Scheduler *scheduler = nullptr)
@@ -527,6 +639,33 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
     return parallel_for_async(range, func, [](int, int) {}, num_threads, scheduler);
 }
 
+/** Launch a single-unit asynchronous task that invokes a user-provided callable.
+
+    The callable must be invokable with no parameters:
+        void func()
+
+    @tparam Func Callable type.
+    @param func Callable to execute asynchronously.
+    @param scheduler Optional Scheduler pointer. If null, Scheduler::singleton() is used.
+    @return Scheduler::TaskTracker TaskTracker that can be used to wait() for completion.
+
+    Example:
+    @code{.cpp}
+    int output = 0;
+    // schedule a background computation
+    auto async_tracker = do_async(
+        [&output]() {
+            // perform some computation
+            // if you want to return a result, do so via a lambda capture like output/
+            // output must remain valid until after async_tracker.wait() is called below
+        });
+
+    // do some other computation here while the above runs in the background
+    // it is not safe to access output until after async_tracker.wait() is called
+
+    async_tracker.wait(); // wait for the background computation to complete (if it hasn't already)
+    @endcode
+*/
 template <typename Func>
 Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
 {
@@ -544,28 +683,6 @@ Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
     auto deleter  = [](int, int, void *payload) { delete (Payload *)payload; };
 
     Payload *payload = new Payload{std::forward<Func>(func)};
-
-    return scheduler->parallelize_async(1, payload, callback, deleter);
-}
-
-template <typename Func>
-Scheduler::TaskTracker do_async(Func &&func, AtomicProgress &progress, Scheduler *scheduler = nullptr)
-{
-    if (!scheduler)
-        scheduler = Scheduler::singleton();
-
-    using BaseFunc = typename std::decay<Func>::type;
-
-    struct Payload
-    {
-        BaseFunc        f;
-        AtomicProgress &progress;
-    };
-
-    auto callback = [](int, int, void *payload) { ((Payload *)payload)->f(((Payload *)payload)->progress); };
-    auto deleter  = [](int, int, void *payload) { delete (Payload *)payload; };
-
-    Payload *payload = new Payload{std::forward<Func>(func), progress};
 
     return scheduler->parallelize_async(1, payload, callback, deleter);
 }

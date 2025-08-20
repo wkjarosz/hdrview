@@ -1,6 +1,5 @@
 #pragma once
 
-#include "async.h"
 #include "fwd.h"
 #include <filesystem>
 #include <functional>

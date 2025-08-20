@@ -101,22 +101,6 @@ void Image::draw_histogram()
         ImPlot::SetupAxisScale(ImAxis_Y1, hdrview()->histogram_y_scale() == AxisScale_Linear ? ImPlotScale_Linear
                                                                                              : ImPlotScale_SymLog);
 
-        // ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
-
-        auto format_power_of_10 = [](double value, char *buff, int size, void *)
-        {
-            // Calculate the exponent of the value
-            int exponent = int(std::log10(std::fabs(value)));
-
-            // Format the value into the buffer with the exponent using fmt::format_to
-            auto result = fmt::format_to_n(buff, size, "10e{}", exponent);
-            // Ensure null termination
-            if (int(result.size) < size)
-                buff[result.size++] = '\0';
-
-            return int(result.size);
-        };
-
         if (x_limits[0] == 0)
             x_limits[0] = 1e-14f;
 

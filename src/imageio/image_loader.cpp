@@ -5,22 +5,62 @@
 using namespace std;
 namespace fs = std::filesystem;
 
-using ImageLoadTask = AsyncTask<std::vector<ImagePtr>>;
-
 static constexpr size_t g_max_recent = 15;
 
 struct BackgroundImageLoader::PendingImages
 {
-    std::string   filename;
-    ImageLoadTask images;
-    bool          add_to_recent;           ///< Whether to add the loaded images to the recent files list
-    bool          should_select = false;   ///< Whether to select the first loaded image
-    ImagePtr      to_replace    = nullptr; ///< If not null, this image will be replaced with the loaded images
-    PendingImages(const std::string &f, ImageLoadTask::NoProgressTaskFunc func, bool recent = true,
-                  bool should_select = false, ImagePtr to_replace = nullptr) :
-        filename(f), images(func), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
+    string                 filename;
+    Scheduler::TaskTracker computation;
+    vector<ImagePtr>       images;
+    bool                   add_to_recent;           ///< Whether to add the loaded images to the recent files list
+    bool                   should_select = false;   ///< Whether to select the first loaded image
+    ImagePtr               to_replace    = nullptr; ///< If not null, this image will be replaced with the loaded images
+    PendingImages(const string &f, const string_view buffer, const fs::path &path, const string &channel_selector,
+                  bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
+        filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
-        images.compute();
+        computation = do_async(
+            // convert the buffer (if any) to a string so the async thread has its own copy,
+            // then load from the string or filename depending on whether the buffer is empty
+            [this, buffer_str = string(buffer), path, channel_selector]()
+            {
+                fs::file_time_type last_modified = fs::file_time_type::clock::now();
+                if (buffer_str.empty())
+                {
+                    if (!fs::exists(path))
+                    {
+                        spdlog::error("File '{}' doesn't exist.", path.u8string());
+                        return;
+                    }
+
+                    try
+                    {
+                        last_modified = fs::last_write_time(path);
+                    }
+                    catch (...)
+                    {
+                    }
+
+                    if (std::ifstream is{path, std::ios_base::binary})
+                        images = Image::load(is, path.u8string(), channel_selector);
+                    else
+                    {
+                        spdlog::error("File '{}' doesn't exist.", path.u8string());
+                        return;
+                    }
+                }
+                else
+                {
+                    std::istringstream is{buffer_str};
+                    images = Image::load(is, path.u8string(), channel_selector);
+                }
+
+                for (auto &img : images)
+                {
+                    img->last_modified = last_modified;
+                    img->path          = path;
+                }
+            });
     }
 };
 
@@ -70,52 +110,8 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         try
         {
             spdlog::info("Loading file '{}'...", path.u8string());
-            // convert the buffer (if any) to a string so the async thread has its own copy,
-            // then load from the string or filename depending on whether the buffer is empty
-            pending_images.emplace_back(std::make_shared<PendingImages>(
-                path.u8string(),
-                [buffer_str = string(buffer), path, channel_selector]() -> vector<ImagePtr>
-                {
-                    vector<ImagePtr>   images{};
-                    fs::file_time_type last_modified = fs::file_time_type::clock::now();
-                    if (buffer_str.empty())
-                    {
-                        if (!fs::exists(path))
-                        {
-                            spdlog::error("File '{}' doesn't exist.", path.u8string());
-                            return {};
-                        }
-
-                        try
-                        {
-                            last_modified = fs::last_write_time(path);
-                        }
-                        catch (...)
-                        {
-                        }
-
-                        if (std::ifstream is{path, std::ios_base::binary})
-                            images = Image::load(is, path.u8string(), channel_selector);
-                        else
-                        {
-                            spdlog::error("File '{}' doesn't exist.", path.u8string());
-                            return vector<ImagePtr>{};
-                        }
-                    }
-                    else
-                    {
-                        std::istringstream is{buffer_str};
-                        images = Image::load(is, path.u8string(), channel_selector);
-                    }
-
-                    for (auto &img : images)
-                    {
-                        img->last_modified = last_modified;
-                        img->path          = path;
-                    }
-                    return images;
-                },
-                add_to_recent, should_select, to_replace));
+            pending_images.emplace_back(std::make_shared<PendingImages>(path.u8string(), buffer, path, channel_selector,
+                                                                        add_to_recent, should_select, to_replace));
         }
         catch (const std::exception &e)
         {
@@ -203,25 +199,28 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
     pending_images.erase(std::remove_if(pending_images.begin(), pending_images.end(),
                                         [this, &callback](shared_ptr<PendingImages> p)
                                         {
-                                            if (p->images.ready())
-                                            {
-                                                // get the result, add any loaded images, and report that we can
-                                                // remove this task
-                                                auto new_images = p->images.get();
-                                                if (new_images.empty())
-                                                    return true;
-
-                                                for (size_t i = 0; i < new_images.size(); ++i)
-                                                    callback(new_images[i], p->to_replace, p->should_select);
-
-                                                // if loading was successful, add the filename to the recent list
-                                                if (p->add_to_recent)
-                                                    add_recent_file(p->filename);
-
-                                                return true;
-                                            }
-                                            else
+                                            // if the computation isn't ready, we return false to indicate that we can't
+                                            // yet remove this entry
+                                            if (!p->computation.ready())
                                                 return false;
+
+                                            // finalize the computation
+                                            p->computation.wait();
+
+                                            // once the async computation is ready, we can access the resulting
+                                            // images and return true to report that we can remove this entry from
+                                            // pending_images
+                                            if (p->images.empty())
+                                                return true;
+
+                                            for (size_t i = 0; i < p->images.size(); ++i)
+                                                callback(p->images[i], p->to_replace, p->should_select);
+
+                                            // if loading was successful, add the filename to the recent list
+                                            if (p->add_to_recent)
+                                                add_recent_file(p->filename);
+
+                                            return true;
                                         }),
                          pending_images.end());
 }

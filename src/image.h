@@ -7,7 +7,6 @@
 #pragma once
 
 #include "array2d.h"
-#include "async.h"
 #include "box.h"
 #include "colorspace.h"
 #include "common.h"
