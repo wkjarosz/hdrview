@@ -306,7 +306,7 @@ if(my_imgui_command_palette_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
 
-CPMAddPackage("gh:wkjarosz/smallthreadpool#225145c5358ba7e2f108baa3bcf92adf51b20f23")
+CPMAddPackage("gh:wkjarosz/smallthreadpool#49944ed2816b108a063497317da27752505f0cfe")
 if(smallthreadpool_ADDED)
   message(STATUS "smallthreadpool library added")
   add_library(smallthreadpool INTERFACE IMPORTED)
