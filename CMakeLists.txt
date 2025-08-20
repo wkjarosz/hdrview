@@ -306,6 +306,14 @@ if(my_imgui_command_palette_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "my_imgui_command_palette")
 
+CPMAddPackage("gh:wkjarosz/smallthreadpool#225145c5358ba7e2f108baa3bcf92adf51b20f23")
+if(smallthreadpool_ADDED)
+  message(STATUS "smallthreadpool library added")
+  add_library(smallthreadpool INTERFACE IMPORTED)
+  target_include_directories(smallthreadpool INTERFACE "${smallthreadpool_SOURCE_DIR}")
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "smallthreadpool")
+
 CPMAddPackage("gh:sgorsten/linalg@2.2")
 if(linalg_ADDED)
   message(STATUS "linalg library added")
@@ -785,12 +793,7 @@ else()
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "CLI11::CLI11")
 
-CPMAddPackage(
-  NAME smalldds
-  GITHUB_REPOSITORY wkjarosz/smalldds
-  GIT_TAG 09e94ab70a9362392a88f5bc5de91c9fd354d0cb
-  DOWNLOAD_ONLY YES
-)
+CPMAddPackage("gh:wkjarosz/smalldds#09e94ab70a9362392a88f5bc5de91c9fd354d0cb")
 if(smalldds_ADDED)
   message(STATUS "smalldds library added")
   add_library(smalldds INTERFACE IMPORTED)
