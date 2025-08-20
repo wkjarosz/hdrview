@@ -12,7 +12,7 @@
 #include "common.h"
 #include "fwd.h"
 #include "json.h"
-#include "scheduler.h"
+#include "smallthreadpool.h"
 #include <cfloat>
 #include <half.h>
 #include <map>
@@ -25,6 +25,7 @@
 
 #include <filesystem>
 namespace fs = std::filesystem;
+using namespace stp;
 
 #include "dithermatrix256.h"
 
@@ -223,7 +224,7 @@ public:
 
 private:
     PixelStats::Ptr                    cached_stats;
-    Scheduler::TaskTracker             async_tracker;
+    ThreadPool::TaskTracker            async_tracker;
     std::shared_ptr<std::atomic<bool>> async_canceled;
     PixelStats::Ptr                    async_stats;
     PixelStats::Settings               async_settings{};

@@ -9,12 +9,12 @@ static constexpr size_t g_max_recent = 15;
 
 struct BackgroundImageLoader::PendingImages
 {
-    string                 filename;
-    Scheduler::TaskTracker computation;
-    vector<ImagePtr>       images;
-    bool                   add_to_recent;           ///< Whether to add the loaded images to the recent files list
-    bool                   should_select = false;   ///< Whether to select the first loaded image
-    ImagePtr               to_replace    = nullptr; ///< If not null, this image will be replaced with the loaded images
+    string                  filename;
+    ThreadPool::TaskTracker computation;
+    vector<ImagePtr>        images;
+    bool                    add_to_recent;         ///< Whether to add the loaded images to the recent files list
+    bool                    should_select = false; ///< Whether to select the first loaded image
+    ImagePtr                to_replace = nullptr;  ///< If not null, this image will be replaced with the loaded images
     PendingImages(const string &f, const string_view buffer, const fs::path &path, const string &channel_selector,
                   bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)

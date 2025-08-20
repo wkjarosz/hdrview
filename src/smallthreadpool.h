@@ -16,14 +16,15 @@
 // limitations under the License.
 
 //
-//
-//
 // Modifications by Wojciech Jarosz (c) 2024, released under the same Apache License as above
+// - Renamed Scheduler to ThreadPool
+// - Converted to a single-header library.
+//   - #define SMALL_THREAD_POOL in *one* translation unit before #including this file
 // - Added ability to run tasks in serial, bypassing the thread pool
 //   - Using num_threads == 0 doesn't create any workers, and all tasks run in serial immediately by the calling thread
 //   - k_all is now defined as -1
-// - Added Scheduler::singleton() which returns a global instance of a Scheduler. Upon first being called, the scheduler
-//   is created and started with num_threads = k_all. The function is guarded by a mutex.
+// - Added ThreadPool::singleton() which returns a global instance of a ThreadPool. Upon first being called, the
+//   thread pool is created and started with num_threads = k_all. The function is guarded by a mutex.
 // - Tasks now store an exception which is re-thrown in TaskTracker::wait()
 // - Added ready() function to TaskTracker
 // - Added various wrapper/utility templates (parallel_for, blocked_range, do_async) which provide a simpler,
@@ -32,8 +33,6 @@
 // - Fixed minor spelling mistakes
 // - Converted to snake_casing, and added some more comments.
 //
-
-// scheduler.h
 
 #pragma once
 
@@ -45,21 +44,31 @@
 #include <utility>
 #include <vector>
 
-/**
-    Implementation of a simple but versatile task scheduler. The scheduler allows to parallelize
-    workload and gives full control over how many threads to burst compute to. Nested parallelism
-    is fully supported, with priority to inner parallelism. Compared to a typical work stealing
-    implementation, there is no spinning, and when there is not enough workload, some threads
-    will go idle instead of spinning, making it obvious when the CPU runs underutilized.
-    Launching a task incurs a small memory allocation of 48 bytes for the task itself, that
-    is it. Lambda captures are not allowed to contain the overhead and the system implementation
-    nimble. The scheduler can be instantiated multiple times, to create multiple isolated thread
-    pools or \ref singleton() returns a pointer to a global singleton (constructed on first
-    use). Schedulers can be instantiated on demand and destroyed if needed.
-    Use \ref start() and \ref stop() methods to initialize and teardown a scheduler.
+//! Small Thread Pool namespace
+namespace stp
+{
+
+/** Implementation of a simple but versatile thread pool/task scheduler.
+
+    The pool allows parallelizing workloads with control over how many threads to burst compute to. Nested parallelism
+    is fully supported, with priority to inner parallelism. Compared to a typical work stealing implementation, there is
+    no spinning, and when there is not enough workload, some threads will go idle instead of spinning, making it obvious
+    when the CPU runs underutilized. Launching a task incurs a small memory allocation (48 bytes + sizeof(atomic<bool>)
+    + sizeof(exception_ptr)) for the task itself, that is it. The scheduler can be instantiated multiple times, to
+    create multiple isolated thread pools, or \ref singleton() returns a pointer to a single global instance
+    (constructed on first use). Thread pools can be instantiated on demand and destroyed if needed. Use \ref start() and
+    \ref stop() methods to initialize and teardown a thread pool.
+
     For examples, look at the documentation of the \ref parallelize() and \ref parallelize_async() methods.
+
+    ThreadPool is relatively low-level, and only supports calling a function pointer matching the signature of \ref
+    TaskFn (this cannot be a stateful lambda). User-supplied data can be accessed by the callback via the supplied void
+    pointer, which can be cast to the appropriate type within the callback body.
+
+    Higher-level template wrapper functions are provided at the bottom (see \ref parallel_for, \ref parallel_for_async,
+    \ref do_async) which do the required gymnastics to allow passing in stateful lambda functions.
 */
-class Scheduler
+class ThreadPool
 {
 public:
     // The task function prototype. The arguments are the same for the task function and epilogue,
@@ -74,7 +83,7 @@ public:
     struct TaskTracker
     {
         TaskTracker() : task(nullptr), scheduler(nullptr) {}
-        TaskTracker(Task *task, Scheduler *scheduler) : task(task), scheduler(scheduler)
+        TaskTracker(Task *task, ThreadPool *scheduler) : task(task), scheduler(scheduler)
         {
             if (scheduler)
                 scheduler->bind(task);
@@ -121,21 +130,21 @@ public:
         */
         void wait();
 
-        Task      *task;
-        Scheduler *scheduler;
+        Task       *task;
+        ThreadPool *scheduler;
     };
 
 public:
     static constexpr int k_all{-1};
     static constexpr int k_invalid_thread_index{-1};
 
-    Scheduler();
-    ~Scheduler();
-    Scheduler(const Scheduler &)            = delete; ///< non construction-copyable
-    Scheduler &operator=(const Scheduler &) = delete; ///< non copyable
+    ThreadPool();
+    ~ThreadPool();
+    ThreadPool(const ThreadPool &)            = delete; ///< non construction-copyable
+    ThreadPool &operator=(const ThreadPool &) = delete; ///< non copyable
 
     // Return the global default scheduler, which is created upon the first call, and guarded by a mutex
-    static Scheduler *singleton();
+    static ThreadPool *singleton();
 
     /// Start a pool with a number of threads. \ref k_all means use the full hardware concurrency available.
     void start(int num_threads = k_all);
@@ -390,7 +399,7 @@ private:
     \param workload_size Total size of the workload (e.g. number of elements to process).
     \param min_unit_size The number of elements per thread that are considered viable to mitigate scheduling overhead.
 */
-inline size_t estimate_threads(size_t workload_size, size_t min_unit_size, const Scheduler &scheduler)
+inline size_t estimate_threads(size_t workload_size, size_t min_unit_size, const ThreadPool &scheduler)
 {
     size_t chunks = (workload_size + min_unit_size - 1) / min_unit_size;
     return std::min<size_t>(chunks, scheduler.size());
@@ -461,7 +470,7 @@ private:
     safe to call concurrently from multiple threads.
 
     Example:
-    @code
+    @code{.cpp}
     std::atomic<uint32_t> counter{0};
     AtomicLoadBalance<int> workload(counter, range);
     while (workload.advance()) {
@@ -505,8 +514,8 @@ public:
     @tparam Func Callable type.
     @param range Range of work to split into blocks (see \ref blocked_range).
     @param func Callable invoked by each worker for each assigned block. Signature: (begin,end,unit_index,thread_index).
-    @param num_threads Number of threads to use. Defaults to Scheduler::k_all (use scheduler size).
-    @param scheduler Optional Scheduler pointer; when null Scheduler::singleton() is used.
+    @param num_threads Number of threads to use. Defaults to ThreadPool::k_all (use scheduler size).
+    @param scheduler Optional ThreadPool pointer; when null ThreadPool::singleton() is used.
 
     Example:
     @code{.cpp}
@@ -521,11 +530,11 @@ public:
     @endcode
 */
 template <typename Int, typename Func>
-void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads = Scheduler::k_all,
-                  Scheduler *scheduler = nullptr)
+void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads = ThreadPool::k_all,
+                  ThreadPool *scheduler = nullptr)
 {
     if (!scheduler)
-        scheduler = Scheduler::singleton();
+        scheduler = ThreadPool::singleton();
 
     struct Payload
     {
@@ -561,9 +570,9 @@ void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads 
     @param range Range to process.
     @param func Main callable (copied into heap payload).
     @param epilogue Epilogue callable to run when task completes (copied into heap payload).
-    @param num_threads Number of threads or Scheduler::k_all.
-    @param scheduler Optional scheduler pointer (defaults to Scheduler::singleton()).
-    @return Scheduler::TaskTracker A TaskTracker that can be waited on.
+    @param num_threads Number of threads or ThreadPool::k_all.
+    @param scheduler Optional scheduler pointer (defaults to ThreadPool::singleton()).
+    @return ThreadPool::TaskTracker A TaskTracker that can be waited on.
 
     Example:
     @code{.cpp}
@@ -585,11 +594,11 @@ void parallel_for(const blocked_range<Int> &range, Func &&func, int num_threads 
     @endcode
 */
 template <typename Int, typename Func1, typename Func2>
-Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func, Func2 &&epilogue,
-                                          int num_threads = Scheduler::k_all, Scheduler *scheduler = nullptr)
+ThreadPool::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func, Func2 &&epilogue,
+                                           int num_threads = ThreadPool::k_all, ThreadPool *scheduler = nullptr)
 {
     if (!scheduler)
-        scheduler = Scheduler::singleton();
+        scheduler = ThreadPool::singleton();
 
     using BaseFunc1 = typename std::decay<Func1>::type;
     using BaseFunc2 = typename std::decay<Func2>::type;
@@ -627,14 +636,14 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
     @tparam Func1 Main callable type.
     @param range Range to process.
     @param func Main callable.
-    @param num_threads Number of threads or Scheduler::k_all.
+    @param num_threads Number of threads or ThreadPool::k_all.
     @param scheduler Optional scheduler pointer.
 
     @see parallel_for_async(range, func, epilogue, ...)
 */
 template <typename Int, typename Func1>
-Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func,
-                                          int num_threads = Scheduler::k_all, Scheduler *scheduler = nullptr)
+ThreadPool::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1 &&func,
+                                           int num_threads = ThreadPool::k_all, ThreadPool *scheduler = nullptr)
 {
     return parallel_for_async(range, func, [](int, int) {}, num_threads, scheduler);
 }
@@ -646,8 +655,8 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
 
     @tparam Func Callable type.
     @param func Callable to execute asynchronously.
-    @param scheduler Optional Scheduler pointer. If null, Scheduler::singleton() is used.
-    @return Scheduler::TaskTracker TaskTracker that can be used to wait() for completion.
+    @param scheduler Optional ThreadPool pointer. If null, ThreadPool::singleton() is used.
+    @return ThreadPool::TaskTracker TaskTracker that can be used to wait() for completion.
 
     Example:
     @code{.cpp}
@@ -667,10 +676,10 @@ Scheduler::TaskTracker parallel_for_async(const blocked_range<Int> &range, Func1
     @endcode
 */
 template <typename Func>
-Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
+ThreadPool::TaskTracker do_async(Func &&func, ThreadPool *scheduler = nullptr)
 {
     if (!scheduler)
-        scheduler = Scheduler::singleton();
+        scheduler = ThreadPool::singleton();
 
     using BaseFunc = typename std::decay<Func>::type;
 
@@ -686,3 +695,397 @@ Scheduler::TaskTracker do_async(Func &&func, Scheduler *scheduler = nullptr)
 
     return scheduler->parallelize_async(1, payload, callback, deleter);
 }
+
+} // namespace stp
+
+#ifdef SMALL_THREADPOOL_IMPLEMENTATION
+
+#include <assert.h>
+#include <spdlog/spdlog.h>
+
+namespace stp
+{
+
+struct ThreadPool::Task
+{
+    inline Task(int num_units, void *data, TaskFn fn, TaskFn epilogue = nullptr) :
+        data(data), fn(fn), epilogue(epilogue), parent(nullptr), num_units(num_units)
+    {
+    }
+
+    // These fields are read-only, they are defined on task creation and never change thereafter.
+    void  *data;      //< The task data to be passed as argument to the task function.
+    TaskFn fn;        //< The task function, executed by as many threads as num_units.
+    TaskFn epilogue;  //< The optional task epilogue function, executed only once upon task completion.
+    Task  *parent;    //< The parent task in case of nested parallelism.
+    int    num_units; //< This is number of units of work. Ideally, this shouldn't exceed the width
+                      //  of the hardware concurrency.
+
+    // The following fields change value during the lifetime of the task.
+    std::atomic<int> completed{0};           //< How many units of work are completed.
+    std::atomic<int> refcount{0};            //< Traditional ref-counting to govern the task lifetime.
+    std::atomic<int> dependencies{1};        //< How many nested tasks are still running. Set to one because
+                                             //  each task is considered to depend on its own completion too.
+    std::atomic<bool>  has_exception{false}; //< Atomic flag stating whether an exception has already been saved.
+    std::exception_ptr exception{nullptr};   //< Pointer to an exception in case the task failed
+
+    // The insertion of an invalid task in the scheduler queue causes one of its threads to terminate.
+    // Besides that, tasks are never invalid by design.
+    bool valid() const { return num_units != 0; }
+};
+
+/////////////////////////////////////////////////////////////////////////////////
+// ThreadPool static members and globals
+thread_local int               ThreadPool::m_thread_index            = ThreadPool::k_invalid_thread_index;
+int                            ThreadPool::m_next_guest_thread_index = 0;
+thread_local ThreadPool::Task *ThreadPool::m_thread_task             = nullptr;
+
+static std::unique_ptr<ThreadPool> s_singleton;
+static std::mutex                  s_singleton_lock;
+
+ThreadPool *ThreadPool::singleton()
+{
+    std::unique_lock<std::mutex> guard(s_singleton_lock);
+
+    if (!s_singleton)
+    {
+        s_singleton = std::make_unique<ThreadPool>();
+        s_singleton->start();
+    }
+
+    return s_singleton.get();
+}
+
+ThreadPool::ThreadPool() {}
+
+ThreadPool::~ThreadPool() { stop(); }
+
+static int get_nesting_level(const ThreadPool::Task *task)
+{
+    int level = 0;
+    while (task)
+    {
+        task = task->parent;
+        level++;
+    }
+    return level;
+}
+
+int ThreadPool::get_nesting_level() { return stp::get_nesting_level(m_thread_task); }
+
+void ThreadPool::bind(Task *task)
+{
+    if (!task)
+        return;
+    task->refcount++;
+}
+
+// Unbind is where tasks are deallocated
+bool ThreadPool::unbind(Task *task)
+{
+    if (!task)
+        return false;
+
+    int current = --task->refcount;
+    assert(current >= 0);
+
+    if (current == 0)
+    {
+        Task *parent = task->parent;
+        delete_task(task);
+
+        // recursion
+        if (parent)
+            unbind(parent);
+        return true;
+    }
+
+    return false;
+}
+
+// Memory management functions: tasks are allocated and freed by the same module, to safeguard
+// from heap corruption across DSO boundaries.
+ThreadPool::Task *ThreadPool::new_task(void *data, TaskFn fn, TaskFn epilogue, int num_units)
+{
+    return new Task(num_units, data, fn, epilogue);
+}
+
+void ThreadPool::delete_task(Task *task)
+{
+    if (!task)
+        return;
+
+    assert(task->refcount.load() == 0);
+
+    delete task;
+}
+
+// Internal function to track dependencies between nested tasks. By binding a parent task, we make it wait on the
+// completion of nested task.
+static void bind_parents(ThreadPool::Task *task)
+{
+    while (task)
+    {
+        task->dependencies++;
+        task = task->parent;
+    }
+}
+static void unbind_parents(ThreadPool::Task *task)
+{
+    while (task)
+    {
+        task->dependencies--;
+        task = task->parent;
+    }
+}
+
+void ThreadPool::start(int num_threads)
+{
+    assert(m_workers.empty() && "Assure scheduler is not initialized twice!");
+    {
+#if defined(__EMSCRIPTEN__) && !defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+        // if threading is disabled, create no threads
+        auto logical_cores = 0;
+#elif defined(HELLOIMGUI_EMSCRIPTEN_PTHREAD)
+        // if threading is enabled in emscripten, then use just 1 thread
+        auto logical_cores = 1;
+#else
+        auto logical_cores = std::thread::hardware_concurrency();
+#endif
+        if (num_threads == k_all)
+            num_threads = logical_cores;
+        else
+            num_threads = std::min<int>(num_threads, logical_cores);
+        // The reason we cap num_threads to the number of logical threads in the system is to avoid
+        // any conflict in the thread_index assignment for guest threads (calling threads) entering
+        // the scheduler during calls to TaskTracker::wait().
+        // If the thread index is above the hardware concurrency, it means it is a guest thread,
+        // independently on how many threads a scheduler has. This is not important with just one
+        // scheduler, but it becomes important when there are more, each with a different count of
+        // threads.
+    }
+
+    m_next_guest_thread_index = num_threads;
+    m_workers.resize(num_threads, nullptr);
+
+    // Spawn worker threads
+    for (int thread_index = 0; thread_index < (int)num_threads; ++thread_index)
+    {
+        m_workers[thread_index] = new std::thread(
+            [this, thread_index]
+            {
+                try
+                {
+                    // Initialize thread index, worker threads have numbers in the range [0, num_threads-1]
+                    // Guest threads will get their own unique indices.
+                    m_thread_index = thread_index;
+
+                    spdlog::trace("Spawning worker thread {}", thread_index);
+                    while (true)
+                    {
+                        WorkUnit work_unit;
+                        {
+                            // usual thread-safe queue code:
+                            std::unique_lock<std::mutex> lock(m_work_mutex);
+                            m_work_signal.wait(lock, [&] { return !m_work.empty(); });
+
+                            // Transfer ownership to this thread, unbind tasks after running
+                            work_unit = m_work.front();
+                            m_work.pop_front();
+                        }
+
+                        // if the task is invalid, it means we are asked to abort:
+                        if (work_unit.task && !work_unit.task->valid())
+                        {
+                            unbind(work_unit.task);
+                            break;
+                        }
+
+                        run_task(work_unit.task, work_unit.index, thread_index);
+                        unbind(work_unit.task);
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    spdlog::error("Caught an exception in a worker thread: '{}'", e.what());
+                }
+                catch (...)
+                {
+                    spdlog::error("Caught an exception in a worker thread");
+                }
+            });
+    }
+}
+
+void ThreadPool::run_task(Task *task, int unit_index, int thread_index)
+{
+    Task *old_task = m_thread_task;
+    m_thread_task  = task;
+
+    if (!task->has_exception.load())
+    {
+        try
+        {
+            task->fn(unit_index, thread_index, task->data);
+        }
+        catch (...)
+        {
+            bool value = false;
+            if (task->has_exception.compare_exchange_strong(value, true))
+            {
+                spdlog::trace("Storing exception thrown by a task...");
+                task->exception = std::current_exception();
+            }
+            else
+                spdlog::trace("Ignoring exception thrown by a task (another exception has already been stored)...");
+        }
+    }
+    else
+    {
+        spdlog::trace(
+            "Skipping callback (task={}, unit_index={}, thread_index={}) because another work unit of this task "
+            "threw an exception.",
+            (void *)task, unit_index, thread_index);
+    }
+
+    int done = ++task->completed;
+    if (done == task->num_units)
+    {
+        if (task->epilogue)
+            task->epilogue(task->num_units, thread_index, task->data);
+
+        unbind_parents(task);
+    }
+
+    m_thread_task = old_task;
+}
+
+void ThreadPool::pick_work_unit(int nesting_level, int thread_index)
+{
+    WorkUnit work_unit;
+    {
+        std::unique_lock<std::mutex> lock(m_work_mutex);
+        if (m_work.empty())
+            return;
+
+        // Do not steal any work that is an outer loop compared to the calling context. Doing
+        // so would have side effects, including:
+        //  - deferring completion of the current workload, and larger memory peaks due to
+        //    longer persistent of any temporary buffer.
+        //  - risk of deadlocks in the calling user code
+        //  - risk of misconfiguration of per-thread context objects pertaining the outer loop
+        // These are examples of real problems I had to work around in past projects using TBB,
+        // where there is no such protection in place.
+        // Note: this mechanism is still simplistic, ideally we could use a dependency tree, and
+        //       pick only work_units that are in the current branch; recursively looking at the
+        //       Task::parent should do the trick. We could also look ahead in the queue to
+        //       search for such a work_unit. Up to now this proved not to be needed; I am post-
+        //       poning any feature adding significant complexity to the system if not strictly
+        //       required.
+        work_unit                   = m_work.front();
+        int work_unit_nesting_level = stp::get_nesting_level(work_unit.task);
+        if (work_unit_nesting_level < nesting_level)
+            return;
+
+        m_work.pop_front();
+    }
+
+    // if the task is invalid, it means we are asked to abort:
+    if (work_unit.task && !work_unit.task->valid())
+    {
+        assert(false);
+        unbind(work_unit.task);
+        return;
+    }
+
+    run_task(work_unit.task, work_unit.index, thread_index);
+    unbind(work_unit.task);
+}
+
+void ThreadPool::stop()
+{
+    if (m_workers.empty())
+        return;
+
+    // Push invalid tasks, one for each thread. The invalid task will make a thread terminate
+    {
+        std::unique_lock<std::mutex> lock(m_work_mutex);
+        for (size_t i = 0; i < m_workers.size(); ++i)
+        {
+            Task *task = new Task(0, nullptr, nullptr);
+            bind(task);
+            m_work.push_back({task, 0});
+        }
+    }
+    m_work_signal.notify_all();
+
+    // Wait for threads to terminate
+    for (std::thread *thread : m_workers) thread->join();
+
+    m_workers.clear();
+    assert(m_work.empty() && "Work queue should be empty");
+}
+
+ThreadPool::TaskTracker ThreadPool::async(int num_units, void *data, TaskFn f, TaskFn epilogue, int reserved_units,
+                                          bool front)
+{
+    Task *task   = new_task(data, f, epilogue, num_units);
+    task->parent = m_thread_task;
+    if (task->parent)
+        bind(task->parent);
+    bind_parents(task->parent);
+
+    // Get the future return value before we hand off the task
+    TaskTracker result(task, this);
+
+    num_units -= reserved_units;
+    task->refcount += num_units;
+    // Store the task in the queue
+    if (num_units > 0)
+    {
+        std::unique_lock<std::mutex> lock(m_work_mutex);
+        if (front)
+            while (--num_units >= 0) m_work.push_front({task, reserved_units + num_units});
+        else
+            while (--num_units >= 0) m_work.push_back({task, reserved_units + num_units});
+    }
+
+    // Wake as many thread as we need to work on the task
+    m_work_signal.notify_all();
+
+    return result;
+}
+
+bool ThreadPool::TaskTracker::ready() const { return !task || task->dependencies.load() == 0; }
+
+void ThreadPool::TaskTracker::wait()
+{
+    if (!task)
+        return;
+
+    int thread_index  = get_or_assign_thread_index();
+    int nesting_level = get_nesting_level();
+
+    while (true)
+    {
+        if (task->dependencies.load() == 0)
+            break;
+
+        // Work stealing
+        scheduler->pick_work_unit(nesting_level, thread_index);
+    }
+
+    // save the exception
+    std::exception_ptr exc = task->exception;
+
+    // cleanup
+    scheduler->unbind(task);
+    task = nullptr, scheduler = nullptr;
+
+    if (exc)
+        std::rethrow_exception(exc);
+}
+
+} // namespace stp
+
+#endif

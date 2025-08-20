@@ -254,7 +254,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         Timer timer;
         {
             size_t               block_size  = 1024 * 1024;
-            const size_t         num_threads = estimate_threads(croi.volume(), block_size, *Scheduler::singleton());
+            const size_t         num_threads = estimate_threads(croi.volume(), block_size, *ThreadPool::singleton());
             std::vector<Summary> partials(max<size_t>(1, num_threads));
 
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());

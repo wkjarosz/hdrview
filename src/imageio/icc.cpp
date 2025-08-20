@@ -1,10 +1,11 @@
 #include "icc.h"
-#include "scheduler.h"
+#include "smallthreadpool.h"
 #include <spdlog/spdlog.h>
 #include <vector>
 
 using std::string;
 using std::vector;
+using namespace stp;
 
 #ifdef HDRVIEW_ENABLE_LCMS2
 #include <lcms2.h>

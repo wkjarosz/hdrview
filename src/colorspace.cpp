@@ -7,11 +7,14 @@
 #include "colorspace.h"
 #include "Imath_to_linalg.h"
 #include "common.h"
-#include "scheduler.h"
 #include <cmath>
 #include <float.h>
 
+#define SMALL_THREADPOOL_IMPLEMENTATION
+#include "smallthreadpool.h"
+
 using namespace std;
+using namespace stp;
 
 // source: https://cie.co.at/data-tables
 

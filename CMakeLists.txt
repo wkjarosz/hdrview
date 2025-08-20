@@ -914,7 +914,6 @@ hello_imgui_add_app(
   src/imgui_ext.cpp
   src/image_gui.cpp
   src/opengl_check.cpp
-  src/scheduler.cpp
   src/shader.cpp
   src/shader_gl.cpp
   src/renderpass_gl.cpp
