@@ -301,9 +301,9 @@ json exif_data_to_json(ExifData *ed)
             if (!entry)
                 continue;
 
-            const char *tag_name = exif_tag_get_name_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
-            if (!tag_name)
-                tag_name = ("UnknownTag_" + std::to_string(entry->tag)).c_str();
+            string tag_name = exif_tag_get_name_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
+            if (tag_name.empty())
+                tag_name = "UnknownTag_" + std::to_string(entry->tag);
 
             ifd_json[tag_name] = entry_to_json(entry, exif_data_get_byte_order(ed));
         }
