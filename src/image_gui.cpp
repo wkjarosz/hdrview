@@ -179,9 +179,9 @@ void Image::draw_histogram()
 
         auto plt_range = ImPlot::GetPlotLimits(ImAxis_X1);
         ImPlot::DragRect(0, &plt_range.X.Min, &plt_range.Y.Min, &xrange.min.x, &plt_range.Y.Max,
-                         ImVec4(0.0, 0.0, 0.0, 1.0), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
+                         ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
         ImPlot::DragRect(0, &xrange.max.x, &plt_range.Y.Min, &plt_range.X.Max, &plt_range.Y.Max,
-                         ImVec4(0.0, 0.0, 0.0, 1.0), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
+                         ImVec4(0.0, 0.0, 0.0, 1.5), ImPlotDragToolFlags_NoInputs | ImPlotDragToolFlags_NoFit);
 
         // Displayed values (d) are related to stored values (p) via the exposure and offset:
         // d = p * (2 ^ e) + o;

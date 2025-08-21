@@ -192,7 +192,7 @@ const std::set<std::string> &Image::savable_formats()
 float2 PixelStats::x_limits(float e, AxisScale_ scale) const
 {
     float2 ret;
-    ret[1] = pow(2.f, -e);
+    ret[1] = pow(2.f, -e) * (scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : 4.f));
     if (summary.minimum < -summary.maximum / 255.f)
         ret[0] = -ret[1];
     else
