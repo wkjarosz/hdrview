@@ -2486,11 +2486,12 @@ void HDRViewApp::close_image()
     if (next < m_current) // there is no visible image after this one, go to previous visible
         next = next_visible_image_index(m_current, Backward);
 
+    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
+
     auto filename = m_images[m_current]->filename;
     m_images.erase(m_images.begin() + m_current);
 
 #if !defined(__EMSCRIPTEN__)
-    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
 
     if (!m_active_directories.empty())
     {
@@ -4410,7 +4411,7 @@ void HDRViewApp::draw_about_dialog()
                 ImGui::Text("define: __EMSCRIPTEN__");
 #endif
 #ifdef ASSETS_LOCATION
-                ImGui::Text("ASSETS_LOCATION:"##ASSETS_LOCATION);
+                ImGui::Text("ASSETS_LOCATION: %s", ASSETS_LOCATION);
 #endif
 #ifdef HDRVIEW_ICONSET_FA6
                 ImGui::Text("HDRVIEW_ICONSET: Font Awesome 6");
