@@ -58,7 +58,7 @@ SpdLogWindow &GlobalSpdLogWindow();
 
 ImVec2 IconSize();
 ImVec2 IconButtonSize();
-bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(0, 0));
+bool   IconButton(const char *icon, bool *v = nullptr, const ImVec2 &size = ImVec2(-1, -1));
 
 //! A simple abstraction for a GUI action, which can be shown as a menu item, button, Checkbox, etc.
 struct Action
@@ -75,7 +75,7 @@ struct Action
 };
 
 void MenuItem(const Action &a);
-void IconButton(const Action &a);
+void IconButton(const Action &a, bool include_name = false);
 void Checkbox(const Action &a);
 
 inline bool BeginComboButton(const char *id, const char *preview_icon, ImGuiComboFlags flags = ImGuiComboFlags_None)
@@ -168,6 +168,9 @@ inline void TextAligned(const std::string text, float align)
     AlignCursor(text, align);
     TextUnformatted(text.c_str());
 }
+
+// right-align the truncated file name
+std::string TruncatedText(const std::string &filename, const std::string &icon);
 
 void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
 

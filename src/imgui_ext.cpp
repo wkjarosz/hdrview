@@ -251,6 +251,21 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
     return m_level_colors.at(static_cast<size_t>(level));
 }
 
+string TruncatedText(const string &filename, const string &icon)
+{
+    string ellipsis = " ";
+    string text     = filename;
+
+    const float avail_width = GetContentRegionAvail().x - GetTreeNodeToLabelSpacing();
+    while (CalcTextSize((icon + ellipsis + text).c_str()).x > avail_width && text.length() > 1)
+    {
+        text     = text.substr(1);
+        ellipsis = " ...";
+    }
+
+    return icon + ellipsis + text;
+};
+
 ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }
 
 ImVec2 IconButtonSize()
@@ -261,7 +276,10 @@ ImVec2 IconButtonSize()
 
 bool IconButton(const char *icon, bool *v, const ImVec2 &size)
 {
-    auto sz = (size.x == 0 && size.y == 0) ? IconButtonSize() : size;
+    auto   asz = IconButtonSize();
+    ImVec2 sz  = size;
+    sz.x       = sz.x < 0.f ? asz.x : sz.x;
+    sz.y       = sz.y < 0.f ? asz.y : sz.y;
 
     bool toggle = v != nullptr;
     if (toggle)
@@ -576,20 +594,34 @@ void MenuItem(const Action &a)
     }
 }
 
-void IconButton(const Action &a)
+void IconButton(const Action &a, bool include_name)
 {
     ImGui::BeginDisabled(a.enabled() == false);
 
-    if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str(), a.p_selected))
-        a.callback();
-
-    if (a.chord)
-        ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
-                                          a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
-                                  .c_str());
+    if (include_name)
+    {
+        if (ImGui::IconButton(fmt::format("{} {}", a.icon, a.name).c_str(), a.p_selected, ImVec2(0, -1)))
+            a.callback();
+        if (a.chord)
+            ImGui::WrappedTooltip(fmt::format("({}){}", ImGui::GetKeyChordNameTranslated(a.chord),
+                                              a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                                      .c_str());
+        else
+            ImGui::WrappedTooltip(fmt::format("{}", a.tooltip.empty() ? "" : fmt::format("{}", a.tooltip)).c_str());
+    }
     else
-        ImGui::WrappedTooltip(
-            fmt::format("{}{}", a.name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
+    {
+        if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str(), a.p_selected))
+            a.callback();
+        if (a.chord)
+            ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
+                                              a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                                      .c_str());
+        else
+            ImGui::WrappedTooltip(
+                fmt::format("{}{}", a.name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
+    }
+
     ImGui::EndDisabled();
 }
 

@@ -676,6 +676,13 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     log_window.GuiFunction       = [this]
     { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); };
 
+    HelloImGui::DockableWindow watched_folders_window;
+    watched_folders_window.label             = "Watched Folders";
+    watched_folders_window.dockSpaceName     = "ImagesSpace";
+    watched_folders_window.isVisible         = true;
+    watched_folders_window.rememberIsVisible = true;
+    watched_folders_window.GuiFunction       = [this] { m_image_loader.draw_gui(); };
+
 #ifdef _WIN32
     ImGuiKey modKey = ImGuiMod_Alt;
 #else
@@ -684,8 +691,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
     // docking layouts
     m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {histogram_window,  channel_stats_window,   file_window, info_window,
-                                              colorspace_window, pixel_inspector_window, log_window};
+    m_params.dockingParams.dockableWindows = {
+        histogram_window,  channel_stats_window,   file_window, watched_folders_window, info_window,
+        colorspace_window, pixel_inspector_window, log_window};
     struct DockableWindowExtraInfo
     {
         ImGuiKeyChord chord = ImGuiKey_None;
@@ -694,6 +702,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
                                              {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
                                              {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
+                                             {ImGuiKey_None, ICON_MY_ADD_WATCHED_FOLDER},
                                              {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                              {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
                                              {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
@@ -1034,33 +1043,12 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                             ImPlot::PopStyleVar(3);
                             ImPlot::EndPlot();
                         }
+
                         ImGui::EndTabItem();
                     }
-                    if (ImGui::BeginTabItem("Watched folders"))
-                    {
-                        m_image_loader.draw_gui();
 
-                        static const ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV |
-                                                                   ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg |
-                                                                   ImGuiTableFlags_ScrollX;
-
-                        ImGui::Text("Active directories");
-                        if (ImGui::BeginTable("Active directories", 1, table_flags, ImVec2(0.f, 300.f)))
-                        {
-                            for (const auto &path : m_active_directories)
-                            {
-                                ImGui::TableNextRow();
-                                ImGui::TableNextColumn();
-
-                                ImGui::TextFmt("{}", path.string());
-                            }
-
-                            ImGui::EndTable();
-                        }
-                        ImGui::EndTabItem();
-                    }
+                    ImGui::EndTabBar();
                 }
-                ImGui::EndTabBar();
             }
 
             ImGui::End();
@@ -1307,16 +1295,22 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                         for (auto &i : m_images) reload_image(i);
                     },
                     if_img});
-        add_action({"Watch for changes", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0, []() {}, always_enabled, false,
-                    &m_watch_files_for_changes});
-        add_action({"Add watched folder...", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0,
+        add_action({"Watch for changes", ICON_MY_WATCH_CHANGES, ImGuiKey_None, 0, []() {}, always_enabled, false,
+                    &m_watch_files_for_changes,
+                    "Regularly monitor opened files and folders, loading new files, and reloading existing files when "
+                    "changes are detected."});
+        add_action({"Add watched folder...", ICON_MY_ADD_WATCHED_FOLDER, ImGuiKey_None, 0,
                     [this]()
                     {
                         if (m_image_loader.add_watched_directory(
                                 pfd::select_folder("Open images in folder", "").result(), true))
                             m_watch_files_for_changes = true;
                     },
-                    always_enabled});
+                    always_enabled, false, nullptr,
+                    "Do not load any existing files from the select folder, but monitor it for new files and load "
+                    "those as they are created.\n"
+                    "Useful if you plan to periodically write images into a folder (e.g. renderings) and want HDRView "
+                    "to automatically load them as they appear."});
 
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
@@ -2949,6 +2943,10 @@ void HDRViewApp::draw_file_window()
     }
     ImGui::WrappedTooltip("Choose how the images and layers are listed below");
 
+    static constexpr ImGuiTreeNodeFlags base_node_flags =
+        ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick |
+        ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DrawLinesFull;
+
     static constexpr ImGuiTableFlags table_flags = ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate |
                                                    ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit |
                                                    ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg |
@@ -2959,13 +2957,8 @@ void HDRViewApp::draw_file_window()
     {
         const float icon_width = ImGui::IconSize().x;
 
-        ImGui::TableSetupColumn(ICON_MY_LIST_OL,
-                                ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed |
-                                    ImGuiTableColumnFlags_IndentDisable,
-                                1.25f * icon_width);
-        // ImGui::TableSetupColumn(ICON_MY_VISIBILITY,
-        //                         ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_IndentDisable,
-        //                         icon_width);
+        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed,
+                                ImGui::GetTreeNodeToLabelSpacing());
         ImGui::TableSetupColumn(g_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
@@ -2999,12 +2992,9 @@ void HDRViewApp::draw_file_window()
                 sort_specs->SpecsDirty = g_request_sort = false;
             }
 
-        static constexpr ImGuiTreeNodeFlags base_node_flags =
-            ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick |
-            ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DrawLinesFull;
-
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
+
         int id                 = 0;
         int visible_img_number = 0;
         int hidden_images      = 0;
@@ -3043,31 +3033,19 @@ void HDRViewApp::draw_file_window()
                 ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
             }
 
-            // right-align the truncated file name
-            string filename;
-            string icon     = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
-            string ellipsis = " ";
-            {
-                auto &selected_group =
-                    img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
-                string group_name =
-                    selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
-                auto  &channel    = img->channels[selected_group.channels[0]];
-                string layer_path = Channel::head(channel.name);
-                filename          = (g_short_names ? img->short_name : img->file_and_partname()) +
-                           (g_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
+            auto &selected_group =
+                img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
+            string group_name =
+                selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
+            auto  &channel    = img->channels[selected_group.channels[0]];
+            string layer_path = Channel::head(channel.name);
+            string filename   = (g_short_names ? img->short_name : img->file_and_partname()) +
+                              (g_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                const float avail_width = ImGui::GetContentRegionAvail().x - ImGui::GetTreeNodeToLabelSpacing();
-                while (ImGui::CalcTextSize((icon + ellipsis + filename).c_str()).x > avail_width &&
-                       filename.length() > 1)
-                {
-                    filename = filename.substr(1);
-                    ellipsis = " ...";
-                }
-            }
+            string the_text = ImGui::TruncatedText(filename, img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE);
 
             // auto item = m_images[i];
-            bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", (icon + ellipsis + filename).c_str());
+            bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", the_text.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
                 if (ImGui::GetIO().KeyShift)
@@ -3096,7 +3074,7 @@ void HDRViewApp::draw_file_window()
                     ImGui::TableNextColumn();
                     ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
                     ImGui::TableNextColumn();
-                    ImGui::Text(icon + ellipsis + filename);
+                    ImGui::Text(the_text);
                     ImGui::EndTable();
                 }
                 ImGui::EndDragDropSource();
@@ -3186,6 +3164,7 @@ void HDRViewApp::draw_file_window()
                 ImGui::TextFmt("{} {} image{} hidden", ICON_MY_VISIBILITY_OFF, hidden_images, images_str);
             ImGui::EndDisabled();
         }
+
         ImGui::PopStyleVar(2);
 
         ImGui::EndTable();
@@ -3204,16 +3183,10 @@ void HDRViewApp::draw_file_window()
 
         ImGui::SameLine();
 
-        ImGui::SetNextItemWidth(
-            std::max(HelloImGui::EmSize(1.f),
-                     ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x - ImGui::IconButtonSize().x));
+        ImGui::SetNextItemWidth(std::max(HelloImGui::EmSize(1.f), ImGui::GetContentRegionAvail().x));
         if (ImGui::SliderFloat("##Playback speed", &g_playback_speed, 0.1f, 60.f, "%.1f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
             g_playback_speed = clamp(g_playback_speed, 1.f / 20.f, 60.f);
-
-        ImGui::SameLine();
-
-        ImGui::IconButton(action("Watch for changes"));
     }
     // ImGui::EndDisabled();
 }
@@ -3675,8 +3648,8 @@ void HDRViewApp::draw_top_toolbar()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
     ImGui::EndGroup();
-    ImGui::WrappedTooltip(
-        "Increase/decrease the blackpoint offset. The offset is added to the pixel value after exposure is applied.");
+    ImGui::WrappedTooltip("Increase/decrease the blackpoint offset. The offset is added to the pixel value after "
+                          "exposure is applied.");
 
     ImGui::SameLine();
 
@@ -3944,7 +3917,8 @@ void HDRViewApp::draw_background()
             // else if (g_mouse_mode == MouseMode_PanZoom)
             // {
             //     // draw pixel watcher indicator
-            //     ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_PAN_ZOOM_TOOL,
+            //     ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK,
+            //     ICON_MY_PAN_ZOOM_TOOL,
             //                           {0.5f, 0.5f});
             //     ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_PAN_ZOOM_TOOL, {0.5f,
             //     0.5f});

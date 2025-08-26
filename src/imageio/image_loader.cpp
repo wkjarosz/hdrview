@@ -1,5 +1,6 @@
 #include "image_loader.h"
 #include "app.h"
+#include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
 #include <fstream>
@@ -189,6 +190,10 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
 bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &dir, bool ignore_existing)
 {
+    if (dir.empty())
+        return false;
+
+    spdlog::trace("adding watched folder '{}'", dir.string());
     std::error_code ec;
     auto            canon_p = fs::weakly_canonical(dir, ec);
     if (ec)
@@ -217,7 +222,6 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
             m_existing_files.emplace(entry);
     }
 
-    m_directories.emplace(dir);
     return true;
 }
 
@@ -341,34 +345,44 @@ void BackgroundImageLoader::load_new_and_modified_files()
 
 void BackgroundImageLoader::draw_gui()
 {
-    static const ImGuiTableFlags table_flags =
-        ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX;
+    ImGui::IconButton(hdrview()->action("Watch for changes"), true);
+    ImGui::SameLine();
+    ImGui::IconButton(hdrview()->action("Add watched folder..."), true);
 
-    ImGui::Text("Watched paths");
-    if (ImGui::BeginTable("Watched paths", 1, table_flags, ImVec2(0.f, 100.f)))
+    if (ImGui::BeginTable("Watched folders", 1,
+                          ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingStretchProp |
+                              ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_RowBg,
+                          ImVec2(0.f, ImGui::GetContentRegionAvail().y)))
     {
+        const float icon_width = ImGui::IconSize().x;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
+        ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
+
+        ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
+        ImGui::TableSetupColumn("Watched folders", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        fs::path to_remove;
         for (const auto &path : m_directories)
         {
             ImGui::TableNextRow();
-            ImGui::TableNextColumn();
+            ImGui::TableSetColumnIndex(0);
+            if (ImGui::SmallButton(fmt::format("{}##{}", ICON_MY_CLOSE_SMALL, path.string()).c_str()))
+                to_remove = path;
 
-            ImGui::TextFmt("{}", path.string());
+            ImGui::SameLine();
+
+            ImGui::BeginDisabled(!(*hdrview()->action("Watch for changes").p_selected));
+            string text = ImGui::TruncatedText(path.string(), ICON_MY_ADD_WATCHED_FOLDER);
+            // if (ImGui::Selectable(text.c_str(), false))
+            //     ;
+            ImGui::TextUnformatted(text.c_str());
+            ImGui::EndDisabled();
         }
 
-        ImGui::EndTable();
-    }
-
-    ImGui::Text("Existing files");
-    if (ImGui::BeginTable("Existing files", 1, table_flags, ImVec2(0.f, 300.f)))
-    {
-        for (const auto &path : m_existing_files)
-        {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-
-            ImGui::TextFmt("{}", path.string());
-        }
-
+        if (!to_remove.empty())
+            remove_watched_directories([to_remove](const fs::path &path) { return path == to_remove; });
+        ImGui::PopStyleVar(2);
         ImGui::EndTable();
     }
 }

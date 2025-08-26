@@ -13,6 +13,7 @@
 #include "fwd.h"
 #include "json.h"
 #include "smallthreadpool.h"
+#include "texture.h"
 #include <cfloat>
 #include <half.h>
 #include <map>
@@ -141,6 +142,14 @@ struct PixelStats
 
 struct Channel : public Array2Df
 {
+private:
+    PixelStats::Ptr                    cached_stats;
+    ThreadPool::TaskTracker            async_tracker;
+    std::shared_ptr<std::atomic<bool>> async_canceled; // this is a shared_ptr instead of a bare atomic<bool> because
+                                                       // the latter has a deleted move constructor
+    PixelStats::Ptr      async_stats;
+    PixelStats::Settings async_settings{};
+
 public:
     static std::pair<std::string, std::string> split(const std::string &full_name);
     static std::vector<std::string>            split_to_path(const std::string &str, char delimiter = '.');
@@ -154,6 +163,21 @@ public:
 
     Channel() = delete;
     Channel(const std::string &name, int2 size);
+
+    // Delete copy operations
+    Channel(const Channel &)            = delete;
+    Channel &operator=(const Channel &) = delete;
+
+    // Define move operations
+    Channel(Channel &&other) noexcept            = default;
+    Channel &operator=(Channel &&other) noexcept = default;
+
+    ~Channel()
+    {
+        if (async_canceled)
+            async_canceled->store(true);
+        async_tracker.wait();
+    }
 
     template <typename Func>
     void apply(Func &&func)
@@ -221,13 +245,6 @@ public:
 
     PixelStats *get_stats();
     void        update_stats(int c, ConstImagePtr img1, ConstImagePtr img2);
-
-private:
-    PixelStats::Ptr                    cached_stats;
-    ThreadPool::TaskTracker            async_tracker;
-    std::shared_ptr<std::atomic<bool>> async_canceled;
-    PixelStats::Ptr                    async_stats;
-    PixelStats::Settings               async_settings{};
 };
 
 // A ChannelGroup collects up to 4 channels into a single unit

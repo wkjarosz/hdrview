@@ -163,6 +163,8 @@ public:
     // load font with the specified name at the specified size
     ImFont *font(const string &name) const;
 
+    ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
+
     float      &gamma_live() { return m_gamma_live; }
     float      &gamma() { return m_gamma; }
     float      &exposure_live() { return m_exposure_live; }
@@ -275,8 +277,6 @@ private:
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
     bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
-
-    ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };
 
 /// Create the global singleton HDRViewApp instance

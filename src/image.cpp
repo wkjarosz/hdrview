@@ -12,7 +12,6 @@
 #include "dithermatrix256.h"
 #include "image.h"
 #include "shader.h"
-#include "texture.h"
 #include "timer.h"
 
 #include <numeric>
@@ -407,7 +406,7 @@ float4x4 ChannelGroup::colors() const
 }
 
 Channel::Channel(const std::string &name, int2 size) :
-    Array2Df(size), name(name), cached_stats(make_shared<PixelStats>()), async_stats(make_shared<PixelStats>())
+    Array2Df(size), cached_stats(make_shared<PixelStats>()), async_stats(make_shared<PixelStats>()), name(name)
 {
 }
 
@@ -473,6 +472,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
         {
             spdlog::trace("Canceling outdated stats computation.");
             *async_canceled = true;
+            async_tracker.wait();
         }
 
         // create the new task
@@ -565,6 +565,7 @@ Image::Image() : id(s_next_image_id++) {}
 
 Image::Image(int2 size, int num_channels) : Image()
 {
+    channels.reserve(num_channels);
     if (num_channels < 3)
     {
         channels.emplace_back("Y", size);
