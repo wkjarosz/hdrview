@@ -37,7 +37,7 @@
 #include <sstream>
 #include <utility>
 
-#include "emscripten_utils.h"
+#include "platform_utils.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -2471,20 +2471,22 @@ void HDRViewApp::set_image_textures()
     }
 }
 
-void HDRViewApp::close_image()
+void HDRViewApp::close_image(int index)
 {
-    if (!current_image())
+    if (!is_valid(index))
+        index = current_image_index();
+
+    // If index is not valid, do nothing
+    if (!is_valid(index) || m_images.empty())
         return;
 
-    // select the next image down the list
-    int next = next_visible_image_index(m_current, Forward);
-    if (next < m_current) // there is no visible image after this one, go to previous visible
-        next = next_visible_image_index(m_current, Backward);
+    // Determine if the image being closed is current or reference
+    bool closing_current   = (index == m_current);
+    bool closing_reference = (index == m_reference);
 
-    fs::path parent_path = fs::path(m_images[m_current]->filename).parent_path();
-
-    auto filename = m_images[m_current]->filename;
-    m_images.erase(m_images.begin() + m_current);
+    fs::path parent_path = fs::path(m_images[index]->filename).parent_path();
+    auto     filename    = m_images[index]->filename;
+    m_images.erase(m_images.begin() + index);
 
     try
     {
@@ -2499,7 +2501,6 @@ void HDRViewApp::close_image()
     if (!parent_path.empty())
     {
 #if !defined(__EMSCRIPTEN__)
-
         if (!m_active_directories.empty())
         {
             spdlog::debug("Active directories before closing image in '{}'.", parent_path.u8string());
@@ -2538,9 +2539,35 @@ void HDRViewApp::close_image()
 #endif
     }
 
-    // adjust the indices after erasing the current image
-    set_current_image_index(next < m_current ? next : next - 1);
-    set_reference_image_index(m_reference < m_current ? m_reference : m_reference - 1);
+    // Adjust indices after erasing the image
+    if (closing_current)
+    {
+        // select the next image down the list
+        int next = next_visible_image_index(index, Forward);
+        if (next < index) // there is no visible image after this one, go to previous visible
+            next = next_visible_image_index(index, Backward);
+        set_current_image_index(next < index ? next : next - 1);
+    }
+    else if (m_current > index && m_current > 0)
+    {
+        // If current image index was after the erased image, decrement it
+        set_current_image_index(m_current - 1);
+    }
+    // else: current image index remains unchanged
+
+    if (closing_reference)
+    {
+        int next_ref = next_visible_image_index(index, Forward);
+        if (next_ref < index)
+            next_ref = next_visible_image_index(index, Backward);
+        set_reference_image_index(next_ref < index ? next_ref : next_ref - 1);
+    }
+    else if (m_reference > index && m_reference > 0)
+    {
+        // If reference image index was after the erased image, decrement it
+        set_reference_image_index(m_reference - 1);
+    }
+    // else: reference image index remains unchanged
 
     update_visibility(); // this also calls set_image_textures();
 }
@@ -2999,6 +3026,7 @@ void HDRViewApp::draw_file_window()
         int visible_img_number = 0;
         int hidden_images      = 0;
         int hidden_groups      = 0;
+        int image_to_close     = -1;
 
         for (int i = 0; i < num_images(); ++i)
         {
@@ -3046,6 +3074,42 @@ void HDRViewApp::draw_file_window()
 
             // auto item = m_images[i];
             bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", the_text.c_str());
+
+            ImGui::PopStyleColor(3);
+
+            // Add right-click context menu
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem("Copy path to clipboard"))
+                    ImGui::SetClipboardText(img->filename.c_str());
+
+#if !defined(__EMSCRIPTEN__)
+                std::string menu_label = fmt::format("Reveal in {}", file_manager_name());
+                if (ImGui::MenuItem(menu_label.c_str()))
+                    show_in_file_manager(img->filename.c_str());
+#endif
+                // Select as current image
+                ImGui::BeginDisabled(is_current);
+                if (ImGui::MenuItem("Select as current image"))
+                {
+                    m_current = i;
+                    set_image_textures();
+                }
+                ImGui::EndDisabled();
+
+                // Select as reference image
+                if (ImGui::MenuItem(fmt::format("{} as reference image", is_reference ? "Unselect" : "Select")))
+                {
+                    m_reference = is_reference ? -1 : i;
+                    set_image_textures();
+                }
+
+                if (ImGui::MenuItem("Close image"))
+                    image_to_close = i;
+
+                ImGui::EndPopup();
+            }
+
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
                 if (ImGui::GetIO().KeyShift)
@@ -3055,8 +3119,6 @@ void HDRViewApp::draw_file_window()
                 set_image_textures();
                 spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
             }
-
-            ImGui::PopStyleColor(3);
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
             {
@@ -3164,6 +3226,9 @@ void HDRViewApp::draw_file_window()
                 ImGui::TextFmt("{} {} image{} hidden", ICON_MY_VISIBILITY_OFF, hidden_images, images_str);
             ImGui::EndDisabled();
         }
+
+        if (image_to_close >= 0)
+            close_image(image_to_close);
 
         ImGui::PopStyleVar(2);
 

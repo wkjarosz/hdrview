@@ -908,7 +908,7 @@ hello_imgui_add_app(
   src/colormap.cpp
   src/colorspace.cpp
   src/common.cpp
-  src/emscripten_utils.cpp
+  src/platform_utils.cpp
   src/fonts.cpp
   src/hdrview.cpp
   src/image.cpp

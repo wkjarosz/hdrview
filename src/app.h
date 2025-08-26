@@ -56,7 +56,7 @@ public:
     void load_url(const string_view url);
     void save_as(const string &filename) const;
     void export_as(const string &filename) const;
-    void close_image();
+    void close_image(int index = -1);
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
     //-----------------------------------------------------------------------------

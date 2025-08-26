@@ -1,9 +1,10 @@
 
-#include "emscripten_utils.h"
 #include "app.h"
 #include "common.h"
+#include "platform_utils.h"
 #include "imgui.h"
 
+#include <cstdlib>
 #include <spdlog/spdlog.h>
 
 #ifdef __EMSCRIPTEN__
@@ -68,6 +69,41 @@ bool host_is_safari()
     return isSafari();
 #else
     return false;
+#endif
+}
+
+const char *file_manager_name()
+{
+#if defined(_WIN32)
+    return "Windows Explorer";
+#elif defined(__APPLE__)
+    return "Finder";
+#elif defined(__linux__)
+    return "File Manager";
+#else
+    return "Unknown";
+#endif
+}
+
+void show_in_file_manager(const char *filename)
+{
+#if defined(_WIN32)
+    // Use explorer.exe to select the file
+    std::string command = "explorer /select,\"" + std::string(filename) + "\"";
+    system(command.c_str());
+#elif defined(__APPLE__)
+    // Use open command with -R to reveal the file in Finder
+    std::string command = "open -R \"" + std::string(filename) + "\"";
+    system(command.c_str());
+#elif defined(__linux__)
+    // Try to use xdg-open to open the containing folder
+    std::string filepath(filename);
+    size_t      last_slash = filepath.find_last_of("/\\");
+    std::string folder     = (last_slash != std::string::npos) ? filepath.substr(0, last_slash) : ".";
+    std::string command    = "xdg-open \"" + folder + "\"";
+    system(command.c_str());
+#else
+    // Unsupported platform
 #endif
 }
 
