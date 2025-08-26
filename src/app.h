@@ -59,7 +59,6 @@ public:
     void close_image();
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
-    void reload_modified_files();
     //-----------------------------------------------------------------------------
 
     //-----------------------------------------------------------------------------
@@ -276,8 +275,6 @@ private:
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
     bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
-
-    std::chrono::steady_clock::time_point m_last_file_changes_check_time = {};
 
     ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
 };

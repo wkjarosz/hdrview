@@ -18,15 +18,19 @@ struct BackgroundImageLoader
     void get_loaded_images(std::function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return pending_images.size(); }
 
+    bool add_watched_directory(const std::filesystem::path &dir, bool ignore_existing);
+
     //! Remove all watched directories that match the criterion.
     void remove_watched_directories(std::function<bool(const std::filesystem::path &)> remove_criterion);
 
-    void load_new_files();
+    void load_new_and_modified_files();
 
     void set_recent_files(const std::vector<std::string> &recents) { m_recent_files = recents; }
     void clear_recent_files() { set_recent_files({}); }
     const std::vector<std::string> &recent_files() const { return m_recent_files; }
     std::vector<std::string>        recent_files_short(int head_length = 32, int tail_length = 25) const;
+
+    void draw_gui();
 
 private:
     struct PendingImages;
@@ -41,5 +45,5 @@ private:
 
     // don't treat these files as new (they are either currently loaded, or we've previously loaded them from a watched
     // directory and manually closed them, so don't want to automatically reload them)
-    std::set<std::filesystem::path> m_files_found_in_directories;
+    std::set<std::filesystem::path> m_existing_files;
 };

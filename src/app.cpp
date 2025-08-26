@@ -806,6 +806,15 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         m_image_loader.get_loaded_images(
             [this](ImagePtr new_image, ImagePtr to_replace, bool should_select)
             {
+#if !defined(__EMSCRIPTEN__)
+                std::error_code ec;
+                auto            path = fs::weakly_canonical(new_image->filename, ec);
+                if (ec)
+                    return;
+
+                m_active_directories.insert(path.parent_path());
+#endif
+
                 int idx = (to_replace) ? image_index(to_replace) : -1;
                 if (is_valid(idx))
                     m_images[idx] = new_image;
@@ -814,10 +823,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
-
-#if !defined(__EMSCRIPTEN__)
-                m_active_directories.insert(fs::canonical(new_image->filename).parent_path());
-#endif
                 update_visibility(); // this also calls set_image_textures();
                 g_request_sort = true;
             });
@@ -1028,6 +1033,29 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
                             ImPlot::PopStyleVar(3);
                             ImPlot::EndPlot();
+                        }
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Watched folders"))
+                    {
+                        m_image_loader.draw_gui();
+
+                        static const ImGuiTableFlags table_flags = ImGuiTableFlags_BordersOuterV |
+                                                                   ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg |
+                                                                   ImGuiTableFlags_ScrollX;
+
+                        ImGui::Text("Active directories");
+                        if (ImGui::BeginTable("Active directories", 1, table_flags, ImVec2(0.f, 300.f)))
+                        {
+                            for (const auto &path : m_active_directories)
+                            {
+                                ImGui::TableNextRow();
+                                ImGui::TableNextColumn();
+
+                                ImGui::TextFmt("{}", path.string());
+                            }
+
+                            ImGui::EndTable();
                         }
                         ImGui::EndTabItem();
                     }
@@ -1279,8 +1307,16 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                         for (auto &i : m_images) reload_image(i);
                     },
                     if_img});
-        add_action({"Watch folders for changes", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0, []() {}, always_enabled, false,
+        add_action({"Watch for changes", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0, []() {}, always_enabled, false,
                     &m_watch_files_for_changes});
+        add_action({"Add watched folder...", ICON_MY_WATCH_FOLDER, ImGuiKey_None, 0,
+                    [this]()
+                    {
+                        if (m_image_loader.add_watched_directory(
+                                pfd::select_folder("Open images in folder", "").result(), true))
+                            m_watch_files_for_changes = true;
+                    },
+                    always_enabled});
 
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
@@ -2010,6 +2046,7 @@ void HDRViewApp::draw_menus()
 #if !defined(__EMSCRIPTEN__)
         MenuItem(action("Open folder..."));
 #endif
+        MenuItem(action("Add watched folder..."));
 
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
@@ -2041,7 +2078,7 @@ void HDRViewApp::draw_menus()
 
         MenuItem(action("Reload image"));
         MenuItem(action("Reload all images"));
-        MenuItem(action("Watch folders for changes"));
+        MenuItem(action("Watch for changes"));
 #endif
 
         ImGui::Separator();
@@ -2418,42 +2455,6 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     m_image_loader.background_load(image->filename, {}, should_select, image, image->channel_selector);
 }
 
-void HDRViewApp::reload_modified_files()
-{
-    bool any_reloaded = false;
-    for (int i = 0; i < num_images(); ++i)
-    {
-        auto &img = m_images[i];
-        if (!fs::exists(img->path))
-        {
-            spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
-            continue;
-        }
-
-        fs::file_time_type last_modified;
-        try
-        {
-            last_modified = fs::last_write_time(img->path);
-        }
-        catch (...)
-        {
-            continue;
-        }
-
-        if (last_modified != img->last_modified)
-        {
-            // Updating the last-modified date prevents double-scheduled reloads if the load take a lot of time or
-            // fails.
-            img->last_modified = last_modified;
-            reload_image(img);
-            any_reloaded = true;
-        }
-    }
-
-    if (!any_reloaded)
-        spdlog::debug("No modified files found to reload.");
-}
-
 void HDRViewApp::set_image_textures()
 {
     try
@@ -2486,46 +2487,62 @@ void HDRViewApp::close_image()
     if (next < m_current) // there is no visible image after this one, go to previous visible
         next = next_visible_image_index(m_current, Backward);
 
-    auto parent_path = fs::canonical(m_images[m_current]->filename).parent_path();
+    fs::path parent_path = fs::path(m_images[m_current]->filename).parent_path();
 
     auto filename = m_images[m_current]->filename;
     m_images.erase(m_images.begin() + m_current);
 
+    try
+    {
+        parent_path = fs::weakly_canonical(parent_path);
+    }
+    catch (const std::exception &e)
+    {
+        // path probably doesn't exist anymore
+        parent_path = fs::path();
+    }
+
+    if (!parent_path.empty())
+    {
 #if !defined(__EMSCRIPTEN__)
 
-    if (!m_active_directories.empty())
-    {
-        spdlog::debug("Active directories before closing image in '{}'.", parent_path.u8string());
-        for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
-    }
-
-    // Remove the parent directory from m_active_directories if no other images are from the same directory
-    bool found = false;
-    for (const auto &img : m_images)
-        if (fs::canonical(img->filename).parent_path() == parent_path)
+        if (!m_active_directories.empty())
         {
-            found = true;
-            break;
+            spdlog::debug("Active directories before closing image in '{}'.", parent_path.u8string());
+            for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
         }
 
-    if (!found)
-        m_active_directories.erase(parent_path);
-
-    if (!m_active_directories.empty())
-    {
-        spdlog::debug("Active directories after closing image in '{}'.", parent_path.u8string());
-        for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
-    }
-
-    spdlog::debug("Watched directories after closing image:");
-    m_image_loader.remove_watched_directories(
-        [this](const fs::path &path)
+        // Remove the parent directory from m_active_directories if no other images are from the same directory
+        bool others_in_same_directory = false;
+        for (const auto &img : m_images)
         {
-            spdlog::debug("{} watched directory: {}", m_active_directories.count(path) == 0 ? "Removing" : "Keeping",
-                          path.u8string());
-            return m_active_directories.count(path) == 0;
-        });
+            std::error_code ec;
+            if (fs::equivalent(fs::path(img->filename).parent_path(), parent_path, ec))
+            {
+                others_in_same_directory = true;
+                break;
+            }
+        }
+
+        if (!others_in_same_directory)
+            m_active_directories.erase(parent_path);
+
+        if (!m_active_directories.empty())
+        {
+            spdlog::debug("Active directories after closing image in '{}'.", parent_path.u8string());
+            for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
+        }
+
+        spdlog::debug("Watched directories after closing image:");
+        m_image_loader.remove_watched_directories(
+            [this](const fs::path &path)
+            {
+                spdlog::debug("{} watched directory: {}",
+                              m_active_directories.count(path) == 0 ? "Removing" : "Keeping", path.u8string());
+                return m_active_directories.count(path) == 0;
+            });
 #endif
+    }
 
     // adjust the indices after erasing the current image
     set_current_image_index(next < m_current ? next : next - 1);
@@ -3196,7 +3213,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::SameLine();
 
-        ImGui::IconButton(action("Watch folders for changes"));
+        ImGui::IconButton(action("Watch for changes"));
     }
     // ImGui::EndDisabled();
 }
@@ -3782,8 +3799,9 @@ void HDRViewApp::draw_background()
     using namespace literals;
     spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
 
-    static auto prev_frame = chrono::steady_clock::now();
-    auto        this_frame = chrono::steady_clock::now();
+    static auto prev_frame                   = chrono::steady_clock::now();
+    static auto last_file_changes_check_time = chrono::steady_clock::now();
+    auto        this_frame                   = chrono::steady_clock::now();
 
     if ((g_play_forward || g_play_backward) &&
         this_frame - prev_frame >= chrono::milliseconds(int(1000 / g_playback_speed)))
@@ -3796,14 +3814,11 @@ void HDRViewApp::draw_background()
     process_shortcuts();
 
     // If watching files for changes, do so every 250ms
-    if (m_watch_files_for_changes)
+    if (m_watch_files_for_changes && this_frame - last_file_changes_check_time >= 250ms)
     {
-        if (this_frame - m_last_file_changes_check_time >= 250ms)
-        {
-            reload_modified_files();
-            m_image_loader.load_new_files();
-            m_last_file_changes_check_time = this_frame;
-        }
+        spdlog::trace("Checking for file changes...");
+        m_image_loader.load_new_and_modified_files();
+        last_file_changes_check_time = this_frame;
     }
 
     try

@@ -359,12 +359,6 @@ int Image::draw_channel_rows(int img_idx, int &id, bool is_current, bool is_refe
     return visible_group;
 }
 
-template <typename Type>
-inline Type ScaleFromNormalized(Type const x, Type const newMin, Type const newMax)
-{
-    return x * (newMax - newMin) + newMin;
-}
-
 void Image::draw_info()
 {
     auto bold_font = hdrview()->font("sans bold");

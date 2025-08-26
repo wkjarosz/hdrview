@@ -1,5 +1,7 @@
 #include "image_loader.h"
+#include "app.h"
 #include "image.h"
+#include "imgui_ext.h"
 #include <fstream>
 
 using namespace std;
@@ -128,25 +130,35 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
         load_one(path, buffer, true, should_select, to_replace, channel_selector);
     }
-    else if (!fs::exists(path))
-        spdlog::error("File '{}' does not exist.", filename);
 #if !defined(__EMSCRIPTEN__)
     else if (fs::is_directory(path))
     {
         spdlog::info("Loading images from folder '{}'", path.u8string());
 
         std::error_code ec;
-        auto            canon_p = fs::canonical(path);
+        auto            canon_p = fs::weakly_canonical(path, ec);
+        if (ec)
+        {
+            spdlog::error("Could not access directory '{}': {}.", path.u8string(), ec.message());
+            return;
+        }
         m_directories.emplace(canon_p);
 
         vector<fs::directory_entry> entries;
         for (auto const &entry : fs::directory_iterator{canon_p, ec})
         {
-            auto ext           = to_lower(get_extension(entry.path().filename().u8string()));
-            bool supported_ext = Image::loadable_formats().find(ext) != Image::loadable_formats().end();
-            if (!entry.is_directory() && supported_ext)
+            if (entry.is_directory())
+                continue;
+
+            auto ext = entry.path().extension().u8string();
+            // remove period and convert to lowercase
+            if (ext.size() > 1 && ext[0] == '.')
+                ext = to_lower(ext.substr(1));
+            else
+                ext = to_lower(ext);
+            if (Image::loadable_formats().count(ext))
             {
-                m_files_found_in_directories.emplace(entry);
+                m_existing_files.emplace(entry);
                 entries.emplace_back(entry);
             }
         }
@@ -161,12 +173,52 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         add_recent_file(filename);
     }
 #endif
-    else if (fs::is_regular_file(path))
+    else
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);
+        if (!fs::exists(path) || !fs::is_regular_file(path))
+        {
+            spdlog::error("File '{}' does not exist or is not a regular file.", filename);
+            return;
+        }
+
         load_one(filename, buffer, true, should_select, to_replace, channel_selector);
     }
+}
+
+bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &dir, bool ignore_existing)
+{
+    std::error_code ec;
+    auto            canon_p = fs::weakly_canonical(dir, ec);
+    if (ec)
+    {
+        spdlog::error("Could not access directory '{}': {}.", dir.u8string(), ec.message());
+        return false;
+    }
+    m_directories.emplace(canon_p);
+
+    if (!ignore_existing)
+        return true;
+
+    // if we are ignoring existing files, add all files in the directory to m_existing_files
+    for (auto const &entry : fs::directory_iterator{canon_p, ec})
+    {
+        if (entry.is_directory() || !entry.is_regular_file())
+            continue;
+
+        auto ext = entry.path().extension().u8string();
+        // remove period and convert to lowercase
+        if (ext.size() > 1 && ext[0] == '.')
+            ext = to_lower(ext.substr(1));
+        else
+            ext = to_lower(ext);
+        if (Image::loadable_formats().count(ext))
+            m_existing_files.emplace(entry);
+    }
+
+    m_directories.emplace(dir);
+    return true;
 }
 
 void BackgroundImageLoader::remove_watched_directories(std::function<bool(const fs::path &)> criterion)
@@ -181,15 +233,13 @@ void BackgroundImageLoader::remove_watched_directories(std::function<bool(const 
     }
 
     // Keep only files whose parent directory is still in m_directories
-    for (auto it = m_files_found_in_directories.begin(); it != m_files_found_in_directories.end();)
+    for (auto it = m_existing_files.begin(); it != m_existing_files.end();)
     {
-        const auto &file_path      = *it;
-        bool        parent_in_dirs = std::any_of(m_directories.begin(), m_directories.end(),
-                                                 [&file_path](const fs::path &dir) { return file_path.parent_path() == dir; });
-        if (parent_in_dirs)
+        if (std::any_of(m_directories.begin(), m_directories.end(),
+                        [&file_path = *it](const fs::path &dir) { return file_path.parent_path() == dir; }))
             ++it;
         else
-            it = m_files_found_in_directories.erase(it);
+            it = m_existing_files.erase(it);
     }
 }
 
@@ -225,8 +275,45 @@ void BackgroundImageLoader::get_loaded_images(function<void(ImagePtr, ImagePtr, 
                          pending_images.end());
 }
 
-void BackgroundImageLoader::load_new_files()
+void BackgroundImageLoader::load_new_and_modified_files()
 {
+    // reload any modified files
+    bool any_reloaded = false;
+    for (int i = 0; i < hdrview()->num_images(); ++i)
+    {
+        auto img = hdrview()->image(i);
+        if (!fs::exists(img->path))
+        {
+            spdlog::warn("File[{}] '{}' no longer exists, skipping reload.", i, img->path.u8string());
+            if (auto it = m_existing_files.find(img->path); it != m_existing_files.end())
+                m_existing_files.erase(it);
+            continue;
+        }
+
+        fs::file_time_type last_modified;
+        try
+        {
+            last_modified = fs::last_write_time(img->path);
+        }
+        catch (...)
+        {
+            continue;
+        }
+
+        if (last_modified != img->last_modified)
+        {
+            // Updating the last-modified date prevents double-scheduled reloads if the load take a lot of time or
+            // fails.
+            img->last_modified = last_modified;
+            hdrview()->reload_image(img);
+            any_reloaded = true;
+        }
+    }
+
+    if (!any_reloaded)
+        spdlog::debug("No modified files found to reload.");
+
+    // load new files
     std::error_code ec;
     for (const auto &dir : m_directories)
         for (auto const &entry : fs::directory_iterator{dir, ec})
@@ -235,10 +322,53 @@ void BackgroundImageLoader::load_new_files()
                 continue;
 
             const auto p = entry.path();
-            if (!m_files_found_in_directories.count(p))
+            if (m_existing_files.count(p))
+                continue;
+
+            auto ext = p.extension().u8string();
+            // remove period and convert to lowercase
+            if (ext.size() > 1 && ext[0] == '.')
+                ext = to_lower(ext.substr(1));
+            else
+                ext = to_lower(ext);
+            if (Image::loadable_formats().count(ext))
             {
-                m_files_found_in_directories.emplace(p);
+                m_existing_files.emplace(p);
                 background_load(p.u8string());
             }
         }
+}
+
+void BackgroundImageLoader::draw_gui()
+{
+    static const ImGuiTableFlags table_flags =
+        ImGuiTableFlags_BordersOuterV | ImGuiTableFlags_BordersH | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX;
+
+    ImGui::Text("Watched paths");
+    if (ImGui::BeginTable("Watched paths", 1, table_flags, ImVec2(0.f, 100.f)))
+    {
+        for (const auto &path : m_directories)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+
+            ImGui::TextFmt("{}", path.string());
+        }
+
+        ImGui::EndTable();
+    }
+
+    ImGui::Text("Existing files");
+    if (ImGui::BeginTable("Existing files", 1, table_flags, ImVec2(0.f, 300.f)))
+    {
+        for (const auto &path : m_existing_files)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+
+            ImGui::TextFmt("{}", path.string());
+        }
+
+        ImGui::EndTable();
+    }
 }
