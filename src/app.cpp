@@ -495,9 +495,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
                    [this]()
                    {
-                       string url;
-                       if (ImGui::InputTextWithHint("##URL", "Enter an image URL and press <return>", &url,
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       char url[256];
+                       if (ImGui::InputTextWithHint("##URL", "Enter an image URL and press <return>", url,
+                                                    IM_ARRAYSIZE(url), ImGuiInputTextFlags_EnterReturnsTrue))
                        {
                            ImGui::CloseCurrentPopup();
                            load_url(url);
@@ -602,7 +602,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         add(Action{"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
                    &m_show_developer_menu});
-        add(Action{"Show Dear ImGui demo window", ICON_MY_BLANK, 0, 0, []() {}, always_enabled, false,
+        add(Action{"Show Dear ImGui demo window", ICON_MY_DEMO_WINDOW, 0, 0, []() {}, always_enabled, false,
                    &m_show_demo_window});
         add(Action{"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false,
                    &m_show_debug_window});
@@ -769,18 +769,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                    [this]()
                    {
-                       string filename;
+                       char   filename[256];
                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
                        ImGui::TextUnformatted(
                            "Please enter a filename. Format is deduced from the accepted extensions:");
                        ImGui::TextFmt("\t{}", filter);
                        ImGui::Separator();
-                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", filename,
+                                                    IM_ARRAYSIZE(filename), ImGuiInputTextFlags_EnterReturnsTrue))
                        {
                            ImGui::CloseCurrentPopup();
-
-                           if (!filename.empty())
+                           if (filename[0] != '\0')
                                save_as(filename);
                        }
                    },
@@ -788,18 +787,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
                    [this]()
                    {
-                       string filename;
+                       char   filename[256];
                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
                        ImGui::TextUnformatted(
                            "Please enter a filename. Format is deduced from the accepted extensions:");
                        ImGui::TextFmt("\t{}", filter);
                        ImGui::Separator();
-                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", filename,
+                                                    IM_ARRAYSIZE(filename), ImGuiInputTextFlags_EnterReturnsTrue))
                        {
                            ImGui::CloseCurrentPopup();
-
-                           if (!filename.empty())
+                           if (filename[0] != '\0')
                                export_as(filename);
                        }
                    },
