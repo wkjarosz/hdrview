@@ -17,7 +17,6 @@ struct Theme
     const char        *name() const { return Theme::name(theme); }
 
     void set(int t);
-    void apply() const;
     void load(json j);
     void save(json &j) const;
 

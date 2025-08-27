@@ -982,3 +982,27 @@ float4 Image::rgba_pixel(int2 p, Target target) const
     value.xyz() = mul(M_to_sRGB, value.xyz());
     return value;
 }
+
+static void calculate_tree_visibility(LayerTreeNode &node, const Image *image)
+{
+    node.visible_groups = 0;
+    node.hidden_groups  = 0;
+    if (node.leaf_layer >= 0)
+    {
+        auto &layer = image->layers[node.leaf_layer];
+        for (size_t g = 0; g < layer.groups.size(); ++g)
+            if (image->groups[layer.groups[g]].visible)
+                ++node.visible_groups;
+            else
+                ++node.hidden_groups;
+    }
+
+    for (auto &[child_name, child_node] : node.children)
+    {
+        calculate_tree_visibility(child_node, image);
+        node.visible_groups += child_node.visible_groups;
+        node.hidden_groups += child_node.hidden_groups;
+    }
+}
+
+void LayerTreeNode::calculate_visibility(const Image *img) { calculate_tree_visibility(*this, img); }

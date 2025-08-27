@@ -72,6 +72,8 @@ struct Action
     bool                  needs_menu = false;
     bool                 *p_selected = nullptr;
     std::string           tooltip    = "";
+
+    bool checked() const { return p_selected && *p_selected; }
 };
 
 void MenuItem(const Action &a);

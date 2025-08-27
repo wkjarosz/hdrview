@@ -6,8 +6,6 @@
 
 #include "hello_imgui/hello_imgui.h"
 
-#include <cmath>
-#include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
 using namespace std;
@@ -208,6 +206,22 @@ const char *Theme::name(int t)
         return "Custom";
 }
 
+static void apply(int theme)
+{
+    if (theme >= 0)
+    {
+        ImGuiTheme::ImGuiTheme_ t                                           = (ImGuiTheme::ImGuiTheme_)theme;
+        HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = t;
+        ImGuiTheme::ApplyTheme(t);
+    }
+    else if (theme == Theme::DARK_THEME)
+        apply_hdrview_dark_theme();
+    else if (theme == Theme::LIGHT_THEME)
+        apply_hdrview_light_theme();
+
+    // otherwise, its a custom theme, and we keep the parameters that were read from the config file
+}
+
 void Theme::set(int t)
 {
     spdlog::info("Applying theme: '{}'", Theme::name(t));
@@ -218,125 +232,115 @@ void Theme::set(int t)
     }
 
     theme = t;
-}
 
-void Theme::apply() const
-{
-    if (theme >= 0)
-    {
-        ImGuiTheme::ImGuiTheme_ t                                           = (ImGuiTheme::ImGuiTheme_)theme;
-        HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = t;
-        ImGuiTheme::ApplyTheme(t);
-    }
-    else if (theme == DARK_THEME)
-        apply_hdrview_dark_theme();
-    else if (theme == LIGHT_THEME)
-        apply_hdrview_light_theme();
-
-    // otherwise, its a custom theme, and we keep the parameters that were read from the config file
+    apply(theme);
 }
 
 void Theme::load(json j)
 {
-    if (j.contains("theme"))
+    if (!j.contains("theme"))
     {
-        auto name = j["theme"].get<string>();
-        spdlog::info("Restoring theme: '{}'", name);
-        if (name == "HDRView dark")
-            theme = DARK_THEME;
-        else if (name == "HDRView light")
-            theme = LIGHT_THEME;
-        else if (name == "Custom")
-            theme = CUSTOM_THEME;
-        else
-            theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
-                ImGuiTheme::ImGuiTheme_FromName(name.c_str());
+        theme = DARK_THEME; // default to dark theme
+        apply(theme);
+        return;
+    }
+
+    auto name = j["theme"].get<string>();
+    spdlog::info("Restoring theme: '{}'", name);
+    if (name == "HDRView dark")
+        theme = DARK_THEME;
+    else if (name == "HDRView light")
+        theme = LIGHT_THEME;
+    else if (name == "Custom")
+    {
+        theme = CUSTOM_THEME;
+        if (j.contains("style"))
+        {
+            spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
+            json   &j_style    = j["style"];
+            auto   &style      = ImGui::GetStyle();
+            ImVec4 *colors     = ImGui::GetStyle().Colors;
+            auto    read_color = [&](const char *key, ImGuiCol idx)
+            {
+                if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 4)
+                    colors[idx] = ImVec4(j_style[key][0].get<float>(), j_style[key][1].get<float>(),
+                                         j_style[key][2].get<float>(), j_style[key][3].get<float>());
+                // else: leave as is (current style value)
+            };
+
+            // Loop over all ImGuiCol values and try to read each from the JSON
+            for (int col = 0; col < ImGuiCol_COUNT; ++col)
+            {
+                // Get the enum name as a string, e.g., "ImGuiCol_Text"
+                const char *col_name = ImGui::GetStyleColorName(col);
+                if (col_name)
+                    read_color(col_name, (ImGuiCol)col);
+            }
+
+            // ImGuiStyle scalar/vector members
+            auto read_float = [&](const char *key, float &val)
+            {
+                if (j_style.contains(key))
+                    val = j_style[key].get<float>();
+            };
+            auto read_vec2 = [&](const char *key, ImVec2 &val)
+            {
+                if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 2)
+                    val = ImVec2(j_style[key][0].get<float>(), j_style[key][1].get<float>());
+            };
+
+            read_float("Alpha", style.Alpha);
+            read_float("DisabledAlpha", style.DisabledAlpha);
+            read_vec2("WindowPadding", style.WindowPadding);
+            read_float("WindowRounding", style.WindowRounding);
+            read_float("WindowBorderSize", style.WindowBorderSize);
+            read_vec2("WindowMinSize", style.WindowMinSize);
+            read_vec2("WindowTitleAlign", style.WindowTitleAlign);
+            read_float("ChildRounding", style.ChildRounding);
+            read_float("ChildBorderSize", style.ChildBorderSize);
+            read_float("PopupRounding", style.PopupRounding);
+            read_float("PopupBorderSize", style.PopupBorderSize);
+            read_vec2("FramePadding", style.FramePadding);
+            read_float("FrameRounding", style.FrameRounding);
+            read_float("FrameBorderSize", style.FrameBorderSize);
+            read_vec2("ItemSpacing", style.ItemSpacing);
+            read_vec2("ItemInnerSpacing", style.ItemInnerSpacing);
+            read_float("IndentSpacing", style.IndentSpacing);
+            read_vec2("CellPadding", style.CellPadding);
+            read_float("ScrollbarSize", style.ScrollbarSize);
+            read_float("ScrollbarRounding", style.ScrollbarRounding);
+            read_float("GrabMinSize", style.GrabMinSize);
+            read_float("GrabRounding", style.GrabRounding);
+            read_float("ImageBorderSize", style.ImageBorderSize);
+            read_float("TabRounding", style.TabRounding);
+            read_float("TabBorderSize", style.TabBorderSize);
+            read_float("TabBarBorderSize", style.TabBarBorderSize);
+            read_float("TabBarOverlineSize", style.TabBarOverlineSize);
+            read_float("TableAngledHeadersAngle", style.TableAngledHeadersAngle);
+            read_vec2("TableAngledHeadersTextAlign", style.TableAngledHeadersTextAlign);
+            read_float("TreeLinesSize", style.TreeLinesSize);
+            read_float("TreeLinesRounding", style.TreeLinesRounding);
+            read_vec2("ButtonTextAlign", style.ButtonTextAlign);
+            read_vec2("SelectableTextAlign", style.SelectableTextAlign);
+            read_float("SeparatorTextBorderSize", style.SeparatorTextBorderSize);
+            read_vec2("SeparatorTextAlign", style.SeparatorTextAlign);
+            read_vec2("SeparatorTextPadding", style.SeparatorTextPadding);
+            read_float("DockingSeparatorSize", style.DockingSeparatorSize);
+            read_float("FontSizeBase", style.FontSizeBase);
+            read_float("FontScaleMain", style.FontScaleMain);
+            read_float("FontScaleDpi", style.FontScaleDpi);
+            read_float("CircleTessellationMaxError", style.CircleTessellationMaxError);
+            if (j_style.contains("WindowMenuButtonPosition"))
+                style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
+        }
     }
     else
-        theme = DARK_THEME; // default to dark theme
-
-    if (theme >= 0)
-        ApplyTweakedTheme(HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme);
-
-    if (theme == CUSTOM_THEME && j.contains("style"))
     {
-        spdlog::debug("Restoring custom ImGui style values from settings:\n{}", j["style"].dump(2));
-        json   &j_style    = j["style"];
-        auto   &style      = ImGui::GetStyle();
-        ImVec4 *colors     = ImGui::GetStyle().Colors;
-        auto    read_color = [&](const char *key, ImGuiCol idx)
-        {
-            if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 4)
-                colors[idx] = ImVec4(j_style[key][0].get<float>(), j_style[key][1].get<float>(),
-                                     j_style[key][2].get<float>(), j_style[key][3].get<float>());
-            // else: leave as is (current style value)
-        };
-
-        // Loop over all ImGuiCol values and try to read each from the JSON
-        for (int col = 0; col < ImGuiCol_COUNT; ++col)
-        {
-            // Get the enum name as a string, e.g., "ImGuiCol_Text"
-            const char *col_name = ImGui::GetStyleColorName(col);
-            if (col_name)
-                read_color(col_name, (ImGuiCol)col);
-        }
-
-        // ImGuiStyle scalar/vector members
-        auto read_float = [&](const char *key, float &val)
-        {
-            if (j_style.contains(key))
-                val = j_style[key].get<float>();
-        };
-        auto read_vec2 = [&](const char *key, ImVec2 &val)
-        {
-            if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 2)
-                val = ImVec2(j_style[key][0].get<float>(), j_style[key][1].get<float>());
-        };
-
-        read_float("Alpha", style.Alpha);
-        read_float("DisabledAlpha", style.DisabledAlpha);
-        read_vec2("WindowPadding", style.WindowPadding);
-        read_float("WindowRounding", style.WindowRounding);
-        read_float("WindowBorderSize", style.WindowBorderSize);
-        read_vec2("WindowMinSize", style.WindowMinSize);
-        read_vec2("WindowTitleAlign", style.WindowTitleAlign);
-        read_float("ChildRounding", style.ChildRounding);
-        read_float("ChildBorderSize", style.ChildBorderSize);
-        read_float("PopupRounding", style.PopupRounding);
-        read_float("PopupBorderSize", style.PopupBorderSize);
-        read_vec2("FramePadding", style.FramePadding);
-        read_float("FrameRounding", style.FrameRounding);
-        read_float("FrameBorderSize", style.FrameBorderSize);
-        read_vec2("ItemSpacing", style.ItemSpacing);
-        read_vec2("ItemInnerSpacing", style.ItemInnerSpacing);
-        read_float("IndentSpacing", style.IndentSpacing);
-        read_vec2("CellPadding", style.CellPadding);
-        read_float("ScrollbarSize", style.ScrollbarSize);
-        read_float("ScrollbarRounding", style.ScrollbarRounding);
-        read_float("GrabMinSize", style.GrabMinSize);
-        read_float("GrabRounding", style.GrabRounding);
-        read_float("ImageBorderSize", style.ImageBorderSize);
-        read_float("TabRounding", style.TabRounding);
-        read_float("TabBorderSize", style.TabBorderSize);
-        read_float("TabBarBorderSize", style.TabBarBorderSize);
-        read_float("TabBarOverlineSize", style.TabBarOverlineSize);
-        read_float("TableAngledHeadersAngle", style.TableAngledHeadersAngle);
-        read_vec2("TableAngledHeadersTextAlign", style.TableAngledHeadersTextAlign);
-        read_float("TreeLinesSize", style.TreeLinesSize);
-        read_float("TreeLinesRounding", style.TreeLinesRounding);
-        read_vec2("ButtonTextAlign", style.ButtonTextAlign);
-        read_vec2("SelectableTextAlign", style.SelectableTextAlign);
-        read_float("SeparatorTextBorderSize", style.SeparatorTextBorderSize);
-        read_vec2("SeparatorTextAlign", style.SeparatorTextAlign);
-        read_vec2("SeparatorTextPadding", style.SeparatorTextPadding);
-        read_float("DockingSeparatorSize", style.DockingSeparatorSize);
-        read_float("FontSizeBase", style.FontSizeBase);
-        read_float("FontScaleMain", style.FontScaleMain);
-        read_float("FontScaleDpi", style.FontScaleDpi);
-        read_float("CircleTessellationMaxError", style.CircleTessellationMaxError);
-        if (j_style.contains("WindowMenuButtonPosition"))
-            style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
+        theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
+            ImGuiTheme::ImGuiTheme_FromName(name.c_str());
     }
+
+    apply(theme);
 }
 
 void Theme::save(json &j) const

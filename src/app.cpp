@@ -16,14 +16,9 @@
 
 #include "texture.h"
 
-#include "opengl_check.h"
-
-#include "colorspace.h"
-
 #include "json.h"
 #include "version.h"
 
-#include <ImfHeader.h>
 #include <ImfThreading.h>
 
 #include <spdlog/mdc.h>
@@ -31,23 +26,15 @@
 
 #include <cmath>
 #include <fmt/core.h>
-#include <fstream>
 #include <memory>
-#include <random>
-#include <sstream>
 #include <utility>
 
 #include "platform_utils.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#include <emscripten_browser_file.h>
 #else
 #include "portable-file-dialogs.h"
-#endif
-
-#ifdef HELLOIMGUI_USE_SDL2
-#include <SDL.h>
 #endif
 
 #ifdef HELLOIMGUI_USE_GLFW3
@@ -61,44 +48,14 @@
 
 using namespace std;
 
-#if defined(__EMSCRIPTEN__)
-static float g_scroll_multiplier = 10.0f;
-#else
-static float g_scroll_multiplier = 1.0f;
-#endif
-
-struct WatchedPixel
-{
-    int2 pixel;
-    int3 color_mode{0, 0, 0}; //!< Color mode for current, reference, and composite pixels
-};
-
-static vector<WatchedPixel> g_watched_pixels;
-
-static constexpr float MIN_ZOOM       = 0.01f;
-static constexpr float MAX_ZOOM       = 512.f;
-static bool            g_show_help    = false;
-static bool            g_help_is_open = false;
-static json            g_settings;
-static bool            g_show_command_palette                = false;
-static bool            g_show_developer_menu                 = false;
-static bool            g_show_tweak_window                   = false;
-static bool            g_show_demo_window                    = false;
-static bool            g_show_debug_window                   = false;
-static bool            g_show_bg_color_picker                = false;
-static char            g_filter_buffer[256]                  = {0};
-static int             g_file_list_mode                      = 1; // 0: images only; 1: list; 2: tree;
-static bool            g_request_sort                        = false;
-static bool            g_short_names                         = false;
-static MouseMode_      g_mouse_mode                          = MouseMode_PanZoom;
-static bool            g_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
-static bool            g_play_forward                        = false;
-static bool            g_play_backward                       = false;
-static bool            g_play_stopped                        = true;
-static float           g_playback_speed                      = 24.f;
-static int             g_status_color_mode                   = 0;
-static bool            g_reverse_colormap                    = false;
-static float           g_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
+static bool  g_show_help            = false;
+static bool  g_help_is_open         = false;
+static bool  g_show_tweak_window    = false;
+static bool  g_show_bg_color_picker = false;
+static int   g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
+static bool  g_request_sort         = false;
+static bool  g_short_names          = false;
+static float g_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
 
 #define g_blank_icon ""
 
@@ -390,12 +347,59 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     // Load user settings at `PostInit` and save them at `BeforeExit`
     //
+
     m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
     m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
         setup_imgui_clipboard();
-        load_settings();
+
+        spdlog::info("Loading user settings from '{}'", HelloImGui::IniSettingsLocation(m_params));
+
+        auto s = HelloImGui::LoadUserPref("UserSettings");
+        if (s.empty())
+        {
+            spdlog::warn("No user settings found, using defaults.");
+            return;
+        }
+
+        try
+        {
+            json j = json::parse(s);
+            spdlog::debug("Restoring recent file list...");
+            m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
+            m_bg_mode =
+                (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
+            m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
+
+            m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
+            m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
+            m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
+            m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
+            m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
+            m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
+            m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
+            m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
+            m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
+            m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
+            m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
+            m_dither               = j.value<bool>("dither", m_dither);
+            g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
+            g_short_names          = j.value<bool>("short names", g_short_names);
+            m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
+            m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
+            m_clip_range           = j.value<float2>("clip range", m_clip_range);
+            m_playback_speed       = j.value<float>("playback speed", m_playback_speed);
+            m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
+
+            *action("Show developer menu").p_selected =
+                j.value<bool>("show developer menu", action("Show developer menu").checked());
+        }
+        catch (json::exception &e)
+        {
+            spdlog::error("Error while parsing user settings: {}", e.what());
+        }
+
         setup_rendering();
 
         if (force_exposure.has_value())
@@ -417,20 +421,66 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         spdlog::info("Using {}-style keyboard behavior",
                      ImGui::GetIO().ConfigMacOSXBehaviors ? "Apple" : "Windows/Linux");
     };
+
     m_params.callbacks.BeforeExit = [this]
     {
         Image::cleanup_default_textures();
         Colormap::cleanup();
-        save_settings();
+
+        spdlog::info("Saving user settings to '{}'", HelloImGui::IniSettingsLocation(m_params));
+
+        json j;
+        j["recent files"]            = m_image_loader.recent_files();
+        j["background mode"]         = (int)m_bg_mode;
+        j["background color"]        = m_bg_color.xyz();
+        j["draw data window"]        = m_draw_data_window;
+        j["draw display window"]     = m_draw_display_window;
+        j["auto fit data window"]    = m_auto_fit_data;
+        j["auto fit display window"] = m_auto_fit_display;
+        j["auto fit selection"]      = m_auto_fit_selection;
+        j["draw pixel info"]         = m_draw_pixel_info;
+        j["draw pixel grid"]         = m_draw_grid;
+        j["exposure"]                = m_exposure;
+        j["gamma"]                   = m_gamma;
+        j["tonemap"]                 = m_tonemap;
+        j["clamp to LDR"]            = m_clamp_to_LDR;
+        j["dither"]                  = m_dither;
+        j["verbosity"]               = spdlog::get_level();
+        j["file list mode"]          = g_file_list_mode;
+        j["short names"]             = g_short_names;
+        j["draw clip warnings"]      = m_draw_clip_warnings;
+        j["show FPS"]                = m_show_FPS;
+        j["clip range"]              = m_clip_range;
+        j["show developer menu"]     = action("Show developer menu").checked();
+        j["playback speed"]          = m_playback_speed;
+        j["colormap index"]          = m_colormap_index;
+
+        m_theme.save(j);
+
+        HelloImGui::SaveUserPref("UserSettings", j.dump(4));
     };
 
     // Change style
     m_params.callbacks.SetupImGuiStyle = [this]()
     {
-        spdlog::info("Setting up ImGui Style: '{}'", m_theme.name());
-        m_theme.load(g_settings);
-        m_theme.apply();
+        auto s = HelloImGui::LoadUserPref("UserSettings");
+        if (s.empty())
+        {
+            spdlog::warn("No user settings found, using defaults.");
+            return;
+        }
+
+        try
+        {
+            m_theme.load(json::parse(s));
+        }
+        catch (json::exception &e)
+        {
+            spdlog::error("Error while parsing user settings: {}", e.what());
+        }
     };
+
+    static bool show_command_palette = false;
 
     m_params.callbacks.ShowGui = [this]()
     {
@@ -460,55 +510,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         draw_about_dialog();
 
-        draw_command_palette();
+        draw_command_palette(show_command_palette);
 
-        // popup version of the below; commented out because it doesn't allow right-clicking to change the color
-        // picker type
-        //
-        // if (g_show_bg_color_picker)
-        //     ImGui::OpenPopup("Background color");
-        // g_show_bg_color_picker = false;
-        // ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
-        //                         ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
-        // ImGui::SetNextWindowFocus();
-        // if (ImGui::BeginPopup("Background color", ImGuiWindowFlags_NoSavedSettings |
-        // ImGuiWindowFlags_AlwaysAutoResize))
-        // {
-        //     ImGui::TextUnformatted("Choose custom background color");
-        //     ImGui::ColorPicker3("##Custom background color", (float *)&m_bg_color,
-        //                         ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float);
-        //     ImGui::EndPopup();
-        // }
-
-        // window version of the above
-        if (g_show_bg_color_picker)
-        {
-            // Center window horizontally, align near top vertically
-            ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
-                                    ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
-            if (ImGui::Begin("Choose custom background color", &g_show_bg_color_picker,
-                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                                 ImGuiWindowFlags_NoDocking))
-            {
-                static float4 previous_bg_color = m_bg_color;
-                if (ImGui::IsWindowAppearing())
-                    previous_bg_color = m_bg_color;
-                ImGui::ColorPicker4("##Custom background color", (float *)&m_bg_color,
-                                    ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha,
-                                    (float *)&previous_bg_color);
-
-                ImGui::Dummy(HelloImGui::EmToVec2(1.f, 0.5f));
-                if (ImGui::Button("OK", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
-                    g_show_bg_color_picker = false;
-                ImGui::SameLine();
-                if (ImGui::Button("Cancel", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
-                {
-                    m_bg_color             = previous_bg_color;
-                    g_show_bg_color_picker = false;
-                }
-            }
-            ImGui::End();
-        }
+        draw_color_picker();
 
         if (g_show_tweak_window)
         {
@@ -523,10 +527,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                     {
                         const bool is_selected = t == m_theme;
                         if (ImGui::Selectable(Theme::name(t), is_selected))
-                        {
                             m_theme.set(t);
-                            m_theme.apply();
-                        }
 
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
@@ -546,138 +547,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             ImGui::End();
         }
 
-        if (g_show_demo_window)
-        {
-            ImGui::ShowDemoWindow(&g_show_demo_window);
-            ImPlot::ShowMetricsWindow(&g_show_demo_window);
-            ImPlot::ShowDemoWindow(&g_show_demo_window);
-        }
-
-        if (g_show_debug_window)
-        {
-            ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Debug", &g_show_debug_window))
-            {
-                if (ImGui::BeginTabBar("Debug tabs", ImGuiTabBarFlags_None))
-                {
-                    if (ImGui::BeginTabItem("Transfer functions"))
-                    {
-                        static float            gamma = 2.2f;
-                        static TransferFunction tf    = TransferFunction_Linear;
-                        ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
-                        if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
-                                              ImGuiComboFlags_HeightLargest))
-                        {
-                            for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
-                            {
-                                const bool is_selected = (tf == n);
-                                if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
-                                                      is_selected))
-                                    tf = (TransferFunction)n;
-
-                                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                                if (is_selected)
-                                    ImGui::SetItemDefaultFocus();
-                            }
-                            ImGui::EndCombo();
-                        }
-                        if (ImPlot::BeginPlot("Transfer functions"))
-                        {
-                            ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-
-                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-
-                            auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
-                            auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
-
-                            const int    N = 101;
-                            static float xs1[N], ys1[N];
-                            for (int i = 0; i < N; ++i)
-                            {
-                                xs1[i] = i / float(N - 1);
-                                ys1[i] = f(xs1[i]);
-                            }
-                            static float xs2[N], ys2[N];
-                            for (int i = 0; i < N; ++i)
-                            {
-                                ys2[i] = lerp(0.0f, ys1[N - 1], i / float(N - 1));
-                                xs2[i] = g(ys2[i]);
-                            }
-
-                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
-                            ImPlot::PlotLine("to_linear", xs1, ys1, N);
-                            ImPlot::SetNextMarkerStyle(ImPlotMarker_Square);
-                            ImPlot::PlotLine("from_linear", xs2, ys2, N);
-
-                            ImPlot::PopStyleVar(2);
-                            ImPlot::EndPlot();
-                        }
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("Illuminant spectra"))
-                    {
-                        if (ImPlot::BeginPlot("Illuminant spectra"))
-                        {
-                            ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit,
-                                              ImPlotAxisFlags_AutoFit);
-
-                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                            ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
-
-                            for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
-                            {
-                                WhitePoint wp{n};
-                                auto       spectrum = white_point_spectrum(wp);
-                                if (spectrum.values.empty())
-                                    continue;
-                                string name{white_point_name(wp)};
-                                ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
-                                                 (spectrum.max_wavelength - spectrum.min_wavelength) /
-                                                     (spectrum.values.size() - 1),
-                                                 spectrum.min_wavelength);
-                            }
-                            ImPlot::PopStyleVar(3);
-                            ImPlot::EndPlot();
-                        }
-                        ImGui::EndTabItem();
-                    }
-
-                    if (ImGui::BeginTabItem("CIE 1931 XYZ"))
-                    {
-                        if (ImPlot::BeginPlot("CIE 1931 XYZ color matching functions"))
-                        {
-                            ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit,
-                                              ImPlotAxisFlags_AutoFit);
-
-                            ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
-                            ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
-                            ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
-
-                            auto &xyz       = CIE_XYZ_spectra();
-                            auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
-                            ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, xyz.values.size(), increment,
-                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                            ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, xyz.values.size(), increment,
-                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-                            ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, xyz.values.size(), increment,
-                                             xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
-
-                            ImPlot::PopStyleVar(3);
-                            ImPlot::EndPlot();
-                        }
-
-                        ImGui::EndTabItem();
-                    }
-
-                    ImGui::EndTabBar();
-                }
-            }
-
-            ImGui::End();
-        }
+        draw_develop_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
@@ -718,7 +588,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
-                    []() {}, always_enabled, false, &g_show_command_palette});
+                    []() {}, always_enabled, false, &show_command_palette});
 
         static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
                                  m_params.callbacks.edgesToolbars.end();
@@ -804,12 +674,15 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                     [this]() { m_params.dockingParams.layoutReset = true; },
                     [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
 
+        static bool s_show_developer_menu = false;
         add_action({"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
-                    &g_show_developer_menu});
+                    &s_show_developer_menu});
+        static bool s_show_demo_window = false;
         add_action(
-            {"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &g_show_demo_window});
+            {"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &s_show_demo_window});
+        static bool s_show_debug_window = false;
         add_action(
-            {"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false, &g_show_debug_window});
+            {"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false, &s_show_debug_window});
         add_action(
             {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
 
@@ -834,7 +707,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                     },
                     always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
         add_action(
-            {"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &g_reverse_colormap});
+            {"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &m_reverse_colormap});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
             add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
                         false, &m_clamp_to_LDR});
@@ -882,30 +755,32 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                     },
                     always_enabled});
 
+        static bool s_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
+
         add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_P, 0,
-                    []()
+                    [this]()
                     {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
-                        g_mouse_mode                            = MouseMode_PanZoom;
-                        g_mouse_mode_enabled[MouseMode_PanZoom] = true;
+                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                        m_mouse_mode                            = MouseMode_PanZoom;
+                        s_mouse_mode_enabled[MouseMode_PanZoom] = true;
                     },
-                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_PanZoom]});
+                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_PanZoom]});
         add_action({"Rectangular select", ICON_MY_SELECT, ImGuiKey_M, 0,
-                    []()
+                    [this]()
                     {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
-                        g_mouse_mode                                         = MouseMode_RectangularSelection;
-                        g_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
+                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                        m_mouse_mode                                         = MouseMode_RectangularSelection;
+                        s_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
                     },
-                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_RectangularSelection]});
+                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
         add_action({"Pixel/color inspector", ICON_MY_WATCHED_PIXEL, ImGuiKey_I, 0,
-                    []()
+                    [this]()
                     {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) g_mouse_mode_enabled[i] = false;
-                        g_mouse_mode                                   = MouseMode_ColorInspector;
-                        g_mouse_mode_enabled[MouseMode_ColorInspector] = true;
+                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                        m_mouse_mode                                   = MouseMode_ColorInspector;
+                        s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
                     },
-                    always_enabled, false, &g_mouse_mode_enabled[MouseMode_ColorInspector]});
+                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_ColorInspector]});
 
         auto if_img = [this]() { return current_image() != nullptr; };
 
@@ -1046,27 +921,27 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add_action({"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
                     [this]
                     {
-                        g_play_backward &= !g_play_forward;
-                        g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = g_play_stopped;
+                        m_play_backward &= !m_play_forward;
+                        m_play_stopped                  = !(m_play_forward || m_play_backward);
+                        m_params.fpsIdling.enableIdling = m_play_stopped;
                     },
-                    always_enabled, false, &g_play_forward});
+                    always_enabled, false, &m_play_forward});
         add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
                     [this]
                     {
-                        g_play_forward &= !g_play_stopped;
-                        g_play_backward &= !g_play_stopped;
+                        m_play_forward &= !m_play_stopped;
+                        m_play_backward &= !m_play_stopped;
                         m_params.fpsIdling.enableIdling = true;
                     },
-                    [] { return g_play_forward || g_play_backward; }, false, &g_play_stopped});
+                    [this] { return m_play_forward || m_play_backward; }, false, &m_play_stopped});
         add_action({"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
                     [this]
                     {
-                        g_play_forward &= !g_play_backward;
-                        g_play_stopped                  = !(g_play_forward || g_play_backward);
-                        m_params.fpsIdling.enableIdling = g_play_stopped;
+                        m_play_forward &= !m_play_backward;
+                        m_play_stopped                  = !(m_play_forward || m_play_backward);
+                        m_params.fpsIdling.enableIdling = m_play_stopped;
                     },
-                    always_enabled, false, &g_play_backward});
+                    always_enabled, false, &m_play_backward});
 
         // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
@@ -1294,125 +1169,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     load_images(in_files);
 }
 
-void HDRViewApp::setup_rendering()
-{
-    try
-    {
-        m_render_pass = new RenderPass(false, true);
-        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-        m_render_pass->set_depth_test(RenderPass::DepthTest::Always, false);
-        m_render_pass->set_clear_color(float4(0.15f, 0.15f, 0.15f, 1.f));
-
-        m_shader = new Shader(
-            m_render_pass,
-            /* An identifying name */
-            "ImageView", Shader::from_asset("shaders/image-shader_vert"),
-            Shader::prepend_includes(Shader::from_asset("shaders/image-shader_frag"), {"shaders/colorspaces"}),
-            Shader::BlendMode::AlphaBlend);
-
-        const float positions[] = {-1.f, -1.f, 1.f, -1.f, -1.f, 1.f, 1.f, -1.f, 1.f, 1.f, -1.f, 1.f};
-
-        m_shader->set_buffer("position", VariableType::Float32, {6, 2}, positions);
-        m_render_pass->set_cull_mode(RenderPass::CullMode::Disabled);
-
-        Image::make_default_textures();
-        Colormap::initialize();
-
-        m_shader->set_texture("dither_texture", Image::dither_texture());
-        set_image_textures();
-        spdlog::info("Successfully initialized graphics API!");
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("Shader initialization failed!:\n\t{}.", e.what());
-    }
-}
-
-void HDRViewApp::load_settings()
-{
-    spdlog::info("Loading user settings from '{}'", HelloImGui::IniSettingsLocation(m_params));
-
-    auto s = HelloImGui::LoadUserPref("UserSettings");
-    if (s.empty())
-    {
-        spdlog::warn("No user settings found, using defaults.");
-        return;
-    }
-
-    try
-    {
-        json j = json::parse(s);
-        spdlog::debug("Restoring recent file list...");
-        m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
-        m_bg_mode =
-            (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
-        m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
-
-        m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
-        m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
-        m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
-        m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
-        m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
-        m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
-        m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
-        m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
-        m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
-        m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
-        m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
-        m_dither               = j.value<bool>("dither", m_dither);
-        g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
-        g_short_names          = j.value<bool>("short names", g_short_names);
-        m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
-        m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
-        m_clip_range           = j.value<float2>("clip range", m_clip_range);
-        g_playback_speed       = j.value<float>("playback speed", g_playback_speed);
-        m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
-
-        g_show_developer_menu = j.value<bool>("show developer menu", g_show_developer_menu);
-
-        // save settings so we can call load_theme from SetupImGuiStyle
-        g_settings = j;
-    }
-    catch (json::exception &e)
-    {
-        spdlog::error("Error while parsing user settings: {}", e.what());
-    }
-}
-
-void HDRViewApp::save_settings()
-{
-    spdlog::info("Saving user settings to '{}'", HelloImGui::IniSettingsLocation(m_params));
-
-    json j;
-    j["recent files"]            = m_image_loader.recent_files();
-    j["background mode"]         = (int)m_bg_mode;
-    j["background color"]        = m_bg_color.xyz();
-    j["draw data window"]        = m_draw_data_window;
-    j["draw display window"]     = m_draw_display_window;
-    j["auto fit data window"]    = m_auto_fit_data;
-    j["auto fit display window"] = m_auto_fit_display;
-    j["auto fit selection"]      = m_auto_fit_selection;
-    j["draw pixel info"]         = m_draw_pixel_info;
-    j["draw pixel grid"]         = m_draw_grid;
-    j["exposure"]                = m_exposure;
-    j["gamma"]                   = m_gamma;
-    j["tonemap"]                 = m_tonemap;
-    j["clamp to LDR"]            = m_clamp_to_LDR;
-    j["dither"]                  = m_dither;
-    j["verbosity"]               = spdlog::get_level();
-    j["file list mode"]          = g_file_list_mode;
-    j["short names"]             = g_short_names;
-    j["draw clip warnings"]      = m_draw_clip_warnings;
-    j["show FPS"]                = m_show_FPS;
-    j["clip range"]              = m_clip_range;
-    j["show developer menu"]     = g_show_developer_menu;
-    j["playback speed"]          = g_playback_speed;
-    j["colormap index"]          = m_colormap_index;
-
-    m_theme.save(j);
-
-    HelloImGui::SaveUserPref("UserSettings", j.dump(4));
-}
 
 static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
                                float width = 0.f)
@@ -1633,7 +1389,7 @@ void HDRViewApp::draw_status_bar()
 
         ImGui::PushID("Current");
         ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, g_status_color_mode, 2, false, HelloImGui::EmSize(25.f));
+        pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, HelloImGui::EmSize(25.f));
         ImGui::PopID();
 
         float real_zoom = m_zoom * pixel_ratio();
@@ -1654,6 +1410,173 @@ void HDRViewApp::draw_status_bar()
     }
 
     ImGui::PopStyleVar();
+}
+
+void HDRViewApp::draw_color_picker()
+{
+    if (!g_show_bg_color_picker)
+        return;
+
+    // Center window horizontally, align near top vertically
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
+                            ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
+    if (ImGui::Begin("Choose custom background color", &g_show_bg_color_picker,
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking))
+    {
+        static float4 previous_bg_color = m_bg_color;
+        if (ImGui::IsWindowAppearing())
+            previous_bg_color = m_bg_color;
+        ImGui::ColorPicker4("##Custom background color", (float *)&m_bg_color,
+                            ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha,
+                            (float *)&previous_bg_color);
+
+        ImGui::Dummy(HelloImGui::EmToVec2(1.f, 0.5f));
+        if (ImGui::Button("OK", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
+            g_show_bg_color_picker = false;
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
+        {
+            m_bg_color             = previous_bg_color;
+            g_show_bg_color_picker = false;
+        }
+    }
+    ImGui::End();
+}
+
+void HDRViewApp::draw_develop_windows()
+{
+    bool *show_demo_window = action("Show Dear ImGui demo window").p_selected;
+    if (*show_demo_window)
+    {
+        ImGui::ShowDemoWindow(show_demo_window);
+        ImPlot::ShowMetricsWindow(show_demo_window);
+        ImPlot::ShowDemoWindow(show_demo_window);
+    }
+
+    bool *show_debug_window = action("Show debug window").p_selected;
+    if (*show_debug_window)
+    {
+        ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Debug", show_debug_window))
+        {
+            if (ImGui::BeginTabBar("Debug tabs", ImGuiTabBarFlags_None))
+            {
+                if (ImGui::BeginTabItem("Transfer functions"))
+                {
+                    static float            gamma = 2.2f;
+                    static TransferFunction tf    = TransferFunction_Linear;
+                    ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
+                    if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
+                                          ImGuiComboFlags_HeightLargest))
+                    {
+                        for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
+                        {
+                            const bool is_selected = (tf == n);
+                            if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
+                                                  is_selected))
+                                tf = (TransferFunction)n;
+
+                            // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                            if (is_selected)
+                                ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                    if (ImPlot::BeginPlot("Transfer functions"))
+                    {
+                        ImPlot::SetupAxes("input", "encoded", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+
+                        auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
+                        auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
+
+                        const int    N = 101;
+                        static float xs1[N], ys1[N];
+                        for (int i = 0; i < N; ++i)
+                        {
+                            xs1[i] = i / float(N - 1);
+                            ys1[i] = f(xs1[i]);
+                        }
+                        static float xs2[N], ys2[N];
+                        for (int i = 0; i < N; ++i)
+                        {
+                            ys2[i] = lerp(0.0f, ys1[N - 1], i / float(N - 1));
+                            xs2[i] = g(ys2[i]);
+                        }
+
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle);
+                        ImPlot::PlotLine("to_linear", xs1, ys1, N);
+                        ImPlot::SetNextMarkerStyle(ImPlotMarker_Square);
+                        ImPlot::PlotLine("from_linear", xs2, ys2, N);
+
+                        ImPlot::PopStyleVar(2);
+                        ImPlot::EndPlot();
+                    }
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Illuminant spectra"))
+                {
+                    if (ImPlot::BeginPlot("Illuminant spectra"))
+                    {
+                        ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+
+                        for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                        {
+                            WhitePoint wp{n};
+                            auto       spectrum = white_point_spectrum(wp);
+                            if (spectrum.values.empty())
+                                continue;
+                            string name{white_point_name(wp)};
+                            ImPlot::PlotLine(name.c_str(), spectrum.values.data(), spectrum.values.size(),
+                                             (spectrum.max_wavelength - spectrum.min_wavelength) /
+                                                 (spectrum.values.size() - 1),
+                                             spectrum.min_wavelength);
+                        }
+                        ImPlot::PopStyleVar(3);
+                        ImPlot::EndPlot();
+                    }
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("CIE 1931 XYZ"))
+                {
+                    if (ImPlot::BeginPlot("CIE 1931 XYZ color matching functions"))
+                    {
+                        ImPlot::SetupAxes("Wavelength", "Intensity", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+
+                        ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
+                        ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
+
+                        auto &xyz       = CIE_XYZ_spectra();
+                        auto  increment = (xyz.max_wavelength - xyz.min_wavelength) / xyz.values.size();
+                        ImPlot::PlotLine("X", (const float *)&xyz.values[0].x, xyz.values.size(), increment,
+                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                        ImPlot::PlotLine("Y", (const float *)&xyz.values[0].y, xyz.values.size(), increment,
+                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+                        ImPlot::PlotLine("Z", (const float *)&xyz.values[0].z, xyz.values.size(), increment,
+                                         xyz.min_wavelength, ImPlotLineFlags_None, 0, sizeof(float3));
+
+                        ImPlot::PopStyleVar(3);
+                        ImPlot::EndPlot();
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
+        }
+
+        ImGui::End();
+    }
 }
 
 void HDRViewApp::draw_menus()
@@ -1821,10 +1744,7 @@ void HDRViewApp::draw_menus()
             int start = m_theme == Theme::CUSTOM_THEME ? Theme::CUSTOM_THEME : Theme::LIGHT_THEME;
             for (int t = start; t < ImGuiTheme::ImGuiTheme_Count; ++t)
                 if (ImGui::MenuItem(Theme::name(t), nullptr, t == m_theme))
-                {
                     m_theme.set(t);
-                    m_theme.apply();
-                }
 
             ImGui::EndMenu();
         }
@@ -1832,7 +1752,7 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    if (g_show_developer_menu && ImGui::BeginMenu("Developer"))
+    if (action("Show developer menu").checked() && ImGui::BeginMenu("Developer"))
     {
         ImGui::MenuItem(action("Show Dear ImGui demo window"));
         ImGui::MenuItem(action("Show debug window"));
@@ -1857,356 +1777,6 @@ void HDRViewApp::draw_menus()
     ImGui::WrappedTooltip(a.name.c_str());
 }
 
-void HDRViewApp::save_as(const string &filename) const
-{
-    try
-    {
-#if !defined(__EMSCRIPTEN__)
-        ofstream os{filename, ios_base::binary};
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
-#else
-        ostringstream os;
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
-        string buffer = os.str();
-        emscripten_browser_file::download(
-            filename,                                    // the default filename for the browser to save.
-            "application/octet-stream",                  // the MIME type of the data, treated as if it were a webserver
-                                                         // serving a file
-            string_view(buffer.c_str(), buffer.length()) // a buffer describing the data to download
-        );
-#endif
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
-    }
-    catch (...)
-    {
-        spdlog::error("An unknown error occurred while saving to '{}'.", filename);
-    }
-}
-
-void HDRViewApp::export_as(const string &filename) const
-{
-    try
-    {
-        Image img(current_image()->size(), 4);
-        img.finalize();
-        auto bounds     = current_image()->data_window;
-        int  block_size = std::max(1, 1024 * 1024 / img.size().x);
-        parallel_for(blocked_range<int>(0, img.size().y, block_size),
-                     [this, &img, bounds](int begin_y, int end_y, int, int)
-                     {
-                         for (int y = begin_y; y < end_y; ++y)
-                             for (int x = 0; x < img.size().x; ++x)
-                             {
-                                 float4 v = pixel_value(int2{x, y} + bounds.min, false, 2);
-
-                                 img.channels[0](x, y) = v[0];
-                                 img.channels[1](x, y) = v[1];
-                                 img.channels[2](x, y) = v[2];
-                                 img.channels[3](x, y) = v[3];
-                             }
-                     });
-
-#if !defined(__EMSCRIPTEN__)
-        ofstream os{filename, ios_base::binary};
-        img.save(os, filename, 1.f, true, m_dither);
-#else
-        ostringstream os;
-        img.save(os, filename, 1.f, true, m_dither);
-        string buffer = os.str();
-        emscripten_browser_file::download(
-            filename,                                    // the default filename for the browser to save.
-            "application/octet-stream",                  // the MIME type of the data, treated as if it were a webserver
-                                                         // serving a file
-            string_view(buffer.c_str(), buffer.length()) // a buffer describing the data to download
-        );
-#endif
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("An error occurred while exporting to '{}':\n\t{}.", filename, e.what());
-    }
-    catch (...)
-    {
-        spdlog::error("An unknown error occurred while exporting to '{}'.", filename);
-    }
-}
-
-void HDRViewApp::load_images(const vector<string> &filenames)
-{
-    string channel_selector = "";
-    for (size_t i = 0; i < filenames.size(); ++i)
-    {
-        if (filenames[i][0] == ':')
-        {
-            channel_selector = filenames[i].substr(1);
-            spdlog::debug("Channel selector set to: {}", channel_selector);
-            continue;
-        }
-
-        load_image(filenames[i], {}, i == 0, channel_selector);
-    }
-}
-
-void HDRViewApp::open_image()
-{
-#if defined(__EMSCRIPTEN__)
-
-    // due to this bug, we just allow all file types on safari:
-    // https://stackoverflow.com/questions/72013027/safari-cannot-upload-file-w-unknown-mime-type-shows-tempimage,
-    string extensions =
-        host_is_safari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
-
-    // open the browser's file selector, and pass the file to the upload handler
-    spdlog::debug("Requesting file from user...");
-    emscripten_browser_file::upload(
-        extensions,
-        [](const string &filename, const string &mime_type, string_view buffer, void *my_data = nullptr)
-        {
-            if (buffer.empty())
-                spdlog::debug("User canceled upload.");
-            else
-            {
-                auto [size, unit] = human_readable_size(buffer.size());
-                spdlog::debug("User uploaded a {:.0f} {} file with filename '{}' of mime-type '{}'", size, unit,
-                              filename, mime_type);
-                hdrview()->load_image(filename, buffer, true);
-            }
-        });
-#else
-    string extensions = fmt::format("*.{}", fmt::join(Image::loadable_formats(), " *."));
-
-    load_images(pfd::open_file("Open image(s)", "", {"Image files", extensions}, pfd::opt::multiselect).result());
-#endif
-}
-
-void HDRViewApp::open_folder()
-{
-#if !defined(__EMSCRIPTEN__)
-    load_images({pfd::select_folder("Open images in folder", "").result()});
-#endif
-}
-
-// Note: the filename is passed by value in case its an element of m_recent_files, which we modify
-void HDRViewApp::load_image(const string filename, const string_view buffer, bool should_select,
-                            const string channel_selector)
-{
-    m_image_loader.background_load(filename, buffer, should_select, nullptr, channel_selector);
-}
-
-void HDRViewApp::load_url(const string_view url)
-{
-    if (url.empty())
-        return;
-
-#if !defined(__EMSCRIPTEN__)
-    spdlog::error("load_url only supported via emscripten");
-#else
-    spdlog::info("Entered URL: {}", url);
-
-    struct Payload
-    {
-        string      url;
-        HDRViewApp *hdrview;
-    };
-    auto data = new Payload{string(url), this};
-
-    m_remaining_download = 100;
-    emscripten_async_wget2_data(
-        data->url.c_str(), "GET", nullptr, data, true,
-        (em_async_wget2_data_onload_func)[](unsigned, void *data, void *buffer, unsigned buffer_size) {
-            auto   payload = reinterpret_cast<Payload *>(data);
-            string url     = payload->url; // copy the url
-            delete payload;
-
-            auto filename    = get_filename(url);
-            auto char_buffer = reinterpret_cast<const char *>(buffer);
-            spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-            hdrview()->load_image(url, {char_buffer, (size_t)buffer_size}, true);
-        },
-        (em_async_wget2_data_onerror_func)[](unsigned, void *data, int err, const char *desc) {
-            auto   payload                         = reinterpret_cast<Payload *>(data);
-            string url                             = payload->url; // copy the url
-            payload->hdrview->m_remaining_download = 0;
-            delete payload;
-
-            spdlog::error("Downloading the file '{}' failed; {}: '{}'.", url, err, desc);
-        },
-        (em_async_wget2_data_onprogress_func)[](unsigned, void *data, int bytes_loaded, int total_bytes) {
-            auto payload = reinterpret_cast<Payload *>(data);
-
-            payload->hdrview->m_remaining_download = (total_bytes - bytes_loaded) / total_bytes;
-        });
-
-    // emscripten_async_wget_data(
-    //     data->url.c_str(), data,
-    //     (em_async_wget_onload_func)[](void *data, void *buffer, int buffer_size) {
-    //         auto   payload = reinterpret_cast<Payload *>(data);
-    //         string url     = payload->url; // copy the url
-    //         delete payload;
-
-    //         auto filename    = get_filename(url);
-    //         auto char_buffer = reinterpret_cast<const char *>(buffer);
-    //         spdlog::info("Downloaded file '{}' with size {} from url '{}'", filename, buffer_size, url);
-    //         hdrview()->load_image(url, {char_buffer, (size_t)buffer_size}, true);
-    //     },
-    //     (em_arg_callback_func)[](void *data) {
-    //         auto   payload = reinterpret_cast<Payload *>(data);
-    //         string url     = payload->url; // copy the url
-    //         delete payload;
-
-    //         spdlog::error("Downloading the file '{}' failed.", url);
-    //     });
-#endif
-}
-
-void HDRViewApp::reload_image(ImagePtr image, bool should_select)
-{
-    if (!image)
-    {
-        spdlog::warn("Tried to reload a null image");
-        return;
-    }
-
-    spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
-    m_image_loader.background_load(image->filename, {}, should_select, image, image->channel_selector);
-}
-
-void HDRViewApp::set_image_textures()
-{
-    try
-    {
-        // bind the primary and secondary images, or a placehold black texture when we have no current or
-        // reference image
-        if (auto img = current_image())
-            img->set_as_texture(Target_Primary);
-        else
-            Image::set_null_texture(Target_Primary);
-
-        if (auto ref = reference_image())
-            ref->set_as_texture(Target_Secondary);
-        else
-            Image::set_null_texture(Target_Secondary);
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("Could not upload texture to graphics backend: {}.", e.what());
-    }
-}
-
-void HDRViewApp::close_image(int index)
-{
-    if (!is_valid(index))
-        index = current_image_index();
-
-    // If index is not valid, do nothing
-    if (!is_valid(index) || m_images.empty())
-        return;
-
-    // Determine if the image being closed is current or reference
-    bool closing_current   = (index == m_current);
-    bool closing_reference = (index == m_reference);
-
-    fs::path parent_path = fs::path(m_images[index]->filename).parent_path();
-    auto     filename    = m_images[index]->filename;
-    m_images.erase(m_images.begin() + index);
-
-    try
-    {
-        parent_path = fs::weakly_canonical(parent_path);
-    }
-    catch (const std::exception &e)
-    {
-        // path probably doesn't exist anymore
-        parent_path = fs::path();
-    }
-
-    if (!parent_path.empty())
-    {
-#if !defined(__EMSCRIPTEN__)
-        if (!m_active_directories.empty())
-        {
-            spdlog::debug("Active directories before closing image in '{}'.", parent_path.u8string());
-            for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
-        }
-
-        // Remove the parent directory from m_active_directories if no other images are from the same directory
-        bool others_in_same_directory = false;
-        for (const auto &img : m_images)
-        {
-            std::error_code ec;
-            if (fs::equivalent(fs::path(img->filename).parent_path(), parent_path, ec))
-            {
-                others_in_same_directory = true;
-                break;
-            }
-        }
-
-        if (!others_in_same_directory)
-            m_active_directories.erase(parent_path);
-
-        if (!m_active_directories.empty())
-        {
-            spdlog::debug("Active directories after closing image in '{}'.", parent_path.u8string());
-            for (const auto &dir : m_active_directories) spdlog::debug("Active directory: {}", dir.u8string());
-        }
-
-        spdlog::debug("Watched directories after closing image:");
-        m_image_loader.remove_watched_directories(
-            [this](const fs::path &path)
-            {
-                spdlog::debug("{} watched directory: {}",
-                              m_active_directories.count(path) == 0 ? "Removing" : "Keeping", path.u8string());
-                return m_active_directories.count(path) == 0;
-            });
-#endif
-    }
-
-    // Adjust indices after erasing the image
-    if (closing_current)
-    {
-        // select the next image down the list
-        int next = next_visible_image_index(index, Forward);
-        if (next < index) // there is no visible image after this one, go to previous visible
-            next = next_visible_image_index(index, Backward);
-        set_current_image_index(next < index ? next : next - 1);
-    }
-    else if (m_current > index && m_current > 0)
-    {
-        // If current image index was after the erased image, decrement it
-        set_current_image_index(m_current - 1);
-    }
-    // else: current image index remains unchanged
-
-    if (closing_reference)
-    {
-        int next_ref = next_visible_image_index(index, Forward);
-        if (next_ref < index)
-            next_ref = next_visible_image_index(index, Backward);
-        set_reference_image_index(next_ref < index ? next_ref : next_ref - 1);
-    }
-    else if (m_reference > index && m_reference > 0)
-    {
-        // If reference image index was after the erased image, decrement it
-        set_reference_image_index(m_reference - 1);
-    }
-    // else: reference image index remains unchanged
-
-    update_visibility(); // this also calls set_image_textures();
-}
-
-void HDRViewApp::close_all_images()
-{
-    m_images.clear();
-    m_current   = -1;
-    m_reference = -1;
-    m_active_directories.clear();
-    m_image_loader.remove_watched_directories([](const fs::path &path) { return true; });
-    update_visibility(); // this also calls set_image_textures();
-}
-
 void HDRViewApp::run()
 {
     ImPlot::CreateContext();
@@ -2229,30 +1799,6 @@ ImFont *HDRViewApp::font(const string &name) const
 }
 
 HDRViewApp::~HDRViewApp() {}
-
-float4 HDRViewApp::pixel_value(int2 p, bool raw, int which_image) const
-{
-    auto img1 = current_image();
-    auto img2 = reference_image();
-
-    float4 value;
-
-    if (which_image == 0)
-        value = img1 ? (raw ? img1->raw_pixel(p, Target_Primary) : img1->rgba_pixel(p, Target_Primary)) : float4{0.f};
-    else if (which_image == 1)
-        value =
-            img2 ? (raw ? img2->raw_pixel(p, Target_Secondary) : img2->rgba_pixel(p, Target_Secondary)) : float4{0.f};
-    else if (which_image == 2)
-    {
-        auto rgba1 = img1 ? img1->rgba_pixel(p, Target_Primary) : float4{0.f};
-        auto rgba2 = img2 ? img2->rgba_pixel(p, Target_Secondary) : float4{0.f};
-        value      = blend(rgba1, rgba2, m_blend_mode);
-    }
-
-    return raw ? value
-               : ::tonemap(float4{powf(2.f, m_exposure_live) * value.xyz() + m_offset_live, value.w}, m_gamma_live,
-                           m_tonemap, m_colormaps[m_colormap_index], g_reverse_colormap);
-}
 
 void HDRViewApp::draw_pixel_inspector_window()
 {
@@ -2328,9 +1874,9 @@ void HDRViewApp::draw_pixel_inspector_window()
     ImGui::Checkbox("Show " ICON_MY_WATCHED_PIXEL "s in viewport", &m_draw_watched_pixels);
 
     int delete_idx = -1;
-    for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
+    for (int i = 0; i < (int)m_watched_pixels.size(); ++i)
     {
-        auto &wp = g_watched_pixels[i];
+        auto &wp = m_watched_pixels[i];
 
         ImGui::PushID(i);
         bool visible = true;
@@ -2359,29 +1905,7 @@ void HDRViewApp::draw_pixel_inspector_window()
             delete_idx = i;
     }
     if (delete_idx >= 0)
-        g_watched_pixels.erase(g_watched_pixels.begin() + delete_idx);
-}
-
-static void calculate_tree_visibility(LayerTreeNode &node, Image &image)
-{
-    node.visible_groups = 0;
-    node.hidden_groups  = 0;
-    if (node.leaf_layer >= 0)
-    {
-        auto &layer = image.layers[node.leaf_layer];
-        for (size_t g = 0; g < layer.groups.size(); ++g)
-            if (image.groups[layer.groups[g]].visible)
-                ++node.visible_groups;
-            else
-                ++node.hidden_groups;
-    }
-
-    for (auto &[child_name, child_node] : node.children)
-    {
-        calculate_tree_visibility(child_node, image);
-        node.visible_groups += child_node.visible_groups;
-        node.hidden_groups += child_node.hidden_groups;
-    }
+        m_watched_pixels.erase(m_watched_pixels.begin() + delete_idx);
 }
 
 void HDRViewApp::update_visibility()
@@ -2409,7 +1933,7 @@ void HDRViewApp::update_visibility()
         if (img->visible)
             visible_image_names.emplace_back(img->file_and_partname());
 
-        calculate_tree_visibility(img->root, *img);
+        img->root.calculate_visibility(img.get());
 
         // if the selected group is hidden, select the next visible group
         if (img->is_valid_group(img->selected_group) && !img->groups[img->selected_group].visible)
@@ -2520,26 +2044,28 @@ void HDRViewApp::draw_file_window()
     // if (!num_images())
     //     return;
 
+    static char filter_buffer[256] = {0};
+
     const ImVec2 button_size = ImGui::IconButtonSize();
 
     bool show_button = m_file_filter.IsActive() || m_channel_filter.IsActive(); // save here to avoid flicker
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
     ImGui::SetNextItemAllowOverlap();
     if (ImGui::InputTextWithHint("##file filter", ICON_MY_FILTER " Filter 'file pattern:channel pattern'",
-                                 g_filter_buffer, IM_ARRAYSIZE(g_filter_buffer)))
+                                 filter_buffer, IM_ARRAYSIZE(filter_buffer)))
     {
         // copy everything before first ':' into m_file_filter.InputBuf, and everything after into
         // m_channel_filter.InputBuf
-        if (auto colon = strchr(g_filter_buffer, ':'))
+        if (auto colon = strchr(filter_buffer, ':'))
         {
-            int file_filter_length    = int(colon - g_filter_buffer + 1);
-            int channel_filter_length = IM_ARRAYSIZE(g_filter_buffer) - file_filter_length;
-            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, file_filter_length);
+            int file_filter_length    = int(colon - filter_buffer + 1);
+            int channel_filter_length = IM_ARRAYSIZE(filter_buffer) - file_filter_length;
+            ImStrncpy(m_file_filter.InputBuf, filter_buffer, file_filter_length);
             ImStrncpy(m_channel_filter.InputBuf, colon + 1, channel_filter_length);
         }
         else
         {
-            ImStrncpy(m_file_filter.InputBuf, g_filter_buffer, IM_ARRAYSIZE(m_file_filter.InputBuf));
+            ImStrncpy(m_file_filter.InputBuf, filter_buffer, IM_ARRAYSIZE(m_file_filter.InputBuf));
             m_channel_filter.InputBuf[0] = 0; // Clear channel filter if no colon is found
         }
 
@@ -2560,7 +2086,7 @@ void HDRViewApp::draw_file_window()
         {
             m_file_filter.Clear();
             m_channel_filter.Clear();
-            g_filter_buffer[0] = 0;
+            filter_buffer[0] = 0;
             update_visibility();
         }
     }
@@ -2874,438 +2400,11 @@ void HDRViewApp::draw_file_window()
         ImGui::SameLine();
 
         ImGui::SetNextItemWidth(std::max(HelloImGui::EmSize(1.f), ImGui::GetContentRegionAvail().x));
-        if (ImGui::SliderFloat("##Playback speed", &g_playback_speed, 0.1f, 60.f, "%.1f fps",
+        if (ImGui::SliderFloat("##Playback speed", &m_playback_speed, 0.1f, 60.f, "%.1f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
-            g_playback_speed = clamp(g_playback_speed, 1.f / 20.f, 60.f);
+            m_playback_speed = clamp(m_playback_speed, 1.f / 20.f, 60.f);
     }
     // ImGui::EndDisabled();
-}
-
-void HDRViewApp::fit_display_window()
-{
-    if (auto img = current_image())
-    {
-        m_zoom = minelem(viewport_size() / img->display_window.size());
-        center();
-    }
-}
-
-void HDRViewApp::fit_data_window()
-{
-    if (auto img = current_image())
-    {
-        m_zoom = minelem(viewport_size() / img->data_window.size());
-
-        auto center_pos   = float2(viewport_size() / 2.f);
-        auto center_pixel = Box2f(img->data_window).center();
-        reposition_pixel_to_vp_pos(center_pos, center_pixel);
-    }
-}
-
-void HDRViewApp::fit_selection()
-{
-    if (current_image() && m_roi.has_volume())
-    {
-        m_zoom = minelem(viewport_size() / m_roi.size());
-
-        auto center_pos   = float2(viewport_size() / 2.f);
-        auto center_pixel = Box2f(m_roi).center();
-        reposition_pixel_to_vp_pos(center_pos, center_pixel);
-    }
-}
-
-float HDRViewApp::zoom_level() const { return log(m_zoom * pixel_ratio()) / log(m_zoom_sensitivity); }
-
-void HDRViewApp::set_zoom_level(float level)
-{
-    m_zoom = clamp(std::pow(m_zoom_sensitivity, level) / pixel_ratio(), MIN_ZOOM, MAX_ZOOM);
-}
-
-void HDRViewApp::zoom_at_vp_pos(float amount, float2 focus_vp_pos)
-{
-    if (amount == 0.f)
-        return;
-
-    auto  focused_pixel = pixel_at_vp_pos(focus_vp_pos); // save focused pixel coord before modifying zoom
-    float scale_factor  = std::pow(m_zoom_sensitivity, amount);
-    m_zoom              = clamp(scale_factor * m_zoom, MIN_ZOOM, MAX_ZOOM);
-    // reposition so focused_pixel is still under focus_app_pos
-    reposition_pixel_to_vp_pos(focus_vp_pos, focused_pixel);
-}
-
-void HDRViewApp::zoom_in()
-{
-    // keep position at center of window fixed while zooming
-    auto center_pos   = float2(viewport_size() / 2.f);
-    auto center_pixel = pixel_at_vp_pos(center_pos);
-
-    // determine next higher power of 2 zoom level
-    float level_for_sensitivity = ceil(log(m_zoom) / log(2.f) + 0.5f);
-    float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
-    reposition_pixel_to_vp_pos(center_pos, center_pixel);
-}
-
-void HDRViewApp::zoom_out()
-{
-    // keep position at center of window fixed while zooming
-    auto center_pos   = float2(viewport_size() / 2.f);
-    auto center_pixel = pixel_at_vp_pos(center_pos);
-
-    // determine next lower power of 2 zoom level
-    float level_for_sensitivity = std::floor(log(m_zoom) / log(2.f) - 0.5f);
-    float new_scale             = std::pow(2.f, level_for_sensitivity);
-    m_zoom                      = clamp(new_scale, MIN_ZOOM, MAX_ZOOM);
-    reposition_pixel_to_vp_pos(center_pos, center_pixel);
-}
-
-void HDRViewApp::reposition_pixel_to_vp_pos(float2 position, float2 pixel)
-{
-    if (auto img = current_image())
-        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-
-    // Calculate where the new offset must be in order to satisfy the image position equation.
-    m_translate = position - (pixel * m_zoom) - center_offset();
-}
-
-Box2f HDRViewApp::scaled_display_window(ConstImagePtr img) const
-{
-    Box2f dw = img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
-    dw.min *= m_zoom;
-    dw.max *= m_zoom;
-    return dw;
-}
-
-Box2f HDRViewApp::scaled_data_window(ConstImagePtr img) const
-{
-    Box2f dw = img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}};
-    dw.min *= m_zoom;
-    dw.max *= m_zoom;
-    return dw;
-}
-
-float HDRViewApp::pixel_ratio() const { return ImGui::GetIO().DisplayFramebufferScale.x; }
-
-float2 HDRViewApp::center_offset() const
-{
-    auto   dw     = scaled_display_window(current_image());
-    float2 offset = (viewport_size() - dw.size()) / 2.f - dw.min;
-
-    // Adjust for flipping: if flipped, offset from the opposite side
-    // if (current_image())
-    {
-        if (m_flip.x)
-            offset.x += dw.min.x;
-        if (m_flip.y)
-            offset.y += dw.min.y;
-    }
-    return offset;
-}
-
-float2 HDRViewApp::image_position(ConstImagePtr img) const
-{
-    auto   dw  = scaled_data_window(img);
-    auto   dsw = scaled_display_window(img);
-    float2 pos = m_translate + center_offset() + select(m_flip, dsw.max - dw.min, dw.min);
-
-    // Adjust for flipping: move the image to the opposite side if flipped
-    // if (img)
-    // {
-    //     if (m_flip.x)
-    //         pos.x += m_offset.x + center_offset().x + (dsw.max.x - dw.min.x);
-    //     if (m_flip.y)
-    //         pos.y += m_offset.y + center_offset().y + (dsw.max.y - dw.min.y);
-    // }
-    return pos / viewport_size();
-}
-
-float2 HDRViewApp::image_scale(ConstImagePtr img) const
-{
-    auto   dw    = scaled_data_window(img);
-    float2 scale = dw.size() / viewport_size();
-
-    // Negate scale for flipped axes
-    // if (img)
-    {
-        if (m_flip.x)
-            scale.x = -scale.x;
-        if (m_flip.y)
-            scale.y = -scale.y;
-    }
-    return scale;
-}
-
-void HDRViewApp::draw_pixel_grid() const
-{
-    if (!current_image())
-        return;
-
-    static const int s_grid_threshold = 10;
-
-    if (!m_draw_grid || (s_grid_threshold == -1) || (m_zoom <= s_grid_threshold))
-        return;
-
-    float factor = clamp((m_zoom - s_grid_threshold) / (2 * s_grid_threshold), 0.f, 1.f);
-    float alpha  = lerp(0.0f, 1.0f, smoothstep(0.0f, 1.0f, factor));
-
-    if (alpha <= 0.0f)
-        return;
-
-    ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
-
-    ImColor col_fg(1.0f, 1.0f, 1.0f, alpha);
-    ImColor col_bg(0.2f, 0.2f, 0.2f, alpha);
-
-    auto bounds =
-        Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
-
-    // draw vertical lines
-    for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-        draw_list->AddLine(app_pos_at_pixel(float2((float)x, (float)bounds.min.y)),
-                           app_pos_at_pixel(float2((float)x, (float)bounds.max.y)), col_bg, 4.f);
-
-    // draw horizontal lines
-    for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-        draw_list->AddLine(app_pos_at_pixel(float2((float)bounds.min.x, (float)y)),
-                           app_pos_at_pixel(float2((float)bounds.max.x, (float)y)), col_bg, 4.f);
-
-    // and now again with the foreground color
-    for (int x = bounds.min.x; x <= bounds.max.x; ++x)
-        draw_list->AddLine(app_pos_at_pixel(float2((float)x, (float)bounds.min.y)),
-                           app_pos_at_pixel(float2((float)x, (float)bounds.max.y)), col_fg, 2.f);
-    for (int y = bounds.min.y; y <= bounds.max.y; ++y)
-        draw_list->AddLine(app_pos_at_pixel(float2((float)bounds.min.x, (float)y)),
-                           app_pos_at_pixel(float2((float)bounds.max.x, (float)y)), col_fg, 2.f);
-}
-
-void HDRViewApp::draw_pixel_info() const
-{
-    auto img = current_image();
-    if (!img || !m_draw_pixel_info)
-        return;
-
-    auto ref = reference_image();
-
-    static constexpr float2 align = {0.5f, 0.5f};
-
-    auto  &group = img->groups[img->selected_group];
-    string names[4];
-    string longest_name;
-    for (int c = 0; c < group.num_channels; ++c)
-    {
-        auto &channel = img->channels[group.channels[c]];
-        names[c]      = Channel::tail(channel.name);
-        if (names[c].length() > longest_name.length())
-            longest_name = names[c];
-    }
-
-    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
-    static float line_height = ImGui::CalcTextSize("").y;
-    const float2 channel_threshold2 =
-        float2{ImGui::CalcTextSize((longest_name + ": 31.00000").c_str()).x, group.num_channels * line_height};
-    const float2 coord_threshold2  = channel_threshold2 + float2{0.f, 2.f * line_height};
-    const float  channel_threshold = maxelem(channel_threshold2);
-    const float  coord_threshold   = maxelem(coord_threshold2);
-    ImGui::PopFont();
-
-    if (m_zoom <= channel_threshold)
-        return;
-
-    // fade value for the channel values shown at sufficient zoom
-    float factor = clamp((m_zoom - channel_threshold) / (1.25f * channel_threshold), 0.f, 1.f);
-    float alpha  = smoothstep(0.0f, 1.0f, factor);
-
-    if (alpha <= 0.0f)
-        return;
-
-    // fade value for the (x,y) coordinates shown at further zoom
-    float factor2 = clamp((m_zoom - coord_threshold) / (1.25f * coord_threshold), 0.f, 1.f);
-    float alpha2  = smoothstep(0.0f, 1.0f, factor2);
-
-    ImDrawList *draw_list = ImGui::GetBackgroundDrawList();
-
-    ImGui::PushFont(m_mono_bold, ImGui::GetStyle().FontSizeBase * 16.f / 14.f);
-
-    auto bounds =
-        Box2i{int2(pixel_at_vp_pos({0.f, 0.f})), int2(pixel_at_vp_pos(viewport_size()))}.make_valid().expand(1);
-
-    for (int y = bounds.min.y; y < bounds.max.y; ++y)
-    {
-        for (int x = bounds.min.x; x < bounds.max.x; ++x)
-        {
-            auto   pos        = app_pos_at_pixel(float2(x + 0.5f, y + 0.5f));
-            float4 r_pixel    = pixel_value({x, y}, true, 2);
-            float4 t_pixel    = linear_to_sRGB(pixel_value({x, y}, false, 2));
-            float4 pixel      = g_status_color_mode == 0 ? r_pixel : t_pixel;
-            float3 text_color = contrasting_color(t_pixel.xyz());
-            float3 shadow     = contrasting_color(text_color);
-            if (alpha2 > 0.f)
-            {
-                float2 c_pos = pos + float2{0.f, (-1 - 0.5f * (group.num_channels - 1)) * line_height};
-                auto   text  = fmt::format("({},{})", x, y);
-                ImGui::AddTextAligned(draw_list, c_pos + 1.f, ImColor(float4{shadow, alpha2}), text, align);
-                ImGui::AddTextAligned(draw_list, c_pos, ImColor(float4{text_color, alpha2}), text, align);
-            }
-
-            for (int c = 0; c < group.num_channels; ++c)
-            {
-                float2 c_pos = pos + float2{0.f, (c - 0.5f * (group.num_channels - 1)) * line_height};
-                auto   text  = fmt::format("{:>2s}:{: > 9.5f}", names[c], pixel[c]);
-                ImGui::AddTextAligned(draw_list, c_pos + 1.f, ImColor(float4{shadow, alpha2}), text, align);
-                ImGui::AddTextAligned(draw_list, c_pos, ImColor{float4{text_color, alpha2}}, text, align);
-            }
-        }
-    }
-    ImGui::PopFont();
-}
-
-void HDRViewApp::draw_image_border() const
-{
-    auto draw_list = ImGui::GetBackgroundDrawList();
-
-    auto cimg = current_image();
-    auto rimg = reference_image();
-
-    if (!cimg && !rimg)
-        return;
-
-    if (cimg && cimg->data_window.has_volume())
-    {
-        auto data_window =
-            Box2f{app_pos_at_pixel(float2{cimg->data_window.min}), app_pos_at_pixel(float2{cimg->data_window.max})}
-                .make_valid();
-        auto display_window = Box2f{app_pos_at_pixel(float2{cimg->display_window.min}),
-                                    app_pos_at_pixel(float2{cimg->display_window.max})}
-                                  .make_valid();
-        bool non_trivial = cimg->data_window != cimg->display_window || cimg->data_window.min != int2{0, 0};
-        ImGui::PushRowColors(true, false);
-        if (m_draw_data_window)
-            ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive), "Data window",
-                                   {0.f, 0.f}, non_trivial);
-        if (m_draw_display_window && non_trivial)
-            ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header), "Display window",
-                                   {1.f, 1.f}, true);
-        ImGui::PopStyleColor(3);
-    }
-
-    if (rimg && rimg->data_window.has_volume())
-    {
-        auto data_window =
-            Box2f{app_pos_at_pixel(float2{rimg->data_window.min}), app_pos_at_pixel(float2{rimg->data_window.max})}
-                .make_valid();
-        auto display_window = Box2f{app_pos_at_pixel(float2{rimg->display_window.min}),
-                                    app_pos_at_pixel(float2{rimg->display_window.max})}
-                                  .make_valid();
-        ImGui::PushRowColors(false, true, true);
-        if (m_draw_data_window)
-            ImGui::DrawLabeledRect(draw_list, data_window, ImGui::GetColorU32(ImGuiCol_HeaderActive),
-                                   "Reference data window", {1.f, 0.f}, true);
-        if (m_draw_display_window)
-            ImGui::DrawLabeledRect(draw_list, display_window, ImGui::GetColorU32(ImGuiCol_Header),
-                                   "Reference display window", {0.f, 1.f}, true);
-        ImGui::PopStyleColor(3);
-    }
-
-    if (m_roi_live.has_volume())
-    {
-        Box2f crop_window{app_pos_at_pixel(float2{m_roi_live.min}), app_pos_at_pixel(float2{m_roi_live.max})};
-        ImGui::DrawLabeledRect(draw_list, crop_window, ImGui::ColorConvertFloat4ToU32(float4{float3{0.5f}, 1.f}),
-                               "Selection", {0.5f, 1.f}, true);
-    }
-}
-
-void HDRViewApp::draw_watched_pixels() const
-{
-    if (!current_image() || !m_draw_watched_pixels)
-        return;
-
-    auto draw_list = ImGui::GetBackgroundDrawList();
-
-    ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
-    for (int i = 0; i < (int)g_watched_pixels.size(); ++i)
-        ImGui::DrawCrosshairs(draw_list, app_pos_at_pixel(g_watched_pixels[i].pixel + 0.5f), fmt::format(" {}", i + 1));
-    ImGui::PopFont();
-}
-
-void HDRViewApp::draw_image() const
-{
-    auto set_color = [this](Target target, ConstImagePtr img)
-    {
-        auto t = target_name(target);
-        if (img)
-        {
-            int                 group_idx = target == Target_Primary ? img->selected_group : img->reference_group;
-            const ChannelGroup &group     = img->groups[group_idx];
-
-            // FIXME: tried to pass this as a 3x3 matrix, but the data was somehow not being passed properly to MSL.
-            // resulted in rapid flickering. So, for now, just pad the 3x3 matrix into a 4x4 one.
-            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{{img->M_to_sRGB[0], 0.f},
-                                                                           {img->M_to_sRGB[1], 0.f},
-                                                                           {img->M_to_sRGB[2], 0.f},
-                                                                           {0.f, 0.f, 0.f, 1.f}});
-            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)group.type);
-            m_shader->set_uniform(fmt::format("{}_yw", t), img->luminance_weights);
-        }
-        else
-        {
-            m_shader->set_uniform(fmt::format("{}_M_to_sRGB", t), float4x4{la::identity});
-            m_shader->set_uniform(fmt::format("{}_channels_type", t), (int)ChannelGroup::Single_Channel);
-            m_shader->set_uniform(fmt::format("{}_yw", t), sRGB_Yw());
-        }
-    };
-
-    set_color(Target_Primary, current_image());
-    set_color(Target_Secondary, reference_image());
-
-    if (current_image() && !current_image()->data_window.is_empty())
-    {
-        static mt19937 rng(53);
-        float2         randomness(generate_canonical<float, 10>(rng) * 255, generate_canonical<float, 10>(rng) * 255);
-
-        m_shader->set_uniform("time", (float)ImGui::GetTime());
-        m_shader->set_uniform("draw_clip_warnings", m_draw_clip_warnings);
-        m_shader->set_uniform("clip_range", m_clip_range);
-        m_shader->set_uniform("randomness", randomness);
-        m_shader->set_uniform("gain", powf(2.0f, m_exposure_live));
-        m_shader->set_uniform("offset", m_offset_live);
-        m_shader->set_uniform("gamma", m_gamma_live);
-        m_shader->set_uniform("tonemap_mode", (int)m_tonemap);
-        m_shader->set_uniform("clamp_to_LDR", m_clamp_to_LDR);
-        m_shader->set_uniform("do_dither", m_dither);
-
-        m_shader->set_uniform("primary_pos", image_position(current_image()));
-        m_shader->set_uniform("primary_scale", image_scale(current_image()));
-
-        m_shader->set_uniform("blend_mode", (int)m_blend_mode);
-        m_shader->set_uniform("channel", (int)m_channel);
-        m_shader->set_uniform("bg_mode", (int)m_bg_mode);
-        m_shader->set_uniform("bg_color", m_bg_color);
-
-        m_shader->set_texture("colormap", Colormap::texture(m_colormaps[m_colormap_index]));
-        m_shader->set_uniform("reverse_colormap", g_reverse_colormap);
-
-        if (reference_image())
-        {
-            m_shader->set_uniform("has_reference", true);
-            m_shader->set_uniform("secondary_pos", image_position(reference_image()));
-            m_shader->set_uniform("secondary_scale", image_scale(reference_image()));
-        }
-        else
-        {
-            m_shader->set_uniform("has_reference", false);
-            m_shader->set_uniform("secondary_pos", float2{0.f});
-            m_shader->set_uniform("secondary_scale", float2{1.f});
-        }
-
-        m_shader->begin();
-        m_shader->draw_array(Shader::PrimitiveType::Triangle, 0, 6, false);
-        m_shader->end();
-    }
-
-    // ImGui::Begin("Texture window");
-    // ImGui::Image((ImTextureID)(intptr_t)Colormap::texture(m_colormap)->texture_handle(),
-    //              ImGui::GetContentRegionAvail());
-    // ImGui::End();
 }
 
 void HDRViewApp::draw_top_toolbar()
@@ -3458,236 +2557,12 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
-void HDRViewApp::draw_background()
+void HDRViewApp::draw_command_palette(bool &show)
 {
-    using namespace literals;
-    spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
-
-    static auto prev_frame                   = chrono::steady_clock::now();
-    static auto last_file_changes_check_time = chrono::steady_clock::now();
-    auto        this_frame                   = chrono::steady_clock::now();
-
-    if ((g_play_forward || g_play_backward) &&
-        this_frame - prev_frame >= chrono::milliseconds(int(1000 / g_playback_speed)))
-    {
-        set_current_image_index(next_visible_image_index(m_current, g_play_forward ? Forward : Backward));
-        set_image_textures();
-        prev_frame = this_frame;
-    }
-
-    process_shortcuts();
-
-    // If watching files for changes, do so every 250ms
-    if (m_watch_files_for_changes && this_frame - last_file_changes_check_time >= 250ms)
-    {
-        spdlog::trace("Checking for file changes...");
-        m_image_loader.load_new_and_modified_files();
-        last_file_changes_check_time = this_frame;
-    }
-
-    try
-    {
-        auto &io = ImGui::GetIO();
-
-        //
-        // calculate the viewport sizes
-        // fbsize is the size of the window in physical pixels while accounting for dpi factor on retina
-        // screens. For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
-        // io.DisplayFramebufferScale to get the physical pixel size for the framebuffer.
-        float2 fbscale = io.DisplayFramebufferScale;
-        int2   fbsize  = int2{float2{io.DisplaySize} * fbscale};
-        spdlog::trace("DisplayFramebufferScale: {}, DpiWindowSizeFactor: {}, DpiFontLoadingFactor: {}",
-                      float2{io.DisplayFramebufferScale}, HelloImGui::DpiWindowSizeFactor(),
-                      HelloImGui::DpiFontLoadingFactor());
-        m_viewport_min  = {0.f, 0.f};
-        m_viewport_size = io.DisplaySize;
-        if (auto id = m_params.dockingParams.dockSpaceIdFromName("MainDockSpace"))
-            if (auto central_node = ImGui::DockBuilderGetCentralNode(*id))
-            {
-                m_viewport_size = central_node->Size;
-                m_viewport_min  = central_node->Pos;
-            }
-
-        if (!io.WantCaptureMouse && current_image())
-        {
-            auto vp_mouse_pos   = vp_pos_at_app_pos(io.MousePos);
-            bool cancel_autofit = false;
-            auto scroll         = float2{io.MouseWheelH, io.MouseWheel} * g_scroll_multiplier;
-
-            if (length2(scroll) > 0.f)
-            {
-                cancel_autofit = true;
-                if (ImGui::IsKeyDown(ImGuiMod_Shift))
-                    // panning
-                    reposition_pixel_to_vp_pos(vp_mouse_pos + scroll * 4.f, pixel_at_vp_pos(vp_mouse_pos));
-                else
-                    zoom_at_vp_pos(scroll.y / 4.f, vp_mouse_pos);
-            }
-
-            if (g_mouse_mode == MouseMode_RectangularSelection)
-            {
-                // set m_roi based on dragged region
-                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-                    m_roi_live = Box2i{int2{0}};
-                else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-                {
-                    m_roi_live.make_empty();
-                    m_roi_live.enclose(int2{pixel_at_app_pos(io.MouseClickedPos[0])});
-                    m_roi_live.enclose(int2{pixel_at_app_pos(io.MousePos)});
-                }
-                else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-                    m_roi = m_roi_live;
-            }
-            else if (g_mouse_mode == MouseMode_ColorInspector)
-            {
-                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-                    // add watched pixel
-                    g_watched_pixels.emplace_back(WatchedPixel{int2{pixel_at_app_pos(io.MousePos)}});
-                else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-                {
-                    if (g_watched_pixels.size())
-                        g_watched_pixels.back().pixel = int2{pixel_at_app_pos(io.MousePos)};
-                }
-            }
-            else
-            {
-                float2 drag_delta{ImGui::GetMouseDragDelta(ImGuiMouseButton_Left)};
-                if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-                {
-                    cancel_autofit = true;
-                    reposition_pixel_to_vp_pos(vp_mouse_pos + drag_delta, pixel_at_vp_pos(vp_mouse_pos));
-                    ImGui::ResetMouseDragDelta();
-                }
-            }
-
-            if (cancel_autofit)
-                this->cancel_autofit();
-        }
-
-        //
-        // clear the framebuffer and set up the viewport
-        //
-
-        // RenderPass expects things in framebuffer coordinates
-        m_render_pass->resize(fbsize);
-        m_render_pass->set_viewport(int2(m_viewport_min * fbscale), int2(m_viewport_size * fbscale));
-
-        if (m_auto_fit_display)
-            fit_display_window();
-        if (m_auto_fit_data)
-            fit_data_window();
-        if (m_auto_fit_selection)
-            fit_selection();
-
-        m_render_pass->begin();
-        draw_image();
-        m_render_pass->end();
-
-        draw_pixel_info();
-        draw_pixel_grid();
-        draw_image_border();
-        draw_watched_pixels();
-
-        if (current_image())
-        {
-            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase * 18.f / 14.f);
-            auto   draw_list = ImGui::GetBackgroundDrawList();
-            float2 pos       = ImGui::GetIO().MousePos;
-            if (g_mouse_mode == MouseMode_RectangularSelection)
-            {
-                // draw selection indicator
-                ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK, ICON_MY_SELECT,
-                                      {0.5f, 0.5f});
-                ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_SELECT, {0.5f, 0.5f});
-            }
-            else if (g_mouse_mode == MouseMode_ColorInspector)
-            {
-                // draw pixel watcher indicator
-                ImGui::DrawCrosshairs(draw_list, pos + int2{18}, " +");
-            }
-            // else if (g_mouse_mode == MouseMode_PanZoom)
-            // {
-            //     // draw pixel watcher indicator
-            //     ImGui::AddTextAligned(draw_list, pos + int2{18} + int2{1, 1}, IM_COL32_BLACK,
-            //     ICON_MY_PAN_ZOOM_TOOL,
-            //                           {0.5f, 0.5f});
-            //     ImGui::AddTextAligned(draw_list, pos + int2{18}, IM_COL32_WHITE, ICON_MY_PAN_ZOOM_TOOL, {0.5f,
-            //     0.5f});
-            // }
-            ImGui::PopFont();
-        }
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("Drawing failed:\n\t{}.", e.what());
-    }
-}
-
-int HDRViewApp::next_visible_image_index(int index, EDirection direction) const
-{
-    return next_matching_index(m_images, index, [](size_t, const ImagePtr &img) { return img->visible; }, direction);
-}
-
-int HDRViewApp::nth_visible_image_index(int n) const
-{
-    return (int)nth_matching_index(m_images, (size_t)n, [](size_t, const ImagePtr &img) { return img->visible; });
-}
-
-int HDRViewApp::image_index(ConstImagePtr img) const
-{
-    for (int i = 0; i < num_images(); ++i)
-        if (m_images[i] == img)
-            return i;
-    return -1; // not found
-}
-
-bool HDRViewApp::process_event(void *e)
-{
-#ifdef HELLOIMGUI_USE_SDL2
-    auto &io = ImGui::GetIO();
-    if (io.WantCaptureMouse)
-        return false;
-
-    SDL_Event *event = static_cast<SDL_Event *>(e);
-    switch (event->type)
-    {
-    case SDL_QUIT: spdlog::trace("Got an SDL_QUIT event"); break;
-    case SDL_WINDOWEVENT: spdlog::trace("Got an SDL_WINDOWEVENT event"); break;
-    case SDL_MOUSEWHEEL: spdlog::trace("Got an SDL_MOUSEWHEEL event"); break;
-    case SDL_MOUSEMOTION: spdlog::trace("Got an SDL_MOUSEMOTION event"); break;
-    case SDL_MOUSEBUTTONDOWN: spdlog::trace("Got an SDL_MOUSEBUTTONDOWN event"); break;
-    case SDL_MOUSEBUTTONUP: spdlog::trace("Got an SDL_MOUSEBUTTONUP event"); break;
-    case SDL_FINGERMOTION: spdlog::trace("Got an SDL_FINGERMOTION event"); break;
-    case SDL_FINGERDOWN: spdlog::trace("Got an SDL_FINGERDOWN event"); break;
-    case SDL_MULTIGESTURE:
-    {
-        spdlog::trace("Got an SDL_MULTIGESTURE event; numFingers: {}; dDist: {}; x: {}, y: {}; io.MousePos: {}, {}; "
-                      "io.MousePosFrac: {}, {}",
-                      event->mgesture.numFingers, event->mgesture.dDist, event->mgesture.x, event->mgesture.y,
-                      io.MousePos.x, io.MousePos.y, io.MousePos.x / io.DisplaySize.x, io.MousePos.y / io.DisplaySize.y);
-        constexpr float cPinchZoomThreshold(0.0001f);
-        constexpr float cPinchScale(80.0f);
-        if (event->mgesture.numFingers == 2 && fabs(event->mgesture.dDist) >= cPinchZoomThreshold)
-        {
-            // Zoom in/out by positive/negative mPinch distance
-            zoom_at_vp_pos(event->mgesture.dDist * cPinchScale, vp_pos_at_app_pos(io.MousePos));
-            return true;
-        }
-    }
-    break;
-    case SDL_FINGERUP: spdlog::trace("Got an SDL_FINGERUP event"); break;
-    }
-#endif
-    (void)e; // prevent unreferenced formal parameter warning
-    return false;
-}
-
-void HDRViewApp::draw_command_palette()
-{
-    if (g_show_command_palette)
+    if (show)
         ImGui::OpenPopup("Command palette...");
 
-    g_show_command_palette = false;
+    show = false;
 
     auto &io = ImGui::GetIO();
 
@@ -3788,11 +2663,7 @@ void HDRViewApp::draw_command_palette()
                                    ImCmd::Prompt(theme_names);
                                    ImCmd::SetNextCommandPaletteSearchBoxFocused();
                                },
-                               [this](int selected_option)
-                               {
-                                   m_theme.set(Theme::LIGHT_THEME + selected_option);
-                                   m_theme.apply();
-                               },
+                               [this](int selected_option) { m_theme.set(Theme::LIGHT_THEME + selected_option); },
                                nullptr, ICON_MY_THEME});
 
             ImCmd::SetNextCommandPaletteSearchBoxFocused();
@@ -3808,7 +2679,7 @@ void HDRViewApp::draw_command_palette()
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
             ImGui::CloseCurrentPopup();
-            g_show_command_palette = false;
+            show = false;
         }
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
@@ -3836,34 +2707,6 @@ void HDRViewApp::draw_command_palette()
 
         ImGui::EndPopup();
     }
-}
-
-void HDRViewApp::process_shortcuts()
-{
-    if (ImGui::GetIO().WantCaptureKeyboard)
-    {
-        spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard");
-        return;
-    }
-
-    // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
-
-    for (auto &a : m_actions)
-        if (a.chord)
-            if (a.enabled() && ImGui::GlobalShortcut(a.chord, a.flags))
-            {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.name, ImGui::GetFrameCount());
-                if (a.p_selected)
-                    *a.p_selected = !*a.p_selected;
-                a.callback();
-#ifdef __EMSCRIPTEN__
-                ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
-                                                 // modifiers) needs to be pressed before this chord is detected again
-#endif
-                break;
-            }
-
-    set_image_textures();
 }
 
 void HDRViewApp::draw_about_dialog()

@@ -145,6 +145,8 @@ public:
     void fit_data_window();
     /// Centers and zooms the view so that the selection fits inside the viewport.
     void fit_selection();
+    /// Applies one of the above depending on which auto-fitting mode is enabled (if any).
+    void auto_fit_viewport();
     /**
         Changes the zoom factor by the provided amount modified by the zoom sensitivity member variable.
         The scaling occurs such that the image pixel coordinate under focus_vp_pos remains in
@@ -189,6 +191,8 @@ public:
 private:
     void load_fonts();
 
+    void   handle_mouse_interaction();
+    void   calculate_viewport();
     float2 center_offset() const;
     Box2f  scaled_display_window(ConstImagePtr img) const;
     Box2f  scaled_data_window(ConstImagePtr img) const;
@@ -201,21 +205,20 @@ private:
     void draw_about_dialog();
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
-    void draw_watched_pixels() const;
     void draw_image() const;
     void draw_image_border() const;
+    void draw_tool_decorations() const;
     void draw_file_window();
     void draw_top_toolbar();
+    void draw_color_picker();
     void draw_menus();
     void draw_status_bar();
+    void draw_develop_windows();
     void process_shortcuts();
     bool process_event(void *event);
     void set_image_textures();
-    void draw_command_palette();
+    void draw_command_palette(bool &show);
     void update_visibility();
-
-    void load_settings();
-    void save_settings();
 
     void setup_rendering();
 
@@ -260,10 +263,11 @@ private:
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
         Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
         Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys,    Colormap_AbsGreys};
-    int        m_colormap_index = 1;
-    EBlendMode m_blend_mode     = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
-    EBGMode    m_bg_mode        = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4     m_bg_color       = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    int        m_colormap_index   = 1;
+    bool       m_reverse_colormap = false;
+    EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
+    EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
+    float4     m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
 
     float2 m_viewport_min, m_viewport_size;
 
@@ -280,6 +284,21 @@ private:
     bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
 
     Theme m_theme;
+
+    MouseMode_ m_mouse_mode = MouseMode_PanZoom;
+
+    struct WatchedPixel
+    {
+        int2 pixel;
+        int3 color_mode{0, 0, 0}; //!< Color mode for current, reference, and composite pixels
+    };
+    vector<WatchedPixel> m_watched_pixels;
+    int                  m_status_color_mode = 0;
+
+    bool  m_play_forward   = false;
+    bool  m_play_backward  = false;
+    bool  m_play_stopped   = true;
+    float m_playback_speed = 24.f;
 };
 
 /// Create the global singleton HDRViewApp instance

@@ -71,6 +71,7 @@ inline double axis_scale_inv_xform(double value, void *user_data)
 }
 
 struct Channel;
+struct Image;
 
 struct PixelStats
 {
@@ -289,6 +290,8 @@ struct LayerTreeNode
     int                                  leaf_layer     = -1; //!< Index into Image::layers, or -1 if
     int                                  visible_groups = 0;  //!< Number of visible descendant groups
     int                                  hidden_groups  = 0;  //!< Number of hidden descendant groups
+
+    void calculate_visibility(const Image *img);
 };
 
 struct Image
