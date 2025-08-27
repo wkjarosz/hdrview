@@ -17,8 +17,6 @@
 #include <numeric>
 #include <sstream>
 
-#include <spdlog/spdlog.h>
-
 #include <stdexcept> // for runtime_error, out_of_range
 
 using namespace std;

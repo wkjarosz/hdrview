@@ -16,6 +16,8 @@
 #define HDRVIEW_ICONSET_MS
 #endif
 
+#define ICON_MY_BLANK ""
+
 #if defined(HDRVIEW_ICONSET_FA6)
 
 // https://fontawesome.com/v6/search?ic=free

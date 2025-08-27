@@ -6,8 +6,6 @@
 #include "hello_imgui/hello_imgui.h"
 #include "imgui_internal.h"
 
-#include <spdlog/spdlog.h>
-
 #ifdef HELLOIMGUI_USE_SDL2
 #include <SDL.h>
 #endif

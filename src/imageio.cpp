@@ -12,7 +12,6 @@
 #include <fstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
-#include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 
 #include "imageio/dds.h"

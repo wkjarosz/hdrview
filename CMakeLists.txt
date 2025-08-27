@@ -906,6 +906,7 @@ hello_imgui_add_app(
   src/imageio/uhdr.cpp
   src/app-draw.cpp
   src/app-file-io.cpp
+  src/app-gui.cpp
   src/app-zoom.cpp
   src/app.cpp
   src/colormap.cpp

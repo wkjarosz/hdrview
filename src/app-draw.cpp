@@ -9,7 +9,6 @@
 #include "texture.h"
 
 #include <spdlog/mdc.h>
-#include <spdlog/spdlog.h>
 
 #include <memory>
 #include <random>

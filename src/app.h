@@ -11,11 +11,9 @@
 #include "hello_imgui/hello_imgui.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
-#include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
 #include "shader.h"
 #include "theme.h"
-#include <chrono>
 #include <filesystem>
 #include <map>
 #include <string>
@@ -39,7 +37,6 @@ class HDRViewApp
 public:
     HDRViewApp(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
                std::optional<bool> force_sdr, std::optional<bool> force_apple_keys, vector<string> in_files = {});
-    ~HDRViewApp();
 
     void run();
 

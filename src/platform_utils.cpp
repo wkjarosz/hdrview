@@ -1,11 +1,10 @@
 
+#include "platform_utils.h"
 #include "app.h"
 #include "common.h"
-#include "platform_utils.h"
 #include "imgui.h"
 
 #include <cstdlib>
-#include <spdlog/spdlog.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten_browser_clipboard.h>

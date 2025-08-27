@@ -5,7 +5,6 @@
 #include "app.h"
 
 #include <fstream>
-#include <spdlog/spdlog.h>
 #include <sstream>
 #include <utility>
 
