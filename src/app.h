@@ -14,6 +14,7 @@
 #include "misc/cpp/imgui_stdlib.h"
 #include "renderpass.h"
 #include "shader.h"
+#include "theme.h"
 #include <chrono>
 #include <filesystem>
 #include <map>
@@ -277,6 +278,8 @@ private:
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
     bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
+
+    Theme m_theme;
 };
 
 /// Create the global singleton HDRViewApp instance

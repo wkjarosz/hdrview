@@ -919,8 +919,9 @@ hello_imgui_add_app(
   src/shader.cpp
   src/shader_gl.cpp
   src/renderpass_gl.cpp
-  src/texture.cpp
   src/texture_gl.cpp
+  src/texture.cpp
+  src/theme.cpp
   ${EXTRA_SOURCES}
   ASSETS_LOCATION
   ${CMAKE_CURRENT_BINARY_DIR}/assets
