@@ -116,6 +116,31 @@ static bool has_zip_extension(const string &fn)
     }
 }
 
+// Helper to split "archive.zip/entry.png" into zip and entry
+static bool split_zip_entry(const string &filename, string &zip_path, string &entry_path)
+{
+    if (has_zip_extension(filename))
+    {
+        zip_path = filename;
+        entry_path.clear();
+        return true;
+    }
+    else
+    {
+        auto pos = filename.find(".zip/");
+        if (pos == string::npos)
+        {
+            zip_path = filename;
+            entry_path.clear();
+            return false;
+        }
+        pos += 4; // include ".zip"
+        zip_path   = filename.substr(0, pos);
+        entry_path = filename.substr(pos + 1);
+        return true;
+    }
+}
+
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
                                             ImagePtr to_replace, const string &channel_selector)
 {
@@ -138,7 +163,8 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     };
 
     // helper to extract zip buffer and schedule each contained image via load_one
-    auto extract_and_schedule = [&](string_view zip_buffer, const string &zip_name, bool select_first)
+    auto extract_and_schedule = [&](string_view zip_buffer, const string &zip_name, bool select_first,
+                                    ImagePtr to_replace, const string &entry_pattern = "")
     {
         mz_zip_archive zip;
         memset(&zip, 0, sizeof(zip));
@@ -151,6 +177,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         int num        = (int)mz_zip_reader_get_num_files(&zip);
         int num_images = 0;
         spdlog::info("Zip '{}' contains {} files.", zip_name, num);
+
         for (int i = 0; i < num; ++i)
         {
             mz_zip_archive_file_stat stat;
@@ -163,6 +190,10 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             if (!Image::loadable(entry_path.extension().u8string()))
                 continue;
 
+            // If entry_pattern is set, skip entries that don't match
+            if (!entry_pattern.empty() && entry_path.u8string() != entry_pattern)
+                continue;
+
             size_t uncompressed_size = 0;
             void  *p                 = mz_zip_reader_extract_to_heap(&zip, i, &uncompressed_size, 0);
             if (!p)
@@ -172,9 +203,13 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             // build a combined filename that prepends the zip path to the entry path
             string combined = zip_name + "/" + entry_path.u8string();
             // schedule async load; do not add each entry to recent files
-            load_one(fs::u8path(combined), data, false, select_first && num_images == 0, nullptr, channel_selector);
+            load_one(fs::u8path(combined), data, false, select_first && num_images == 0, to_replace, channel_selector);
             ++num_images;
             mz_free(p);
+
+            // If entry_pattern is set, we only want one entry
+            if (!entry_pattern.empty())
+                break;
         }
 
         if (!num_images)
@@ -185,7 +220,8 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         return num_images;
     };
 
-    auto path = fs::u8path(filename.c_str());
+    auto path = fs::u8path(filename);
+
     if (!buffer.empty())
     {
         // if we have a buffer, we assume it is a file that has been downloaded
@@ -196,7 +232,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         if (has_zip_extension(filename))
         {
             remove_recent_file(filename);
-            if (extract_and_schedule(buffer, filename, should_select))
+            if (extract_and_schedule(buffer, filename, should_select, to_replace))
                 add_recent_file(filename);
         }
         else
@@ -247,29 +283,35 @@ void BackgroundImageLoader::background_load(const string filename, const string_
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);
-        if (!fs::exists(path) || !fs::is_regular_file(path))
+        string zip_fn, entry_fn;
+        bool   is_zip_entry = split_zip_entry(filename, zip_fn, entry_fn);
+
+        auto zip_path = fs::u8path(zip_fn);
+
+        if (!fs::exists(zip_path) || !fs::is_regular_file(zip_path))
         {
-            spdlog::error("File '{}' does not exist or is not a regular file.", filename);
+            spdlog::error("File '{}' does not exist or is not a regular file.", zip_path.u8string());
             return;
         }
 
         // If the file is a zip on disk, read into memory and extract
-        if (has_zip_extension(filename))
+        if (is_zip_entry)
         {
-            std::ifstream is(filename, std::ios::binary);
+            std::ifstream is(zip_path, std::ios::binary);
             if (!is)
             {
-                spdlog::error("Failed to open zip file '{}'", filename);
+                spdlog::error("Failed to open zip file '{}'", zip_path.u8string());
                 return;
             }
             std::vector<char> buf((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char>());
             if (buf.empty())
             {
-                spdlog::warn("Zip file '{}' is empty", filename);
+                spdlog::warn("Zip file '{}' is empty", zip_path.u8string());
                 return;
             }
 
-            if (extract_and_schedule(string_view(buf.data(), buf.size()), filename, should_select))
+            if (extract_and_schedule(string_view(buf.data(), buf.size()), filename, should_select, to_replace,
+                                     entry_fn))
                 add_recent_file(filename);
         }
         else
