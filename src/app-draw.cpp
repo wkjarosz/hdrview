@@ -1,7 +1,3 @@
-/** \file app.cpp
-    \author Wojciech Jarosz
-*/
-
 #include "app.h"
 
 #include "colormap.h"

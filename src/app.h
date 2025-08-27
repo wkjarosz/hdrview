@@ -22,12 +22,9 @@
 
 namespace fs = std::filesystem;
 
-using std::function;
 using std::map;
-using std::ofstream;
-using std::pair;
+using std::optional;
 using std::set;
-using std::shared_ptr;
 using std::string;
 using std::string_view;
 using std::vector;
@@ -35,8 +32,8 @@ using std::vector;
 class HDRViewApp
 {
 public:
-    HDRViewApp(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-               std::optional<bool> force_sdr, std::optional<bool> force_apple_keys, vector<string> in_files = {});
+    HDRViewApp(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
+               optional<bool> force_apple_keys, vector<string> in_files = {});
 
     void run();
 
@@ -311,8 +308,8 @@ private:
 };
 
 /// Create the global singleton HDRViewApp instance
-void init_hdrview(std::optional<float> exposure, std::optional<float> gamma, std::optional<bool> dither,
-                  std::optional<bool> force_sdr, std::optional<bool> apple_keys, const vector<string> &in_files = {});
+void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool> dither, optional<bool> force_sdr,
+                  optional<bool> apple_keys, const vector<string> &in_files = {});
 
 /// Return a pointer to the global singleton HDRViewApp instance
 HDRViewApp *hdrview();
