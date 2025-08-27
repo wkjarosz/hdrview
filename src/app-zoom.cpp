@@ -8,6 +8,10 @@
 
 #include <spdlog/spdlog.h>
 
+#ifdef HELLOIMGUI_USE_SDL2
+#include <SDL.h>
+#endif
+
 using namespace std;
 
 static constexpr float MIN_ZOOM = 0.01f;
