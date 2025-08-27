@@ -5,8 +5,6 @@
 //
 
 #include "colorspace.h"
-#include "Imath_to_linalg.h"
-#include "common.h"
 #include <cmath>
 #include <float.h>
 

@@ -5,7 +5,6 @@
 //
 
 #include "colormap.h"
-#include "colorspace.h"
 #include "common.h"
 #include "texture.h"
 

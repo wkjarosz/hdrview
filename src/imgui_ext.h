@@ -5,7 +5,6 @@
 #include <spdlog/sinks/dup_filter_sink.h>
 #include <spdlog/spdlog.h>
 
-#include "colormap.h"
 #include "imgui.h"
 #include "ringbuffer_color_sink.h"
 

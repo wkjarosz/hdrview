@@ -1,5 +1,4 @@
 #include "app.h"
-#include "hello_imgui/hello_imgui.h"
 #include "imgui_internal.h"
 
 #ifdef HELLOIMGUI_USE_SDL2

@@ -7,9 +7,7 @@
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "image.h"
-#include "texture.h"
 #include "timer.h"
-#include <fstream>
 #include <stdexcept> // for runtime_error, out_of_range
 
 #include <spdlog/stopwatch.h>

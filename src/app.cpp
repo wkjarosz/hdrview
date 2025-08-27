@@ -1085,17 +1085,3 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // load any passed-in images
     load_images(in_files);
 }
-
-ImFont *HDRViewApp::font(const string &name) const
-{
-    if (name == "sans regular")
-        return m_sans_regular;
-    else if (name == "sans bold")
-        return m_sans_bold;
-    else if (name == "mono regular")
-        return m_mono_regular;
-    else if (name == "mono bold")
-        return m_mono_bold;
-    else
-        throw runtime_error(fmt::format("Font with name '{}' was not loaded.", name));
-}

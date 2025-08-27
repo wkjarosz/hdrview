@@ -1,10 +1,8 @@
 
 #include "platform_utils.h"
-#include "app.h"
-#include "common.h"
-#include "imgui.h"
 
-#include <cstdlib>
+#include <stdlib.h> // for system
+#include <string>   // for allocator, char_traits, basic_string, operator+
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten_browser_clipboard.h>

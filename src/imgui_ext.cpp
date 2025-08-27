@@ -1,16 +1,12 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui_ext.h"
 #include "box.h"
-#include "colorspace.h"
-#include "spdlog/pattern_formatter.h"
-#include "texture.h"
-
+#include "common.h"
 #include "fonts.h"
-
-#include "imgui_internal.h"
-
 #include "hello_imgui/dpi_aware.h"
+#include "imgui_internal.h"
 #include "nvgui/property_editor.hpp"
+#include "spdlog/pattern_formatter.h"
 
 #include <array>
 
