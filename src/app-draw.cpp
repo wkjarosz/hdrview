@@ -4,49 +4,19 @@
 
 #include "app.h"
 
-#include "hello_imgui/dpi_aware.h"
-#include "hello_imgui/hello_imgui.h"
-#include "imgui_internal.h"
-
-#include "fonts.h"
-
 #include "colormap.h"
-
+#include "fonts.h"
 #include "texture.h"
-
-#include "json.h"
 
 #include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 
-#include <cmath>
-#include <fmt/core.h>
-#include <fstream>
 #include <memory>
 #include <random>
-#include <sstream>
 #include <utility>
-
-#include "platform_utils.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
-#include <emscripten_browser_file.h>
-#else
-#include "portable-file-dialogs.h"
-#endif
-
-#ifdef HELLOIMGUI_USE_SDL2
-#include <SDL.h>
-#endif
-
-#ifdef HELLOIMGUI_USE_GLFW3
-#include <GLFW/glfw3.h>
-#ifdef __APPLE__
-// on macOS, we need to include this to get the NS api for opening files
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3native.h>
-#endif
 #endif
 
 using namespace std;

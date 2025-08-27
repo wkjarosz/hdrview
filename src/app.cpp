@@ -10,23 +10,16 @@
 #include "imgui_internal.h"
 #include "implot.h"
 
-#include "fonts.h"
-
 #include "colormap.h"
-
-#include "texture.h"
-
+#include "fonts.h"
 #include "json.h"
+#include "texture.h"
 #include "version.h"
 
 #include <ImfThreading.h>
 
-#include <spdlog/mdc.h>
-#include <spdlog/spdlog.h>
-
-#include <cmath>
-#include <fmt/core.h>
 #include <memory>
+#include <spdlog/spdlog.h>
 #include <utility>
 
 #include "platform_utils.h"
@@ -1168,7 +1161,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // load any passed-in images
     load_images(in_files);
 }
-
 
 static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
                                float width = 0.f)

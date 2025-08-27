@@ -4,14 +4,8 @@
 
 #include "app.h"
 
-#include "hello_imgui/hello_imgui.h"
-#include "imgui_internal.h"
-
-#include <spdlog/spdlog.h>
-
-#include <cmath>
-#include <fmt/core.h>
 #include <fstream>
+#include <spdlog/spdlog.h>
 #include <sstream>
 #include <utility>
 
