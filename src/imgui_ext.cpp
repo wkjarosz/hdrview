@@ -575,7 +575,7 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const string &subs
 //     return value_changed;
 // }
 
-void MenuItem(const Action &a)
+void MenuItem(const Action &a, bool include_name)
 {
     if (a.needs_menu)
     {
@@ -587,10 +587,20 @@ void MenuItem(const Action &a)
     }
     else
     {
-        if (ImGui::MenuItemEx(a.name, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
+        if (ImGui::MenuItemEx(include_name ? a.name : a.icon, include_name ? a.icon : "",
+                              ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
             a.callback();
-        if (!a.tooltip.empty())
-            ImGui::WrappedTooltip(a.tooltip.c_str());
+        if (!include_name)
+            ImGui::WrappedTooltip(
+                fmt::format("{}{}{}", a.name,
+                            a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "",
+                            a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                    .c_str());
+        else if (!a.tooltip.empty())
+            ImGui::WrappedTooltip(
+                fmt::format("{}{}", a.tooltip.c_str(),
+                            a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "")
+                    .c_str());
     }
 }
 

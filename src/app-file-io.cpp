@@ -9,6 +9,8 @@
 #include <sstream>
 #include <utility>
 
+#include "platform_utils.h"
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
 #include <emscripten_browser_file.h>

@@ -326,13 +326,13 @@ void HDRViewApp::process_shortcuts()
     // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
-        if (a.chord)
-            if (a.enabled() && ImGui::GlobalShortcut(a.chord, a.flags))
+        if (a.second.chord)
+            if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
-                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.name, ImGui::GetFrameCount());
-                if (a.p_selected)
-                    *a.p_selected = !*a.p_selected;
-                a.callback();
+                spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.name, ImGui::GetFrameCount());
+                if (a.second.p_selected)
+                    *a.second.p_selected = !*a.second.p_selected;
+                a.second.callback();
 #ifdef __EMSCRIPTEN__
                 ImGui::GetIO().ClearInputKeys(); // FIXME: somehow needed in emscripten, otherwise the key (without
                                                  // modifiers) needs to be pressed before this chord is detected again

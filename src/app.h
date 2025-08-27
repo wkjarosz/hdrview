@@ -166,7 +166,7 @@ public:
     // load font with the specified name at the specified size
     ImFont *font(const string &name) const;
 
-    ImGui::Action &action(const string &name) { return m_actions[m_action_map[name]]; }
+    ImGui::Action &action(const string &name) { return m_actions[name]; }
 
     float      &gamma_live() { return m_gamma_live; }
     float      &gamma() { return m_gamma; }
@@ -214,10 +214,11 @@ private:
     void draw_menus();
     void draw_status_bar();
     void draw_develop_windows();
+    void draw_tweak_window();
     void process_shortcuts();
     bool process_event(void *event);
     void set_image_textures();
-    void draw_command_palette(bool &show);
+    void draw_command_palette();
     void update_visibility();
 
     void setup_rendering();
@@ -277,8 +278,7 @@ private:
 
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
 
-    vector<ImGui::Action>          m_actions;
-    map<string, size_t>            m_action_map;
+    map<string, ImGui::Action>     m_actions;
     HelloImGui::EdgeToolbarOptions m_top_toolbar_options;
 
     bool m_watch_files_for_changes = false; ///< Whether to watch files for changes
@@ -299,6 +299,18 @@ private:
     bool  m_play_backward  = false;
     bool  m_play_stopped   = true;
     float m_playback_speed = 24.f;
+
+    bool  m_open_help            = false;
+    bool  m_open_command_palette = false;
+    bool  m_show_developer_menu  = false;
+    bool  m_show_demo_window     = false;
+    bool  m_show_debug_window    = false;
+    bool  m_show_tweak_window    = false;
+    bool  m_show_bg_color_picker = false;
+    bool  m_request_sort         = false;
+    bool  m_short_names          = false;
+    int   m_file_list_mode       = 1;    // 0: images only; 1: list; 2: tree;
+    float m_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
 };
 
 /// Create the global singleton HDRViewApp instance

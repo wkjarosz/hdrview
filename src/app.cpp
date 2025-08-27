@@ -41,15 +41,6 @@
 
 using namespace std;
 
-static bool  g_show_help            = false;
-static bool  g_help_is_open         = false;
-static bool  g_show_tweak_window    = false;
-static bool  g_show_bg_color_picker = false;
-static int   g_file_list_mode       = 1; // 0: images only; 1: list; 2: tree;
-static bool  g_request_sort         = false;
-static bool  g_short_names          = false;
-static float g_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
-
 #define g_blank_icon ""
 
 static HDRViewApp *g_hdrview = nullptr;
@@ -62,9 +53,6 @@ void init_hdrview(optional<float> exposure, optional<float> gamma, optional<bool
         spdlog::critical("HDRView already created!");
         exit(EXIT_FAILURE);
     }
-
-    if (in_files.empty())
-        g_show_help = true;
 
     spdlog::info("Overriding exposure: {}", exposure.has_value());
     spdlog::info("Overriding gamma: {}", gamma.has_value());
@@ -377,16 +365,14 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
             m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
             m_dither               = j.value<bool>("dither", m_dither);
-            g_file_list_mode       = j.value<int>("file list mode", g_file_list_mode);
-            g_short_names          = j.value<bool>("short names", g_short_names);
+            m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
+            m_short_names          = j.value<bool>("short names", m_short_names);
             m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
             m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
             m_clip_range           = j.value<float2>("clip range", m_clip_range);
             m_playback_speed       = j.value<float>("playback speed", m_playback_speed);
             m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
-
-            *action("Show developer menu").p_selected =
-                j.value<bool>("show developer menu", action("Show developer menu").checked());
+            m_show_developer_menu  = j.value<bool>("show developer menu", m_show_developer_menu);
         }
         catch (json::exception &e)
         {
@@ -439,12 +425,12 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         j["clamp to LDR"]            = m_clamp_to_LDR;
         j["dither"]                  = m_dither;
         j["verbosity"]               = spdlog::get_level();
-        j["file list mode"]          = g_file_list_mode;
-        j["short names"]             = g_short_names;
+        j["file list mode"]          = m_file_list_mode;
+        j["short names"]             = m_short_names;
         j["draw clip warnings"]      = m_draw_clip_warnings;
         j["show FPS"]                = m_show_FPS;
         j["clip range"]              = m_clip_range;
-        j["show developer menu"]     = action("Show developer menu").checked();
+        j["show developer menu"]     = m_show_developer_menu;
         j["playback speed"]          = m_playback_speed;
         j["colormap index"]          = m_colormap_index;
 
@@ -473,8 +459,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         }
     };
 
-    static bool show_command_palette = false;
-
     m_params.callbacks.ShowGui = [this]()
     {
         m_image_loader.get_loaded_images(
@@ -498,48 +482,13 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 if (should_select)
                     m_current = is_valid(idx) ? idx : int(m_images.size() - 1);
                 update_visibility(); // this also calls set_image_textures();
-                g_request_sort = true;
+                m_request_sort = true;
             });
 
         draw_about_dialog();
-
-        draw_command_palette(show_command_palette);
-
+        draw_command_palette();
         draw_color_picker();
-
-        if (g_show_tweak_window)
-        {
-            // auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-            ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
-            if (ImGui::Begin("Theme Tweaks", &g_show_tweak_window))
-            {
-                ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
-                if (ImGui::BeginCombo("Theme", m_theme.name(), ImGuiComboFlags_HeightLargest))
-                {
-                    for (int t = Theme::LIGHT_THEME; t < ImGuiTheme::ImGuiTheme_Count; ++t)
-                    {
-                        const bool is_selected = t == m_theme;
-                        if (ImGui::Selectable(Theme::name(t), is_selected))
-                            m_theme.set(t);
-
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-
-                ImGuiStyle previous = ImGui::GetStyle();
-
-                ImGui::ShowStyleEditor(nullptr);
-
-                bool theme_changed = memcmp(&previous, &ImGui::GetStyle(), sizeof(ImGuiStyle) - 2 * sizeof(float)) != 0;
-
-                if (theme_changed)
-                    m_theme.set(Theme::CUSTOM_THEME);
-            }
-            ImGui::End();
-        }
-
+        draw_tweak_window();
         draw_develop_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
@@ -550,59 +499,59 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     {
         const auto always_enabled = []() { return true; };
-        auto       add_action     = [this](const ImGui::Action &a)
-        {
-            m_action_map[a.name] = m_actions.size();
-            m_actions.push_back(a);
-        };
-        add_action({"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+        using ImGui::Action;
+        auto add = [this](const Action &a) { m_actions[a.name] = a; };
+        add(Action{"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
 #if !defined(__EMSCRIPTEN__)
-        add_action({"Open folder...", ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
+        add(Action{"Open folder...", ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
 #endif
 
 #if defined(__EMSCRIPTEN__)
-        add_action({"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
-                    [this]()
-                    {
-                        string url;
-                        if (ImGui::InputTextWithHint("##URL", "Enter an image URL and press <return>", &url,
-                                                     ImGuiInputTextFlags_EnterReturnsTrue))
-                        {
-                            ImGui::CloseCurrentPopup();
-                            load_url(url);
-                        }
-                    },
-                    always_enabled, true});
+        add(Action{"Open URL...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       string url;
+                       if (ImGui::InputTextWithHint("##URL", "Enter an image URL and press <return>", &url,
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       {
+                           ImGui::CloseCurrentPopup();
+                           load_url(url);
+                       }
+                   },
+                   always_enabled, true});
 #endif
 
-        add_action({"Show help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false,
-                    &g_show_help});
-        add_action({"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+        if (in_files.empty())
+            m_open_help = true;
 
-        add_action({"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
-                    []() {}, always_enabled, false, &show_command_palette});
+        add(Action{"Show help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false,
+                   &m_open_help});
+        add(Action{"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
+
+        add(Action{"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
+                   []() {}, always_enabled, false, &m_open_command_palette});
 
         static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
                                  m_params.callbacks.edgesToolbars.end();
-        add_action({"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
-                    [this]()
-                    {
-                        if (!toolbar_on)
-                            m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
-                        else
-                            m_params.callbacks.AddEdgeToolbar(
-                                HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); },
-                                m_top_toolbar_options);
-                    },
-                    always_enabled, false, &toolbar_on});
-        add_action({"Show menu bar", ICON_MY_HIDE_ALL_WINDOWS, 0, 0, []() {}, always_enabled, false,
-                    &m_params.imGuiWindowParams.showMenuBar});
-        add_action({"Show status bar", ICON_MY_STATUSBAR, 0, 0, []() {}, always_enabled, false,
-                    &m_params.imGuiWindowParams.showStatusBar});
-        add_action({"Show FPS in status bar", ICON_MY_FPS, 0, 0, []() {}, always_enabled, false, &m_show_FPS});
-        add_action(
-            {"Enable idling", g_blank_icon, 0, 0, []() {}, always_enabled, false, &m_params.fpsIdling.enableIdling});
+        add(Action{"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
+                   [this]()
+                   {
+                       if (!toolbar_on)
+                           m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                       else
+                           m_params.callbacks.AddEdgeToolbar(
+                               HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); },
+                               m_top_toolbar_options);
+                   },
+                   always_enabled, false, &toolbar_on});
+        add(Action{"Show menu bar", ICON_MY_HIDE_ALL_WINDOWS, 0, 0, []() {}, always_enabled, false,
+                   &m_params.imGuiWindowParams.showMenuBar});
+        add(Action{"Show status bar", ICON_MY_STATUSBAR, 0, 0, []() {}, always_enabled, false,
+                   &m_params.imGuiWindowParams.showStatusBar});
+        add(Action{"Show FPS in status bar", ICON_MY_FPS, 0, 0, []() {}, always_enabled, false, &m_show_FPS});
+        add(Action{"Enable idling", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+                   &m_params.fpsIdling.enableIdling});
 
         auto any_window_hidden = [this]()
         {
@@ -612,550 +561,547 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             return false;
         };
 
-        add_action({"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = true;
-                    },
-                    any_window_hidden});
+        add(Action{"Show all windows", ICON_MY_SHOW_ALL_WINDOWS, ImGuiKey_Tab, 0,
+                   [this]()
+                   {
+                       for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                               dockableWindow.isVisible = true;
+                   },
+                   any_window_hidden});
 
-        add_action({"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = false;
-                    },
-                    [any_window_hidden]() { return !any_window_hidden(); }});
+        add(Action{"Hide all windows", ICON_MY_HIDE_ALL_WINDOWS, ImGuiKey_Tab, 0,
+                   [this]()
+                   {
+                       for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                               dockableWindow.isVisible = false;
+                   },
+                   [any_window_hidden]() { return !any_window_hidden(); }});
 
-        add_action({"Show entire GUI", ICON_MY_SHOW_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = true;
-                        m_params.imGuiWindowParams.showMenuBar   = true;
-                        m_params.imGuiWindowParams.showStatusBar = true;
-                        m_params.callbacks.AddEdgeToolbar(
-                            HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
-                    },
-                    [this, any_window_hidden]()
-                    {
-                        return any_window_hidden() || !m_params.imGuiWindowParams.showMenuBar ||
-                               !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
-                    }});
+        add(Action{"Show entire GUI", ICON_MY_SHOW_ALL_WINDOWS, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+                   [this]()
+                   {
+                       for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                               dockableWindow.isVisible = true;
+                       m_params.imGuiWindowParams.showMenuBar   = true;
+                       m_params.imGuiWindowParams.showStatusBar = true;
+                       m_params.callbacks.AddEdgeToolbar(
+                           HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+                   },
+                   [this, any_window_hidden]()
+                   {
+                       return any_window_hidden() || !m_params.imGuiWindowParams.showMenuBar ||
+                              !m_params.imGuiWindowParams.showStatusBar || !toolbar_on;
+                   }});
 
-        add_action({"Hide entire GUI", ICON_MY_HIDE_GUI, ImGuiMod_Shift | ImGuiKey_Tab, 0,
-                    [this]()
-                    {
-                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                            if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
-                                dockableWindow.isVisible = false;
-                        m_params.imGuiWindowParams.showMenuBar   = false;
-                        m_params.imGuiWindowParams.showStatusBar = false;
-                        m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
-                    },
-                    [this, any_window_hidden]()
-                    {
-                        return !any_window_hidden() || m_params.imGuiWindowParams.showMenuBar ||
-                               m_params.imGuiWindowParams.showStatusBar || toolbar_on;
-                    }});
+        add(Action{"Hide entire GUI", ICON_MY_HIDE_GUI, ImGuiMod_Shift | ImGuiKey_Tab, 0,
+                   [this]()
+                   {
+                       for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
+                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                               dockableWindow.isVisible = false;
+                       m_params.imGuiWindowParams.showMenuBar   = false;
+                       m_params.imGuiWindowParams.showStatusBar = false;
+                       m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                   },
+                   [this, any_window_hidden]()
+                   {
+                       return !any_window_hidden() || m_params.imGuiWindowParams.showMenuBar ||
+                              m_params.imGuiWindowParams.showStatusBar || toolbar_on;
+                   }});
 
-        add_action({"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
-                    [this]() { m_params.dockingParams.layoutReset = true; },
-                    [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
+        add(Action{"Restore default layout", ICON_MY_RESTORE_LAYOUT, 0, 0,
+                   [this]() { m_params.dockingParams.layoutReset = true; },
+                   [this]() { return !m_params.dockingParams.dockableWindows.empty(); }});
 
-        static bool s_show_developer_menu = false;
-        add_action({"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
-                    &s_show_developer_menu});
-        static bool s_show_demo_window = false;
-        add_action(
-            {"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false, &s_show_demo_window});
-        static bool s_show_debug_window = false;
-        add_action(
-            {"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false, &s_show_debug_window});
-        add_action(
-            {"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false, &g_show_tweak_window});
+        add(Action{"Show developer menu", ICON_MY_DEVELOPER_WINDOW, 0, 0, []() {}, always_enabled, false,
+                   &m_show_developer_menu});
+        add(Action{"Show Dear ImGui demo window", g_blank_icon, 0, 0, []() {}, always_enabled, false,
+                   &m_show_demo_window});
+        add(Action{"Show debug window", ICON_MY_LOG_LEVEL_DEBUG, 0, 0, []() {}, always_enabled, false,
+                   &m_show_debug_window});
+        add(Action{"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false,
+                   &m_show_tweak_window});
 
         for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
         {
             HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
-            add_action({fmt::format("Show {} window", w.label).c_str(), window_info[i].icon, window_info[i].chord, 0,
-                        []() {}, [&w]() { return w.canBeClosed; }, false, &w.isVisible});
+            add(Action{fmt::format("Show {} window", w.label).c_str(), window_info[i].icon, window_info[i].chord, 0,
+                       []() {}, [&w]() { return w.canBeClosed; }, false, &w.isVisible});
         }
 
-        add_action({"Decrease exposure", ICON_MY_DECREASE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
-                    [this]() { m_exposure_live = m_exposure -= 0.25f; }});
-        add_action({"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
-                    [this]() { m_exposure_live = m_exposure += 0.25f; }});
-        add_action({"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0,
-                    [this]()
-                    {
-                        m_exposure_live = m_exposure = 0.f;
-                        m_offset_live = m_offset = 0.f;
-                        m_gamma_live = m_gamma = 1.f;
-                        m_tonemap              = Tonemap_Gamma;
-                    },
-                    always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
-        add_action(
-            {"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false, &m_reverse_colormap});
+        add(Action{"Decrease exposure", ICON_MY_DECREASE_EXPOSURE, ImGuiKey_E, ImGuiInputFlags_Repeat,
+                   [this]() { m_exposure_live = m_exposure -= 0.25f; }});
+        add(Action{"Increase exposure", ICON_MY_INCREASE_EXPOSURE, ImGuiMod_Shift | ImGuiKey_E, ImGuiInputFlags_Repeat,
+                   [this]() { m_exposure_live = m_exposure += 0.25f; }});
+        add(Action{"Reset tonemapping", ICON_MY_RESET_TONEMAPPING, 0, 0,
+                   [this]()
+                   {
+                       m_exposure_live = m_exposure = 0.f;
+                       m_offset_live = m_offset = 0.f;
+                       m_gamma_live = m_gamma = 1.f;
+                       m_tonemap              = Tonemap_Gamma;
+                   },
+                   always_enabled, false, nullptr, "Reset the exposure and blackpoint offset to 0."});
+        add(Action{"Reverse colormap", ICON_MY_INVERT_COLORMAP, 0, 0, []() {}, always_enabled, false,
+                   &m_reverse_colormap});
         if (m_params.rendererBackendOptions.requestFloatBuffer)
-            add_action({"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
-                        false, &m_clamp_to_LDR});
-        add_action({"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
-        add_action(
-            {"Clip warnings", ICON_MY_ZEBRA_STRIPES, 0, 0, []() {}, always_enabled, false, &m_draw_clip_warnings});
+            add(Action{"Clamp to LDR", ICON_MY_CLAMP_TO_LDR, ImGuiMod_Ctrl | ImGuiKey_L, 0, []() {}, always_enabled,
+                       false, &m_clamp_to_LDR});
+        add(Action{"Dither", ICON_MY_DITHER, 0, 0, []() {}, always_enabled, false, &m_dither});
+        add(Action{"Clip warnings", ICON_MY_ZEBRA_STRIPES, 0, 0, []() {}, always_enabled, false,
+                   &m_draw_clip_warnings});
 
-        add_action({"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
-                    &m_draw_grid});
-        add_action({"Draw pixel values", ICON_MY_SHOW_PIXEL_VALUES, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {},
-                    always_enabled, false, &m_draw_pixel_info});
+        add(Action{"Draw pixel grid", ICON_MY_SHOW_GRID, ImGuiMod_Ctrl | ImGuiKey_G, 0, []() {}, always_enabled, false,
+                   &m_draw_grid});
+        add(Action{"Draw pixel values", ICON_MY_SHOW_PIXEL_VALUES, ImGuiMod_Ctrl | ImGuiKey_P, 0, []() {},
+                   always_enabled, false, &m_draw_pixel_info});
 
-        add_action({"Draw data window", ICON_MY_DATA_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
-                    &m_draw_data_window});
-        add_action({"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
-                    &m_draw_display_window});
+        add(Action{"Draw data window", ICON_MY_DATA_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
+                   &m_draw_data_window});
+        add(Action{"Draw display window", ICON_MY_DISPLAY_WINDOW, ImGuiKey_None, 0, []() {}, always_enabled, false,
+                   &m_draw_display_window});
 
-        add_action({"Decrease gamma/Previous colormap", ICON_MY_DECREASE_GAMMA, ImGuiKey_G, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        switch (m_tonemap)
-                        {
-                        default: [[fallthrough]];
-                        case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); break;
-                        case Tonemap_FalseColor: [[fallthrough]];
-                        case Tonemap_PositiveNegative:
-                            m_colormap_index = mod(m_colormap_index - 1, (int)std::size(m_colormaps));
-                            break;
-                        }
-                    },
-                    always_enabled});
-        add_action({"Increase gamma/Next colormap", ICON_MY_INCREASE_GAMMA, ImGuiMod_Shift | ImGuiKey_G,
-                    ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        switch (m_tonemap)
-                        {
-                        default: [[fallthrough]];
-                        case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); break;
-                        case Tonemap_FalseColor: [[fallthrough]];
-                        case Tonemap_PositiveNegative:
-                            m_colormap_index = mod(m_colormap_index + 1, (int)std::size(m_colormaps));
-                            break;
-                        }
-                    },
-                    always_enabled});
+        add(Action{"Decrease gamma/Previous colormap", ICON_MY_DECREASE_GAMMA, ImGuiKey_G, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       switch (m_tonemap)
+                       {
+                       default: [[fallthrough]];
+                       case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma - 0.02f); break;
+                       case Tonemap_FalseColor: [[fallthrough]];
+                       case Tonemap_PositiveNegative:
+                           m_colormap_index = mod(m_colormap_index - 1, (int)std::size(m_colormaps));
+                           break;
+                       }
+                   },
+                   always_enabled});
+        add(Action{"Increase gamma/Next colormap", ICON_MY_INCREASE_GAMMA, ImGuiMod_Shift | ImGuiKey_G,
+                   ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       switch (m_tonemap)
+                       {
+                       default: [[fallthrough]];
+                       case Tonemap_Gamma: m_gamma_live = m_gamma = std::max(0.02f, m_gamma + 0.02f); break;
+                       case Tonemap_FalseColor: [[fallthrough]];
+                       case Tonemap_PositiveNegative:
+                           m_colormap_index = mod(m_colormap_index + 1, (int)std::size(m_colormaps));
+                           break;
+                       }
+                   },
+                   always_enabled});
 
         static bool s_mouse_mode_enabled[MouseMode_COUNT] = {true, false, false};
 
-        add_action({"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_P, 0,
-                    [this]()
-                    {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                        m_mouse_mode                            = MouseMode_PanZoom;
-                        s_mouse_mode_enabled[MouseMode_PanZoom] = true;
-                    },
-                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_PanZoom]});
-        add_action({"Rectangular select", ICON_MY_SELECT, ImGuiKey_M, 0,
-                    [this]()
-                    {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                        m_mouse_mode                                         = MouseMode_RectangularSelection;
-                        s_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
-                    },
-                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
-        add_action({"Pixel/color inspector", ICON_MY_WATCHED_PIXEL, ImGuiKey_I, 0,
-                    [this]()
-                    {
-                        for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
-                        m_mouse_mode                                   = MouseMode_ColorInspector;
-                        s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
-                    },
-                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_ColorInspector]});
+        add(Action{"Pan and zoom", ICON_MY_PAN_ZOOM_TOOL, ImGuiKey_P, 0,
+                   [this]()
+                   {
+                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                       m_mouse_mode                            = MouseMode_PanZoom;
+                       s_mouse_mode_enabled[MouseMode_PanZoom] = true;
+                   },
+                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_PanZoom]});
+        add(Action{"Rectangular select", ICON_MY_SELECT, ImGuiKey_M, 0,
+                   [this]()
+                   {
+                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                       m_mouse_mode                                         = MouseMode_RectangularSelection;
+                       s_mouse_mode_enabled[MouseMode_RectangularSelection] = true;
+                   },
+                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_RectangularSelection]});
+        add(Action{"Pixel/color inspector", ICON_MY_WATCHED_PIXEL, ImGuiKey_I, 0,
+                   [this]()
+                   {
+                       for (int i = 0; i < MouseMode_COUNT; ++i) s_mouse_mode_enabled[i] = false;
+                       m_mouse_mode                                   = MouseMode_ColorInspector;
+                       s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
+                   },
+                   always_enabled, false, &s_mouse_mode_enabled[MouseMode_ColorInspector]});
 
         auto if_img = [this]() { return current_image() != nullptr; };
 
         // below actions are only available if there is an image
 
 #if !defined(__EMSCRIPTEN__)
-        add_action({"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
-                    [this]() { reload_image(current_image()); }, if_img});
-        add_action({"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
-                    [this]()
-                    {
-                        for (auto &i : m_images) reload_image(i);
-                    },
-                    if_img});
-        add_action({"Watch for changes", ICON_MY_WATCH_CHANGES, ImGuiKey_None, 0, []() {}, always_enabled, false,
-                    &m_watch_files_for_changes,
-                    "Regularly monitor opened files and folders, loading new files, and reloading existing files when "
-                    "changes are detected."});
-        add_action({"Add watched folder...", ICON_MY_ADD_WATCHED_FOLDER, ImGuiKey_None, 0,
-                    [this]()
-                    {
-                        if (m_image_loader.add_watched_directory(
-                                pfd::select_folder("Open images in folder", "").result(), true))
-                            m_watch_files_for_changes = true;
-                    },
-                    always_enabled, false, nullptr,
-                    "Do not load the selected folder, but monitor it for new files and load those as they are "
-                    "created.\nUseful if you plan to periodically write images into a folder (e.g. renderings) and "
-                    "want HDRView to automatically load them as they appear."});
+        add(Action{"Reload image", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiKey_R, 0,
+                   [this]() { reload_image(current_image()); }, if_img});
+        add(Action{"Reload all images", ICON_MY_RELOAD, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_R, 0,
+                   [this]()
+                   {
+                       for (auto &i : m_images) reload_image(i);
+                   },
+                   if_img});
+        add(Action{"Watch for changes", ICON_MY_WATCH_CHANGES, ImGuiKey_None, 0, []() {}, always_enabled, false,
+                   &m_watch_files_for_changes,
+                   "Regularly monitor opened files and folders, loading new files, and reloading existing files when "
+                   "changes are detected."});
+        add(Action{"Add watched folder...", ICON_MY_ADD_WATCHED_FOLDER, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       if (m_image_loader.add_watched_directory(
+                               pfd::select_folder("Open images in folder", "").result(), true))
+                           m_watch_files_for_changes = true;
+                   },
+                   always_enabled, false, nullptr,
+                   "Do not load the selected folder, but monitor it for new files and load those as they are "
+                   "created.\nUseful if you plan to periodically write images into a folder (e.g. renderings) and "
+                   "want HDRView to automatically load them as they appear."});
 
-        add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
-                    [this]()
-                    {
-                        string filename =
-                            pfd::save_file("Save as", g_blank_icon,
-                                           {
-                                               "Supported image files",
-                                               fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
-                                           })
-                                .result();
+        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+                   [this]()
+                   {
+                       string filename =
+                           pfd::save_file("Save as", g_blank_icon,
+                                          {
+                                              "Supported image files",
+                                              fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
+                                          })
+                               .result();
 
-                        if (!filename.empty())
-                            save_as(filename);
-                    },
-                    if_img});
-        add_action({"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
-                    [this]()
-                    {
-                        string filename =
-                            pfd::save_file("Export image as", g_blank_icon,
-                                           {
-                                               "Supported image files",
-                                               fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
-                                           })
-                                .result();
+                       if (!filename.empty())
+                           save_as(filename);
+                   },
+                   if_img});
+        add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       string filename =
+                           pfd::save_file("Export image as", g_blank_icon,
+                                          {
+                                              "Supported image files",
+                                              fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
+                                          })
+                               .result();
 
-                        if (!filename.empty())
-                            export_as(filename);
-                    },
-                    if_img});
+                       if (!filename.empty())
+                           export_as(filename);
+                   },
+                   if_img});
 
 #else
-        add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
-                    [this]()
-                    {
-                        string filename;
-                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                        ImGui::TextUnformatted(
-                            "Please enter a filename. Format is deduced from the accepted extensions:");
-                        ImGui::TextFmt("\t{}", filter);
-                        ImGui::Separator();
-                        if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                                     ImGuiInputTextFlags_EnterReturnsTrue))
-                        {
-                            ImGui::CloseCurrentPopup();
+        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+                   [this]()
+                   {
+                       string filename;
+                       string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
+                       ImGui::TextUnformatted(
+                           "Please enter a filename. Format is deduced from the accepted extensions:");
+                       ImGui::TextFmt("\t{}", filter);
+                       ImGui::Separator();
+                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       {
+                           ImGui::CloseCurrentPopup();
 
-                            if (!filename.empty())
-                                save_as(filename);
-                        }
-                    },
-                    if_img, true});
-        add_action({"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
-                    [this]()
-                    {
-                        string filename;
-                        string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                        ImGui::TextUnformatted(
-                            "Please enter a filename. Format is deduced from the accepted extensions:");
-                        ImGui::TextFmt("\t{}", filter);
-                        ImGui::Separator();
-                        if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
-                                                     ImGuiInputTextFlags_EnterReturnsTrue))
-                        {
-                            ImGui::CloseCurrentPopup();
+                           if (!filename.empty())
+                               save_as(filename);
+                       }
+                   },
+                   if_img, true});
+        add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       string filename;
+                       string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
+                       ImGui::TextUnformatted(
+                           "Please enter a filename. Format is deduced from the accepted extensions:");
+                       ImGui::TextFmt("\t{}", filter);
+                       ImGui::Separator();
+                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", &filename,
+                                                    ImGuiInputTextFlags_EnterReturnsTrue))
+                       {
+                           ImGui::CloseCurrentPopup();
 
-                            if (!filename.empty())
-                                export_as(filename);
-                        }
-                    },
-                    if_img, true});
+                           if (!filename.empty())
+                               export_as(filename);
+                       }
+                   },
+                   if_img, true});
 #endif
 
-        add_action({"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
-                    [this]()
-                    {
-                        if (auto img = current_image())
-                        {
-                            float minimum = numeric_limits<float>::max();
-                            float maximum = numeric_limits<float>::min();
-                            auto &group   = img->groups[img->selected_group];
+        add(Action{"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
+                   [this]()
+                   {
+                       if (auto img = current_image())
+                       {
+                           float minimum = numeric_limits<float>::max();
+                           float maximum = numeric_limits<float>::min();
+                           auto &group   = img->groups[img->selected_group];
 
-                            bool3 should_include[NUM_CHANNELS] = {
-                                {true, true, true},   // RGB
-                                {true, false, false}, // RED
-                                {false, true, false}, // GREEN
-                                {false, false, true}, // BLUE
-                                {true, true, true},   // ALPHA
-                                {true, true, true}    // Y
-                            };
-                            for (int c = 0; c < std::min(group.num_channels, 3); ++c)
-                            {
-                                if (group.num_channels >= 3 && !should_include[m_channel][c])
-                                    continue;
-                                minimum =
-                                    std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
-                                maximum =
-                                    std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
-                            }
+                           bool3 should_include[NUM_CHANNELS] = {
+                               {true, true, true},   // RGB
+                               {true, false, false}, // RED
+                               {false, true, false}, // GREEN
+                               {false, false, true}, // BLUE
+                               {true, true, true},   // ALPHA
+                               {true, true, true}    // Y
+                           };
+                           for (int c = 0; c < std::min(group.num_channels, 3); ++c)
+                           {
+                               if (group.num_channels >= 3 && !should_include[m_channel][c])
+                                   continue;
+                               minimum =
+                                   std::min(minimum, img->channels[group.channels[c]].get_stats()->summary.minimum);
+                               maximum =
+                                   std::max(maximum, img->channels[group.channels[c]].get_stats()->summary.maximum);
+                           }
 
-                            float factor    = 1.0f / (maximum - minimum);
-                            m_exposure_live = m_exposure = log2(factor);
-                            m_offset_live = m_offset = -minimum * factor;
-                        }
-                    },
-                    if_img, false, nullptr,
-                    "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
+                           float factor    = 1.0f / (maximum - minimum);
+                           m_exposure_live = m_exposure = log2(factor);
+                           m_offset_live = m_offset = -minimum * factor;
+                       }
+                   },
+                   if_img, false, nullptr,
+                   "Adjust the exposure and blackpoint offset to fit image values to the range [0, 1]."});
 
-        add_action({"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        m_play_backward &= !m_play_forward;
-                        m_play_stopped                  = !(m_play_forward || m_play_backward);
-                        m_params.fpsIdling.enableIdling = m_play_stopped;
-                    },
-                    always_enabled, false, &m_play_forward});
-        add_action({"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        m_play_forward &= !m_play_stopped;
-                        m_play_backward &= !m_play_stopped;
-                        m_params.fpsIdling.enableIdling = true;
-                    },
-                    [this] { return m_play_forward || m_play_backward; }, false, &m_play_stopped});
-        add_action({"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
-                    [this]
-                    {
-                        m_play_forward &= !m_play_backward;
-                        m_play_stopped                  = !(m_play_forward || m_play_backward);
-                        m_params.fpsIdling.enableIdling = m_play_stopped;
-                    },
-                    always_enabled, false, &m_play_backward});
+        add(Action{"Play forward", ICON_MY_PLAY_FORWARD, ImGuiKey_Space, 0,
+                   [this]
+                   {
+                       m_play_backward &= !m_play_forward;
+                       m_play_stopped                  = !(m_play_forward || m_play_backward);
+                       m_params.fpsIdling.enableIdling = m_play_stopped;
+                   },
+                   always_enabled, false, &m_play_forward});
+        add(Action{"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
+                   [this]
+                   {
+                       m_play_forward &= !m_play_stopped;
+                       m_play_backward &= !m_play_stopped;
+                       m_params.fpsIdling.enableIdling = true;
+                   },
+                   [this] { return m_play_forward || m_play_backward; }, false, &m_play_stopped});
+        add(Action{"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
+                   [this]
+                   {
+                       m_play_forward &= !m_play_backward;
+                       m_play_stopped                  = !(m_play_forward || m_play_backward);
+                       m_params.fpsIdling.enableIdling = m_play_stopped;
+                   },
+                   always_enabled, false, &m_play_backward});
 
         // switch the current image using the image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
-                        [this, n]()
-                        {
-                            set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
-                            g_scroll_to_next_frame = 0.5f;
-                        },
-                        [this, n]()
-                        {
-                            auto i = nth_visible_image_index(mod(n - 1, 10));
-                            return is_valid(i) && i != m_current;
-                        }});
+            add(Action{fmt::format("Go to image {}", n), ICON_MY_IMAGE, ImGuiKey_0 + mod(n, 10), 0,
+                       [this, n]()
+                       {
+                           set_current_image_index(nth_visible_image_index(mod(n - 1, 10)));
+                           m_scroll_to_next_frame = 0.5f;
+                       },
+                       [this, n]()
+                       {
+                           auto i = nth_visible_image_index(mod(n - 1, 10));
+                           return is_valid(i) && i != m_current;
+                       }});
 
         // select the reference image using Cmd + image number (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                        ImGuiMod_Ctrl | (ImGuiKey_0 + mod(n, 10)), 0,
-                        [this, n]()
-                        {
-                            auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
-                            if (m_reference == nth_visible)
-                                m_reference = -1;
-                            else
-                                set_reference_image_index(nth_visible);
-                        },
-                        [this, n]()
-                        {
-                            auto i = nth_visible_image_index(mod(n - 1, 10));
-                            return is_valid(i);
-                        }});
+            add(Action{fmt::format("Set image {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                       ImGuiMod_Ctrl | (ImGuiKey_0 + mod(n, 10)), 0,
+                       [this, n]()
+                       {
+                           auto nth_visible = nth_visible_image_index(mod(n - 1, 10));
+                           if (m_reference == nth_visible)
+                               m_reference = -1;
+                           else
+                               set_reference_image_index(nth_visible);
+                       },
+                       [this, n]()
+                       {
+                           auto i = nth_visible_image_index(mod(n - 1, 10));
+                           return is_valid(i);
+                       }});
 
         // switch the selected channel group using Ctrl + number key (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
-                        modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
-                        [this, n]()
-                        {
-                            auto img               = current_image();
-                            img->selected_group    = img->nth_visible_group_index(mod(n - 1, 10));
-                            g_scroll_to_next_frame = 0.5f;
-                        },
-                        [this, n]()
-                        {
-                            if (auto img = current_image())
-                            {
-                                auto i = img->nth_visible_group_index(mod(n - 1, 10));
-                                return img->is_valid_group(i) && i != img->selected_group;
-                            }
-                            return false;
-                        }});
+            add(Action{fmt::format("Go to channel group {}", n), ICON_MY_CHANNEL_GROUP,
+                       modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
+                       [this, n]()
+                       {
+                           auto img               = current_image();
+                           img->selected_group    = img->nth_visible_group_index(mod(n - 1, 10));
+                           m_scroll_to_next_frame = 0.5f;
+                       },
+                       [this, n]()
+                       {
+                           if (auto img = current_image())
+                           {
+                               auto i = img->nth_visible_group_index(mod(n - 1, 10));
+                               return img->is_valid_group(i) && i != img->selected_group;
+                           }
+                           return false;
+                       }});
         // switch the reference channel group using Shift + Ctrl + number key (one-based indexing)
         for (int n = 1; n <= 10; ++n)
-            add_action({fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
-                        ImGuiMod_Shift | modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
-                        [this, n]()
-                        {
-                            auto img         = current_image();
-                            auto nth_visible = img->nth_visible_group_index(mod(n - 1, 10));
-                            if (img->reference_group == nth_visible)
-                            {
-                                img->reference_group = -1;
-                                m_reference          = -1;
-                            }
-                            else
-                            {
-                                img->reference_group = nth_visible;
-                                m_reference          = m_current;
-                            }
-                        },
-                        [this, n]()
-                        {
-                            if (auto img = current_image())
-                            {
-                                auto i = img->nth_visible_group_index(mod(n - 1, 10));
-                                return img->is_valid_group(i);
-                            }
-                            return false;
-                        }});
+            add(Action{fmt::format("Set channel group {} as reference", n), ICON_MY_REFERENCE_IMAGE,
+                       ImGuiMod_Shift | modKey | ImGuiKey(ImGuiKey_0 + mod(n, 10)), 0,
+                       [this, n]()
+                       {
+                           auto img         = current_image();
+                           auto nth_visible = img->nth_visible_group_index(mod(n - 1, 10));
+                           if (img->reference_group == nth_visible)
+                           {
+                               img->reference_group = -1;
+                               m_reference          = -1;
+                           }
+                           else
+                           {
+                               img->reference_group = nth_visible;
+                               m_reference          = m_current;
+                           }
+                       },
+                       [this, n]()
+                       {
+                           if (auto img = current_image())
+                           {
+                               auto i = img->nth_visible_group_index(mod(n - 1, 10));
+                               return img->is_valid_group(i);
+                           }
+                           return false;
+                       }});
 
-        add_action({"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
-                    [this]() { close_image(); }, if_img});
-        add_action({"Close all", ICON_MY_CLOSE_ALL, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
-                    [this]() { close_all_images(); }, if_img});
+        add(Action{"Close", ICON_MY_CLOSE, ImGuiMod_Ctrl | ImGuiKey_W, ImGuiInputFlags_Repeat,
+                   [this]() { close_image(); }, if_img});
+        add(Action{"Close all", ICON_MY_CLOSE_ALL, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_W, 0,
+                   [this]() { close_all_images(); }, if_img});
 
-        add_action({"Go to next image", g_blank_icon, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        set_current_image_index(next_visible_image_index(m_current, Forward));
-                        g_scroll_to_next_frame = 1.f;
-                    },
-                    [this]()
-                    {
-                        auto i = next_visible_image_index(m_current, Forward);
-                        return is_valid(i) && i != m_current;
-                    }});
-        add_action({"Go to previous image", g_blank_icon, ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        set_current_image_index(next_visible_image_index(m_current, Backward));
-                        g_scroll_to_next_frame = 0.f;
-                    },
-                    [this]()
-                    {
-                        auto i = next_visible_image_index(m_current, Backward);
-                        return is_valid(i) && i != m_current;
-                    }});
-        add_action({"Make next image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_DownArrow,
-                    ImGuiInputFlags_Repeat,
-                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Forward)); },
-                    [this]()
-                    {
-                        auto i = next_visible_image_index(m_reference, Forward);
-                        return is_valid(i) && i != m_reference;
-                    }});
-        add_action({"Make previous image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_UpArrow,
-                    ImGuiInputFlags_Repeat,
-                    [this]() { set_reference_image_index(next_visible_image_index(m_reference, Backward)); },
-                    [this]()
-                    {
-                        auto i = next_visible_image_index(m_reference, Backward);
-                        return is_valid(i) && i != m_reference;
-                    }});
-        add_action({"Go to next channel group", g_blank_icon, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        auto img               = current_image();
-                        img->selected_group    = img->next_visible_group_index(img->selected_group, Forward);
-                        g_scroll_to_next_frame = 1.f;
-                    },
-                    [this]() { return current_image() != nullptr; }});
-        add_action({"Go to previous channel group", g_blank_icon, ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        auto img               = current_image();
-                        img->selected_group    = img->next_visible_group_index(img->selected_group, Backward);
-                        g_scroll_to_next_frame = 0.f;
-                    },
-                    [this]() { return current_image() != nullptr; }});
-        add_action({"Go to next channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_RightArrow,
-                    ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        // if no reference image is selected, use the current image
-                        if (!reference_image())
-                            m_reference = m_current;
-                        auto img             = reference_image();
-                        img->reference_group = img->next_visible_group_index(img->reference_group, Forward);
-                    },
-                    [this]() { return reference_image() || current_image(); }});
-        add_action({"Go to previous channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_LeftArrow,
-                    ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        // if no reference image is selected, use the current image
-                        if (!reference_image())
-                            m_reference = m_current;
-                        auto img             = reference_image();
-                        img->reference_group = img->next_visible_group_index(img->reference_group, Backward);
-                    },
-                    [this]() { return reference_image() || current_image(); }});
+        add(Action{"Go to next image", g_blank_icon, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       set_current_image_index(next_visible_image_index(m_current, Forward));
+                       m_scroll_to_next_frame = 1.f;
+                   },
+                   [this]()
+                   {
+                       auto i = next_visible_image_index(m_current, Forward);
+                       return is_valid(i) && i != m_current;
+                   }});
+        add(Action{"Go to previous image", g_blank_icon, ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       set_current_image_index(next_visible_image_index(m_current, Backward));
+                       m_scroll_to_next_frame = 0.f;
+                   },
+                   [this]()
+                   {
+                       auto i = next_visible_image_index(m_current, Backward);
+                       return is_valid(i) && i != m_current;
+                   }});
+        add(Action{"Make next image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_DownArrow,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Forward)); },
+                   [this]()
+                   {
+                       auto i = next_visible_image_index(m_reference, Forward);
+                       return is_valid(i) && i != m_reference;
+                   }});
+        add(Action{"Make previous image the reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_UpArrow,
+                   ImGuiInputFlags_Repeat,
+                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Backward)); },
+                   [this]()
+                   {
+                       auto i = next_visible_image_index(m_reference, Backward);
+                       return is_valid(i) && i != m_reference;
+                   }});
+        add(Action{"Go to next channel group", g_blank_icon, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       auto img               = current_image();
+                       img->selected_group    = img->next_visible_group_index(img->selected_group, Forward);
+                       m_scroll_to_next_frame = 1.f;
+                   },
+                   [this]() { return current_image() != nullptr; }});
+        add(Action{"Go to previous channel group", g_blank_icon, ImGuiKey_LeftArrow, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       auto img               = current_image();
+                       img->selected_group    = img->next_visible_group_index(img->selected_group, Backward);
+                       m_scroll_to_next_frame = 0.f;
+                   },
+                   [this]() { return current_image() != nullptr; }});
+        add(Action{"Go to next channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_RightArrow,
+                   ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       // if no reference image is selected, use the current image
+                       if (!reference_image())
+                           m_reference = m_current;
+                       auto img             = reference_image();
+                       img->reference_group = img->next_visible_group_index(img->reference_group, Forward);
+                   },
+                   [this]() { return reference_image() || current_image(); }});
+        add(Action{"Go to previous channel group in reference", g_blank_icon, ImGuiMod_Shift | ImGuiKey_LeftArrow,
+                   ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       // if no reference image is selected, use the current image
+                       if (!reference_image())
+                           m_reference = m_current;
+                       auto img             = reference_image();
+                       img->reference_group = img->next_visible_group_index(img->reference_group, Backward);
+                   },
+                   [this]() { return reference_image() || current_image(); }});
 
-        add_action({"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        zoom_out();
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"Zoom in", ICON_MY_ZOOM_IN, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
-                    [this]()
-                    {
-                        zoom_in();
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"100%", ICON_MY_ZOOM_100, 0, 0,
-                    [this]()
-                    {
-                        set_zoom_level(0.f);
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"Center", ICON_MY_CENTER, ImGuiKey_C, 0,
-                    [this]()
-                    {
-                        center();
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"Fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0,
-                    [this]()
-                    {
-                        fit_display_window();
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"Auto fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiKey_F, 0,
-                    [this]() { m_auto_fit_selection = m_auto_fit_data = false; }, if_img, false, &m_auto_fit_display});
-        add_action({"Fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Alt | ImGuiKey_F, 0,
-                    [this]()
-                    {
-                        fit_data_window();
-                        cancel_autofit();
-                    },
-                    if_img});
-        add_action({"Auto fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F, 0,
-                    [this]() { m_auto_fit_selection = m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
-        add_action({"Fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
-                    [this]()
-                    {
-                        fit_selection();
-                        cancel_autofit();
-                    },
-                    [if_img, this]() { return if_img() && m_roi.has_volume(); }});
-        add_action({"Auto fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
-                    [this]() { m_auto_fit_display = m_auto_fit_data = false; },
-                    [if_img, this]() { return if_img() && m_roi.has_volume(); }, false, &m_auto_fit_selection});
-        add_action({"Flip horizontally", ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
-        add_action({"Flip vertically", ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
+        add(Action{"Zoom out", ICON_MY_ZOOM_OUT, ImGuiKey_Minus, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       zoom_out();
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"Zoom in", ICON_MY_ZOOM_IN, ImGuiKey_Equal, ImGuiInputFlags_Repeat,
+                   [this]()
+                   {
+                       zoom_in();
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"100%", ICON_MY_ZOOM_100, 0, 0,
+                   [this]()
+                   {
+                       set_zoom_level(0.f);
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"Center", ICON_MY_CENTER, ImGuiKey_C, 0,
+                   [this]()
+                   {
+                       center();
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"Fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiKey_F, 0,
+                   [this]()
+                   {
+                       fit_display_window();
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"Auto fit display window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiKey_F, 0,
+                   [this]() { m_auto_fit_selection = m_auto_fit_data = false; }, if_img, false, &m_auto_fit_display});
+        add(Action{"Fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Alt | ImGuiKey_F, 0,
+                   [this]()
+                   {
+                       fit_data_window();
+                       cancel_autofit();
+                   },
+                   if_img});
+        add(Action{"Auto fit data window", ICON_MY_FIT_TO_WINDOW, ImGuiMod_Shift | ImGuiMod_Alt | ImGuiKey_F, 0,
+                   [this]() { m_auto_fit_selection = m_auto_fit_display = false; }, if_img, false, &m_auto_fit_data});
+        add(Action{"Fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       fit_selection();
+                       cancel_autofit();
+                   },
+                   [if_img, this]() { return if_img() && m_roi.has_volume(); }});
+        add(Action{"Auto fit selection", ICON_MY_FIT_TO_WINDOW, ImGuiKey_None, 0,
+                   [this]() { m_auto_fit_display = m_auto_fit_data = false; },
+                   [if_img, this]() { return if_img() && m_roi.has_volume(); }, false, &m_auto_fit_selection});
+        add(Action{"Flip horizontally", ICON_MY_FLIP_HORIZ, ImGuiKey_H, 0, []() {}, if_img, false, &m_flip.x});
+        add(Action{"Flip vertically", ICON_MY_FLIP_VERT, ImGuiKey_V, 0, []() {}, if_img, false, &m_flip.y});
     }
 
     // load any passed-in images
@@ -1406,13 +1352,13 @@ void HDRViewApp::draw_status_bar()
 
 void HDRViewApp::draw_color_picker()
 {
-    if (!g_show_bg_color_picker)
+    if (!m_show_bg_color_picker)
         return;
 
     // Center window horizontally, align near top vertically
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
                             ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
-    if (ImGui::Begin("Choose custom background color", &g_show_bg_color_picker,
+    if (ImGui::Begin("Choose custom background color", &m_show_bg_color_picker,
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking))
     {
         static float4 previous_bg_color = m_bg_color;
@@ -1424,32 +1370,66 @@ void HDRViewApp::draw_color_picker()
 
         ImGui::Dummy(HelloImGui::EmToVec2(1.f, 0.5f));
         if (ImGui::Button("OK", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
-            g_show_bg_color_picker = false;
+            m_show_bg_color_picker = false;
         ImGui::SameLine();
         if (ImGui::Button("Cancel", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
         {
             m_bg_color             = previous_bg_color;
-            g_show_bg_color_picker = false;
+            m_show_bg_color_picker = false;
         }
+    }
+    ImGui::End();
+}
+
+void HDRViewApp::draw_tweak_window()
+{
+    if (!m_show_tweak_window)
+        return;
+
+    // auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
+    ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Theme Tweaks", &m_show_tweak_window))
+    {
+        ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
+        if (ImGui::BeginCombo("Theme", m_theme.name(), ImGuiComboFlags_HeightLargest))
+        {
+            for (int t = Theme::LIGHT_THEME; t < ImGuiTheme::ImGuiTheme_Count; ++t)
+            {
+                const bool is_selected = t == m_theme;
+                if (ImGui::Selectable(Theme::name(t), is_selected))
+                    m_theme.set(t);
+
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGuiStyle previous = ImGui::GetStyle();
+
+        ImGui::ShowStyleEditor(nullptr);
+
+        bool theme_changed = memcmp(&previous, &ImGui::GetStyle(), sizeof(ImGuiStyle) - 2 * sizeof(float)) != 0;
+
+        if (theme_changed)
+            m_theme.set(Theme::CUSTOM_THEME);
     }
     ImGui::End();
 }
 
 void HDRViewApp::draw_develop_windows()
 {
-    bool *show_demo_window = action("Show Dear ImGui demo window").p_selected;
-    if (*show_demo_window)
+    if (m_show_demo_window)
     {
-        ImGui::ShowDemoWindow(show_demo_window);
-        ImPlot::ShowMetricsWindow(show_demo_window);
-        ImPlot::ShowDemoWindow(show_demo_window);
+        ImGui::ShowDemoWindow(&m_show_demo_window);
+        ImPlot::ShowMetricsWindow(&m_show_demo_window);
+        ImPlot::ShowDemoWindow(&m_show_demo_window);
     }
 
-    bool *show_debug_window = action("Show debug window").p_selected;
-    if (*show_debug_window)
+    if (m_show_debug_window)
     {
         ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Debug", show_debug_window))
+        if (ImGui::Begin("Debug", &m_show_debug_window))
         {
             if (ImGui::BeginTabBar("Debug tabs", ImGuiTabBarFlags_None))
             {
@@ -1728,8 +1708,8 @@ void HDRViewApp::draw_menus()
 
         if (ImGui::BeginMenuEx("Theme", ICON_MY_THEME))
         {
-            if (ImGui::MenuItemEx("Theme tweak window", ICON_MY_TWEAK_THEME, nullptr, g_show_tweak_window))
-                g_show_tweak_window = !g_show_tweak_window;
+            if (ImGui::MenuItemEx("Theme tweak window", ICON_MY_TWEAK_THEME, nullptr, m_show_tweak_window))
+                m_show_tweak_window = !m_show_tweak_window;
 
             ImGui::Separator();
 
@@ -1744,7 +1724,7 @@ void HDRViewApp::draw_menus()
         ImGui::EndMenu();
     }
 
-    if (action("Show developer menu").checked() && ImGui::BeginMenu("Developer"))
+    if (m_show_developer_menu && ImGui::BeginMenu("Developer"))
     {
         ImGui::MenuItem(action("Show Dear ImGui demo window"));
         ImGui::MenuItem(action("Show debug window"));
@@ -1761,12 +1741,8 @@ void HDRViewApp::draw_menus()
     if (pos_x > ImGui::GetCursorPosX())
         ImGui::SetCursorPosX(pos_x);
 
-    ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected);
-    ImGui::WrappedTooltip(a.name.c_str());
-    a = action("Show help");
-    if (ImGui::MenuItem(a.icon, ImGui::GetKeyChordNameTranslated(a.chord), &g_help_is_open))
-        g_show_help = true;
-    ImGui::WrappedTooltip(a.name.c_str());
+    ImGui::MenuItem(a, false);
+    ImGui::MenuItem(action("Show help"), false);
 }
 
 void HDRViewApp::run()
@@ -2084,30 +2060,30 @@ void HDRViewApp::draw_file_window()
     }
 
     ImGui::SameLine();
-    if (ImGui::IconButton(g_short_names ? ICON_MY_SHORT_NAMES "##short names button"
+    if (ImGui::IconButton(m_short_names ? ICON_MY_SHORT_NAMES "##short names button"
                                         : ICON_MY_FULL_NAMES "##short names button"))
-        g_short_names = !g_short_names;
-    ImGui::WrappedTooltip(g_short_names ? "Click to show full filenames."
+        m_short_names = !m_short_names;
+    ImGui::WrappedTooltip(m_short_names ? "Click to show full filenames."
                                         : "Click to show only the unique portion of each file name.");
 
     static const string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
     ImGui::SameLine();
-    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[g_file_list_mode].data()))
+    if (ImGui::BeginComboButton("##channel list mode", s_view_mode_icons[m_file_list_mode].data()))
     {
-        auto old_mode = g_file_list_mode;
+        auto old_mode = m_file_list_mode;
         if (ImGui::Selectable((s_view_mode_icons[0] + " Only images (do not list channel groups)").c_str(),
-                              g_file_list_mode == 0))
-            g_file_list_mode = 0;
+                              m_file_list_mode == 0))
+            m_file_list_mode = 0;
         if (ImGui::Selectable((s_view_mode_icons[1] + " Flat list of layers and channels").c_str(),
-                              g_file_list_mode == 1))
-            g_file_list_mode = 1;
+                              m_file_list_mode == 1))
+            m_file_list_mode = 1;
         if (ImGui::Selectable((s_view_mode_icons[2] + " Tree view of layers and channels").c_str(),
-                              g_file_list_mode == 2))
-            g_file_list_mode = 2;
+                              m_file_list_mode == 2))
+            m_file_list_mode = 2;
 
-        if (old_mode != g_file_list_mode)
-            g_scroll_to_next_frame = 0.5f;
+        if (old_mode != m_file_list_mode)
+            m_scroll_to_next_frame = 0.5f;
 
         ImGui::EndCombo();
     }
@@ -2129,7 +2105,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed,
                                 ImGui::GetTreeNodeToLabelSpacing());
-        ImGui::TableSetupColumn(g_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
+        ImGui::TableSetupColumn(m_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
         ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
         ImGui::TableHeadersRow();
@@ -2139,7 +2115,7 @@ void HDRViewApp::draw_file_window()
             if (sort_specs->SpecsCount)
             {
                 direction = sort_specs->Specs[0].SortDirection;
-                if (sort_specs->SpecsDirty || g_request_sort)
+                if (sort_specs->SpecsDirty || m_request_sort)
                 {
                     spdlog::info("Sorting {}", (int)direction);
                     auto old_current   = current_image();
@@ -2159,7 +2135,7 @@ void HDRViewApp::draw_file_window()
                         m_reference = int(find(m_images.begin(), m_images.end(), old_reference) - m_images.begin());
                 }
 
-                sort_specs->SpecsDirty = g_request_sort = false;
+                sort_specs->SpecsDirty = m_request_sort = false;
             }
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
@@ -2187,7 +2163,7 @@ void HDRViewApp::draw_file_window()
 
             ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-            ImGui::PushFont(g_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
+            ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -2198,7 +2174,7 @@ void HDRViewApp::draw_file_window()
 
             if (is_current || is_reference)
                 node_flags |= ImGuiTreeNodeFlags_Selected;
-            if (g_file_list_mode == 0)
+            if (m_file_list_mode == 0)
             {
                 node_flags |= ImGuiTreeNodeFlags_Leaf;
                 ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
@@ -2210,8 +2186,8 @@ void HDRViewApp::draw_file_window()
                 selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
             auto  &channel    = img->channels[selected_group.channels[0]];
             string layer_path = Channel::head(channel.name);
-            string filename   = (g_short_names ? img->short_name : img->file_and_partname()) +
-                              (g_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
+            string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
+                              (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
             string the_text = ImGui::TruncatedText(filename, img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE);
 
@@ -2312,26 +2288,26 @@ void HDRViewApp::draw_file_window()
             {
                 ImGui::PushFont(m_sans_regular, 0.f);
                 int visible_groups = 1;
-                if (g_file_list_mode == 0)
+                if (m_file_list_mode == 0)
                 {
                     ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
-                    if (is_current && g_scroll_to_next_frame >= -0.5f)
+                    if (is_current && m_scroll_to_next_frame >= -0.5f)
                     {
                         if (!ImGui::IsItemVisible())
-                            ImGui::SetScrollHereY(g_scroll_to_next_frame);
-                        g_scroll_to_next_frame = -1.f;
+                            ImGui::SetScrollHereY(m_scroll_to_next_frame);
+                        m_scroll_to_next_frame = -1.f;
                     }
                 }
-                else if (g_file_list_mode == 1)
+                else if (m_file_list_mode == 1)
                 {
-                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference, g_scroll_to_next_frame);
+                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference, m_scroll_to_next_frame);
                     MY_ASSERT(visible_groups == img->root.visible_groups,
                               "Unexpected number of visible groups; {} != {}", visible_groups,
                               img->root.visible_groups);
                 }
                 else
                 {
-                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference, g_scroll_to_next_frame);
+                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference, m_scroll_to_next_frame);
                     MY_ASSERT(visible_groups == img->root.visible_groups,
                               "Unexpected number of visible groups; {} != {}", visible_groups,
                               img->root.visible_groups);
@@ -2549,12 +2525,10 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
-void HDRViewApp::draw_command_palette(bool &show)
+void HDRViewApp::draw_command_palette()
 {
-    if (show)
+    if (m_open_command_palette)
         ImGui::OpenPopup("Command palette...");
-
-    show = false;
 
     auto &io = ImGui::GetIO();
 
@@ -2573,6 +2547,7 @@ void HDRViewApp::draw_command_palette(bool &show)
 
     if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
+        m_open_command_palette = false;
         if (ImGui::IsWindowAppearing())
         {
             spdlog::trace("Creating ImCmd context");
@@ -2585,15 +2560,14 @@ void HDRViewApp::draw_command_palette(bool &show)
             ImCmd::SetStyleFont(ImCmdTextType_Regular, m_sans_regular);
             ImCmd::SetStyleFont(ImCmdTextType_Highlight, m_sans_bold);
             ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
-            // ImVec4 highlight_font_color(1.0f, 1.0f, 1.0f, 1.0f);
             auto highlight_font_color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
             ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::ColorConvertFloat4ToU32(highlight_font_color));
 
             for (auto &a : m_actions)
             {
-                if (a.enabled())
-                    ImCmd::AddCommand({a.name, a.p_selected ? [&a](){
-                *a.p_selected = !*a.p_selected;a.callback();} : a.callback, nullptr, nullptr, a.icon, ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected});
+                if (a.second.enabled())
+                    ImCmd::AddCommand({a.second.name, a.second.p_selected ? [&a](){
+                *a.second.p_selected = !*a.second.p_selected;a.second.callback();} : a.second.callback, nullptr, nullptr, a.second.icon, ImGui::GetKeyChordNameTranslated(a.second.chord), a.second.p_selected});
             }
 
 #if !defined(__EMSCRIPTEN__)
@@ -2638,7 +2612,7 @@ void HDRViewApp::draw_command_palette(bool &show)
                                {
                                    m_bg_mode = (EBGMode)clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 1);
                                    if (m_bg_mode == BG_CUSTOM_COLOR)
-                                       g_show_bg_color_picker = true;
+                                       m_show_bg_color_picker = true;
                                },
                                nullptr, g_blank_icon});
 
@@ -2671,7 +2645,6 @@ void HDRViewApp::draw_command_palette(bool &show)
             // Close window when user selects an item, hits escape, or unfocuses the command palette window
             // (clicking elsewhere)
             ImGui::CloseCurrentPopup();
-            show = false;
         }
 
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
@@ -2703,12 +2676,9 @@ void HDRViewApp::draw_command_palette(bool &show)
 
 void HDRViewApp::draw_about_dialog()
 {
-    if (g_show_help)
-        ImGui::OpenPopup("About");
-
     // work around HelloImGui rendering a couple frames to figure out sizes
-    if (ImGui::GetFrameCount() > 1)
-        g_show_help = false;
+    if (m_open_help && ImGui::GetFrameCount() > 1)
+        ImGui::OpenPopup("About");
 
     auto &io = ImGui::GetIO();
 
@@ -2729,7 +2699,7 @@ void HDRViewApp::draw_about_dialog()
     if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_AlwaysAutoResize))
     {
-        g_help_is_open = true;
+        m_open_help = false;
         ImGui::Spacing();
 
         auto platform_backend = [](HelloImGui::PlatformBackendType type)
@@ -2977,16 +2947,9 @@ void HDRViewApp::draw_about_dialog()
         if (ImGui::Button("Dismiss", HelloImGui::EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
             ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) ||
             ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Slash))
-        {
             ImGui::CloseCurrentPopup();
-            g_show_help = false;
-        }
 
         ImGui::ScrollWhenDraggingOnVoid(ImVec2(0.0f, -ImGui::GetIO().MouseDelta.y), ImGuiMouseButton_Left);
         ImGui::EndPopup();
-    }
-    else
-    {
-        g_help_is_open = false;
     }
 }
