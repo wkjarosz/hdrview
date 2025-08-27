@@ -676,12 +676,14 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     log_window.GuiFunction       = [this]
     { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); };
 
+#if !defined(__EMSCRIPTEN__)
     HelloImGui::DockableWindow watched_folders_window;
     watched_folders_window.label             = "Watched Folders";
     watched_folders_window.dockSpaceName     = "ImagesSpace";
     watched_folders_window.isVisible         = true;
     watched_folders_window.rememberIsVisible = true;
     watched_folders_window.GuiFunction       = [this] { m_image_loader.draw_gui(); };
+#endif
 
 #ifdef _WIN32
     ImGuiKey modKey = ImGuiMod_Alt;
@@ -690,24 +692,39 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
 
     // docking layouts
-    m_params.dockingParams.layoutName      = "Standard";
-    m_params.dockingParams.dockableWindows = {
-        histogram_window,  channel_stats_window,   file_window, watched_folders_window, info_window,
-        colorspace_window, pixel_inspector_window, log_window};
     struct DockableWindowExtraInfo
     {
         ImGuiKeyChord chord = ImGuiKey_None;
         const char   *icon  = nullptr;
     };
+
+    m_params.dockingParams.layoutName      = "Standard";
+    m_params.dockingParams.dockableWindows = {histogram_window,
+                                              channel_stats_window,
+                                              file_window,
+                                              info_window,
+                                              colorspace_window,
+                                              pixel_inspector_window,
+                                              log_window
+#if !defined(__EMSCRIPTEN__)
+                                              ,
+                                              watched_folders_window
+#endif
+    };
     DockableWindowExtraInfo window_info[] = {{ImGuiKey_F5, ICON_MY_HISTOGRAM_WINDOW},
                                              {ImGuiKey_F6, ICON_MY_STATISTICS_WINDOW},
                                              {ImGuiKey_F7, ICON_MY_FILES_WINDOW},
-                                             {ImGuiKey_None, ICON_MY_ADD_WATCHED_FOLDER},
                                              {ImGuiMod_Ctrl | ImGuiKey_I, ICON_MY_INFO_WINDOW},
                                              {ImGuiKey_F8, ICON_MY_COLORSPACE_WINDOW},
                                              {ImGuiKey_F9, ICON_MY_INSPECTOR_WINDOW},
-                                             {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}};
-    m_params.dockingParams.dockingSplits  = {
+                                             {modKey | ImGuiKey_GraveAccent, ICON_MY_LOG_WINDOW}
+#if !defined(__EMSCRIPTEN__)
+                                             ,
+                                             {ImGuiKey_None, ICON_MY_ADD_WATCHED_FOLDER}
+#endif
+    };
+
+    m_params.dockingParams.dockingSplits = {
         HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
         HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
         HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
@@ -1307,10 +1324,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                             m_watch_files_for_changes = true;
                     },
                     always_enabled, false, nullptr,
-                    "Do not load any existing files from the select folder, but monitor it for new files and load "
-                    "those as they are created.\n"
-                    "Useful if you plan to periodically write images into a folder (e.g. renderings) and want HDRView "
-                    "to automatically load them as they appear."});
+                    "Do not load the selected folder, but monitor it for new files and load those as they are "
+                    "created.\nUseful if you plan to periodically write images into a folder (e.g. renderings) and "
+                    "want HDRView to automatically load them as they appear."});
 
         add_action({"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
                     [this]()
@@ -2037,14 +2053,10 @@ void HDRViewApp::draw_menus()
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
-#if !defined(__EMSCRIPTEN__)
-        MenuItem(action("Open folder..."));
-#endif
-        MenuItem(action("Add watched folder..."));
-
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
 #else
+        MenuItem(action("Open folder..."));
 
         ImGui::BeginDisabled(m_image_loader.recent_files().empty());
         if (ImGui::BeginMenuEx("Open recent", ICON_MY_OPEN_IMAGE))
@@ -2067,6 +2079,8 @@ void HDRViewApp::draw_menus()
             ImGui::EndMenu();
         }
         ImGui::EndDisabled();
+
+        MenuItem(action("Add watched folder..."));
 
         ImGui::Separator();
 
