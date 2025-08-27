@@ -318,45 +318,47 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         spdlog::info("Loading user settings from '{}'", HelloImGui::IniSettingsLocation(m_params));
 
         auto s = HelloImGui::LoadUserPref("UserSettings");
-        if (s.empty())
+        if (!s.empty())
+        {
+
+            try
+            {
+                json j = json::parse(s);
+                spdlog::debug("Restoring recent file list...");
+                m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
+                m_bg_mode        = (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK,
+                                                  (int)NUM_BG_MODES - 1);
+                m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
+
+                m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
+                m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
+                m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
+                m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
+                m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
+                m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
+                m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
+                m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
+                m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
+                m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
+                m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
+                m_dither               = j.value<bool>("dither", m_dither);
+                m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
+                m_short_names          = j.value<bool>("short names", m_short_names);
+                m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
+                m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
+                m_clip_range           = j.value<float2>("clip range", m_clip_range);
+                m_playback_speed       = j.value<float>("playback speed", m_playback_speed);
+                m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
+                m_show_developer_menu  = j.value<bool>("show developer menu", m_show_developer_menu);
+            }
+            catch (json::exception &e)
+            {
+                spdlog::error("Error while parsing user settings: {}", e.what());
+            }
+        }
+        else
         {
             spdlog::warn("No user settings found, using defaults.");
-            return;
-        }
-
-        try
-        {
-            json j = json::parse(s);
-            spdlog::debug("Restoring recent file list...");
-            m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
-            m_bg_mode =
-                (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK, (int)NUM_BG_MODES - 1);
-            m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
-
-            m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
-            m_draw_display_window = j.value<bool>("draw display window", m_draw_display_window);
-            m_auto_fit_data       = j.value<bool>("auto fit data window", m_auto_fit_data);
-            m_auto_fit_display    = j.value<bool>("auto fit display window", m_auto_fit_display);
-            m_auto_fit_selection  = j.value<bool>("auto fit selection", m_auto_fit_selection);
-            m_draw_pixel_info     = j.value<bool>("draw pixel info", m_draw_pixel_info);
-            m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
-            m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
-            m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
-            m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
-            m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
-            m_dither               = j.value<bool>("dither", m_dither);
-            m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
-            m_short_names          = j.value<bool>("short names", m_short_names);
-            m_draw_clip_warnings   = j.value<bool>("draw clip warnings", m_draw_clip_warnings);
-            m_show_FPS             = j.value<bool>("show FPS", m_show_FPS);
-            m_clip_range           = j.value<float2>("clip range", m_clip_range);
-            m_playback_speed       = j.value<float>("playback speed", m_playback_speed);
-            m_colormap_index       = clamp<int>(j.value<int>("colormap index", 0), 0, std::size(m_colormaps));
-            m_show_developer_menu  = j.value<bool>("show developer menu", m_show_developer_menu);
-        }
-        catch (json::exception &e)
-        {
-            spdlog::error("Error while parsing user settings: {}", e.what());
         }
 
         setup_rendering();
