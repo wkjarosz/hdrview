@@ -9,7 +9,6 @@ using namespace stp;
 
 #ifdef HDRVIEW_ENABLE_LCMS2
 #include <lcms2.h>
-#include <memory>
 
 //
 // Some minimal wrappers around just the Little CMS 2 functionality we need

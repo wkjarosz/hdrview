@@ -5,7 +5,6 @@
 
 #include "texture.h"
 #include <cstring>
-#include <memory>
 
 #include <spdlog/spdlog.h>
 

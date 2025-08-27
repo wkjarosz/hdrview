@@ -11,7 +11,6 @@
 #include "texture.h"
 #include <fmt/core.h>
 #include <iostream>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>

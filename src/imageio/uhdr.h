@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include <istream>
-#include <memory>
-#include <string_view>
-
 #include "fwd.h"
+
+#include <istream>
+#include <string_view>
 
 // should not throw
 bool is_uhdr_image(std::istream &is) noexcept;

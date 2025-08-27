@@ -7,8 +7,8 @@
 #pragma once
 
 #include "fwd.h"
+
 #include <istream>
-#include <memory>
 #include <string_view>
 
 // should not throw

@@ -1,13 +1,11 @@
 #include "texture.h"
-#include <memory>
 
 Texture::Texture(PixelFormat pixel_format, ComponentFormat component_format, int2 size,
                  InterpolationMode min_interpolation_mode, InterpolationMode mag_interpolation_mode, WrapMode wrap_mode,
                  uint8_t samples, uint8_t flags, bool manual_mipmapping) :
-    m_pixel_format(pixel_format),
-    m_component_format(component_format), m_min_interpolation_mode(min_interpolation_mode),
-    m_mag_interpolation_mode(mag_interpolation_mode), m_wrap_mode(wrap_mode), m_samples(samples), m_flags(flags),
-    m_size(size), m_manual_mipmapping(manual_mipmapping)
+    m_pixel_format(pixel_format), m_component_format(component_format),
+    m_min_interpolation_mode(min_interpolation_mode), m_mag_interpolation_mode(mag_interpolation_mode),
+    m_wrap_mode(wrap_mode), m_samples(samples), m_flags(flags), m_size(size), m_manual_mipmapping(manual_mipmapping)
 {
     init();
 }

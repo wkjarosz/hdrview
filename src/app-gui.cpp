@@ -14,8 +14,6 @@
 #include "texture.h"
 #include "version.h"
 
-#include <memory>
-
 #include "platform_utils.h"
 
 using namespace std;

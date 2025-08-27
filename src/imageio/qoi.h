@@ -6,11 +6,10 @@
 
 #pragma once
 
-#include <istream>
-#include <memory>
-#include <string>
-
 #include "fwd.h"
+
+#include <istream>
+#include <string>
 
 // should not throw
 bool is_qoi_image(std::istream &is) noexcept;

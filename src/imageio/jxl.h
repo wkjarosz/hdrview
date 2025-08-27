@@ -7,7 +7,6 @@
 #pragma once
 
 #include <istream>
-#include <memory>
 #include <string_view>
 
 #include "fwd.h"

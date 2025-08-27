@@ -10,7 +10,6 @@
 
 #include <spdlog/mdc.h>
 
-#include <memory>
 #include <random>
 #include <utility>
 
