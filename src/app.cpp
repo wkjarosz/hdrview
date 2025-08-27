@@ -1,14 +1,10 @@
 #include "app.h"
 
-#include "hello_imgui/hello_imgui.h"
-
-#include "colormap.h"
 #include "fonts.h"
-#include "json.h"
+#include "hello_imgui/hello_imgui.h"
+#include "platform_utils.h"
 
 #include <ImfThreading.h>
-
-#include "platform_utils.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>

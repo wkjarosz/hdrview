@@ -1,12 +1,11 @@
 #include "app.h"
 
+#include "colormap.h"
+#include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
 #include "imcmd_command_palette.h"
 #include "imgui_internal.h"
 #include "implot.h"
-
-#include "colormap.h"
-#include "fonts.h"
 #include "texture.h"
 #include "version.h"
 

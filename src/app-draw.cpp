@@ -2,12 +2,9 @@
 
 #include "colormap.h"
 #include "fonts.h"
-#include "texture.h"
-
-#include <spdlog/mdc.h>
 
 #include <random>
-#include <utility>
+#include <spdlog/mdc.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>

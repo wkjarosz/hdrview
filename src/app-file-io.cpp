@@ -1,8 +1,6 @@
 #include "app.h"
 
 #include <fstream>
-#include <sstream>
-#include <utility>
 
 #include "platform_utils.h"
 

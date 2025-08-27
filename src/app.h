@@ -16,6 +16,7 @@
 #include "theme.h"
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>

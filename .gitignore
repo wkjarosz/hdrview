@@ -25,6 +25,7 @@ cmake_install.cmake
 .ninja_log
 build.ninja
 rules.ninja
+compile_commands.json
 
 # Executables, build directories and miscellaneous
 *.exe
@@ -37,3 +38,4 @@ cmake-build-release
 cmake-build-minsizerel
 cmake-build-relwithdebinfo
 .idea
+.cache

@@ -8,21 +8,15 @@
 
 #include "app.h"
 #include "common.h"
-#include "image.h"
-#include "shader.h"
-#include "texture.h"
-
 #include "fonts.h"
+#include "image.h"
 #include "imgui_ext.h"
 #include "implot.h"
 #include "implot_internal.h"
+#include "shader.h"
+#include "texture.h"
 
 #include "nvgui/property_editor.hpp"
-
-#include <ImfStandardAttributes.h>
-
-#include <sstream>
-#include <stdexcept> // for runtime_error, out_of_range
 
 using namespace std;
 
