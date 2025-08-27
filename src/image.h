@@ -297,6 +297,7 @@ struct LayerTreeNode
 struct Image
 {
 public:
+    static bool                         loadable(const std::string &extension);
     static const std::set<std::string> &loadable_formats(); /// Set of supported formats for image loading
     static const std::set<std::string> &savable_formats();  /// Set of supported formats for image saving
     static void                         make_default_textures();

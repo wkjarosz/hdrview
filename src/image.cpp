@@ -182,6 +182,19 @@ const std::set<std::string> &Image::savable_formats()
     return formats;
 }
 
+bool Image::loadable(const std::string &ext)
+{
+    try
+    {
+        // remove period and convert to lowercase
+        return Image::loadable_formats().count(to_lower(ext.size() > 1 && ext[0] == '.' ? ext.substr(1) : ext)) > 0;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 //
 // end static methods
 //

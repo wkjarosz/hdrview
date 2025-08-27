@@ -95,6 +95,9 @@ void HDRViewApp::load_images(const vector<string> &filenames)
     string channel_selector = "";
     for (size_t i = 0; i < filenames.size(); ++i)
     {
+        if (filenames[i].empty())
+            continue;
+
         if (filenames[i][0] == ':')
         {
             channel_selector = filenames[i].substr(1);
@@ -112,8 +115,9 @@ void HDRViewApp::open_image()
 
     // due to this bug, we just allow all file types on safari:
     // https://stackoverflow.com/questions/72013027/safari-cannot-upload-file-w-unknown-mime-type-shows-tempimage,
-    string extensions =
-        host_is_safari() ? "*" : fmt::format(".{}", fmt::join(Image::loadable_formats(), ",.")) + ",image/*";
+    string extensions = host_is_safari() ? "*"
+                                         : fmt::format(".{},.zip", fmt::join(Image::loadable_formats(), ",.")) +
+                                               ",image/*" + ",application/zip";
 
     // open the browser's file selector, and pass the file to the upload handler
     spdlog::debug("Requesting file from user...");
@@ -132,7 +136,7 @@ void HDRViewApp::open_image()
             }
         });
 #else
-    string extensions = fmt::format("*.{}", fmt::join(Image::loadable_formats(), " *."));
+    string extensions = fmt::format("*.{} *.zip", fmt::join(Image::loadable_formats(), " *."));
 
     load_images(pfd::open_file("Open image(s)", "", {"Image files", extensions}, pfd::opt::multiselect).result());
 #endif

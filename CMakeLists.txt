@@ -841,9 +841,22 @@ if(nvpro_core2_ADDED)
   target_include_directories(nvgui PUBLIC ${nvpro_core2_SOURCE_DIR})
   # nvgui includes imgui.h as <imgui/imgui.h>, so add its parent include directory
   target_include_directories(nvgui PUBLIC ${hello_imgui_SOURCE_DIR}/external)
-
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES nvgui)
+
+CPMAddPackage(
+  NAME miniz
+  # GITHUB_REPOSITORY richgel999/miniz
+  VERSION 3.0.2
+  URL https://github.com/richgel999/miniz/releases/download/3.0.2/miniz-3.0.2.zip
+  DOWNLOAD_ONLY YES
+)
+if(miniz_ADDED)
+  message(STATUS "miniz library added")
+  add_library(miniz "${miniz_SOURCE_DIR}/miniz.c" "${miniz_SOURCE_DIR}/miniz.h")
+  target_include_directories(miniz PUBLIC ${miniz_SOURCE_DIR})
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES miniz)
 
 # ============================================================================
 # Compile remainder of the codebase with compiler warnings turned on

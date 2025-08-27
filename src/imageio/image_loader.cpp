@@ -3,6 +3,7 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "miniz.h"
 #include <fstream>
 
 using namespace std;
@@ -102,17 +103,30 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
     return short_names;
 }
 
+// helper: case-insensitive extension check for .zip
+static bool has_zip_extension(const string &fn)
+{
+    try
+    {
+        return to_lower(fs::path(fn).extension().u8string()) == ".zip";
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
                                             ImagePtr to_replace, const string &channel_selector)
 {
     if (should_select)
         spdlog::debug("will select image '{}'", filename);
+
     auto load_one = [this](const fs::path &path, const string_view buffer, bool add_to_recent, bool should_select,
                            ImagePtr to_replace, const string &channel_selector)
     {
         try
         {
-            spdlog::info("Loading file '{}'...", path.u8string());
             pending_images.emplace_back(std::make_shared<PendingImages>(path.u8string(), buffer, path, channel_selector,
                                                                         add_to_recent, should_select, to_replace));
         }
@@ -123,24 +137,82 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         }
     };
 
+    // helper to extract zip buffer and schedule each contained image via load_one
+    auto extract_and_schedule = [&](string_view zip_buffer, const string &zip_name, bool select_first)
+    {
+        mz_zip_archive zip;
+        memset(&zip, 0, sizeof(zip));
+        if (!mz_zip_reader_init_mem(&zip, zip_buffer.data(), zip_buffer.size(), 0))
+        {
+            spdlog::error("Failed to open zip archive '{}'", zip_name);
+            return 0;
+        }
+
+        int num        = (int)mz_zip_reader_get_num_files(&zip);
+        int num_images = 0;
+        spdlog::info("Zip '{}' contains {} files.", zip_name, num);
+        for (int i = 0; i < num; ++i)
+        {
+            mz_zip_archive_file_stat stat;
+            if (!mz_zip_reader_file_stat(&zip, i, &stat))
+                continue;
+            if (stat.m_is_directory)
+                continue;
+
+            fs::path entry_path = fs::path(stat.m_filename);
+            if (!Image::loadable(entry_path.extension().u8string()))
+                continue;
+
+            size_t uncompressed_size = 0;
+            void  *p                 = mz_zip_reader_extract_to_heap(&zip, i, &uncompressed_size, 0);
+            if (!p)
+                continue;
+
+            string_view data{reinterpret_cast<char *>(p), uncompressed_size};
+            // build a combined filename that prepends the zip path to the entry path
+            string combined = zip_name + "/" + entry_path.u8string();
+            // schedule async load; do not add each entry to recent files
+            load_one(fs::u8path(combined), data, false, select_first && num_images == 0, nullptr, channel_selector);
+            ++num_images;
+            mz_free(p);
+        }
+
+        if (!num_images)
+            spdlog::warn("No loadable images found in '{}'", zip_name);
+
+        mz_zip_reader_end(&zip);
+
+        return num_images;
+    };
+
     auto path = fs::u8path(filename.c_str());
     if (!buffer.empty())
     {
         // if we have a buffer, we assume it is a file that has been downloaded
         // and we load it directly from the buffer
-        spdlog::info("Loading image from buffer with size {} bytes", buffer.size());
-        load_one(path, buffer, true, should_select, to_replace, channel_selector);
+        auto [sz, unit] = human_readable_size(buffer.size());
+        spdlog::info("Loading image '{}' from {:.0f} {} buffer.", filename, sz, unit);
+
+        if (has_zip_extension(filename))
+        {
+            remove_recent_file(filename);
+            if (extract_and_schedule(buffer, filename, should_select))
+                add_recent_file(filename);
+        }
+        else
+            load_one(path, buffer, false, should_select, to_replace, channel_selector);
+        return;
     }
 #if !defined(__EMSCRIPTEN__)
     else if (fs::is_directory(path))
     {
-        spdlog::info("Loading images from folder '{}'", path.u8string());
+        spdlog::info("Loading images from folder '{}'", filename);
 
         std::error_code ec;
         auto            canon_p = fs::weakly_canonical(path, ec);
         if (ec)
         {
-            spdlog::error("Could not access directory '{}': {}.", path.u8string(), ec.message());
+            spdlog::error("Could not access directory '{}': {}.", filename, ec.message());
             return;
         }
         m_directories.emplace(canon_p);
@@ -151,13 +223,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             if (entry.is_directory())
                 continue;
 
-            auto ext = entry.path().extension().u8string();
-            // remove period and convert to lowercase
-            if (ext.size() > 1 && ext[0] == '.')
-                ext = to_lower(ext.substr(1));
-            else
-                ext = to_lower(ext);
-            if (Image::loadable_formats().count(ext))
+            if (Image::loadable(entry.path().extension().u8string()))
             {
                 m_existing_files.emplace(entry);
                 entries.emplace_back(entry);
@@ -168,13 +234,16 @@ void BackgroundImageLoader::background_load(const string filename, const string_
              [](const auto &a, const auto &b) { return natural_less(a.path().string(), b.path().string()); });
 
         for (size_t i = 0; i < entries.size(); ++i)
+        {
+            spdlog::info("Loading file '{}'...", entries[i].path().u8string());
             load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, channel_selector);
+        }
 
         // this moves the file to the top of the recent files list
         add_recent_file(filename);
     }
 #endif
-    else
+    else // a regular file
     {
         // remove any instances of filename from the recent files list until we know it has loaded successfully
         remove_recent_file(filename);
@@ -184,7 +253,30 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             return;
         }
 
-        load_one(filename, buffer, true, should_select, to_replace, channel_selector);
+        // If the file is a zip on disk, read into memory and extract
+        if (has_zip_extension(filename))
+        {
+            std::ifstream is(filename, std::ios::binary);
+            if (!is)
+            {
+                spdlog::error("Failed to open zip file '{}'", filename);
+                return;
+            }
+            std::vector<char> buf((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char>());
+            if (buf.empty())
+            {
+                spdlog::warn("Zip file '{}' is empty", filename);
+                return;
+            }
+
+            if (extract_and_schedule(string_view(buf.data(), buf.size()), filename, should_select))
+                add_recent_file(filename);
+        }
+        else
+        {
+            spdlog::info("Loading file '{}'...", filename);
+            load_one(filename, buffer, true, should_select, to_replace, channel_selector);
+        }
     }
 }
 
@@ -212,13 +304,7 @@ bool BackgroundImageLoader::add_watched_directory(const std::filesystem::path &d
         if (entry.is_directory() || !entry.is_regular_file())
             continue;
 
-        auto ext = entry.path().extension().u8string();
-        // remove period and convert to lowercase
-        if (ext.size() > 1 && ext[0] == '.')
-            ext = to_lower(ext.substr(1));
-        else
-            ext = to_lower(ext);
-        if (Image::loadable_formats().count(ext))
+        if (Image::loadable(entry.path().extension().u8string()))
             m_existing_files.emplace(entry);
     }
 
@@ -329,13 +415,7 @@ void BackgroundImageLoader::load_new_and_modified_files()
             if (m_existing_files.count(p))
                 continue;
 
-            auto ext = p.extension().u8string();
-            // remove period and convert to lowercase
-            if (ext.size() > 1 && ext[0] == '.')
-                ext = to_lower(ext.substr(1));
-            else
-                ext = to_lower(ext);
-            if (Image::loadable_formats().count(ext))
+            if (Image::loadable(p.extension().u8string()))
             {
                 m_existing_files.emplace(p);
                 background_load(p.u8string());
