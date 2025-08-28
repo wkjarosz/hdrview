@@ -325,7 +325,7 @@ CPMAddPackage("gh:fmtlib/fmt#9.1.0")
 if(fmt_ADDED)
   message(STATUS "fmt library added")
 endif()
-list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
+# list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
 
 CPMAddPackage(
   NAME spdlog
@@ -714,7 +714,7 @@ endif()
 
 if(TARGET lcms2)
   message(STATUS "Using lcms2 target already provided by libjxl")
-  list(APPEND HDRVIEW_DEPENDENCIES "lcms2")
+  # list(APPEND HDRVIEW_DEPENDENCIES "lcms2")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_LCMS2)
 else()
   find_package(LCMS2 REQUIRED)
