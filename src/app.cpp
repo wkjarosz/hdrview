@@ -140,6 +140,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                                 return img->draw_channel_stats();
                                         }};
     DockableWindow file_window{"Images", "ImagesSpace", [this] { draw_file_window(); }};
+    file_window.focusWindowAtNextFrame = true;
+
     DockableWindow info_window{"Info", "RightSpace", [this]
                                {
                                    if (auto img = current_image())
@@ -488,7 +490,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         auto any_window_hidden = [this]()
         {
             for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu && !dockableWindow.isVisible)
+                if (dockableWindow.canBeClosed && !dockableWindow.isVisible)
                     return true;
             return false;
         };
@@ -497,7 +499,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                           if (dockableWindow.canBeClosed)
                                dockableWindow.isVisible = true;
                    },
                    any_window_hidden});
@@ -506,7 +508,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                           if (dockableWindow.canBeClosed)
                                dockableWindow.isVisible = false;
                    },
                    [any_window_hidden]() { return !any_window_hidden(); }});
@@ -515,12 +517,13 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                           if (dockableWindow.canBeClosed)
                                dockableWindow.isVisible = true;
                        m_params.imGuiWindowParams.showMenuBar   = true;
                        m_params.imGuiWindowParams.showStatusBar = true;
                        m_params.callbacks.AddEdgeToolbar(
                            EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+                       toolbar_on = true;
                    },
                    [this, any_window_hidden]()
                    {
@@ -532,11 +535,12 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]()
                    {
                        for (auto &dockableWindow : m_params.dockingParams.dockableWindows)
-                           if (dockableWindow.canBeClosed && dockableWindow.includeInViewMenu)
+                           if (dockableWindow.canBeClosed)
                                dockableWindow.isVisible = false;
                        m_params.imGuiWindowParams.showMenuBar   = false;
                        m_params.imGuiWindowParams.showStatusBar = false;
                        m_params.callbacks.edgesToolbars.erase(EdgeToolbarType::Top);
+                       toolbar_on = false;
                    },
                    [this, any_window_hidden]()
                    {
