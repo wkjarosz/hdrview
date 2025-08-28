@@ -80,8 +80,17 @@ jobs:
         run: |
           RESULT="${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView-${{ matrix.config.arch }}.dmg"
           test -f $RESULT && rm $RESULT
-          sudo killall -9 XProtectBehaviorService
-          sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app
+          for i in 1 2 3; do
+            if sudo create-dmg --window-size 500 300 --icon-size 96 --volname "HDRView Installer" --app-drop-link 360 105 --icon HDRView.app 130 105 $RESULT ${{github.workspace}}/build/${{ matrix.config.arch }}/HDRView.app; then
+              break
+            elif [ $i -eq 3 ]; then
+              echo "create-dmg failed after 3 attempts"
+              exit 1
+            else
+              echo "create-dmg failed, retrying ($i)..."
+              sleep 2
+            fi
+          done
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
