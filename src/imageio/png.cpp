@@ -232,15 +232,19 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     json metadata = json::object();
 
 #if defined(PNG_TEXT_SUPPORTED)
-    /* png_get_text also returns the number of text chunks in *num_text */
-    png_textp *text_ptr = nullptr;
-    spdlog::info("Text supported!!!!!!!!!!!!!!!!!!!!!");
-    int num_text = png_get_text(png_ptr, info_ptr.get(), text_ptr, nullptr);
-    for (int t = 0; t < num_text; ++t)
+    /* png_get_text returns the number of text chunks and writes a pointer to
+       an array of png_text into the provided address. Pass the address of a
+       png_textp variable. */
+    png_textp text_ptr = nullptr;
+    int       num_text = png_get_text(png_ptr, info_ptr.get(), &text_ptr, nullptr);
+    if (num_text > 0 && text_ptr)
     {
-        spdlog::info("text {} : {}", text_ptr[t]->key, text_ptr[t]->text);
-        metadata["header"][text_ptr[t]->key] = {
-            {"value", text_ptr[t]->text}, {"string", text_ptr[t]->text}, {"type", "string"}};
+        for (int t = 0; t < num_text; ++t)
+        {
+            spdlog::info("text {} : {}", text_ptr[t].key, text_ptr[t].text);
+            metadata["header"][text_ptr[t].key] = {
+                {"value", text_ptr[t].text}, {"string", text_ptr[t].text}, {"type", "string"}};
+        }
     }
 #endif
 
