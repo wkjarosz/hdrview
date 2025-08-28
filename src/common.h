@@ -291,13 +291,16 @@ inline T square(T value)
 
 bool                          starts_with(std::string_view s, std::string_view prefix);
 bool                          ends_with(std::string_view s, std::string_view suffix);
-std::string_view              get_extension(std::string_view path);
+std::string                   get_extension(std::string_view path);
 std::string_view              get_filename(std::string_view path);
 std::string_view              get_basename(std::string_view path);
 std::vector<std::string_view> split(std::string_view text, std::string_view delim);
 std::string                   to_lower(std::string_view str);
 std::string                   to_upper(std::string_view str);
 std::pair<float, std::string> human_readable_size(size_t bytes);
+// Helper to split "archive.zip/entry.png" into zip and entry
+bool split_zip_entry(std::string_view filename, std::string &zip_path, std::string &entry_path);
+
 /// Run func on each line of the input string
 void process_lines(std::string_view input, std::function<void(std::string_view &)> op);
 /// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true

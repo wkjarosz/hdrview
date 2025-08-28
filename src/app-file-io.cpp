@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "image.h"
 #include <fstream>
 
 #ifdef __EMSCRIPTEN__

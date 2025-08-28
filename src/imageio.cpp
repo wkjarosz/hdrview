@@ -133,15 +133,15 @@ vector<ImagePtr> Image::load(istream &is, string_view filename, string_view chan
 void Image::save(ostream &os, string_view _filename, float gain, bool sRGB, bool dither) const
 {
     string extension = to_lower(get_extension(_filename));
-    if (extension == "exr")
+    if (extension == ".exr")
         return save_exr_image(*this, os, _filename);
-    else if (extension == "jpg" || extension == "jpeg")
+    else if (extension == ".jpg" || extension == ".jpeg")
         return save_uhdr_image(*this, os, _filename, gain);
-    else if (extension == "pfm")
+    else if (extension == ".pfm")
         return save_pfm_image(*this, os, _filename, gain);
-    else if (extension == "qoi")
+    else if (extension == ".qoi")
         return save_qoi_image(*this, os, _filename, gain, sRGB, dither);
-    else if (extension == "png")
+    else if (extension == ".png")
         return save_png_image(*this, os, _filename, gain, sRGB, dither);
     else
         return save_stb_image(*this, os, _filename, gain, sRGB, dither);

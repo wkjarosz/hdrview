@@ -5,6 +5,9 @@
 #include <string>
 
 #ifdef __EMSCRIPTEN__
+#include "app.h"
+#include "common.h"
+#include "imgui.h"
 #include <emscripten_browser_clipboard.h>
 
 EM_JS(bool, isSafari, (), {
@@ -79,6 +82,19 @@ const char *file_manager_name()
     return "File Manager";
 #else
     return "Unknown";
+#endif
+}
+
+const char *reveal_in_file_manager_text()
+{
+#if defined(_WIN32)
+    return "Reveal in Windows Explorer";
+#elif defined(__APPLE__)
+    return "Reveal in Finder";
+#elif defined(__linux__)
+    return "Reveal in File Manager";
+#else
+    return "Reveal in unknown File Manager";
 #endif
 }
 

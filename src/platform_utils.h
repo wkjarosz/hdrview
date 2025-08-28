@@ -4,6 +4,7 @@ void        setup_imgui_clipboard();
 bool        host_is_apple();
 bool        host_is_safari();
 const char *file_manager_name();
+const char *reveal_in_file_manager_text();
 void        show_in_file_manager(const char *filename);
 
 #ifdef __EMSCRIPTEN__

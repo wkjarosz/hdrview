@@ -6,10 +6,12 @@
 
 #include "common.h"
 #include <algorithm>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 
 using namespace std;
+namespace fs = std::filesystem;
 
 bool starts_with(string_view s, string_view prefix) { return s.rfind(prefix, 0) == 0; }
 bool ends_with(string_view s, string_view suffix)
@@ -17,11 +19,16 @@ bool ends_with(string_view s, string_view suffix)
     return s.find(suffix, s.length() - suffix.length()) != string::npos;
 }
 
-string_view get_extension(string_view path)
+string get_extension(string_view path)
 {
-    if (auto last_dot = path.find_last_of("."); last_dot != string::npos)
-        return path.substr(last_dot + 1);
-    return "";
+    try
+    {
+        return fs::path(path).extension().u8string();
+    }
+    catch (...)
+    {
+        return "";
+    }
 }
 
 string_view get_filename(string_view path)
@@ -77,6 +84,30 @@ vector<string_view> split(string_view text, string_view delim)
     }
 
     return result;
+}
+
+bool split_zip_entry(string_view filename, string &zip_path, string &entry_path)
+{
+    if (to_lower(get_extension(filename)) == ".zip")
+    {
+        zip_path = filename;
+        entry_path.clear();
+        return true;
+    }
+    else
+    {
+        auto pos = filename.find(".zip/");
+        if (pos == string::npos)
+        {
+            zip_path = filename;
+            entry_path.clear();
+            return false;
+        }
+        pos += 4; // include ".zip"
+        zip_path   = filename.substr(0, pos);
+        entry_path = filename.substr(pos + 1);
+        return true;
+    }
 }
 
 void process_lines(string_view input, function<void(string_view)> op)

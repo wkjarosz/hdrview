@@ -1,4 +1,5 @@
 #include "app.h"
+#include "image.h"
 #include "imgui_internal.h"
 
 #ifdef HELLOIMGUI_USE_SDL2
@@ -10,6 +11,22 @@ using namespace HelloImGui;
 
 static constexpr float MIN_ZOOM = 0.01f;
 static constexpr float MAX_ZOOM = 512.f;
+
+float2 HDRViewApp::pixel_at_vp_pos(float2 vp_pos) const
+{
+    float2 pixel = (vp_pos - (m_translate + center_offset())) / m_zoom;
+    if (auto img = current_image())
+        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
+    return pixel;
+}
+
+float2 HDRViewApp::vp_pos_at_pixel(float2 pixel) const
+{
+    if (auto img = current_image())
+        pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
+
+    return m_zoom * pixel + (m_translate + center_offset());
+}
 
 void HDRViewApp::fit_display_window()
 {

@@ -1,8 +1,10 @@
 #include "app.h"
 
 #include "colormap.h"
+#include "colorspace.h"
 #include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
+#include "image.h"
 #include "imcmd_command_palette.h"
 #include "imgui_internal.h"
 #include "implot.h"
@@ -181,7 +183,7 @@ void HDRViewApp::draw_status_bar()
     }
     else if (m_remaining_download > 0)
     {
-        ImGui::ScopedFont{nullptr, 4.0f};
+        ImGui::ScopedFont f{nullptr, 4.0f};
         ImGui::ProgressBar((100 - m_remaining_download) / 100.f, EmToVec2(15.f, 0.f), "Downloading image");
         ImGui::SameLine();
     }
@@ -502,6 +504,9 @@ void HDRViewApp::draw_menus()
         MenuItem(action("Reload image"));
         MenuItem(action("Reload all images"));
         MenuItem(action("Watch for changes"));
+
+        ImGui::Separator();
+        MenuItem(action(reveal_in_file_manager_text()));
 #endif
 
         ImGui::Separator();
@@ -1093,9 +1098,13 @@ void HDRViewApp::draw_file_window()
                     ImGui::SetClipboardText(img->filename.c_str());
 
 #if !defined(__EMSCRIPTEN__)
-                std::string menu_label = fmt::format("Reveal in {}", file_manager_name());
+                std::string menu_label = fmt::format(reveal_in_file_manager_text(), file_manager_name());
                 if (ImGui::MenuItem(menu_label.c_str()))
-                    show_in_file_manager(img->filename.c_str());
+                {
+                    string filename, entry_fn;
+                    split_zip_entry(img->filename, filename, entry_fn);
+                    show_in_file_manager(filename.c_str());
+                }
 #endif
                 // Select as current image
                 ImGui::BeginDisabled(is_current);

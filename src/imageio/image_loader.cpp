@@ -103,44 +103,6 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
     return short_names;
 }
 
-// helper: case-insensitive extension check for .zip
-static bool has_zip_extension(const string &fn)
-{
-    try
-    {
-        return to_lower(fs::path(fn).extension().u8string()) == ".zip";
-    }
-    catch (...)
-    {
-        return false;
-    }
-}
-
-// Helper to split "archive.zip/entry.png" into zip and entry
-static bool split_zip_entry(const string &filename, string &zip_path, string &entry_path)
-{
-    if (has_zip_extension(filename))
-    {
-        zip_path = filename;
-        entry_path.clear();
-        return true;
-    }
-    else
-    {
-        auto pos = filename.find(".zip/");
-        if (pos == string::npos)
-        {
-            zip_path = filename;
-            entry_path.clear();
-            return false;
-        }
-        pos += 4; // include ".zip"
-        zip_path   = filename.substr(0, pos);
-        entry_path = filename.substr(pos + 1);
-        return true;
-    }
-}
-
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
                                             ImagePtr to_replace, const string &channel_selector)
 {
@@ -229,7 +191,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         auto [sz, unit] = human_readable_size(buffer.size());
         spdlog::info("Loading image '{}' from {:.0f} {} buffer.", filename, sz, unit);
 
-        if (has_zip_extension(filename))
+        if (to_lower(get_extension(filename)) == ".zip")
         {
             remove_recent_file(filename);
             if (extract_and_schedule(buffer, filename, should_select, to_replace))

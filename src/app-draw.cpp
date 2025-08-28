@@ -1,7 +1,9 @@
 #include "app.h"
 
 #include "colormap.h"
+#include "common.h"
 #include "fonts.h"
+#include "image.h"
 
 #include <random>
 

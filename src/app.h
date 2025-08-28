@@ -4,11 +4,10 @@
 
 #pragma once
 
-#include "common.h"
-#include "image.h"
-
+#include "box.h"
 #include "colormap.h"
-#include "hello_imgui/hello_imgui.h"
+#include "hello_imgui/runner_callbacks.h"
+#include "hello_imgui/runner_params.h"
 #include "imageio/image_loader.h"
 #include "imgui_ext.h"
 #include "renderpass.h"
@@ -92,21 +91,9 @@ public:
     //   3) pixel (pixel): coordinates within the displayed image (origin: top-left of image)
     //-----------------------------------------------------------------------------
     /// Calculates the image pixel coordinates of the given position in the viewport
-    float2 pixel_at_vp_pos(float2 vp_pos) const
-    {
-        float2 pixel = (vp_pos - (m_translate + center_offset())) / m_zoom;
-        if (auto img = current_image())
-            pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-        return pixel;
-    }
+    float2 pixel_at_vp_pos(float2 vp_pos) const;
     /// Calculates the position inside the viewport for the given image pixel coordinate.
-    float2 vp_pos_at_pixel(float2 pixel) const
-    {
-        if (auto img = current_image())
-            pixel = select(m_flip, img->display_window.max - pixel - 1, pixel);
-
-        return m_zoom * pixel + (m_translate + center_offset());
-    }
+    float2 vp_pos_at_pixel(float2 pixel) const;
     /// Calculates the app position at the given image pixel coordinate.
     float2 app_pos_at_pixel(float2 pixel) const { return app_pos_at_vp_pos(vp_pos_at_pixel(pixel)); }
     /// Calculates the image pixel coordinates at the given app position.

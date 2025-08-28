@@ -2,6 +2,7 @@
 
 #include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
+#include "image.h"
 #include "platform_utils.h"
 
 #include <ImfThreading.h>
@@ -434,12 +435,26 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     {
         const auto always_enabled = []() { return true; };
+        const auto if_img         = [this]() { return current_image() != nullptr; };
         using ImGui::Action;
         auto add = [this](const Action &a) { m_actions[a.name] = a; };
         add(Action{"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
 #if !defined(__EMSCRIPTEN__)
         add(Action{"Open folder...", ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});
+
+        add(Action{reveal_in_file_manager_text(), ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0,
+                   [this]()
+                   {
+                       if (auto img = current_image())
+                       {
+                           string filename, entry_fn;
+                           split_zip_entry(img->filename, filename, entry_fn);
+                           show_in_file_manager(filename.c_str());
+                       }
+                   },
+                   if_img});
+
 #endif
 
 #if defined(__EMSCRIPTEN__)
@@ -658,8 +673,6 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        s_mouse_mode_enabled[MouseMode_ColorInspector] = true;
                    },
                    always_enabled, false, &s_mouse_mode_enabled[MouseMode_ColorInspector]});
-
-        auto if_img = [this]() { return current_image() != nullptr; };
 
         // below actions are only available if there is an image
 
