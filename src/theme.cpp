@@ -9,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 using namespace std;
+using namespace HelloImGui;
 
 static void apply_hdrview_dark_theme()
 {
@@ -210,8 +211,8 @@ static void apply(int theme)
 {
     if (theme >= 0)
     {
-        ImGuiTheme::ImGuiTheme_ t                                           = (ImGuiTheme::ImGuiTheme_)theme;
-        HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = t;
+        ImGuiTheme::ImGuiTheme_ t                               = (ImGuiTheme::ImGuiTheme_)theme;
+        GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = t;
         ImGuiTheme::ApplyTheme(t);
     }
     else if (theme == Theme::DARK_THEME)
@@ -335,10 +336,7 @@ void Theme::load(json j)
         }
     }
     else
-    {
-        theme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme =
-            ImGuiTheme::ImGuiTheme_FromName(name.c_str());
-    }
+        theme = GetRunnerParams()->imGuiWindowParams.tweakedTheme.Theme = ImGuiTheme::ImGuiTheme_FromName(name.c_str());
 
     apply(theme);
 }

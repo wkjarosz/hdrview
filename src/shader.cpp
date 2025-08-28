@@ -22,21 +22,22 @@ static const size_t num_extensions = sizeof(shader_extensions) / sizeof(shader_e
 
 string Shader::from_asset(string_view basename)
 {
+    using namespace HelloImGui;
     for (size_t i = 0; i < num_extensions; ++i)
     {
         string filename = basename.data() + shader_extensions[i];
 
-        if (!HelloImGui::AssetExists(filename))
+        if (!AssetExists(filename))
             continue;
 
-        string full_path = HelloImGui::assetFileFullPath(filename);
+        string full_path = assetFileFullPath(filename);
         spdlog::info("Loading shader from \"{}\"...", full_path);
-        auto shader_txt = HelloImGui::LoadAssetFileData(filename.c_str());
+        auto shader_txt = LoadAssetFileData(filename.c_str());
         if (shader_txt.data == nullptr)
             throw std::runtime_error(fmt::format("Cannot load shader from file \"{}\"", filename));
 
         auto source = string((char *)shader_txt.data, shader_txt.dataSize);
-        HelloImGui::FreeAssetFileData(&shader_txt);
+        FreeAssetFileData(&shader_txt);
         return source;
     }
     throw std::runtime_error(fmt::format(

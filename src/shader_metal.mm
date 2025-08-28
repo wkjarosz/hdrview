@@ -16,6 +16,7 @@
 // #include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
+using HelloImGui::GetMetalGlobals;
 using std::string;
 
 id<MTLFunction> compile_metal_shader(id<MTLDevice> device, const std::string &name, const std::string &type_str,
@@ -63,10 +64,9 @@ id<MTLFunction> compile_metal_shader(id<MTLDevice> device, const std::string &na
 
 Shader::Shader(RenderPass *render_pass, const std::string &name, const std::string &vs_source,
                const std::string &fs_source, BlendMode blend_mode) :
-    m_render_pass(render_pass),
-    m_name(name), m_blend_mode(blend_mode)
+    m_render_pass(render_pass), m_name(name), m_blend_mode(blend_mode)
 {
-    auto           &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto           &gMetalGlobals = GetMetalGlobals();
     id<MTLDevice>   device        = gMetalGlobals.caMetalLayer.device;
     id<MTLFunction> fragment_func = compile_metal_shader(device, name, "fragment", fs_source),
                     vertex_func   = compile_metal_shader(device, name, "vertex", vs_source);
@@ -185,7 +185,7 @@ Shader::~Shader()
 
 void Shader::set_buffer(const std::string &name, VariableType dtype, size_t ndim, const size_t *shape, const void *data)
 {
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     auto it = m_buffers.find(name);
     if (it == m_buffers.end())
@@ -350,9 +350,7 @@ void Shader::begin()
     }
 }
 
-void Shader::end()
-{ /* No-op */
-}
+void Shader::end() { /* No-op */ }
 
 void Shader::draw_array(PrimitiveType primitive_type, size_t offset, size_t count, bool indexed, size_t instances)
 {

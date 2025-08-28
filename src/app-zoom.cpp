@@ -6,6 +6,7 @@
 #endif
 
 using namespace std;
+using namespace HelloImGui;
 
 static constexpr float MIN_ZOOM = 0.01f;
 static constexpr float MAX_ZOOM = 512.f;
@@ -225,8 +226,7 @@ void HDRViewApp::calculate_viewport()
     // screens. For retina displays, io.DisplaySize is the size of the window in logical pixels so we it by
     // io.DisplayFramebufferScale to get the physical pixel size for the framebuffer.
     spdlog::trace("DisplayFramebufferScale: {}, DpiWindowSizeFactor: {}, DpiFontLoadingFactor: {}",
-                  float2{io.DisplayFramebufferScale}, HelloImGui::DpiWindowSizeFactor(),
-                  HelloImGui::DpiFontLoadingFactor());
+                  float2{io.DisplayFramebufferScale}, DpiWindowSizeFactor(), DpiFontLoadingFactor());
     m_viewport_min  = {0.f, 0.f};
     m_viewport_size = io.DisplaySize;
     if (auto id = m_params.dockingParams.dockSpaceIdFromName("MainDockSpace"))

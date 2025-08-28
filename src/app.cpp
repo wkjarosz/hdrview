@@ -22,6 +22,7 @@
 #endif
 
 using namespace std;
+using namespace HelloImGui;
 
 static HDRViewApp *g_hdrview = nullptr;
 
@@ -70,11 +71,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // m_params.dpiAwareParams.fontRenderingScale  = 0.5f;
 #endif
 
-    bool use_edr = HelloImGui::hasEdrSupport() && !force_sdr;
+    bool use_edr = hasEdrSupport() && !force_sdr;
 
     if (force_sdr)
         spdlog::info("Forcing SDR display mode (display {} support EDR mode)",
-                     HelloImGui::hasEdrSupport() ? "would otherwise" : "would not anyway");
+                     hasEdrSupport() ? "would otherwise" : "would not anyway");
 
     m_params.rendererBackendOptions.requestFloatBuffer = use_edr;
     spdlog::info("Launching GUI with {} display support.", use_edr ? "EDR" : "SDR");
@@ -90,7 +91,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // Setting this to true allows multiple viewports where you can drag windows outside out the main window in
     // order to put their content into new native windows
     m_params.imGuiWindowParams.enableViewports        = false;
-    m_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
+    m_params.imGuiWindowParams.defaultImGuiWindowType = DefaultImGuiWindowType::ProvideFullScreenDockSpace;
     // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
 
     // Load additional font
@@ -114,8 +115,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     m_top_toolbar_options.sizeEm          = 2.3f;
     m_top_toolbar_options.WindowPaddingEm = ImVec2(0.7f, 0.35f);
-    m_params.callbacks.AddEdgeToolbar(
-        HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+    m_params.callbacks.AddEdgeToolbar(EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
 
     //
     // Status bar
@@ -129,83 +129,38 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // Dockable windows
     //
 
-    HelloImGui::DockableWindow histogram_window;
-    histogram_window.label             = "Histogram";
-    histogram_window.dockSpaceName     = "HistogramSpace";
-    histogram_window.isVisible         = true;
-    histogram_window.rememberIsVisible = true;
-    histogram_window.GuiFunction       = [this]
-    {
-        if (auto img = current_image())
-            img->draw_histogram();
-    };
-
-    HelloImGui::DockableWindow channel_stats_window;
-    channel_stats_window.label             = "Channel statistics";
-    channel_stats_window.dockSpaceName     = "HistogramSpace";
-    channel_stats_window.isVisible         = true;
-    channel_stats_window.rememberIsVisible = true;
-    channel_stats_window.GuiFunction       = [this]
-    {
-        if (auto img = current_image())
-            return img->draw_channel_stats();
-    };
-
-    HelloImGui::DockableWindow file_window;
-    file_window.label             = "Images";
-    file_window.dockSpaceName     = "ImagesSpace";
-    file_window.isVisible         = true;
-    file_window.rememberIsVisible = true;
-    file_window.GuiFunction       = [this] { draw_file_window(); };
-
-    HelloImGui::DockableWindow info_window;
-    info_window.label             = "Info";
-    info_window.dockSpaceName     = "RightSpace";
-    info_window.isVisible         = true;
-    info_window.rememberIsVisible = true;
-    // info_window.imGuiWindowFlags  = ImGuiWindowFlags_HorizontalScrollbar;
-    info_window.GuiFunction = [this]
-    {
-        if (auto img = current_image())
-            return img->draw_info();
-    };
-
-    HelloImGui::DockableWindow colorspace_window;
-    colorspace_window.label             = "Colorspace";
-    colorspace_window.dockSpaceName     = "RightSpace";
-    colorspace_window.isVisible         = true;
-    colorspace_window.rememberIsVisible = true;
+    DockableWindow histogram_window{"Histogram", "HistogramSpace", [this]
+                                    {
+                                        if (auto img = current_image())
+                                            img->draw_histogram();
+                                    }};
+    DockableWindow channel_stats_window{"Channel statistics", "HistogramSpace", [this]
+                                        {
+                                            if (auto img = current_image())
+                                                return img->draw_channel_stats();
+                                        }};
+    DockableWindow file_window{"Images", "ImagesSpace", [this] { draw_file_window(); }};
+    DockableWindow info_window{"Info", "RightSpace", [this]
+                               {
+                                   if (auto img = current_image())
+                                       return img->draw_info();
+                               }};
+    DockableWindow colorspace_window{"Colorspace", "RightSpace", [this]
+                                     {
+                                         if (auto img = current_image())
+                                             return img->draw_colorspace();
+                                     }};
     colorspace_window.imGuiWindowFlags =
         ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_AlwaysVerticalScrollbar;
-    colorspace_window.GuiFunction = [this]
-    {
-        if (auto img = current_image())
-            return img->draw_colorspace();
-    };
 
-    HelloImGui::DockableWindow pixel_inspector_window;
-    pixel_inspector_window.label             = "Pixel inspector";
-    pixel_inspector_window.dockSpaceName     = "RightBottomSpace";
-    pixel_inspector_window.isVisible         = true;
-    pixel_inspector_window.rememberIsVisible = true;
-    pixel_inspector_window.GuiFunction       = [this] { draw_pixel_inspector_window(); };
-
-    // the window showing the spdlog messages
-    HelloImGui::DockableWindow log_window;
-    log_window.label             = "Log";
-    log_window.dockSpaceName     = "LogSpace";
-    log_window.isVisible         = false;
-    log_window.rememberIsVisible = true;
-    log_window.GuiFunction       = [this]
-    { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); };
+    DockableWindow pixel_inspector_window{"Pixel inspector", "RightBottomSpace",
+                                          [this] { draw_pixel_inspector_window(); }};
+    DockableWindow log_window{
+        "Log", "LogSpace",
+        [this] { ImGui::GlobalSpdLogWindow().draw(font("mono regular"), ImGui::GetStyle().FontSizeBase); }, false};
 
 #if !defined(__EMSCRIPTEN__)
-    HelloImGui::DockableWindow watched_folders_window;
-    watched_folders_window.label             = "Watched Folders";
-    watched_folders_window.dockSpaceName     = "ImagesSpace";
-    watched_folders_window.isVisible         = true;
-    watched_folders_window.rememberIsVisible = true;
-    watched_folders_window.GuiFunction       = [this] { m_image_loader.draw_gui(); };
+    DockableWindow watched_folders_window{"Watched Folders", "ImagesSpace", [this] { m_image_loader.draw_gui(); }};
 #endif
 
 #ifdef _WIN32
@@ -247,12 +202,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 #endif
     };
 
-    m_params.dockingParams.dockingSplits = {
-        HelloImGui::DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
-        HelloImGui::DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
-        HelloImGui::DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
-        HelloImGui::DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
-        HelloImGui::DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
+    m_params.dockingParams.dockingSplits = {DockingSplit{"MainDockSpace", "HistogramSpace", ImGuiDir_Left, 0.2f},
+                                            DockingSplit{"HistogramSpace", "ImagesSpace", ImGuiDir_Down, 0.75f},
+                                            DockingSplit{"MainDockSpace", "LogSpace", ImGuiDir_Down, 0.25f},
+                                            DockingSplit{"MainDockSpace", "RightSpace", ImGuiDir_Right, 0.25f},
+                                            DockingSplit{"RightSpace", "RightBottomSpace", ImGuiDir_Down, 0.5f}};
 
 #if defined(HELLOIMGUI_USE_GLFW3)
     m_params.callbacks.PostInit_AddPlatformBackendCallbacks = [this, in_files]
@@ -309,18 +263,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     // Load user settings at `PostInit` and save them at `BeforeExit`
     //
 
-    m_params.iniFolderType      = HelloImGui::IniFolderType::AppUserConfigFolder;
+    m_params.iniFolderType      = IniFolderType::AppUserConfigFolder;
     m_params.iniFilename        = "HDRView/settings.ini";
     m_params.callbacks.PostInit = [this, force_exposure, force_gamma, force_dither, force_apple_keys]
     {
         setup_imgui_clipboard();
 
-        spdlog::info("Loading user settings from '{}'", HelloImGui::IniSettingsLocation(m_params));
+        spdlog::info("Loading user settings from '{}'", IniSettingsLocation(m_params));
 
-        auto s = HelloImGui::LoadUserPref("UserSettings");
+        auto s = LoadUserPref("UserSettings");
         if (!s.empty())
         {
-
             try
             {
                 json j = json::parse(s);
@@ -388,7 +341,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         Image::cleanup_default_textures();
         Colormap::cleanup();
 
-        spdlog::info("Saving user settings to '{}'", HelloImGui::IniSettingsLocation(m_params));
+        spdlog::info("Saving user settings to '{}'", IniSettingsLocation(m_params));
 
         json j;
         j["recent files"]            = m_image_loader.recent_files();
@@ -418,27 +371,25 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
         m_theme.save(j);
 
-        HelloImGui::SaveUserPref("UserSettings", j.dump(4));
+        SaveUserPref("UserSettings", j.dump(4));
     };
 
     // Change style
     m_params.callbacks.SetupImGuiStyle = [this]()
     {
-        auto s = HelloImGui::LoadUserPref("UserSettings");
-        if (s.empty())
-        {
-            spdlog::warn("No user settings found, using defaults.");
-            return;
-        }
-
+        json j;
         try
         {
-            m_theme.load(json::parse(s));
+            auto s = LoadUserPref("UserSettings");
+            if (!s.empty())
+                j = json::parse(s);
         }
-        catch (json::exception &e)
+        catch (const std::exception &e)
         {
             spdlog::error("Error while parsing user settings: {}", e.what());
         }
+
+        m_theme.load(j);
     };
 
     m_params.callbacks.ShowGui = [this]()
@@ -514,17 +465,16 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
                    []() {}, always_enabled, false, &m_open_command_palette});
 
-        static bool toolbar_on = m_params.callbacks.edgesToolbars.find(HelloImGui::EdgeToolbarType::Top) !=
-                                 m_params.callbacks.edgesToolbars.end();
+        static bool toolbar_on =
+            m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top) != m_params.callbacks.edgesToolbars.end();
         add(Action{"Show top toolbar", ICON_MY_TOOLBAR, 0, 0,
                    [this]()
                    {
                        if (!toolbar_on)
-                           m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                           m_params.callbacks.edgesToolbars.erase(EdgeToolbarType::Top);
                        else
                            m_params.callbacks.AddEdgeToolbar(
-                               HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); },
-                               m_top_toolbar_options);
+                               EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
                    },
                    always_enabled, false, &toolbar_on});
         add(Action{"Show menu bar", ICON_MY_HIDE_ALL_WINDOWS, 0, 0, []() {}, always_enabled, false,
@@ -570,7 +520,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        m_params.imGuiWindowParams.showMenuBar   = true;
                        m_params.imGuiWindowParams.showStatusBar = true;
                        m_params.callbacks.AddEdgeToolbar(
-                           HelloImGui::EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
+                           EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
                    },
                    [this, any_window_hidden]()
                    {
@@ -586,7 +536,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                dockableWindow.isVisible = false;
                        m_params.imGuiWindowParams.showMenuBar   = false;
                        m_params.imGuiWindowParams.showStatusBar = false;
-                       m_params.callbacks.edgesToolbars.erase(HelloImGui::EdgeToolbarType::Top);
+                       m_params.callbacks.edgesToolbars.erase(EdgeToolbarType::Top);
                    },
                    [this, any_window_hidden]()
                    {
@@ -606,10 +556,12 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    &m_show_debug_window});
         add(Action{"Theme tweak window", ICON_MY_TWEAK_THEME, 0, 0, []() {}, always_enabled, false,
                    &m_show_tweak_window});
+        add(Action{"Locate settings file", ICON_MY_DEVELOPER_WINDOW, 0, 0,
+                   [this]() { show_in_file_manager(IniSettingsLocation(m_params).c_str()); }, always_enabled, false});
 
         for (size_t i = 0; i < m_params.dockingParams.dockableWindows.size(); ++i)
         {
-            HelloImGui::DockableWindow &w = m_params.dockingParams.dockableWindows[i];
+            DockableWindow &w = m_params.dockingParams.dockableWindows[i];
             add(Action{fmt::format("Show {} window", w.label).c_str(), window_info[i].icon, window_info[i].chord, 0,
                        []() {}, [&w]() { return w.canBeClosed; }, false, &w.isVisible});
         }

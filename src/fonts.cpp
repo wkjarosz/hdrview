@@ -3,6 +3,7 @@
 #include "timer.h"
 
 using namespace std;
+using namespace HelloImGui;
 
 ImFont *HDRViewApp::font(const string &name) const
 {
@@ -24,43 +25,42 @@ void HDRViewApp::load_fonts()
     spdlog::info("Loading fonts...");
     auto load_font = [](const string &font_path, float size = 14.f)
     {
-        if (!HelloImGui::AssetExists(font_path))
+        if (!AssetExists(font_path))
             spdlog::critical("Cannot find the font asset '{}'!");
 
-        HelloImGui::LoadFont(font_path, size);
+        LoadFont(font_path, size);
 
         // merge in icon font
-        if (!HelloImGui::AssetExists(FONT_ICON_FILE_NAME_MY))
+        if (!AssetExists(FONT_ICON_FILE_NAME_MY))
             spdlog::critical("Cannot find the icon font '{}'", FONT_ICON_FILE_NAME_MY);
 
-        HelloImGui::FontLoadingParams iconFontParams;
+        FontLoadingParams iconFontParams;
         iconFontParams.mergeToLastFont       = true;
         iconFontParams.fontConfig.PixelSnapH = true;
 
 #if defined(HDRVIEW_ICONSET_FA6)
         auto icon_font_size                        = 0.85f * size;
         iconFontParams.fontConfig.GlyphMinAdvanceX = iconFontParams.fontConfig.GlyphMaxAdvanceX =
-            icon_font_size * HelloImGui::DpiFontLoadingFactor() * 1.25f;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.05f;
+            icon_font_size * DpiFontLoadingFactor() * 1.25f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.05f;
 #elif defined(HDRVIEW_ICONSET_LC)
         auto icon_font_size                     = size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.03f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.20f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.03f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.20f;
 #elif defined(HDRVIEW_ICONSET_MS)
         auto icon_font_size                     = 1.28571429f * size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.01f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.2f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.01f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.2f;
 #elif defined(HDRVIEW_ICONSET_MD)
         auto icon_font_size                     = size;
-        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.01f;
-        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * HelloImGui::DpiFontLoadingFactor() * 0.2f;
+        iconFontParams.fontConfig.GlyphOffset.x = icon_font_size * DpiFontLoadingFactor() * 0.01f;
+        iconFontParams.fontConfig.GlyphOffset.y = icon_font_size * DpiFontLoadingFactor() * 0.2f;
 #elif defined(HDRVIEW_ICONSET_MDI)
-        auto icon_font_size = size;
-        iconFontParams.fontConfig.GlyphOffset =
-            icon_font_size * HelloImGui::DpiFontLoadingFactor() * float2{0.02f, 0.1f};
+        auto icon_font_size                   = size;
+        iconFontParams.fontConfig.GlyphOffset = icon_font_size * DpiFontLoadingFactor() * float2{0.02f, 0.1f};
 
 #endif
-        return HelloImGui::LoadFont(FONT_ICON_FILE_NAME_MY, icon_font_size, iconFontParams);
+        return LoadFont(FONT_ICON_FILE_NAME_MY, icon_font_size, iconFontParams);
     };
 
     m_sans_regular = load_font("fonts/Roboto/Roboto-Regular.ttf");

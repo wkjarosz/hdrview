@@ -19,15 +19,15 @@
 #include "nvgui/property_editor.hpp"
 
 using namespace std;
+using namespace HelloImGui;
 
 void Image::draw_histogram()
 {
     static int        bin_type  = 1;
     static ImPlotCond plot_cond = ImPlotCond_Always;
-    float             combo_width =
-        std::max(HelloImGui::EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
-                                                  2.f * ImGui::GetStyle().ItemSpacing.x) -
-                                              (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
+    float combo_width = std::max(EmSize(5.f), 0.5f * (ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                                      2.f * ImGui::GetStyle().ItemSpacing.x) -
+                                                  (ImGui::CalcTextSize("X:").x + ImGui::GetStyle().ItemInnerSpacing.x));
     ImGui::BeginGroup();
     ImGui::AlignTextToFramePadding();
     ImGui::Text("Y:");
@@ -521,8 +521,8 @@ void Image::draw_colorspace()
                   {
                       bool modified = false;
                       auto wpn      = white_point_names();
-                      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < HelloImGui::EmSize(8.f)
-                                                  ? HelloImGui::EmSize(8.f)
+                      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < EmSize(8.f)
+                                                  ? EmSize(8.f)
                                                   : -FLT_MIN); // use the full width of the column
                       auto open_combo = ImGui::BeginCombo("##White point", white_point_name(white_point),
                                                           ImGuiComboFlags_HeightLargest);
@@ -680,7 +680,7 @@ void Image::draw_colorspace()
         // property_name("Diagram");
         // ImGui::SameLine(label_size);
         // ImGui::Indent();
-        float const size = ImMax(ImGui::GetContentRegionAvail().x, HelloImGui::EmSize(8.f));
+        float const size = ImMax(ImGui::GetContentRegionAvail().x, EmSize(8.f));
 
         ImGui::PushFont(hdrview()->font("sans regular"), ImGui::GetStyle().FontSizeBase);
 

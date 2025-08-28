@@ -12,11 +12,12 @@
 #include "platform_utils.h"
 
 using namespace std;
+using namespace HelloImGui;
 
 void HDRViewApp::run()
 {
     ImPlot::CreateContext();
-    HelloImGui::Run(m_params);
+    Run(m_params);
     ImPlot::DestroyContext();
 }
 
@@ -173,7 +174,7 @@ void HDRViewApp::draw_status_bar()
     if (auto num = m_image_loader.num_pending_images())
     {
         // ImGui::PushFont(m_sans_regular, 8.f);
-        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), HelloImGui::EmToVec2(15.f, 0.f),
+        ImGui::ProgressBar(-1.0f * (float)ImGui::GetTime(), EmToVec2(15.f, 0.f),
                            fmt::format("Loading {} image{}", num, num > 1 ? "s" : "").c_str());
         ImGui::SameLine();
         // ImGui::PopFont();
@@ -181,7 +182,7 @@ void HDRViewApp::draw_status_bar()
     else if (m_remaining_download > 0)
     {
         ImGui::ScopedFont{nullptr, 4.0f};
-        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, HelloImGui::EmToVec2(15.f, 0.f), "Downloading image");
+        ImGui::ProgressBar((100 - m_remaining_download) / 100.f, EmToVec2(15.f, 0.f), "Downloading image");
         ImGui::SameLine();
     }
 
@@ -189,7 +190,7 @@ void HDRViewApp::draw_status_bar()
 
     auto sized_text = [&](float em_size, const string &text, float align = 1.f)
     {
-        float item_width = HelloImGui::EmSize(em_size);
+        float item_width = EmSize(em_size);
         float text_width = ImGui::CalcTextSize(text.c_str()).x;
         float spacing    = ImGui::GetStyle().ItemInnerSpacing.x;
 
@@ -220,7 +221,7 @@ void HDRViewApp::draw_status_bar()
         ImGui::BeginDisabled(!in_viewport);
         ImGui::SameLine();
         auto  fpy       = ImGui::GetStyle().FramePadding.y;
-        float drag_size = HelloImGui::EmSize(5.f);
+        float drag_size = EmSize(5.f);
         ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
         auto y = ImGui::GetCursorPosY();
         ImGui::SetCursorPosY(y + fpy);
@@ -239,14 +240,13 @@ void HDRViewApp::draw_status_bar()
 
         ImGui::PushID("Current");
         ImGui::SameLine(x);
-        pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, HelloImGui::EmSize(25.f));
+        pixel_color_widget(hovered_pixel, m_status_color_mode, 2, false, EmSize(25.f));
         ImGui::PopID();
 
         float real_zoom = m_zoom * pixel_ratio();
         int   numer     = (real_zoom < 1.0f) ? 1 : (int)round(real_zoom);
         int   denom     = (real_zoom < 1.0f) ? (int)round(1.0f / real_zoom) : 1;
-        x               = ImGui::GetIO().DisplaySize.x - HelloImGui::EmSize(11.f) -
-            (m_show_FPS ? HelloImGui::EmSize(14.f) : HelloImGui::EmSize(0.f));
+        x               = ImGui::GetIO().DisplaySize.x - EmSize(11.f) - (m_show_FPS ? EmSize(14.f) : EmSize(0.f));
         sized_text(10.f, fmt::format("{:7.2f}% ({:d}:{:d})", real_zoom * 100, numer, denom));
     }
 
@@ -256,7 +256,7 @@ void HDRViewApp::draw_status_bar()
         ImGui::Checkbox("Enable idling", &m_params.fpsIdling.enableIdling);
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        ImGui::Text("FPS: %.1f%s", HelloImGui::FrameRate(), m_params.fpsIdling.isIdling ? " (Idling)" : "");
+        ImGui::Text("FPS: %.1f%s", FrameRate(), m_params.fpsIdling.isIdling ? " (Idling)" : "");
     }
 
     ImGui::PopStyleVar();
@@ -268,8 +268,8 @@ void HDRViewApp::draw_color_picker()
         return;
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * HelloImGui::EmSize()),
-                            ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_FirstUseEver,
+                            ImVec2(0.5f, 0.0f));
     if (ImGui::Begin("Choose custom background color", &m_show_bg_color_picker,
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking))
     {
@@ -280,11 +280,11 @@ void HDRViewApp::draw_color_picker()
                             ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_NoAlpha,
                             (float *)&previous_bg_color);
 
-        ImGui::Dummy(HelloImGui::EmToVec2(1.f, 0.5f));
-        if (ImGui::Button("OK", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
+        ImGui::Dummy(EmToVec2(1.f, 0.5f));
+        if (ImGui::Button("OK", EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
             m_show_bg_color_picker = false;
         ImGui::SameLine();
-        if (ImGui::Button("Cancel", HelloImGui::EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
+        if (ImGui::Button("Cancel", EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
         {
             m_bg_color             = previous_bg_color;
             m_show_bg_color_picker = false;
@@ -299,7 +299,7 @@ void HDRViewApp::draw_tweak_window()
         return;
 
     // auto &tweakedTheme = HelloImGui::GetRunnerParams()->imGuiWindowParams.tweakedTheme;
-    ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Theme Tweaks", &m_show_tweak_window))
     {
         ImGui::PushItemWidth(ImGui::GetWindowWidth() * 0.50f);
@@ -340,7 +340,7 @@ void HDRViewApp::draw_develop_windows()
 
     if (m_show_debug_window)
     {
-        ImGui::SetNextWindowSize(HelloImGui::EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(EmToVec2(20.f, 46.f), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Debug", &m_show_debug_window))
         {
             if (ImGui::BeginTabBar("Debug tabs", ImGuiTabBarFlags_None))
@@ -641,6 +641,7 @@ void HDRViewApp::draw_menus()
         ImGui::MenuItem(action("Show Dear ImGui demo window"));
         ImGui::MenuItem(action("Show debug window"));
         ImGui::MenuItem(action("Show developer menu"));
+        ImGui::MenuItem(action("Locate settings file"));
 
         ImGui::EndMenu();
     }
@@ -672,7 +673,7 @@ void HDRViewApp::draw_pixel_inspector_window()
         ImGui::SameLine();
         float drag_size =
             0.5f * (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x - ImGui::GetFrameHeight());
-        if (drag_size > HelloImGui::EmSize(1.f))
+        if (drag_size > EmSize(1.f))
         {
             auto fpy = ImGui::GetStyle().FramePadding.y;
             ImGui::PushStyleVarY(ImGuiStyleVar_FramePadding, 0.f);
@@ -1256,7 +1257,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::SameLine();
 
-        ImGui::SetNextItemWidth(std::max(HelloImGui::EmSize(1.f), ImGui::GetContentRegionAvail().x));
+        ImGui::SetNextItemWidth(std::max(EmSize(1.f), ImGui::GetContentRegionAvail().x));
         if (ImGui::SliderFloat("##Playback speed", &m_playback_speed, 0.1f, 60.f, "%.1f fps",
                                ImGuiInputTextFlags_EnterReturnsTrue))
             m_playback_speed = clamp(m_playback_speed, 1.f / 20.f, 60.f);
@@ -1274,7 +1275,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::TextUnformatted(ICON_MY_EXPOSURE);
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(8));
+    ImGui::SetNextItemWidth(EmSize(8));
     ImGui::SliderFloat("##ExposureSlider", &m_exposure_live, -9.f, 9.f, "Exposure: %+5.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
@@ -1290,7 +1291,7 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::TextUnformatted(ICON_MY_OFFSET);
     ImGui::PopFont();
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(6));
+    ImGui::SetNextItemWidth(EmSize(6));
     ImGui::SliderFloat("##OffsetSlider", &m_offset_live, -1.f, 1.f, "Offset: %+1.2f");
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
@@ -1308,7 +1309,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine();
 
-    ImGui::SetNextItemWidth(HelloImGui::EmSize(4));
+    ImGui::SetNextItemWidth(EmSize(4));
     static const char *items[] = {ICON_MY_TONEMAPPING ": γ", ICON_MY_TONEMAPPING ": +", ICON_MY_TONEMAPPING ": ±"};
     if (ImGui::BeginCombo("##Tonemapping", items[m_tonemap]))
     {
@@ -1334,7 +1335,7 @@ void HDRViewApp::draw_top_toolbar()
 
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-    const auto tonemap_width = HelloImGui::EmSize(7);
+    const auto tonemap_width = EmSize(7);
     switch (m_tonemap)
     {
     default: [[fallthrough]];
@@ -1422,17 +1423,16 @@ void HDRViewApp::draw_command_palette()
     auto &io = ImGui::GetIO();
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
-                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowSize(ImVec2{400, 0}, ImGuiCond_Always);
 
     float remaining_height            = ImGui::GetMainViewport()->Size.y - ImGui::GetCursorScreenPos().y;
-    float search_result_window_height = remaining_height - 2.f * HelloImGui::EmSize();
+    float search_result_window_height = remaining_height - 2.f * EmSize();
 
     // Set constraints to allow horizontal resizing based on content
-    ImGui::SetNextWindowSizeConstraints(
-        ImVec2(0, 0), ImVec2(io.DisplaySize.x - 2.f * HelloImGui::EmSize(), search_result_window_height));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0),
+                                        ImVec2(io.DisplaySize.x - 2.f * EmSize(), search_result_window_height));
 
     if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1572,18 +1572,17 @@ void HDRViewApp::draw_about_dialog()
     auto &io = ImGui::GetIO();
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
-                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
 
     ImGui::SetNextWindowFocus();
     constexpr float icon_size     = 128.f;
-    float2          col_width     = {icon_size + HelloImGui::EmSize(), 32 * HelloImGui::EmSize()};
+    float2          col_width     = {icon_size + EmSize(), 32 * EmSize()};
     float           content_width = col_width[0] + col_width[1] + ImGui::GetStyle().ItemSpacing.x;
     ImGui::SetNextWindowContentSize(float2{content_width, 0.f});
     ImGui::SetNextWindowSizeConstraints(
         ImVec2{2 * icon_size, icon_size},
         float2{content_width + 2.f * ImGui::GetStyle().WindowPadding.x + ImGui::GetStyle().ScrollbarSize,
-               io.DisplaySize.y - 7.f * HelloImGui::EmSize()});
+               io.DisplaySize.y - 7.f * EmSize()});
 
     if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_AlwaysAutoResize))
@@ -1591,9 +1590,9 @@ void HDRViewApp::draw_about_dialog()
         m_open_help = false;
         ImGui::Spacing();
 
-        auto platform_backend = [](HelloImGui::PlatformBackendType type)
+        auto platform_backend = [](PlatformBackendType type)
         {
-            using T = HelloImGui::PlatformBackendType;
+            using T = PlatformBackendType;
             switch (type)
             {
             case T::FirstAvailable: return "FirstAvailable";
@@ -1604,9 +1603,9 @@ void HDRViewApp::draw_about_dialog()
             }
         }(m_params.platformBackendType);
 
-        auto renderer_backend = [](HelloImGui::RendererBackendType type)
+        auto renderer_backend = [](RendererBackendType type)
         {
-            using T = HelloImGui::RendererBackendType;
+            using T = RendererBackendType;
             switch (type)
             {
             case T::FirstAvailable: return "FirstAvailable";
@@ -1628,8 +1627,8 @@ void HDRViewApp::draw_about_dialog()
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
             // right align the image
-            ImGui::AlignCursor(icon_size + 0.5f * HelloImGui::EmSize(), 1.f);
-            HelloImGui::ImageFromAsset("app_settings/icon-256.png", {icon_size, icon_size}); // show the app icon
+            ImGui::AlignCursor(icon_size + 0.5f * EmSize(), 1.f);
+            ImageFromAsset("app_settings/icon-256.png", {icon_size, icon_size}); // show the app icon
 
             ImGui::TableNextColumn();
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1]);
@@ -1675,7 +1674,7 @@ void HDRViewApp::draw_about_dialog()
             ImGui::PopFont();
             ImGui::TableNextColumn();
 
-            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - HelloImGui::EmSize());
+            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - EmSize());
             ImGui::PushFont(m_sans_regular, ImGui::GetStyle().FontSizeBase);
             ImGui::TextUnformatted(desc);
             ImGui::PopFont();
@@ -1781,12 +1780,12 @@ void HDRViewApp::draw_about_dialog()
             if (ImGui::BeginTabItem("Build info"))
             {
                 ImGui::PushFont(m_mono_regular, 0.f);
-                ImVec2 child_size = ImVec2(0, HelloImGui::EmSize(12.f));
+                ImVec2 child_size = ImVec2(0, EmSize(12.f));
                 ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_FrameStyle);
 
                 ImGui::Text("ImGui version: %s", ImGui::GetVersion());
 
-                ImGui::Text("EDR support: %s", HelloImGui::hasEdrSupport() ? "yes" : "no");
+                ImGui::Text("EDR support: %s", hasEdrSupport() ? "yes" : "no");
 #ifdef __EMSCRIPTEN__
                 ImGui::Text("define: __EMSCRIPTEN__");
 #endif
@@ -1833,7 +1832,7 @@ void HDRViewApp::draw_about_dialog()
             ImGui::EndTabBar();
         }
 
-        if (ImGui::Button("Dismiss", HelloImGui::EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
+        if (ImGui::Button("Dismiss", EmToVec2(8.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape) ||
             ImGui::Shortcut(ImGuiKey_Enter) || ImGui::Shortcut(ImGuiKey_Space) ||
             ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Slash))
             ImGui::CloseCurrentPopup();

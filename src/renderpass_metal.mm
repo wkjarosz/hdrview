@@ -10,6 +10,8 @@
 
 #include <fmt/core.h>
 
+using HelloImGui::GetMetalGlobals;
+
 RenderPass::RenderPass(bool write_depth, bool clear) :
     m_clear(clear), m_depth_test(write_depth ? DepthTest::Less : DepthTest::Always), m_depth_write(write_depth),
     m_cull_mode(CullMode::Back),
@@ -28,7 +30,7 @@ void RenderPass::begin()
         throw std::runtime_error("RenderPass::begin(): render pass is already active!");
 #endif
 
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLCommandBuffer> command_buffer = [gMetalGlobals.mtlCommandQueue commandBuffer];
     if (command_buffer == nullptr)
@@ -180,7 +182,7 @@ void RenderPass::set_depth_test(DepthTest depth_test, bool depth_write)
         depth_desc.depthCompareFunction = func;
         depth_desc.depthWriteEnabled    = depth_write;
 
-        auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+        auto &gMetalGlobals = GetMetalGlobals();
 
         id<MTLDepthStencilState> depth_state =
             [gMetalGlobals.caMetalLayer.device newDepthStencilStateWithDescriptor:depth_desc];

@@ -7,6 +7,8 @@
 
 #import <Metal/Metal.h>
 
+using HelloImGui::GetMetalGlobals;
+
 void Texture::init()
 {
     int2 size = m_size;
@@ -22,7 +24,7 @@ void Texture::init()
     default: throw std::invalid_argument("Texture::Texture(): invalid wrap mode!");
     }
 
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLDevice>         device       = gMetalGlobals.caMetalLayer.device;
     MTLSamplerDescriptor *sampler_desc = [MTLSamplerDescriptor new];
@@ -51,7 +53,7 @@ Texture::~Texture()
 
 void Texture::upload(const uint8_t *data)
 {
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLTexture> texture = (__bridge id<MTLTexture>)m_texture_handle;
 
@@ -91,7 +93,7 @@ void Texture::upload(const uint8_t *data)
 
 void Texture::upload_sub_region(const uint8_t *data, const int2 &origin, const int2 &size)
 {
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLTexture> texture = (__bridge id<MTLTexture>)m_texture_handle;
 
@@ -131,7 +133,7 @@ void Texture::upload_sub_region(const uint8_t *data, const int2 &origin, const i
 
 void Texture::download(uint8_t *data)
 {
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLCommandQueue>       command_queue   = gMetalGlobals.mtlCommandQueue;
     id<MTLCommandBuffer>      command_buffer  = [command_queue commandBuffer];
@@ -282,7 +284,7 @@ void Texture::resize(const int2 &size)
     default: throw std::invalid_argument("Texture::Texture(): invalid pixel format!");
     }
 
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     bool                  mipmap       = m_min_interpolation_mode == InterpolationMode::Trilinear;
     id<MTLDevice>         device       = gMetalGlobals.caMetalLayer.device;
@@ -312,7 +314,7 @@ void Texture::resize(const int2 &size)
 
 void Texture::generate_mipmap()
 {
-    auto &gMetalGlobals = HelloImGui::GetMetalGlobals();
+    auto &gMetalGlobals = GetMetalGlobals();
 
     id<MTLTexture>            texture         = (__bridge id<MTLTexture>)m_texture_handle;
     id<MTLCommandQueue>       command_queue   = gMetalGlobals.mtlCommandQueue;
