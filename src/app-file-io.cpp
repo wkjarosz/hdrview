@@ -306,9 +306,9 @@ void HDRViewApp::close_image(int index)
     if (closing_current)
     {
         // select the next image down the list
-        int next = next_visible_image_index(index, Forward);
+        int next = next_visible_image_index(index, Direction_Forward);
         if (next < index) // there is no visible image after this one, go to previous visible
-            next = next_visible_image_index(index, Backward);
+            next = next_visible_image_index(index, Direction_Backward);
         set_current_image_index(next < index ? next : next - 1);
     }
     else if (m_current > index && m_current > 0)
@@ -320,9 +320,9 @@ void HDRViewApp::close_image(int index)
 
     if (closing_reference)
     {
-        int next_ref = next_visible_image_index(index, Forward);
+        int next_ref = next_visible_image_index(index, Direction_Forward);
         if (next_ref < index)
-            next_ref = next_visible_image_index(index, Backward);
+            next_ref = next_visible_image_index(index, Direction_Backward);
         set_reference_image_index(next_ref < index ? next_ref : next_ref - 1);
     }
     else if (m_reference > index && m_reference > 0)

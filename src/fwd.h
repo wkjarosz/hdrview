@@ -59,20 +59,22 @@ class Timer;
 using ConstImagePtr = std::shared_ptr<const Image>;
 using ImagePtr      = std::shared_ptr<Image>;
 
-enum EChannel : int
+using Channels = int;
+enum Channels_ : Channels
 {
-    RGB = 0,
-    RED,
-    GREEN,
-    BLUE,
-    ALPHA,
-    Y,
+    Channels_RGBA = 0,
+    Channels_RGB,
+    Channels_Red,
+    Channels_Green,
+    Channels_Blue,
+    Channels_Alpha,
+    Channels_Y,
 
-    NUM_CHANNELS
+    Channels_COUNT
 };
 
-using Tonemap_ = int;
-enum Tonemap : Tonemap_
+using Tonemap = int;
+enum Tonemap_ : Tonemap
 {
     Tonemap_Gamma = 0,
     Tonemap_FalseColor,
@@ -81,53 +83,43 @@ enum Tonemap : Tonemap_
     Tonemap_COUNT
 };
 
-enum EBlendMode : int
+using BlendMode = int;
+enum BlendMode_ : BlendMode
 {
-    NORMAL_BLEND = 0,
-    MULTIPLY_BLEND,
-    DIVIDE_BLEND,
-    ADD_BLEND,
-    AVERAGE_BLEND,
-    SUBTRACT_BLEND,
-    DIFFERENCE_BLEND,
-    RELATIVE_DIFFERENCE_BLEND,
+    BlendMode_Normal = 0,
+    BlendMode_Multiply,
+    BlendMode_Divide,
+    BlendMode_Add,
+    BlendMode_Average,
+    BlendMode_Subtract,
+    BlendMode_Relative_Subtract,
+    BlendMode_Difference,
+    BlendMode_Relative_Difference,
 
-    NUM_BLEND_MODES
+    BlendMode_COUNT
 };
 
-enum EBGMode : int
+using BackgroundMode = int;
+enum BackgroundMode_ : BackgroundMode
 {
-    BG_BLACK = 0,
-    BG_WHITE,
-    BG_DARK_CHECKER,
-    BG_LIGHT_CHECKER,
-    BG_CUSTOM_COLOR,
+    BGMode_Black = 0,
+    BGMode_White,
+    BGMode_Dark_Checker,
+    BGMode_Light_Checker,
+    BGMode_Custom_Color,
 
-    NUM_BG_MODES
+    BGMode_COUNT
 };
 
-enum EDirection
+using Direction = int;
+enum Direction_ : Direction
 {
-    Forward,
-    Backward,
+    Direction_Forward = 0,
+    Direction_Backward,
 };
 
-using Orientation_ = int;
-enum Orientation : Orientation_
-{
-    None        = 0,
-    TopLeft     = 1,
-    TopRight    = 2,
-    BottomRight = 3,
-    BottomLeft  = 4,
-    LeftTop     = 5,
-    RightTop    = 6,
-    RightBottom = 7,
-    LeftBottom  = 8,
-};
-
-using AxisScale_ = int;
-enum AxisScale : AxisScale_
+using AxisScale = int;
+enum AxisScale_ : AxisScale
 {
     AxisScale_Linear = 0,
     AxisScale_SRGB,
@@ -137,8 +129,8 @@ enum AxisScale : AxisScale_
     AxisScale_COUNT
 };
 
-using Target_ = int;
-enum Target : Target_
+using Target = int;
+enum Target_ : Target
 {
     Target_Primary   = 0,
     Target_Secondary = 1,
@@ -146,7 +138,7 @@ enum Target : Target_
     Target_COUNT
 };
 
-inline const char *target_name(Target t)
+inline const char *target_name(Target_ t)
 {
     switch (t)
     {
@@ -156,8 +148,8 @@ inline const char *target_name(Target t)
     }
 }
 
-using MouseMode_ = int;
-enum MouseMode : MouseMode_
+using MouseMode = int;
+enum MouseMode_ : MouseMode
 {
     MouseMode_PanZoom = 0,
     MouseMode_ColorInspector,

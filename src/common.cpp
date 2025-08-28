@@ -154,29 +154,27 @@ string indent(string_view input, bool also_indent_first, int amount)
     return oss.str();
 }
 
-const vector<string> &tonemap_names()
-{
-    static const vector<string> names{"Gamma", "False color", "Positive/Negative"};
-    return names;
-}
-
 const vector<string> &channel_names()
 {
-    static const vector<string> names{"RGBA", "Red", "Green", "Blue", "Alpha", "Luminance"};
+    static const vector<string> names{"RGBA", "RGB", "Red", "Green", "Blue", "Alpha", "Luminance"};
     return names;
 }
 
 const vector<string> &blend_mode_names()
 {
     static const vector<string> names{
-        "Normal", "Multiply", "Divide", "Add", "Average", "Subtract", "Difference", "Relative difference",
+        "Normal",
+        "Multiply",
+        "Divide",
+        "Add",
+        "Average",
+        "Subtract",
+        "Relative subtract",
+        "Difference",
+        "Relative difference",
     };
     return names;
 }
-
-string channel_to_string(EChannel channel) { return channel_names()[channel]; }
-
-string blend_mode_to_string(EBlendMode mode) { return blend_mode_names()[mode]; }
 
 static inline int code_point_length(char first)
 {

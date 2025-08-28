@@ -199,7 +199,7 @@ bool Image::loadable(const std::string &ext)
 // end static methods
 //
 
-float2 PixelStats::x_limits(float e, AxisScale_ scale) const
+float2 PixelStats::x_limits(float e, AxisScale scale) const
 {
     float2 ret;
     ret[1] = pow(2.f, -e) * (scale == AxisScale_Linear ? 1.2f : (scale == AxisScale_SRGB ? 1.5f : 4.f));
@@ -233,7 +233,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         }
 
         // intersect with reference image window
-        if (ref && desired.blend_mode != NORMAL_BLEND)
+        if (ref && desired.blend_mode != BlendMode_Normal)
         {
             croi = croi.intersect(rroi);
             spdlog::info("c and r roi's: {}..{}; {}..{}", croi.min, croi.max, rroi.min, rroi.max);
@@ -524,7 +524,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
     }
 }
 
-void Image::set_null_texture(Target target)
+void Image::set_null_texture(Target_ target)
 {
     auto s = hdrview()->shader();
     auto t = target_name(target);
@@ -532,7 +532,7 @@ void Image::set_null_texture(Target target)
     for (int c = 0; c < 4; ++c) s->set_texture(fmt::format("{}_{}_texture", t, c), black_texture());
 }
 
-void Image::set_as_texture(Target target)
+void Image::set_as_texture(Target_ target)
 {
     auto                s         = hdrview()->shader();
     auto                t         = target_name(target);
@@ -938,7 +938,7 @@ string Image::to_string() const
     return out;
 }
 
-int Image::next_visible_group_index(int index, EDirection direction) const
+int Image::next_visible_group_index(int index, Direction_ direction) const
 {
     return next_matching_index(groups, index, [](size_t, const ChannelGroup &g) { return g.visible; }, direction);
 }
@@ -948,7 +948,7 @@ int Image::nth_visible_group_index(int n) const
     return (int)nth_matching_index(groups, (size_t)n, [](size_t, const ChannelGroup &g) { return g.visible; });
 }
 
-float4 Image::raw_pixel(int2 p, Target target) const
+float4 Image::raw_pixel(int2 p, Target_ target) const
 {
     if (!contains(p))
         return float4{0.f};
@@ -963,7 +963,7 @@ float4 Image::raw_pixel(int2 p, Target target) const
 }
 
 /// Reconstruct the raw pixel value into an RGBA value (like the first stage of the fragment shader)
-float4 Image::rgba_pixel(int2 p, Target target) const
+float4 Image::rgba_pixel(int2 p, Target_ target) const
 {
     if (!contains(p))
         return float4{0.f};

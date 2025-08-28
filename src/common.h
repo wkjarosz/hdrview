@@ -306,11 +306,8 @@ void process_lines(std::string_view input, std::function<void(std::string_view &
 /// Indent the input string by amount spaces. Skips the first line by default, unless also_indent_first is true
 std::string                     indent(std::string_view input, bool also_indent_first = false, int amount = 2);
 std::string                     add_line_numbers(std::string_view input);
-const std::vector<std::string> &tonemap_names();
 const std::vector<std::string> &channel_names();
 const std::vector<std::string> &blend_mode_names();
-std::string                     channel_to_string(EChannel channel);
-std::string                     blend_mode_to_string(EBlendMode mode);
 
 /**
     @brief Finds the index of the next element matching a given criterion in a vector.
@@ -332,7 +329,7 @@ std::string                     blend_mode_to_string(EBlendMode mode);
 
 template <typename T, typename Criterion>
 int next_matching_index(const std::vector<T> &vec, int current_index, Criterion criterion,
-                        EDirection direction = Forward)
+                        Direction_ direction = Direction_Forward)
 {
     if (vec.empty())
         return current_index; // Return current index if vector is empty
@@ -340,7 +337,7 @@ int next_matching_index(const std::vector<T> &vec, int current_index, Criterion 
     const size_t size = vec.size();
 
     size_t index_increment =
-        (direction == EDirection::Forward) ? 1 : (size - 1); // Increment/decrement based on direction
+        (direction == Direction_Forward) ? 1 : (size - 1); // Increment/decrement based on direction
 
     for (size_t i = (current_index + index_increment) % size, count = 0; count < size;
          i = (i + index_increment) % size, ++count)

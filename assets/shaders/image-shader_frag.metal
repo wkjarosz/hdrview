@@ -4,31 +4,33 @@
 using namespace metal;
 
 // These need to stay in sync with the various enums in fwd.h
-#define CHANNEL_RGB 0
-#define CHANNEL_RED 1
-#define CHANNEL_GREEN 2
-#define CHANNEL_BLUE 3
-#define CHANNEL_ALPHA 4
-#define CHANNEL_Y 5
+#define Channels_RGBA   0
+#define Channels_RGB    1
+#define Channels_Red    2
+#define Channels_Green  3
+#define Channels_Blue   4
+#define Channels_Alpha  5
+#define Channels_Y      6
 
 #define Tonemap_Gamma            0
 #define Tonemap_FalseColor       1
 #define Tonemap_PositiveNegative 2
 
-#define NORMAL_BLEND 0
-#define MULTIPLY_BLEND 1
-#define DIVIDE_BLEND 2
-#define ADD_BLEND 3
-#define AVERAGE_BLEND 4
-#define SUBTRACT_BLEND 5
-#define DIFFERENCE_BLEND 6
-#define RELATIVE_DIFFERENCE_BLEND 7
+#define BlendMode_Normal 0
+#define BlendMode_Multiply 1
+#define BlendMode_Divide 2
+#define BlendMode_Add 3
+#define BlendMode_Average 4
+#define BlendMode_Subtract 5
+#define BlendMode_Relative_Subtract 6
+#define BlendMode_Difference 7
+#define BlendMode_Relative_Difference 8
 
-#define BG_BLACK 0
-#define BG_WHITE 1
-#define BG_DARK_CHECKER 2
-#define BG_LIGHT_CHECKER 3
-#define BG_CUSTOM_COLOR 4
+#define BGMode_Black 0
+#define BGMode_White 1
+#define BGMode_Dark_Checker 2
+#define BGMode_Light_Checker 3
+#define BGMode_Custom_Color 4
 
 #define RGBA_Channels 0
 #define RGB_Channels 1
@@ -96,12 +98,13 @@ float4 choose_channel(float4 rgba, int channel, const float3 yw)
 {
     switch (channel)
     {
-        case CHANNEL_RGB:   return rgba;
-        case CHANNEL_RED:   return float4(rgba.rrr, 1.0);
-        case CHANNEL_GREEN: return float4(rgba.ggg, 1.0);
-        case CHANNEL_BLUE:  return float4(rgba.bbb, 1.0);
-        case CHANNEL_ALPHA: return rgba;
-        case CHANNEL_Y:     return float4(float3(dot(rgba.rgb, yw)), rgba.a);
+        case Channels_RGBA:  return rgba;
+        case Channels_RGB:   return float4(rgba.rgb, 1.0);
+        case Channels_Red:   return float4(rgba.rrr, 1.0);
+        case Channels_Green: return float4(rgba.ggg, 1.0);
+        case Channels_Blue:  return float4(rgba.bbb, 1.0);
+        case Channels_Alpha: return rgba;
+        case Channels_Y:     return float4(float3(dot(rgba.rgb, yw)), rgba.a);
     }
     return rgba;
 }
@@ -112,14 +115,15 @@ float4 blend(float4 top, float4 bottom, int blend_mode)
     float alpha = top.a + bottom.a*(1-top.a);
     switch (blend_mode)
     {
-        case NORMAL_BLEND:              return float4(top.rgb + bottom.rgb*(1-top.a), alpha);
-        case MULTIPLY_BLEND:            return float4(top.rgb * bottom.rgb, alpha);
-        case DIVIDE_BLEND:              return float4(top.rgb / bottom.rgb, alpha);
-        case ADD_BLEND:                 return float4(top.rgb + bottom.rgb, alpha);
-        case AVERAGE_BLEND:             return 0.5*(top + bottom);
-        case SUBTRACT_BLEND:            return float4(diff, alpha);
-        case DIFFERENCE_BLEND:          return float4(abs(diff), alpha);
-        case RELATIVE_DIFFERENCE_BLEND: return float4(abs(diff) / (bottom.rgb + float3(0.01)), alpha);
+        case BlendMode_Normal:              return float4(top.rgb + bottom.rgb*(1-top.a), alpha);
+        case BlendMode_Multiply:            return float4(top.rgb * bottom.rgb, alpha);
+        case BlendMode_Divide:              return float4(top.rgb / bottom.rgb, alpha);
+        case BlendMode_Add:                 return float4(top.rgb + bottom.rgb, alpha);
+        case BlendMode_Average:             return 0.5*(top + bottom);
+        case BlendMode_Subtract:            return float4(diff, alpha);
+        case BlendMode_Relative_Subtract:   return float4(diff / (bottom.rgb + float3(0.01)), alpha);
+        case BlendMode_Difference:          return float4(abs(diff), alpha);
+        case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.rgb + float3(0.01)), alpha);
     }
     return float4(0.0);
 }
@@ -183,14 +187,14 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
                             )
 {
     float4 background(bg_color.rgb, 1.0);
-    if (bg_mode == BG_BLACK)
+    if (bg_mode == BGMode_Black)
         background.rgb = float3(0.0);
-    else if (bg_mode == BG_WHITE)
+    else if (bg_mode == BGMode_White)
         background.rgb = float3(1.0);
-    else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
+    else if (bg_mode == BGMode_Dark_Checker || bg_mode == BGMode_Light_Checker)
     {
-        float dark_gray = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
-        float light_gray = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float dark_gray = (bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
+        float light_gray = (bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
         float checkerboard = (fmod(float(int(floor(vert.position.x / 8.0) + floor(vert.position.y / 8.0))), 2.0) == 0.0) ? dark_gray : light_gray;
         background.rgb = sRGBToLinear(float3(checkerboard));
     }
@@ -211,7 +215,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
 
     value = primary_M_to_sRGB * value;
 
-    if (channel == CHANNEL_ALPHA)
+    if (channel == Channels_Alpha)
         value = float4(value.aaa, 1.0);
 
     if (has_reference)
@@ -226,7 +230,7 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
 
         reference_val = secondary_M_to_sRGB * reference_val;
 
-        if (channel == CHANNEL_ALPHA)
+        if (channel == Channels_Alpha)
             reference_val = float4(reference_val.aaa, 1.0);
 
         value = blend(value, reference_val, blend_mode);

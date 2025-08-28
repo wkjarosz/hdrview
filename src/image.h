@@ -42,7 +42,7 @@ inline double axis_scale_fwd_xform(double value, void *user_data)
     static constexpr double log_eps = -4;        // std::log10(eps);
     static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
 
-    const auto x_scale = *(AxisScale_ *)user_data;
+    const auto x_scale = *(AxisScale *)user_data;
     if (x_scale == AxisScale_SRGB)
         return linear_to_sRGB(value);
     else if (x_scale == AxisScale_SymLog)
@@ -59,7 +59,7 @@ inline double axis_scale_inv_xform(double value, void *user_data)
     static constexpr double log_eps = -4;        // std::log10(eps);
     static constexpr double a_0     = eps * 1.8; // 1.8 makes asinh and our symlog looks roughly the same
 
-    const auto x_scale = *(AxisScale_ *)user_data;
+    const auto x_scale = *(AxisScale *)user_data;
     if (x_scale == AxisScale_SRGB)
         return sRGB_to_linear(value);
     else if (x_scale == AxisScale_SymLog)
@@ -81,10 +81,10 @@ struct PixelStats
     struct Settings
     {
         float      exposure   = 0.f;
-        AxisScale_ x_scale    = AxisScale_Linear;
-        AxisScale_ y_scale    = AxisScale_Linear;
+        AxisScale  x_scale    = AxisScale_Linear;
+        AxisScale  y_scale    = AxisScale_Linear;
         Box2i      roi        = Box2i{int2{0}};
-        EBlendMode blend_mode = NORMAL_BLEND;
+        BlendMode_ blend_mode = BlendMode_Normal;
         int        ref_id     = -1;
         int        ref_group  = -1;
 
@@ -138,7 +138,7 @@ struct PixelStats
         return axis_scale_inv_xform(hist_normalization[1] * value * inv_bins + hist_normalization[0], (void *)&x_scale);
     }
 
-    float2 x_limits(float exposure, AxisScale_ x_scale) const;
+    float2 x_limits(float exposure, AxisScale x_scale) const;
 };
 
 struct Channel : public Array2Df
@@ -369,13 +369,13 @@ public:
     int2 size() const { return data_window.size(); }
 
     bool is_valid_group(int index) const { return index >= 0 && index < (int)groups.size(); }
-    int  next_visible_group_index(int index, EDirection direction) const;
+    int  next_visible_group_index(int index, Direction_ direction) const;
     int  nth_visible_group_index(int n) const;
 
-    static void set_null_texture(Target target = Target_Primary);
-    void        set_as_texture(Target target = Target_Primary);
-    float4      raw_pixel(int2 p, Target target = Target_Primary) const;
-    float4      rgba_pixel(int2 p, Target target = Target_Primary) const;
+    static void set_null_texture(Target_ target = Target_Primary);
+    void        set_as_texture(Target_ target = Target_Primary);
+    float4      raw_pixel(int2 p, Target_ target = Target_Primary) const;
+    float4      rgba_pixel(int2 p, Target_ target = Target_Primary) const;
     void        finalize();
     void        compute_color_transform();
     std::string to_string() const;

@@ -4,6 +4,7 @@
 #include "image.h"
 #include "imgui_ext.h"
 #include "miniz.h"
+#include "timer.h"
 #include <fstream>
 
 using namespace std;
@@ -138,8 +139,10 @@ void BackgroundImageLoader::background_load(const string filename, const string_
 
         int num        = (int)mz_zip_reader_get_num_files(&zip);
         int num_images = 0;
-        spdlog::info("Zip '{}' contains {} files.", zip_name, num);
 
+        spdlog::debug("Zip '{}' contains {} files, loading...", zip_name, num);
+        std::vector<char> buffer(1000000); // reuse a buffer to reduce memory reallocations
+        Timer             timer;
         for (int i = 0; i < num; ++i)
         {
             mz_zip_archive_file_stat stat;
@@ -149,6 +152,13 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                 continue;
 
             fs::path entry_path = fs::path(stat.m_filename);
+
+            auto fn = entry_path.filename().u8string();
+            // skip hidden files (starting with '.')
+            if (!fn.empty() && fn.front() == '.')
+                continue;
+
+            // skip files we can't load based on the extension
             if (!Image::loadable(entry_path.extension().u8string()))
                 continue;
 
@@ -156,18 +166,19 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             if (!entry_pattern.empty() && entry_path.u8string() != entry_pattern)
                 continue;
 
-            size_t uncompressed_size = 0;
-            void  *p                 = mz_zip_reader_extract_to_heap(&zip, i, &uncompressed_size, 0);
-            if (!p)
+            buffer.resize(stat.m_uncomp_size);
+            if (!mz_zip_reader_extract_to_mem(&zip, i, buffer.data(), buffer.size(), 0))
+            {
+                spdlog::warn("Failed to extract '{}' from '{}'", entry_path.u8string(), zip_name);
                 continue;
+            }
 
-            string_view data{reinterpret_cast<char *>(p), uncompressed_size};
+            string_view data{reinterpret_cast<char *>(buffer.data()), buffer.size()};
             // build a combined filename that prepends the zip path to the entry path
             string combined = zip_name + "/" + entry_path.u8string();
             // schedule async load; do not add each entry to recent files
             load_one(fs::u8path(combined), data, false, select_first && num_images == 0, to_replace, channel_selector);
             ++num_images;
-            mz_free(p);
 
             // If entry_pattern is set, we only want one entry
             if (!entry_pattern.empty())
@@ -178,6 +189,8 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             spdlog::warn("No loadable images found in '{}'", zip_name);
 
         mz_zip_reader_end(&zip);
+
+        spdlog::info("Loading files in the zip archive took {:f} seconds.", timer.elapsed() / 1000.f);
 
         return num_images;
     };
@@ -265,12 +278,16 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                 spdlog::error("Failed to open zip file '{}'", zip_path.u8string());
                 return;
             }
+
+            spdlog::debug("Loading zip file into memory buffer...");
+            Timer             timer;
             std::vector<char> buf((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char>());
             if (buf.empty())
             {
                 spdlog::warn("Zip file '{}' is empty", zip_path.u8string());
                 return;
             }
+            spdlog::info("Loading zip file data took {:f} seconds.", timer.elapsed() / 1000.f);
 
             if (extract_and_schedule(string_view(buf.data(), buf.size()), zip_fn, should_select, to_replace, entry_fn))
                 add_recent_file(filename);

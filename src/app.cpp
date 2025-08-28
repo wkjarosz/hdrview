@@ -282,8 +282,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 json j = json::parse(s);
                 spdlog::debug("Restoring recent file list...");
                 m_image_loader.set_recent_files(j.value<vector<string>>("recent files", {}));
-                m_bg_mode        = (EBGMode)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BG_BLACK,
-                                                  (int)NUM_BG_MODES - 1);
+                m_bg_mode = (BackgroundMode_)clamp(j.value<int>("background mode", (int)m_bg_mode), (int)BGMode_Black,
+                                                   (int)BGMode_COUNT - 1);
                 m_bg_color.xyz() = j.value<float3>("background color", m_bg_color.xyz());
 
                 m_draw_data_window    = j.value<bool>("draw data window", m_draw_data_window);
@@ -295,7 +295,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 m_draw_grid           = j.value<bool>("draw pixel grid", m_draw_grid);
                 m_exposure_live = m_exposure = j.value<float>("exposure", m_exposure);
                 m_gamma_live = m_gamma = j.value<float>("gamma", m_gamma);
-                m_tonemap              = j.value<Tonemap>("tonemap", m_tonemap);
+                m_tonemap              = j.value<Tonemap_>("tonemap", m_tonemap);
                 m_clamp_to_LDR         = j.value<bool>("clamp to LDR", m_clamp_to_LDR);
                 m_dither               = j.value<bool>("dither", m_dither);
                 m_file_list_mode       = j.value<int>("file list mode", m_file_list_mode);
@@ -780,7 +780,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                            float maximum = numeric_limits<float>::min();
                            auto &group   = img->groups[img->selected_group];
 
-                           bool3 should_include[NUM_CHANNELS] = {
+                           bool3 should_include[Channels_COUNT] = {
+                               {true, true, true},   // RGBA
                                {true, true, true},   // RGB
                                {true, false, false}, // RED
                                {false, true, false}, // GREEN
@@ -919,46 +920,46 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         add(Action{"Go to next image", ICON_MY_BLANK, ImGuiKey_DownArrow, ImGuiInputFlags_Repeat,
                    [this]()
                    {
-                       set_current_image_index(next_visible_image_index(m_current, Forward));
+                       set_current_image_index(next_visible_image_index(m_current, Direction_Forward));
                        m_scroll_to_next_frame = 1.f;
                    },
                    [this]()
                    {
-                       auto i = next_visible_image_index(m_current, Forward);
+                       auto i = next_visible_image_index(m_current, Direction_Forward);
                        return is_valid(i) && i != m_current;
                    }});
         add(Action{"Go to previous image", ICON_MY_BLANK, ImGuiKey_UpArrow, ImGuiInputFlags_Repeat,
                    [this]()
                    {
-                       set_current_image_index(next_visible_image_index(m_current, Backward));
+                       set_current_image_index(next_visible_image_index(m_current, Direction_Backward));
                        m_scroll_to_next_frame = 0.f;
                    },
                    [this]()
                    {
-                       auto i = next_visible_image_index(m_current, Backward);
+                       auto i = next_visible_image_index(m_current, Direction_Backward);
                        return is_valid(i) && i != m_current;
                    }});
         add(Action{"Make next image the reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_DownArrow,
                    ImGuiInputFlags_Repeat,
-                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Forward)); },
+                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Direction_Forward)); },
                    [this]()
                    {
-                       auto i = next_visible_image_index(m_reference, Forward);
+                       auto i = next_visible_image_index(m_reference, Direction_Forward);
                        return is_valid(i) && i != m_reference;
                    }});
         add(Action{"Make previous image the reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_UpArrow,
                    ImGuiInputFlags_Repeat,
-                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Backward)); },
+                   [this]() { set_reference_image_index(next_visible_image_index(m_reference, Direction_Backward)); },
                    [this]()
                    {
-                       auto i = next_visible_image_index(m_reference, Backward);
+                       auto i = next_visible_image_index(m_reference, Direction_Backward);
                        return is_valid(i) && i != m_reference;
                    }});
         add(Action{"Go to next channel group", ICON_MY_BLANK, ImGuiKey_RightArrow, ImGuiInputFlags_Repeat,
                    [this]()
                    {
                        auto img               = current_image();
-                       img->selected_group    = img->next_visible_group_index(img->selected_group, Forward);
+                       img->selected_group    = img->next_visible_group_index(img->selected_group, Direction_Forward);
                        m_scroll_to_next_frame = 1.f;
                    },
                    [this]() { return current_image() != nullptr; }});
@@ -966,7 +967,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]()
                    {
                        auto img               = current_image();
-                       img->selected_group    = img->next_visible_group_index(img->selected_group, Backward);
+                       img->selected_group    = img->next_visible_group_index(img->selected_group, Direction_Backward);
                        m_scroll_to_next_frame = 0.f;
                    },
                    [this]() { return current_image() != nullptr; }});
@@ -978,7 +979,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        if (!reference_image())
                            m_reference = m_current;
                        auto img             = reference_image();
-                       img->reference_group = img->next_visible_group_index(img->reference_group, Forward);
+                       img->reference_group = img->next_visible_group_index(img->reference_group, Direction_Forward);
                    },
                    [this]() { return reference_image() || current_image(); }});
         add(Action{"Go to previous channel group in reference", ICON_MY_BLANK, ImGuiMod_Shift | ImGuiKey_LeftArrow,
@@ -989,7 +990,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        if (!reference_image())
                            m_reference = m_current;
                        auto img             = reference_image();
-                       img->reference_group = img->next_visible_group_index(img->reference_group, Backward);
+                       img->reference_group = img->next_visible_group_index(img->reference_group, Direction_Backward);
                    },
                    [this]() { return reference_image() || current_image(); }});
 

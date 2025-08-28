@@ -78,7 +78,7 @@ public:
     {
         m_reference = force || is_valid(index) ? index : m_reference;
     }
-    int next_visible_image_index(int index, EDirection direction) const;
+    int next_visible_image_index(int index, Direction_ direction) const;
     int nth_visible_image_index(int n) const;
     //-----------------------------------------------------------------------------
 
@@ -156,15 +156,15 @@ public:
     float      &exposure() { return m_exposure; }
     float      &offset_live() { return m_offset_live; }
     float      &offset() { return m_offset; }
-    Tonemap    &tonemap() { return m_tonemap; }
+    Tonemap_   &tonemap() { return m_tonemap; }
     Colormap_   colormap() { return m_colormaps[m_colormap_index]; }
-    EBlendMode &blend_mode() { return m_blend_mode; }
+    BlendMode_ &blend_mode() { return m_blend_mode; }
     bool       &clamp_to_LDR() { return m_clamp_to_LDR; }
     bool       &dithering_on() { return m_dither; }
     bool       &draw_grid_on() { return m_draw_grid; }
     bool       &draw_pixel_info_on() { return m_draw_pixel_info; }
-    AxisScale_ &histogram_x_scale() { return m_x_scale; }
-    AxisScale_ &histogram_y_scale() { return m_y_scale; }
+    AxisScale  &histogram_x_scale() { return m_x_scale; }
+    AxisScale  &histogram_y_scale() { return m_y_scale; }
     Box2i      &roi_live() { return m_roi_live; }
     Box2i      &roi() { return m_roi; }
     bool       &draw_clip_warnings() { return m_draw_clip_warnings; }
@@ -221,9 +221,9 @@ private:
     int m_remaining_download = 0;
 
     float m_exposure = 0.f, m_exposure_live = 0.f, m_offset = 0.f, m_offset_live = 0.f, m_gamma = 1.0f,
-          m_gamma_live   = 1.0f;
-    AxisScale_ m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
-    bool       m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
+          m_gamma_live  = 1.0f;
+    AxisScale m_x_scale = AxisScale_Asinh, m_y_scale = AxisScale_Linear;
+    bool      m_clamp_to_LDR = false, m_dither = true, m_draw_grid = true, m_draw_pixel_info = true,
          m_draw_watched_pixels = true, m_draw_data_window = true, m_draw_display_window = true,
          m_draw_clip_warnings = false, m_show_FPS = false;
     float2 m_clip_range{0.f, 1.f}; ///< Values outside this range will have zebra stripes if m_draw_clip_warnings = true
@@ -234,23 +234,24 @@ private:
     // Image display parameters.
     float m_zoom_sensitivity = 1.0717734625f;
 
-    bool     m_auto_fit_display   = false; ///< Continually keep the image display window fit within the viewport
-    bool     m_auto_fit_data      = false; ///< Continually keep the image data window fit within the viewport
-    bool     m_auto_fit_selection = false; ///< Continually keep the selection box fit within the viewport
-    bool2    m_flip               = {false, false}; ///< Whether to flip the image horizontally and/or vertically
-    float    m_zoom               = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
-    float2   m_translate          = {0.f, 0.f};     ///< The panning offset of the image
-    EChannel m_channel            = EChannel::RGB;  ///< Which channel to display
-    Tonemap  m_tonemap            = Tonemap_Gamma;
+    bool      m_auto_fit_display   = false; ///< Continually keep the image display window fit within the viewport
+    bool      m_auto_fit_data      = false; ///< Continually keep the image data window fit within the viewport
+    bool      m_auto_fit_selection = false; ///< Continually keep the selection box fit within the viewport
+    bool2     m_flip               = {false, false}; ///< Whether to flip the image horizontally and/or vertically
+    float     m_zoom               = 1.f;            ///< The zoom factor (image pixel size / logical pixel size)
+    float2    m_translate          = {0.f, 0.f};     ///< The panning offset of the image
+    Channels_ m_channel            = Channels_::Channels_RGBA; ///< Which channel to display
+    Tonemap_  m_tonemap            = Tonemap_Gamma;
     static constexpr Colormap_ m_colormaps[] = {
         Colormap_Viridis, Colormap_Plasma,   Colormap_Inferno,  Colormap_Hot,      Colormap_Cool,    Colormap_Pink,
         Colormap_Jet,     Colormap_Spectral, Colormap_Turbo,    Colormap_Twilight, Colormap_RdBu,    Colormap_BrBG,
         Colormap_PiYG,    Colormap_IceFire,  Colormap_CoolWarm, Colormap_Greys,    Colormap_AbsGreys};
-    int        m_colormap_index   = 1;
-    bool       m_reverse_colormap = false;
-    EBlendMode m_blend_mode       = EBlendMode::NORMAL_BLEND; ///< How to blend the current and reference images
-    EBGMode    m_bg_mode  = EBGMode::BG_DARK_CHECKER; ///< How the background around the image should be rendered
-    float4     m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BG_CUSTOM_COLOR
+    int             m_colormap_index   = 1;
+    bool            m_reverse_colormap = false;
+    BlendMode_      m_blend_mode = BlendMode_::BlendMode_Normal; ///< How to blend the current and reference images
+    BackgroundMode_ m_bg_mode =
+        BackgroundMode_::BGMode_Dark_Checker;     ///< How the background around the image should be rendered
+    float4 m_bg_color = {0.3f, 0.3f, 0.3f, 1.0f}; ///< The background color if m_bg_mode == BGMode_Custom_Color
 
     float2 m_viewport_min, m_viewport_size;
 
@@ -267,7 +268,7 @@ private:
 
     Theme m_theme;
 
-    MouseMode_ m_mouse_mode = MouseMode_PanZoom;
+    MouseMode m_mouse_mode = MouseMode_PanZoom;
 
     struct WatchedPixel
     {

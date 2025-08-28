@@ -1,31 +1,33 @@
 precision mediump float;
 
 // These need to stay in sync with the various enums in fwd.h
-#define CHANNEL_RGB   0
-#define CHANNEL_RED   1
-#define CHANNEL_GREEN 2
-#define CHANNEL_BLUE  3
-#define CHANNEL_ALPHA 4
-#define CHANNEL_Y     5
+#define Channels_RGBA   0
+#define Channels_RGB    1
+#define Channels_Red    2
+#define Channels_Green  3
+#define Channels_Blue   4
+#define Channels_Alpha  5
+#define Channels_Y      6
 
 #define Tonemap_Gamma            0
 #define Tonemap_FalseColor       1
 #define Tonemap_PositiveNegative 2
 
-#define NORMAL_BLEND              0
-#define MULTIPLY_BLEND            1
-#define DIVIDE_BLEND              2
-#define ADD_BLEND                 3
-#define AVERAGE_BLEND             4
-#define SUBTRACT_BLEND            5
-#define DIFFERENCE_BLEND          6
-#define RELATIVE_DIFFERENCE_BLEND 7
+#define BlendMode_Normal              0
+#define BlendMode_Multiply            1
+#define BlendMode_Divide              2
+#define BlendMode_Add                 3
+#define BlendMode_Average             4
+#define BlendMode_Subtract            5
+#define BlendMode_Relative_Subtract   6
+#define BlendMode_Difference          7
+#define BlendMode_Relative_Difference 8
 
-#define BG_BLACK         0
-#define BG_WHITE         1
-#define BG_DARK_CHECKER  2
-#define BG_LIGHT_CHECKER 3
-#define BG_CUSTOM_COLOR  4
+#define BGMode_Black         0
+#define BGMode_White         1
+#define BGMode_Dark_Checker  2
+#define BGMode_Light_Checker 3
+#define BGMode_Custom_Color  4
 
 #define RGBA_Channels   0
 #define RGB_Channels    1
@@ -128,12 +130,13 @@ vec4 choose_channel(vec4 rgba)
 {
     switch (channel)
     {
-    case CHANNEL_RGB: return rgba;
-    case CHANNEL_RED: return vec4(rgba.rrr, 1.0);
-    case CHANNEL_GREEN: return vec4(rgba.ggg, 1.0);
-    case CHANNEL_BLUE: return vec4(rgba.bbb, 1.0);
-    case CHANNEL_ALPHA: return rgba;
-    case CHANNEL_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
+    case Channels_RGBA: return rgba;
+    case Channels_RGB: return vec4(rgba.rgb, 1.0);
+    case Channels_Red: return vec4(rgba.rrr, 1.0);
+    case Channels_Green: return vec4(rgba.ggg, 1.0);
+    case Channels_Blue: return vec4(rgba.bbb, 1.0);
+    case Channels_Alpha: return rgba;
+    case Channels_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
     }
     return rgba;
 }
@@ -144,14 +147,15 @@ vec4 blend(vec4 top, vec4 bottom)
     float alpha = top.a + bottom.a * (1.0 - top.a);
     switch (blend_mode)
     {
-    case NORMAL_BLEND: return vec4(top.rgb + bottom.rgb * (1.0 - top.a), alpha);
-    case MULTIPLY_BLEND: return vec4(top.rgb * bottom.rgb, alpha);
-    case DIVIDE_BLEND: return vec4(top.rgb / bottom.rgb, alpha);
-    case ADD_BLEND: return vec4(top.rgb + bottom.rgb, alpha);
-    case AVERAGE_BLEND: return 0.5 * (top + bottom);
-    case SUBTRACT_BLEND: return vec4(diff, alpha);
-    case DIFFERENCE_BLEND: return vec4(abs(diff), alpha);
-    case RELATIVE_DIFFERENCE_BLEND: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
+    case BlendMode_Normal: return vec4(top.rgb + bottom.rgb * (1.0 - top.a), alpha);
+    case BlendMode_Multiply: return vec4(top.rgb * bottom.rgb, alpha);
+    case BlendMode_Divide: return vec4(top.rgb / bottom.rgb, alpha);
+    case BlendMode_Add: return vec4(top.rgb + bottom.rgb, alpha);
+    case BlendMode_Average: return 0.5 * (top + bottom);
+    case BlendMode_Subtract: return vec4(diff, alpha);
+    case BlendMode_Relative_Subtract: return vec4(diff / (bottom.rgb + vec3(0.01)), alpha);
+    case BlendMode_Difference: return vec4(abs(diff), alpha);
+    case BlendMode_Relative_Difference: return vec4(abs(diff) / (bottom.rgb + vec3(0.01)), alpha);
     }
     return vec4(0.0);
 }
@@ -173,14 +177,14 @@ void main()
 {
     vec2 pixel      = vec2(gl_FragCoord.x, -gl_FragCoord.y);
     vec4 background = vec4(bg_color.rgb, 1.0);
-    if (bg_mode == BG_BLACK)
+    if (bg_mode == BGMode_Black)
         background.rgb = vec3(0.0);
-    else if (bg_mode == BG_WHITE)
+    else if (bg_mode == BGMode_White)
         background.rgb = vec3(1.0);
-    else if (bg_mode == BG_DARK_CHECKER || bg_mode == BG_LIGHT_CHECKER)
+    else if (bg_mode == BGMode_Dark_Checker || bg_mode == BGMode_Light_Checker)
     {
-        float dark_gray    = (bg_mode == BG_DARK_CHECKER) ? 0.1 : 0.5;
-        float light_gray   = (bg_mode == BG_DARK_CHECKER) ? 0.2 : 0.55;
+        float dark_gray    = (bg_mode == BGMode_Dark_Checker) ? 0.1 : 0.5;
+        float light_gray   = (bg_mode == BGMode_Dark_Checker) ? 0.2 : 0.55;
         float checkerboard = mod(floor(pixel.x / 8.0) + floor(pixel.y / 8.0), 2.0) == 0.0 ? dark_gray : light_gray;
         background.rgb     = sRGBToLinear(vec3(checkerboard));
     }
@@ -199,7 +203,7 @@ void main()
         value.xyz = YC_to_RGB(value.xyz, primary_yw);
 
     value = primary_M_to_sRGB * value;
-    if (channel == CHANNEL_ALPHA)
+    if (channel == Channels_Alpha)
         value = vec4(value.aaa, 1.0);
 
     if (has_reference)
@@ -213,7 +217,7 @@ void main()
             reference_val.xyz = YC_to_RGB(reference_val.xyz, secondary_yw);
 
         reference_val = secondary_M_to_sRGB * reference_val;
-        if (channel == CHANNEL_ALPHA)
+        if (channel == Channels_Alpha)
             reference_val = vec4(reference_val.aaa, 1.0);
 
         value = blend(value, reference_val);

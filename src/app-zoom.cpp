@@ -192,7 +192,7 @@ float2 HDRViewApp::image_scale(ConstImagePtr img) const
     return scale;
 }
 
-int HDRViewApp::next_visible_image_index(int index, EDirection direction) const
+int HDRViewApp::next_visible_image_index(int index, Direction_ direction) const
 {
     return next_matching_index(m_images, index, [](size_t, const ImagePtr &img) { return img->visible; }, direction);
 }

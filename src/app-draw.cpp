@@ -228,7 +228,7 @@ void HDRViewApp::draw_tool_decorations() const
 
 void HDRViewApp::draw_image() const
 {
-    auto set_color = [this](Target target, ConstImagePtr img)
+    auto set_color = [this](Target_ target, ConstImagePtr img)
     {
         auto t = target_name(target);
         if (img)
@@ -346,7 +346,8 @@ void HDRViewApp::draw_background()
     if ((m_play_forward || m_play_backward) &&
         this_frame - prev_frame >= chrono::milliseconds(int(1000 / m_playback_speed)))
     {
-        set_current_image_index(next_visible_image_index(m_current, m_play_forward ? Forward : Backward));
+        set_current_image_index(
+            next_visible_image_index(m_current, m_play_forward ? Direction_Forward : Direction_Backward));
         set_image_textures();
         prev_frame = this_frame;
     }

@@ -802,7 +802,7 @@ void HDRViewApp::update_visibility()
         if (img->is_valid_group(img->selected_group) && !img->groups[img->selected_group].visible)
         {
             auto old = img->selected_group;
-            if ((img->selected_group = img->next_visible_group_index(img->selected_group, Forward)) == old)
+            if ((img->selected_group = img->next_visible_group_index(img->selected_group, Direction_Forward)) == old)
                 img->selected_group = -1; // no visible groups left
         }
 
@@ -816,7 +816,7 @@ void HDRViewApp::update_visibility()
     if (!is_valid(m_current) || !m_images[m_current]->visible)
     {
         auto old = m_current;
-        if ((m_current = next_visible_image_index(m_current, Forward)) == old)
+        if ((m_current = next_visible_image_index(m_current, Direction_Forward)) == old)
             m_current = -1; // no visible images left
     }
 
@@ -870,12 +870,12 @@ void HDRViewApp::draw_file_window()
 {
     if (ImGui::BeginCombo("Mode", blend_mode_names()[m_blend_mode].c_str(), ImGuiComboFlags_HeightLargest))
     {
-        for (int n = 0; n < NUM_BLEND_MODES; ++n)
+        for (BlendMode n = 0; n < BlendMode_COUNT; ++n)
         {
             const bool is_selected = (m_blend_mode == n);
             if (ImGui::Selectable(blend_mode_names()[n].c_str(), is_selected))
             {
-                m_blend_mode = (EBlendMode)n;
+                m_blend_mode = (BlendMode_)n;
                 spdlog::debug("Switching to blend mode {}.", n);
             }
 
@@ -888,12 +888,12 @@ void HDRViewApp::draw_file_window()
 
     if (ImGui::BeginCombo("Channel", channel_names()[m_channel].c_str(), ImGuiComboFlags_HeightLargest))
     {
-        for (int n = 0; n < NUM_CHANNELS; ++n)
+        for (Channels n = 0; n < Channels_COUNT; ++n)
         {
             const bool is_selected = (m_channel == n);
             if (ImGui::Selectable(channel_names()[n].c_str(), is_selected))
             {
-                m_channel = (EChannel)n;
+                m_channel = (Channels_)n;
                 spdlog::debug("Switching to channel {}.", n);
             }
 
@@ -1327,7 +1327,7 @@ void HDRViewApp::draw_top_toolbar()
         {
             const bool is_selected = (m_tonemap == n);
             if (ImGui::Selectable(items[n], is_selected))
-                m_tonemap = (Tonemap)n;
+                m_tonemap = (Tonemap_)n;
 
             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
             if (is_selected)
@@ -1508,8 +1508,9 @@ void HDRViewApp::draw_command_palette()
                                },
                                [this](int selected_option)
                                {
-                                   m_bg_mode = (EBGMode)clamp(selected_option, (int)BG_BLACK, (int)NUM_BG_MODES - 1);
-                                   if (m_bg_mode == BG_CUSTOM_COLOR)
+                                   m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BGMode_Black,
+                                                                      (int)BGMode_COUNT - 1);
+                                   if (m_bg_mode == BGMode_Custom_Color)
                                        m_show_bg_color_picker = true;
                                },
                                nullptr, ICON_MY_BLANK});
