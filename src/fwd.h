@@ -8,9 +8,12 @@
 
 // #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
 
-#include "linalg.h"
+#include "linalg.h" // IWYU pragma: export
 #include <memory>
-using namespace linalg::aliases;
+
+// Shortname for the linalg namespace
+namespace la = linalg;
+using namespace la::aliases;
 
 // define extra conversion here before including imgui
 #define IM_VEC2_CLASS_EXTRA                                                                                            \
@@ -23,12 +26,9 @@ using namespace linalg::aliases;
     constexpr ImVec4(const float4 &f) : x(f.x), y(f.y), z(f.z), w(f.w) {}                                              \
     operator float4() const { return float4(x, y, z, w); }
 
-// Shortname for the linalg namespace
-namespace la = linalg;
-
 // forward declarations
-template <typename Vec_, typename Value_ = typename linalg::scalar_t<Vec_>,
-          size_t Dims_ = linalg::detail::apply<linalg::detail::op_pos, void, Vec_>::size>
+template <typename Vec_, typename Value_ = typename la::scalar_t<Vec_>,
+          size_t Dims_ = la::detail::apply<la::detail::op_pos, void, Vec_>::size>
 class Box;
 using Color3 = float3;
 using Color4 = float4;

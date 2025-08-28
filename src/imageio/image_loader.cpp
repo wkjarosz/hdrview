@@ -310,8 +310,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                 return;
             }
 
-            if (extract_and_schedule(string_view(buf.data(), buf.size()), filename, should_select, to_replace,
-                                     entry_fn))
+            if (extract_and_schedule(string_view(buf.data(), buf.size()), zip_fn, should_select, to_replace, entry_fn))
                 add_recent_file(filename);
         }
         else

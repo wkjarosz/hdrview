@@ -4,7 +4,6 @@
 #include "fonts.h"
 
 #include <random>
-#include <spdlog/mdc.h>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -337,7 +336,6 @@ void HDRViewApp::process_shortcuts()
 void HDRViewApp::draw_background()
 {
     using namespace literals;
-    spdlog::mdc::put(" f", to_string(ImGui::GetFrameCount()));
 
     static auto prev_frame                   = chrono::steady_clock::now();
     static auto last_file_changes_check_time = chrono::steady_clock::now();

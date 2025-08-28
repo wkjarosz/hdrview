@@ -2,9 +2,8 @@
 
 #include <fstream>
 
-#include "platform_utils.h"
-
 #ifdef __EMSCRIPTEN__
+#include "platform_utils.h"
 #include <emscripten/emscripten.h>
 #include <emscripten_browser_file.h>
 #else
