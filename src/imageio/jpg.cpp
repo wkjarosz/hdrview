@@ -8,7 +8,6 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
-#include "texture.h"
 #include <fmt/core.h>
 #include <iostream>
 #include <stdexcept>
@@ -56,6 +55,8 @@ bool is_jpg_image(std::istream &is) noexcept
 
 std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, std::string_view channel_selector)
 {
+    ScopedMDC mdc{"IO", "JPG"};
+
     struct jpeg_stream_source_mgr : public jpeg_source_mgr
     {
         std::istream       *is;
@@ -110,7 +111,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     {
         char buffer[JMSG_LENGTH_MAX];
         (*cinfo->err->format_message)(cinfo, buffer);
-        throw std::invalid_argument{fmt::format("JPEG error: {}", buffer)};
+        throw std::invalid_argument{buffer};
     };
 
     jpeg_create_decompress(&cinfo);
@@ -223,11 +224,11 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             try
             {
                 image->metadata["exif"] = exif_to_json(exif_data.data(), exif_data.size());
-                spdlog::debug("JPEG: EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
+                spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
             }
             catch (const std::exception &e)
             {
-                spdlog::warn("JPEG: Exception while parsing EXIF chunk: {}", e.what());
+                spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
             }
         }
 
@@ -253,7 +254,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             Chromaticities chr;
             if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
             {
-                spdlog::info("JPEG: Linearizing colors using ICC profile.");
+                spdlog::info("Linearizing colors using ICC profile.");
                 image->chromaticities = chr;
             }
         }
@@ -273,7 +274,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     catch (const std::exception &e)
     {
         // jpeg_destroy_decompress will be called by unique_ptr deleter
-        throw std::runtime_error(fmt::format("JPEG: error during decompression: {}", e.what()));
+        throw std::runtime_error(fmt::format("Error during decompression: {}", e.what()));
     }
 }
 

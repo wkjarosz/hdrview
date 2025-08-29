@@ -21,7 +21,10 @@ message(STATUS "Using sanitizer: ${USE_SANITIZER}")
 
 function(append value)
   foreach(variable ${ARGN})
-    set(${variable} "${${variable}} ${value}" PARENT_SCOPE)
+    set(${variable}
+        "${${variable}} ${value}"
+        PARENT_SCOPE
+    )
   endforeach(variable)
 endfunction()
 
@@ -30,7 +33,7 @@ if(USE_SANITIZER)
 
   if(UNIX)
 
-    if(uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
       append("-O1" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     endif()
 

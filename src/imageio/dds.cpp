@@ -636,8 +636,9 @@ bool is_dds_image(std::istream &is) noexcept
 
 vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view channel_selector)
 {
-    DDSFile dds;
-    auto    result = dds.load(is);
+    ScopedMDC mdc{"IO", "DDS"};
+    DDSFile   dds;
+    auto      result = dds.load(is);
     if (result.type == Result::Error)
         throw std::invalid_argument(result.message);
     else if (result.type == Result::Warning)
@@ -678,9 +679,9 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
 
     if (dds.num_channels == 0)
     {
-        spdlog::debug("DDS: file '{}': Unsupported format or no channels detected. This was the header:\n{}", filename,
+        spdlog::debug("File '{}': Unsupported format or no channels detected. This was the header:\n{}", filename,
                       header.dump(2));
-        throw std::invalid_argument("DDS: Unsupported format or no channels detected.");
+        throw std::invalid_argument("Unsupported format or no channels detected.");
     }
 
     static const char *cubemap_face_names[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
@@ -690,7 +691,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view c
     {
         const DDSFile::ImageData *data = dds.get_image_data(0, p);
         if (!data)
-            throw std::runtime_error(fmt::format("DDS: No image data found for array index {}.", p));
+            throw std::runtime_error(fmt::format("No image data found for array index {}.", p));
 
         vector<ImagePtr> new_images;
         if (dds.compression != DDSFile::Compression::None)

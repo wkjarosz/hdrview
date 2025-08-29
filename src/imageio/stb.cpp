@@ -116,6 +116,7 @@ bool is_stb_image(istream &is) noexcept
 
 vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
 {
+    ScopedMDC mdc{"IO", "STB"};
     // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
     // we'll do our own srgb correction
     stbi_ldr_to_hdr_scale(1.0f);
@@ -159,15 +160,14 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     }
 
     if (!data)
-        throw invalid_argument{fmt::format("STB: {}", stbi_failure_reason())};
+        throw invalid_argument{stbi_failure_reason()};
 
     if (product(size) == 0)
-        throw invalid_argument{"STB: Image has zero pixels."};
+        throw invalid_argument{"Image has zero pixels."};
 
     json j;
     if (!supported_format(is, j))
-        throw runtime_error{
-            "STB: loaded the image, but then couldn't figure out the format (this should never happen)."};
+        throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
     bool linearize = j["format"] != "hdr";
     if (linearize)

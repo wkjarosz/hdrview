@@ -17,7 +17,6 @@
 #include <ImfTileDescriptionAttribute.h>
 #include <ImfTimeCodeAttribute.h>
 #include <ImfVecAttribute.h>
-#include <iomanip>
 #include <sstream>
 
 using namespace Imf;
@@ -33,17 +32,17 @@ json attribute_to_json(const Attribute &a)
     j["type"]        = type;
     if (const auto *ta = dynamic_cast<const Box2iAttribute *>(&a))
     {
-        auto &b     = ta->value();
-        j["min"]    = {b.min.x, b.min.y};
-        j["max"]    = {b.max.x, b.max.y};
-        j["string"] = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
+        auto &b           = ta->value();
+        j["value"]["min"] = {b.min.x, b.min.y};
+        j["value"]["max"] = {b.max.x, b.max.y};
+        j["string"]       = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
     }
     else if (const auto *ta = dynamic_cast<const Box2fAttribute *>(&a))
     {
-        auto &b     = ta->value();
-        j["min"]    = {b.min.x, b.min.y};
-        j["max"]    = {b.max.x, b.max.y};
-        j["string"] = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
+        auto &b           = ta->value();
+        j["value"]["min"] = {b.min.x, b.min.y};
+        j["value"]["max"] = {b.max.x, b.max.y};
+        j["string"]       = fmt::format("({}, {}) - ({}, {})", b.min.x, b.min.y, b.max.x, b.max.y);
     }
     else if (const auto *ta = dynamic_cast<const ChannelListAttribute *>(&a))
     {
@@ -73,16 +72,16 @@ json attribute_to_json(const Attribute &a)
             if (i.channel().pLinear)
                 oss << ", plinear";
         }
-        j["channels"] = channels;
-        j["string"]   = oss.str();
+        j["value"]["channels"] = channels;
+        j["string"]            = oss.str();
     }
     else if (const auto *ta = dynamic_cast<const ChromaticitiesAttribute *>(&a))
     {
-        auto &c     = ta->value();
-        j["red"]    = {c.red.x, c.red.y};
-        j["green"]  = {c.green.x, c.green.y};
-        j["blue"]   = {c.blue.x, c.blue.y};
-        j["white"]  = {c.white.x, c.white.y};
+        auto &c             = ta->value();
+        j["value"]["red"]   = {c.red.x, c.red.y};
+        j["value"]["green"] = {c.green.x, c.green.y};
+        j["value"]["blue"]  = {c.blue.x, c.blue.y};
+        j["value"]["white"] = {c.white.x, c.white.y};
         j["string"] = fmt::format("red ({}, {})\ngreen ({}, {})\nblue ({}, {})\nwhite ({}, {})", c.red.x, c.red.y,
                                   c.green.x, c.green.y, c.blue.x, c.blue.y, c.white.x, c.white.y);
     }
@@ -135,13 +134,13 @@ json attribute_to_json(const Attribute &a)
     }
     else if (const auto *ta = dynamic_cast<const KeyCodeAttribute *>(&a))
     {
-        j["filmMfcCode"]   = ta->value().filmMfcCode();
-        j["filmType"]      = ta->value().filmType();
-        j["prefix"]        = ta->value().prefix();
-        j["count"]         = ta->value().count();
-        j["perfOffset"]    = ta->value().perfOffset();
-        j["perfsPerFrame"] = ta->value().perfsPerFrame();
-        j["perfsPerCount"] = ta->value().perfsPerCount();
+        j["value"]["filmMfcCode"]   = ta->value().filmMfcCode();
+        j["value"]["filmType"]      = ta->value().filmType();
+        j["value"]["prefix"]        = ta->value().prefix();
+        j["value"]["count"]         = ta->value().count();
+        j["value"]["perfOffset"]    = ta->value().perfOffset();
+        j["value"]["perfsPerFrame"] = ta->value().perfsPerFrame();
+        j["value"]["perfsPerCount"] = ta->value().perfsPerCount();
         j["string"] =
             fmt::format("film manufacturer code {}, film type code {}, prefix {}, count {}, perf offset {}, perfs per "
                         "frame {}, perfs per count {}",
@@ -210,9 +209,9 @@ json attribute_to_json(const Attribute &a)
     }
     else if (const auto *ta = dynamic_cast<const PreviewImageAttribute *>(&a))
     {
-        j["width"]  = ta->value().width();
-        j["height"] = ta->value().height();
-        j["string"] = fmt::format("{} by {} pixels", ta->value().width(), ta->value().height());
+        j["value"]["width"]  = ta->value().width();
+        j["value"]["height"] = ta->value().height();
+        j["string"]          = fmt::format("{} by {} pixels", ta->value().width(), ta->value().height());
     }
     else if (const auto *ta = dynamic_cast<const StringAttribute *>(&a))
     {
@@ -227,17 +226,18 @@ json attribute_to_json(const Attribute &a)
     }
     else if (const auto *ta = dynamic_cast<const RationalAttribute *>(&a))
     {
-        j["numerator"]   = ta->value().n;
-        j["denominator"] = ta->value().d;
-        j["string"]      = fmt::format("{}/{} ({})", ta->value().n, ta->value().d, static_cast<double>(ta->value()));
+        j["value"]["numerator"]   = ta->value().n / ta->value().d;
+        j["value"]["numerator"]   = ta->value().n;
+        j["value"]["denominator"] = ta->value().d;
+        j["string"] = fmt::format("{}/{} ({})", ta->value().n, ta->value().d, static_cast<double>(ta->value()));
     }
     else if (const auto *ta = dynamic_cast<const TileDescriptionAttribute *>(&a))
     {
-        auto &t           = ta->value();
-        j["mode"]         = t.mode;
-        j["xSize"]        = t.xSize;
-        j["ySize"]        = t.ySize;
-        j["roundingMode"] = t.roundingMode;
+        auto &t                    = ta->value();
+        j["value"]["mode"]         = t.mode;
+        j["value"]["xSize"]        = t.xSize;
+        j["value"]["ySize"]        = t.ySize;
+        j["value"]["roundingMode"] = t.roundingMode;
         std::string mode_str;
         switch (t.mode)
         {
@@ -257,19 +257,19 @@ json attribute_to_json(const Attribute &a)
     }
     else if (const auto *ta = dynamic_cast<const TimeCodeAttribute *>(&a))
     {
-        auto &t         = ta->value();
-        j["hours"]      = t.hours();
-        j["minutes"]    = t.minutes();
-        j["seconds"]    = t.seconds();
-        j["frame"]      = t.frame();
-        j["dropFrame"]  = t.dropFrame();
-        j["colorFrame"] = t.colorFrame();
-        j["fieldPhase"] = t.fieldPhase();
-        j["bgf0"]       = t.bgf0();
-        j["bgf1"]       = t.bgf1();
-        j["bgf2"]       = t.bgf2();
-        j["userData"]   = t.userData();
-        j["string"]     = fmt::format("time {:02}:{:02}:{:02}:{:02}", t.hours(), t.minutes(), t.seconds(), t.frame());
+        auto &t                  = ta->value();
+        j["value"]["hours"]      = t.hours();
+        j["value"]["minutes"]    = t.minutes();
+        j["value"]["seconds"]    = t.seconds();
+        j["value"]["frame"]      = t.frame();
+        j["value"]["dropFrame"]  = t.dropFrame();
+        j["value"]["colorFrame"] = t.colorFrame();
+        j["value"]["fieldPhase"] = t.fieldPhase();
+        j["value"]["bgf0"]       = t.bgf0();
+        j["value"]["bgf1"]       = t.bgf1();
+        j["value"]["bgf2"]       = t.bgf2();
+        j["value"]["userData"]   = t.userData();
+        j["string"] = fmt::format("time {:02}:{:02}:{:02}:{:02}", t.hours(), t.minutes(), t.seconds(), t.frame());
     }
     else if (const auto *ta = dynamic_cast<const V2iAttribute *>(&a))
     {

@@ -6,16 +6,12 @@
 
 #include "exif.h"
 #include "image.h"
-#include "texture.h"
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
-#include <type_traits>
 
 using namespace std;
 
@@ -32,13 +28,12 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
-// #include <jxl/cms.h>
-// #include <jxl/cms_interface.h>
 #include <jxl/codestream_header.h>
 #include <jxl/decode.h>
 #include <jxl/decode_cxx.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
 #include <jxl/types.h>
+#include <jxl/version.h>
 
 #include "colorspace.h"
 #include "icc.h"
@@ -166,6 +161,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view channel_selector)
 {
+    ScopedMDC mdc{"IO", "JXL"};
     // calculate size of stream
     is.clear();
     is.seekg(0, is.end);
@@ -227,9 +223,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
         if (status == JXL_DEC_ERROR)
-            throw invalid_argument{"JPEG XL decoder error"};
+            throw invalid_argument{"Decoder error"};
         else if (status == JXL_DEC_NEED_MORE_INPUT)
-            throw invalid_argument{"JPEG XL decoder error, already provided all input"};
+            throw invalid_argument{"Decoder error, already provided all input"};
         else if (status == JXL_DEC_BASIC_INFO)
         {
             spdlog::debug("JXL_DEC_BASIC_INFO");

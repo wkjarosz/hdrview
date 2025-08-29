@@ -37,7 +37,8 @@ bool is_exr_image(istream &is_, string_view filename) noexcept
 
 vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view channel_selector)
 {
-    auto is = StdIStream{is_, string(filename).c_str()};
+    ScopedMDC mdc{"IO", "EXR"};
+    auto      is = StdIStream{is_, string(filename).c_str()};
 
     Imf::MultiPartInputFile infile{is};
 
@@ -99,12 +100,12 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
                                {displayWindow.max.x + 1, displayWindow.max.y + 1}};
 
         if (img->data_window.is_empty())
-            throw invalid_argument{fmt::format("EXR image has invalid data window: [{},{}] - [{},{}]",
+            throw invalid_argument{fmt::format("Image has invalid data window: [{},{}] - [{},{}]",
                                                img->data_window.min.x, img->data_window.min.y, img->data_window.max.x,
                                                img->data_window.max.y)};
 
         if (img->display_window.is_empty())
-            throw invalid_argument{fmt::format("EXR image has invalid display window: [{},{}] - [{},{}]",
+            throw invalid_argument{fmt::format("Image has invalid display window: [{},{}] - [{},{}]",
                                                img->display_window.min.x, img->display_window.min.y,
                                                img->display_window.max.x, img->display_window.max.y)};
 
@@ -115,13 +116,13 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
             auto name = channel_name(c);
             if (!filter.PassFilter(&name[0], &name[0] + name.size()))
             {
-                spdlog::debug("Skipping EXR channel '{}' in part {}: '{}'", name, p, c.name());
+                spdlog::debug("Skipping channel '{}' in part {}: '{}'", name, p, c.name());
                 continue;
             }
             else
             {
                 has_channels = true;
-                spdlog::debug("Loading EXR channel '{}' in part {}: '{}'", name, p, c.name());
+                spdlog::debug("Loading channel '{}' in part {}: '{}'", name, p, c.name());
             }
 
             name = c.name();
@@ -133,7 +134,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
 
         if (!has_channels)
         {
-            spdlog::debug("EXR part {}: '{}' has no channels matching the filter '{}', skipping...", p,
+            spdlog::debug("Part {}: '{}' has no channels matching the filter '{}', skipping...", p,
                           part.header().hasName() ? part.header().name() : "unnamed", channel_selector);
             continue;
         }
@@ -153,8 +154,8 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
             if (xs == 1 && ys == 1)
                 continue;
 
-            spdlog::warn("EXR channel '{}' is subsampled ({},{}). Only rudimentary subsampling is supported.", c.name(),
-                         xs, ys);
+            spdlog::warn("Channel '{}' is subsampled ({},{}). Only rudimentary subsampling is supported.", c.name(), xs,
+                         ys);
             Array2Df tmp = img->channels[i];
 
             int subsampled_width = size.x / xs;

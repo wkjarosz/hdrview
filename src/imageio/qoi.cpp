@@ -48,8 +48,9 @@ bool is_qoi_image(istream &is) noexcept
 
 vector<ImagePtr> load_qoi_image(istream &is, string_view filename)
 {
+    ScopedMDC mdc{"IO", "QOI"};
     if (!is_qoi_image(is))
-        throw invalid_argument{"QOI: invalid magic string"};
+        throw invalid_argument{"Invalid magic string"};
 
     // calculate size of stream
     is.clear();

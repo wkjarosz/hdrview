@@ -780,6 +780,132 @@ void Image::compute_color_transform()
     }
 }
 
+void Image::apply_exif_orientation()
+{
+    // --- EXIF orientation handling ---
+    if (!metadata.contains("exif") || !metadata["exif"].is_object())
+        return;
+
+    // Look for EXIF orientation field (commonly in "Orientation" or "orientation")
+    int  orientation = 1;
+    json orientation_metadata;
+    for (auto &exif_entry : metadata["exif"].items())
+    {
+        if (exif_entry.value().contains("orientation"))
+        {
+            orientation_metadata = exif_entry.value()["orientation"];
+            break;
+        }
+        else if (exif_entry.value().contains("Orientation"))
+        {
+            orientation_metadata = exif_entry.value()["Orientation"];
+            break;
+        }
+    }
+
+    if (orientation_metadata.is_object() && orientation_metadata.contains("value"))
+    {
+        // Orientation is usually an integer (1-8)
+        if (orientation_metadata["value"].is_number_integer())
+            orientation = orientation_metadata["value"].get<int>();
+    }
+
+    if (orientation != 1)
+    {
+        spdlog::info("Applying EXIF orientation: {}", orientation);
+        // Helper lambdas for flipping/rotating
+        auto flip_horizontal = [this]()
+        {
+            for (auto &channel : channels)
+            {
+                int w          = channel.width();
+                int h          = channel.height();
+                int block_size = std::max(1, 1024 * 1024 / w);
+                stp::parallel_for(stp::blocked_range<int>(0, h, block_size),
+                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < w / 2; ++x)
+                                              std::swap(channel(x, y), channel(w - 1 - x, y));
+                                  });
+            }
+        };
+        auto flip_vertical = [this]()
+        {
+            for (auto &channel : channels)
+            {
+                int w          = channel.width();
+                int h          = channel.height();
+                int block_size = std::max(1, 1024 * 1024 / h);
+                stp::parallel_for(stp::blocked_range<int>(0, w, block_size),
+                                  [&](int x0, int x1, int /*unit*/, int /*thread*/)
+                                  {
+                                      for (int x = x0; x < x1; ++x)
+                                          for (int y = 0; y < h / 2; ++y)
+                                              std::swap(channel(x, y), channel(x, h - 1 - y));
+                                  });
+            }
+        };
+        auto transpose = [this]()
+        {
+            for (auto &channel : channels)
+            {
+                Array2Df tmp(channel.height(), channel.width());
+                int      block_size = std::max(1, 1024 * 1024 / channel.width());
+                stp::parallel_for(stp::blocked_range<int>(0, channel.height(), block_size),
+                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < channel.width(); ++x) tmp(y, x) = channel(x, y);
+                                  });
+                channel.resize(tmp.size());
+                stp::parallel_for(stp::blocked_range<int>(0, tmp.height(), block_size),
+                                  [&](int y0, int y1, int /*unit*/, int /*thread*/)
+                                  {
+                                      for (int y = y0; y < y1; ++y)
+                                          for (int x = 0; x < tmp.width(); ++x) channel(x, y) = tmp(x, y);
+                                  });
+            }
+            std::swap(data_window.max.x, data_window.max.y);
+            std::swap(display_window.max.x, display_window.max.y);
+        };
+
+        // Apply orientation according to EXIF spec
+        // 1 = Horizontal (normal)
+        // 2 = Mirror horizontal
+        // 3 = Rotate 180
+        // 4 = Mirror vertical
+        // 5 = Mirror horizontal and rotate 270 CW
+        // 6 = Rotate 90 CW
+        // 7 = Mirror horizontal and rotate 90 CW
+        // 8 = Rotate 270 CW
+        switch (orientation)
+        {
+        case 2: flip_horizontal(); break;
+        case 3:
+            flip_horizontal();
+            flip_vertical();
+            break;
+        case 4: flip_vertical(); break;
+        case 5: transpose(); break;
+        case 6:
+            transpose();
+            flip_horizontal();
+            break;
+        case 7:
+            transpose();
+            flip_vertical();
+            flip_horizontal();
+            break;
+        case 8:
+            transpose();
+            flip_vertical();
+            break;
+        default: break;
+        }
+    }
+}
+
 void Image::finalize()
 {
     // check that there is at least 1 channel
@@ -801,6 +927,8 @@ void Image::finalize()
                             c.size().x, c.size().y, data_window.size().x, data_window.size().y)};
 
     build_layers_and_groups();
+
+    apply_exif_orientation();
 
     // sanity check layers, channels, and channel groups
     {

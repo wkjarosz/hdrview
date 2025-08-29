@@ -135,13 +135,13 @@ until another channel selector is encountered.)")
         // enable all log messages globally, and for the default logger
         spdlog::set_level(spdlog::level::trace);
         spdlog::default_logger()->set_level(spdlog::level::trace);
-        spdlog::set_pattern("%^[%T%& | %5l]: %$%v");
+        spdlog::set_pattern("%^[%T | %l %&]: %$%v");
 
         // create a new sink.
         // new sinks default to allowing all levels (that are propagated by the parent logger)
         spdlog::default_logger()->sinks().push_back(ImGui::GlobalSpdLogWindow().sink());
         // spdlog::info("There are {} sinks", spdlog::default_logger()->sinks().size());
-        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T%& | %5l]: %$%v");
+        ImGui::GlobalSpdLogWindow().set_pattern("%^%*[%T | %l %&]: %$%v");
 
 #ifdef _WIN32
         (void)argv; // prevent unused variable warning

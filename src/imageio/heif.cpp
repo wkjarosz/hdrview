@@ -105,6 +105,7 @@ static auto chroma_name(heif_chroma ch)
 
 vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view channel_selector)
 {
+    ScopedMDC mdc{"IO", "HEIF"};
     // calculate size of stream
     is.clear();
     is.seekg(0, is.end);
@@ -116,7 +117,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
     is.read(raw_data.data(), raw_size);
     if ((size_t)is.gcount() != raw_size)
         throw invalid_argument{
-            fmt::format("HEIF: Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
+            fmt::format("Failed to read : {} bytes, read : {} bytes", raw_size, (size_t)is.gcount())};
 
     vector<ImagePtr> images;
     try
@@ -138,7 +139,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
         int num_subimages = 1 + int(item_ids.size());
 
-        spdlog::info("HEIF: Found {} subimages", num_subimages);
+        spdlog::info("Found {} subimages", num_subimages);
 
         ImGuiTextFilter filter{string(channel_selector).c_str()};
         filter.Build();
@@ -146,7 +147,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
         // just get the primary image for now
         for (int subimage = 0; subimage < num_subimages; ++subimage)
         {
-            spdlog::info("HEIF: Loading subimage {}...", subimage);
+            spdlog::info("Loading subimage {}...", subimage);
             auto id = (subimage == 0) ? primary_id : item_ids[subimage - 1];
 
             if (auto name = fmt::format("{:d}.R,G,B", id); !filter.PassFilter(name.c_str()))
@@ -165,17 +166,17 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
             auto err = heif_image_handle_get_nclx_color_profile(raw_ihandle, &nclx);
             if (err.code != heif_error_Ok)
-                spdlog::info("HEIF: No handle-level nclx color profile found");
+                spdlog::info("No handle-level nclx color profile found");
 
             if (size_t icc_size = heif_image_handle_get_raw_color_profile_size(raw_ihandle); icc_size != 0)
             {
-                spdlog::info("HEIF: File contains a handle-level ICC profile.");
+                spdlog::info("File contains a handle-level ICC profile.");
                 icc_profile.resize(icc_size);
                 err =
                     heif_image_handle_get_raw_color_profile(raw_ihandle, reinterpret_cast<void *>(icc_profile.data()));
                 if (err.code != heif_error_Ok)
                 {
-                    spdlog::info("HEIF: Could not read handle-level ICC profile.");
+                    spdlog::info("Could not read handle-level ICC profile.");
                     icc_profile.clear();
                 }
             }
@@ -266,11 +267,11 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                         // exclude the first four bytes, which are the length
                         auto j                  = exif_to_json(exif_data.data() + 4, exif_size - 4);
                         image->metadata["exif"] = j;
-                        spdlog::debug("HEIF: EXIF metadata successfully parsed: {}", image->metadata.dump(2));
+                        spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata.dump(2));
                     }
                     catch (const std::exception &e)
                     {
-                        spdlog::warn("HEIF: Exception while parsing EXIF chunk: {}", e.what());
+                        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
                     }
                 }
             }
@@ -280,7 +281,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
             if (himage.get_width(out_planes[0]) != size.x || himage.get_height(out_planes[0]) != size.y)
             {
-                spdlog::warn("HEIF: Image size mismatch: {}x{} vs {}x{}", himage.get_width(out_planes[0]),
+                spdlog::warn("Image size mismatch: {}x{} vs {}x{}", himage.get_width(out_planes[0]),
                              himage.get_height(out_planes[0]), size.x, size.y);
                 size.x = himage.get_width(out_planes[0]);
                 size.y = himage.get_height(out_planes[0]);
@@ -308,8 +309,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
             {
                 err = heif_image_get_nclx_color_profile(raw_image, &nclx);
                 if (err.code == heif_error_Color_profile_does_not_exist)
-                    spdlog::warn(
-                        "HEIF: No image-level nclx color profile found. Will assume sRGB/IEC 61966-2-1 colorspace.");
+                    spdlog::warn("No image-level nclx color profile found. Will assume sRGB/IEC 61966-2-1 colorspace.");
                 else if (err.code == heif_error_Ok)
                     image->metadata["header"]["nclx profile"] =
                         json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
@@ -322,7 +322,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
                     err = heif_image_get_raw_color_profile(raw_image, reinterpret_cast<void *>(icc_profile.data()));
                     if (err.code != heif_error_Ok)
                     {
-                        spdlog::info("HEIF: Could not read image-level ICC profile");
+                        spdlog::info("Could not read image-level ICC profile");
                         icc_profile.clear();
                     }
                     else
@@ -396,16 +396,16 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
     catch (const heif::Error &err)
     {
         std::string e = err.get_message();
-        throw invalid_argument{fmt::format("HEIF: {}", e.empty() ? "unknown exception" : e)};
+        throw invalid_argument{e.empty() ? "unknown exception" : e};
     }
     catch (const exception &err)
     {
         std::string e = err.what();
-        throw invalid_argument{fmt::format("HEIF: {}", e.empty() ? "unknown exception" : e)};
+        throw invalid_argument{e.empty() ? "unknown exception" : e};
     }
     catch (...)
     {
-        throw invalid_argument{"HEIF: unknown exception"};
+        throw invalid_argument{"unknown exception"};
     }
 
     return images;

@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include "fwd.h"
+
 #include "array2d.h"
 #include "box.h"
 #include "colorspace.h"
-#include "common.h"
-#include "fwd.h"
 #include "json.h"
 #include "smallthreadpool.h"
 #include "texture.h"
@@ -22,13 +22,9 @@
 #include <string>
 #include <vector>
 
-#include <ImfHeader.h>
-
 #include <filesystem>
 namespace fs = std::filesystem;
 using namespace stp;
-
-#include "dithermatrix256.h"
 
 // A very small value to avoid divisions by zero when converting to unpremultiplied alpha. The technical introduction to
 // OpenEXR (https://openexr.com/en/latest/TechnicalIntroduction.html#premultiplied-vs-un-premultiplied-color-channels)
@@ -377,6 +373,7 @@ public:
     float4      raw_pixel(int2 p, Target_ target = Target_Primary) const;
     float4      rgba_pixel(int2 p, Target_ target = Target_Primary) const;
     void        finalize();
+    void        apply_exif_orientation();
     void        compute_color_transform();
     std::string to_string() const;
 

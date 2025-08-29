@@ -11,6 +11,26 @@
 #include "texture.h"
 #include "version.h"
 
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+#include <jpeglib.h>
+#endif
+
+#ifdef HDRVIEW_ENABLE_HEIF
+#include <libheif/heif.h>
+#endif
+
+#ifdef HDRVIEW_ENABLE_JPEGXL
+#include <jxl/version.h>
+#endif
+
+#ifdef HDRVIEW_ENABLE_LIBPNG
+#include <png.h>
+#endif
+
+#ifdef HDRVIEW_ENABLE_UHDR
+#include <ultrahdr_api.h>
+#endif
+
 #include "platform_utils.h"
 
 using namespace std;
@@ -1576,7 +1596,7 @@ void HDRViewApp::draw_command_palette()
 void HDRViewApp::draw_about_dialog()
 {
     // work around HelloImGui rendering a couple frames to figure out sizes
-    if (m_open_help && ImGui::GetFrameCount() > 1)
+    if (m_open_help && ImGui::GetFrameCount() > 2)
         ImGui::OpenPopup("About");
 
     auto &io = ImGui::GetIO();
@@ -1790,7 +1810,7 @@ void HDRViewApp::draw_about_dialog()
             if (ImGui::BeginTabItem("Build info"))
             {
                 ImGui::PushFont(m_mono_regular, 0.f);
-                ImVec2 child_size = ImVec2(0, EmSize(12.f));
+                ImVec2 child_size = ImVec2(0, EmSize(18.f));
                 ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_FrameStyle);
 
                 ImGui::Text("ImGui version: %s", ImGui::GetVersion());
@@ -1816,24 +1836,84 @@ void HDRViewApp::draw_about_dialog()
 
                 ImGui::Text("Image IO libraries:");
 #ifdef HDRVIEW_ENABLE_UHDR
-                ImGui::Text("\tlibuhdr: yes");
+                ImGui::Text("\tlibuhdr: %s", UHDR_LIB_VERSION_STR);
 #else
                 ImGui::Text("\tlibuhdr: no");
 #endif
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+#ifdef LIBJPEG_TURBO_VERSION
+#define STR_HELPER(x) #x
+#define MY_STR(x)     STR_HELPER(x)
+                ImGui::Text("\tlibjpeg-turbo: %d (%s)", LIBJPEG_TURBO_VERSION_NUMBER, MY_STR(LIBJPEG_TURBO_VERSION));
+#else
+                ImGui::Text("\tlibjpeg: %d", JPEG_LIB_VERSION);
+#endif
+#else
+                ImGui::Text("\tlibjpeg:  no");
+#endif
+
 #ifdef HDRVIEW_ENABLE_JPEGXL
-                ImGui::Text("\tlibjxl:  yes");
+                ImGui::Text("\tlibjxl: %d.%d.%d", JPEGXL_MAJOR_VERSION, JPEGXL_MINOR_VERSION, JPEGXL_PATCH_VERSION);
 #else
                 ImGui::Text("\tlibjxl:  no");
 #endif
 #ifdef HDRVIEW_ENABLE_HEIF
-                ImGui::Text("\tlibheif: yes");
+                ImGui::Text("\tlibheif: %s", heif_get_version());
 #else
                 ImGui::Text("\tlibheif: no");
 #endif
 #ifdef HDRVIEW_ENABLE_LIBPNG
-                ImGui::Text("\tlibpng:  yes");
+                ImGui::Text("\tlibpng: %s", PNG_LIBPNG_VER_STRING);
+#ifdef PNG_TEXT_SUPPORTED
+                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: yes");
 #else
-                ImGui::Text("\tlibpng:  no");
+                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: no");
+#endif
+#ifdef PNG_eXIf_SUPPORTED
+                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: yes");
+#else
+                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: no");
+#endif
+#ifdef PNG_EASY_ACCESS_SUPPORTED
+                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: yes");
+#else
+                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: no");
+#endif
+                ImGui::Text("\t\tPNG_READ_ALPHA_MODE_SUPPORTED: %s",
+#ifdef PNG_READ_ALPHA_MODE_SUPPORTED
+                            "yes"
+#else
+                            "no"
+#endif
+                );
+                ImGui::Text("\t\tPNG_GAMMA_SUPPORTED: %s",
+#ifdef PNG_GAMMA_SUPPORTED
+                            "yes"
+#else
+                            "no"
+#endif
+                );
+                ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED: %s",
+#ifdef PNG_USER_CHUNKS_SUPPORTED
+                            "yes"
+#else
+                            "no"
+#endif
+                );
+                ImGui::Text("\t\tPNG_APNG_SUPPORTED: %s",
+#ifdef PNG_APNG_SUPPORTED
+                            "yes"
+#else
+                            "no"
+#endif
+                );
+                ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s",
+#ifdef PNG_PROGRESSIVE_READ_SUPPORTED
+                            "yes"
+#else
+                            "no"
+#endif
+                );
 #endif
                 ImGui::EndChild();
                 ImGui::PopFont();

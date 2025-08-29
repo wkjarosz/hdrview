@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cmath>
 static constexpr int   g_dither_matrix_w                                      = 256;
 static constexpr float g_dither_matrix[g_dither_matrix_w * g_dither_matrix_w] = {
     23095, 38725, 19697, 43107, 30053, 36034, 21940, 42128, 29348, 37954, 19282, 41252, 58370, 24633, 53615, 18619,

@@ -8,14 +8,11 @@
 #include "colorspace.h"
 #include "exif.h"
 #include "image.h"
-#include "texture.h"
 #include "timer.h"
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
-#include <fstream>
 #include <half.h>
 #include <iostream>
 #include <stdexcept>
@@ -42,7 +39,7 @@ void save_uhdr_image(const Image &img, ostream &os, string_view filename, float 
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
 
-#include "ultrahdr_api.h"
+#include <ultrahdr_api.h>
 
 static uhdr_color_gamut cg_from_chr(const optional<Chromaticities> &chr)
 {
@@ -122,8 +119,9 @@ bool is_uhdr_image(istream &is) noexcept
 
 vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
+    ScopedMDC mdc{"IO", "UHDR"};
     if (!is.good())
-        throw invalid_argument("UltraHDR: invalid file stream.");
+        throw invalid_argument("invalid file stream.");
 
     using Decoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
     auto decoder  = Decoder{uhdr_create_decoder(), uhdr_release_decoder};
@@ -131,7 +129,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     auto throw_if_error = [](uhdr_error_info_t status)
     {
         if (status.error_code != UHDR_CODEC_OK)
-            throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
+            throw invalid_argument(fmt::format("Error decoding image: {}", status.detail));
     };
 
     {
@@ -148,7 +146,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 
         if ((size_t)is.gcount() != size)
             throw invalid_argument{
-                fmt::format("UltraHDR: Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
+                fmt::format("Failed to read : {} bytes, read : {} bytes", size, (size_t)is.gcount())};
 
         uhdr_compressed_image_t compressed_image{
             data.get(),          /**< Pointer to a block of data to decode */
@@ -162,7 +160,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
         throw_if_error(uhdr_dec_set_out_color_transfer(decoder.get(), UHDR_CT_LINEAR));
         throw_if_error(uhdr_dec_set_out_img_format(decoder.get(), UHDR_IMG_FMT_64bppRGBAHalfFloat));
         throw_if_error(uhdr_dec_probe(decoder.get()));
-        spdlog::debug("UltraHDR: base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),
+        spdlog::debug("base image: {}x{}", uhdr_dec_get_image_width(decoder.get()),
                       uhdr_dec_get_image_height(decoder.get()));
         throw_if_error(uhdr_decode(decoder.get()));
         // going out of scope deallocates contents of data
@@ -170,13 +168,13 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 
     uhdr_raw_image_t *decoded_image = uhdr_get_decoded_image(decoder.get()); // freed by decoder destructor
     if (!decoded_image)
-        throw invalid_argument{"UltraHDR: Decode image failed."};
+        throw invalid_argument{"Decode image failed."};
     if (decoded_image->fmt != UHDR_IMG_FMT_64bppRGBAHalfFloat)
-        throw invalid_argument{"UltraHDR: Unexpected pixel format."};
+        throw invalid_argument{"Unexpected pixel format."};
 
-    spdlog::debug("UltraHDR: base image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", decoded_image->w,
-                  decoded_image->h, decoded_image->stride[UHDR_PLANE_PACKED], (int)decoded_image->cg,
-                  (int)decoded_image->ct, (int)decoded_image->range);
+    spdlog::debug("base image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", decoded_image->w, decoded_image->h,
+                  decoded_image->stride[UHDR_PLANE_PACKED], (int)decoded_image->cg, (int)decoded_image->ct,
+                  (int)decoded_image->range);
 
     int2 size = int2(decoded_image->w, decoded_image->h);
 
@@ -188,17 +186,17 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     const uhdr_mem_block_t *exif_data = uhdr_dec_get_exif(decoder.get());
     if (exif_data && exif_data->data && exif_data->data_sz > 0)
     {
-        spdlog::debug("UltraHDR: Found EXIF data of size {} bytes", exif_data->data_sz);
+        spdlog::debug("Found EXIF data of size {} bytes", exif_data->data_sz);
 
         try
         {
             auto j                  = exif_to_json(reinterpret_cast<uint8_t *>(exif_data->data), exif_data->data_sz);
             image->metadata["exif"] = j;
-            spdlog::debug("UltraHDR: EXIF metadata successfully parsed: {}", j.dump(2));
+            spdlog::debug("EXIF metadata successfully parsed: {}", j.dump(2));
         }
         catch (const std::exception &e)
         {
-            spdlog::warn("UltraHDR: Exception while parsing EXIF chunk: {}", e.what());
+            spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
         }
     }
 
@@ -236,7 +234,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     uhdr_raw_image_t *gainmap = uhdr_get_decoded_gainmap_image(decoder.get()); // freed by decoder destructor
     int2              gainmap_size(gainmap->w, gainmap->h);
 
-    spdlog::debug("UltraHDR: gainmap image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", gainmap->w, gainmap->h,
+    spdlog::debug("Gainmap image: {}x{}; stride: {}; cg: {}; ct: {}; range: {}", gainmap->w, gainmap->h,
                   gainmap->stride[UHDR_PLANE_PACKED], (int)gainmap->cg, (int)gainmap->ct, (int)gainmap->range);
 
     // if the gainmap is an unexpected size or format, we are done

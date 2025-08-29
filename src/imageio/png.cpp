@@ -6,11 +6,11 @@
 
 #include "png.h"
 #include "colorspace.h"
+#include "common.h"
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
 #include "imgui.h"
-#include "texture.h"
 #include "timer.h"
 #include <optional>
 
@@ -25,7 +25,6 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename)
 
 #else
 
-#include <cmath>
 #include <cstring>
 #include <fmt/core.h>
 #include <png.h>
@@ -65,6 +64,89 @@ struct PngInfoPtrDeleter
     }
 };
 
+// Return the offset to start of the sequence "Exif\0\0" in `data` of length `len`, or -1 if not found
+int find_exif_signature_offset(const char *data, int len)
+{
+    if (!data || len <= 6)
+        return -1;
+    static const char sig[6] = {'E', 'x', 'i', 'f', '\0', '\0'};
+    for (int i = 0; i + 6 <= len; ++i)
+    {
+        if (std::memcmp(data + i, sig, 6) == 0)
+            return i;
+    }
+    return -1;
+}
+
+// returns new size of decoded buffer
+int decode_ascii_hex_to_binary(uint8_t u8[], int length)
+{
+    int     r     = 0; // resulting length
+    int     t     = 0; // temporary
+    bool    first = true;
+    bool    valid[256];
+    uint8_t value[256];
+    for (int i = 0; i < 256; i++) valid[i] = false;
+    for (int i = '0'; i <= '9'; i++)
+    {
+        valid[i] = true;
+        value[i] = i - '0';
+    }
+    for (int i = 'a'; i <= 'f'; i++)
+    {
+        valid[i] = true;
+        value[i] = 10 + i - 'a';
+    }
+    for (int i = 'A'; i <= 'F'; i++)
+    {
+        valid[i] = true;
+        value[i] = 10 + i - 'A';
+    }
+
+    for (int i = 0; i < length; i++)
+    {
+        unsigned char x = u8[i];
+        if (valid[x])
+        {
+            if (first)
+            {
+                t     = value[x] << 4;
+                first = false;
+            }
+            else
+            {
+                first   = true;
+                u8[r++] = t + value[x];
+            }
+        }
+    }
+    return r;
+}
+
+json decode_exif_text(char *text, size_t len)
+{
+    spdlog::info("Found Raw EXIF data in text chunk");
+    try
+    {
+        uint8_t *u8         = reinterpret_cast<uint8_t *>(text);
+        auto     binary_len = decode_ascii_hex_to_binary(u8, len);
+        int      hex_offset = find_exif_signature_offset(text, binary_len);
+        if (hex_offset < 0)
+        {
+            spdlog::warn("EXIF signature not found");
+            return {};
+        }
+
+        int remaining = binary_len - hex_offset;
+        return exif_to_json(u8 + hex_offset, remaining);
+    }
+    catch (const std::exception &e)
+    {
+        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+        return {};
+    }
+}
+
 } // end anonymous namespace
 
 bool is_png_image(istream &is) noexcept
@@ -85,6 +167,7 @@ bool is_png_image(istream &is) noexcept
 
 vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view channel_selector)
 {
+    ScopedMDC mdc{"IO", "PNG"};
     if (!check_png_signature(is))
         throw runtime_error("Not a PNG file");
 
@@ -138,8 +221,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     int bit_depth = png_get_bit_depth(png_ptr, info_ptr.get());
 
     if (bit_depth != 8 && bit_depth != 16)
-        throw invalid_argument{
-            fmt::format("PNG: requested bit depth to be either 8 or 16 now, but received {}", bit_depth)};
+        throw invalid_argument{fmt::format("Requested bit depth to be either 8 or 16 now, but received {}", bit_depth)};
 
     //
     // Read color chunks in reverse priority order
@@ -156,7 +238,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     {
         icc_profile.assign(icc_ptr, icc_ptr + icc_len);
         has_icc_profile = true;
-        spdlog::info("PNG: Found ICC profile: {} ({} bytes)", icc_name, icc_len);
+        spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
     }
 
     double           gamma       = 2.2; // default gamma
@@ -165,7 +247,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
-        spdlog::info("PNG: Found gamma chunk: {:.4f}", gamma);
+        spdlog::info("Found gamma chunk: {:.4f}", gamma);
         tf = TransferFunction_Gamma;
     }
 
@@ -175,15 +257,14 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     double wx, wy, rx, ry, gx, gy, bx, by;
     if (png_get_cHRM(png_ptr, info_ptr.get(), &wx, &wy, &rx, &ry, &gx, &gy, &bx, &by))
     {
-        spdlog::info(
-            "PNG: Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})", rx,
-            ry, gx, gy, bx, by, wx, wy);
+        spdlog::info("Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})",
+                     rx, ry, gx, gy, bx, by, wx, wy);
         *chr = Chromaticities{float2(rx, ry), float2(gx, gy), float2(bx, by), float2(wx, wy)};
     }
 
     if (png_get_sRGB(png_ptr, info_ptr.get(), &srgb_intent))
     {
-        spdlog::info("PNG: Found sRGB chunk. sRGB intent: {}", srgb_intent);
+        spdlog::info("Found sRGB chunk. sRGB intent: {}", srgb_intent);
         tf = TransferFunction_sRGB;
     }
 
@@ -198,7 +279,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
                      &video_full_range_flag))
     {
         has_cICP = true;
-        spdlog::info("PNG: Found cICP chunk:\n\tcolor Primaries: {}\n\tTransfer Function: {}\n\t"
+        spdlog::info("Found cICP chunk:\n\tcolor Primaries: {}\n\tTransfer Function: {}\n\t"
                      "Matrix Coefficients: {}\n\tVideo Full Range: {}",
                      color_primaries, transfer_function, matrix_coefficients, video_full_range_flag);
 
@@ -213,14 +294,14 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
         }
         catch (const std::exception &e)
         {
-            spdlog::warn("PNG: Unknown cICP color primaries: {}", int(color_primaries));
+            spdlog::warn("Unknown cICP color primaries: {}", int(color_primaries));
         }
 
         float gamma_f = gamma;
         tf            = transfer_function_from_cicp(transfer_function, &gamma_f);
         gamma         = gamma_f;
         if (tf == TransferFunction_Unknown)
-            spdlog::warn("PNG: cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
+            spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
     }
 #endif
 
@@ -241,9 +322,17 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     {
         for (int t = 0; t < num_text; ++t)
         {
-            spdlog::info("text {} : {}", text_ptr[t].key, text_ptr[t].text);
-            metadata["header"][text_ptr[t].key] = {
-                {"value", text_ptr[t].text}, {"string", text_ptr[t].text}, {"type", "string"}};
+            if (string(text_ptr[t].key) == string("Raw profile type exif"))
+            {
+                if (auto j = decode_exif_text(text_ptr[t].text, text_ptr[t].text_length); !j.empty())
+                    metadata["exif"] = j;
+            }
+            else
+            {
+                spdlog::debug("text {} : {}", text_ptr[t].key, text_ptr[t].text);
+                metadata["header"][text_ptr[t].key] = {
+                    {"value", text_ptr[t].text}, {"string", text_ptr[t].text}, {"type", "string"}};
+            }
         }
     }
 #endif
@@ -309,15 +398,15 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     png_uint_32 exif_len = 0;
     if (png_get_eXIf_1(png_ptr, info_ptr.get(), &exif_len, &exif_ptr) && exif_ptr && exif_len > 0)
     {
-        spdlog::info("PNG: Found EXIF chunk ({} bytes)", exif_len);
+        spdlog::info("Found EXIF chunk ({} bytes)", exif_len);
         try
         {
             metadata["exif"] = exif_to_json(exif_ptr, exif_len);
-            spdlog::debug("PNG: EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
+            spdlog::debug("EXIF metadata successfully parsed: {}", metadata["exif"].dump(2));
         }
         catch (const std::exception &e)
         {
-            spdlog::warn("PNG: Exception while parsing EXIF chunk: {}", e.what());
+            spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
         }
     }
 #endif
@@ -335,7 +424,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 #endif
 
     if (animation)
-        spdlog::info("PNG: Detected APNG with {} frames, {} plays", num_frames, num_plays);
+        spdlog::info("Detected APNG with {} frames, {} plays", num_frames, num_plays);
     else
         num_frames = 1, num_plays = 0;
 
@@ -375,7 +464,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 
             if (!filter.PassFilter(&image->partname[0], &image->partname[0] + image->partname.size()))
             {
-                spdlog::debug("PNG: Skipping frame {} (filtered out by channel selector)", frame_idx);
+                spdlog::debug("Skipping frame {} (filtered out by channel selector)", frame_idx);
                 continue;
             }
         }
@@ -406,7 +495,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
             Chromaticities chr;
             if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
             {
-                spdlog::info("PNG: Linearizing colors using ICC profile.");
+                spdlog::info("Linearizing colors using ICC profile.");
                 image->chromaticities = chr;
             }
         }

@@ -525,7 +525,7 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     unset(CMAKE_REQUIRED_LIBRARIES)
     unset(CMAKE_REQUIRED_INCLUDES)
 
-    message(STATUS "Found libjpeg-turbo with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
+    message(STATUS "Found libjpeg with HAVE_JPEG_WRITE_ICC_PROFILE=${HAVE_JPEG_WRITE_ICC_PROFILE}")
 
     # set(JPEG_HEADER_FOUND FALSE)
     # foreach(JPEG_DIR ${JPEG_INCLUDE_DIRS})
@@ -539,6 +539,9 @@ if(HDRVIEW_ENABLE_LIBJPEG)
     # if(NOT JPEG_HEADER_FOUND)
     #   message(WARNING "Could not find jpeglib.h in any of: ${JPEG_INCLUDE_DIRS}")
     # endif()
+
+    find_package(TurboJpeg QUIET)
+    message(STATUS "JPEG is libjpeg-turbo = ${TurboJpeg_FOUND}")
 
     list(APPEND HDRVIEW_DEPENDENCIES JPEG::JPEG)
   else()
@@ -680,7 +683,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    VERSION 0.11.1
+    GIT_TAG 6efa0f5add2fcd6eae728cd78d10be4786d5ca46
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "JPEGXL_ENABLE_FUZZERS OFF"

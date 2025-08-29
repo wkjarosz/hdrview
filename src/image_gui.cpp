@@ -404,6 +404,30 @@ void Image::draw_info()
         ImGui::AlignTextToFramePadding();
         if (ImGui::TreeNodeEx("Header", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
         {
+            auto add_tooltip = [](const json &field_obj)
+            {
+                std::string tt;
+                bool        is_string = false;
+                if (field_obj.contains("type") && field_obj["type"].is_string())
+                {
+                    if (field_obj["type"].get<std::string>() == "string")
+                        is_string = true;
+                    tt += std::string("type: ") + field_obj["type"].get<std::string>() + "\n";
+                }
+
+                if (!is_string && field_obj.contains("value"))
+                {
+                    const auto &v = field_obj["value"];
+                    if (v.is_string())
+                        tt += std::string("value: ") + v.get<std::string>();
+                    else
+                        tt += std::string("value: ") + v.dump(2);
+                }
+
+                if (!tt.empty())
+                    ImGui::SetTooltip("%s", tt.c_str());
+            };
+
             if (metadata.contains("header") && metadata["header"].is_object())
             {
                 for (auto &field : metadata["header"].items())
@@ -419,6 +443,10 @@ void Image::draw_info()
                         continue;
 
                     ImGui::WrappedTextProperty(key, value, "", bold_font);
+
+                    // show type + value (raw) as tooltip on hover (similar to EXIF tooltips)
+                    if (ImGui::IsItemHovered())
+                        add_tooltip(field_obj);
                 }
             }
 
@@ -455,6 +483,10 @@ void Image::draw_info()
                                     continue;
 
                                 ImGui::WrappedTextProperty(key, value, "", bold_font);
+
+                                // show type + value (raw) as tooltip on hover
+                                if (ImGui::IsItemHovered())
+                                    add_tooltip(field_obj);
                             }
                             ImGui::TreePop();
                         }

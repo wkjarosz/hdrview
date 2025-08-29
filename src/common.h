@@ -24,7 +24,26 @@
 #include <fmt/color.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
+
+/**
+    Manages a scoped entry in the spdlog MDC (Mapped Diagnostic Context).
+
+    Upon construction, adds a key-value pair to the MDC for the current scope.
+    The key is automatically removed from the MDC when the object is destroyed.
+
+    Useful for associating contextual information with log messages within a scope.
+ */
+class ScopedMDC
+{
+public:
+    ScopedMDC(const std::string &key, const std::string &value) : m_key(key) { spdlog::mdc::put(m_key, value); }
+    ~ScopedMDC() { spdlog::mdc::remove(m_key); }
+
+private:
+    std::string m_key;
+};
 
 #define MY_ASSERT(cond, description, ...)                                                                              \
     if (!(cond))                                                                                                       \

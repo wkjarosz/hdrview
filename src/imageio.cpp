@@ -28,7 +28,8 @@ using namespace std;
 vector<ImagePtr> Image::load(istream &is, string_view filename, string_view channel_selector)
 {
     spdlog::info("Loading from file: {}", filename);
-    Timer timer;
+    ScopedMDC mdc{"file", string(get_basename(filename))};
+    Timer     timer;
     try
     {
         if (!is.good())
