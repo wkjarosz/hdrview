@@ -5,16 +5,11 @@
 //
 
 #include "stb.h"
-#include "dithermatrix256.h"
 #include "image.h"
-#include "texture.h"
 #include "timer.h"
-#include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 

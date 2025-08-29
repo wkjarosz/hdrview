@@ -10,20 +10,15 @@
 
 #include "colorspace.h"
 #include "image.h"
-#include "texture.h"
 #include "timer.h"
 #include <ImfHeader.h>
 #include <ImfStandardAttributes.h>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
-
-#include "dithermatrix256.h"
 
 using namespace std;
 

@@ -5,13 +5,10 @@
 //
 
 #include "image.h"
-#include "texture.h"
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 

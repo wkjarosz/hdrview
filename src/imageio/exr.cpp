@@ -10,7 +10,6 @@
 #include "exr_std_streams.h"
 #include "image.h"
 #include "imgui.h"
-#include "texture.h"
 #include "timer.h"
 #include <ImfChannelList.h>
 #include <ImfChannelListAttribute.h>
@@ -22,10 +21,7 @@
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
 #include <ImfVersion.h>
-#include <fstream>
 #include <stdexcept> // for runtime_error, out_of_range
-
-#include "Imath_to_linalg.h"
 
 using namespace std;
 

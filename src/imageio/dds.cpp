@@ -1,6 +1,5 @@
 #include "dds.h"
 #include "image.h"
-#include "texture.h"
 #include <fmt/core.h>
 #include <iostream>
 #include <stdexcept>

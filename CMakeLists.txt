@@ -683,7 +683,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    GIT_TAG 6efa0f5add2fcd6eae728cd78d10be4786d5ca46
+    GIT_TAG ba915d7cd317867df7d0fdd8300da6f9e5475b8e
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "JPEGXL_ENABLE_FUZZERS OFF"
@@ -925,6 +925,7 @@ hello_imgui_add_app(
   src/app-draw.cpp
   src/app-file-io.cpp
   src/app-gui.cpp
+  src/app-windows.cpp
   src/app-zoom.cpp
   src/app.cpp
   src/colormap.cpp
