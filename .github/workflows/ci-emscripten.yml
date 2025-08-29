@@ -29,8 +29,12 @@ jobs:
       - name: Install dependencies
         # downloading old version of emscripten since 4.0.13 is broken
         run: |
-          brew install ninja libpng emscripten
-        # curl -O https://raw.githubusercontent.com/Homebrew/homebrew-core/9990c9ddd731e97581a3312ca0358b45b14d1cc6/Formula/e/emscripten.rb && brew install ./emscripten.rb
+          brew install ninja libpng
+          curl -O https://raw.githubusercontent.com/Homebrew/homebrew-core/9990c9ddd731e97581a3312ca0358b45b14d1cc6/Formula/e/emscripten.rb
+          FORMULA_DIR="$(brew --repository)/Library/Taps/wkjarosz/homebrew-emscripten-old/Formula/"
+          mkdir -p "$FORMULA_DIR"
+          mv ./emscripten.rb "$FORMULA_DIR"
+          brew install wkjarosz/emscripten-old/emscripten
 
       - uses: actions/checkout@v4
         with:
