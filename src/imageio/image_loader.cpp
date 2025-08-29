@@ -6,6 +6,7 @@
 #include "miniz.h"
 #include "timer.h"
 #include <fstream>
+#include <sstream>
 
 using namespace std;
 namespace fs = std::filesystem;
