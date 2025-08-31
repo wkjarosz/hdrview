@@ -747,7 +747,7 @@ void Image::draw_colorspace()
             //
             // plot background texture
             //
-            ImPlot::PlotImage("##chromaticity_image", (ImTextureRef)chromaticity_texture()->texture_handle(),
+            ImPlot::PlotImage("##chromaticity_image", (ImTextureID)chromaticity_texture()->texture_handle(),
                               ImPlotPoint(0.0, 0.0), ImPlotPoint(.73f, .83f), {0.f, .83f}, {.73f, 0.f});
 
             auto normal_to_plot_tangent = [](const float2 &tangent, float pixel_length) -> float2

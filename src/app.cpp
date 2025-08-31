@@ -397,6 +397,18 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
     m_params.callbacks.ShowGui = [this]()
     {
+        // recompute toolbar height in case the font size was changed
+        // this is require because HelloImGui decided to specify toolbar sizes in Ems, but we want the padding and size
+        // to be consistent with other ImGui elements (1 line high + standard Frame padding)
+        if (auto it = m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top);
+            it != m_params.callbacks.edgesToolbars.end())
+        {
+            m_top_toolbar_options.WindowPaddingEm = PixelsToEm(ImGui::GetStyle().FramePadding);
+            m_top_toolbar_options.sizeEm =
+                PixelSizeToEm(ImGui::GetFrameHeight() + 1) + 2.f * m_top_toolbar_options.WindowPaddingEm.y;
+            it->second.options = m_top_toolbar_options;
+        }
+
         m_image_loader.get_loaded_images(
             [this](ImagePtr new_image, ImagePtr to_replace, bool should_select)
             {
