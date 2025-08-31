@@ -121,8 +121,22 @@ inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
     ImGui::TextUnformatted(str.c_str());
 }
 
+/**
+    Displays a property with wrapped text in an ImGui property editor.
+
+    This function renders a property name and its value, wrapping the value text to fit within a specified width.
+    Optionally, a custom font can be used. If the value is clicked, it is copied to the clipboard.
+    When hovered, the mouse cursor changes to a hand icon. A tooltip can be displayed for additional information.
+
+    @param property_name The name of the property to display.
+    @param value The value of the property to display, shown as wrapped text.
+    @param tooltip Tooltip text to show when hovering over the property.
+    @param font Optional font to use for rendering the property value. If nullptr, the default font is used.
+    @param wrap_em The width (in em units) to wrap the text at. If 0 or less, wraps to the available content region
+   width.
+*/
 void WrappedTextProperty(const std::string &property_name, const std::string &value, const std::string &tooltip,
-                         ImFont *font = nullptr);
+                         ImFont *font = nullptr, float wrap_em = 0.f);
 
 // return true when activated.
 inline bool MenuItem(const std::string &label, const std::string &shortcut = "", bool selected = false,

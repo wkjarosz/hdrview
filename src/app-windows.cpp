@@ -446,9 +446,12 @@ void HDRViewApp::draw_pixel_inspector_window()
 void HDRViewApp::update_visibility()
 {
     // compute image:channel visibility and update selection indices
-    vector<string> visible_image_names;
-    for (auto img : m_images)
+    static vector<string> visible_image_names;
+    visible_image_names.resize(0);
+    m_visible_images.resize(0);
+    for (size_t i = 0; i < m_images.size(); ++i)
     {
+        auto        &img    = m_images[i];
         const string prefix = img->partname + (img->partname.empty() ? "" : ".");
 
         // compute visibility of all groups
@@ -466,7 +469,10 @@ void HDRViewApp::update_visibility()
         img->visible = m_file_filter.PassFilter(img->filename.c_str()) && img->any_groups_visible;
 
         if (img->visible)
+        {
             visible_image_names.emplace_back(img->file_and_partname());
+            m_visible_images.push_back(i);
+        }
 
         img->root.calculate_visibility(img.get());
 
@@ -708,193 +714,199 @@ void HDRViewApp::draw_file_window()
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, ImGui::GetStyle().FramePadding.y));
         ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, icon_width);
 
-        int id                 = 0;
-        int visible_img_number = 0;
-        int hidden_images      = 0;
-        int hidden_groups      = 0;
-        int image_to_close     = -1;
+        int id             = 0;
+        int hidden_groups  = 0;
+        int image_to_close = -1;
 
-        for (int i = 0; i < num_images(); ++i)
+        // currently we only support the clipper when each image is one row
+        bool             use_clipper = m_file_list_mode == 0;
+        ImGuiListClipper clipper;
+        if (use_clipper)
+            clipper.Begin(m_visible_images.size());
+        // the loop conditions here are to execute this outer loop once if we are not using the clipper, and execute it
+        // as long as clipper.Step() returns true otherwise
+        for (int iter = 0; (!use_clipper && iter < 1) || (use_clipper && clipper.Step()); ++iter)
         {
-            auto &img          = m_images[i];
-            bool  is_current   = m_current == i;
-            bool  is_reference = m_reference == i;
-
-            if (!img->visible)
+            int start = use_clipper ? clipper.DisplayStart : 0;
+            int end   = use_clipper ? clipper.DisplayEnd : m_visible_images.size();
+            for (int vi = start; vi < end; ++vi)
             {
-                ++hidden_images;
-                continue;
-            }
+                int   i            = m_visible_images[vi];
+                auto &img          = m_images[i];
+                bool  is_current   = m_current == i;
+                bool  is_reference = m_reference == i;
 
-            ++visible_img_number;
+                ImGuiTreeNodeFlags node_flags = base_node_flags;
 
-            ImGuiTreeNodeFlags node_flags = base_node_flags;
+                ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
 
-            ImGui::PushFont(m_file_list_mode == 0 ? m_sans_regular : m_sans_bold, ImGui::GetStyle().FontSizeBase);
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
+                ImGui::TextAligned(fmt::format("{}", vi + 1), 1.0f);
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
-            ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
+                ImGui::TableNextColumn();
 
-            ImGui::TableNextColumn();
-
-            if (is_current || is_reference)
-                node_flags |= ImGuiTreeNodeFlags_Selected;
-            if (m_file_list_mode == 0)
-            {
-                node_flags |= ImGuiTreeNodeFlags_Leaf;
-                ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
-            }
-
-            auto &selected_group =
-                img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
-            string group_name =
-                selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
-            auto  &channel    = img->channels[selected_group.channels[0]];
-            string layer_path = Channel::head(channel.name);
-            string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
-                              (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
-
-            string the_text = ImGui::TruncatedText(filename, img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE);
-
-            // auto item = m_images[i];
-            bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", the_text.c_str());
-
-            ImGui::PopStyleColor(3);
-
-            // Add right-click context menu
-            if (ImGui::BeginPopupContextItem())
-            {
-                if (ImGui::MenuItem("Copy path to clipboard"))
-                    ImGui::SetClipboardText(img->filename.c_str());
-
-#if !defined(__EMSCRIPTEN__)
-                std::string menu_label = fmt::format(reveal_in_file_manager_text(), file_manager_name());
-                if (ImGui::MenuItem(menu_label.c_str()))
-                {
-                    string filename, entry_fn;
-                    split_zip_entry(img->filename, filename, entry_fn);
-                    show_in_file_manager(filename.c_str());
-                }
-#endif
-                // Select as current image
-                ImGui::BeginDisabled(is_current);
-                if (ImGui::MenuItem("Select as current image"))
-                {
-                    m_current = i;
-                    set_image_textures();
-                }
-                ImGui::EndDisabled();
-
-                // Select as reference image
-                if (ImGui::MenuItem(fmt::format("{} as reference image", is_reference ? "Unselect" : "Select")))
-                {
-                    m_reference = is_reference ? -1 : i;
-                    set_image_textures();
-                }
-
-                if (ImGui::MenuItem("Close image"))
-                    image_to_close = i;
-
-                ImGui::EndPopup();
-            }
-
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
-            {
-                if (ImGui::GetIO().KeyShift)
-                    m_reference = is_reference ? -1 : i;
-                else
-                    m_current = i;
-                set_image_textures();
-                spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
-            }
-
-            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
-            {
-                // Set payload to carry the index of our item
-                ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
-
-                // Display preview
-                ImGui::TextUnformatted("Move here");
-                if (ImGui::BeginTable("ImageList", 2, table_flags))
-                {
-                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
-                    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    ImGui::TextAligned(fmt::format("{}", visible_img_number), 1.0f);
-                    ImGui::TableNextColumn();
-                    ImGui::Text(the_text);
-                    ImGui::EndTable();
-                }
-                ImGui::EndDragDropSource();
-            }
-            if (ImGui::BeginDragDropTarget())
-            {
-                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
-                {
-                    IM_ASSERT(payload->DataSize == sizeof(int));
-                    int payload_i = *(const int *)payload->Data;
-
-                    // move image at payload_i to i, and shift all images in between
-                    if (payload_i < i)
-                        for (int j = payload_i; j < i; ++j) swap(m_images[j], m_images[j + 1]);
-                    else
-                        for (int j = payload_i; j > i; --j) swap(m_images[j], m_images[j - 1]);
-
-                    // maintain the current and reference images
-                    if (m_current == payload_i)
-                        m_current = i;
-                    if (m_reference == payload_i)
-                        m_reference = i;
-
-                    ImGui::TableSetColumnSortDirection(0, ImGuiSortDirection_None, false);
-                }
-                ImGui::EndDragDropTarget();
-            }
-
-            if (open)
-            {
-                ImGui::PushFont(m_sans_regular, 0.f);
-                int visible_groups = 1;
+                if (is_current || is_reference)
+                    node_flags |= ImGuiTreeNodeFlags_Selected;
                 if (m_file_list_mode == 0)
                 {
-                    ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
-                    if (is_current && m_scroll_to_next_frame >= -0.5f)
+                    node_flags |= ImGuiTreeNodeFlags_Leaf;
+                    ImGui::Unindent(ImGui::GetTreeNodeToLabelSpacing());
+                }
+
+                auto &selected_group =
+                    img->groups[(is_reference && !is_current) ? img->reference_group : img->selected_group];
+                string group_name =
+                    selected_group.num_channels == 1 ? selected_group.name : "(" + selected_group.name + ")";
+                auto  &channel    = img->channels[selected_group.channels[0]];
+                string layer_path = Channel::head(channel.name);
+                string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
+                                  (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
+
+                string the_text =
+                    ImGui::TruncatedText(filename, img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE);
+
+                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", the_text.c_str());
+
+                ImGui::PopStyleColor(3);
+
+                // Add right-click context menu
+                if (ImGui::BeginPopupContextItem())
+                {
+                    if (ImGui::MenuItem("Copy path to clipboard"))
+                        ImGui::SetClipboardText(img->filename.c_str());
+
+#if !defined(__EMSCRIPTEN__)
+                    std::string menu_label = fmt::format(reveal_in_file_manager_text(), file_manager_name());
+                    if (ImGui::MenuItem(menu_label.c_str()))
                     {
-                        if (!ImGui::IsItemVisible())
-                            ImGui::SetScrollHereY(m_scroll_to_next_frame);
-                        m_scroll_to_next_frame = -1.f;
+                        string filename, entry_fn;
+                        split_zip_entry(img->filename, filename, entry_fn);
+                        show_in_file_manager(filename.c_str());
                     }
-                }
-                else if (m_file_list_mode == 1)
-                {
-                    visible_groups = img->draw_channel_rows(i, id, is_current, is_reference, m_scroll_to_next_frame);
-                    MY_ASSERT(visible_groups == img->root.visible_groups,
-                              "Unexpected number of visible groups; {} != {}", visible_groups,
-                              img->root.visible_groups);
-                }
-                else
-                {
-                    visible_groups = img->draw_channel_tree(i, id, is_current, is_reference, m_scroll_to_next_frame);
-                    MY_ASSERT(visible_groups == img->root.visible_groups,
-                              "Unexpected number of visible groups; {} != {}", visible_groups,
-                              img->root.visible_groups);
+#endif
+                    // Select as current image
+                    ImGui::BeginDisabled(is_current);
+                    if (ImGui::MenuItem("Select as current image"))
+                    {
+                        m_current = i;
+                        set_image_textures();
+                    }
+                    ImGui::EndDisabled();
+
+                    // Select as reference image
+                    if (ImGui::MenuItem(fmt::format("{} as reference image", is_reference ? "Unselect" : "Select")))
+                    {
+                        m_reference = is_reference ? -1 : i;
+                        set_image_textures();
+                    }
+
+                    if (ImGui::MenuItem("Close image"))
+                        image_to_close = i;
+
+                    ImGui::EndPopup();
                 }
 
-                hidden_groups += (int)img->groups.size() - visible_groups;
+                if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+                {
+                    if (ImGui::GetIO().KeyShift)
+                        m_reference = is_reference ? -1 : i;
+                    else
+                        m_current = i;
+                    set_image_textures();
+                    spdlog::trace("Setting image {} to the {} image", i, is_reference ? "reference" : "current");
+                }
 
-                ImGui::PopFont();
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+                {
+                    // Set payload to carry the index of our item
+                    ImGui::SetDragDropPayload("DND_IMAGE", &i, sizeof(int));
+
+                    // Display preview
+                    ImGui::TextUnformatted("Move here");
+                    if (ImGui::BeginTable("ImageList", 2, table_flags))
+                    {
+                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
+                        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TextAligned(fmt::format("{}", vi + 1), 1.0f);
+                        ImGui::TableNextColumn();
+                        ImGui::Text(the_text);
+                        ImGui::EndTable();
+                    }
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("DND_IMAGE"))
+                    {
+                        IM_ASSERT(payload->DataSize == sizeof(int));
+                        int payload_i = *(const int *)payload->Data;
+
+                        // move image at payload_i to i, and shift all images in between
+                        if (payload_i < i)
+                            for (int j = payload_i; j < i; ++j) swap(m_images[j], m_images[j + 1]);
+                        else
+                            for (int j = payload_i; j > i; --j) swap(m_images[j], m_images[j - 1]);
+
+                        // maintain the current and reference images
+                        if (m_current == payload_i)
+                            m_current = i;
+                        if (m_reference == payload_i)
+                            m_reference = i;
+
+                        ImGui::TableSetColumnSortDirection(0, ImGuiSortDirection_None, false);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
 
                 if (open)
-                    ImGui::TreePop();
-            }
+                {
+                    ImGui::PushFont(m_sans_regular, 0.f);
+                    int visible_groups = 1;
+                    if (m_file_list_mode == 0)
+                    {
+                        ImGui::Indent(ImGui::GetTreeNodeToLabelSpacing());
+                        if (is_current && m_scroll_to_next_frame >= -0.5f)
+                        {
+                            if (!ImGui::IsItemVisible())
+                                ImGui::SetScrollHereY(m_scroll_to_next_frame);
+                            m_scroll_to_next_frame = -1.f;
+                        }
+                    }
+                    else if (m_file_list_mode == 1)
+                    {
+                        visible_groups =
+                            img->draw_channel_rows(i, id, is_current, is_reference, m_scroll_to_next_frame);
+                        MY_ASSERT(visible_groups == img->root.visible_groups,
+                                  "Unexpected number of visible groups; {} != {}", visible_groups,
+                                  img->root.visible_groups);
+                    }
+                    else
+                    {
+                        visible_groups =
+                            img->draw_channel_tree(i, id, is_current, is_reference, m_scroll_to_next_frame);
+                        MY_ASSERT(visible_groups == img->root.visible_groups,
+                                  "Unexpected number of visible groups; {} != {}", visible_groups,
+                                  img->root.visible_groups);
+                    }
 
-            ImGui::PopFont();
+                    hidden_groups += (int)img->groups.size() - visible_groups;
+
+                    ImGui::PopFont();
+
+                    if (open)
+                        ImGui::TreePop();
+                }
+
+                ImGui::PopFont();
+            }
         }
 
+        int hidden_images = num_images() - num_visible_images();
         if (hidden_images || hidden_groups)
         {
             ImGui::BeginDisabled();

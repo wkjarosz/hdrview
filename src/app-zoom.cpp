@@ -199,7 +199,8 @@ int HDRViewApp::next_visible_image_index(int index, Direction_ direction) const
 
 int HDRViewApp::nth_visible_image_index(int n) const
 {
-    return (int)nth_matching_index(m_images, (size_t)n, [](size_t, const ImagePtr &img) { return img->visible; });
+    return (int)n < m_visible_images.size() ? m_visible_images[n] : m_images.size();
+    // nth_matching_index(m_images, (size_t)n, [](size_t, const ImagePtr &img) { return img->visible; });
 }
 
 int HDRViewApp::image_index(ConstImagePtr img) const

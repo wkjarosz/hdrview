@@ -642,7 +642,8 @@ void Checkbox(const Action &a)
     }
 }
 
-void WrappedTextProperty(const string &property_name, const string &value, const string &tooltip, ImFont *font)
+void WrappedTextProperty(const string &property_name, const string &value, const string &tooltip, ImFont *font,
+                         float wrap_em)
 {
     nvgui::PropertyEditor::entry(
         property_name,
@@ -651,7 +652,8 @@ void WrappedTextProperty(const string &property_name, const string &value, const
             ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
 
             ImGui::PushTextWrapPos(ImGui::GetCursorPos().x +
-                                   std::max(HelloImGui::EmSize(8.f), ImGui::GetContentRegionAvail().x));
+                                   std::max(HelloImGui::EmSize(8.f), wrap_em <= 0.f ? ImGui::GetContentRegionAvail().x
+                                                                                    : HelloImGui::EmSize(wrap_em)));
 
             ImGui::TextUnformatted(value);
             if (ImGui::IsItemClicked())

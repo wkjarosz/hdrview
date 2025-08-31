@@ -513,7 +513,8 @@ void Image::draw_colorspace()
     if (PE::begin("Colorspace", table_flags))
     {
         ImGui::WrappedTextProperty("Transfer function", metadata.value<string>("transfer function", "linear"),
-                                   "The transfer function applied at load time to make the values linear.", bold_font);
+                                   "The transfer function applied at load time to make the values linear.", bold_font,
+                                   FLT_MAX);
 
         PE::entry("Color gamut",
                   [&]

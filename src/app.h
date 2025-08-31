@@ -60,6 +60,7 @@ public:
     // access to images
     //-----------------------------------------------------------------------------
     int           num_images() const { return int(m_images.size()); }
+    int           num_visible_images() const { return int(m_visible_images.size()); }
     int           current_image_index() const { return m_current; }
     int           reference_image_index() const { return m_reference; }
     bool          is_valid(int index) const { return index >= 0 && index < num_images(); }
@@ -258,6 +259,7 @@ private:
     HelloImGui::RunnerParams m_params;
 
     ImGuiTextFilter m_file_filter, m_channel_filter;
+    vector<size_t>  m_visible_images;
 
     ImFont *m_sans_regular = nullptr, *m_sans_bold = nullptr, *m_mono_regular = nullptr, *m_mono_bold = nullptr;
 
