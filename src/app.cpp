@@ -95,6 +95,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_params.imGuiWindowParams.defaultImGuiWindowType = DefaultImGuiWindowType::ProvideFullScreenDockSpace;
     // m_params.imGuiWindowParams.backgroundColor        = float4{0.15f, 0.15f, 0.15f, 1.f};
 
+    m_params.fpsIdling.rememberEnableIdling = true;
+
     // Load additional font
     m_params.callbacks.LoadAdditionalFonts = [this]() { load_fonts(); };
 
@@ -114,7 +116,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     //
     // Toolbars
     //
-    m_top_toolbar_options.sizeEm          = 2.3f;
+    m_top_toolbar_options.sizeEm          = 2.34285714f; // (14+8+1)/14 + 2*0.35
     m_top_toolbar_options.WindowPaddingEm = ImVec2(0.7f, 0.35f);
     m_params.callbacks.AddEdgeToolbar(EdgeToolbarType::Top, [this]() { draw_top_toolbar(); }, m_top_toolbar_options);
 
@@ -403,7 +405,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         if (auto it = m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top);
             it != m_params.callbacks.edgesToolbars.end())
         {
-            m_top_toolbar_options.WindowPaddingEm = PixelsToEm(ImGui::GetStyle().FramePadding);
+            m_top_toolbar_options.WindowPaddingEm =
+                PixelsToEm(ImVec2(ImGui::GetStyle().WindowPadding.x, ImGui::GetStyle().FramePadding.y));
             m_top_toolbar_options.sizeEm =
                 PixelSizeToEm(ImGui::GetFrameHeight() + 1) + 2.f * m_top_toolbar_options.WindowPaddingEm.y;
             it->second.options = m_top_toolbar_options;
@@ -823,8 +826,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    [this]
                    {
                        m_play_backward &= !m_play_forward;
-                       m_play_stopped                  = !(m_play_forward || m_play_backward);
-                       m_params.fpsIdling.enableIdling = m_play_stopped;
+                       m_play_stopped             = !(m_play_forward || m_play_backward);
+                       m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
                    always_enabled, false, &m_play_forward});
         add(Action{"Stop playback", ICON_MY_STOP, ImGuiKey_Space, 0,
@@ -832,15 +835,15 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    {
                        m_play_forward &= !m_play_stopped;
                        m_play_backward &= !m_play_stopped;
-                       m_params.fpsIdling.enableIdling = true;
+                       m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
                    [this] { return m_play_forward || m_play_backward; }, false, &m_play_stopped});
         add(Action{"Play backward", ICON_MY_PLAY_BACKWARD, ImGuiMod_Shift | ImGuiKey_Space, 0,
                    [this]
                    {
                        m_play_forward &= !m_play_backward;
-                       m_play_stopped                  = !(m_play_forward || m_play_backward);
-                       m_params.fpsIdling.enableIdling = m_play_stopped;
+                       m_play_stopped             = !(m_play_forward || m_play_backward);
+                       m_params.fpsIdling.fpsIdle = m_play_stopped ? 9.f : 0.f;
                    },
                    always_enabled, false, &m_play_backward});
 
