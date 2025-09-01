@@ -2,6 +2,7 @@
 
 #include "image.h"
 #include <fstream>
+#include <sstream>
 
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
