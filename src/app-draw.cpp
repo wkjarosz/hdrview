@@ -311,7 +311,7 @@ void HDRViewApp::process_shortcuts()
 {
     if (ImGui::GetIO().WantCaptureKeyboard)
     {
-        spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard");
+        // spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard");
         return;
     }
 
