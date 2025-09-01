@@ -18,6 +18,8 @@ using namespace std;
 
 #ifndef HDRVIEW_ENABLE_LIBJPEG
 
+#include "stb.h"
+
 bool is_jpg_image(istream &is) noexcept { return false; }
 
 std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, std::string_view channel_selector)
@@ -25,9 +27,10 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive,
+                    float gain, bool sRGB, bool dither)
 {
-    return;
+    return save_stb_image(img, os, filename, gain, sRGB, dither);
 }
 
 #else
