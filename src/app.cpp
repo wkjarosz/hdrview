@@ -730,7 +730,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        if (!filename.empty())
                            save_as(filename);
                    },
-                   if_img});
+                   if_img, false, nullptr, "Save the current image to disk in a supported format."});
         add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
                    [this]()
                    {
@@ -745,7 +745,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                        if (!filename.empty())
                            export_as(filename);
                    },
-                   if_img});
+                   if_img, false, nullptr,
+                   "Export the composited/blended result between the current image and reference image to disk."});
 
 #else
         add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
@@ -765,7 +766,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                save_as(filename);
                        }
                    },
-                   if_img, true});
+                   if_img, true, nullptr, "Save the current image to disk in a supported format."});
         add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
                    [this]()
                    {
@@ -783,7 +784,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                                export_as(filename);
                        }
                    },
-                   if_img, true});
+                   if_img, true, nullptr,
+                   "Export the composited/blended result between the current image and reference image to disk."});
 #endif
 
         add(Action{"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,

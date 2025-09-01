@@ -815,13 +815,14 @@ inline float blend(float top, float bottom, BlendMode_ blend_mode)
     float diff = top - bottom;
     switch (blend_mode)
     {
-    // case BlendMode_Normal:
-    default: return top;
+    default: [[fallthrough]];
+    case BlendMode_Normal: return top;
     case BlendMode_Multiply: return top * bottom;
     case BlendMode_Divide: return top / bottom;
     case BlendMode_Add: return top + bottom;
     case BlendMode_Average: return 0.5f * (top + bottom);
     case BlendMode_Subtract: return diff;
+    case BlendMode_Relative_Subtract: return diff / (bottom + 0.01f);
     case BlendMode_Difference: return abs(diff);
     case BlendMode_Relative_Difference: return abs(diff) / (bottom + 0.01f);
     }
@@ -834,13 +835,14 @@ inline float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
     float  alpha = top.w + bottom.w * (1.f - top.w);
     switch (blend_mode)
     {
-    // case BlendMode_Normal:
-    default: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
+    default: [[fallthrough]];
+    case BlendMode_Normal: return float4(top.xyz() + bottom.xyz() * (1.f - top.w), alpha);
     case BlendMode_Multiply: return float4(top.xyz() * bottom.xyz(), alpha);
     case BlendMode_Divide: return float4(top.xyz() / bottom.xyz(), alpha);
     case BlendMode_Add: return float4(top.xyz() + bottom.xyz(), alpha);
     case BlendMode_Average: return 0.5f * (top + bottom);
     case BlendMode_Subtract: return float4(diff, alpha);
+    case BlendMode_Relative_Subtract: return float4(diff / (bottom.xyz() + float3(0.01f)), alpha);
     case BlendMode_Difference: return float4(abs(diff), alpha);
     case BlendMode_Relative_Difference: return float4(abs(diff) / (bottom.xyz() + float3(0.01f)), alpha);
     }

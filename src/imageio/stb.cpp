@@ -244,7 +244,7 @@ void save_stb_image(const Image &img, ostream &os, const string_view filename, f
         // get interleaved HDR pixel data
         int  w = 0, h = 0, n = 0;
         auto pixels = img.as_interleaved_floats(&w, &h, &n, gain);
-        if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0)
+        if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
             throw runtime_error("Failed to write HDR image via stb.");
         spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
     }
@@ -254,19 +254,19 @@ void save_stb_image(const Image &img, ostream &os, const string_view filename, f
         int  w = 0, h = 0, n = 0;
         auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
 
-        bool ret = false;
+        bool success = false;
         if (extension == ".png")
-            ret = stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
+            success = stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
         else if (extension == ".bmp")
-            ret = stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+            success = stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
         else if (extension == ".tga")
-            ret = stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
+            success = stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
         else if (extension == ".jpg" || extension == ".jpeg")
-            ret = stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 100) != 0;
+            success = stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 100) != 0;
         else
             throw invalid_argument(
                 fmt::format("Could not determine desired file type from extension \"{}\".", extension));
-        if (ret)
+        if (success)
             spdlog::info("Saved {} image via stb to '{}' in {} seconds.", to_upper(extension.substr(1)), filename,
                          (timer.elapsed() / 1000.f));
         else

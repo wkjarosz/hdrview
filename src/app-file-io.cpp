@@ -17,18 +17,19 @@ void HDRViewApp::save_as(const string &filename) const
 {
     try
     {
-#if !defined(__EMSCRIPTEN__)
-        ofstream os{filename, ios_base::binary};
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
-#else
         ostringstream os;
         current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
         string buffer = os.str();
+
+#if !defined(__EMSCRIPTEN__)
+        ofstream ofs{filename, ios_base::binary};
+        ofs.write(buffer.data(), buffer.size());
+#else
         emscripten_browser_file::download(
-            filename,                                    // the default filename for the browser to save.
-            "application/octet-stream",                  // the MIME type of the data, treated as if it were a webserver
-                                                         // serving a file
-            string_view(buffer.c_str(), buffer.length()) // a buffer describing the data to download
+            filename,                                   // the default filename for the browser to save.
+            "application/octet-stream",                 // the MIME type of the data, treated as if it were a webserver
+                                                        // serving a file
+            string_view(buffer.data(), buffer.length()) // a buffer describing the data to download
         );
 #endif
     }

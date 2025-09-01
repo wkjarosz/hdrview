@@ -34,11 +34,11 @@
 using namespace std;
 using namespace HelloImGui;
 
-static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
-                               float width = 0.f)
+void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy,
+                                    float width) const
 {
-    float4   color32         = hdrview()->pixel_value(pixel, true, which_image);
-    float4   displayed_color = linear_to_sRGB(hdrview()->pixel_value(pixel, false, which_image));
+    float4   color32         = pixel_value(pixel, true, which_image);
+    float4   displayed_color = linear_to_sRGB(pixel_value(pixel, false, which_image));
     uint32_t hex             = color_f128_to_u32(color_u32_to_f128(color_f128_to_u32(displayed_color)));
     int4     ldr_color       = int4{float4{color_u32_to_f128(hex)} * 255.f};
     bool3    inside          = {false, false, false};
@@ -53,18 +53,18 @@ static void pixel_color_widget(const int2 &pixel, int &color_mode, int which_ima
         ChannelGroup  group;
         if (which_image == 0)
         {
-            if (!hdrview()->current_image())
+            if (!current_image())
                 return;
-            img        = hdrview()->current_image();
+            img        = current_image();
             components = color_mode == 0 ? img->groups[img->selected_group].num_channels : 4;
             group      = img->groups[img->selected_group];
             inside[0]  = img->contains(pixel);
         }
         else if (which_image == 1)
         {
-            if (!hdrview()->reference_image())
+            if (!reference_image())
                 return;
-            img        = hdrview()->reference_image();
+            img        = reference_image();
             components = color_mode == 0 ? img->groups[img->reference_group].num_channels : 4;
             group      = img->groups[img->reference_group];
             inside[1]  = img->contains(pixel);

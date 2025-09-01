@@ -137,7 +137,9 @@ void Image::save(ostream &os, string_view _filename, float gain, bool sRGB, bool
     if (extension == ".exr")
         return save_exr_image(*this, os, _filename);
     else if (extension == ".jpg" || extension == ".jpeg")
-        return save_uhdr_image(*this, os, _filename, gain);
+        return save_jpg_image(*this, os, _filename, 95, true, gain, sRGB, dither);
+    // else if (extension == ".jpg" || extension == ".jpeg")
+    //     return save_uhdr_image(*this, os, _filename, gain);
     else if (extension == ".pfm")
         return save_pfm_image(*this, os, _filename, gain);
     else if (extension == ".qoi")

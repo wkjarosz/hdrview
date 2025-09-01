@@ -278,8 +278,16 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     }
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive,
+                    float gain, bool sRGB, bool dither)
 {
+    // get interleaved LDR pixel data
+    int  w = 0, h = 0, n = 0;
+    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    // Validation: ensure we actually have pixel data / valid dimensions
+    if (!pixels || w <= 0 || h <= 0)
+        throw runtime_error("JPEG: empty image or invalid image dimensions");
+
     jpeg_compress_struct cinfo;
     jpeg_error_mgr       jerr;
     cinfo.err = jpeg_std_error(&jerr);
@@ -330,18 +338,11 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
         jpeg_simple_progression(&cinfo);
 
     jpeg_start_compress(&cinfo, TRUE);
-    std::vector<uint8_t> row_buffer(img.size().x * img.channels.size());
-    for (int y = 0; y < img.size().y; ++y)
+    // write scanlines one row at a time with a JSAMPROW pointer to each row
+    const size_t row_stride = size_t(w) * size_t(n); // bytes per row
+    for (int y = 0; y < h; ++y)
     {
-        for (int x = 0; x < img.size().x; ++x)
-        {
-            for (int c = 0; c < (int)img.channels.size(); ++c)
-            {
-                row_buffer[x * img.channels.size() + c] =
-                    static_cast<uint8_t>(std::clamp(img.channels[c](x, y) * 255.0f, 0.0f, 255.0f));
-            }
-        }
-        JSAMPROW row_pointer = row_buffer.data();
+        JSAMPROW row_pointer = pixels.get() + size_t(y) * row_stride;
         jpeg_write_scanlines(&cinfo, &row_pointer, 1);
     }
     jpeg_finish_compress(&cinfo);

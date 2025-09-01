@@ -35,26 +35,7 @@ void save_uhdr_image(const Image &img, ostream &os, string_view filename, float 
 
 #else
 
-#include <ImfHeader.h>
-#include <ImfRgbaYca.h>
-#include <ImfStandardAttributes.h>
-
 #include <ultrahdr_api.h>
-
-static uhdr_color_gamut cg_from_chr(const optional<Chromaticities> &chr)
-{
-    if (chr)
-    {
-        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_sRGB_BT709)))
-            return UHDR_CG_BT_709;
-        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_Display_P3_SMPTE432)))
-            return UHDR_CG_DISPLAY_P3;
-        if (approx_equal(*chr, gamut_chromaticities(ColorGamut_BT2020_2100)))
-            return UHDR_CG_BT_2100;
-    }
-
-    return UHDR_CG_UNSPECIFIED;
-}
 
 bool is_uhdr_image(istream &is) noexcept
 {
@@ -300,6 +281,24 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
 
+    // The UHDR API expects a packed RGBA half-float buffer for UHDR_IMG_FMT_64bppRGBAHalfFloat.
+    // If we were given only RGB (n==3) expand to RGBA and set alpha to 1.0.
+    const size_t      npixels = size_t(w) * size_t(h);
+    std::vector<half> expanded_rgba(npixels * 4); // keep alive until after encode()
+    auto              src = reinterpret_cast<half *>(pixels.get());
+    for (size_t i = 0; i < npixels; ++i)
+    {
+        float3 rgb               = {src[3 * i + 0], src[3 * i + 1], src[3 * i + 2]};
+        float3 srgb              = mul(img.M_to_sRGB, rgb);
+        expanded_rgba[4 * i + 0] = srgb.x;
+        expanded_rgba[4 * i + 1] = srgb.y;
+        expanded_rgba[4 * i + 2] = srgb.z;
+        expanded_rgba[4 * i + 3] = half(1.0f); // opaque alpha
+    }
+    // Treat as 4-channel data from now on
+    n                = 4;
+    void *plane0_ptr = expanded_rgba.data();
+
     auto throw_if_error = [](uhdr_error_info_t status)
     {
         if (status.error_code != UHDR_CODEC_OK)
@@ -310,14 +309,14 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     auto encoder  = Encoder{uhdr_create_encoder(), uhdr_release_encoder};
 
     uhdr_raw_image_t raw_image{
-        UHDR_IMG_FMT_64bppRGBAHalfFloat,  /**< Image Format */
-        cg_from_chr(img.chromaticities),  /**< Color Gamut */
-        UHDR_CT_LINEAR,                   /**< Color Transfer */
-        UHDR_CR_FULL_RANGE,               /**< Color Range */
-        (unsigned)w,                      /**< Stored image width */
-        (unsigned)h,                      /**< Stored image height */
-        {pixels.get(), nullptr, nullptr}, /**< pointer to the top left pixel for each plane */
-        {(unsigned)w, 0u, 0u}             /**< stride in pixels between rows for each plane */
+        UHDR_IMG_FMT_64bppRGBAHalfFloat, /**< Image Format */
+        UHDR_CG_BT_709,                  /**< Color Gamut */
+        UHDR_CT_LINEAR,                  /**< Color Transfer */
+        UHDR_CR_FULL_RANGE,              /**< Color Range */
+        (unsigned)w,                     /**< Stored image width */
+        (unsigned)h,                     /**< Stored image height */
+        {plane0_ptr, nullptr, nullptr},  /**< pointer to the top left pixel for each plane */
+        {(unsigned)w, 0u, 0u}            /**< stride in pixels between rows for each plane */
     };
 
     throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &raw_image, UHDR_HDR_IMG));

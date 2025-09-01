@@ -206,6 +206,9 @@ private:
 
     void setup_rendering();
 
+    void pixel_color_widget(const int2 &pixel, int &color_mode, int which_image, bool allow_copy = false,
+                            float width = 0.f) const;
+
 private:
     //-----------------------------------------------------------------------------
     // Private data members

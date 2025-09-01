@@ -519,6 +519,10 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
 
+    // Validation: ensure we actually have pixel data / valid dimensions
+    if (!pixels || w <= 0 || h <= 0)
+        throw runtime_error("PNG: empty image or invalid image dimensions");
+
     if (n != 1 && n != 2 && n != 3 && n != 4)
         throw runtime_error("Unsupported channel count for PNG");
 
@@ -557,14 +561,21 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
                      : (n == 3) ? PNG_COLOR_TYPE_RGB
                                 : PNG_COLOR_TYPE_RGB_ALPHA;
 
+    // set Adam7 interlacing instead of no interlace
     png_set_IHDR(png_ptr, info_ptr.get(), w, h, 8, color_type, PNG_INTERLACE_ADAM7, PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
 
     png_write_info(png_ptr, info_ptr.get());
 
-    // Write image data row by row
-    size_t row_bytes = w * n;
-    for (int y = 0; y < h; ++y) png_write_row(png_ptr, pixels.get() + y * row_bytes);
+    // Ask libpng for the correct rowbytes (safer than w * n)
+    size_t row_bytes = png_get_rowbytes(png_ptr, info_ptr.get());
+    if (row_bytes != size_t(w * n))
+        throw runtime_error("PNG: mismatched rowbytes");
+
+    // build row pointers and let libpng handle Adam7 passes
+    std::vector<png_bytep> row_pointers(h);
+    for (int y = 0; y < h; ++y) row_pointers[y] = pixels.get() + size_t(y) * row_bytes;
+    png_write_image(png_ptr, row_pointers.data());
 
     png_write_end(png_ptr, info_ptr.get());
 }
