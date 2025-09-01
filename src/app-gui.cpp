@@ -659,19 +659,10 @@ void HDRViewApp::draw_command_palette()
     if (m_open_command_palette)
         ImGui::OpenPopup("Command palette...");
 
-    auto &io = ImGui::GetIO();
-
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
-
-    ImGui::SetNextWindowSize(ImVec2{400, 0}, ImGuiCond_Always);
-
-    float remaining_height            = ImGui::GetMainViewport()->Size.y - ImGui::GetCursorScreenPos().y;
-    float search_result_window_height = remaining_height - 2.f * EmSize();
-
-    // Set constraints to allow horizontal resizing based on content
-    ImGui::SetNextWindowSizeConstraints(ImVec2(0, 0),
-                                        ImVec2(io.DisplaySize.x - 2.f * EmSize(), search_result_window_height));
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * EmSize()), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowSize(ImVec2{EmSize(30), 0}, ImGuiCond_Always);
 
     if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -688,8 +679,7 @@ void HDRViewApp::draw_command_palette()
             ImCmd::SetStyleFont(ImCmdTextType_Regular, m_sans_regular);
             ImCmd::SetStyleFont(ImCmdTextType_Highlight, m_sans_bold);
             ImCmd::SetStyleFlag(ImCmdTextType_Highlight, ImCmdTextFlag_Underline, true);
-            auto highlight_font_color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
-            ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::ColorConvertFloat4ToU32(highlight_font_color));
+            ImCmd::SetStyleColor(ImCmdTextType_Highlight, ImGui::GetColorU32(ImGuiCol_CheckMark));
 
             for (auto &a : m_actions)
             {
@@ -765,21 +755,9 @@ void HDRViewApp::draw_command_palette()
             ImCmd::SetNextCommandPaletteSearch("");
         }
 
-        // ImCmd::SetNextCommandPaletteSearchBoxFocused(); // always focus the search box
-        ImCmd::CommandPalette("Command palette", "Filter commands...");
-
-        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
-        {
-            // Close window when user selects an item, hits escape, or unfocuses the command palette window
-            // (clicking elsewhere)
-            ImGui::CloseCurrentPopup();
-        }
-
         if (ImGui::BeginTable("PaletteHelp", 3, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_ContextMenuInBody))
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-            ImGui::ScopedFont sf{m_sans_bold, 10};
+            // ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 
             string txt;
             txt = "Navigate (" ICON_MY_ARROW_UP ICON_MY_ARROW_DOWN ")";
@@ -794,10 +772,17 @@ void HDRViewApp::draw_command_palette()
             txt = "Dismiss (" ICON_MY_KEY_ESC ")";
             ImGui::TextAligned(txt, 1.f);
 
-            ImGui::PopStyleColor();
+            // ImGui::PopStyleColor();
 
             ImGui::EndTable();
         }
+
+        ImCmd::CommandPalette("Command palette", "Filter commands...");
+
+        // Close window when we select an item, hit escape, or unfocus the command palette window (click elsewhere)
+        if (ImCmd::IsAnyItemSelected() || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
+            ImGui::CloseCurrentPopup();
 
         ImGui::EndPopup();
     }
