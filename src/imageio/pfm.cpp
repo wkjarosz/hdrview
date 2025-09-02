@@ -5,6 +5,7 @@
 //
 
 #include "pfm.h"
+#include "colorspace.h"
 #include "image.h"
 #include "timer.h"
 #include <cmath>
@@ -181,7 +182,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, float g
     Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, gain, TransferFunction_Linear);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }

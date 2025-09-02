@@ -240,7 +240,7 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved_floats(&w, &h, &n, 1.0f);
+    auto  pixels = img.as_interleaved<float>(&w, &h, &n);
     if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write HDR image via stb.");
     spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
@@ -251,7 +251,8 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                               2.2f, dither);
     if (stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), std::clamp(int(quality), 1, 100)) == 0)
         throw std::runtime_error("Failed to write JPG image via stb.");
     spdlog::info("Saved JPG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
@@ -262,7 +263,8 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                               2.2f, dither);
     if (stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write TGA image via stb.");
     spdlog::info("Saved TGA image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
@@ -273,7 +275,8 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                               2.2f, dither);
     if (stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write BMP image via stb.");
     spdlog::info("Saved BMP image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
@@ -284,7 +287,8 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                               2.2f, dither);
     if (stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) == 0)
         throw std::runtime_error("Failed to write PNG image via stb.");
     spdlog::info("Saved PNG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));

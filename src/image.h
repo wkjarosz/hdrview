@@ -407,13 +407,9 @@ public:
     void save(std::ostream &os, std::string_view filename, float gain = 1.f, bool sRGB = true,
               bool dither = true) const;
 
-    std::unique_ptr<uint8_t[]>  as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
-    std::unique_ptr<uint16_t[]> as_interleaved_shorts(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
-    std::unique_ptr<float[]>    as_interleaved_floats(int *w, int *h, int *n, float gain) const;
-    std::unique_ptr<half[]>     as_interleaved_halves(int *w, int *h, int *n, float gain) const;
-
     template <typename T>
-    std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, float gamma = 2.2f,
+    std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
+                                        TransferFunction tf = TransferFunction_Linear, float gamma = 1.f,
                                         bool dither = true, bool unpremultiply = true,
                                         bool convert_to_sRGB = true) const;
 

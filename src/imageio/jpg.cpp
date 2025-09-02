@@ -5,6 +5,7 @@
 //
 
 #include "jpg.h"
+#include "colorspace.h"
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
@@ -286,10 +287,25 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 {
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                              2.2f, dither);
     // Validation: ensure we actually have pixel data / valid dimensions
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("JPEG: empty image or invalid image dimensions");
+
+    if (n > 3)
+    {
+        // Remove alpha channel: convert RGBA to RGB in-place
+        std::unique_ptr<uint8_t[]> rgb_pixels(new uint8_t[w * h * 3]);
+        for (int i = 0, j = 0; i < w * h; ++i, j += n)
+        {
+            rgb_pixels[i * 3 + 0] = pixels[j + 0];
+            rgb_pixels[i * 3 + 1] = pixels[j + 1];
+            rgb_pixels[i * 3 + 2] = pixels[j + 2];
+        }
+        pixels.swap(rgb_pixels);
+        n = 3;
+    }
 
     jpeg_compress_struct cinfo;
     jpeg_error_mgr       jerr;
@@ -331,9 +347,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     } dest_mgr(os);
     cinfo.dest = reinterpret_cast<jpeg_destination_mgr *>(&dest_mgr);
 
-    cinfo.image_width      = img.size().x;
-    cinfo.image_height     = img.size().y;
-    cinfo.input_components = img.channels.size();
+    cinfo.image_width      = w;
+    cinfo.image_height     = h;
+    cinfo.input_components = n;
     cinfo.in_color_space   = (img.channels.size() == 1) ? JCS_GRAYSCALE : JCS_RGB;
     jpeg_set_defaults(&cinfo);
     jpeg_set_quality(&cinfo, quality, TRUE);

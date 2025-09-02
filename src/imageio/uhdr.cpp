@@ -280,7 +280,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     Timer timer;
     // get interleaved HDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_halves(&w, &h, &n, gain);
+    auto pixels = img.as_interleaved<half>(&w, &h, &n, gain);
 
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");

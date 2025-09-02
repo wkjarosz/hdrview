@@ -267,7 +267,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         {
 #if !defined(__EMSCRIPTEN__)
             filename = pfd::save_file(
-                           save_as_name.c_str(), "",
+                           save_as_name.c_str(), "output" + string(save_format_extensions[save_format]),
                            {string(save_format_names[save_format]) + " images", save_format_extensions[save_format]})
                            .result();
 #else

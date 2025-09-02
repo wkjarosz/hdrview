@@ -104,7 +104,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, float g
     Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
+                                              2.2f, dither);
 
     // The QOI image format only supports RGB or RGBA data.
     if (n != 4 && n != 3)
