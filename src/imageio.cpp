@@ -197,6 +197,54 @@ std::unique_ptr<uint8_t[]> Image::as_interleaved_bytes(int *w, int *h, int *n, f
     return pixels;
 }
 
+std::unique_ptr<uint16_t[]> Image::as_interleaved_shorts(int *w, int *h, int *n, float gain, bool sRGB,
+                                                         bool dither) const
+{
+    Timer timer;
+    *w                   = size().x;
+    *h                   = size().y;
+    *n                   = groups[selected_group].num_channels;
+    const Channel *alpha = *n > 3 ? &channels[groups[selected_group].channels[3]] : nullptr;
+
+    std::unique_ptr<uint16_t[]> pixels(new uint16_t[(*w) * (*h) * (*n)]);
+
+    int block_size = std::max(1, 1024 * 1024 / (*w));
+    parallel_for(
+        blocked_range<int>(0, *h, block_size),
+        [this, alpha, w = *w, n = *n, data = pixels.get(), gain, sRGB, dither](int begin_y, int end_y, int, int)
+        {
+            int y_stride = w * n;
+            for (int y = begin_y; y < end_y; ++y)
+                for (int x = 0; x < w; ++x)
+                {
+                    auto rgba_pixel = data + y * y_stride + n * x;
+                    for (int c = 0; c < n; ++c)
+                    {
+                        float v = channels[groups[selected_group].channels[c]](x, y);
+
+                        // only gamma correct and premultiply the RGB channels.
+                        // alpha channel gets stored linearly.
+                        if (c < 3)
+                        {
+                            v *= gain;
+
+                            // unpremultiply
+                            if (alpha)
+                                v /= std::max(k_small_alpha, (*alpha)(x, y));
+
+                            if (sRGB)
+                                v = linear_to_sRGB(v);
+                        }
+
+                        rgba_pixel[c] = quantize_full<uint16_t>(v, dither, x, y);
+                    }
+                }
+        });
+
+    spdlog::debug("Getting interleaved 16-bit pixels took: {} seconds.", (timer.elapsed() / 1000.f));
+    return pixels;
+}
+
 std::unique_ptr<float[]> Image::as_interleaved_floats(int *w, int *h, int *n, float gain) const
 {
     Timer timer;

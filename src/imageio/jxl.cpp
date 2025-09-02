@@ -749,34 +749,26 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     color_encoding.gamma             = 1.0; // Not used for PQ
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
 
-    if (img.chromaticities && img.chromaticities != ::gamut_chromaticities(ColorGamut_sRGB_BT709))
+    Chromaticities c{}; // sRGB/Rec709, D65
+    if (!img.chromaticities || approx_equal(*img.chromaticities, c))
     {
-        // Use chromaticities from the image
-        color_encoding.white_point           = JXL_WHITE_POINT_CUSTOM;
-        color_encoding.white_point_xy[0]     = img.chromaticities->white.x;
-        color_encoding.white_point_xy[1]     = img.chromaticities->white.y;
-        color_encoding.primaries             = JXL_PRIMARIES_CUSTOM;
-        color_encoding.primaries_red_xy[0]   = img.chromaticities->red.x;
-        color_encoding.primaries_red_xy[1]   = img.chromaticities->red.y;
-        color_encoding.primaries_green_xy[0] = img.chromaticities->green.x;
-        color_encoding.primaries_green_xy[1] = img.chromaticities->green.y;
-        color_encoding.primaries_blue_xy[0]  = img.chromaticities->blue.x;
-        color_encoding.primaries_blue_xy[1]  = img.chromaticities->blue.y;
+        color_encoding.white_point = JXL_WHITE_POINT_D65;
+        color_encoding.primaries   = JXL_PRIMARIES_SRGB;
     }
     else
     {
-        // Fallback to sRGB D65
-        color_encoding.white_point           = JXL_WHITE_POINT_D65;
-        color_encoding.white_point_xy[0]     = 0.3127;
-        color_encoding.white_point_xy[1]     = 0.3290;
-        color_encoding.primaries             = JXL_PRIMARIES_SRGB;
-        color_encoding.primaries_red_xy[0]   = 0.640;
-        color_encoding.primaries_red_xy[1]   = 0.330;
-        color_encoding.primaries_green_xy[0] = 0.300;
-        color_encoding.primaries_green_xy[1] = 0.600;
-        color_encoding.primaries_blue_xy[0]  = 0.150;
-        color_encoding.primaries_blue_xy[1]  = 0.060;
+        color_encoding.white_point = JXL_WHITE_POINT_CUSTOM;
+        color_encoding.primaries   = JXL_PRIMARIES_CUSTOM;
     }
+
+    color_encoding.white_point_xy[0]     = c.white.x;
+    color_encoding.white_point_xy[1]     = c.white.y;
+    color_encoding.primaries_red_xy[0]   = c.red.x;
+    color_encoding.primaries_red_xy[1]   = c.red.y;
+    color_encoding.primaries_green_xy[0] = c.green.x;
+    color_encoding.primaries_green_xy[1] = c.green.y;
+    color_encoding.primaries_blue_xy[0]  = c.blue.x;
+    color_encoding.primaries_blue_xy[1]  = c.blue.y;
 
     if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
         throw std::runtime_error("JxlEncoderSetColorEncoding failed");
@@ -789,8 +781,8 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     if (JXL_ENC_SUCCESS != JxlEncoderSetFrameDistance(frame_settings, distance))
         throw std::runtime_error("JxlEncoderSetFrameDistance failed");
 
-    if (JXL_ENC_SUCCESS != JxlEncoderSetCodestreamLevel(enc.get(), 10))
-        throw std::runtime_error("JxlEncoderSetCodestreamLevel failed");
+    // if (JXL_ENC_SUCCESS != JxlEncoderSetCodestreamLevel(enc.get(), 10))
+    //     throw std::runtime_error("JxlEncoderSetCodestreamLevel failed");
     // JxlEncoderSetFrameLossless(frame_settings, JXL_TRUE);
 
     size_t pixel_bytes = sizeof(float) * w * h * n;

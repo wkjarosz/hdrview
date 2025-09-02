@@ -517,15 +517,38 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     return images;
 }
 
-void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither,
-                    bool interlaced)
+void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
+                    bool sixteen_bit, TransferFunction tf)
 {
     Timer timer;
-    // get interleaved LDR pixel data
-    int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    int   w = 0, h = 0, n = 0;
+    auto  pixelsf = img.as_interleaved_floats(&w, &h, &n, gain);
+    from_linear(pixelsf.get(), {w, h, n}, tf, 2.2f);
+    std::unique_ptr<uint8_t[]>  pixels8;
+    std::unique_ptr<uint16_t[]> pixels16;
+    void                       *pixels = nullptr;
+    if (sixteen_bit)
+    {
+        pixels16 = std::make_unique<uint16_t[]>(w * h * n);
+        for (int i = 0; i < w * h * n; ++i) pixels16[i] = quantize_full<uint16_t>(pixelsf[i]);
+        if (is_little_endian())
+        {
+            // Swap bytes for each 16-bit pixel (big-endian required by PNG)
+            for (int i = 0; i < w * h * n; ++i)
+            {
+                uint16_t v  = pixels16[i];
+                pixels16[i] = (v >> 8) | (v << 8);
+            }
+        }
+        pixels = pixels16.get();
+    }
+    else
+    {
+        pixels8 = std::make_unique<uint8_t[]>(w * h * n);
+        for (int i = 0; i < w * h * n; ++i) pixels8[i] = quantize_full<uint8_t>(pixelsf[i]);
+        pixels = pixels8.get();
+    }
 
-    // Validation: ensure we actually have pixel data / valid dimensions
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("PNG: empty image or invalid image dimensions");
 
@@ -567,19 +590,42 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
                      : (n == 3) ? PNG_COLOR_TYPE_RGB
                                 : PNG_COLOR_TYPE_RGB_ALPHA;
 
-    png_set_IHDR(png_ptr, info_ptr.get(), w, h, 8, color_type, interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE,
-                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+    int bit_depth = sixteen_bit ? 16 : 8;
+
+    png_set_IHDR(png_ptr, info_ptr.get(), w, h, bit_depth, color_type,
+                 interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+
+    if (img.chromaticities)
+    {
+        const auto &chr = *img.chromaticities;
+        png_set_cHRM(png_ptr, info_ptr.get(), chr.white.x, chr.white.y, chr.red.x, chr.red.y, chr.green.x, chr.green.y,
+                     chr.blue.x, chr.blue.y);
+    }
+
+#ifdef PNG_cICP_SUPPORTED
+    // Example values, replace with your actual color primaries, transfer function, etc.
+    png_byte color_primaries     = 1;                             // e.g. 1 for BT.709, 9 for BT.2020
+    png_byte transfer_function   = transfer_function_to_cicp(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
+    png_byte matrix_coefficients = 0;                             // e.g. 0 for RGB
+    png_byte video_full_range    = 1;                             // 1 for full range, 0 for limited
+
+    png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
+#endif
 
     png_write_info(png_ptr, info_ptr.get());
 
     // Ask libpng for the correct rowbytes (safer than w * n)
     size_t row_bytes = png_get_rowbytes(png_ptr, info_ptr.get());
-    if (row_bytes != size_t(w * n))
+    if (row_bytes != size_t(w * n * bit_depth / 8))
         throw runtime_error("PNG: mismatched rowbytes");
 
     // build row pointers and let libpng handle Adam7 passes
     std::vector<png_bytep> row_pointers(h);
-    for (int y = 0; y < h; ++y) row_pointers[y] = pixels.get() + size_t(y) * row_bytes;
+    for (int y = 0; y < h; ++y)
+        row_pointers[y] =
+            sixteen_bit ? reinterpret_cast<png_bytep>(pixels16.get()) + y * row_bytes : pixels8.get() + y * row_bytes;
+
     png_write_image(png_ptr, row_pointers.data());
 
     png_write_end(png_ptr, info_ptr.get());

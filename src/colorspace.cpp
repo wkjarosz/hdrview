@@ -587,6 +587,31 @@ TransferFunction transfer_function_from_cicp(int cicp, float *gamma)
     }
 }
 
+int transfer_function_to_cicp(TransferFunction tf, float gamma)
+{
+    switch (tf)
+    {
+    case TransferFunction_ITU: return 1; // Also covers 6, 12, 14, 15 in from_cicp
+    case TransferFunction_Gamma:
+        if (gamma == 2.2f)
+            return 4;
+        else if (gamma == 2.8f)
+            return 5;
+        else
+            return 0; // Unknown gamma
+    case TransferFunction_ST240: return 7;
+    case TransferFunction_Linear: return 8;
+    case TransferFunction_Log100: return 9;
+    case TransferFunction_Log100_Sqrt10: return 10;
+    case TransferFunction_IEC61966_2_4: return 11;
+    case TransferFunction_sRGB: return 13;
+    case TransferFunction_BT2100_PQ: return 16;
+    case TransferFunction_DCI_P3: return 17;
+    case TransferFunction_BT2100_HLG: return 18;
+    default: return 0; // Unknown or unsupported
+    }
+}
+
 float3x3 RGB_to_XYZ(const Chromaticities &chroma, float Y)
 {
     // Adapted from ImfChromaticities.cpp

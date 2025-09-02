@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "colorspace.h"
 #include "fonts.h"
 #include "image.h"
 #include <fstream>
@@ -40,10 +41,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
     {
         open = false;
 
-        static int   composite         = 0;
-        static bool  progressive       = false;
-        static bool  dither            = true;
-        static bool  float32           = true;
+        static int              composite   = 0;
+        static bool             progressive = false;
+        static bool             dither      = true;
+        static TransferFunction tf          = TransferFunction_sRGB;
+        // static bool  float32           = true;
+        static bool  sixteen_bit       = false;
         static float quality           = 95.f;
         static float gainmap_quality   = 95.f;
         static bool  use_multi_channel = false;
@@ -178,20 +181,27 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 break;
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
-            case Format_JPEG_XL:
-                // ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-                // ImGui::Checkbox("Dither", &dither);
-                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
-                // ImGui::Checkbox("Use float32", &float32);
-                break;
+            case Format_JPEG_XL: ImGui::SliderFloat("Quality", &quality, 1.f, 100.f); break;
 #endif
             case Format_EXR: break;
             case Format_PFM: break;
 #ifdef HDRVIEW_ENABLE_LIBPNG
             case Format_PNG_LIBPNG:
-                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                if (ImGui::BeginCombo("Transfer function", transfer_function_name(tf).c_str()))
+                {
+                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    {
+                        bool is_selected = (tf == i);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i).c_str(), is_selected))
+                            tf = (TransferFunction)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
                 ImGui::Checkbox("Dither", &dither);
                 ImGui::Checkbox("Interlaced", &interlaced);
+                ImGui::Checkbox("Use 16 bit", &sixteen_bit);
                 break;
 #endif
             case Format_JPEG_STB:
@@ -291,7 +301,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 case Format_PFM: save_pfm_image(*img, os, filename, gain); break;
 #ifdef HDRVIEW_ENABLE_LIBPNG
                 case Format_PNG_LIBPNG:
-                    save_png_image(*img, os, filename, gain, colorspace == 1, dither, interlaced);
+                    save_png_image(*img, os, filename, gain, dither, interlaced, sixteen_bit, tf);
                     break;
 #endif
                 case Format_PNG_STB: save_stb_png(*img, os, filename, gain, colorspace == 1, dither); break;

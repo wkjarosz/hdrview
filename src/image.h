@@ -407,9 +407,10 @@ public:
     void save(std::ostream &os, std::string_view filename, float gain = 1.f, bool sRGB = true,
               bool dither = true) const;
 
-    std::unique_ptr<uint8_t[]> as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
-    std::unique_ptr<float[]>   as_interleaved_floats(int *w, int *h, int *n, float gain) const;
-    std::unique_ptr<half[]>    as_interleaved_halves(int *w, int *h, int *n, float gain) const;
+    std::unique_ptr<uint8_t[]>  as_interleaved_bytes(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
+    std::unique_ptr<uint16_t[]> as_interleaved_shorts(int *w, int *h, int *n, float gain, bool sRGB, bool dither) const;
+    std::unique_ptr<float[]>    as_interleaved_floats(int *w, int *h, int *n, float gain) const;
+    std::unique_ptr<half[]>     as_interleaved_halves(int *w, int *h, int *n, float gain) const;
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,

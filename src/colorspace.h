@@ -171,6 +171,7 @@ enum TransferFunction : TransferFunction_
 
 std::string      transfer_function_name(TransferFunction tf, float gamma = 2.2f);
 TransferFunction transfer_function_from_cicp(int cicp, float *gamma = nullptr);
+int              transfer_function_to_cicp(TransferFunction tf, float gamma = 2.2f);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
