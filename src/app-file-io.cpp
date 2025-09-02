@@ -17,6 +17,10 @@
 #include "imgui.h"
 #include "imgui_ext.h"
 
+#ifdef HDRVIEW_ENABLE_JPEGXL
+#include <jxl/types.h>
+#endif
+
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
 #include <emscripten/emscripten.h>
@@ -41,13 +45,19 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
     {
         open = false;
 
+#ifdef HDRVIEW_ENABLE_JPEGXL
+        static int data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
+#endif
+        static int              data_type   = 0;
         static int              composite   = 0;
         static bool             progressive = false;
         static bool             dither      = true;
+        static TransferFunction jxl_tf      = TransferFunction_sRGB;
         static TransferFunction tf          = TransferFunction_sRGB;
         // static bool  float32           = true;
         static bool  sixteen_bit       = false;
         static float quality           = 95.f;
+        static float gamma             = 1.0f;
         static float gainmap_quality   = 95.f;
         static bool  use_multi_channel = false;
         static int   gainmap_scale     = 1;
@@ -181,18 +191,39 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 break;
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
-            case Format_JPEG_XL: ImGui::SliderFloat("Quality", &quality, 1.f, 100.f); break;
+            case Format_JPEG_XL:
+                if (ImGui::BeginCombo("Transfer function", transfer_function_name(jxl_tf, gamma).c_str()))
+                {
+                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    {
+                        if (!jxl_supported_tf((TransferFunction)i))
+                            continue;
+
+                        bool is_selected = (jxl_tf == i);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i, gamma).c_str(), is_selected))
+                            jxl_tf = (TransferFunction)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::Combo("Data type", &data_type, "Float32\0Float16\0UInt8\0UInt16\0");
+                ImGui::BeginDisabled(jxl_tf != TransferFunction_Gamma);
+                ImGui::SliderFloat("Gamma", &gamma, 0.1f, 5.f);
+                ImGui::EndDisabled();
+                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+                break;
 #endif
             case Format_EXR: break;
             case Format_PFM: break;
 #ifdef HDRVIEW_ENABLE_LIBPNG
             case Format_PNG_LIBPNG:
-                if (ImGui::BeginCombo("Transfer function", transfer_function_name(tf).c_str()))
+                if (ImGui::BeginCombo("Transfer function", transfer_function_name(tf, gamma).c_str()))
                 {
                     for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
                     {
                         bool is_selected = (tf == i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i).c_str(), is_selected))
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i, gamma).c_str(), is_selected))
                             tf = (TransferFunction)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
@@ -295,7 +326,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                     break;
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
-                case Format_JPEG_XL: save_jxl_image(*img, os, filename, gain, quality); break;
+                case Format_JPEG_XL:
+                    save_jxl_image(*img, os, filename, gain, quality, jxl_tf, gamma, data_types[data_type]);
+                    break;
 #endif
                 case Format_EXR: save_exr_image(*img, os, filename); break;
                 case Format_PFM: save_pfm_image(*img, os, filename, gain); break;

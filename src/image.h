@@ -412,6 +412,11 @@ public:
     std::unique_ptr<float[]>    as_interleaved_floats(int *w, int *h, int *n, float gain) const;
     std::unique_ptr<half[]>     as_interleaved_halves(int *w, int *h, int *n, float gain) const;
 
+    template <typename T>
+    std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, float gamma = 2.2f,
+                                        bool dither = true, bool unpremultiply = true,
+                                        bool convert_to_sRGB = true) const;
+
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
                            bool short_names, int &visible_group, float &scroll_to);
@@ -451,5 +456,83 @@ inline Box2f display_window(ConstImagePtr img = nullptr)
     return img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
 }
 inline Box2f data_window(ConstImagePtr img = nullptr) { return img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}}; }
+
+template <typename T>
+std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, float gamma,
+                                           bool dither, bool unpremultiply, bool convert_to_sRGB) const
+{
+    *w                   = size().x;
+    *h                   = size().y;
+    *n                   = groups[selected_group].num_channels;
+    const Channel *alpha = *n > 3 ? &channels[groups[selected_group].channels[3]] : nullptr;
+
+    std::unique_ptr<T[]> pixels(new T[(*w) * (*h) * (*n)]);
+
+    int block_size = std::max(1, 1024 * 1024 / (*w));
+
+    if (*n >= 3)
+    {
+        // process RGB channels together
+        parallel_for(blocked_range<int>(0, *h, block_size),
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, gamma, unpremultiply,
+                      convert_to_sRGB](int begin_y, int end_y, int, int)
+                     {
+                         int y_stride = w * n;
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < w; ++x)
+                             {
+                                 float3 rgb{channels[groups[selected_group].channels[0]](x, y),
+                                            channels[groups[selected_group].channels[1]](x, y),
+                                            channels[groups[selected_group].channels[2]](x, y)};
+                                 rgb *= gain;
+
+                                 if (convert_to_sRGB)
+                                     rgb = mul(M_to_sRGB, rgb);
+
+                                 // unpremultiply alpha
+                                 if (alpha && unpremultiply)
+                                     rgb /= std::max(k_small_alpha, (*alpha)(x, y));
+
+                                 // Apply transfer function to RGB triple
+                                 float3 rgb_out = from_linear(rgb, tf, float3{gamma});
+
+                                 auto rgba_pixel = data + y * y_stride + n * x;
+                                 for (int c = 0; c < 3; ++c)
+                                     rgba_pixel[c] = (std::is_integral_v<T>)
+                                                         ? quantize_full<T>(rgb_out[c], dither, x, y)
+                                                         : T(rgb_out[c]);
+
+                                 // Copy alpha if present
+                                 if (alpha)
+                                     rgba_pixel[3] = std::is_integral_v<T>
+                                                         ? quantize_full<T>((*alpha)(x, y), dither, x, y)
+                                                         : T((*alpha)(x, y));
+                             }
+                     });
+    }
+    else
+    {
+        parallel_for(
+            blocked_range<int>(0, *h, block_size),
+            [this, w = *w, n = *n, data = pixels.get(), gain, tf, dither, gamma](int begin_y, int end_y, int, int)
+            {
+                int y_stride = w * n;
+                for (int y = begin_y; y < end_y; ++y)
+                    for (int x = 0; x < w; ++x)
+                    {
+                        auto rgba_pixel = data + y * y_stride + n * x;
+                        for (int c = 0; c < n; ++c)
+                        {
+                            float v = channels[groups[selected_group].channels[c]](x, y);
+                            v *= gain;
+                            v             = from_linear(v, tf, gamma);
+                            rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, dither, x, y) : T(v);
+                        }
+                    }
+            });
+    }
+
+    return pixels;
+}
 
 // void draw_histogram(Image *img, float exposure);

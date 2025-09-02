@@ -149,7 +149,9 @@ const char **color_gamut_names();
 //! are not recognized.
 Chromaticities gamut_chromaticities(ColorGamut primaries);
 Chromaticities chromaticities_from_cicp(int cicp);
-ColorGamut     named_color_gamut(const Chromaticities &chr);
+// Returns -1 if the chromaticities do not match one of the predefined CICP values
+int        chromaticities_to_cicp(const Chromaticities &chr);
+ColorGamut named_color_gamut(const Chromaticities &chr);
 
 using TransferFunction_ = int;
 enum TransferFunction : TransferFunction_
@@ -722,6 +724,26 @@ inline float from_linear(float encoded, const TransferFunction tf, const float g
     case TransferFunction_Log100_Sqrt10: return OETF_log100_sqrt10(encoded);
     case TransferFunction_IEC61966_2_4: return OETF_IEC61966_2_4(encoded);
     case TransferFunction_DCI_P3: return inverse_EOTF_DCI_P3(encoded);
+    case TransferFunction_Linear: [[fallthrough]];
+    default: return encoded;
+    }
+}
+
+inline float3 from_linear(float3 encoded, const TransferFunction tf, const float3 gamma = float3(2.2f))
+{
+    switch (tf)
+    {
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, gamma);
+    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_sRGB: return linear_to_sRGB(encoded);
+    case TransferFunction_ITU: return la::apply(OETF_ITU<float>, encoded);
+    case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, encoded * 219.f);
+    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(encoded * 219.f);
+    case TransferFunction_ST240: return la::apply(OETF_ST240<float>, encoded);
+    case TransferFunction_Log100: return la::apply(OETF_log100<float>, encoded);
+    case TransferFunction_Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, encoded);
+    case TransferFunction_IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, encoded);
+    case TransferFunction_DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, encoded);
     case TransferFunction_Linear: [[fallthrough]];
     default: return encoded;
     }

@@ -39,6 +39,38 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 #include "icc.h"
 #include "timer.h"
 
+TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &enc, float &gamma)
+{
+    switch (enc.transfer_function)
+    {
+    case JXL_TRANSFER_FUNCTION_709: return TransferFunction_ITU;
+    case JXL_TRANSFER_FUNCTION_SRGB: return TransferFunction_sRGB;
+    case JXL_TRANSFER_FUNCTION_GAMMA: gamma = enc.gamma; return TransferFunction_Gamma;
+    case JXL_TRANSFER_FUNCTION_LINEAR: return TransferFunction_Linear;
+    case JXL_TRANSFER_FUNCTION_PQ: return TransferFunction_BT2100_PQ;
+    case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction_BT2100_HLG;
+    case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction_DCI_P3;
+    case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction_Unknown;
+    }
+}
+
+JxlTransferFunction jxl_tf(TransferFunction tf)
+{
+    switch (tf)
+    {
+    case TransferFunction_Linear: return JXL_TRANSFER_FUNCTION_LINEAR;
+    case TransferFunction_Gamma: return JXL_TRANSFER_FUNCTION_GAMMA;
+    case TransferFunction_sRGB: return JXL_TRANSFER_FUNCTION_SRGB;
+    case TransferFunction_ITU: return JXL_TRANSFER_FUNCTION_709;
+    case TransferFunction_BT2100_PQ: return JXL_TRANSFER_FUNCTION_PQ;
+    case TransferFunction_BT2100_HLG: return JXL_TRANSFER_FUNCTION_HLG;
+    case TransferFunction_DCI_P3: return JXL_TRANSFER_FUNCTION_DCI;
+    default: return JXL_TRANSFER_FUNCTION_UNKNOWN;
+    }
+}
+
+bool jxl_supported_tf(TransferFunction tf) { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+
 static string color_encoding_info(const JxlColorEncoding &enc)
 {
     string out;
@@ -47,19 +79,9 @@ static string color_encoding_info(const JxlColorEncoding &enc)
     out += format_indented(4, "Green primary xy: {} {}\n", enc.primaries_green_xy[0], enc.primaries_green_xy[1]);
     out += format_indented(4, "Blue primary xy: {} {}\n", enc.primaries_blue_xy[0], enc.primaries_blue_xy[1]);
 
-    // Print out the name of the transfer function in human readable form
-    switch (enc.transfer_function)
-    {
-    case JXL_TRANSFER_FUNCTION_709: out += format_indented(4, "Transfer function: 709\n"); break;
-    case JXL_TRANSFER_FUNCTION_SRGB: out += format_indented(4, "Transfer function: sRGB\n"); break;
-    case JXL_TRANSFER_FUNCTION_GAMMA: out += format_indented(4, "Transfer function: gamma: {}\n", enc.gamma); break;
-    case JXL_TRANSFER_FUNCTION_LINEAR: out += format_indented(4, "Transfer function: linear\n"); break;
-    case JXL_TRANSFER_FUNCTION_PQ: out += format_indented(4, "Transfer function: PQ\n"); break;
-    case JXL_TRANSFER_FUNCTION_HLG: out += format_indented(4, "Transfer function: HLG\n"); break;
-    case JXL_TRANSFER_FUNCTION_DCI: out += format_indented(4, "Transfer function: DCI\n"); break;
-    case JXL_TRANSFER_FUNCTION_UNKNOWN:
-    default: out += format_indented(4, "Transfer function: unknown\n"); break;
-    }
+    float gamma;
+    auto  tf = transfer_function_from_color_encoding(enc, gamma);
+    out += format_indented(4, "Transfer function: {}\n", transfer_function_name(tf, gamma));
 
     // print out the rendering intent in human readible form
     switch (enc.rendering_intent)
@@ -702,25 +724,69 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     return images;
 }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, float quality)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, float quality,
+                    TransferFunction tf, float gamma, int data_type)
 {
     Timer timer;
 
     JxlBasicInfo info;
     JxlEncoderInitBasicInfo(&info);
 
-    int            w = 0, h = 0, n = 0;
-    auto           pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+    JxlTransferFunction jtf = jxl_tf(tf);
+
+    if (!(data_type == JXL_TYPE_FLOAT || data_type == JXL_TYPE_UINT8 || data_type == JXL_TYPE_UINT16 ||
+          data_type == JXL_TYPE_FLOAT16))
+        throw std::runtime_error("JPEG XL: unsupported data type");
+
+    if (jtf == JXL_TRANSFER_FUNCTION_UNKNOWN)
+        throw std::runtime_error("JPEG XL: unsupported transfer function");
+
+    int                         w = 0, h = 0, n = 0;
+    std::unique_ptr<uint8_t[]>  pixels_u8;
+    std::unique_ptr<uint16_t[]> pixels_u16;
+    std::unique_ptr<half[]>     pixels_f16;
+    std::unique_ptr<float[]>    pixels_f32;
+    const void                 *pixels = nullptr;
+
+    size_t pixel_bytes;
+
     JxlPixelFormat format;
+    format.endianness = JXL_NATIVE_ENDIAN;
+    format.align      = 0;
+
+    format.data_type = (JxlDataType)data_type;
+    switch (data_type)
+    {
+    case JXL_TYPE_UINT8:
+        info.bits_per_sample          = 8;
+        info.exponent_bits_per_sample = 0;
+        pixels_u8                     = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, true, true, false);
+        pixels                        = pixels_u8.get();
+        pixel_bytes                   = sizeof(uint8_t) * w * h * n;
+        break;
+    case JXL_TYPE_UINT16:
+        info.bits_per_sample          = 16;
+        info.exponent_bits_per_sample = 0;
+        pixels_u16                    = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, gamma, true, true, false);
+        pixels                        = pixels_u16.get();
+        pixel_bytes                   = sizeof(uint16_t) * w * h * n;
+        break;
+    case JXL_TYPE_FLOAT16:
+        info.bits_per_sample          = 16;
+        info.exponent_bits_per_sample = 5;
+        pixels_f16                    = img.as_interleaved<half>(&w, &h, &n, gain, tf, gamma, false, true, false);
+        pixels                        = pixels_f16.get();
+        pixel_bytes                   = sizeof(half) * w * h * n;
+        break;
+    case JXL_TYPE_FLOAT:
+        info.bits_per_sample          = 32;
+        info.exponent_bits_per_sample = 8;
+        pixels_f32                    = img.as_interleaved<float>(&w, &h, &n, gain, tf, gamma, false, true, false);
+        pixels                        = pixels_f32.get();
+        pixel_bytes                   = sizeof(float) * w * h * n;
+        break;
+    }
     format.num_channels = n;
-    format.data_type    = JXL_TYPE_FLOAT;
-    format.endianness   = JXL_NATIVE_ENDIAN;
-    format.align        = 0;
-
-    info.bits_per_sample          = 32;
-    info.exponent_bits_per_sample = 8;
-
-    from_linear(pixels.get(), {w, h, n}, TransferFunction::TransferFunction_BT2100_PQ, 2.2f);
 
     if (!pixels || w <= 0 || h <= 0)
         throw std::runtime_error("JPEG XL: empty image or invalid image dimensions");
@@ -729,8 +795,8 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     info.ysize                 = h;
     info.num_color_channels    = n == 1 ? 1 : 3;
     info.num_extra_channels    = (n == 2 || n == 4) ? 1 : 0;
-    info.alpha_bits            = (n == 2 || n == 4) ? 32 : 0;
-    info.alpha_exponent_bits   = (n == 2 || n == 4) ? 8 : 0;
+    info.alpha_bits            = (n == 2 || n == 4) ? info.bits_per_sample : 0;
+    info.alpha_exponent_bits   = (n == 2 || n == 4) ? info.exponent_bits_per_sample : 0;
     info.uses_original_profile = 0;
 
     JxlEncoderPtr enc    = JxlEncoderMake(nullptr);
@@ -745,8 +811,8 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     JxlColorEncoding color_encoding;
     memset(&color_encoding, 0, sizeof(color_encoding));
     color_encoding.color_space       = JXL_COLOR_SPACE_RGB;
-    color_encoding.transfer_function = JXL_TRANSFER_FUNCTION_PQ;
-    color_encoding.gamma             = 1.0; // Not used for PQ
+    color_encoding.transfer_function = jtf;
+    color_encoding.gamma             = gamma;
     color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
 
     Chromaticities c{}; // sRGB/Rec709, D65
@@ -759,6 +825,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     {
         color_encoding.white_point = JXL_WHITE_POINT_CUSTOM;
         color_encoding.primaries   = JXL_PRIMARIES_CUSTOM;
+        c                          = *img.chromaticities;
     }
 
     color_encoding.white_point_xy[0]     = c.white.x;
@@ -785,9 +852,10 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     //     throw std::runtime_error("JxlEncoderSetCodestreamLevel failed");
     // JxlEncoderSetFrameLossless(frame_settings, JXL_TRUE);
 
-    size_t pixel_bytes = sizeof(float) * w * h * n;
-    if (JXL_ENC_SUCCESS != JxlEncoderAddImageFrame(frame_settings, &format, pixels.get(), pixel_bytes))
-        throw std::runtime_error("JxlEncoderAddImageFrame failed");
+    if (JXL_ENC_SUCCESS != JxlEncoderAddImageFrame(frame_settings, &format, pixels, pixel_bytes))
+    {
+        throw std::runtime_error(fmt::format("JxlEncoderAddImageFrame failed: {}", (int)JxlEncoderGetError(enc.get())));
+    }
 
     JxlEncoderCloseInput(enc.get());
 

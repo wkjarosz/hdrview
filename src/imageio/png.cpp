@@ -520,17 +520,20 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
 void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
                     bool sixteen_bit, TransferFunction tf)
 {
-    Timer timer;
-    int   w = 0, h = 0, n = 0;
-    auto  pixelsf = img.as_interleaved_floats(&w, &h, &n, gain);
-    from_linear(pixelsf.get(), {w, h, n}, tf, 2.2f);
+    Timer                       timer;
+    int                         w = 0, h = 0, n = 0;
     std::unique_ptr<uint8_t[]>  pixels8;
     std::unique_ptr<uint16_t[]> pixels16;
     void                       *pixels = nullptr;
+
+    int cicp_primaries = 2;
+    if (img.chromaticities)
+        cicp_primaries = chromaticities_to_cicp(*img.chromaticities);
+    // if cicp_primaries are unrecognized (< 0), we will convert to sRGB/Rec709
+
     if (sixteen_bit)
     {
-        pixels16 = std::make_unique<uint16_t[]>(w * h * n);
-        for (int i = 0; i < w * h * n; ++i) pixels16[i] = quantize_full<uint16_t>(pixelsf[i]);
+        pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, 2.2f, dither, true, cicp_primaries < 0);
         if (is_little_endian())
         {
             // Swap bytes for each 16-bit pixel (big-endian required by PNG)
@@ -544,9 +547,8 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
     }
     else
     {
-        pixels8 = std::make_unique<uint8_t[]>(w * h * n);
-        for (int i = 0; i < w * h * n; ++i) pixels8[i] = quantize_full<uint8_t>(pixelsf[i]);
-        pixels = pixels8.get();
+        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, 2.2f, dither, true, cicp_primaries < 0);
+        pixels  = pixels8.get();
     }
 
     if (!pixels || w <= 0 || h <= 0)
@@ -598,14 +600,15 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 
     if (img.chromaticities)
     {
-        const auto &chr = *img.chromaticities;
+        // to make sure
+        auto chr = (cicp_primaries < 0) ? Chromaticities{} : *img.chromaticities;
         png_set_cHRM(png_ptr, info_ptr.get(), chr.white.x, chr.white.y, chr.red.x, chr.red.y, chr.green.x, chr.green.y,
                      chr.blue.x, chr.blue.y);
     }
 
 #ifdef PNG_cICP_SUPPORTED
-    // Example values, replace with your actual color primaries, transfer function, etc.
-    png_byte color_primaries     = 1;                             // e.g. 1 for BT.709, 9 for BT.2020
+    // if cicp_primaries are unrecognized (< 0), we already converted values to sRGB/BT.709
+    png_byte color_primaries     = cicp_primaries < 0 ? 1 : cicp_primaries; // e.g. 1 for BT.709, 9 for BT.2020
     png_byte transfer_function   = transfer_function_to_cicp(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
     png_byte matrix_coefficients = 0;                             // e.g. 0 for RGB
     png_byte video_full_range    = 1;                             // 1 for full range, 0 for limited

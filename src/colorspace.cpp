@@ -536,6 +536,15 @@ Chromaticities chromaticities_from_cicp(int cicp)
     }
 }
 
+int chromaticities_to_cicp(const Chromaticities &chr)
+{
+    for (int cicp : {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22})
+        if (approx_equal(chr, chromaticities_from_cicp(cicp)))
+            return cicp;
+
+    return -1;
+}
+
 ColorGamut named_color_gamut(const Chromaticities &chr)
 {
     for (ColorGamut_ i = ColorGamut_FirstNamed; i <= ColorGamut_LastNamed; ++i)
