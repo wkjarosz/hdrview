@@ -23,6 +23,11 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename)
     throw runtime_error("PNG support not enabled in this build.");
 }
 
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither)
+{
+    throw runtime_error("PNG support not enabled in this build.");
+}
+
 #else
 
 #include <cstring>

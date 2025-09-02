@@ -31,15 +31,15 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::OpenPopup("Save as...");
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
-                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
+                            ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
 
     if (ImGui::BeginPopupModal("Save as...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         open = false;
 
-        static bool  composite         = false;
+        static int   composite         = 0;
         static bool  progressive       = false;
         static bool  dither            = true;
         static float quality           = 95.f;
@@ -73,7 +73,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             Format_TGA_STB,
             Format_Last = Format_TGA_STB
         };
-        static Format_ save_format = Format_BMP_STB;
+        static Format_ save_format = Format_EXR;
 
         // Array of format names
         // clang-format off
@@ -123,7 +123,11 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         };
         // clang-format on
 
-        ImGui::PushItemWidth(-HelloImGui::EmSize(10));
+        // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
+
+        ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
+        ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
+                              "image and reference image as shown in the viewport.");
 
         // ImGui Combo using BeginCombo/EndCombo
         if (ImGui::BeginCombo("File format", save_format_names[save_format]))
@@ -142,58 +146,55 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::Spacing();
         ImGui::Indent();
 
-        ImGui::Checkbox("Composited image", &composite);
-        ImGui::WrappedTooltip("Save the composited/blended result between the current "
-                              "image and reference image as shown in the viewport. Otherwise, save the current image.");
-
-        switch (save_format)
+        if (ImGui::CollapsingHeader("Options"))
         {
-        case Format_HDR_STB: break;
+            switch (save_format)
+            {
+            case Format_HDR_STB: break;
 #ifdef HDRVIEW_ENABLE_LIBJPEG
-        case Format_JPEG_LIBJPEG:
-            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-            ImGui::Checkbox("Dither", &dither);
-            ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
-            ImGui::Checkbox("Progressive", &progressive);
-            break;
+            case Format_JPEG_LIBJPEG:
+                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+                ImGui::Checkbox("Progressive", &progressive);
+                break;
 #endif
 #ifdef HDRVIEW_ENABLE_UHDR
-        case Format_JPEG_UHDR:
-            ImGui::SliderFloat("Base image quality", &quality, 1.f, 100.f);
-            ImGui::SliderFloat("Gain map quality", &gainmap_quality, 1.f, 100.f);
-            ImGui::Checkbox("Use multi-channel gainmap", &use_multi_channel);
-            ImGui::SliderInt("Gain map scale factor", &gainmap_scale, 1, 5);
-            ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.");
-            ImGui::SliderFloat("Gain map gamma", &gainmap_gamma, 0.1f, 5.0f);
-            break;
+            case Format_JPEG_UHDR:
+                ImGui::SliderFloat("Base image quality", &quality, 1.f, 100.f);
+                ImGui::SliderFloat("Gain map quality", &gainmap_quality, 1.f, 100.f);
+                ImGui::Checkbox("Use multi-channel gainmap", &use_multi_channel);
+                ImGui::SliderInt("Gain map scale factor", &gainmap_scale, 1, 5);
+                ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.");
+                ImGui::SliderFloat("Gain map gamma", &gainmap_gamma, 0.1f, 5.0f);
+                break;
 #endif
-        // case Format_JPEG_XL: break;
-        case Format_EXR: break;
-        case Format_PFM: break;
+            // case Format_JPEG_XL: break;
+            case Format_EXR: break;
+            case Format_PFM: break;
 #ifdef HDRVIEW_ENABLE_LIBPNG
-        case Format_PNG_LIBPNG:
-            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-            ImGui::Checkbox("Dither", &dither);
-            ImGui::Checkbox("Interlaced", &interlaced);
-            break;
+            case Format_PNG_LIBPNG:
+                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                ImGui::Checkbox("Interlaced", &interlaced);
+                break;
 #endif
-        case Format_JPEG_STB:
-            ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
-            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-            ImGui::Checkbox("Dither", &dither);
-            break;
-        case Format_QOI: [[fallthrough]];
-        case Format_PNG_STB: [[fallthrough]];
-        case Format_TGA_STB: [[fallthrough]];
-        case Format_BMP_STB:
-            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-            ImGui::Checkbox("Dither", &dither);
-            break;
+            case Format_JPEG_STB:
+                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                break;
+            case Format_QOI: [[fallthrough]];
+            case Format_PNG_STB: [[fallthrough]];
+            case Format_TGA_STB: [[fallthrough]];
+            case Format_BMP_STB:
+                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                break;
+            }
         }
 
         ImGui::Unindent();
-
-        ImGui::PopItemWidth();
 
         ImGui::Spacing();
 

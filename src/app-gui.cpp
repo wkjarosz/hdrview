@@ -663,12 +663,13 @@ void HDRViewApp::draw_command_palette(bool &open)
         ImGui::OpenPopup("Command palette...");
 
     // Center window horizontally, align near top vertically
-    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * EmSize()), ImGuiCond_Always,
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * EmSize()), ImGuiCond_Appearing,
                             ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2{EmSize(29), 0}, ImGuiCond_Always);
 
     if (ImGui::BeginPopupModal("Command palette...", nullptr,
-                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoTitleBar))
     {
         open = false;
         if (ImGui::IsWindowAppearing())

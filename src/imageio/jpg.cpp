@@ -27,10 +27,10 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, int quality, bool progressive,
-                    float gain, bool sRGB, bool dither)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither,
+                    int quality, bool progressive)
 {
-    return save_stb_image(img, os, filename, gain, sRGB, dither);
+    return save_stb_jpg(img, os, filename, gain, sRGB, dither, quality);
 }
 
 #else

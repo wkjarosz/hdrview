@@ -28,7 +28,9 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-void save_uhdr_image(const Image &img, ostream &os, string_view filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, float base_quality,
+                     float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
+                     float gainmap_gamma)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
