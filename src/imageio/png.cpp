@@ -512,7 +512,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     return images;
 }
 
-void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
+void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither,
+                    bool interlaced)
 {
     Timer timer;
     // get interleaved LDR pixel data
@@ -561,9 +562,8 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
                      : (n == 3) ? PNG_COLOR_TYPE_RGB
                                 : PNG_COLOR_TYPE_RGB_ALPHA;
 
-    // set Adam7 interlacing instead of no interlace
-    png_set_IHDR(png_ptr, info_ptr.get(), w, h, 8, color_type, PNG_INTERLACE_ADAM7, PNG_COMPRESSION_TYPE_DEFAULT,
-                 PNG_FILTER_TYPE_DEFAULT);
+    png_set_IHDR(png_ptr, info_ptr.get(), w, h, 8, color_type, interlaced ? PNG_INTERLACE_ADAM7 : PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
     png_write_info(png_ptr, info_ptr.get());
 

@@ -271,7 +271,9 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     return {image};
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain)
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, float base_quality,
+                     float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
+                     float gainmap_gamma)
 {
     Timer timer;
     // get interleaved HDR pixel data
@@ -320,11 +322,11 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     };
 
     throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &raw_image, UHDR_HDR_IMG));
-    throw_if_error(uhdr_enc_set_quality(encoder.get(), 95, UHDR_BASE_IMG));
-    throw_if_error(uhdr_enc_set_quality(encoder.get(), 95, UHDR_GAIN_MAP_IMG));
-    throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), false));
-    throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), 1));
-    throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), 1.0f));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), (int)base_quality, UHDR_BASE_IMG));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), (int)gainmap_quality, UHDR_GAIN_MAP_IMG));
+    throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), use_multi_channel_gainmap));
+    throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), gainmap_scale_factor));
+    throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), gainmap_gamma));
     throw_if_error(uhdr_enc_set_preset(encoder.get(), UHDR_USAGE_BEST_QUALITY));
 
     throw_if_error(uhdr_encode(encoder.get()));

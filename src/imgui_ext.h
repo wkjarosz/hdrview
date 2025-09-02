@@ -13,7 +13,7 @@
 namespace ImGui
 {
 
-class ScopedFont
+struct ScopedFont
 {
 public:
     explicit ScopedFont(ImFont *font, float font_size_base_unscaled) { ImGui::PushFont(font, font_size_base_unscaled); }

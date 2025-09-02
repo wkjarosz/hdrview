@@ -63,6 +63,11 @@ static const stbi_io_callbacks stbi_callbacks = {
     [](void *user) { return (int)reinterpret_cast<istream *>(user)->eof(); },
 };
 
+static void ostream_write_func(void *context, void *data, int size)
+{
+    reinterpret_cast<std::ostream *>(context)->write(reinterpret_cast<char *>(data), size);
+}
+
 static bool supported_format(istream &is, json &j) noexcept
 {
     is.clear();
@@ -231,45 +236,75 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     return images;
 }
 
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename)
+{
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved_floats(&w, &h, &n, 1.0f);
+    if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
+        throw std::runtime_error("Failed to write HDR image via stb.");
+    spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
+                  bool dither, float quality)
+{
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    if (stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), std::clamp(int(quality), 1, 100)) == 0)
+        throw std::runtime_error("Failed to write JPG image via stb.");
+    spdlog::info("Saved JPG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
+                  bool dither)
+{
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    if (stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
+        throw std::runtime_error("Failed to write TGA image via stb.");
+    spdlog::info("Saved TGA image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
+                  bool dither)
+{
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    if (stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
+        throw std::runtime_error("Failed to write BMP image via stb.");
+    spdlog::info("Saved BMP image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
+                  bool dither)
+{
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
+    if (stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) == 0)
+        throw std::runtime_error("Failed to write PNG image via stb.");
+    spdlog::info("Saved PNG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
 void save_stb_image(const Image &img, ostream &os, const string_view filename, float gain, bool sRGB, bool dither)
 {
-    Timer             timer;
-    static const auto ostream_write_func = [](void *context, void *data, int size)
-    { reinterpret_cast<ostream *>(context)->write(reinterpret_cast<char *>(data), size); };
-
+    Timer  timer;
     string extension = to_lower(get_extension(filename));
 
     if (extension == ".hdr")
-    {
-        // get interleaved HDR pixel data
-        int  w = 0, h = 0, n = 0;
-        auto pixels = img.as_interleaved_floats(&w, &h, &n, gain);
-        if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
-            throw runtime_error("Failed to write HDR image via stb.");
-        spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
-    }
+        save_stb_hdr(img, os, filename);
+    else if (extension == ".jpg" || extension == ".jpeg")
+        save_stb_jpg(img, os, filename, gain, sRGB, dither, 100.0f);
+    else if (extension == ".png")
+        save_stb_png(img, os, filename, gain, sRGB, dither);
+    else if (extension == ".bmp")
+        save_stb_bmp(img, os, filename, gain, sRGB, dither);
+    else if (extension == ".tga")
+        save_stb_tga(img, os, filename, gain, sRGB, dither);
     else
-    {
-        // get interleaved LDR pixel data
-        int  w = 0, h = 0, n = 0;
-        auto pixels = img.as_interleaved_bytes(&w, &h, &n, gain, sRGB, dither);
-
-        bool success = false;
-        if (extension == ".png")
-            success = stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) != 0;
-        else if (extension == ".bmp")
-            success = stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
-        else if (extension == ".tga")
-            success = stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) != 0;
-        else if (extension == ".jpg" || extension == ".jpeg")
-            success = stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 100) != 0;
-        else
-            throw invalid_argument(
-                fmt::format("Could not determine desired file type from extension \"{}\".", extension));
-        if (success)
-            spdlog::info("Saved {} image via stb to '{}' in {} seconds.", to_upper(extension.substr(1)), filename,
-                         (timer.elapsed() / 1000.f));
-        else
-            throw runtime_error(fmt::format("Failed to write {} image via stb.", to_upper(extension.substr(1))));
-    }
+        throw invalid_argument(fmt::format("Could not determine desired file type from extension \"{}\".", extension));
 }

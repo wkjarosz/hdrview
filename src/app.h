@@ -27,6 +27,7 @@ using std::optional;
 using std::set;
 using std::string;
 using std::string_view;
+using std::unique_ptr;
 using std::vector;
 
 class HDRViewApp
@@ -49,8 +50,6 @@ public:
     void load_image(const string filename, const string_view buffer = string_view{}, bool should_select = true,
                     const string channel_selector = "");
     void load_url(const string_view url);
-    void save_as(const string &filename) const;
-    void export_as(const string &filename) const;
     void close_image(int index = -1);
     void close_all_images();
     void reload_image(ImagePtr image, bool shall_select = false);
@@ -185,7 +184,10 @@ private:
     void draw_background();
     void draw_channel_stats_window();
     void draw_pixel_inspector_window();
-    void draw_about_dialog();
+    void draw_about_dialog(bool &);
+    void draw_command_palette(bool &);
+    void draw_save_as_dialog(bool &);
+    void draw_color_picker(bool &);
     void draw_pixel_info() const;
     void draw_pixel_grid() const;
     void draw_image() const;
@@ -193,7 +195,6 @@ private:
     void draw_tool_decorations() const;
     void draw_file_window();
     void draw_top_toolbar();
-    void draw_color_picker();
     void draw_menus();
     void draw_status_bar();
     void draw_develop_windows();
@@ -201,7 +202,6 @@ private:
     void process_shortcuts();
     bool process_event(void *event);
     void set_image_textures();
-    void draw_command_palette();
     void update_visibility();
 
     void setup_rendering();
@@ -288,17 +288,26 @@ private:
     bool  m_play_stopped   = true;
     float m_playback_speed = 24.f;
 
-    bool  m_open_help            = false;
-    bool  m_open_command_palette = false;
     bool  m_show_developer_menu  = false;
     bool  m_show_demo_window     = false;
     bool  m_show_debug_window    = false;
     bool  m_show_tweak_window    = false;
-    bool  m_show_bg_color_picker = false;
     bool  m_request_sort         = false;
     bool  m_short_names          = false;
     int   m_file_list_mode       = 1;    // 0: images only; 1: list; 2: tree;
     float m_scroll_to_next_frame = -1.f; // <0: don't focus; >=0 center ratio to focus on next frame
+
+    struct PopupDialog
+    {
+        std::function<void(bool &)> draw;
+        bool                        open;
+
+        PopupDialog(std::function<void(bool &)> draw_func, bool initially_open = false) :
+            draw(draw_func), open(initially_open)
+        {
+        }
+    };
+    map<string, unique_ptr<PopupDialog>> m_dialogs;
 };
 
 /// Create the global singleton HDRViewApp instance

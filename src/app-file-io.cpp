@@ -1,8 +1,19 @@
 #include "app.h"
 
+#include "fonts.h"
 #include "image.h"
 #include <fstream>
 #include <sstream>
+
+#include "imageio/exr.h"
+#include "imageio/jpg.h"
+#include "imageio/pfm.h"
+#include "imageio/png.h"
+#include "imageio/qoi.h"
+#include "imageio/stb.h"
+#include "imageio/uhdr.h"
+#include "imgui.h"
+#include "imgui_ext.h"
 
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
@@ -14,81 +25,286 @@
 
 using namespace std;
 
-void HDRViewApp::save_as(const string &filename) const
+void HDRViewApp::draw_save_as_dialog(bool &open)
 {
-    try
+    if (open)
+        ImGui::OpenPopup("Save as...");
+
+    // Center window horizontally, align near top vertically
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
+
+    if (ImGui::BeginPopupModal("Save as...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ostringstream os;
-        current_image()->save(os, filename, powf(2.0f, m_exposure_live), true, m_dither);
-        string buffer = os.str();
+        open = false;
+
+        static bool  composite         = false;
+        static bool  progressive       = false;
+        static bool  dither            = true;
+        static float quality           = 95.f;
+        static float gainmap_quality   = 95.f;
+        static bool  use_multi_channel = false;
+        static int   gainmap_scale     = 1;
+        static float gainmap_gamma     = 1.0f;
+        static bool  interlaced        = false;
+        static int   colorspace        = 1;
+
+        // Define enum for save formats
+        enum Format_
+        {
+            Format_BMP_STB,
+            Format_HDR_STB,
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+            Format_JPEG_LIBJPEG,
+#endif
+            Format_JPEG_STB,
+#ifdef HDRVIEW_ENABLE_UHDR
+            Format_JPEG_UHDR,
+#endif
+            // Format_JPEG_XL,
+            Format_EXR,
+            Format_PFM,
+#ifdef HDRVIEW_ENABLE_LIBPNG
+            Format_PNG_LIBPNG,
+#endif
+            Format_PNG_STB,
+            Format_QOI,
+            Format_TGA_STB,
+            Format_Last = Format_TGA_STB
+        };
+        static Format_ save_format = Format_BMP_STB;
+
+        // Array of format names
+        // clang-format off
+        static const char *save_format_names[Format_Last + 1] = {
+            "BMP (stb)",
+            "HDR (stb)",
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+            "JPEG (libjpeg)",
+#endif
+            "JPEG (stb)",
+#ifdef HDRVIEW_ENABLE_UHDR
+            "JPEG (UltraHDR)",
+#endif
+            // "JPEG-XL",
+            "OpenEXR",
+            "PFM",
+#ifdef HDRVIEW_ENABLE_LIBPNG
+            "PNG (libpng)",
+#endif
+            "PNG (stb)",
+            "QOI",
+            "TGA (stb)"
+            };
+        // clang-format on
+
+        // filename extensions for each of the above
+        // clang-format off
+        static const char *save_format_extensions[Format_Last + 1] = {
+            ".bmp",
+            ".hdr",
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+            ".jpg",
+#endif
+            ".jpg",
+#ifdef HDRVIEW_ENABLE_UHDR
+            ".jxl",
+#endif
+            // ".jpeg-xl",
+            ".exr",
+            ".pfm",
+#ifdef HDRVIEW_ENABLE_LIBPNG
+            ".png",
+#endif
+            ".png",
+            ".qoi",
+            ".tga"
+        };
+        // clang-format on
+
+        ImGui::PushItemWidth(-HelloImGui::EmSize(10));
+
+        // ImGui Combo using BeginCombo/EndCombo
+        if (ImGui::BeginCombo("File format", save_format_names[save_format]))
+        {
+            for (int i = 0; i <= Format_Last; ++i)
+            {
+                bool is_selected = (save_format == i);
+                if (ImGui::Selectable(save_format_names[i], is_selected))
+                    save_format = (Format_)i;
+                if (is_selected)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::Spacing();
+        ImGui::Indent();
+
+        ImGui::Checkbox("Composited image", &composite);
+        ImGui::WrappedTooltip("Save the composited/blended result between the current "
+                              "image and reference image as shown in the viewport. Otherwise, save the current image.");
+
+        switch (save_format)
+        {
+        case Format_HDR_STB: break;
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+        case Format_JPEG_LIBJPEG:
+            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+            ImGui::Checkbox("Dither", &dither);
+            ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+            ImGui::Checkbox("Progressive", &progressive);
+            break;
+#endif
+#ifdef HDRVIEW_ENABLE_UHDR
+        case Format_JPEG_UHDR:
+            ImGui::SliderFloat("Base image quality", &quality, 1.f, 100.f);
+            ImGui::SliderFloat("Gain map quality", &gainmap_quality, 1.f, 100.f);
+            ImGui::Checkbox("Use multi-channel gainmap", &use_multi_channel);
+            ImGui::SliderInt("Gain map scale factor", &gainmap_scale, 1, 5);
+            ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.");
+            ImGui::SliderFloat("Gain map gamma", &gainmap_gamma, 0.1f, 5.0f);
+            break;
+#endif
+        // case Format_JPEG_XL: break;
+        case Format_EXR: break;
+        case Format_PFM: break;
+#ifdef HDRVIEW_ENABLE_LIBPNG
+        case Format_PNG_LIBPNG:
+            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+            ImGui::Checkbox("Dither", &dither);
+            ImGui::Checkbox("Interlaced", &interlaced);
+            break;
+#endif
+        case Format_JPEG_STB:
+            ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+            ImGui::Checkbox("Dither", &dither);
+            break;
+        case Format_QOI: [[fallthrough]];
+        case Format_PNG_STB: [[fallthrough]];
+        case Format_TGA_STB: [[fallthrough]];
+        case Format_BMP_STB:
+            ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+            ImGui::Checkbox("Dither", &dither);
+            break;
+        }
+
+        ImGui::Unindent();
+
+        ImGui::PopItemWidth();
+
+        ImGui::Spacing();
+
+        if (ImGui::Button("Cancel") || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
+            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::SameLine();
+
+        string        filename;
+        static string save_as_name;
+        save_as_name = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
+        if (ImGui::Button(save_as_name.c_str()))
+        {
+#if !defined(__EMSCRIPTEN__)
+            filename = pfd::save_file(
+                           save_as_name.c_str(), "",
+                           {string(save_format_names[save_format]) + " images", save_format_extensions[save_format]})
+                           .result();
+#else
+            filename = "output" + string(save_format_extensions[save_format]);
+#endif
+        }
+
+        ImGui::SetItemDefaultFocus();
+
+        if (!filename.empty())
+        {
+            ImGui::CloseCurrentPopup();
+            try
+            {
+                ostringstream os;
+                float         gain = powf(2.0f, m_exposure_live);
+
+                ImagePtr img = current_image();
+
+                if (composite)
+                {
+                    img = make_shared<Image>(current_image()->size(), 4);
+                    img->finalize();
+                    auto bounds     = current_image()->data_window;
+                    int  block_size = std::max(1, 1024 * 1024 / img->size().x);
+                    parallel_for(blocked_range<int>(0, img->size().y, block_size),
+                                 [this, &img, bounds](int begin_y, int end_y, int, int)
+                                 {
+                                     for (int y = begin_y; y < end_y; ++y)
+                                         for (int x = 0; x < img->size().x; ++x)
+                                         {
+                                             float4 v = pixel_value(int2{x, y} + bounds.min, false, 2);
+
+                                             img->channels[0](x, y) = v[0];
+                                             img->channels[1](x, y) = v[1];
+                                             img->channels[2](x, y) = v[2];
+                                             img->channels[3](x, y) = v[3];
+                                         }
+                                 });
+                }
+
+                switch (save_format)
+                {
+                case Format_BMP_STB: save_stb_bmp(*img, os, filename, gain, colorspace == 1, dither); break;
+                case Format_HDR_STB: save_stb_hdr(*img, os, filename); break;
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+                case Format_JPEG_LIBJPEG:
+                    save_jpg_image(*img, os, filename, gain, colorspace == 1, dither, quality, progressive);
+                    break;
+#endif
+                case Format_JPEG_STB: save_stb_jpg(*img, os, filename, gain, colorspace == 1, dither, quality); break;
+#ifdef HDRVIEW_ENABLE_UHDR
+                case Format_JPEG_UHDR:
+                    save_uhdr_image(*img, os, filename, gain, quality, gainmap_quality, use_multi_channel,
+                                    gainmap_scale, gainmap_gamma);
+                    break;
+#endif
+                case Format_EXR: save_exr_image(*img, os, filename); break;
+                case Format_PFM: save_pfm_image(*img, os, filename, gain); break;
+#ifdef HDRVIEW_ENABLE_LIBPNG
+                case Format_PNG_LIBPNG:
+                    save_png_image(*img, os, filename, gain, colorspace == 1, dither, interlaced);
+                    break;
+#endif
+                case Format_PNG_STB: save_stb_png(*img, os, filename, gain, colorspace == 1, dither); break;
+                case Format_QOI: save_qoi_image(*img, os, filename, gain, colorspace == 1, dither); break;
+                case Format_TGA_STB: save_stb_tga(*img, os, filename, gain, colorspace == 1, dither); break;
+                }
+
+                string buffer = os.str();
 
 #if !defined(__EMSCRIPTEN__)
-        ofstream ofs{filename, ios_base::binary};
-        ofs.write(buffer.data(), buffer.size());
+                ofstream ofs{filename, ios_base::binary};
+                ofs.write(buffer.data(), buffer.size());
 #else
-        emscripten_browser_file::download(
-            filename,                                   // the default filename for the browser to save.
-            "application/octet-stream",                 // the MIME type of the data, treated as if it were a webserver
-                                                        // serving a file
-            string_view(buffer.data(), buffer.length()) // a buffer describing the data to download
-        );
+                emscripten_browser_file::download(
+                    filename,                   // the default filename for the browser to save.
+                    "application/octet-stream", // the MIME type of the data, treated as if it were a webserver
+                                                // serving a file
+                    string_view(buffer.data(), buffer.length()) // a buffer describing the data to download
+                );
 #endif
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
-    }
-    catch (...)
-    {
-        spdlog::error("An unknown error occurred while saving to '{}'.", filename);
-    }
-}
+            }
+            catch (const exception &e)
+            {
+                spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
+            }
+            catch (...)
+            {
+                spdlog::error("An unknown error occurred while saving to '{}'.", filename);
+            }
+        }
 
-void HDRViewApp::export_as(const string &filename) const
-{
-    try
-    {
-        Image img(current_image()->size(), 4);
-        img.finalize();
-        auto bounds     = current_image()->data_window;
-        int  block_size = std::max(1, 1024 * 1024 / img.size().x);
-        parallel_for(blocked_range<int>(0, img.size().y, block_size),
-                     [this, &img, bounds](int begin_y, int end_y, int, int)
-                     {
-                         for (int y = begin_y; y < end_y; ++y)
-                             for (int x = 0; x < img.size().x; ++x)
-                             {
-                                 float4 v = pixel_value(int2{x, y} + bounds.min, false, 2);
-
-                                 img.channels[0](x, y) = v[0];
-                                 img.channels[1](x, y) = v[1];
-                                 img.channels[2](x, y) = v[2];
-                                 img.channels[3](x, y) = v[3];
-                             }
-                     });
-
-#if !defined(__EMSCRIPTEN__)
-        ofstream os{filename, ios_base::binary};
-        img.save(os, filename, 1.f, true, m_dither);
-#else
-        ostringstream os;
-        img.save(os, filename, 1.f, true, m_dither);
-        string buffer = os.str();
-        emscripten_browser_file::download(
-            filename,                                    // the default filename for the browser to save.
-            "application/octet-stream",                  // the MIME type of the data, treated as if it were a webserver
-                                                         // serving a file
-            string_view(buffer.c_str(), buffer.length()) // a buffer describing the data to download
-        );
-#endif
-    }
-    catch (const exception &e)
-    {
-        spdlog::error("An error occurred while exporting to '{}':\n\t{}.", filename, e.what());
-    }
-    catch (...)
-    {
-        spdlog::error("An unknown error occurred while exporting to '{}'.", filename);
+        ImGui::EndPopup();
     }
 }
 

@@ -3,6 +3,9 @@
 #include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
+#include "imageio/stb.h"
+#include "imgui.h"
+#include "imgui_ext.h"
 #include "platform_utils.h"
 
 #include <ImfThreading.h>
@@ -399,6 +402,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
 
     m_params.callbacks.ShowGui = [this]()
     {
+        for (auto &[key, value] : m_dialogs) value->draw(value->open);
+
         // recompute toolbar height in case the font size was changed
         // this is require because HelloImGui decided to specify toolbar sizes in Ems, but we want the padding and size
         // to be consistent with other ImGui elements (1 line high + standard Frame padding)
@@ -436,14 +441,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 m_request_sort = true;
             });
 
-        draw_about_dialog();
-        draw_command_palette();
-        draw_color_picker();
         draw_tweak_window();
         draw_develop_windows();
     };
     m_params.callbacks.CustomBackground        = [this]() { draw_background(); };
     m_params.callbacks.AnyBackendEventCallback = [this](void *event) { return process_event(event); };
+
+    m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
+    m_dialogs["Command palette..."] = make_unique<PopupDialog>([this](bool &open) { draw_command_palette(open); });
+    m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
+    m_dialogs["Custom background color picker"] =
+        make_unique<PopupDialog>([this](bool &open) { draw_color_picker(open); });
 
     //
     // Actions and command palette
@@ -487,15 +495,12 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    always_enabled, true});
 #endif
 
-        if (in_files.empty())
-            m_open_help = true;
-
         add(Action{"Show help", ICON_MY_ABOUT, ImGuiMod_Shift | ImGuiKey_Slash, 0, []() {}, always_enabled, false,
-                   &m_open_help});
+                   &m_dialogs["About"]->open});
         add(Action{"Quit", ICON_MY_QUIT, ImGuiMod_Ctrl | ImGuiKey_Q, 0, [this]() { m_params.appShallExit = true; }});
 
         add(Action{"Command palette...", ICON_MY_COMMAND_PALETTE, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, 0,
-                   []() {}, always_enabled, false, &m_open_command_palette});
+                   []() {}, always_enabled, false, &m_dialogs["Command palette..."]->open});
 
         static bool toolbar_on =
             m_params.callbacks.edgesToolbars.find(EdgeToolbarType::Top) != m_params.callbacks.edgesToolbars.end();
@@ -715,78 +720,9 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                    "Do not load the selected folder, but monitor it for new files and load those as they are "
                    "created.\nUseful if you plan to periodically write images into a folder (e.g. renderings) and "
                    "want HDRView to automatically load them as they appear."});
-
-        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
-                   [this]()
-                   {
-                       string filename =
-                           pfd::save_file("Save as", ICON_MY_BLANK,
-                                          {
-                                              "Supported image files",
-                                              fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
-                                          })
-                               .result();
-
-                       if (!filename.empty())
-                           save_as(filename);
-                   },
-                   if_img, false, nullptr, "Save the current image to disk in a supported format."});
-        add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
-                   [this]()
-                   {
-                       string filename =
-                           pfd::save_file("Export image as", ICON_MY_BLANK,
-                                          {
-                                              "Supported image files",
-                                              fmt::format("*.{}", fmt::join(Image::savable_formats(), "*.")),
-                                          })
-                               .result();
-
-                       if (!filename.empty())
-                           export_as(filename);
-                   },
-                   if_img, false, nullptr,
-                   "Export the composited/blended result between the current image and reference image to disk."});
-
-#else
-        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
-                   [this]()
-                   {
-                       char   filename[256];
-                       string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                       ImGui::TextUnformatted(
-                           "Please enter a filename. Format is deduced from the accepted extensions:");
-                       ImGui::TextFmt("\t{}", filter);
-                       ImGui::Separator();
-                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", filename,
-                                                    IM_ARRAYSIZE(filename), ImGuiInputTextFlags_EnterReturnsTrue))
-                       {
-                           ImGui::CloseCurrentPopup();
-                           if (filename[0] != '\0')
-                               save_as(filename);
-                       }
-                   },
-                   if_img, true, nullptr, "Save the current image to disk in a supported format."});
-        add(Action{"Export image as...", ICON_MY_SAVE_AS, ImGuiKey_None, 0,
-                   [this]()
-                   {
-                       char   filename[256];
-                       string filter = fmt::format("*.{}", fmt::join(Image::savable_formats(), " *."));
-                       ImGui::TextUnformatted(
-                           "Please enter a filename. Format is deduced from the accepted extensions:");
-                       ImGui::TextFmt("\t{}", filter);
-                       ImGui::Separator();
-                       if (ImGui::InputTextWithHint("##Filename", "Enter a filename and press <return>", filename,
-                                                    IM_ARRAYSIZE(filename), ImGuiInputTextFlags_EnterReturnsTrue))
-                       {
-                           ImGui::CloseCurrentPopup();
-                           if (filename[0] != '\0')
-                               export_as(filename);
-                       }
-                   },
-                   if_img, true, nullptr,
-                   "Export the composited/blended result between the current image and reference image to disk."});
 #endif
+        add(Action{"Save as...", ICON_MY_SAVE_AS, ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, 0,
+                   [this]() { m_dialogs["Save as..."]->open = true; }, if_img});
 
         add(Action{"Normalize exposure", ICON_MY_NORMALIZE_EXPOSURE, ImGuiKey_N, 0,
                    [this]()

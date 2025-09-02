@@ -5,6 +5,7 @@
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
 #include "imcmd_command_palette.h"
+#include "imgui.h"
 #include "imgui_internal.h"
 #include "texture.h"
 #include "version.h"
@@ -275,17 +276,19 @@ void HDRViewApp::draw_status_bar()
     ImGui::PopStyleVar();
 }
 
-void HDRViewApp::draw_color_picker()
+void HDRViewApp::draw_color_picker(bool &open)
 {
-    if (!m_show_bg_color_picker)
-        return;
+    if (open)
+        ImGui::OpenPopup("Choose custom background color");
 
     // Center window horizontally, align near top vertically
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, 5.f * EmSize()), ImGuiCond_FirstUseEver,
                             ImVec2(0.5f, 0.0f));
-    if (ImGui::Begin("Choose custom background color", &m_show_bg_color_picker,
-                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking))
+    if (ImGui::BeginPopup("Choose custom background color", ImGuiWindowFlags_AlwaysAutoResize |
+                                                                ImGuiWindowFlags_NoSavedSettings |
+                                                                ImGuiWindowFlags_NoDocking))
     {
+        open                            = false;
         static float4 previous_bg_color = m_bg_color;
         if (ImGui::IsWindowAppearing())
             previous_bg_color = m_bg_color;
@@ -295,15 +298,15 @@ void HDRViewApp::draw_color_picker()
 
         ImGui::Dummy(EmToVec2(1.f, 0.5f));
         if (ImGui::Button("OK", EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Enter))
-            m_show_bg_color_picker = false;
+            ImGui::CloseCurrentPopup();
         ImGui::SameLine();
         if (ImGui::Button("Cancel", EmToVec2(5.f, 0.f)) || ImGui::Shortcut(ImGuiKey_Escape))
         {
-            m_bg_color             = previous_bg_color;
-            m_show_bg_color_picker = false;
+            m_bg_color = previous_bg_color;
+            ImGui::CloseCurrentPopup();
         }
+        ImGui::EndPopup();
     }
-    ImGui::End();
 }
 
 void HDRViewApp::draw_menus()
@@ -654,9 +657,9 @@ void HDRViewApp::draw_top_toolbar()
     ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 }
 
-void HDRViewApp::draw_command_palette()
+void HDRViewApp::draw_command_palette(bool &open)
 {
-    if (m_open_command_palette)
+    if (open)
         ImGui::OpenPopup("Command palette...");
 
     // Center window horizontally, align near top vertically
@@ -664,9 +667,10 @@ void HDRViewApp::draw_command_palette()
                             ImVec2(0.5f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2{EmSize(29), 0}, ImGuiCond_Always);
 
-    if (ImGui::BeginPopup("Command palette...", ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Command palette...", nullptr,
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize))
     {
-        m_open_command_palette = false;
+        open = false;
         if (ImGui::IsWindowAppearing())
         {
             spdlog::trace("Creating ImCmd context");
@@ -731,7 +735,7 @@ void HDRViewApp::draw_command_palette()
                                    m_bg_mode = (BackgroundMode_)clamp(selected_option, (int)BGMode_Black,
                                                                       (int)BGMode_COUNT - 1);
                                    if (m_bg_mode == BGMode_Custom_Color)
-                                       m_show_bg_color_picker = true;
+                                       m_dialogs["Custom background color picker"]->open = true;
                                },
                                nullptr, ICON_MY_BLANK});
 
@@ -788,10 +792,10 @@ void HDRViewApp::draw_command_palette()
     }
 }
 
-void HDRViewApp::draw_about_dialog()
+void HDRViewApp::draw_about_dialog(bool &open)
 {
     // work around HelloImGui rendering a couple frames to figure out sizes
-    if (m_open_help && ImGui::GetFrameCount() > 2)
+    if (open && ImGui::GetFrameCount() > 2)
         ImGui::OpenPopup("About");
 
     auto &io = ImGui::GetIO();
@@ -812,7 +816,7 @@ void HDRViewApp::draw_about_dialog()
     if (ImGui::BeginPopup("About", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoSavedSettings |
                                        ImGuiWindowFlags_AlwaysAutoResize))
     {
-        m_open_help = false;
+        open = false;
         ImGui::Spacing();
 
         auto platform_backend = [](PlatformBackendType type)
