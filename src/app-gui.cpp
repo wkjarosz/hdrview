@@ -356,7 +356,6 @@ void HDRViewApp::draw_menus()
         ImGui::Separator();
 
         MenuItem(action("Save as..."));
-        MenuItem(action("Export image as..."));
 
         ImGui::Separator();
 
@@ -665,11 +664,10 @@ void HDRViewApp::draw_command_palette(bool &open)
     // Center window horizontally, align near top vertically
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * EmSize()), ImGuiCond_Appearing,
                             ImVec2(0.5f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2{EmSize(29), 0}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{EmSize(30), 0}, ImGuiCond_Always);
 
     if (ImGui::BeginPopupModal("Command palette...", nullptr,
-                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize |
-                                   ImGuiWindowFlags_NoTitleBar))
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoTitleBar))
     {
         open = false;
         if (ImGui::IsWindowAppearing())
