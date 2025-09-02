@@ -7,6 +7,7 @@
 
 #include "imageio/exr.h"
 #include "imageio/jpg.h"
+#include "imageio/jxl.h"
 #include "imageio/pfm.h"
 #include "imageio/png.h"
 #include "imageio/qoi.h"
@@ -42,6 +43,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         static int   composite         = 0;
         static bool  progressive       = false;
         static bool  dither            = true;
+        static bool  float32           = true;
         static float quality           = 95.f;
         static float gainmap_quality   = 95.f;
         static bool  use_multi_channel = false;
@@ -62,7 +64,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #ifdef HDRVIEW_ENABLE_UHDR
             Format_JPEG_UHDR,
 #endif
-            // Format_JPEG_XL,
+#ifdef HDRVIEW_ENABLE_JPEGXL
+            Format_JPEG_XL,
+#endif
             Format_EXR,
             Format_PFM,
 #ifdef HDRVIEW_ENABLE_LIBPNG
@@ -87,7 +91,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #ifdef HDRVIEW_ENABLE_UHDR
             "JPEG (UltraHDR)",
 #endif
-            // "JPEG-XL",
+#ifdef HDRVIEW_ENABLE_JPEGXL
+            "JPEG-XL",
+#endif
             "OpenEXR",
             "PFM",
 #ifdef HDRVIEW_ENABLE_LIBPNG
@@ -111,7 +117,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #ifdef HDRVIEW_ENABLE_UHDR
             ".jxl",
 #endif
-            // ".jpeg-xl",
+#ifdef HDRVIEW_ENABLE_JPEGXL
+            ".jxl",
+#endif
             ".exr",
             ".pfm",
 #ifdef HDRVIEW_ENABLE_LIBPNG
@@ -169,7 +177,14 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                 ImGui::SliderFloat("Gain map gamma", &gainmap_gamma, 0.1f, 5.0f);
                 break;
 #endif
-            // case Format_JPEG_XL: break;
+#ifdef HDRVIEW_ENABLE_JPEGXL
+            case Format_JPEG_XL:
+                // ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+                // ImGui::Checkbox("Dither", &dither);
+                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+                // ImGui::Checkbox("Use float32", &float32);
+                break;
+#endif
             case Format_EXR: break;
             case Format_PFM: break;
 #ifdef HDRVIEW_ENABLE_LIBPNG
@@ -268,6 +283,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                     save_uhdr_image(*img, os, filename, gain, quality, gainmap_quality, use_multi_channel,
                                     gainmap_scale, gainmap_gamma);
                     break;
+#endif
+#ifdef HDRVIEW_ENABLE_JPEGXL
+                case Format_JPEG_XL: save_jxl_image(*img, os, filename, gain, quality); break;
 #endif
                 case Format_EXR: save_exr_image(*img, os, filename); break;
                 case Format_PFM: save_pfm_image(*img, os, filename, gain); break;

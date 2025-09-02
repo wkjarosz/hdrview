@@ -26,11 +26,11 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 
 #else
 
-#include <ImfHeader.h>
-#include <ImfStandardAttributes.h>
 #include <jxl/codestream_header.h>
 #include <jxl/decode.h>
 #include <jxl/decode_cxx.h>
+#include <jxl/encode.h>
+#include <jxl/encode_cxx.h>
 #include <jxl/resizable_parallel_runner_cxx.h>
 #include <jxl/types.h>
 #include <jxl/version.h>
@@ -635,7 +635,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
         {
             spdlog::info("Got exif box.");
             //
-            // ”Exif”: a box with EXIF metadata. Starts with a 4-byte tiff header offset (big-endian uint32) that
+            // "Exif": a box with EXIF metadata. Starts with a 4-byte tiff header offset (big-endian uint32) that
             // indicates the start of the actual EXIF data (which starts with a tiff header). Usually the offset
             // will be zero and the EXIF data starts immediately after the offset field.
             //
@@ -700,6 +700,124 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     }
 
     return images;
+}
+
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, float quality)
+{
+    Timer timer;
+
+    JxlBasicInfo info;
+    JxlEncoderInitBasicInfo(&info);
+
+    int            w = 0, h = 0, n = 0;
+    auto           pixels = img.as_interleaved_floats(&w, &h, &n, gain);
+    JxlPixelFormat format;
+    format.num_channels = n;
+    format.data_type    = JXL_TYPE_FLOAT;
+    format.endianness   = JXL_NATIVE_ENDIAN;
+    format.align        = 0;
+
+    info.bits_per_sample          = 32;
+    info.exponent_bits_per_sample = 8;
+
+    from_linear(pixels.get(), {w, h, n}, TransferFunction::TransferFunction_BT2100_PQ, 2.2f);
+
+    if (!pixels || w <= 0 || h <= 0)
+        throw std::runtime_error("JPEG XL: empty image or invalid image dimensions");
+
+    info.xsize                 = w;
+    info.ysize                 = h;
+    info.num_color_channels    = n == 1 ? 1 : 3;
+    info.num_extra_channels    = (n == 2 || n == 4) ? 1 : 0;
+    info.alpha_bits            = (n == 2 || n == 4) ? 32 : 0;
+    info.alpha_exponent_bits   = (n == 2 || n == 4) ? 8 : 0;
+    info.uses_original_profile = 0;
+
+    JxlEncoderPtr enc    = JxlEncoderMake(nullptr);
+    auto          runner = JxlResizableParallelRunnerMake(nullptr);
+    if (JXL_ENC_SUCCESS != JxlEncoderSetParallelRunner(enc.get(), JxlResizableParallelRunner, runner.get()))
+        throw std::runtime_error("JxlEncoderSetParallelRunner failed");
+
+    if (JXL_ENC_SUCCESS != JxlEncoderSetBasicInfo(enc.get(), &info))
+        throw std::runtime_error("JxlEncoderSetBasicInfo failed");
+
+    // Set color encoding
+    JxlColorEncoding color_encoding;
+    memset(&color_encoding, 0, sizeof(color_encoding));
+    color_encoding.color_space       = JXL_COLOR_SPACE_RGB;
+    color_encoding.transfer_function = JXL_TRANSFER_FUNCTION_PQ;
+    color_encoding.gamma             = 1.0; // Not used for PQ
+    color_encoding.rendering_intent  = JXL_RENDERING_INTENT_RELATIVE;
+
+    if (img.chromaticities && img.chromaticities != ::gamut_chromaticities(ColorGamut_sRGB_BT709))
+    {
+        // Use chromaticities from the image
+        color_encoding.white_point           = JXL_WHITE_POINT_CUSTOM;
+        color_encoding.white_point_xy[0]     = img.chromaticities->white.x;
+        color_encoding.white_point_xy[1]     = img.chromaticities->white.y;
+        color_encoding.primaries             = JXL_PRIMARIES_CUSTOM;
+        color_encoding.primaries_red_xy[0]   = img.chromaticities->red.x;
+        color_encoding.primaries_red_xy[1]   = img.chromaticities->red.y;
+        color_encoding.primaries_green_xy[0] = img.chromaticities->green.x;
+        color_encoding.primaries_green_xy[1] = img.chromaticities->green.y;
+        color_encoding.primaries_blue_xy[0]  = img.chromaticities->blue.x;
+        color_encoding.primaries_blue_xy[1]  = img.chromaticities->blue.y;
+    }
+    else
+    {
+        // Fallback to sRGB D65
+        color_encoding.white_point           = JXL_WHITE_POINT_D65;
+        color_encoding.white_point_xy[0]     = 0.3127;
+        color_encoding.white_point_xy[1]     = 0.3290;
+        color_encoding.primaries             = JXL_PRIMARIES_SRGB;
+        color_encoding.primaries_red_xy[0]   = 0.640;
+        color_encoding.primaries_red_xy[1]   = 0.330;
+        color_encoding.primaries_green_xy[0] = 0.300;
+        color_encoding.primaries_green_xy[1] = 0.600;
+        color_encoding.primaries_blue_xy[0]  = 0.150;
+        color_encoding.primaries_blue_xy[1]  = 0.060;
+    }
+
+    if (JXL_ENC_SUCCESS != JxlEncoderSetColorEncoding(enc.get(), &color_encoding))
+        throw std::runtime_error("JxlEncoderSetColorEncoding failed");
+
+    JxlEncoderFrameSettings *frame_settings = JxlEncoderFrameSettingsCreate(enc.get(), nullptr);
+    if (!frame_settings)
+        throw std::runtime_error("JxlEncoderFrameSettingsCreate failed");
+
+    float distance = JxlEncoderDistanceFromQuality(quality);
+    if (JXL_ENC_SUCCESS != JxlEncoderSetFrameDistance(frame_settings, distance))
+        throw std::runtime_error("JxlEncoderSetFrameDistance failed");
+
+    if (JXL_ENC_SUCCESS != JxlEncoderSetCodestreamLevel(enc.get(), 10))
+        throw std::runtime_error("JxlEncoderSetCodestreamLevel failed");
+    // JxlEncoderSetFrameLossless(frame_settings, JXL_TRUE);
+
+    size_t pixel_bytes = sizeof(float) * w * h * n;
+    if (JXL_ENC_SUCCESS != JxlEncoderAddImageFrame(frame_settings, &format, pixels.get(), pixel_bytes))
+        throw std::runtime_error("JxlEncoderAddImageFrame failed");
+
+    JxlEncoderCloseInput(enc.get());
+
+    std::vector<uint8_t> outbuf(1024 * 1024); // Start with 1MB
+    uint8_t             *next_out  = outbuf.data();
+    size_t               avail_out = outbuf.size();
+    while (true)
+    {
+        JxlEncoderStatus status = JxlEncoderProcessOutput(enc.get(), &next_out, &avail_out);
+        if (status == JXL_ENC_ERROR)
+            throw std::runtime_error("JxlEncoderProcessOutput failed");
+        if (status == JXL_ENC_SUCCESS)
+            break;
+        size_t used = next_out - outbuf.data();
+        outbuf.resize(outbuf.size() * 2);
+        next_out  = outbuf.data() + used;
+        avail_out = outbuf.size() - used;
+    }
+    size_t out_size = next_out - outbuf.data();
+    os.write(reinterpret_cast<char *>(outbuf.data()), out_size);
+
+    spdlog::info("Saved JPEG XL image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
 #endif

@@ -1014,3 +1014,38 @@ void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
                      });
     }
 }
+
+void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
+{
+    if (tf == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
+    {
+        // HLG needs to operate on all three channels at once
+        if (size.z == 3)
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i) rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * 255.f);
+                         });
+        else // size.z == 4
+            // don't modify the alpha channel
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [rgba = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i)
+                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * 255.f);
+                         });
+    }
+    else
+    {
+        // assume this means we have an alpha channel, which we pass through without modification
+        int num_color_channels = (size.z == 2 || size.z == 4) ? size.z - 1 : size.z;
+        // other transfer functions apply to each channel independently
+        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024 / size.z),
+                     [&pixels, tf, gamma, size, num_color_channels](int start, int end, int, int)
+                     {
+                         for (int i = start; i < end; ++i)
+                             for (int c = 0; c < num_color_channels; ++c)
+                                 pixels[i * size.z + c] = from_linear(pixels[i * size.z + c], tf, gamma);
+                     });
+    }
+}
