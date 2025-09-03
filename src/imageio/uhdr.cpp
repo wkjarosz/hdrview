@@ -23,6 +23,8 @@ using namespace std;
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
+bool uhdr_supported_tf(TransferFunction tf) { return false; }
+
 vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
@@ -38,6 +40,20 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
 #else
 
 #include <ultrahdr_api.h>
+
+uhdr_color_transfer_t uhdr_tf(TransferFunction tf)
+{
+    switch (tf)
+    {
+    case TransferFunction_Linear: return UHDR_CT_LINEAR;
+    case TransferFunction_sRGB: return UHDR_CT_SRGB;
+    case TransferFunction_BT2100_PQ: return UHDR_CT_PQ;
+    case TransferFunction_BT2100_HLG: return UHDR_CT_HLG;
+    default: return UHDR_CT_UNSPECIFIED;
+    }
+}
+
+bool uhdr_supported_tf(TransferFunction tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
 
 bool is_uhdr_image(istream &is) noexcept
 {
@@ -278,30 +294,35 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
                      float gainmap_gamma)
 {
     Timer timer;
+
     // get interleaved HDR pixel data
-    int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<half>(&w, &h, &n, gain);
+    int                     w = 0, h = 0, n = 0;
+    std::unique_ptr<half[]> pixels_f16 =
+        img.as_interleaved<half>(&w, &h, &n, gain, TransferFunction_Linear, 1.f, false, true, true);
+    void *pixels = pixels_f16.get();
 
     if (n != 3 && n != 4)
         throw invalid_argument("Can only save images with 3 or 4 channels in UltraHDR right now.");
 
     // The UHDR API expects a packed RGBA half-float buffer for UHDR_IMG_FMT_64bppRGBAHalfFloat.
     // If we were given only RGB (n==3) expand to RGBA and set alpha to 1.0.
-    const size_t      npixels = size_t(w) * size_t(h);
-    std::vector<half> expanded_rgba(npixels * 4); // keep alive until after encode()
-    auto              src = reinterpret_cast<half *>(pixels.get());
-    for (size_t i = 0; i < npixels; ++i)
+    if (n == 3)
     {
-        float3 rgb               = {src[3 * i + 0], src[3 * i + 1], src[3 * i + 2]};
-        float3 srgb              = mul(img.M_to_sRGB, rgb);
-        expanded_rgba[4 * i + 0] = srgb.x;
-        expanded_rgba[4 * i + 1] = srgb.y;
-        expanded_rgba[4 * i + 2] = srgb.z;
-        expanded_rgba[4 * i + 3] = half(1.0f); // opaque alpha
+        const size_t       npixels = size_t(w) * size_t(h);
+        unique_ptr<half[]> expanded_rgba(new half[npixels * 4]);
+        auto               src = pixels_f16.get();
+        for (size_t i = 0; i < npixels; ++i)
+        {
+            expanded_rgba[4 * i + 0] = src[3 * i + 0];
+            expanded_rgba[4 * i + 1] = src[3 * i + 1];
+            expanded_rgba[4 * i + 2] = src[3 * i + 2];
+            expanded_rgba[4 * i + 3] = half(1.0f); // opaque alpha
+        }
+        pixels_f16.swap(expanded_rgba);
+        pixels = pixels_f16.get();
+
+        n = 4; // Treat as 4-channel data from now on
     }
-    // Treat as 4-channel data from now on
-    n                = 4;
-    void *plane0_ptr = expanded_rgba.data();
 
     auto throw_if_error = [](uhdr_error_info_t status)
     {
@@ -319,7 +340,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
         UHDR_CR_FULL_RANGE,              /**< Color Range */
         (unsigned)w,                     /**< Stored image width */
         (unsigned)h,                     /**< Stored image height */
-        {plane0_ptr, nullptr, nullptr},  /**< pointer to the top left pixel for each plane */
+        {pixels, nullptr, nullptr},      /**< pointer to the top left pixel for each plane */
         {(unsigned)w, 0u, 0u}            /**< stride in pixels between rows for each plane */
     };
 

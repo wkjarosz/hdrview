@@ -19,6 +19,8 @@ using namespace std;
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
+bool jxl_supported_tf(TransferFunction tf) noexcept { return false; }
+
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
@@ -54,7 +56,7 @@ TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &e
     }
 }
 
-JxlTransferFunction jxl_tf(TransferFunction tf)
+JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
 {
     switch (tf)
     {
@@ -69,7 +71,7 @@ JxlTransferFunction jxl_tf(TransferFunction tf)
     }
 }
 
-bool jxl_supported_tf(TransferFunction tf) { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+bool jxl_supported_tf(TransferFunction tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
 
 static string color_encoding_info(const JxlColorEncoding &enc)
 {
@@ -734,12 +736,12 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
     JxlTransferFunction jtf = jxl_tf(tf);
 
+    if (jtf == JXL_TRANSFER_FUNCTION_UNKNOWN)
+        throw std::runtime_error("JPEG XL: unsupported transfer function");
+
     if (!(data_type == JXL_TYPE_FLOAT || data_type == JXL_TYPE_UINT8 || data_type == JXL_TYPE_UINT16 ||
           data_type == JXL_TYPE_FLOAT16))
         throw std::runtime_error("JPEG XL: unsupported data type");
-
-    if (jtf == JXL_TRANSFER_FUNCTION_UNKNOWN)
-        throw std::runtime_error("JPEG XL: unsupported transfer function");
 
     int                         w = 0, h = 0, n = 0;
     std::unique_ptr<uint8_t[]>  pixels_u8;

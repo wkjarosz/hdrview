@@ -20,6 +20,9 @@
 #ifdef HDRVIEW_ENABLE_JPEGXL
 #include <jxl/types.h>
 #endif
+#ifdef HDRVIEW_ENABLE_UHDR
+#include <ultrahdr_api.h>
+#endif
 
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
@@ -48,12 +51,11 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #ifdef HDRVIEW_ENABLE_JPEGXL
         static int data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
 #endif
-        static int              data_type   = 0;
-        static int              composite   = 0;
-        static bool             progressive = false;
-        static bool             dither      = true;
-        static TransferFunction jxl_tf      = TransferFunction_sRGB;
-        static TransferFunction tf          = TransferFunction_sRGB;
+        static int              jxl_data_type_index = 0;
+        static int              composite           = 0;
+        static bool             progressive         = false;
+        static bool             dither              = true;
+        static TransferFunction jxl_tf = TransferFunction_sRGB, tf = TransferFunction_sRGB;
         // static bool  float32           = true;
         static bool  sixteen_bit       = false;
         static float quality           = 95.f;
@@ -128,7 +130,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #endif
             ".jpg",
 #ifdef HDRVIEW_ENABLE_UHDR
-            ".jxl",
+            ".jpg",
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
             ".jxl",
@@ -207,7 +209,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                     }
                     ImGui::EndCombo();
                 }
-                ImGui::Combo("Data type", &data_type, "Float32\0Float16\0UInt8\0UInt16\0");
+                ImGui::Combo("Data type", &jxl_data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
                 ImGui::BeginDisabled(jxl_tf != TransferFunction_Gamma);
                 ImGui::SliderFloat("Gamma", &gamma, 0.1f, 5.f);
                 ImGui::EndDisabled();
@@ -265,13 +267,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         save_as_name = fmt::format("Save as {}...", save_format_names[save_format]).c_str();
         if (ImGui::Button(save_as_name.c_str()))
         {
+            filename = current_image()->path.stem().u8string() + string(save_format_extensions[save_format]);
 #if !defined(__EMSCRIPTEN__)
             filename = pfd::save_file(
-                           save_as_name.c_str(), "output" + string(save_format_extensions[save_format]),
+                           save_as_name.c_str(), filename,
                            {string(save_format_names[save_format]) + " images", save_format_extensions[save_format]})
                            .result();
-#else
-            filename = "output" + string(save_format_extensions[save_format]);
 #endif
         }
 
@@ -327,7 +328,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
                 case Format_JPEG_XL:
-                    save_jxl_image(*img, os, filename, gain, quality, jxl_tf, gamma, data_types[data_type]);
+                    save_jxl_image(*img, os, filename, gain, quality, jxl_tf, gamma, data_types[jxl_data_type_index]);
                     break;
 #endif
                 case Format_EXR: save_exr_image(*img, os, filename); break;
