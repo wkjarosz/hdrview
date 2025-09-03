@@ -23,7 +23,7 @@ using namespace std;
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
-bool uhdr_supported_tf(TransferFunction tf) { return false; }
+bool uhdr_supported_tf(TransferFunction tf) noexcept { return false; }
 
 vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
