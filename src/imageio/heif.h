@@ -20,7 +20,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
                      bool lossless = false, bool use_alpha = true, int format_index = 0,
                      TransferFunction tf = TransferFunction_sRGB, float gamma = 1.f);
 
-struct HEIFEncodeParameters;
-HEIFEncodeParameters *heif_parameters_gui();
+struct HEIFSaveOptions;
+HEIFSaveOptions *heif_parameters_gui();
 // throws on error
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFEncodeParameters *params);
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFSaveOptions *params);

@@ -1,3 +1,9 @@
+//
+// Copyright (C) Wojciech Jarosz. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can
+// be found in the LICENSE.txt file.
+//
+
 #include "image_loader.h"
 #include "app.h"
 #include "fonts.h"
@@ -7,6 +13,17 @@
 #include "timer.h"
 #include <fstream>
 #include <sstream>
+
+#include "imageio/dds.h"
+#include "imageio/exr.h"
+#include "imageio/heif.h"
+#include "imageio/jpg.h"
+#include "imageio/jxl.h"
+#include "imageio/pfm.h"
+#include "imageio/png.h"
+#include "imageio/qoi.h"
+#include "imageio/stb.h"
+#include "imageio/uhdr.h"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -21,14 +38,14 @@ struct BackgroundImageLoader::PendingImages
     bool                    add_to_recent;         ///< Whether to add the loaded images to the recent files list
     bool                    should_select = false; ///< Whether to select the first loaded image
     ImagePtr                to_replace = nullptr;  ///< If not null, this image will be replaced with the loaded images
-    PendingImages(const string &f, const string_view buffer, const fs::path &path, const string &channel_selector,
+    PendingImages(const string &f, const string_view buffer, const fs::path &path, const ImageLoadOptions &opts,
                   bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
         computation = do_async(
             // convert the buffer (if any) to a string so the async thread has its own copy,
             // then load from the string or filename depending on whether the buffer is empty
-            [this, buffer_str = string(buffer), path, channel_selector]()
+            [this, buffer_str = string(buffer), path, opts]()
             {
                 fs::file_time_type last_modified = fs::file_time_type::clock::now();
                 if (buffer_str.empty())
@@ -48,7 +65,7 @@ struct BackgroundImageLoader::PendingImages
                     }
 
                     if (std::ifstream is{path, std::ios_base::binary})
-                        images = Image::load(is, path.u8string(), channel_selector);
+                        images = load_image(is, path.u8string(), opts);
                     else
                     {
                         spdlog::error("File '{}' doesn't exist.", path.u8string());
@@ -58,7 +75,7 @@ struct BackgroundImageLoader::PendingImages
                 else
                 {
                     std::istringstream is{buffer_str};
-                    images = Image::load(is, path.u8string(), channel_selector);
+                    images = load_image(is, path.u8string(), opts);
                 }
 
                 for (auto &img : images)
@@ -106,17 +123,17 @@ vector<string> BackgroundImageLoader::recent_files_short(int head_length, int ta
 }
 
 void BackgroundImageLoader::background_load(const string filename, const string_view buffer, bool should_select,
-                                            ImagePtr to_replace, const string &channel_selector)
+                                            ImagePtr to_replace, const ImageLoadOptions &opts)
 {
     if (should_select)
         spdlog::debug("will select image '{}'", filename);
 
     auto load_one = [this](const fs::path &path, const string_view buffer, bool add_to_recent, bool should_select,
-                           ImagePtr to_replace, const string &channel_selector)
+                           ImagePtr to_replace, const ImageLoadOptions &opts)
     {
         try
         {
-            pending_images.emplace_back(std::make_shared<PendingImages>(path.u8string(), buffer, path, channel_selector,
+            pending_images.emplace_back(std::make_shared<PendingImages>(path.u8string(), buffer, path, opts,
                                                                         add_to_recent, should_select, to_replace));
         }
         catch (const std::exception &e)
@@ -178,7 +195,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
             // build a combined filename that prepends the zip path to the entry path
             string combined = zip_name + "/" + entry_path.u8string();
             // schedule async load; do not add each entry to recent files
-            load_one(fs::u8path(combined), data, false, select_first && num_images == 0, to_replace, channel_selector);
+            load_one(fs::u8path(combined), data, false, select_first && num_images == 0, to_replace, opts);
             ++num_images;
 
             // If entry_pattern is set, we only want one entry
@@ -212,7 +229,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
                 add_recent_file(filename);
         }
         else
-            load_one(path, buffer, false, should_select, to_replace, channel_selector);
+            load_one(path, buffer, false, should_select, to_replace, opts);
         return;
     }
 #if !defined(__EMSCRIPTEN__)
@@ -248,7 +265,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         for (size_t i = 0; i < entries.size(); ++i)
         {
             spdlog::info("Loading file '{}'...", entries[i].path().u8string());
-            load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, channel_selector);
+            load_one(entries[i].path(), buffer, false, i == 0 ? should_select : false, to_replace, opts);
         }
 
         // this moves the file to the top of the recent files list
@@ -296,7 +313,7 @@ void BackgroundImageLoader::background_load(const string filename, const string_
         else
         {
             spdlog::info("Loading file '{}'...", filename);
-            load_one(filename, buffer, true, should_select, to_replace, channel_selector);
+            load_one(filename, buffer, true, should_select, to_replace, opts);
         }
     }
 }
@@ -486,4 +503,110 @@ void BackgroundImageLoader::draw_gui()
         ImGui::PopStyleVar(2);
         ImGui::EndTable();
     }
+}
+
+vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOptions &opts)
+{
+    spdlog::info("Loading from file: {}", filename);
+    ScopedMDC mdc{"file", string(get_basename(filename))};
+    Timer     timer;
+    try
+    {
+        if (!is.good())
+            throw invalid_argument("Invalid input stream");
+
+        vector<ImagePtr> images;
+
+        if (is_exr_image(is, filename))
+        {
+            spdlog::info("Detected EXR image.");
+            images = load_exr_image(is, filename, opts.channel_selector);
+        }
+        else if (is_uhdr_image(is))
+        {
+            spdlog::info("Detected UltraHDR JPEG image. Loading via libultrahdr.");
+            images = load_uhdr_image(is, filename);
+        }
+        else if (is_jpg_image(is))
+        {
+            spdlog::info("Detected JPEG image. Loading via libjpeg.");
+            images = load_jpg_image(is, filename, opts.channel_selector);
+        }
+        else if (is_qoi_image(is))
+        {
+            spdlog::info("Detected QOI image.");
+            images = load_qoi_image(is, filename);
+        }
+        else if (is_jxl_image(is))
+        {
+            spdlog::info("Detected JPEG XL image. Loading via libjxl.");
+            images = load_jxl_image(is, filename, opts.channel_selector);
+        }
+        // is_heif_image falsely claims many dds files are heif files, and then fails, so we put dds earlier
+        else if (is_dds_image(is))
+        {
+            spdlog::info("Detected dds-compatible image. Loading via smalldds.");
+            images = load_dds_image(is, filename, opts.channel_selector);
+        }
+        else if (is_heif_image(is))
+        {
+            spdlog::info("Detected HEIF image.");
+            images = load_heif_image(is, filename, opts.channel_selector);
+        }
+        else if (is_png_image(is))
+        {
+            spdlog::info("Detected PNG image. Loading via libpng.");
+            images = load_png_image(is, filename, opts.channel_selector);
+        }
+        else if (is_stb_image(is))
+        {
+            spdlog::info("Detected stb-compatible image. Loading via stb_image.");
+            images = load_stb_image(is, filename);
+        }
+        else if (is_pfm_image(is))
+        {
+            spdlog::info("Detected PFM image.");
+            images = load_pfm_image(is, filename);
+        }
+        else
+            throw invalid_argument("This doesn't seem to be a supported image file.");
+
+        for (auto i : images)
+        {
+            try
+            {
+                i->finalize();
+                i->filename   = filename;
+                i->short_name = i->file_and_partname();
+
+                // If multiple image "parts" were loaded and they have names, store these names in the image's channel
+                // selector. This is useful if we later want to reload a specific image part from the original file.
+                if (i->partname.empty())
+                    i->channel_selector = opts.channel_selector;
+                else
+                {
+                    const auto selector_parts = split(opts.channel_selector, ",");
+                    if (opts.channel_selector.empty())
+                        i->channel_selector = i->partname;
+                    else if (find(begin(selector_parts), end(selector_parts), i->partname) == end(selector_parts))
+                        i->channel_selector = fmt::format("{},{}", i->partname, opts.channel_selector);
+                    else
+                        i->channel_selector = opts.channel_selector;
+                }
+
+                spdlog::info("Loaded image in {:f} seconds:\n{:s}", timer.elapsed() / 1000.f, i->to_string());
+            }
+            catch (const exception &e)
+            {
+                spdlog::error("Skipping image loaded from \"{}\" due to error:\n\t{}", filename, e.what());
+                continue; // skip this image
+            }
+        }
+        return images;
+    }
+    catch (const exception &e)
+    {
+        spdlog::error("Unable to load image file \"{}\":\n\t{}", filename, e.what());
+    }
+    return {};
 }

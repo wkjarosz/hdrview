@@ -935,7 +935,6 @@ hello_imgui_add_app(
   src/fonts.cpp
   src/hdrview.cpp
   src/image.cpp
-  src/imageio.cpp
   src/imgui_ext.cpp
   src/image_gui.cpp
   src/opengl_check.cpp

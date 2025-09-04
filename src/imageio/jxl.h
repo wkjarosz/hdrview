@@ -23,7 +23,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
                     bool lossless = false, float quality = 95.f, TransferFunction tf = TransferFunction_sRGB,
                     float gamma = 1.f, int data_type = 0);
 
-struct JXLEncodeParameters;
-JXLEncodeParameters *jxl_parameters_gui();
+struct JXLSaveOptions;
+JXLSaveOptions *jxl_parameters_gui();
 // throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLEncodeParameters *params);
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params);

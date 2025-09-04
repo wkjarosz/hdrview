@@ -1,5 +1,6 @@
 #pragma once
 
+#include "colorspace.h"
 #include "fwd.h"
 #include <filesystem>
 #include <functional>
@@ -17,10 +18,29 @@ using std::string;
 using std::string_view;
 using std::vector;
 
+struct ImageLoadOptions
+{
+    //! Comma-separated list of channel names to include or exclude from the image. If empty, all channels are selected.
+    string channel_selector;
+
+    //! Override any metadata in the file and decode pixel values using this transfer function
+    TransferFunction tf = TransferFunction_Unknown;
+};
+
+/**
+    Load the an image from the input stream.
+
+    \param [] is       The input stream to read from
+    \param [] filename The corresponding filename if `is` was opened from a file
+    \param [] opts     Options for loading the image
+    \return            A vector of possibly multiple images (e.g. from multi-part EXR files)
+*/
+vector<ImagePtr> load_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
+
 struct BackgroundImageLoader
 {
     void background_load(const string filename, const string_view = string_view{}, bool should_select = false,
-                         ImagePtr to_replace = nullptr, const string &channel_selector = "");
+                         ImagePtr to_replace = nullptr, const ImageLoadOptions &opts = {});
     void load_recent_file(int index);
     void get_loaded_images(function<void(ImagePtr, ImagePtr, bool)> callback);
     int  num_pending_images() const { return pending_images.size(); }

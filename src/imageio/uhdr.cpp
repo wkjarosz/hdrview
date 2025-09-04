@@ -20,7 +20,7 @@
 
 using namespace std;
 
-struct UHDREncodeParameters
+struct UHDRSaveOptions
 {
     float gain              = 1.f;
     int   quality           = 95;
@@ -30,7 +30,7 @@ struct UHDREncodeParameters
     float gainmap_gamma     = 1.f;
 };
 
-static UHDREncodeParameters s_params;
+static UHDRSaveOptions s_params;
 
 #ifndef HDRVIEW_ENABLE_UHDR
 
@@ -50,9 +50,9 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-UHDREncodeParameters *uhdr_parameters_gui() { return &s_params; }
+UHDRSaveOptions *uhdr_parameters_gui() { return &s_params; }
 
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDREncodeParameters *params)
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -383,7 +383,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
 #include "imgui.h"
 #include "imgui_ext.h"
 
-UHDREncodeParameters *uhdr_parameters_gui()
+UHDRSaveOptions *uhdr_parameters_gui()
 {
     ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
@@ -404,15 +404,15 @@ UHDREncodeParameters *uhdr_parameters_gui()
                           "[any positive real number (1.0 : default)]");
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = UHDREncodeParameters{};
+        s_params = UHDRSaveOptions{};
     return &s_params;
 }
 
 // throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDREncodeParameters *params)
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params)
 {
     if (params == nullptr)
-        throw std::invalid_argument("UHDREncodeParameters pointer is null");
+        throw std::invalid_argument("UHDRSaveOptions pointer is null");
 
     save_uhdr_image(img, os, filename, params->gain, params->quality, params->gainmap_quality,
                     params->use_multi_channel, params->gainmap_scale, params->gainmap_gamma);

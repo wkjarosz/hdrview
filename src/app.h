@@ -48,7 +48,7 @@ public:
     void open_folder();
     void load_images(const vector<string> &filenames);
     void load_image(const string filename, const string_view buffer = string_view{}, bool should_select = true,
-                    const string channel_selector = "");
+                    const ImageLoadOptions &opts = {});
     void load_url(const string_view url);
     void close_image(int index = -1);
     void close_all_images();
@@ -187,6 +187,7 @@ private:
     void draw_about_dialog(bool &);
     void draw_command_palette(bool &);
     void draw_save_as_dialog(bool &);
+    void draw_open_options_dialog(bool &open);
     void draw_color_picker(bool &);
     void draw_pixel_info() const;
     void draw_pixel_grid() const;

@@ -314,9 +314,29 @@ void HDRViewApp::draw_menus()
     if (ImGui::BeginMenu("File"))
     {
         MenuItem(action("Open image..."));
+        MenuItem(action("Open image (advanced)..."));
 #if defined(__EMSCRIPTEN__)
         MenuItem(action("Open URL..."));
 #else
+
+        // // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0));
+        // ImGui::SetNextItemAllowOverlap();
+        // ImGui::Selectable(ICON_MY_OPEN_IMAGE "##Open image selectable", false);
+        // // ImGui::TextUnformatted(ICON_MY_OPEN_IMAGE);
+        // ImGui::SameLine();
+        // ImGui::TextUnformatted("Open image...");
+        // ImGui::SameLine(ImGui::GetContentRegionAvail().x - 2.f * ImGui::GetTextLineHeight());
+        // // ImGui::TextUnformatted("Clip warnings");
+        // // ImGui::SameLine();
+        // ImGui::SmallButton(ICON_MY_ZEBRA_STRIPES "##Open options");
+        // // ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+        // // ImGui::BeginDisabled(!m_draw_clip_warnings);
+        // // ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemInnerSpacing.x);
+        // // ImGui::DragFloatRange2("##Clip warnings", &m_clip_range.x, &m_clip_range.y, 0.01f, 0.f, 0.f, "min: %.01f",
+        // //    "max: %.01f");
+        // // ImGui::EndDisabled();
+        // // ImGui::PopStyleVar();
+
         MenuItem(action("Open folder..."));
 
         ImGui::BeginDisabled(m_image_loader.recent_files().empty());

@@ -20,7 +20,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f, bool sRGB = true,
                     bool dither = true, int quality = 95, bool progressive = false);
 
-struct JPGEncodeParameters;
-JPGEncodeParameters *jpg_parameters_gui();
+struct JPGSaveOptions;
+JPGSaveOptions *jpg_parameters_gui();
 // throws on error
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGEncodeParameters *params);
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params);

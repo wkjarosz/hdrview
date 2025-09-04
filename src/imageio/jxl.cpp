@@ -16,7 +16,7 @@
 
 using namespace std;
 
-struct JXLEncodeParameters
+struct JXLSaveOptions
 {
     float            gain            = 1.f;
     bool             lossless        = false;
@@ -26,7 +26,7 @@ struct JXLEncodeParameters
     float            gamma           = 1.f;
 };
 
-static JXLEncodeParameters s_params;
+static JXLSaveOptions s_params;
 
 #ifndef HDRVIEW_ENABLE_JPEGXL
 
@@ -39,9 +39,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
-JXLEncodeParameters *jxl_parameters_gui() { return &s_params; }
+JXLSaveOptions *jxl_parameters_gui() { return &s_params; }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLEncodeParameters *params)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
@@ -908,7 +908,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
 
-JXLEncodeParameters *jxl_parameters_gui()
+JXLSaveOptions *jxl_parameters_gui()
 {
     ImGui::BeginGroup();
     ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
@@ -945,15 +945,15 @@ JXLEncodeParameters *jxl_parameters_gui()
     ImGui::EndDisabled();
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = JXLEncodeParameters{};
+        s_params = JXLSaveOptions{};
     return &s_params;
 }
 
 // throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLEncodeParameters *params)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
     if (params == nullptr)
-        throw std::invalid_argument("JXLEncodeParameters pointer is null");
+        throw std::invalid_argument("JXLSaveOptions pointer is null");
 
     save_jxl_image(img, os, filename, params->gain, params->lossless, params->quality, params->tf, params->gamma,
                    s_data_types[params->data_type_index]);

@@ -18,7 +18,7 @@
 
 using namespace std;
 
-struct JPGEncodeParameters
+struct JPGSaveOptions
 {
     float gain        = 1.f;
     int   tf          = 1;
@@ -27,7 +27,7 @@ struct JPGEncodeParameters
     bool  progressive = false;
 };
 
-static JPGEncodeParameters s_params;
+static JPGSaveOptions s_params;
 
 #ifndef HDRVIEW_ENABLE_LIBJPEG
 
@@ -46,9 +46,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     return save_stb_jpg(img, os, filename, gain, sRGB, dither, quality);
 }
 
-JPGEncodeParameters *jpg_parameters_gui() { return &s_params; }
+JPGSaveOptions *jpg_parameters_gui() { return &s_params; }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGEncodeParameters *params)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params)
 {
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
@@ -389,7 +389,7 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 #include "imgui.h"
 #include "imgui_ext.h"
 
-JPGEncodeParameters *jpg_parameters_gui()
+JPGSaveOptions *jpg_parameters_gui()
 {
     ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
@@ -403,16 +403,16 @@ JPGEncodeParameters *jpg_parameters_gui()
     ImGui::Checkbox("Progressive", &s_params.progressive);
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = JPGEncodeParameters{};
+        s_params = JPGSaveOptions{};
 
     return &s_params;
 }
 
 // throws on error
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGEncodeParameters *params)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params)
 {
     if (params == nullptr)
-        throw std::invalid_argument("JPGEncodeParameters pointer is null");
+        throw std::invalid_argument("JPGSaveOptions pointer is null");
 
     save_jpg_image(img, os, filename, 1.f, s_params.tf, s_params.quality, s_params.dither, s_params.progressive);
 }

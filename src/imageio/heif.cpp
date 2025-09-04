@@ -17,7 +17,7 @@
 
 using namespace std;
 
-struct HEIFEncodeParameters
+struct HEIFSaveOptions
 {
     float            gain         = 1.f;
     int              quality      = 95;
@@ -28,7 +28,7 @@ struct HEIFEncodeParameters
     float            gamma        = 2.2f;
 };
 
-static HEIFEncodeParameters s_heif_params;
+static HEIFSaveOptions s_heif_params;
 
 #ifndef HDRVIEW_ENABLE_HEIF
 
@@ -45,12 +45,12 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, float, int
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, HEIFEncodeParameters *)
+void save_heif_image(const Image &, std::ostream &, std::string_view, HEIFSaveOptions *)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFEncodeParameters *heif_parameters_gui() { return &s_heif_params; }
+HEIFSaveOptions *heif_parameters_gui() { return &s_heif_params; }
 
 #else
 
@@ -632,16 +632,16 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // Opaque pointer version
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFEncodeParameters *params)
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFSaveOptions *params)
 {
     if (!params)
-        throw std::invalid_argument("HEIFEncodeParameters pointer is null");
+        throw std::invalid_argument("HEIFSaveOptions pointer is null");
     save_heif_image(img, os, filename, params->gain, params->quality, params->lossless, params->use_alpha,
                     params->format_index, params->tf, params->gamma);
 }
 
 // GUI parameter function
-HEIFEncodeParameters *heif_parameters_gui()
+HEIFSaveOptions *heif_parameters_gui()
 {
     init_heif_supported_formats();
 
@@ -686,7 +686,7 @@ HEIFEncodeParameters *heif_parameters_gui()
     }
     ImGui::SliderFloat("Gamma", &s_heif_params.gamma, 0.1f, 5.0f);
     if (ImGui::Button("Reset options to defaults"))
-        s_heif_params = HEIFEncodeParameters{};
+        s_heif_params = HEIFSaveOptions{};
     return &s_heif_params;
 }
 

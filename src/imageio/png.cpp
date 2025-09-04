@@ -15,7 +15,7 @@
 #include "timer.h"
 #include <optional>
 
-struct PNGEncodeParameters
+struct PNGSaveOptions
 {
     float            gain            = 1.f;
     bool             dither          = true;
@@ -25,7 +25,7 @@ struct PNGEncodeParameters
     bool             interlaced      = false;
 };
 
-static PNGEncodeParameters s_params;
+static PNGSaveOptions s_params;
 
 #ifndef HDRVIEW_ENABLE_LIBPNG
 
@@ -41,9 +41,9 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-PNGEncodeParameters *png_parameters_gui() { return &s_params; }
+PNGSaveOptions *png_parameters_gui() { return &s_params; }
 
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGEncodeParameters *params)
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -657,7 +657,7 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 #include "imgui.h"
 #include "imgui_ext.h"
 
-PNGEncodeParameters *png_parameters_gui()
+PNGSaveOptions *png_parameters_gui()
 {
     ImGui::BeginGroup();
     ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
@@ -685,15 +685,15 @@ PNGEncodeParameters *png_parameters_gui()
     ImGui::Combo("Data type", &s_params.data_type_index, "UInt8\0UInt16\0");
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = PNGEncodeParameters{};
+        s_params = PNGSaveOptions{};
     return &s_params;
 }
 
 // throws on error
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGEncodeParameters *params)
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params)
 {
     if (params == nullptr)
-        throw std::invalid_argument("PNGEncodeParameters pointer is null");
+        throw std::invalid_argument("PNGSaveOptions pointer is null");
 
     save_png_image(img, os, filename, params->gain, params->dither, params->interlaced, params->data_type_index,
                    params->tf);

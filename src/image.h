@@ -377,36 +377,6 @@ public:
     void        compute_color_transform();
     std::string to_string() const;
 
-    /**
-        Load the an image from the input stream.
-
-        \param [] is                The input stream to read from
-        \param [] filename          The corresponding filename if `is` was opened from a file
-        \param [] channel_selector  A comma-separated list of channel names to select from the image. If empty, all
-                                    channels are selected.
-        \return                     A vector of possibly multiple images (e.g. from multi-part EXR files)
-    */
-    static std::vector<ImagePtr> load(std::istream &is, std::string_view filename,
-                                      std::string_view channel_selector = std::string_view{});
-
-    /**
-        Write the image to the output stream.
-
-        The output image format is deduced from the filename extension.
-
-        If the format is OpenEXR, then all channels of this Image are written to the file.
-        For all other formats, only the selected channel group \ref selected_group is written.
-
-        \param os        The output stream to write to
-        \param filename  The filename to save to
-        \param gain      Multiply all pixel values by gain before saving
-        \param sRGB      If not saving to an HDR format, tonemap the image to sRGB
-        \param dither    If not saving to an HDR format, dither when tonemapping down to 8-bit
-        \return          Returns nothing. Throws on error.
-    */
-    void save(std::ostream &os, std::string_view filename, float gain = 1.f, bool sRGB = true,
-              bool dither = true) const;
-
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
                                         TransferFunction tf = TransferFunction_Linear, float gamma = 1.f,
@@ -530,5 +500,3 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
 
     return pixels;
 }
-
-// void draw_histogram(Image *img, float exposure);

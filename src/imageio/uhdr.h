@@ -23,7 +23,7 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
                      float base_quality = 95.f, float gainmap_quality = 95.f, bool use_multi_channel_gainmap = false,
                      int gainmap_scale_factor = 1, float gainmap_gamma = 1.f);
 
-struct UHDREncodeParameters;
-UHDREncodeParameters *uhdr_parameters_gui();
+struct UHDRSaveOptions;
+UHDRSaveOptions *uhdr_parameters_gui();
 // throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDREncodeParameters *params);
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params);

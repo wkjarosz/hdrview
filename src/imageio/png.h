@@ -22,7 +22,7 @@ void save_png_image(const Image &img, std::ostream &os, const std::string_view f
                     bool dither = true, bool interlaced = false, bool sixteen_bit = false,
                     TransferFunction tf = TransferFunction_sRGB);
 
-struct PNGEncodeParameters;
-PNGEncodeParameters *png_parameters_gui();
+struct PNGSaveOptions;
+PNGSaveOptions *png_parameters_gui();
 // throws on error
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGEncodeParameters *params);
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params);
