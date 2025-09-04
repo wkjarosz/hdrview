@@ -6,6 +6,7 @@
 
 #include "image_loader.h"
 #include "app.h"
+#include "colorspace.h"
 #include "fonts.h"
 #include "hello_imgui/dpi_aware.h"
 #include "image.h"
@@ -531,37 +532,46 @@ const ImageLoadOptions &load_image_options_gui()
         "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
         "would exclude channels named \"A\". Leave empty to load all parts.");
 
-    // static bool force = false;
-    // ImGui::BeginGroup();
-    // ImGui::BeginDisabled(!force);
-    // if (ImGui::BeginCombo("Force transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
-    // {
-    //     for (int i = TransferFunction_Unknown; i <= TransferFunction_DCI_P3; ++i)
-    //     {
-    //         bool is_selected = (s_opts.tf == (TransferFunction)i);
-    //         if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(),
-    //         is_selected))
-    //             s_opts.tf = (TransferFunction)i;
-    //         if (is_selected)
-    //             ImGui::SetItemDefaultFocus();
-    //     }
-    //     ImGui::EndCombo();
-    // }
-    // ImGui::EndDisabled();
-    // ImGui::SameLine();
-    // if (ImGui::Checkbox("##Force transfer function", &force))
-    //     s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
+    static bool force = false;
+    ImGui::BeginGroup();
+    ImGui::BeginDisabled(!force);
+    if (ImGui::BeginCombo("Force transfer function",
+                          s_opts.tf == TransferFunction_Unknown
+                              ? "Use file's transfer function"
+                              : transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+        {
+            bool is_selected = (s_opts.tf == (TransferFunction)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
+                s_opts.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Checkbox("##Force transfer function", &force))
+        s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
+    ImGui::BeginDisabled(!force);
+    if (s_opts.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
+    ImGui::EndDisabled();
 
-    // ImGui::EndGroup();
-    // ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
-    //                       "using the chosen transfer function.");
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
+                          "using the chosen transfer function.");
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
     if (ImGui::Button("Reset options to defaults"))
+    {
         s_opts = ImageLoadOptions{};
+        force  = false;
+    }
 
     ImGui::SameLine();
 
@@ -634,7 +644,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         else if (is_pfm_image(is))
         {
             spdlog::info("Detected PFM image.");
-            images = load_pfm_image(is, filename);
+            images = load_pfm_image(is, filename, opts);
         }
         else
             throw invalid_argument("This doesn't seem to be a supported image file.");

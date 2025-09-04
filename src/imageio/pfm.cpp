@@ -139,7 +139,7 @@ unique_ptr<float[]> load_pfm_image(istream &is, string_view filename, int *width
     }
 }
 
-vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename)
+vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "PFM"};
     int3      size;
@@ -149,10 +149,15 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename)
     image->metadata["pixel format"]      = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
     image->metadata["transfer function"] = transfer_function_name(TransferFunction_Linear);
 
+    to_linear(float_data.get(), size, opts.tf, opts.gamma);
+
     Timer timer;
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
                                                  [](float v) { return v; });
+
+    image->metadata["transfer function"] = transfer_function_name(opts.tf, 1.f / opts.gamma);
+
     spdlog::debug("Copying image data for took: {} seconds.", (timer.elapsed() / 1000.f));
     return {image};
 }

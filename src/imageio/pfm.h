@@ -11,11 +11,12 @@
 
 #include "colorspace.h"
 #include "fwd.h"
+#include "image_loader.h"
 
 // should not throw
 bool is_pfm_image(std::istream &is) noexcept;
 
-std::vector<ImagePtr>    load_pfm_image(std::istream &is, std::string_view filename);
+std::vector<ImagePtr>    load_pfm_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 std::unique_ptr<float[]> load_pfm_image(std::istream &is, std::string_view filename, int *width, int *height,
                                         int *num_channels);
 // throws on error
