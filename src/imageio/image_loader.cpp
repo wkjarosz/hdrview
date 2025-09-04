@@ -40,7 +40,7 @@ struct BackgroundImageLoader::PendingImages
     bool                    add_to_recent;         ///< Whether to add the loaded images to the recent files list
     bool                    should_select = false; ///< Whether to select the first loaded image
     ImagePtr                to_replace = nullptr;  ///< If not null, this image will be replaced with the loaded images
-    PendingImages(const string &f, const string_view buffer, const fs::path &path, const ImageLoadOptions &opts,
+    PendingImages(const string &f, const string_view buffer, const fs::path &path, ImageLoadOptions opts,
                   bool recent = true, bool should_select = false, ImagePtr to_replace = nullptr) :
         filename(f), add_to_recent(recent), should_select(should_select), to_replace(to_replace)
     {
@@ -93,7 +93,7 @@ void BackgroundImageLoader::load_recent_file(int index)
 {
     int idx = int(m_recent_files.size()) - 1 - index;
     if (idx >= 0 && idx < int(m_recent_files.size()))
-        background_load(m_recent_files[idx], {}, true);
+        background_load(m_recent_files[idx], {}, true, nullptr, load_image_options());
 }
 
 void BackgroundImageLoader::add_recent_file(const string &f)
@@ -507,9 +507,9 @@ void BackgroundImageLoader::draw_gui()
     }
 }
 
-ImageLoadOptions *load_image_options() { return &s_opts; }
+const ImageLoadOptions &load_image_options() { return s_opts; }
 
-ImageLoadOptions *load_image_options_gui()
+const ImageLoadOptions &load_image_options_gui()
 {
     ImGui::TextWrapped("These options control how images are loaded. They will be applied to all images opened "
                        "from now on, including those opened via the main \"Open image\" dialog.");
@@ -531,29 +531,30 @@ ImageLoadOptions *load_image_options_gui()
         "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
         "would exclude channels named \"A\". Leave empty to load all parts.");
 
-    static bool force = false;
-    ImGui::BeginGroup();
-    ImGui::BeginDisabled(!force);
-    if (ImGui::BeginCombo("Force transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
-    {
-        for (int i = TransferFunction_Unknown; i <= TransferFunction_DCI_P3; ++i)
-        {
-            bool is_selected = (s_opts.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
-                s_opts.tf = (TransferFunction)i;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (ImGui::Checkbox("##Force transfer function", &force))
-        s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
+    // static bool force = false;
+    // ImGui::BeginGroup();
+    // ImGui::BeginDisabled(!force);
+    // if (ImGui::BeginCombo("Force transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    // {
+    //     for (int i = TransferFunction_Unknown; i <= TransferFunction_DCI_P3; ++i)
+    //     {
+    //         bool is_selected = (s_opts.tf == (TransferFunction)i);
+    //         if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(),
+    //         is_selected))
+    //             s_opts.tf = (TransferFunction)i;
+    //         if (is_selected)
+    //             ImGui::SetItemDefaultFocus();
+    //     }
+    //     ImGui::EndCombo();
+    // }
+    // ImGui::EndDisabled();
+    // ImGui::SameLine();
+    // if (ImGui::Checkbox("##Force transfer function", &force))
+    //     s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
 
-    ImGui::EndGroup();
-    ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
-                          "using the chosen transfer function.");
+    // ImGui::EndGroup();
+    // ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
+    //                       "using the chosen transfer function.");
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -569,7 +570,7 @@ ImageLoadOptions *load_image_options_gui()
     if (ImGui::Button("OK", HelloImGui::EmToVec2(4.f, 0.f)))
         ImGui::CloseCurrentPopup();
 
-    return &s_opts;
+    return s_opts;
 }
 
 vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOptions &opts)
@@ -587,7 +588,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         if (is_exr_image(is, filename))
         {
             spdlog::info("Detected EXR image.");
-            images = load_exr_image(is, filename, opts.channel_selector);
+            images = load_exr_image(is, filename, opts);
         }
         else if (is_uhdr_image(is))
         {
@@ -597,7 +598,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         else if (is_jpg_image(is))
         {
             spdlog::info("Detected JPEG image. Loading via libjpeg.");
-            images = load_jpg_image(is, filename, opts.channel_selector);
+            images = load_jpg_image(is, filename, opts);
         }
         else if (is_qoi_image(is))
         {
@@ -607,23 +608,23 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         else if (is_jxl_image(is))
         {
             spdlog::info("Detected JPEG XL image. Loading via libjxl.");
-            images = load_jxl_image(is, filename, opts.channel_selector);
+            images = load_jxl_image(is, filename, opts);
         }
         // is_heif_image falsely claims many dds files are heif files, and then fails, so we put dds earlier
         else if (is_dds_image(is))
         {
             spdlog::info("Detected dds-compatible image. Loading via smalldds.");
-            images = load_dds_image(is, filename, opts.channel_selector);
+            images = load_dds_image(is, filename, opts);
         }
         else if (is_heif_image(is))
         {
             spdlog::info("Detected HEIF image.");
-            images = load_heif_image(is, filename, opts.channel_selector);
+            images = load_heif_image(is, filename, opts);
         }
         else if (is_png_image(is))
         {
             spdlog::info("Detected PNG image. Loading via libpng.");
-            images = load_png_image(is, filename, opts.channel_selector);
+            images = load_png_image(is, filename, opts);
         }
         else if (is_stb_image(is))
         {

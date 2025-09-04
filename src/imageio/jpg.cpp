@@ -35,7 +35,7 @@ static JPGSaveOptions s_opts;
 
 bool is_jpg_image(istream &is) noexcept { return false; }
 
-std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, std::string_view channel_selector)
+std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts)
 {
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
@@ -76,7 +76,7 @@ bool is_jpg_image(std::istream &is) noexcept
     }
 }
 
-std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, std::string_view channel_selector)
+std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "JPG"};
 

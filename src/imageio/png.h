@@ -8,6 +8,7 @@
 
 #include "colorspace.h"
 #include "fwd.h"
+#include "image_loader.h"
 
 #include <istream>
 #include <string_view>
@@ -16,7 +17,7 @@
 bool is_png_image(std::istream &is) noexcept;
 // throws on error
 std::vector<ImagePtr> load_png_image(std::istream &is, const std::string_view filename,
-                                     const std::string_view channel_selector = std::string_view{});
+                                     const ImageLoadOptions &opts = {});
 // throws on error
 void save_png_image(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
                     bool dither = true, bool interlaced = false, bool sixteen_bit = false,

@@ -37,7 +37,7 @@ static HEIFSaveOptions s_opts;
 
 bool is_heif_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     throw runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -190,7 +190,7 @@ static auto chroma_name(heif_chroma ch)
     }
 };
 
-vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "HEIF"};
     // calculate size of stream
@@ -228,7 +228,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
         spdlog::info("Found {} subimages", num_subimages);
 
-        ImGuiTextFilter filter{string(channel_selector).c_str()};
+        ImGuiTextFilter filter{opts.channel_selector.c_str()};
         filter.Build();
 
         // just get the primary image for now
@@ -239,7 +239,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, string_view 
 
             if (auto name = fmt::format("{:d}.R,G,B", id); !filter.PassFilter(name.c_str()))
             {
-                spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, channel_selector);
+                spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, opts.channel_selector);
                 continue;
             }
 

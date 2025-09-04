@@ -10,9 +10,9 @@
 #include <string_view>
 
 #include "fwd.h"
+#include "imageio/image_loader.h"
 
 // should not throw
 bool is_dds_image(std::istream &is) noexcept;
 // throws on error
-std::vector<ImagePtr> load_dds_image(std::istream &is, std::string_view filename,
-                                     std::string_view channel_selector = std::string_view{});
+std::vector<ImagePtr> load_dds_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});

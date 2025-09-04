@@ -10,12 +10,12 @@
 #include <string>
 
 #include "fwd.h"
+#include "image_loader.h"
 
 // does not throw
 bool is_exr_image(std::istream &is, std::string_view filename) noexcept;
 // throws on error
-std::vector<ImagePtr> load_exr_image(std::istream &is, std::string_view filename,
-                                     std::string_view channel_selector = std::string_view{});
+std::vector<ImagePtr> load_exr_image(std::istream &is, std::string_view filename, const ImageLoadOptions &opts = {});
 
 struct EXRSaveOptions;
 EXRSaveOptions *exr_parameters_gui(const ImagePtr &img);

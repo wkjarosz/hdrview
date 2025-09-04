@@ -203,7 +203,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 // - Setting the desired JxlDecoderSetOutputColorProfile to JXL_TRANSFER_FUNCTION_SRGB does call the CMS functions.
 //
 
-vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "JXL"};
     // calculate size of stream
@@ -259,7 +259,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
         JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size()))
         throw invalid_argument{"Failed to set input for decoder."};
 
-    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
     while (true)
@@ -418,7 +418,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             {
                 auto name = (frame_name.empty()) ? string("R,G,B") : frame_name + "." + string("R,G,B");
                 if ((skip_color = !filter.PassFilter(&name[0], &name[0] + name.size())))
-                    spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, channel_selector);
+                    spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name,
+                                  opts.channel_selector);
 
                 size_t buffer_size;
                 if (JXL_DEC_SUCCESS != JxlDecoderImageOutBufferSize(dec.get(), &format, &buffer_size))
@@ -442,7 +443,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
                 if (!filter.PassFilter(&name[0], &name[0] + name.size()))
                 {
                     spdlog::debug("Skipping extra channel {}: '{}' (filtered out by channel selector '{}')", i, name,
-                                  channel_selector);
+                                  opts.channel_selector);
                     continue;
                 }
 
@@ -482,7 +483,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
             spdlog::debug("JXL_DEC_FULL_IMAGE");
             if (skip_color)
             {
-                spdlog::debug("Skipping image, all channels filtered out by channel selector '{}'", channel_selector);
+                spdlog::debug("Skipping image, all channels filtered out by channel selector '{}'",
+                              opts.channel_selector);
                 continue;
             }
 

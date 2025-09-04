@@ -28,8 +28,8 @@ struct ImageLoadOptions
     float            gamma = 1.f;
 };
 
-ImageLoadOptions *load_image_options();
-ImageLoadOptions *load_image_options_gui();
+const ImageLoadOptions &load_image_options();
+const ImageLoadOptions &load_image_options_gui();
 
 /**
     Load the an image from the input stream.

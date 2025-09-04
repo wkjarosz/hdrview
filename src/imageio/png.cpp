@@ -31,7 +31,7 @@ static PNGSaveOptions s_opts;
 
 bool is_png_image(istream &is) noexcept { return false; }
 
-vector<ImagePtr> load_png_image(istream &is, string_view filename)
+vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -190,7 +190,7 @@ bool is_png_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "PNG"};
     if (!check_png_signature(is))
@@ -453,7 +453,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, string_view c
     else
         num_frames = 1, num_plays = 0;
 
-    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
     std::vector<ImagePtr> images;

@@ -633,7 +633,7 @@ bool is_dds_image(std::istream &is) noexcept
     }
 }
 
-vector<ImagePtr> load_dds_image(istream &is, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "DDS"};
     DDSFile   dds;

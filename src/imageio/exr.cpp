@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "exr.h"
 #include "colorspace.h"
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_header.h"
@@ -47,7 +48,7 @@ bool is_exr_image(istream &is_, string_view filename) noexcept
     return Imf::isOpenExrFile(is);
 }
 
-vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view channel_selector)
+vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "EXR"};
     auto      is = StdIStream{is_, string(filename).c_str()};
@@ -57,8 +58,9 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
     if (infile.parts() <= 0)
         throw invalid_argument{"EXR file contains no parts!"};
 
-    ImGuiTextFilter filter{string(channel_selector).c_str()};
+    ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
+    spdlog::info("Building filter for selector '{}'", opts.channel_selector);
 
     vector<ImagePtr> images;
     for (int p = 0; p < infile.parts(); ++p)
@@ -147,7 +149,7 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
         if (!has_channels)
         {
             spdlog::debug("Part {}: '{}' has no channels matching the filter '{}', skipping...", p,
-                          part.header().hasName() ? part.header().name() : "unnamed", channel_selector);
+                          part.header().hasName() ? part.header().name() : "unnamed", opts.channel_selector);
             continue;
         }
 
