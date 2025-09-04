@@ -28,7 +28,7 @@
 
 using namespace std;
 
-struct EXRSaveParameters
+struct EXRSaveOptions
 {
     std::vector<bool> group_enabled;                      // size = img.groups.size()
     int               pixel_type  = 1;                    // 0 = Imf::FLOAT, 1 = Imf::HALF
@@ -39,7 +39,7 @@ struct EXRSaveParameters
     float             dwa_quality = 45.0f; // Only for DWAA/DWAB
 };
 
-static EXRSaveParameters s_params{};
+static EXRSaveOptions s_opts{};
 
 bool is_exr_image(istream &is_, string_view filename) noexcept
 {
@@ -180,12 +180,12 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
     return images;
 }
 
-void save_exr_image(const Image &img, ostream &os_, string_view filename, const EXRSaveParameters *params)
+void save_exr_image(const Image &img, ostream &os_, string_view filename, const EXRSaveOptions *params)
 {
     try
     {
         if (!params)
-            params = &s_params;
+            params = &s_opts;
         Timer timer;
         // OpenEXR expects the display window to be inclusive, while our images are exclusive
         auto displayWindow = Imath::Box2i(Imath::V2i(img.display_window.min.x, img.display_window.min.y),
@@ -273,13 +273,13 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename, const 
     }
 }
 
-EXRSaveParameters *exr_parameters_gui(const ImagePtr &img)
+EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
 {
     static ImGuiSelectionBasicStorage group_selection;
 
-    if (s_params.group_enabled.size() != img->groups.size())
+    if (s_opts.group_enabled.size() != img->groups.size())
     {
-        s_params.group_enabled.assign(img->groups.size(), true);
+        s_opts.group_enabled.assign(img->groups.size(), true);
         group_selection.Clear();
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
@@ -311,20 +311,20 @@ EXRSaveParameters *exr_parameters_gui(const ImagePtr &img)
         ms_io = ImGui::EndMultiSelect();
         group_selection.ApplyRequests(ms_io);
 
-        // Update s_params.group_enabled based on selection
-        if (s_params.group_enabled.size() != img->groups.size())
-            s_params.group_enabled.assign(img->groups.size(), true);
+        // Update s_opts.group_enabled based on selection
+        if (s_opts.group_enabled.size() != img->groups.size())
+            s_opts.group_enabled.assign(img->groups.size(), true);
         for (int i = 0; i < (int)img->groups.size(); ++i)
-            s_params.group_enabled[i] = group_selection.Contains((ImGuiID)i);
+            s_opts.group_enabled[i] = group_selection.Contains((ImGuiID)i);
     }
     ImGui::EndChild();
 
     // Pixel type
-    ImGui::Combo("Pixel type", &s_params.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
+    ImGui::Combo("Pixel type", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
     ImGui::WrappedTooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
     ImGui::SameLine();
     // Tiled vs scanline
-    ImGui::Checkbox("Tiled", &s_params.tiled);
+    ImGui::Checkbox("Tiled", &s_opts.tiled);
     ImGui::WrappedTooltip("Enable to save as a tiled EXR file (recommended for large images).");
 
     // Compression type
@@ -335,15 +335,15 @@ EXRSaveParameters *exr_parameters_gui(const ImagePtr &img)
     static const int num_compressions = IM_ARRAYSIZE(compression_values);
 
     string name;
-    Imf::getCompressionNameFromId(compression_values[s_params.compression], name);
+    Imf::getCompressionNameFromId(compression_values[s_opts.compression], name);
     if (ImGui::BeginCombo("Compression", name.c_str()))
     {
         for (int i = 0; i < num_compressions; ++i)
         {
-            bool is_selected = (s_params.compression == compression_values[i]);
+            bool is_selected = (s_opts.compression == compression_values[i]);
             Imf::getCompressionNameFromId(compression_values[i], name);
             if (ImGui::Selectable(name.c_str(), is_selected))
-                s_params.compression = compression_values[i];
+                s_opts.compression = compression_values[i];
 
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
@@ -355,22 +355,22 @@ EXRSaveParameters *exr_parameters_gui(const ImagePtr &img)
     ImGui::WrappedTooltip("Select the compression method for the EXR file.");
 
     // Tile size
-    if (s_params.tiled)
+    if (s_opts.tiled)
     {
-        ImGui::SliderInt("Tile width", &s_params.tile_width, 16, 512);
-        ImGui::SliderInt("Tile height", &s_params.tile_height, 16, 512);
+        ImGui::SliderInt("Tile width", &s_opts.tile_width, 16, 512);
+        ImGui::SliderInt("Tile height", &s_opts.tile_height, 16, 512);
         ImGui::WrappedTooltip("Set the tile size for tiled EXR output.");
     }
 
     // DWA compression quality
-    if (s_params.compression == Imf::DWAA_COMPRESSION || s_params.compression == Imf::DWAB_COMPRESSION)
+    if (s_opts.compression == Imf::DWAA_COMPRESSION || s_opts.compression == Imf::DWAB_COMPRESSION)
     {
-        ImGui::SliderFloat("DWA compression quality", &s_params.dwa_quality, 0.0f, 100.0f);
+        ImGui::SliderFloat("DWA compression quality", &s_opts.dwa_quality, 0.0f, 100.0f);
         ImGui::WrappedTooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
     }
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = EXRSaveParameters{};
+        s_opts = EXRSaveOptions{};
 
-    return &s_params;
+    return &s_opts;
 }

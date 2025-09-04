@@ -442,39 +442,39 @@ static const Chromaticities s_gamut_chromaticities[] = {
     {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_D65]}
     // ColorGamut_Custom (should not be used, throw below)
 };
-static const char *s_gamut_names[] = {"sRGB/BT.709",
-                                      "BT.470 M/NTSC",
-                                      "BT.470 BG/PAL/SECAM",
-                                      "SMPTE ST 170",
-                                      "SMPTE ST 240",
-                                      "Generic film",
-                                      "BT.2020/BT.2100",
-                                      "SMPTE ST 428-1",
-                                      "DCI P3/SMPTE RP 431",
-                                      "Display P3/SMPTE EG 432",
-                                      "CICP 22",
-                                      "ACES AP0",
-                                      "ACEScg AP1",
-                                      "Adobe RGB",
-                                      "ProPhoto RGB",
-                                      "CIE 1931 XYZ",
-                                      "Unspecified (Assuming sRGB/BT.709)",
-                                      "Custom",
-                                      nullptr};
+static const char *s_gamut_names[ColorGamut_Count + 1] = {"sRGB/BT.709",
+                                                          "BT.470 M/NTSC",
+                                                          "BT.470 BG/PAL/SECAM",
+                                                          "SMPTE ST 170/240",
+                                                          "Generic film",
+                                                          "BT.2020/BT.2100",
+                                                          "SMPTE ST 428-1",
+                                                          "DCI P3/SMPTE RP 431",
+                                                          "Display P3/SMPTE EG 432",
+                                                          "CICP 22",
+                                                          "ACES AP0",
+                                                          "ACEScg AP1",
+                                                          "Adobe RGB",
+                                                          "ProPhoto RGB",
+                                                          "CIE 1931 XYZ",
+                                                          "Unspecified (Assuming sRGB/BT.709)",
+                                                          "Custom",
+                                                          nullptr};
 
-static const char *s_transfer_function_names[] = {"Unknown (Assuming sRGB)", // TransferFunction_Unknown
-                                                  "Linear",                  // TransferFunction_Linear
-                                                  "Gamma",                   // TransferFunction_Gamma
-                                                  "sRGB IEC61966-2.1",       // TransferFunction_sRGB
-                                                  "BT.709/2020",             // TransferFunction_ITU
-                                                  "BT.2100 PQ",              // TransferFunction_BT2100_PQ
-                                                  "BT.2100 HLG",             // TransferFunction_BT2100_HLG
-                                                  "SMPTE ST 240",            // TransferFunction_ST240
-                                                  "Log100",                  // TransferFunction_Log100
-                                                  "Log100 Sqrt10",           // TransferFunction_Log100_Sqrt10
-                                                  "IEC 61966-2-4",           // TransferFunction_IEC61966_2_4
-                                                  "DCI-P3",                  // TransferFunction_DCI_P3
-                                                  nullptr};
+static const char *s_transfer_function_names[TransferFunction_Count + 1] = {
+    "Unknown (Assuming sRGB)", // TransferFunction_Unknown
+    "Linear",                  // TransferFunction_Linear
+    "Gamma",                   // TransferFunction_Gamma
+    "sRGB IEC61966-2.1",       // TransferFunction_sRGB
+    "BT.709/2020",             // TransferFunction_ITU
+    "BT.2100 PQ",              // TransferFunction_BT2100_PQ
+    "BT.2100 HLG",             // TransferFunction_BT2100_HLG
+    "SMPTE ST 240",            // TransferFunction_ST240
+    "Log100",                  // TransferFunction_Log100
+    "Log100 Sqrt10",           // TransferFunction_Log100_Sqrt10
+    "IEC 61966-2-4",           // TransferFunction_IEC61966_2_4
+    "DCI-P3",                  // TransferFunction_DCI_P3
+    nullptr};
 
 float2 white_point(WhitePoint wp)
 {

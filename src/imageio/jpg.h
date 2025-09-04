@@ -23,4 +23,4 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 struct JPGSaveOptions;
 JPGSaveOptions *jpg_parameters_gui();
 // throws on error
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params);
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params);

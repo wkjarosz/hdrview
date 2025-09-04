@@ -25,4 +25,4 @@ void save_png_image(const Image &img, std::ostream &os, const std::string_view f
 struct PNGSaveOptions;
 PNGSaveOptions *png_parameters_gui();
 // throws on error
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params);
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params);

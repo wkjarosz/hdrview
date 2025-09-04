@@ -221,9 +221,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             break;
 
             case Format_PFM:
+            {
+                auto opts = pfm_parameters_gui();
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_pfm_image(img, os, filename); };
-                break;
+                { save_pfm_image(img, os, filename, opts); };
+            }
+            break;
 
             case Format_PNG_LIBPNG:
             {

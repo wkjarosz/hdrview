@@ -30,7 +30,7 @@ struct UHDRSaveOptions
     float gainmap_gamma     = 1.f;
 };
 
-static UHDRSaveOptions s_params;
+static UHDRSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_UHDR
 
@@ -50,9 +50,9 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
 
-UHDRSaveOptions *uhdr_parameters_gui() { return &s_params; }
+UHDRSaveOptions *uhdr_parameters_gui() { return &s_opts; }
 
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params)
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -385,31 +385,31 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
 
 UHDRSaveOptions *uhdr_parameters_gui()
 {
-    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
     ImGui::SameLine();
     if (ImGui::Button("From viewport"))
-        s_params.gain = exp2f(hdrview()->exposure());
+        s_opts.gain = exp2f(hdrview()->exposure());
 
-    ImGui::SliderInt("Base image quality", &s_params.quality, 1, 100);
+    ImGui::SliderInt("Base image quality", &s_opts.quality, 1, 100);
     ImGui::WrappedTooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
-    ImGui::SliderInt("Gain map quality", &s_params.gainmap_quality, 1, 100);
+    ImGui::SliderInt("Gain map quality", &s_opts.gainmap_quality, 1, 100);
     ImGui::WrappedTooltip("The quality factor to be used while encoding gain map image.\n[0-100]");
-    ImGui::Checkbox("Use multi-channel gainmap", &s_params.use_multi_channel);
-    ImGui::SliderInt("Gain map scale factor", &s_params.gainmap_scale, 1, 5);
+    ImGui::Checkbox("Use multi-channel gainmap", &s_opts.use_multi_channel);
+    ImGui::SliderInt("Gain map scale factor", &s_opts.gainmap_scale, 1, 5);
     ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.\n"
                           "[integer values in range [1 - 128] (1 : default)]]");
-    ImGui::SliderFloat("Gain map gamma", &s_params.gainmap_gamma, 0.1f, 5.0f);
+    ImGui::SliderFloat("Gain map gamma", &s_opts.gainmap_gamma, 0.1f, 5.0f);
     ImGui::WrappedTooltip("The gamma correction to be applied on the gainmap image.\n"
                           "[any positive real number (1.0 : default)]");
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = UHDRSaveOptions{};
-    return &s_params;
+        s_opts = UHDRSaveOptions{};
+    return &s_opts;
 }
 
 // throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params)
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
 {
     if (params == nullptr)
         throw std::invalid_argument("UHDRSaveOptions pointer is null");

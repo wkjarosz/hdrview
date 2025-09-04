@@ -12,8 +12,11 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "app.h"
+
 #include "exif.h"
 #include "imgui.h"
+#include "imgui_ext.h"
 
 using namespace std;
 
@@ -28,7 +31,7 @@ struct HEIFSaveOptions
     float            gamma        = 2.2f;
 };
 
-static HEIFSaveOptions s_heif_params;
+static HEIFSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_HEIF
 
@@ -45,12 +48,12 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, float, int
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, HEIFSaveOptions *)
+void save_heif_image(const Image &, std::ostream &, std::string_view, const HEIFSaveOptions *)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui() { return &s_heif_params; }
+HEIFSaveOptions *heif_parameters_gui() { return &s_opts; }
 
 #else
 
@@ -632,7 +635,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 // Opaque pointer version
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFSaveOptions *params)
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params)
 {
     if (!params)
         throw std::invalid_argument("HEIFSaveOptions pointer is null");
@@ -645,10 +648,16 @@ HEIFSaveOptions *heif_parameters_gui()
 {
     init_heif_supported_formats();
 
-    ImGui::SliderFloat("Gain", &s_heif_params.gain, 0.1f, 10.0f);
-    ImGui::SliderInt("Quality", &s_heif_params.quality, 1, 100);
-    ImGui::Checkbox("Lossless", &s_heif_params.lossless);
-    ImGui::Checkbox("Include alpha", &s_heif_params.use_alpha);
+    ImGui::BeginGroup();
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
+    ImGui::Checkbox("Lossless", &s_opts.lossless);
+    ImGui::Checkbox("Include alpha", &s_opts.use_alpha);
 
     // Format combo
     static int selected_format = 0;
@@ -666,28 +675,28 @@ HEIFSaveOptions *heif_parameters_gui()
         }
         ImGui::EndCombo();
     }
-    s_heif_params.format_index = selected_format; // repurpose as index
+    s_opts.format_index = selected_format; // repurpose as index
 
-    if (ImGui::BeginCombo("Transfer function",
-                          transfer_function_name(s_heif_params.tf, 1.f / s_heif_params.gamma).c_str()))
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
         {
             if (!is_heif_transfer_supported((TransferFunction)i))
                 continue;
-            bool selected = (s_heif_params.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_heif_params.gamma).c_str(),
-                                  selected))
-                s_heif_params.tf = (TransferFunction)i;
+            bool selected = (s_opts.tf == (TransferFunction)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), selected))
+                s_opts.tf = (TransferFunction)i;
             if (selected)
                 ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
-    ImGui::SliderFloat("Gamma", &s_heif_params.gamma, 0.1f, 5.0f);
+    if (s_opts.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
+
     if (ImGui::Button("Reset options to defaults"))
-        s_heif_params = HEIFSaveOptions{};
-    return &s_heif_params;
+        s_opts = HEIFSaveOptions{};
+    return &s_opts;
 }
 
 #endif

@@ -9,6 +9,7 @@
 #include <istream>
 #include <string>
 
+#include "colorspace.h"
 #include "fwd.h"
 
 // should not throw
@@ -20,4 +21,10 @@ std::unique_ptr<float[]> load_pfm_image(std::istream &is, std::string_view filen
 // throws on error
 void write_pfm_image(std::ostream &os, std::string_view filename, int width, int height, int num_channels,
                      const float data[]);
-void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f);
+void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
+                    TransferFunction tf = TransferFunction_Linear, float gamma = 1.f);
+
+struct PFMSaveOptions;
+PFMSaveOptions *pfm_parameters_gui();
+// throws on error
+void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, const PFMSaveOptions *opts);

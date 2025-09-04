@@ -23,4 +23,4 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 struct HEIFSaveOptions;
 HEIFSaveOptions *heif_parameters_gui();
 // throws on error
-void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFSaveOptions *params);
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, const HEIFSaveOptions *params);

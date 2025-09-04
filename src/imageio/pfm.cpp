@@ -16,7 +16,21 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "app.h"
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
 using namespace std;
+
+struct PFMSaveOptions
+{
+    float            gain  = 1.f;
+    TransferFunction tf    = TransferFunction_Linear;
+    float            gamma = 1.f;
+};
+
+static PFMSaveOptions s_opts;
 
 namespace
 {
@@ -177,12 +191,59 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, width * height * sizeof(float) * num_channels);
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction tf, float gamma)
 {
+    Timer timer;
+    int   w = 0, h = 0, n = 0;
+    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain, tf, gamma);
+    write_pfm_image(os, filename, w, h, n, pixels.get());
+    spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_pfm_image(const Image &img, ostream &os, string_view filename, const PFMSaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("PFMSaveOptions pointer is null");
+
     Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, gain, TransferFunction_Linear);
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->gain, opts->tf, opts->gamma);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+// GUI parameter function
+PFMSaveOptions *pfm_parameters_gui()
+{
+    ImGui::BeginGroup();
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    ImGui::BeginGroup();
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+        {
+            bool is_selected = (s_opts.tf == (TransferFunction)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
+                s_opts.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (s_opts.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
+                          "file are typically assumed linear, and there is no way to signal in the file "
+                          "that the values are encoded with a different transfer function.");
+    if (ImGui::Button("Reset options to defaults"))
+        s_opts = PFMSaveOptions{};
+    return &s_opts;
 }

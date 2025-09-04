@@ -26,4 +26,4 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
 struct UHDRSaveOptions;
 UHDRSaveOptions *uhdr_parameters_gui();
 // throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDRSaveOptions *params);
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params);

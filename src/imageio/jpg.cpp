@@ -27,7 +27,7 @@ struct JPGSaveOptions
     bool  progressive = false;
 };
 
-static JPGSaveOptions s_params;
+static JPGSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_LIBJPEG
 
@@ -46,9 +46,9 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     return save_stb_jpg(img, os, filename, gain, sRGB, dither, quality);
 }
 
-JPGSaveOptions *jpg_parameters_gui() { return &s_params; }
+JPGSaveOptions *jpg_parameters_gui() { return &s_opts; }
 
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params)
 {
     throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
@@ -391,30 +391,30 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 
 JPGSaveOptions *jpg_parameters_gui()
 {
-    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
     ImGui::SameLine();
     if (ImGui::Button("From viewport"))
-        s_params.gain = exp2f(hdrview()->exposure());
+        s_opts.gain = exp2f(hdrview()->exposure());
 
-    ImGui::Combo("Transfer function", &s_params.tf, "Linear\0sRGB\0");
-    ImGui::Checkbox("Dither", &s_params.dither);
-    ImGui::SliderInt("Quality", &s_params.quality, 1, 100);
-    ImGui::Checkbox("Progressive", &s_params.progressive);
+    ImGui::Combo("Transfer function", &s_opts.tf, "Linear\0sRGB\0");
+    ImGui::Checkbox("Dither", &s_opts.dither);
+    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
+    ImGui::Checkbox("Progressive", &s_opts.progressive);
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = JPGSaveOptions{};
+        s_opts = JPGSaveOptions{};
 
-    return &s_params;
+    return &s_opts;
 }
 
 // throws on error
-void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGSaveOptions *params)
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, const JPGSaveOptions *params)
 {
     if (params == nullptr)
         throw std::invalid_argument("JPGSaveOptions pointer is null");
 
-    save_jpg_image(img, os, filename, 1.f, s_params.tf, s_params.quality, s_params.dither, s_params.progressive);
+    save_jpg_image(img, os, filename, 1.f, s_opts.tf, s_opts.quality, s_opts.dither, s_opts.progressive);
 }
 
 #endif

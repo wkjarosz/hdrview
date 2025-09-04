@@ -26,7 +26,7 @@ struct JXLSaveOptions
     float            gamma           = 1.f;
 };
 
-static JXLSaveOptions s_params;
+static JXLSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_JPEGXL
 
@@ -39,7 +39,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
 
-JXLSaveOptions *jxl_parameters_gui() { return &s_params; }
+JXLSaveOptions *jxl_parameters_gui() { return &s_opts; }
 
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params)
 {
@@ -911,42 +911,41 @@ static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, J
 JXLSaveOptions *jxl_parameters_gui()
 {
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::SameLine();
     if (ImGui::Button("From viewport"))
-        s_params.gain = exp2f(hdrview()->exposure());
+        s_opts.gain = exp2f(hdrview()->exposure());
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_params.tf, 1.f / s_params.gamma).c_str()))
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
         {
             if (!jxl_supported_tf((TransferFunction)i))
                 continue;
 
-            bool is_selected = (s_params.tf == i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_params.gamma).c_str(),
-                                  is_selected))
-                s_params.tf = (TransferFunction)i;
+            bool is_selected = (s_opts.tf == i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
+                s_opts.tf = (TransferFunction)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
-    if (s_params.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &s_params.gamma, 0.1f, 5.f);
+    if (s_opts.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
 
-    ImGui::Combo("Data type", &s_params.data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
+    ImGui::Combo("Data type", &s_opts.data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
 
-    ImGui::Checkbox("Lossless", &s_params.lossless);
-    ImGui::BeginDisabled(s_params.lossless);
-    ImGui::SliderInt("Quality", &s_params.quality, 1, 100);
+    ImGui::Checkbox("Lossless", &s_opts.lossless);
+    ImGui::BeginDisabled(s_opts.lossless);
+    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
     ImGui::EndDisabled();
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = JXLSaveOptions{};
-    return &s_params;
+        s_opts = JXLSaveOptions{};
+    return &s_opts;
 }
 
 // throws on error

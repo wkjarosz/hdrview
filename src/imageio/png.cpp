@@ -25,7 +25,7 @@ struct PNGSaveOptions
     bool             interlaced      = false;
 };
 
-static PNGSaveOptions s_params;
+static PNGSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_LIBPNG
 
@@ -41,9 +41,9 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
     throw runtime_error("PNG support not enabled in this build.");
 }
 
-PNGSaveOptions *png_parameters_gui() { return &s_params; }
+PNGSaveOptions *png_parameters_gui() { return &s_opts; }
 
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params)
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -660,37 +660,36 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 PNGSaveOptions *png_parameters_gui()
 {
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::SameLine();
     if (ImGui::Button("From viewport"))
-        s_params.gain = exp2f(hdrview()->exposure());
+        s_opts.gain = exp2f(hdrview()->exposure());
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_params.tf, 1.f / s_params.gamma).c_str()))
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
-            bool is_selected = (s_params.tf == i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_params.gamma).c_str(),
-                                  is_selected))
-                s_params.tf = (TransferFunction)i;
+            bool is_selected = (s_opts.tf == i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
+                s_opts.tf = (TransferFunction)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
-    ImGui::Checkbox("Dither", &s_params.dither);
-    ImGui::Checkbox("Interlaced", &s_params.interlaced);
-    ImGui::Combo("Data type", &s_params.data_type_index, "UInt8\0UInt16\0");
+    ImGui::Checkbox("Dither", &s_opts.dither);
+    ImGui::Checkbox("Interlaced", &s_opts.interlaced);
+    ImGui::Combo("Data type", &s_opts.data_type_index, "UInt8\0UInt16\0");
 
     if (ImGui::Button("Reset options to defaults"))
-        s_params = PNGSaveOptions{};
-    return &s_params;
+        s_opts = PNGSaveOptions{};
+    return &s_opts;
 }
 
 // throws on error
-void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGSaveOptions *params)
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, const PNGSaveOptions *params)
 {
     if (params == nullptr)
         throw std::invalid_argument("PNGSaveOptions pointer is null");
