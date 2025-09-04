@@ -490,155 +490,17 @@ void HDRViewApp::open_folder()
 void HDRViewApp::draw_open_options_dialog(bool &open)
 {
     if (open)
-        ImGui::OpenPopup("Open image (advanced)...");
+        ImGui::OpenPopup("Image loading options...");
 
     // Center window horizontally, align near top vertically
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
 
-    if (ImGui::BeginPopupModal("Open image (advanced)...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Image loading options...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         open = false;
 
-        static ColorGamut     color_space = ColorGamut_sRGB_BT709;
-        static Chromaticities chromaticities;
-
-        // bool modified = false;
-        // auto csn      = color_gamut_names();
-        // auto open_combo =
-        //     ImGui::BeginCombo("Color gamut", color_gamut_name((ColorGamut)color_space),
-        //     ImGuiComboFlags_HeightLargest);
-        // if (open_combo)
-        // {
-        //     for (ColorGamut_ n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
-        //     {
-        //         auto       cg          = (ColorGamut)n;
-        //         const bool is_selected = (color_space == n);
-        //         if (ImGui::Selectable(csn[n], is_selected))
-        //         {
-        //             color_space = cg;
-        //             spdlog::debug("Switching to color space {}.", n);
-        //             chromaticities = ::gamut_chromaticities(cg);
-        //             // compute_color_transform();
-        //             modified = true;
-        //         }
-
-        //         // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-        //         if (is_selected)
-        //             ImGui::SetItemDefaultFocus();
-        //     }
-        //     ImGui::EndCombo();
-        // }
-
-        // ImGui::WrappedTooltip(
-        //     "Interpret the values stored in the file using the chromaticities of a common color profile.");
-
-        static TransferFunction tf    = TransferFunction_sRGB;
-        static float            gamma = 1.f;
-        static bool             force = false;
-        ImGui::BeginGroup();
-        ImGui::BeginDisabled(!force);
-        if (ImGui::BeginCombo("##Transfer function", transfer_function_name(tf, 1.f / gamma).c_str()))
-        {
-            for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-            {
-                bool is_selected = (tf == (TransferFunction)i);
-                if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / gamma).c_str(), is_selected))
-                    tf = (TransferFunction)i;
-                if (is_selected)
-                    ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::Checkbox("Force transfer function", &force);
-        ImGui::EndGroup();
-        ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
-                              "using the chosen transfer function.");
-
-        static char  filter_buffer[256] = {0};
-        const ImVec2 button_size        = ImGui::IconButtonSize();
-        // bool         show_button =
-        //     false; // strnlen(filter_buffer, IM_ARRAYSIZE(filter_buffer)) > 0; // save here to avoid flicker
-        // ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x -
-        //                         2.f * (button_size.x + ImGui::GetStyle().ItemSpacing.x));
-        ImGui::SetNextItemAllowOverlap();
-        if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", filter_buffer,
-                                     IM_ARRAYSIZE(filter_buffer)))
-        {
-            // // copy everything before first ':' into m_file_filter.InputBuf, and everything after into
-            // // m_channel_filter.InputBuf
-            // if (auto colon = strchr(filter_buffer, ':'))
-            // {
-            //     int file_filter_length    = int(colon - filter_buffer + 1);
-            //     int channel_filter_length = IM_ARRAYSIZE(filter_buffer) - file_filter_length;
-            //     // ImStrncpy(m_file_filter.InputBuf, filter_buffer, file_filter_length);
-            //     // ImStrncpy(m_channel_filter.InputBuf, colon + 1, channel_filter_length);
-            // }
-            // else
-            // {
-            //     // ImStrncpy(m_file_filter.InputBuf, filter_buffer, IM_ARRAYSIZE(m_file_filter.InputBuf));
-            //     m_channel_filter.InputBuf[0] = 0; // Clear channel filter if no colon is found
-            // }
-
-            // m_file_filter.Build();
-            // m_channel_filter.Build();
-
-            // update_visibility();
-        }
-        ImGui::WrappedTooltip("Selector to choose which channels or parts to load from multi-channel files (e.g. "
-                              "\"-.A\" would exclude channels named \"A\").");
-        // if (show_button)
-        // {
-        //     ImGui::SameLine(0.f, 0.f);
-        //     ImGui::SetCursorPosX(ImGui::GetCursorPosX() - button_size.x);
-        //     if (ImGui::IconButton(ICON_MY_DELETE))
-        //     {
-        //         m_file_filter.Clear();
-        //         m_channel_filter.Clear();
-        //         filter_buffer[0] = 0;
-        //         update_visibility();
-        //     }
-        // }
-
-        ImGui::Spacing();
-
-        if (ImGui::Button("Cancel") ||
-            (!ImGui::GetIO().NavVisible &&
-             (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
-            ImGui::CloseCurrentPopup();
-
-        ImGui::SameLine();
-
-        string filename;
-
-        if (ImGui::Button("Choose files to open..."))
-        {
-            static const string extensions = fmt::format("*.{} *.zip", fmt::join(Image::loadable_formats(), " *."));
-
-            spdlog::info(
-                pfd::open_file("Open image(s)", "", {"Image files", extensions}, pfd::opt::multiselect).result());
-        }
-
-        ImGui::SetItemDefaultFocus();
-
-        if (!filename.empty())
-        {
-            ImGui::CloseCurrentPopup();
-            try
-            {
-                ; //
-            }
-            catch (const exception &e)
-            {
-                spdlog::error("An error occurred while saving to '{}':\n\t{}.", filename, e.what());
-            }
-            catch (...)
-            {
-                spdlog::error("An unknown error occurred while saving to '{}'.", filename);
-            }
-        }
+        load_image_options_gui();
 
         ImGui::EndPopup();
     }

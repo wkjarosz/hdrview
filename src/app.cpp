@@ -459,7 +459,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
     m_dialogs["About"] = make_unique<PopupDialog>([this](bool &open) { draw_about_dialog(open); }, in_files.empty());
     m_dialogs["Command palette..."] = make_unique<PopupDialog>([this](bool &open) { draw_command_palette(open); });
     m_dialogs["Save as..."]         = make_unique<PopupDialog>([this](bool &open) { draw_save_as_dialog(open); });
-    m_dialogs["Open image (advanced)..."] =
+    m_dialogs["Image loading options..."] =
         make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
     m_dialogs["Custom background color picker"] =
         make_unique<PopupDialog>([this](bool &open) { draw_color_picker(open); });
@@ -474,8 +474,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         auto add = [this](const Action &a) { m_actions[a.name] = a; };
         add(Action{"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
 
-        add(Action{"Open image (advanced)...", ICON_MY_OPEN_IMAGE, ImGuiKey_None, 0,
-                   [this]() { m_dialogs["Open image (advanced)..."]->open = true; }});
+        add(Action{"Image loading options...", ICON_MY_SETTINGS_WINDOW, ImGuiKey_None, 0,
+                   [this]() { m_dialogs["Image loading options..."]->open = true; }});
 
 #if !defined(__EMSCRIPTEN__)
         add(Action{"Open folder...", ICON_MY_OPEN_FOLDER, ImGuiKey_None, 0, [this]() { open_folder(); }});

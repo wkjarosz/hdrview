@@ -7,6 +7,7 @@
 #include "image_loader.h"
 #include "app.h"
 #include "fonts.h"
+#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui_ext.h"
 #include "miniz.h"
@@ -28,6 +29,7 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+static ImageLoadOptions s_opts;
 static constexpr size_t g_max_recent = 15;
 
 struct BackgroundImageLoader::PendingImages
@@ -505,6 +507,71 @@ void BackgroundImageLoader::draw_gui()
     }
 }
 
+ImageLoadOptions *load_image_options() { return &s_opts; }
+
+ImageLoadOptions *load_image_options_gui()
+{
+    ImGui::TextWrapped("These options control how images are loaded. They will be applied to all images opened "
+                       "from now on, including those opened via the main \"Open image\" dialog.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    static char buf[256] = "";
+    if (s_opts.channel_selector != buf)
+        strncpy(buf, s_opts.channel_selector.c_str(), IM_ARRAYSIZE(buf));
+    if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", buf,
+                                 IM_ARRAYSIZE(buf)))
+        s_opts.channel_selector = string(buf);
+    ImGui::WrappedTooltip(
+        "If the image file contains multiple images or channels (e.g. multi-part EXR files), you can specify "
+        "which part(s) to load here. This is a comma-separated list of part,layer, or channel names to include or "
+        "(prefixed with '-') exclude.\n\n"
+        "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
+        "would exclude channels named \"A\". Leave empty to load all parts.");
+
+    static bool force = false;
+    ImGui::BeginGroup();
+    ImGui::BeginDisabled(!force);
+    if (ImGui::BeginCombo("Force transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Unknown; i <= TransferFunction_DCI_P3; ++i)
+        {
+            bool is_selected = (s_opts.tf == (TransferFunction)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
+                s_opts.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Checkbox("##Force transfer function", &force))
+        s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
+
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
+                          "using the chosen transfer function.");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_opts = ImageLoadOptions{};
+
+    ImGui::SameLine();
+
+    string filename;
+
+    if (ImGui::Button("OK", HelloImGui::EmToVec2(4.f, 0.f)))
+        ImGui::CloseCurrentPopup();
+
+    return &s_opts;
+}
+
 vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     spdlog::info("Loading from file: {}", filename);
@@ -579,8 +646,9 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
                 i->filename   = filename;
                 i->short_name = i->file_and_partname();
 
-                // If multiple image "parts" were loaded and they have names, store these names in the image's channel
-                // selector. This is useful if we later want to reload a specific image part from the original file.
+                // If multiple image "parts" were loaded and they have names, store these names in the image's
+                // channel selector. This is useful if we later want to reload a specific image part from the
+                // original file.
                 if (i->partname.empty())
                     i->channel_selector = opts.channel_selector;
                 else

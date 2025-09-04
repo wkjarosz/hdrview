@@ -24,8 +24,12 @@ struct ImageLoadOptions
     string channel_selector;
 
     //! Override any metadata in the file and decode pixel values using this transfer function
-    TransferFunction tf = TransferFunction_Unknown;
+    TransferFunction tf    = TransferFunction_Unknown;
+    float            gamma = 1.f;
 };
+
+ImageLoadOptions *load_image_options();
+ImageLoadOptions *load_image_options_gui();
 
 /**
     Load the an image from the input stream.
