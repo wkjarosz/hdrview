@@ -5,6 +5,7 @@
 //
 
 #include "jpg.h"
+#include "app.h"
 #include "colorspace.h"
 #include "exif.h"
 #include "icc.h"
@@ -16,6 +17,17 @@
 #include <vector>
 
 using namespace std;
+
+struct JPGEncodeParameters
+{
+    float gain        = 1.f;
+    int   tf          = 1;
+    bool  dither      = true;
+    int   quality     = 95;
+    bool  progressive = false;
+};
+
+static JPGEncodeParameters s_params;
 
 #ifndef HDRVIEW_ENABLE_LIBJPEG
 
@@ -32,6 +44,13 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
                     int quality, bool progressive)
 {
     return save_stb_jpg(img, os, filename, gain, sRGB, dither, quality);
+}
+
+JPGEncodeParameters *jpg_parameters_gui() { return &s_params; }
+
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGEncodeParameters *params)
+{
+    throw runtime_error("Turbo JPEG support not enabled in this build.");
 }
 
 #else
@@ -365,6 +384,37 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
         jpeg_write_scanlines(&cinfo, &row_pointer, 1);
     }
     jpeg_finish_compress(&cinfo);
+}
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
+JPGEncodeParameters *jpg_parameters_gui()
+{
+    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_params.gain = exp2f(hdrview()->exposure());
+
+    ImGui::Combo("Transfer function", &s_params.tf, "Linear\0sRGB\0");
+    ImGui::Checkbox("Dither", &s_params.dither);
+    ImGui::SliderInt("Quality", &s_params.quality, 1, 100);
+    ImGui::Checkbox("Progressive", &s_params.progressive);
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_params = JPGEncodeParameters{};
+
+    return &s_params;
+}
+
+// throws on error
+void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, JPGEncodeParameters *params)
+{
+    if (params == nullptr)
+        throw std::invalid_argument("JPGEncodeParameters pointer is null");
+
+    save_jpg_image(img, os, filename, 1.f, s_params.tf, s_params.quality, s_params.dither, s_params.progressive);
 }
 
 #endif

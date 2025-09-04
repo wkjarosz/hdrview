@@ -309,17 +309,12 @@ void HDRViewApp::draw_image() const
 
 void HDRViewApp::process_shortcuts()
 {
-    if (ImGui::GetIO().WantCaptureKeyboard)
-    {
-        // spdlog::trace("Not processing shortcuts because ImGui wants to capture the keyboard");
-        return;
-    }
-
     // spdlog::trace("Processing shortcuts (frame: {})", ImGui::GetFrameCount());
 
     for (auto &a : m_actions)
         if (a.second.chord)
-            if (a.second.enabled() && ImGui::GlobalShortcut(a.second.chord, a.second.flags))
+            if (a.second.enabled() && !ImGui::GetIO().NavVisible &&
+                ImGui::GlobalShortcut(a.second.chord, a.second.flags))
             {
                 spdlog::trace("Processing shortcut for action '{}' (frame: {})", a.second.name, ImGui::GetFrameCount());
                 if (a.second.p_selected)
@@ -352,7 +347,7 @@ void HDRViewApp::draw_background()
         prev_frame = this_frame;
     }
 
-    process_shortcuts();
+    // process_shortcuts();
 
     // If watching files for changes, do so every 250ms
     if (m_watch_files_for_changes && this_frame - last_file_changes_check_time >= 250ms)

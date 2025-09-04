@@ -16,3 +16,11 @@ bool is_heif_image(std::istream &is) noexcept;
 // throws on error
 std::vector<ImagePtr> load_heif_image(std::istream &is, std::string_view filename,
                                       std::string_view channel_selector = std::string_view{});
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f, int quality = 95,
+                     bool lossless = false, bool use_alpha = true, int format_index = 0,
+                     TransferFunction tf = TransferFunction_sRGB, float gamma = 1.f);
+
+struct HEIFEncodeParameters;
+HEIFEncodeParameters *heif_parameters_gui();
+// throws on error
+void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, HEIFEncodeParameters *params);

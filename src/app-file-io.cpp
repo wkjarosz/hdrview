@@ -2,11 +2,13 @@
 
 #include "colorspace.h"
 #include "fonts.h"
+#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include <fstream>
 #include <sstream>
 
 #include "imageio/exr.h"
+#include "imageio/heif.h"
 #include "imageio/jpg.h"
 #include "imageio/jxl.h"
 #include "imageio/pfm.h"
@@ -16,13 +18,6 @@
 #include "imageio/uhdr.h"
 #include "imgui.h"
 #include "imgui_ext.h"
-
-#ifdef HDRVIEW_ENABLE_JPEGXL
-#include <jxl/types.h>
-#endif
-#ifdef HDRVIEW_ENABLE_UHDR
-#include <ultrahdr_api.h>
-#endif
 
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
@@ -42,51 +37,25 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
     // Center window horizontally, align near top vertically
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
+    // ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
 
     if (ImGui::BeginPopupModal("Save as...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
     {
         open = false;
 
-#ifdef HDRVIEW_ENABLE_JPEGXL
-        static int data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
-#endif
-        static int              jxl_data_type_index = 0;
-        static int              composite           = 0;
-        static bool             progressive         = false;
-        static bool             dither              = true;
-        static TransferFunction jxl_tf = TransferFunction_sRGB, tf = TransferFunction_sRGB;
-        // static bool  float32           = true;
-        static bool  sixteen_bit       = false;
-        static float quality           = 95.f;
-        static float gamma             = 1.0f;
-        static float gainmap_quality   = 95.f;
-        static bool  use_multi_channel = false;
-        static int   gainmap_scale     = 1;
-        static float gainmap_gamma     = 1.0f;
-        static bool  interlaced        = false;
-        static int   colorspace        = 1;
-
         // Define enum for save formats
         enum Format_
         {
-            Format_BMP_STB,
+            Format_BMP_STB = 0,
             Format_HDR_STB,
-#ifdef HDRVIEW_ENABLE_LIBJPEG
+            Format_HEIF_AVIF,
             Format_JPEG_LIBJPEG,
-#endif
             Format_JPEG_STB,
-#ifdef HDRVIEW_ENABLE_UHDR
             Format_JPEG_UHDR,
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
             Format_JPEG_XL,
-#endif
             Format_EXR,
             Format_PFM,
-#ifdef HDRVIEW_ENABLE_LIBPNG
             Format_PNG_LIBPNG,
-#endif
             Format_PNG_STB,
             Format_QOI,
             Format_TGA_STB,
@@ -94,26 +63,49 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         };
         static Format_ save_format = Format_EXR;
 
+        static bool format_enabled[Format_Last + 1] = {true, true,
+#ifdef HDRVIEW_ENABLE_HEIF
+                                                       true,
+#else
+                                                       false,
+#endif
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+                                                       true,
+#else
+                                                       false,
+#endif
+                                                       true,
+#ifdef HDRVIEW_ENABLE_UHDR
+                                                       true,
+#else
+                                                       false,
+#endif
+#ifdef HDRVIEW_ENABLE_JPEGXL
+                                                       true,
+#else
+                                                       false,
+#endif
+                                                       true, true,
+#ifdef HDRVIEW_ENABLE_LIBPNG
+                                                       true,
+#else
+                                                       false,
+#endif
+                                                       true, true, true};
+
         // Array of format names
         // clang-format off
         static const char *save_format_names[Format_Last + 1] = {
             "BMP (stb)",
             "HDR (stb)",
-#ifdef HDRVIEW_ENABLE_LIBJPEG
+            "HEIF/AVIF",
             "JPEG (libjpeg)",
-#endif
             "JPEG (stb)",
-#ifdef HDRVIEW_ENABLE_UHDR
             "JPEG (UltraHDR)",
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
             "JPEG-XL",
-#endif
             "OpenEXR",
             "PFM",
-#ifdef HDRVIEW_ENABLE_LIBPNG
             "PNG (libpng)",
-#endif
             "PNG (stb)",
             "QOI",
             "TGA (stb)"
@@ -125,21 +117,14 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         static const char *save_format_extensions[Format_Last + 1] = {
             ".bmp",
             ".hdr",
-#ifdef HDRVIEW_ENABLE_LIBJPEG
+            ".heif",
             ".jpg",
-#endif
             ".jpg",
-#ifdef HDRVIEW_ENABLE_UHDR
             ".jpg",
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
             ".jxl",
-#endif
             ".exr",
             ".pfm",
-#ifdef HDRVIEW_ENABLE_LIBPNG
             ".png",
-#endif
             ".png",
             ".qoi",
             ".tga"
@@ -148,116 +133,212 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
-        ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
-        ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
-                              "image and reference image as shown in the viewport.");
+        static int composite = 0;
+
+        ImGui::BeginGroup();
+        // ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
+        // ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
+        //                       "image and reference image as shown in the viewport.");
 
         // ImGui Combo using BeginCombo/EndCombo
-        if (ImGui::BeginCombo("File format", save_format_names[save_format]))
+        ImGui::TextUnformatted("File format:");
+        // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
+        if (ImGui::BeginListBox("##File format", HelloImGui::EmToVec2(8.f, 17.f)))
         {
             for (int i = 0; i <= Format_Last; ++i)
             {
+                if (!format_enabled[i])
+                    continue;
                 bool is_selected = (save_format == i);
                 if (ImGui::Selectable(save_format_names[i], is_selected))
                     save_format = (Format_)i;
                 if (is_selected)
                     ImGui::SetItemDefaultFocus();
             }
-            ImGui::EndCombo();
+            ImGui::EndListBox();
         }
+        ImGui::EndGroup();
 
-        ImGui::Spacing();
-        ImGui::Indent();
+        // ImGui::Spacing();
+        // ImGui::Indent();
+        ImGui::SameLine();
 
-        if (ImGui::CollapsingHeader("Options"))
+        ImGui::BeginGroup();
+        ImGui::TextUnformatted("Options:");
+
+        static float gain   = 1.f;
+        static bool  dither = true;
+        static int   tf     = 1;
+
+        // float                                                                      gain = powf(2.0f,
+        // m_exposure_live);
+        std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
+
+        // if (ImGui::CollapsingHeader("Options"))
         {
             switch (save_format)
             {
-            case Format_HDR_STB: break;
-#ifdef HDRVIEW_ENABLE_LIBJPEG
             case Format_JPEG_LIBJPEG:
-                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
-                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
-                ImGui::Checkbox("Progressive", &progressive);
-                break;
-#endif
-#ifdef HDRVIEW_ENABLE_UHDR
-            case Format_JPEG_UHDR:
-                ImGui::SliderFloat("Base image quality", &quality, 1.f, 100.f);
-                ImGui::SliderFloat("Gain map quality", &gainmap_quality, 1.f, 100.f);
-                ImGui::Checkbox("Use multi-channel gainmap", &use_multi_channel);
-                ImGui::SliderInt("Gain map scale factor", &gainmap_scale, 1, 5);
-                ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.");
-                ImGui::SliderFloat("Gain map gamma", &gainmap_gamma, 0.1f, 5.0f);
-                break;
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
-            case Format_JPEG_XL:
-                if (ImGui::BeginCombo("Transfer function", transfer_function_name(jxl_tf, gamma).c_str()))
-                {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-                    {
-                        if (!jxl_supported_tf((TransferFunction)i))
-                            continue;
+            {
+                auto libjpeg_params = jpg_parameters_gui();
+                save_func           = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_jpg_image(img, os, filename, libjpeg_params); };
+            }
+            break;
 
-                        bool is_selected = (jxl_tf == i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i, gamma).c_str(), is_selected))
-                            jxl_tf = (TransferFunction)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::Combo("Data type", &jxl_data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
-                ImGui::BeginDisabled(jxl_tf != TransferFunction_Gamma);
-                ImGui::SliderFloat("Gamma", &gamma, 0.1f, 5.f);
-                ImGui::EndDisabled();
-                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+            case Format_HEIF_AVIF:
+            {
+                auto heif_params = heif_parameters_gui();
+                save_func        = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_heif_image(img, os, filename, heif_params); };
+            }
+            break;
+
+            case Format_JPEG_UHDR:
+            {
+                auto uhdr_params = uhdr_parameters_gui();
+                save_func        = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_uhdr_image(img, os, filename, uhdr_params); };
+            }
+            break;
+
+            case Format_JPEG_XL:
+            {
+                auto jxl_params = jxl_parameters_gui();
+                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_jxl_image(img, os, filename, jxl_params); };
+            }
+            break;
+
+            case Format_EXR:
+            {
+                auto exr_params = exr_parameters_gui(current_image());
+                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_exr_image(img, os, filename, exr_params); };
+            }
+            break;
+
+            case Format_PFM:
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_pfm_image(img, os, filename); };
                 break;
-#endif
-            case Format_EXR: break;
-            case Format_PFM: break;
-#ifdef HDRVIEW_ENABLE_LIBPNG
+
             case Format_PNG_LIBPNG:
-                if (ImGui::BeginCombo("Transfer function", transfer_function_name(tf, gamma).c_str()))
-                {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-                    {
-                        bool is_selected = (tf == i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction)i, gamma).c_str(), is_selected))
-                            tf = (TransferFunction)i;
-                        if (is_selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
+            {
+                auto png_params = png_parameters_gui();
+                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_png_image(img, os, filename, png_params); };
+            }
+            break;
+
+            case Format_QOI:
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
                 ImGui::Checkbox("Dither", &dither);
-                ImGui::Checkbox("Interlaced", &interlaced);
-                ImGui::Checkbox("Use 16 bit", &sixteen_bit);
-                break;
-#endif
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_qoi_image(img, os, filename, gain, tf == 1, dither); };
+            }
+            break;
+
             case Format_JPEG_STB:
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                static float quality = 95.f;
                 ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
-                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
-                break;
-            case Format_QOI: [[fallthrough]];
-            case Format_PNG_STB: [[fallthrough]];
-            case Format_TGA_STB: [[fallthrough]];
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_stb_jpg(img, os, filename, gain, tf == 1, dither, quality); };
+            }
+            break;
+
             case Format_BMP_STB:
-                ImGui::Combo("Colorspace", &colorspace, "Linear\0sRGB\0");
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
                 ImGui::Checkbox("Dither", &dither);
-                break;
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_stb_bmp(img, os, filename, gain, tf == 1, dither); };
+            }
+            break;
+
+            case Format_HDR_STB:
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_stb_hdr(img, os, filename, gain); };
+            }
+            break;
+
+            case Format_PNG_STB:
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_stb_png(img, os, filename, gain, tf == 1, dither); };
+            }
+            break;
+
+            case Format_TGA_STB:
+            {
+                ImGui::BeginGroup();
+                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
+                ImGui::SameLine();
+                if (ImGui::Button("From viewport"))
+                    gain = exp2f(exposure());
+                ImGui::EndGroup();
+                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
+                ImGui::Checkbox("Dither", &dither);
+                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_stb_tga(img, os, filename, gain, tf == 1, dither); };
+            }
+            break;
             }
         }
 
-        ImGui::Unindent();
+        // ImGui::Unindent();
+
+        ImGui::Dummy(HelloImGui::EmToVec2(25.f, 0.f)); // ensure minimum size even for no options
+        ImGui::EndGroup();
 
         ImGui::Spacing();
 
-        if (ImGui::Button("Cancel") || ImGui::GlobalShortcut(ImGuiKey_Escape, ImGuiInputFlags_RouteOverActive) ||
-            ImGui::GlobalShortcut(ImGuiMod_Ctrl | ImGuiKey_Period, ImGuiInputFlags_RouteOverActive))
+        if (ImGui::Button("Cancel") ||
+            (!ImGui::GetIO().NavVisible &&
+             (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
             ImGui::CloseCurrentPopup();
 
         ImGui::SameLine();
@@ -284,7 +365,6 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             try
             {
                 ostringstream os;
-                float         gain = powf(2.0f, m_exposure_live);
 
                 ImagePtr img = current_image();
 
@@ -310,38 +390,10 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                                  });
                 }
 
-                switch (save_format)
-                {
-                case Format_BMP_STB: save_stb_bmp(*img, os, filename, gain, colorspace == 1, dither); break;
-                case Format_HDR_STB: save_stb_hdr(*img, os, filename); break;
-#ifdef HDRVIEW_ENABLE_LIBJPEG
-                case Format_JPEG_LIBJPEG:
-                    save_jpg_image(*img, os, filename, gain, colorspace == 1, dither, quality, progressive);
-                    break;
-#endif
-                case Format_JPEG_STB: save_stb_jpg(*img, os, filename, gain, colorspace == 1, dither, quality); break;
-#ifdef HDRVIEW_ENABLE_UHDR
-                case Format_JPEG_UHDR:
-                    save_uhdr_image(*img, os, filename, gain, quality, gainmap_quality, use_multi_channel,
-                                    gainmap_scale, gainmap_gamma);
-                    break;
-#endif
-#ifdef HDRVIEW_ENABLE_JPEGXL
-                case Format_JPEG_XL:
-                    save_jxl_image(*img, os, filename, gain, quality, jxl_tf, gamma, data_types[jxl_data_type_index]);
-                    break;
-#endif
-                case Format_EXR: save_exr_image(*img, os, filename); break;
-                case Format_PFM: save_pfm_image(*img, os, filename, gain); break;
-#ifdef HDRVIEW_ENABLE_LIBPNG
-                case Format_PNG_LIBPNG:
-                    save_png_image(*img, os, filename, gain, dither, interlaced, sixteen_bit, tf);
-                    break;
-#endif
-                case Format_PNG_STB: save_stb_png(*img, os, filename, gain, colorspace == 1, dither); break;
-                case Format_QOI: save_qoi_image(*img, os, filename, gain, colorspace == 1, dither); break;
-                case Format_TGA_STB: save_stb_tga(*img, os, filename, gain, colorspace == 1, dither); break;
-                }
+                if (save_func)
+                    save_func(*img, os, filename);
+                else
+                    throw runtime_error("No save function defined for this format.");
 
                 string buffer = os.str();
 

@@ -8,8 +8,10 @@
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_header.h"
 #include "exr_std_streams.h"
+#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui.h"
+#include "imgui_ext.h"
 #include "timer.h"
 #include <ImfChannelList.h>
 #include <ImfChannelListAttribute.h>
@@ -20,10 +22,24 @@
 #include <ImfOutputFile.h>
 #include <ImfStandardAttributes.h>
 #include <ImfTestFile.h> // for isOpenExrFile
+#include <ImfTiledOutputFile.h>
 #include <ImfVersion.h>
 #include <stdexcept> // for runtime_error, out_of_range
 
 using namespace std;
+
+struct EXRSaveParameters
+{
+    std::vector<bool> group_enabled;                      // size = img.groups.size()
+    int               pixel_type  = 1;                    // 0 = Imf::FLOAT, 1 = Imf::HALF
+    Imf::Compression  compression = Imf::PIZ_COMPRESSION; // Default compression
+    bool              tiled       = false;
+    int               tile_width  = 64;
+    int               tile_height = 64;
+    float             dwa_quality = 45.0f; // Only for DWAA/DWAB
+};
+
+static EXRSaveParameters s_params{};
 
 bool is_exr_image(istream &is_, string_view filename) noexcept
 {
@@ -164,10 +180,12 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, string_view 
     return images;
 }
 
-void save_exr_image(const Image &img, ostream &os_, string_view filename)
+void save_exr_image(const Image &img, ostream &os_, string_view filename, const EXRSaveParameters *params)
 {
     try
     {
+        if (!params)
+            params = &s_params;
         Timer timer;
         // OpenEXR expects the display window to be inclusive, while our images are exclusive
         auto displayWindow = Imath::Box2i(Imath::V2i(img.display_window.min.x, img.display_window.min.y),
@@ -187,34 +205,172 @@ void save_exr_image(const Image &img, ostream &os_, string_view filename)
         header.displayWindow() = displayWindow;
         header.dataWindow()    = dataWindow;
 
+        // Compression
+        header.compression() = params->compression;
+
+        // Tiled
+        if (params->tiled)
+            header.setTileDescription(Imf::TileDescription(params->tile_width, params->tile_height, Imf::ONE_LEVEL));
+
+        // DWA quality
+        if (params->compression == Imf::DWAA_COMPRESSION || params->compression == Imf::DWAB_COMPRESSION)
+            header.insert("dwaCompressionLevel", Imf::FloatAttribute(params->dwa_quality));
+
         Imf::FrameBuffer frameBuffer;
 
+        std::map<std::string, std::vector<half>> halfBuffers; // Temporary storage for half buffers
         for (int g = 0; g < (int)img.groups.size(); ++g)
         {
+            if (g >= (int)params->group_enabled.size() || !params->group_enabled[g])
+                continue;
             auto &group = img.groups[g];
             if (!group.visible)
                 continue;
 
             for (int c = 0; c < group.num_channels; ++c)
             {
-                auto &channel = img.channels[group.channels[c]];
-                header.channels().insert(channel.name, Imf::Channel(Imf::FLOAT));
+                auto &channel    = img.channels[group.channels[c]];
+                auto  pixel_type = (params->pixel_type == 1) ? Imf::HALF : Imf::FLOAT;
 
-                // OpenEXR expects the base address to point to the display window origin, while our channels only store
-                // pixels for the data_window. The Slice::Make function below does the heavy lifting of computing the
-                // base pointer for a slice
-                frameBuffer.insert(channel.name, Imf::Slice::Make(Imf::FLOAT, channel.data(), dataWindow));
+                // Specify desired file type in header
+                header.channels().insert(channel.name, Imf::Channel(pixel_type));
+
+                if (pixel_type == Imf::HALF)
+                {
+                    // Convert float buffer to half buffer
+                    std::vector<half> &hbuf = halfBuffers[channel.name];
+                    hbuf.resize(channel.num_elements());
+                    const float *fbuf = channel.data();
+                    for (int i = 0; i < channel.num_elements(); ++i) hbuf[i] = half(fbuf[i]);
+                    frameBuffer.insert(channel.name, Imf::Slice::Make(Imf::HALF, hbuf.data(), dataWindow));
+                }
+                else
+                {
+                    // Use float buffer directly
+                    frameBuffer.insert(channel.name, Imf::Slice::Make(Imf::FLOAT, channel.data(), dataWindow));
+                }
             }
         }
 
-        auto            os = StdOStream{os_, string(filename).c_str()};
-        Imf::OutputFile file{os, header};
-        file.setFrameBuffer(frameBuffer);
-        file.writePixels(img.data_window.size().y);
+        auto os = StdOStream{os_, string(filename).c_str()};
+        if (params->tiled)
+        {
+            Imf::TiledOutputFile file{os, header};
+            file.setFrameBuffer(frameBuffer);
+            file.writeTiles(0, file.numXTiles() - 1, 0, file.numYTiles() - 1);
+        }
+        else
+        {
+            Imf::OutputFile file{os, header};
+            file.setFrameBuffer(frameBuffer);
+            file.writePixels(img.data_window.size().y);
+        }
         spdlog::info("Saved EXR image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
     }
     catch (const exception &e)
     {
         throw runtime_error{fmt::format("Failed to write EXR image \"{}\" failed: {}", filename, e.what())};
     }
+}
+
+EXRSaveParameters *exr_parameters_gui(const ImagePtr &img)
+{
+    static ImGuiSelectionBasicStorage group_selection;
+
+    if (s_params.group_enabled.size() != img->groups.size())
+    {
+        s_params.group_enabled.assign(img->groups.size(), true);
+        group_selection.Clear();
+        for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
+    }
+
+    ImGui::Text("Channel groups to include (%d/%d):", group_selection.Size, (int)img->groups.size());
+
+    if (ImGui::BeginChild("##Groups", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 10),
+                          ImGuiChildFlags_FrameStyle | ImGuiChildFlags_ResizeY))
+    {
+        ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect1d;
+        ImGuiMultiSelectIO   *ms_io = ImGui::BeginMultiSelect(flags, group_selection.Size, (int)img->groups.size());
+        group_selection.ApplyRequests(ms_io);
+
+        int width = std::to_string(img->groups.size()).size();
+        for (int i = 0; i < (int)img->groups.size(); ++i)
+        {
+            auto &group            = img->groups[i];
+            bool  item_is_selected = group_selection.Contains((ImGuiID)i);
+            ImGui::SetNextItemSelectionUserData(i);
+
+            auto       &channel    = img->channels[group.channels[0]];
+            string      group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
+            string      layer_path = Channel::head(channel.name) + group_name;
+            std::string label      = fmt::format("{:>{}d} {}", i + 1, width, layer_path);
+
+            ImGui::Selectable(label.c_str(), item_is_selected);
+        }
+
+        ms_io = ImGui::EndMultiSelect();
+        group_selection.ApplyRequests(ms_io);
+
+        // Update s_params.group_enabled based on selection
+        if (s_params.group_enabled.size() != img->groups.size())
+            s_params.group_enabled.assign(img->groups.size(), true);
+        for (int i = 0; i < (int)img->groups.size(); ++i)
+            s_params.group_enabled[i] = group_selection.Contains((ImGuiID)i);
+    }
+    ImGui::EndChild();
+
+    // Pixel type
+    ImGui::Combo("Pixel type", &s_params.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
+    ImGui::WrappedTooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
+    ImGui::SameLine();
+    // Tiled vs scanline
+    ImGui::Checkbox("Tiled", &s_params.tiled);
+    ImGui::WrappedTooltip("Enable to save as a tiled EXR file (recommended for large images).");
+
+    // Compression type
+    static const Imf::Compression compression_values[] = {
+        Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION, Imf::ZIP_COMPRESSION,
+        Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,  Imf::B44A_COMPRESSION,
+        Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION};
+    static const int num_compressions = IM_ARRAYSIZE(compression_values);
+
+    string name;
+    Imf::getCompressionNameFromId(compression_values[s_params.compression], name);
+    if (ImGui::BeginCombo("Compression", name.c_str()))
+    {
+        for (int i = 0; i < num_compressions; ++i)
+        {
+            bool is_selected = (s_params.compression == compression_values[i]);
+            Imf::getCompressionNameFromId(compression_values[i], name);
+            if (ImGui::Selectable(name.c_str(), is_selected))
+                s_params.compression = compression_values[i];
+
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+            Imf::getCompressionDescriptionFromId(compression_values[i], name);
+            ImGui::WrappedTooltip(name.c_str());
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::WrappedTooltip("Select the compression method for the EXR file.");
+
+    // Tile size
+    if (s_params.tiled)
+    {
+        ImGui::SliderInt("Tile width", &s_params.tile_width, 16, 512);
+        ImGui::SliderInt("Tile height", &s_params.tile_height, 16, 512);
+        ImGui::WrappedTooltip("Set the tile size for tiled EXR output.");
+    }
+
+    // DWA compression quality
+    if (s_params.compression == Imf::DWAA_COMPRESSION || s_params.compression == Imf::DWAB_COMPRESSION)
+    {
+        ImGui::SliderFloat("DWA compression quality", &s_params.dwa_quality, 0.0f, 100.0f);
+        ImGui::WrappedTooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
+    }
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_params = EXRSaveParameters{};
+
+    return &s_params;
 }

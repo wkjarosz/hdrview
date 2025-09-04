@@ -400,8 +400,17 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         m_theme.load(j);
     };
 
+    m_params.callbacks.SetupImGuiConfig = []()
+    {
+        ImGuiIO &io = ImGui::GetIO();
+        // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    };
+
     m_params.callbacks.ShowGui = [this]()
     {
+        process_shortcuts();
+
         for (auto &[key, value] : m_dialogs) value->draw(value->open);
 
         // recompute toolbar height in case the font size was changed

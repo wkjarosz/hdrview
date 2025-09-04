@@ -5,6 +5,7 @@
 //
 
 #include "png.h"
+#include "app.h"
 #include "colorspace.h"
 #include "common.h"
 #include "exif.h"
@@ -13,6 +14,18 @@
 #include "imgui.h"
 #include "timer.h"
 #include <optional>
+
+struct PNGEncodeParameters
+{
+    float            gain            = 1.f;
+    bool             dither          = true;
+    TransferFunction tf              = TransferFunction_sRGB;
+    float            gamma           = 1.0f;
+    int              data_type_index = 0;
+    bool             interlaced      = false;
+};
+
+static PNGEncodeParameters s_params;
 
 #ifndef HDRVIEW_ENABLE_LIBPNG
 
@@ -24,6 +37,13 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename)
 }
 
 void save_png_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither)
+{
+    throw runtime_error("PNG support not enabled in this build.");
+}
+
+PNGEncodeParameters *png_parameters_gui() { return &s_params; }
+
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGEncodeParameters *params)
 {
     throw runtime_error("PNG support not enabled in this build.");
 }
@@ -632,6 +652,51 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
     png_write_image(png_ptr, row_pointers.data());
 
     png_write_end(png_ptr, info_ptr.get());
+}
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
+PNGEncodeParameters *png_parameters_gui()
+{
+    ImGui::BeginGroup();
+    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_params.gain = exp2f(hdrview()->exposure());
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_params.tf, 1.f / s_params.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+        {
+            bool is_selected = (s_params.tf == i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_params.gamma).c_str(),
+                                  is_selected))
+                s_params.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::Checkbox("Dither", &s_params.dither);
+    ImGui::Checkbox("Interlaced", &s_params.interlaced);
+    ImGui::Combo("Data type", &s_params.data_type_index, "UInt8\0UInt16\0");
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_params = PNGEncodeParameters{};
+    return &s_params;
+}
+
+// throws on error
+void save_png_image(const Image &img, std::ostream &os, std::string_view filename, PNGEncodeParameters *params)
+{
+    if (params == nullptr)
+        throw std::invalid_argument("PNGEncodeParameters pointer is null");
+
+    save_png_image(img, os, filename, params->gain, params->dither, params->interlaced, params->data_type_index,
+                   params->tf);
 }
 
 #endif

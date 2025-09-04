@@ -4,6 +4,7 @@
 #include "common.h"
 #include "fonts.h"
 #include "hello_imgui/dpi_aware.h"
+#include "imgui.h"
 #include "imgui_internal.h"
 #include "nvgui/property_editor.hpp"
 #include "spdlog/pattern_formatter.h"

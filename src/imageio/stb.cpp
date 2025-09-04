@@ -236,11 +236,11 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     return images;
 }
 
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename)
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<float>(&w, &h, &n);
+    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain);
     if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write HDR image via stb.");
     spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));

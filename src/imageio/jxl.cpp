@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "app.h"
 #include "exif.h"
 #include "image.h"
 #include <cstdint>
@@ -15,6 +16,18 @@
 
 using namespace std;
 
+struct JXLEncodeParameters
+{
+    float            gain            = 1.f;
+    bool             lossless        = false;
+    int              quality         = 95;
+    int              data_type_index = 0;
+    TransferFunction tf              = TransferFunction_BT2100_PQ;
+    float            gamma           = 1.f;
+};
+
+static JXLEncodeParameters s_params;
+
 #ifndef HDRVIEW_ENABLE_JPEGXL
 
 bool is_jxl_image(istream &is) noexcept { return false; }
@@ -22,6 +35,13 @@ bool is_jxl_image(istream &is) noexcept { return false; }
 bool jxl_supported_tf(TransferFunction tf) noexcept { return false; }
 
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
+{
+    throw runtime_error("JPEG-XL support not enabled in this build.");
+}
+
+JXLEncodeParameters *jxl_parameters_gui() { return &s_params; }
+
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLEncodeParameters *params)
 {
     throw runtime_error("JPEG-XL support not enabled in this build.");
 }
@@ -726,8 +746,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, string_view c
     return images;
 }
 
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, float quality,
-                    TransferFunction tf, float gamma, int data_type)
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool lossless,
+                    float quality, TransferFunction tf, float gamma, int data_type)
 {
     Timer timer;
 
@@ -852,7 +872,8 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 
     // if (JXL_ENC_SUCCESS != JxlEncoderSetCodestreamLevel(enc.get(), 10))
     //     throw std::runtime_error("JxlEncoderSetCodestreamLevel failed");
-    // JxlEncoderSetFrameLossless(frame_settings, JXL_TRUE);
+    if (JXL_ENC_SUCCESS != JxlEncoderSetFrameLossless(frame_settings, lossless ? JXL_TRUE : JXL_FALSE))
+        throw std::runtime_error("JxlEncoderSetFrameLossless failed");
 
     if (JXL_ENC_SUCCESS != JxlEncoderAddImageFrame(frame_settings, &format, pixels, pixel_bytes))
     {
@@ -880,6 +901,62 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     os.write(reinterpret_cast<char *>(outbuf.data()), out_size);
 
     spdlog::info("Saved JPEG XL image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
+static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
+
+JXLEncodeParameters *jxl_parameters_gui()
+{
+    ImGui::BeginGroup();
+    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_params.gain = exp2f(hdrview()->exposure());
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_params.tf, 1.f / s_params.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
+        {
+            if (!jxl_supported_tf((TransferFunction)i))
+                continue;
+
+            bool is_selected = (s_params.tf == i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_params.gamma).c_str(),
+                                  is_selected))
+                s_params.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (s_params.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &s_params.gamma, 0.1f, 5.f);
+
+    ImGui::Combo("Data type", &s_params.data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
+
+    ImGui::Checkbox("Lossless", &s_params.lossless);
+    ImGui::BeginDisabled(s_params.lossless);
+    ImGui::SliderInt("Quality", &s_params.quality, 1, 100);
+    ImGui::EndDisabled();
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_params = JXLEncodeParameters{};
+    return &s_params;
+}
+
+// throws on error
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLEncodeParameters *params)
+{
+    if (params == nullptr)
+        throw std::invalid_argument("JXLEncodeParameters pointer is null");
+
+    save_jxl_image(img, os, filename, params->gain, params->lossless, params->quality, params->tf, params->gamma,
+                   s_data_types[params->data_type_index]);
 }
 
 #endif

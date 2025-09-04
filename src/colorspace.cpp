@@ -428,7 +428,6 @@ static const Chromaticities s_gamut_chromaticities[] = {
     {{0.6700f, 0.3300f}, {0.2100f, 0.7100f}, {0.1400f, 0.0800f}, s_white_point_values[WhitePoint_C]},
     {{0.6400f, 0.3300f}, {0.2900f, 0.6000f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_D65]},
     {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, s_white_point_values[WhitePoint_D65]},
-    {{0.6300f, 0.3400f}, {0.3100f, 0.5950f}, {0.1550f, 0.0700f}, s_white_point_values[WhitePoint_D65]},
     {{0.6810f, 0.3190f}, {0.2430f, 0.6920f}, {0.1450f, 0.0490f}, s_white_point_values[WhitePoint_C]},
     {{0.7080f, 0.2920f}, {0.1700f, 0.7970f}, {0.1310f, 0.0460f}, s_white_point_values[WhitePoint_D65]},
     {{0.7350f, 0.2650f}, {0.2740f, 0.7170f}, {0.1670f, 0.0090f}, s_white_point_values[WhitePoint_E]},
@@ -443,7 +442,6 @@ static const Chromaticities s_gamut_chromaticities[] = {
     {{0.6400f, 0.3300f}, {0.3000f, 0.6000f}, {0.1500f, 0.0600f}, s_white_point_values[WhitePoint_D65]}
     // ColorGamut_Custom (should not be used, throw below)
 };
-
 static const char *s_gamut_names[] = {"sRGB/BT.709",
                                       "BT.470 M/NTSC",
                                       "BT.470 BG/PAL/SECAM",
@@ -524,8 +522,8 @@ Chromaticities chromaticities_from_cicp(int cicp)
     case 2: return s_gamut_chromaticities[ColorGamut_Unspecified];
     case 4: return s_gamut_chromaticities[ColorGamut_BT470M];
     case 5: return s_gamut_chromaticities[ColorGamut_BT470BG];
-    case 6: return s_gamut_chromaticities[ColorGamut_SMPTE170M];
-    case 7: return s_gamut_chromaticities[ColorGamut_SMPTE240M];
+    case 6: [[fallthrough]];
+    case 7: return s_gamut_chromaticities[ColorGamut_SMPTE170M_240M];
     case 8: return s_gamut_chromaticities[ColorGamut_Film];
     case 9: return s_gamut_chromaticities[ColorGamut_BT2020_2100];
     case 10: return s_gamut_chromaticities[ColorGamut_SMPTE428];

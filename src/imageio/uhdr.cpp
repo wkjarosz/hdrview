@@ -5,6 +5,7 @@
 //
 
 #include "uhdr.h"
+#include "app.h"
 #include "colorspace.h"
 #include "exif.h"
 #include "image.h"
@@ -18,6 +19,18 @@
 #include <stdexcept>
 
 using namespace std;
+
+struct UHDREncodeParameters
+{
+    float gain              = 1.f;
+    int   quality           = 95;
+    int   gainmap_quality   = 95;
+    bool  use_multi_channel = false;
+    int   gainmap_scale     = 1;
+    float gainmap_gamma     = 1.f;
+};
+
+static UHDREncodeParameters s_params;
 
 #ifndef HDRVIEW_ENABLE_UHDR
 
@@ -33,6 +46,13 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, float base_quality,
                      float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
                      float gainmap_gamma)
+{
+    throw runtime_error("UltraHDR support not enabled in this build.");
+}
+
+UHDREncodeParameters *uhdr_parameters_gui() { return &s_params; }
+
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDREncodeParameters *params)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -327,7 +347,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     auto throw_if_error = [](uhdr_error_info_t status)
     {
         if (status.error_code != UHDR_CODEC_OK)
-            throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
+            throw invalid_argument(fmt::format("UltraHDR: Error encoding image: {}", status.detail));
     };
 
     using Encoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
@@ -358,6 +378,44 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
 
     os.write(static_cast<char *>(output->data), output->data_sz);
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
+UHDREncodeParameters *uhdr_parameters_gui()
+{
+    ImGui::SliderFloat("Gain", &s_params.gain, 0.1f, 10.0f);
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        s_params.gain = exp2f(hdrview()->exposure());
+
+    ImGui::SliderInt("Base image quality", &s_params.quality, 1, 100);
+    ImGui::WrappedTooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
+    ImGui::SliderInt("Gain map quality", &s_params.gainmap_quality, 1, 100);
+    ImGui::WrappedTooltip("The quality factor to be used while encoding gain map image.\n[0-100]");
+    ImGui::Checkbox("Use multi-channel gainmap", &s_params.use_multi_channel);
+    ImGui::SliderInt("Gain map scale factor", &s_params.gainmap_scale, 1, 5);
+    ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.\n"
+                          "[integer values in range [1 - 128] (1 : default)]]");
+    ImGui::SliderFloat("Gain map gamma", &s_params.gainmap_gamma, 0.1f, 5.0f);
+    ImGui::WrappedTooltip("The gamma correction to be applied on the gainmap image.\n"
+                          "[any positive real number (1.0 : default)]");
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_params = UHDREncodeParameters{};
+    return &s_params;
+}
+
+// throws on error
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, UHDREncodeParameters *params)
+{
+    if (params == nullptr)
+        throw std::invalid_argument("UHDREncodeParameters pointer is null");
+
+    save_uhdr_image(img, os, filename, params->gain, params->quality, params->gainmap_quality,
+                    params->use_multi_channel, params->gainmap_scale, params->gainmap_gamma);
 }
 
 #endif
