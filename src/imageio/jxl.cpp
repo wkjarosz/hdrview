@@ -525,7 +525,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             //
             // We therefore swap the black channel for the alpha channel in the pixel array before applying the ICC
             // profile, and then swap them back afterwards.
-            if (prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            if (opts.tf == TransferFunction_Unknown && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 float *black_data        = image->channels[size.z + first_black_channel].data();
@@ -544,16 +544,25 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("Swapped alpha channel in interleaved array with black channel data.");
             }
 
-            if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
-                linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
+            if (opts.tf != TransferFunction_Unknown)
             {
-                image->chromaticities                = chr;
-                image->metadata["transfer function"] = tf_description;
+                if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
+                    linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
+                {
+                    image->chromaticities                = chr;
+                    image->metadata["transfer function"] = tf_description;
+                }
+                else
+                    image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
             }
             else
-                image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
+            {
+                // use the transfer function specified by the user
+                to_linear(pixels.data(), size, opts.tf, opts.gamma);
+                image->metadata["transfer function"] = transfer_function_name(opts.tf, opts.gamma);
+            }
 
-            if (prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
+            if (opts.tf == TransferFunction_Unknown && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 // Copy from alpha_copy back into the alpha channel
@@ -607,11 +616,17 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
                 spdlog::info("Applying transfer function to extra channel '{}'", channel.name);
 
-                if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
-                    linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
+                if (opts.tf != TransferFunction_Unknown)
                 {
-                    //
+                    if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
+                        linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
+                    {
+                        //
+                    }
                 }
+                else
+                    // use the transfer function specified by the user
+                    to_linear(channel.data(), int3{size.xy(), 1}, opts.tf, opts.gamma);
             }
 
             images.push_back(image);

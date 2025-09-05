@@ -400,7 +400,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
             }
 
             // get the icc profile, first try the image level, then the handle level
-            vector<uint8_t> icc_profile; // handle-level icc profile
+            vector<uint8_t> icc_profile;
             try
             {
                 icc_profile = himage.get_raw_color_profile();
@@ -459,25 +459,35 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 }
                 spdlog::debug("done copying to continuguous float buffer");
 
-                // only prefer the nclx if it exists and it specifies an HDR transfer function
-                bool prefer_icc = // false;
-                    !nclx ||
-                    (nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
-                     nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
-
-                string         tf_description;
-                Chromaticities chr;
-                // for SDR profiles, try to transform the interleaved data using the icc profile.
-                // Then try the nclx profile
-                if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
-                                                         &tf_description, &chr)) ||
-                    linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx.get(), &tf_description, &chr))
+                if (opts.tf != TransferFunction_Unknown)
                 {
-                    image->chromaticities                = chr;
-                    image->metadata["transfer function"] = tf_description;
+                    // only prefer the nclx if it exists and it specifies an HDR transfer function
+                    bool prefer_icc = // false;
+                        !nclx ||
+                        (nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                         nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
+
+                    string         tf_description;
+                    Chromaticities chr;
+                    // for SDR profiles, try to transform the interleaved data using the icc profile.
+                    // Then try the nclx profile
+                    if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
+                                                             &tf_description, &chr)) ||
+                        linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx.get(), &tf_description, &chr))
+                    {
+                        image->chromaticities                = chr;
+                        image->metadata["transfer function"] = tf_description;
+                    }
+                    else
+                        image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
                 }
                 else
-                    image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
+                {
+                    // FIXME: probably still want to use the icc/nclx profile to get chromaticities
+                    // linearize using the user-specified transfer function
+                    to_linear(float_pixels.data(), int3{size.xy(), cpp}, opts.tf, opts.gamma);
+                    image->metadata["transfer function"] = transfer_function_name(opts.tf, opts.gamma);
+                }
 
                 // copy the interleaved float pixels into the channels
                 for (int c = 0; c < cpp; ++c)

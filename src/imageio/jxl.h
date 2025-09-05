@@ -26,4 +26,4 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 struct JXLSaveOptions;
 JXLSaveOptions *jxl_parameters_gui();
 // throws on error
-void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *params);
+void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, JXLSaveOptions *opts);

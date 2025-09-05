@@ -268,26 +268,36 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        TransferFunction tf = TransferFunction_Unknown; // default
-        std::string      tf_desc;
+        TransferFunction tf =
+            TransferFunction_Unknown; // opts.tf != TransferFunction_Unknown ? opts.tf : TransferFunction_Unknown;
+        string tf_desc = transfer_function_name(tf);
 
-        // ICC profile linearization
-        if (!icc_profile.empty())
+        if (opts.tf == TransferFunction_Unknown)
         {
-            Chromaticities chr;
-            if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
+            // ICC profile linearization
+            if (!icc_profile.empty())
             {
-                spdlog::info("Linearizing colors using ICC profile.");
-                image->chromaticities = chr;
+                Chromaticities chr;
+                if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
+                {
+                    spdlog::info("Linearizing colors using ICC profile.");
+                    image->chromaticities = chr;
+                }
             }
+            else if (tf != TransferFunction_Linear)
+                // If no ICC profile, assume sRGB transfer function
+                to_linear(float_pixels.data(), size, tf, 2.2f);
+
+            image->metadata["transfer function"] = tf_desc;
         }
-        else if (tf != TransferFunction_Linear)
+        else
         {
-            tf_desc = transfer_function_name(TransferFunction_Unknown);
-            // If no ICC profile, assume sRGB transfer function
-            to_linear(float_pixels.data(), size, tf, 2.2f);
+            spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
+                         transfer_function_name(opts.tf, 1.f / opts.gamma));
+            to_linear(float_pixels.data(), size, opts.tf, opts.gamma);
+            image->metadata["transfer function"] = transfer_function_name(opts.tf, 1.f / opts.gamma);
         }
-        image->metadata["transfer function"] = tf_desc;
+
         for (int c = 0; c < size.z; ++c)
             image->channels[c].copy_from_interleaved(float_pixels.data(), size.x, size.y, size.z, c,
                                                      [](float v) { return v; });

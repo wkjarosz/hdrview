@@ -6,6 +6,7 @@
 
 #define QOI_NO_STDIO
 #define QOI_IMPLEMENTATION
+#include "qoi.h"
 #include <qoi.h>
 
 #include "colorspace.h"
@@ -41,7 +42,7 @@ bool is_qoi_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_qoi_image(istream &is, string_view filename)
+vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "QOI"};
     if (!is_qoi_image(is))
@@ -70,29 +71,34 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename)
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
+    TransferFunction tf = desc.colorspace == QOI_LINEAR ? TransferFunction_Linear : TransferFunction_sRGB;
+    if (opts.tf != TransferFunction_Unknown)
+    {
+        spdlog::info("This is a {} QOI file, but we are forcing transfer function to {}.", transfer_function_name(tf),
+                     transfer_function_name(opts.tf, 1.f / opts.gamma));
+        tf = opts.tf;
+    }
+
     auto image                           = make_shared<Image>(size.xy(), size.z);
     image->filename                      = filename;
     image->file_has_straight_alpha       = size.z > 3;
     image->metadata["loader"]            = "qoi";
     image->metadata["pixel format"]      = fmt::format("{}-bit (8 bpc)", size.z * 8);
-    image->metadata["transfer function"] = desc.colorspace == QOI_LINEAR
-                                               ? transfer_function_name(TransferFunction_Linear)
-                                               : transfer_function_name(TransferFunction_sRGB);
-
-    bool linearize = desc.colorspace != QOI_LINEAR;
-
-    if (linearize)
-        spdlog::info("QOI image is sRGB encoded, linearizing.");
+    image->metadata["transfer function"] = transfer_function_name(tf);
 
     Timer timer;
+    // first convert/copy to float channels
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
-                                                 size.z, c,
-                                                 [linearize, c](uint8_t v)
-                                                 {
-                                                     auto v2 = dequantize_full(v);
-                                                     return linearize && c != 3 ? sRGB_to_linear(v2) : v2;
-                                                 });
+                                                 size.z, c, [](uint8_t v) { return dequantize_full(v); });
+    // then apply transfer function
+    if (opts.tf != TransferFunction_Linear)
+    {
+        int num_color_channels = size.z >= 3 ? 3 : 1;
+        to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
+                  size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, opts.gamma,
+                  1);
+    }
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
