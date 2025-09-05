@@ -43,7 +43,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither,
                     int quality, bool progressive)
 {
-    return save_stb_jpg(img, os, filename, gain, sRGB, dither, quality);
+    return save_stb_jpg(img, os, filename, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear, 2.2f, dither,
+                        quality);
 }
 
 JPGSaveOptions *jpg_parameters_gui() { return &s_opts; }
