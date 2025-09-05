@@ -186,16 +186,17 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     if (!supported_format(is, j))
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
-    if (!is_hdr && opts.tf != TransferFunction_Unknown)
-        spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
-    else if (opts.tf != TransferFunction_Unknown)
-        spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf, 1.f / opts.gamma));
-
     auto tf = TransferFunction_Linear;
-    if (opts.tf != TransferFunction_Unknown)
-        tf = opts.tf;
-    else if (!is_hdr)
+    if (!is_hdr && opts.tf == TransferFunction_Unknown)
+    {
+        spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
         tf = TransferFunction_Unknown;
+    }
+    if (opts.tf != TransferFunction_Unknown)
+    {
+        spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf, 1.f / opts.gamma));
+        tf = opts.tf;
+    }
 
     Timer            timer;
     vector<ImagePtr> images(size.w);

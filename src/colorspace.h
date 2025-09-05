@@ -708,43 +708,43 @@ Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float from_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
+inline float from_linear(float linear, const TransferFunction tf, const float gamma = 2.2f)
 {
     switch (tf)
     {
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, gamma);
+    case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
     case TransferFunction_Unknown: [[fallthrough]];
-    case TransferFunction_sRGB: return linear_to_sRGB(encoded);
-    case TransferFunction_ITU: return OETF_ITU(encoded);
-    case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(encoded * 219.f);
-    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(encoded * 219.f);
-    case TransferFunction_ST240: return OETF_ST240(encoded);
-    case TransferFunction_Log100: return OETF_log100(encoded);
-    case TransferFunction_Log100_Sqrt10: return OETF_log100_sqrt10(encoded);
-    case TransferFunction_IEC61966_2_4: return OETF_IEC61966_2_4(encoded);
-    case TransferFunction_DCI_P3: return inverse_EOTF_DCI_P3(encoded);
+    case TransferFunction_sRGB: return linear_to_sRGB(linear);
+    case TransferFunction_ITU: return OETF_ITU(linear);
+    case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
+    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction_ST240: return OETF_ST240(linear);
+    case TransferFunction_Log100: return OETF_log100(linear);
+    case TransferFunction_Log100_Sqrt10: return OETF_log100_sqrt10(linear);
+    case TransferFunction_IEC61966_2_4: return OETF_IEC61966_2_4(linear);
+    case TransferFunction_DCI_P3: return inverse_EOTF_DCI_P3(linear);
     case TransferFunction_Linear: [[fallthrough]];
-    default: return encoded;
+    default: return linear;
     }
 }
 
-inline float3 from_linear(float3 encoded, const TransferFunction tf, const float3 gamma = float3(2.2f))
+inline float3 from_linear(float3 linear, const TransferFunction tf, const float3 gamma = float3(2.2f))
 {
     switch (tf)
     {
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, gamma);
+    case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
     case TransferFunction_Unknown: [[fallthrough]];
-    case TransferFunction_sRGB: return linear_to_sRGB(encoded);
-    case TransferFunction_ITU: return la::apply(OETF_ITU<float>, encoded);
-    case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, encoded * 219.f);
-    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(encoded * 219.f);
-    case TransferFunction_ST240: return la::apply(OETF_ST240<float>, encoded);
-    case TransferFunction_Log100: return la::apply(OETF_log100<float>, encoded);
-    case TransferFunction_Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, encoded);
-    case TransferFunction_IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, encoded);
-    case TransferFunction_DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, encoded);
+    case TransferFunction_sRGB: return linear_to_sRGB(linear);
+    case TransferFunction_ITU: return la::apply(OETF_ITU<float>, linear);
+    case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
+    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction_ST240: return la::apply(OETF_ST240<float>, linear);
+    case TransferFunction_Log100: return la::apply(OETF_log100<float>, linear);
+    case TransferFunction_Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
+    case TransferFunction_IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
+    case TransferFunction_DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
     case TransferFunction_Linear: [[fallthrough]];
-    default: return encoded;
+    default: return linear;
     }
 }
 

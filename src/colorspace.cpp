@@ -1025,9 +1025,9 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                          for (int i = start; i < end; ++i)
                          {
                              auto rgb      = EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
-                             r[i * stride] = rgb[0] / 255.f;
-                             g[i * stride] = rgb[1] / 255.f;
-                             b[i * stride] = rgb[2] / 255.f;
+                             r[i * stride] = rgb[0] / 219.f;
+                             g[i * stride] = rgb[1] / 219.f;
+                             b[i * stride] = rgb[2] / 219.f;
                          }
                      });
     }
@@ -1054,7 +1054,7 @@ void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
             parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                          [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
                          {
-                             for (int i = start; i < end; ++i) rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * 255.f);
+                             for (int i = start; i < end; ++i) rgb[i] = inverse_EOTF_BT2100_HLG(rgb[i] * 219.f);
                          });
         else // size.z == 4
             // don't modify the alpha channel
@@ -1062,7 +1062,7 @@ void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
                          [rgba = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
                          {
                              for (int i = start; i < end; ++i)
-                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * 255.f);
+                                 rgba[i].xyz() = inverse_EOTF_BT2100_HLG(rgba[i].xyz() * 219.f);
                          });
     }
     else

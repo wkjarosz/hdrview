@@ -26,23 +26,19 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
                   TransferFunction tf = TransferFunction::TransferFunction_Linear, float gamma = 1.f);
 void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-// JPG: explicit version takes TransferFunction + gamma (and quality)
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
                   TransferFunction tf = TransferFunction::TransferFunction_sRGB, float gamma = 1.f, bool dither = true,
                   float quality = 95.f);
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-// TGA
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
                   TransferFunction tf = TransferFunction::TransferFunction_sRGB, float gamma = 1.f, bool dither = true);
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-// BMP
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
                   TransferFunction tf = TransferFunction::TransferFunction_sRGB, float gamma = 1.f, bool dither = true);
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
 
-// PNG
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain = 1.f,
                   TransferFunction tf = TransferFunction::TransferFunction_sRGB, float gamma = 1.f, bool dither = true);
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts);
