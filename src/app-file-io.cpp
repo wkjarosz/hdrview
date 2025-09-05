@@ -254,81 +254,41 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
             case Format_JPEG_STB:
             {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
-                static float quality = 95.f;
-                ImGui::SliderFloat("Quality", &quality, 1.f, 100.f);
+                auto opts = stb_parameters_gui(false, true);
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_jpg(img, os, filename, gain, tf == 1, dither, quality); };
+                { save_stb_jpg(img, os, filename, opts); };
             }
             break;
 
             case Format_BMP_STB:
             {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
+                auto opts = stb_parameters_gui(false, false);
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_bmp(img, os, filename, gain, tf == 1, dither); };
+                { save_stb_bmp(img, os, filename, opts); };
             }
             break;
 
             case Format_HDR_STB:
             {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+                auto opts = stb_parameters_gui(true, false);
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_hdr(img, os, filename, gain); };
+                { save_stb_hdr(img, os, filename, opts); };
             }
             break;
 
             case Format_PNG_STB:
             {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
+                auto opts = stb_parameters_gui(false, false);
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_png(img, os, filename, gain, tf == 1, dither); };
+                { save_stb_png(img, os, filename, opts); };
             }
             break;
 
             case Format_TGA_STB:
             {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
+                auto opts = stb_parameters_gui(false, false);
                 save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_tga(img, os, filename, gain, tf == 1, dither); };
+                { save_stb_tga(img, os, filename, opts); };
             }
             break;
             }

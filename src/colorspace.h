@@ -788,7 +788,14 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     }
 }
 
-void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, float gamma = 2.2f,
+               int stride = 1);
+inline void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f)
+{
+    int num_color_channels = size.z >= 3 ? 3 : 1;
+    to_linear(pixels, size.z >= 3 ? pixels + 1 : nullptr, size.z >= 3 ? pixels + 2 : nullptr, size.x * size.y,
+              num_color_channels, tf, gamma, size.z);
+}
 void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
 
 inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)

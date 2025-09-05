@@ -13,6 +13,11 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "app.h"
+
+#include "imgui.h"
+#include "imgui_ext.h"
+
 // these pragmas ignore warnings about unused static functions
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -48,6 +53,18 @@
 #endif
 
 using namespace std;
+
+struct STBSaveOptions
+{
+    float            gain    = 1.f;
+    TransferFunction tf      = TransferFunction_sRGB;
+    float            gamma   = 1.f;
+    bool             dither  = true; // only used for LDR formats
+    int              quality = 95;   // only used for jpg
+};
+
+static STBSaveOptions s_opts;
+static STBSaveOptions s_hdr_opts{1.f, TransferFunction_Linear, 1.f, false, 95};
 
 static const stbi_io_callbacks stbi_callbacks = {
     // read
@@ -114,7 +131,7 @@ bool is_stb_image(istream &is) noexcept
     return supported_format(is, j);
 }
 
-vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
+vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "STB"};
     // stbi doesn't do proper srgb, but uses gamma=2.2 instead, so override it.
@@ -169,9 +186,16 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
     if (!supported_format(is, j))
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
-    bool linearize = j["format"] != "hdr";
-    if (linearize)
+    if (!is_hdr && opts.tf != TransferFunction_Unknown)
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
+    else if (opts.tf != TransferFunction_Unknown)
+        spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf, 1.f / opts.gamma));
+
+    auto tf = TransferFunction_Linear;
+    if (opts.tf != TransferFunction_Unknown)
+        tf = opts.tf;
+    else if (!is_hdr)
+        tf = TransferFunction_Unknown;
 
     Timer            timer;
     vector<ImagePtr> images(size.w);
@@ -187,16 +211,16 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());
 
-        if (!linearize)
+        if (is_hdr)
             image->metadata["pixel format"] = "8:8:8:8 rgbe";
         else if (is_16_bit)
             image->metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", 16 * size.z, 16);
         else
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
-        image->metadata["transfer function"] = linearize ? transfer_function_name(TransferFunction_Unknown)
-                                                         : transfer_function_name(TransferFunction_Linear);
+        image->metadata["transfer function"] = transfer_function_name(tf, 1.f / opts.gamma);
 
+        // first convert+copy to float channels
         if (is_hdr)
         {
             for (int c = 0; c < size.z; ++c)
@@ -204,111 +228,181 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename)
                                                          [](float v) { return v; });
             data_ptr = (float *)data_ptr + size.x * size.y * size.z;
         }
+        else if (is_16_bit)
+        {
+            for (int c = 0; c < size.z; ++c)
+                image->channels[c].copy_from_interleaved((uint16_t *)data_ptr, size.x, size.y, size.z, c,
+                                                         [](uint16_t v) { return dequantize_full(v); });
+            data_ptr = (uint16_t *)data_ptr + size.x * size.y * size.z;
+        }
         else
         {
-            Timer timer;
-            if (is_16_bit)
-            {
-                for (int c = 0; c < size.z; ++c)
-                    image->channels[c].copy_from_interleaved((uint16_t *)data_ptr, size.x, size.y, size.z, c,
-                                                             [c](uint16_t v)
-                                                             {
-                                                                 float f = dequantize_full(v);
-                                                                 return c != 3 ? sRGB_to_linear(f) : f;
-                                                             });
-                data_ptr = (uint16_t *)data_ptr + size.x * size.y * size.z;
-            }
-            else
-            {
-                for (int c = 0; c < size.z; ++c)
-                    image->channels[c].copy_from_interleaved((uint8_t *)data_ptr, size.x, size.y, size.z, c,
-                                                             [c](uint8_t v)
-                                                             {
-                                                                 float f = dequantize_full(v);
-                                                                 return c != 3 ? sRGB_to_linear(f) : f;
-                                                             });
-                data_ptr = (uint8_t *)data_ptr + size.x * size.y * size.z;
-            }
+            for (int c = 0; c < size.z; ++c)
+                image->channels[c].copy_from_interleaved((uint8_t *)data_ptr, size.x, size.y, size.z, c,
+                                                         [](uint8_t v) { return dequantize_full(v); });
+            data_ptr = (uint8_t *)data_ptr + size.x * size.y * size.z;
         }
+
+        // then apply transfer function
+        int num_color_channels = size.z >= 3 ? 3 : 1;
+        to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
+                  size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, opts.gamma,
+                  1);
     }
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
 
     return images;
 }
 
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain)
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  float gamma)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain);
+    auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain, tf, gamma, false);
     if (stbi_write_hdr_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write HDR image via stb.");
     spdlog::info("Saved HDR image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
-                  bool dither, float quality)
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("STBSaveOptions pointer is null.");
+    save_stb_hdr(img, os, filename, opts->gain, opts->tf, opts->gamma);
+}
+
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  float gamma, bool dither, float quality)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-                                               2.2f, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
     if (stbi_write_jpg_to_func(ostream_write_func, &os, w, h, n, pixels.get(), std::clamp(int(quality), 1, 100)) == 0)
         throw std::runtime_error("Failed to write JPG image via stb.");
     spdlog::info("Saved JPG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
-                  bool dither)
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("STBSaveOptions pointer is null.");
+    save_stb_jpg(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither, float(opts->quality));
+}
+
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  float gamma, bool dither)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-                                               2.2f, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
     if (stbi_write_tga_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write TGA image via stb.");
     spdlog::info("Saved TGA image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
-                  bool dither)
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("STBSaveOptions pointer is null.");
+    save_stb_tga(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither);
+}
+
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  float gamma, bool dither)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-                                               2.2f, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
     if (stbi_write_bmp_to_func(ostream_write_func, &os, w, h, n, pixels.get()) == 0)
         throw std::runtime_error("Failed to write BMP image via stb.");
     spdlog::info("Saved BMP image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, bool sRGB,
-                  bool dither)
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("STBSaveOptions pointer is null.");
+    save_stb_bmp(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither);
+}
+
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  float gamma, bool dither)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
-    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-                                               2.2f, dither);
+    auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
     if (stbi_write_png_to_func(ostream_write_func, &os, w, h, n, pixels.get(), 0) == 0)
         throw std::runtime_error("Failed to write PNG image via stb.");
     spdlog::info("Saved PNG image via stb to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-void save_stb_image(const Image &img, ostream &os, const string_view filename, float gain, bool sRGB, bool dither)
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, const STBSaveOptions *opts)
 {
-    Timer  timer;
-    string extension = to_lower(get_extension(filename));
+    if (!opts)
+        throw std::invalid_argument("STBSaveOptions pointer is null.");
+    save_stb_png(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither);
+}
 
-    if (extension == ".hdr")
-        save_stb_hdr(img, os, filename);
-    else if (extension == ".jpg" || extension == ".jpeg")
-        save_stb_jpg(img, os, filename, gain, sRGB, dither, 100.0f);
-    else if (extension == ".png")
-        save_stb_png(img, os, filename, gain, sRGB, dither);
-    else if (extension == ".bmp")
-        save_stb_bmp(img, os, filename, gain, sRGB, dither);
-    else if (extension == ".tga")
-        save_stb_tga(img, os, filename, gain, sRGB, dither);
-    else
-        throw invalid_argument(fmt::format("Could not determine desired file type from extension \"{}\".", extension));
+// void save_stb_image(const Image &img, ostream &os, const string_view filename, float gain, bool sRGB, bool dither)
+// {
+//     Timer  timer;
+//     string extension = to_lower(get_extension(filename));
+
+//     if (extension == ".hdr")
+//         save_stb_hdr(img, os, filename);
+//     else if (extension == ".jpg" || extension == ".jpeg")
+//         save_stb_jpg(img, os, filename, gain, sRGB, dither, 100.0f);
+//     else if (extension == ".png")
+//         save_stb_png(img, os, filename, gain, sRGB, dither);
+//     else if (extension == ".bmp")
+//         save_stb_bmp(img, os, filename, gain, sRGB, dither);
+//     else if (extension == ".tga")
+//         save_stb_tga(img, os, filename, gain, sRGB, dither);
+//     else
+//         throw invalid_argument(fmt::format("Could not determine desired file type from extension \"{}\".",
+//         extension));
+// }
+
+// GUI parameter function
+STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
+{
+    auto &opts = is_hdr ? s_hdr_opts : s_opts;
+    ImGui::BeginGroup();
+    ImGui::SliderFloat("Gain", &opts.gain, 0.1f, 10.0f);
+    ImGui::SameLine();
+    if (ImGui::Button("From viewport"))
+        opts.gain = exp2f(hdrview()->exposure());
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    ImGui::BeginGroup();
+    if (ImGui::BeginCombo("Transfer function", transfer_function_name(opts.tf, 1.f / opts.gamma).c_str()))
+    {
+        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+        {
+            bool is_selected = (opts.tf == (TransferFunction)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / opts.gamma).c_str(), is_selected))
+                opts.tf = (TransferFunction)i;
+            if (is_selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (opts.tf == TransferFunction_Gamma)
+        ImGui::SliderFloat("Gamma", &opts.gamma, 0.1f, 5.f);
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
+                          "provide a way to signal what transfer function the files were saved with. Without this "
+                          "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
+
+    if (!is_hdr)
+        ImGui::Checkbox("Dither", &opts.dither);
+    if (has_quality)
+        ImGui::SliderInt("Quality", &opts.quality, 1, 100);
+
+    if (ImGui::Button("Reset options to defaults"))
+        opts = is_hdr ? STBSaveOptions{1.f, TransferFunction_Linear, 1.f, false, 95} : STBSaveOptions{};
+
+    return &opts;
 }

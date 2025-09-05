@@ -1013,37 +1013,35 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
 
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra() { return s_CIE_xyz; }
 
-void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, float gamma,
+               int stride)
 {
-    if (tf == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
+    if (tf == TransferFunction_BT2100_HLG && num_channels == 3)
     {
         // HLG needs to operate on all three channels at once
-        if (size.z == 3)
-            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                         [rgb = reinterpret_cast<float3 *>(pixels)](int start, int end, int, int)
-                         {
-                             for (int i = start; i < end; ++i) rgb[i] = EOTF_BT2100_HLG(rgb[i]) / 255.f;
-                         });
-        else // size.z == 4
-            // don't modify the alpha channel
-            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                         [rgb = reinterpret_cast<float4 *>(pixels)](int start, int end, int, int)
-                         {
-                             for (int i = start; i < end; ++i) rgb[i].xyz() = EOTF_BT2100_HLG(rgb[i].xyz()) / 255.f;
-                         });
-    }
-    else
-    {
-        // assume this means we have an alpha channel, which we pass through without modification
-        int num_color_channels = (size.z == 2 || size.z == 4) ? size.z - 1 : size.z;
-        // other transfer functions apply to each channel independently
-        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024 / size.z),
-                     [&pixels, tf, gamma, size, num_color_channels](int start, int end, int, int)
+        parallel_for(blocked_range<int>(0, num_pixels, 1024 * 1024),
+                     [r, g, b, stride](int start, int end, int, int)
                      {
                          for (int i = start; i < end; ++i)
-                             for (int c = 0; c < num_color_channels; ++c)
-                                 pixels[i * size.z + c] = to_linear(pixels[i * size.z + c], tf, gamma);
+                         {
+                             auto rgb      = EOTF_BT2100_HLG(float3{r[i * stride], g[i * stride], b[i * stride]});
+                             r[i * stride] = rgb[0] / 255.f;
+                             g[i * stride] = rgb[1] / 255.f;
+                             b[i * stride] = rgb[2] / 255.f;
+                         }
                      });
+    }
+    else if (tf != TransferFunction_Linear)
+    {
+        float *rgb[] = {r, g, b};
+        for (int c = 0; c < num_channels; ++c)
+            // other transfer functions apply to each channel independently
+            parallel_for(blocked_range<int>(0, num_pixels, 1024 * 1024 / num_channels),
+                         [rgb, c, tf, gamma, stride](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i)
+                                 rgb[c][i * stride] = to_linear(rgb[c][i * stride], tf, gamma);
+                         });
     }
 }
 

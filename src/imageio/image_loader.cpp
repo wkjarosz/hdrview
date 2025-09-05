@@ -639,7 +639,7 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
         else if (is_stb_image(is))
         {
             spdlog::info("Detected stb-compatible image. Loading via stb_image.");
-            images = load_stb_image(is, filename);
+            images = load_stb_image(is, filename, opts);
         }
         else if (is_pfm_image(is))
         {
