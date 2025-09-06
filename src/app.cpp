@@ -1,6 +1,8 @@
 #include "app.h"
 
+#include "dithermatrix256.h"
 #include "fonts.h"
+#include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
 #include "imageio/stb.h"
@@ -463,6 +465,156 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         make_unique<PopupDialog>([this](bool &open) { draw_open_options_dialog(open); });
     m_dialogs["Custom background color picker"] =
         make_unique<PopupDialog>([this](bool &open) { draw_color_picker(open); });
+    m_dialogs["Create dither image..."] = make_unique<PopupDialog>(
+        [this](bool &open)
+        {
+            if (open)
+                ImGui::OpenPopup("Create dither image...");
+
+            static int2  size = {256, 256};
+            static bool  tent = false;
+            static Box1f range{0.0f, 1.0f};
+            ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+            if (ImGui::BeginPopupModal("Create dither image...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                open = false;
+                ImGui::InputInt2("Size", &size.x);
+                ImGui::Checkbox("Tent dither", &tent);
+                ImGui::DragFloatRange2("Value range", &range.min.x, &range.max.x, 0.01f, -FLT_MAX, FLT_MAX, "min: %.3f",
+                                       "max: %.3f");
+
+                if (ImGui::Button("Cancel", EmToVec2(6.f, 0.f)) ||
+                    (!ImGui::GetIO().NavVisible &&
+                     (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+                    ImGui::CloseCurrentPopup();
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Create", EmToVec2(6.f, 0.f)) ||
+                    (!ImGui::GetIO().NavVisible && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+                {
+                    auto img = std::make_shared<Image>(size, 1);
+
+                    float dst_range = range.size().x;
+
+                    int block_size = std::max(1, 1024 * 1024 / size.x);
+
+                    parallel_for(blocked_range<int>(0, size.y, block_size),
+                                 [img, w = size.x, dst_range](int begin_y, int end_y, int, int)
+                                 {
+                                     for (int y = begin_y; y < end_y; ++y)
+                                         for (int x = 0; x < w; ++x)
+                                         {
+                                             float dither_val       = tent ? tent_dither(x, y) : box_dither(x, y);
+                                             img->channels[0](x, y) = (dither_val + 0.5f) * dst_range + range.min.x;
+                                         }
+                                 });
+
+                    img->filename = fmt::format("dither_{}x{}_{}_{:.3f}-{:.3f}", size.x, size.y, tent ? "tent" : "box",
+                                                range.min.x, range.max.x);
+                    img->finalize();
+
+                    m_images.push_back(img);
+                    m_current = int(m_images.size()) - 1;
+                    update_visibility(); // this also calls set_image_textures();
+                    m_request_sort = true;
+
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+        });
+    m_dialogs["Create gradient image..."] = make_unique<PopupDialog>(
+        [this](bool &open)
+        {
+            if (open)
+                ImGui::OpenPopup("Create gradient image...");
+
+            static int2   size   = {256, 256};
+            static float  dither = 1.f;
+            static Box1f  range{0.0f, 1.0f};
+            static int    levels = 256;
+            static float4 c00{float3{1.f}, 1.f}, c10{float3{0.f}, 1.f}, c11{float3{0.f}, 1.f}, c01{float3{1.f}, 1.f};
+            ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
+            if (ImGui::BeginPopupModal("Create gradient image...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                open = false;
+                ImGui::InputInt2("Size", &size.x);
+                ImGui::SliderInt("Levels", &levels, 2, 65536);
+                static int channel_mode = 1; // Default to RGB
+                static int num_channels = 3;
+                if (ImGui::Combo("Channels", &channel_mode, "Gray\0RGB\0RGBA\0"))
+                    num_channels = channel_mode == 0 ? 1 : channel_mode == 1 ? 3 : 4;
+                ImGui::SliderFloat("Dither amount", &dither, 0.0f, 1.0f);
+                ImGui::DragFloatRange2("Value range", &range.min.x, &range.max.x, 0.01f, -FLT_MAX, FLT_MAX, "min: %.3f",
+                                       "max: %.3f");
+                auto flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_Float;
+                ImGui::ColorEdit4("##Top-left color", &c00.x, flags);
+                ImGui::SameLine();
+                ImGui::ColorEdit4("##Top-right color", &c10.x, flags);
+                ImGui::ColorEdit4("##Bottom-left color", &c01.x, flags);
+                ImGui::SameLine();
+                ImGui::ColorEdit4("##Bottom-right color", &c11.x, flags);
+
+                if (ImGui::Button("Cancel", EmToVec2(6.f, 0.f)) ||
+                    (!ImGui::GetIO().NavVisible &&
+                     (ImGui::Shortcut(ImGuiKey_Escape) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Period))))
+                    ImGui::CloseCurrentPopup();
+
+                ImGui::SameLine();
+
+                if (ImGui::Button("Create", EmToVec2(6.f, 0.f)) ||
+                    (!ImGui::GetIO().NavVisible && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Enter)))
+                {
+                    auto img = std::make_shared<Image>(size, num_channels);
+
+                    int block_size = std::max(1, 1024 * 1024 / size.x);
+
+                    // Dithers and quantizes color value c in [0, 1] to the given number of levels.
+                    auto dither_quantize = [](float c, int levels, int x, int y, float amount)
+                    {
+                        float cmax = float(levels) - 1.f;
+                        float ci   = (c * cmax);
+
+                        // Symmetric triangular distribution on [-1, 1] for general case; uniform distribution on [-0.5,
+                        // 0.5] when near boundary
+                        float d = (ci - amount + 0.5f < 0.0 || ci + amount + 0.5f >= cmax + 1.0f)
+                                      ? box_dither(x, y)
+                                      : 2.f * tent_dither(x, y);
+                        return int(std::clamp(ci + amount * d + 0.5f, 0.0f, cmax));
+                    };
+
+                    parallel_for(blocked_range<int>(0, size.y, block_size),
+                                 [img, w = size.x, h = size.y, dither_quantize](int begin_y, int end_y, int, int)
+                                 {
+                                     for (int y = begin_y; y < end_y; ++y)
+                                         for (int x = 0; x < w; ++x)
+                                         {
+                                             float  u      = (x + 0.5f) / w;
+                                             float  v      = (y + 0.5f) / h;
+                                             float4 bilerp = c00 * (1 - u) * (1 - v) + c10 * u * (1 - v) +
+                                                             c01 * (1 - u) * v + c11 * u * v;
+
+                                             for (size_t c = 0; c < img->channels.size(); ++c)
+                                                 img->channels[c](x, y) =
+                                                     dither_quantize(bilerp[c], levels, x, y, dither) / (levels - 1.f);
+                                         }
+                                 });
+
+                    img->filename =
+                        fmt::format("gradient_{}x{}_{:.3f}-{:.3f}", size.x, size.y, range.min.x, range.max.x);
+                    img->finalize();
+
+                    m_images.push_back(img);
+                    m_current = int(m_images.size()) - 1;
+                    update_visibility(); // this also calls set_image_textures();
+                    m_request_sort = true;
+
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::EndPopup();
+            }
+        });
 
     //
     // Actions and command palette
@@ -473,6 +625,11 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
         using ImGui::Action;
         auto add = [this](const Action &a) { m_actions[a.name] = a; };
         add(Action{"Open image...", ICON_MY_OPEN_IMAGE, ImGuiMod_Ctrl | ImGuiKey_O, 0, [this]() { open_image(); }});
+
+        add(Action{"Create gradient image...", ICON_MY_DITHER, ImGuiKey_None, 0,
+                   [this]() { m_dialogs["Create gradient image..."]->open = true; }});
+        add(Action{"Create dither image...", ICON_MY_DITHER, ImGuiKey_None, 0,
+                   [this]() { m_dialogs["Create dither image..."]->open = true; }});
 
         add(Action{"Image loading options...", ICON_MY_SETTINGS_WINDOW, ImGuiKey_None, 0,
                    [this]() { m_dialogs["Image loading options..."]->open = true; }});

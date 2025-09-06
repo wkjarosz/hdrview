@@ -25,9 +25,9 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-    float            gain  = 1.f;
-    TransferFunction tf    = TransferFunction_Linear;
-    float            gamma = 1.f;
+    float             gain  = 1.f;
+    TransferFunction_ tf    = TransferFunction_Linear;
+    float             gamma = 1.f;
 };
 
 static PFMSaveOptions s_opts;
@@ -196,7 +196,7 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, width * height * sizeof(float) * num_channels);
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction tf, float gamma)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction_ tf, float gamma)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -234,9 +234,10 @@ PFMSaveOptions *pfm_parameters_gui()
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
-            bool is_selected = (s_opts.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
-                s_opts.tf = (TransferFunction)i;
+            bool is_selected = (s_opts.tf == (TransferFunction_)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                                  is_selected))
+                s_opts.tf = (TransferFunction_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }

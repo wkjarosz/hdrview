@@ -536,15 +536,16 @@ const ImageLoadOptions &load_image_options_gui()
     ImGui::BeginGroup();
     ImGui::BeginDisabled(!force);
     if (ImGui::BeginCombo("Force transfer function",
-                          s_opts.tf == TransferFunction_Unknown
+                          s_opts.tf == TransferFunction_Unspecified
                               ? "Use file's transfer function"
                               : transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
-            bool is_selected = (s_opts.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
-                s_opts.tf = (TransferFunction)i;
+            bool is_selected = (s_opts.tf == (TransferFunction_)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                                  is_selected))
+                s_opts.tf = (TransferFunction_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
@@ -553,7 +554,7 @@ const ImageLoadOptions &load_image_options_gui()
     ImGui::EndDisabled();
     ImGui::SameLine();
     if (ImGui::Checkbox("##Force transfer function", &force))
-        s_opts.tf = force ? s_opts.tf : TransferFunction_Unknown;
+        s_opts.tf = force ? s_opts.tf : TransferFunction_Unspecified;
     ImGui::BeginDisabled(!force);
     if (s_opts.tf == TransferFunction_Gamma)
         ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);

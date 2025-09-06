@@ -53,6 +53,7 @@ if(EMSCRIPTEN)
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.*
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/emscripten/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 elseif(APPLE)
@@ -61,6 +62,7 @@ elseif(APPLE)
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/apple/**.*
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.metal
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 elseif(WIN32)
@@ -68,6 +70,7 @@ elseif(WIN32)
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.glsl
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 endif()
@@ -931,6 +934,7 @@ hello_imgui_add_app(
   src/colormap.cpp
   src/colorspace.cpp
   src/common.cpp
+  src/dithermatrix256.cpp
   src/platform_utils.cpp
   src/fonts.cpp
   src/hdrview.cpp

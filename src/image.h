@@ -293,8 +293,8 @@ public:
     float3x3                      M_to_sRGB               = la::identity;
     float3                        luminance_weights       = sRGB_Yw();
     AdaptationMethod              adaptation_method       = AdaptationMethod_Bradford;
-    ColorGamut                    color_space             = ColorGamut_Unspecified;
-    WhitePoint                    white_point             = WhitePoint_Unspecified;
+    ColorGamut_                   color_space             = ColorGamut_Unspecified;
+    WhitePoint_                   white_point             = WhitePoint_Unspecified;
     bool                          file_has_straight_alpha = false;
     json                          metadata                = json::object();
 
@@ -355,7 +355,7 @@ public:
 
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
-                                        TransferFunction tf = TransferFunction_Linear, float gamma = 1.f,
+                                        TransferFunction_ tf = TransferFunction_Linear, float gamma = 1.f,
                                         bool dither = true, bool unpremultiply = true,
                                         bool convert_to_sRGB = true) const;
 
@@ -393,14 +393,8 @@ private:
                        int level = 0) const;
 };
 
-inline Box2f display_window(ConstImagePtr img = nullptr)
-{
-    return img ? Box2f{img->display_window} : Box2f{{0, 0}, {0, 0}};
-}
-inline Box2f data_window(ConstImagePtr img = nullptr) { return img ? Box2f{img->data_window} : Box2f{{0, 0}, {0, 0}}; }
-
 template <typename T>
-std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, float gamma,
+std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction_ tf, float gamma,
                                            bool dither, bool unpremultiply, bool convert_to_sRGB) const
 {
     *w                   = size().x;
@@ -441,13 +435,13 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                  auto rgba_pixel = data + y * y_stride + n * x;
                                  for (int c = 0; c < 3; ++c)
                                      rgba_pixel[c] = (std::is_integral_v<T>)
-                                                         ? quantize_full<T>(rgb_out[c], dither, x, y)
+                                                         ? quantize_full<T>(rgb_out[c], x, y, dither)
                                                          : T(rgb_out[c]);
 
                                  // Copy alpha if present
                                  if (alpha)
                                      rgba_pixel[3] = std::is_integral_v<T>
-                                                         ? quantize_full<T>((*alpha)(x, y), dither, x, y)
+                                                         ? quantize_full<T>((*alpha)(x, y), x, y, dither)
                                                          : T((*alpha)(x, y));
                              }
                      });
@@ -468,7 +462,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                             float v = channels[groups[selected_group].channels[c]](x, y);
                             v *= gain;
                             v             = from_linear(v, tf, gamma);
-                            rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, dither, x, y) : T(v);
+                            rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
                         }
                     }
             });

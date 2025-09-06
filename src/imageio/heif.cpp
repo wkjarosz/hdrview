@@ -22,13 +22,13 @@ using namespace std;
 
 struct HEIFSaveOptions
 {
-    float            gain         = 1.f;
-    int              quality      = 95;
-    bool             lossless     = false;
-    bool             use_alpha    = true;
-    int              format_index = 0;
-    TransferFunction tf           = TransferFunction_sRGB;
-    float            gamma        = 2.2f;
+    float             gain         = 1.f;
+    int               quality      = 95;
+    bool              lossless     = false;
+    bool              use_alpha    = true;
+    int               format_index = 0;
+    TransferFunction_ tf           = TransferFunction_sRGB;
+    float             gamma        = 2.2f;
 };
 
 static HEIFSaveOptions s_opts;
@@ -96,7 +96,7 @@ static void init_heif_supported_formats()
     s_heif_formats_initialized = true;
 }
 
-static heif_transfer_characteristics transfer_function_to_heif(TransferFunction tf)
+static heif_transfer_characteristics transfer_function_to_heif(TransferFunction_ tf)
 {
     switch (tf)
     {
@@ -114,7 +114,7 @@ static heif_transfer_characteristics transfer_function_to_heif(TransferFunction 
     }
 }
 
-static bool is_heif_transfer_supported(TransferFunction tf)
+static bool is_heif_transfer_supported(TransferFunction_ tf)
 {
     switch (transfer_function_to_heif(tf))
     {
@@ -141,10 +141,10 @@ static bool linearize_colors(float *pixels, int3 size, const heif::ColorProfile_
     if (c)
         *c = chromaticities_from_cicp((int)nclx->get_color_primaries());
 
-    float            gamma = 1.f;
-    TransferFunction tf    = transfer_function_from_cicp((int)nclx->get_transfer_characteristics(), &gamma);
+    float             gamma = 1.f;
+    TransferFunction_ tf    = transfer_function_from_cicp((int)nclx->get_transfer_characteristics(), &gamma);
 
-    if (tf == TransferFunction_Unknown)
+    if (tf == TransferFunction_Unspecified)
         spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
                      (int)nclx->get_transfer_characteristics());
 
@@ -459,7 +459,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 }
                 spdlog::debug("done copying to continuguous float buffer");
 
-                if (opts.tf != TransferFunction_Unknown)
+                if (opts.tf != TransferFunction_Unspecified)
                 {
                     // only prefer the nclx if it exists and it specifies an HDR transfer function
                     bool prefer_icc = // false;
@@ -479,7 +479,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         image->metadata["transfer function"] = tf_description;
                     }
                     else
-                        image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unknown);
+                        image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unspecified);
                 }
                 else
                 {
@@ -545,7 +545,7 @@ bool is_heif_image(istream &is) noexcept
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, int format_index, TransferFunction tf, float gamma)
+                     bool lossless, bool use_alpha, int format_index, TransferFunction_ tf, float gamma)
 {
     try
     {
@@ -691,11 +691,11 @@ HEIFSaveOptions *heif_parameters_gui()
     {
         for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
         {
-            if (!is_heif_transfer_supported((TransferFunction)i))
+            if (!is_heif_transfer_supported((TransferFunction_)i))
                 continue;
-            bool selected = (s_opts.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), selected))
-                s_opts.tf = (TransferFunction)i;
+            bool selected = (s_opts.tf == (TransferFunction_)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(), selected))
+                s_opts.tf = (TransferFunction_)i;
             if (selected)
                 ImGui::SetItemDefaultFocus();
         }

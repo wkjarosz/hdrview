@@ -72,18 +72,18 @@ void HDRViewApp::draw_develop_windows()
             {
                 if (ImGui::BeginTabItem("Transfer functions"))
                 {
-                    static float            gamma = 2.2f;
-                    static TransferFunction tf    = TransferFunction_Linear;
+                    static float             gamma = 2.2f;
+                    static TransferFunction_ tf    = TransferFunction_Linear;
                     ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
                     if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
                                           ImGuiComboFlags_HeightLargest))
                     {
-                        for (TransferFunction_ n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
+                        for (TransferFunction n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
                         {
                             const bool is_selected = (tf == n);
-                            if (ImGui::Selectable(transfer_function_name((TransferFunction)n, 1.f / gamma).c_str(),
+                            if (ImGui::Selectable(transfer_function_name((TransferFunction_)n, 1.f / gamma).c_str(),
                                                   is_selected))
-                                tf = (TransferFunction)n;
+                                tf = (TransferFunction_)n;
 
                             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
                             if (is_selected)
@@ -136,10 +136,10 @@ void HDRViewApp::draw_develop_windows()
                         ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
                         ImPlot::PushStyleVar(ImPlotStyleVar_Marker, ImPlotMarker_Circle);
 
-                        for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                        for (WhitePoint n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
                         {
-                            WhitePoint wp{n};
-                            auto       spectrum = white_point_spectrum(wp);
+                            WhitePoint_ wp{n};
+                            auto        spectrum = white_point_spectrum(wp);
                             if (spectrum.values.empty())
                                 continue;
                             string name{white_point_name(wp)};

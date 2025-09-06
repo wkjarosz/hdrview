@@ -269,11 +269,11 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        TransferFunction tf =
-            TransferFunction_Unknown; // opts.tf != TransferFunction_Unknown ? opts.tf : TransferFunction_Unknown;
+        TransferFunction_ tf =
+            TransferFunction_Unspecified; // opts.tf != TransferFunction_Unknown ? opts.tf : TransferFunction_Unknown;
         string tf_desc = transfer_function_name(tf);
 
-        if (opts.tf == TransferFunction_Unknown)
+        if (opts.tf == TransferFunction_Unspecified)
         {
             // ICC profile linearization
             if (!icc_profile.empty())

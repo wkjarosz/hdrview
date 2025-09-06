@@ -16,7 +16,6 @@
 #include <string>
 #include <vector>
 
-#include <map>
 #include <string>
 
 /**
@@ -77,8 +76,8 @@ inline bool approx_equal(const Chromaticities &a, const Chromaticities &b, float
            approx_equal(a.blue, b.blue, tol) && approx_equal(a.white, b.white, tol);
 }
 
-using WhitePoint_ = int;
-enum WhitePoint : WhitePoint_
+using WhitePoint = int;
+enum WhitePoint_ : WhitePoint
 {
     WhitePoint_FirstNamed = 0,
     WhitePoint_ACES       = WhitePoint_FirstNamed, // Academy Color Encoding System, ~6000k
@@ -110,13 +109,13 @@ enum WhitePoint : WhitePoint_
     WhitePoint_Count
 };
 
-float2       white_point(WhitePoint wp);
-const char  *white_point_name(WhitePoint wp);
+float2       white_point(WhitePoint_ wp);
+const char  *white_point_name(WhitePoint_ wp);
 const char **white_point_names();
-WhitePoint   named_white_point(float2 wp);
+WhitePoint_  named_white_point(float2 wp);
 
-using ColorGamut_ = int;
-enum ColorGamut : ColorGamut_
+using ColorGamut = int;
+enum ColorGamut_ : ColorGamut
 {
     ColorGamut_FirstNamed = 0,
     ColorGamut_sRGB_BT709 = ColorGamut_FirstNamed,
@@ -141,21 +140,21 @@ enum ColorGamut : ColorGamut_
 };
 
 //! Returns a description of the ColorGamut enum value.
-const char  *color_gamut_name(const ColorGamut primaries);
+const char  *color_gamut_name(const ColorGamut_ primaries);
 const char **color_gamut_names();
 
 //! Returns the Chromaticities corresponding to one of the predefined color primaries, or throws if the primaries
 //! are not recognized.
-Chromaticities gamut_chromaticities(ColorGamut primaries);
+Chromaticities gamut_chromaticities(ColorGamut_ primaries);
 Chromaticities chromaticities_from_cicp(int cicp);
 // Returns -1 if the chromaticities do not match one of the predefined CICP values
-int        chromaticities_to_cicp(const Chromaticities &chr);
-ColorGamut named_color_gamut(const Chromaticities &chr);
+int         chromaticities_to_cicp(const Chromaticities &chr);
+ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
-using TransferFunction_ = int;
-enum TransferFunction : TransferFunction_
+using TransferFunction = int;
+enum TransferFunction_ : TransferFunction
 {
-    TransferFunction_Unknown = 0,
+    TransferFunction_Unspecified = 0,
     TransferFunction_Linear,
     TransferFunction_Gamma,
     TransferFunction_sRGB,
@@ -170,9 +169,9 @@ enum TransferFunction : TransferFunction_
     TransferFunction_Count
 };
 
-std::string      transfer_function_name(TransferFunction tf, float gamma = 2.2f);
-TransferFunction transfer_function_from_cicp(int cicp, float *gamma = nullptr);
-int              transfer_function_to_cicp(TransferFunction tf, float gamma = 2.2f);
+std::string       transfer_function_name(TransferFunction_ tf, float gamma = 2.2f);
+TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma = nullptr);
+int               transfer_function_to_cicp(TransferFunction_ tf, float gamma = 2.2f);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
@@ -242,7 +241,7 @@ float2 Kelvin_to_xy(float T);
     See https://en.wikipedia.org/wiki/Standard_illuminant#Computation
 */
 float2                           daylight_to_xy(float T);
-const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint wp = WhitePoint_D65);
+const TabulatedSpectrum<float>  &white_point_spectrum(WhitePoint_ wp = WhitePoint_D65);
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra();
 
 /*! Convert a wavelength in nanometers to a CIE 1931 chromaticity value.
@@ -708,12 +707,12 @@ Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float from_linear(float linear, const TransferFunction tf, const float gamma = 2.2f)
+inline float from_linear(float linear, const TransferFunction_ tf, const float gamma = 2.2f)
 {
     switch (tf)
     {
     case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
-    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return linear_to_sRGB(linear);
     case TransferFunction_ITU: return OETF_ITU(linear);
     case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
@@ -728,12 +727,12 @@ inline float from_linear(float linear, const TransferFunction tf, const float ga
     }
 }
 
-inline float3 from_linear(float3 linear, const TransferFunction tf, const float3 gamma = float3(2.2f))
+inline float3 from_linear(float3 linear, const TransferFunction_ tf, const float3 gamma = float3(2.2f))
 {
     switch (tf)
     {
     case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
-    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return linear_to_sRGB(linear);
     case TransferFunction_ITU: return la::apply(OETF_ITU<float>, linear);
     case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
@@ -748,12 +747,12 @@ inline float3 from_linear(float3 linear, const TransferFunction tf, const float3
     }
 }
 
-inline float to_linear(float encoded, const TransferFunction tf, const float gamma = 2.2f)
+inline float to_linear(float encoded, const TransferFunction_ tf, const float gamma = 2.2f)
 {
     switch (tf)
     {
     case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
-    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return sRGB_to_linear(encoded);
     case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
     case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
@@ -768,11 +767,11 @@ inline float to_linear(float encoded, const TransferFunction tf, const float gam
     }
 }
 
-inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const float3 &gamma = float3(2.2f))
+inline float3 to_linear(const float3 &encoded, const TransferFunction_ tf, const float3 &gamma = float3(2.2f))
 {
     switch (tf)
     {
-    case TransferFunction_Unknown: [[fallthrough]];
+    case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return sRGB_to_linear(encoded);
     case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
     case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
@@ -788,15 +787,15 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction tf, const 
     }
 }
 
-void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, float gamma = 2.2f,
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction_ tf, float gamma = 2.2f,
                int stride = 1);
-inline void to_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f)
+inline void to_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma = 2.2f)
 {
     int num_color_channels = size.z >= 3 ? 3 : 1;
     to_linear(pixels, size.z >= 3 ? pixels + 1 : nullptr, size.z >= 3 ? pixels + 2 : nullptr, size.x * size.y,
               num_color_channels, tf, gamma, size.z);
 }
-void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma = 2.2f);
+void from_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma = 2.2f);
 
 inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
@@ -883,15 +882,15 @@ inline float4 blend(float4 top, float4 bottom, BlendMode_ blend_mode)
 template <typename T>
 inline float dequantize_full(T v)
 {
-    constexpr auto min_val = std::numeric_limits<T>::min();
-    constexpr auto max_val = std::numeric_limits<T>::max();
-    const float    denom   = 1.f / float(max_val - min_val);
+    constexpr auto min_val   = std::numeric_limits<T>::min();
+    constexpr auto max_val   = std::numeric_limits<T>::max();
+    const float    inv_range = 1.f / float(max_val - min_val);
     if constexpr (std::is_signed<T>::value)
         // signed normalized, map [min, max] to [-1, 1]
-        return (2.f * (float(v) - min_val) * denom) - 1.f;
+        return (2.f * (float(v) - min_val) * inv_range) - 1.f;
     else
         // unsigned normalized, map [min, max] to [0, 1]
-        return (float(v) - min_val) * denom;
+        return (float(v) - min_val) * inv_range;
 }
 
 template <>
@@ -906,18 +905,22 @@ T quantize_full(float v, int x = 0, int y = 0, bool dither = true)
 {
     constexpr auto min_val = std::numeric_limits<T>::min();
     constexpr auto max_val = std::numeric_limits<T>::max();
-    const float    denom   = float(max_val) - float(min_val);
+    const float    range   = float(max_val) - float(min_val);
     if constexpr (std::is_signed<T>::value)
     {
         // signed normalized, map [-1, 1] to [min, max]
-        float q = ((v + 1.f) * 0.5f) * denom + min_val + (dither ? tent_dither(x, y) : 0.f);
+        float q = ((v + 1.f) * 0.5f) * range + min_val + (dither ? tent_dither(x, y) : 0.f);
         return (T)std::clamp(q, (float)min_val, (float)max_val);
     }
     else
     {
         // unsigned normalized, map [0, 1] to [min, max]
-        float q = v * denom + min_val + (dither ? tent_dither(x, y) : 0.f);
-        return (T)std::clamp(q, (float)min_val, (float)max_val);
+        float ci = v * max_val;
+        // Symmetric triangular distribution on [-1, 1] for general case; uniform distribution on [-0.5,
+        // 0.5] when near boundary
+        float d =
+            (ci - 1.f + 0.5f < 0.0 || ci + 1.f + 0.5f >= max_val + 1.0f) ? box_dither(x, y) : 2.f * tent_dither(x, y);
+        return (T)std::clamp(ci + (dither ? d : 0.f) + 0.5f, (float)min_val, (float)max_val);
     }
 }
 

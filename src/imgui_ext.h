@@ -203,7 +203,7 @@ inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
 void UnderLine(ImColor c, float raise = 0.05f);
 
 // Replacement for ImGui::TextLinkOpenURL which uses default font for tooltip
-void HyperlinkText(const char *label, const char *url = NULL);
+void HyperlinkText(const char *label, const char *url = nullptr);
 
 // Like ImGui::GetKeyChordName, but returns the translated name of the key chord.
 const char *GetKeyChordNameTranslated(ImGuiKeyChord key_chord);

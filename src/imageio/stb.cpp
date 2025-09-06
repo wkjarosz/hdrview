@@ -32,17 +32,17 @@
 #endif
 
 // since other libraries might include old versions of stb headers, we declare stb static here
-#define STB_IMAGE_STATIC
+// #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #undef STB_IMAGE_IMPLEMENTATION
-#undef STB_IMAGE_STATIC
+// #undef STB_IMAGE_STATIC
 
-#define STB_IMAGE_WRITE_STATIC
+// #define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #undef STB_IMAGE_WRITE_IMPLEMENTATION
-#undef STB_IMAGE_WRITE_STATIC
+// #undef STB_IMAGE_WRITE_STATIC
 
 #if defined(__clang__)
 #pragma clang diagnostic pop
@@ -56,11 +56,11 @@ using namespace std;
 
 struct STBSaveOptions
 {
-    float            gain    = 1.f;
-    TransferFunction tf      = TransferFunction_sRGB;
-    float            gamma   = 1.f;
-    bool             dither  = true; // only used for LDR formats
-    int              quality = 95;   // only used for jpg
+    float             gain    = 1.f;
+    TransferFunction_ tf      = TransferFunction_sRGB;
+    float             gamma   = 1.f;
+    bool              dither  = true; // only used for LDR formats
+    int               quality = 95;   // only used for jpg
 };
 
 static STBSaveOptions s_opts;
@@ -187,12 +187,12 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
     auto tf = TransferFunction_Linear;
-    if (!is_hdr && opts.tf == TransferFunction_Unknown)
+    if (!is_hdr && opts.tf == TransferFunction_Unspecified)
     {
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
-        tf = TransferFunction_Unknown;
+        tf = TransferFunction_Unspecified;
     }
-    if (opts.tf != TransferFunction_Unknown)
+    if (opts.tf != TransferFunction_Unspecified)
     {
         spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf, 1.f / opts.gamma));
         tf = opts.tf;
@@ -255,7 +255,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     return images;
 }
 
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma)
 {
     Timer timer;
@@ -273,7 +273,7 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_hdr(img, os, filename, opts->gain, opts->tf, opts->gamma);
 }
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither, float quality)
 {
     Timer timer;
@@ -291,7 +291,7 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_jpg(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither, float(opts->quality));
 }
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
     Timer timer;
@@ -309,7 +309,7 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_tga(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither);
 }
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
     Timer timer;
@@ -327,7 +327,7 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_bmp(img, os, filename, opts->gain, opts->tf, opts->gamma, opts->dither);
 }
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
     Timer timer;
@@ -382,9 +382,9 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
-            bool is_selected = (opts.tf == (TransferFunction)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / opts.gamma).c_str(), is_selected))
-                opts.tf = (TransferFunction)i;
+            bool is_selected = (opts.tf == (TransferFunction_)i);
+            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / opts.gamma).c_str(), is_selected))
+                opts.tf = (TransferFunction_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }

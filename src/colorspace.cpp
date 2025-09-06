@@ -476,29 +476,29 @@ static const char *s_transfer_function_names[TransferFunction_Count + 1] = {
     "DCI-P3",                  // TransferFunction_DCI_P3
     nullptr};
 
-float2 white_point(WhitePoint wp)
+float2 white_point(WhitePoint_ wp)
 {
     if (wp >= WhitePoint_Custom)
         return s_white_point_values[WhitePoint_Custom];
     return s_white_point_values[wp];
 }
 
-WhitePoint named_white_point(float2 wp)
+WhitePoint_ named_white_point(float2 wp)
 {
-    for (WhitePoint_ i = WhitePoint_FirstNamed; i <= WhitePoint_LastNamed; ++i)
+    for (WhitePoint i = WhitePoint_FirstNamed; i <= WhitePoint_LastNamed; ++i)
     {
         if (approx_equal(wp, s_white_point_values[i]))
-            return static_cast<WhitePoint>(i);
+            return static_cast<WhitePoint_>(i);
     }
     // Return custom for unrecognized
     return WhitePoint_Custom;
 }
 
-const char *white_point_name(WhitePoint wp) { return s_white_point_names[wp]; }
+const char *white_point_name(WhitePoint_ wp) { return s_white_point_names[wp]; }
 
 const char **white_point_names() { return s_white_point_names; }
 
-const char *color_gamut_name(const ColorGamut primaries)
+const char *color_gamut_name(const ColorGamut_ primaries)
 {
     if (primaries >= ColorGamut_Custom)
         return s_gamut_names[ColorGamut_Custom];
@@ -507,7 +507,7 @@ const char *color_gamut_name(const ColorGamut primaries)
 
 const char **color_gamut_names() { return s_gamut_names; }
 
-Chromaticities gamut_chromaticities(ColorGamut primaries)
+Chromaticities gamut_chromaticities(ColorGamut_ primaries)
 {
     if (primaries < 0 || primaries >= ColorGamut_Custom)
         throw std::invalid_argument("Unrecognized ColorGamut value");
@@ -543,28 +543,28 @@ int chromaticities_to_cicp(const Chromaticities &chr)
     return -1;
 }
 
-ColorGamut named_color_gamut(const Chromaticities &chr)
+ColorGamut_ named_color_gamut(const Chromaticities &chr)
 {
-    for (ColorGamut_ i = ColorGamut_FirstNamed; i <= ColorGamut_LastNamed; ++i)
+    for (ColorGamut i = ColorGamut_FirstNamed; i <= ColorGamut_LastNamed; ++i)
     {
-        if (approx_equal(chr, gamut_chromaticities(static_cast<ColorGamut>(i))))
-            return static_cast<ColorGamut>(i);
+        if (approx_equal(chr, gamut_chromaticities(static_cast<ColorGamut_>(i))))
+            return static_cast<ColorGamut_>(i);
     }
     // Return custom for unrecognized
     return ColorGamut_Custom;
 }
 
-string transfer_function_name(TransferFunction tf, float gamma)
+string transfer_function_name(TransferFunction_ tf, float gamma)
 {
     if (tf == TransferFunction_Gamma)
         return fmt::format("{} (={})", s_transfer_function_names[TransferFunction_Gamma], float(1.0 / gamma));
-    else if (tf < TransferFunction_Unknown || tf >= TransferFunction_Count)
-        return s_transfer_function_names[TransferFunction_Unknown];
+    else if (tf < TransferFunction_Unspecified || tf >= TransferFunction_Count)
+        return s_transfer_function_names[TransferFunction_Unspecified];
     else
         return s_transfer_function_names[tf];
 }
 
-TransferFunction transfer_function_from_cicp(int cicp, float *gamma)
+TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma)
 {
     switch (cicp)
     {
@@ -590,11 +590,11 @@ TransferFunction transfer_function_from_cicp(int cicp, float *gamma)
     case 16: return TransferFunction_BT2100_PQ;
     case 17: return TransferFunction_DCI_P3;
     case 18: return TransferFunction_BT2100_HLG;
-    default: return TransferFunction_Unknown;
+    default: return TransferFunction_Unspecified;
     }
 }
 
-int transfer_function_to_cicp(TransferFunction tf, float gamma)
+int transfer_function_to_cicp(TransferFunction_ tf, float gamma)
 {
     switch (tf)
     {
@@ -945,7 +945,7 @@ float2 daylight_to_xy(float T)
     return {xD, yD};
 }
 
-const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
+const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint_ wp)
 {
     // The D-series illuminants are defined in terms of three basis functions stored in s_CIE_D_bases
     // The weights are chosen based on the CCT.
@@ -1013,7 +1013,7 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint wp)
 
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra() { return s_CIE_xyz; }
 
-void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, float gamma,
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction_ tf, float gamma,
                int stride)
 {
     if (tf == TransferFunction_BT2100_HLG && num_channels == 3)
@@ -1045,7 +1045,7 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
     }
 }
 
-void from_linear(float *pixels, int3 size, TransferFunction tf, float gamma)
+void from_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma)
 {
     if (tf == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
     {

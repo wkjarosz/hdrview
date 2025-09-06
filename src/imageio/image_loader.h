@@ -24,8 +24,8 @@ struct ImageLoadOptions
     string channel_selector;
 
     //! Override any metadata in the file and decode pixel values using this transfer function
-    TransferFunction tf    = TransferFunction_Unknown;
-    float            gamma = 1.f;
+    TransferFunction_ tf    = TransferFunction_Unspecified;
+    float             gamma = 1.f;
 };
 
 const ImageLoadOptions &load_image_options();

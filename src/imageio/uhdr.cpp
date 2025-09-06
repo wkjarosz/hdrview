@@ -61,7 +61,7 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include <ultrahdr_api.h>
 
-uhdr_color_transfer_t uhdr_tf(TransferFunction tf)
+uhdr_color_transfer_t uhdr_tf(TransferFunction_ tf)
 {
     switch (tf)
     {
@@ -73,7 +73,7 @@ uhdr_color_transfer_t uhdr_tf(TransferFunction tf)
     }
 }
 
-bool uhdr_supported_tf(TransferFunction tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
+bool uhdr_supported_tf(TransferFunction_ tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
 
 bool is_uhdr_image(istream &is) noexcept
 {

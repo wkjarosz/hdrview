@@ -521,13 +521,13 @@ void Image::draw_colorspace()
                   {
                       bool modified   = false;
                       auto csn        = color_gamut_names();
-                      auto open_combo = ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut)color_space),
+                      auto open_combo = ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut_)color_space),
                                                           ImGuiComboFlags_HeightLargest);
                       if (open_combo)
                       {
-                          for (ColorGamut_ n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
+                          for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
                           {
-                              auto       cg          = (ColorGamut)n;
+                              auto       cg          = (ColorGamut_)n;
                               const bool is_selected = (color_space == n);
                               if (ImGui::Selectable(csn[n], is_selected))
                               {
@@ -561,9 +561,9 @@ void Image::draw_colorspace()
                                                           ImGuiComboFlags_HeightLargest);
                       if (open_combo)
                       {
-                          for (WhitePoint_ n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                          for (WhitePoint n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
                           {
-                              auto       wp          = (WhitePoint)n;
+                              auto       wp          = (WhitePoint_)n;
                               const bool is_selected = (white_point == n);
                               if (ImGui::Selectable(wpn[n], is_selected))
                               {

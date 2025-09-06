@@ -64,8 +64,8 @@ void Image::make_default_textures()
     s_white_texture  = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32, int2{1, 1},
                                                  Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
-    s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::Float32,
-                                                 int2{g_dither_matrix_w}, Texture::InterpolationMode::Nearest,
+    s_dither_texture = std::make_unique<Texture>(Texture::PixelFormat::R, Texture::ComponentFormat::UInt8,
+                                                 int2{dither_texture_width()}, Texture::InterpolationMode::Nearest,
                                                  Texture::InterpolationMode::Nearest, Texture::WrapMode::Repeat);
     s_chromaticity_texture = std::make_unique<Texture>(
         Texture::PixelFormat::RGBA, Texture::ComponentFormat::UInt8, int2{chr_w}, Texture::InterpolationMode::Bilinear,
@@ -145,7 +145,7 @@ void Image::make_default_textures()
 
     s_black_texture->upload((const uint8_t *)&s_black);
     s_white_texture->upload((const uint8_t *)&s_white);
-    s_dither_texture->upload((const uint8_t *)g_dither_matrix);
+    s_dither_texture->upload((const uint8_t *)dither_texture_data());
     s_chromaticity_texture->upload((const uint8_t *)g_chromaticity_data.data());
 }
 
@@ -773,7 +773,7 @@ void Image::compute_color_transform()
     if (chromaticities)
     {
         color_space = named_color_gamut(*chromaticities);
-        spdlog::debug("Detected color space: '{}'", color_gamut_name((ColorGamut)color_space));
+        spdlog::debug("Detected color space: '{}'", color_gamut_name((ColorGamut_)color_space));
 
         white_point = named_white_point(chr.white);
         spdlog::debug("Detected white point: '{}'", white_point_name(white_point));

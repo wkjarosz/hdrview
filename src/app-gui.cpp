@@ -169,14 +169,15 @@ void HDRViewApp::pixel_color_widget(const int2 &pixel, int &color_mode, int whic
                 ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
 
             set_item_width(c);
-            ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, NULL,
-                                NULL, fmt::format("{}: %d", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
+            ImGui::InputScalarN(fmt::format("##component {}", c).c_str(), ImGuiDataType_S32, &ldr_color[c], 1, nullptr,
+                                nullptr, fmt::format("{}: %d", channel_names[c]).c_str(), ImGuiInputTextFlags_ReadOnly);
         }
     }
     else if (color_mode == 3)
     {
         ImGui::SetNextItemWidth(IM_TRUNC(w_full));
-        ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, NULL, NULL, "#%08X", ImGuiInputTextFlags_ReadOnly);
+        ImGui::InputScalar("##hex color", ImGuiDataType_S32, &hex, nullptr, nullptr, "#%08X",
+                           ImGuiInputTextFlags_ReadOnly);
     }
     ImGui::EndGroup();
     ImGui::EndDisabled();
@@ -515,7 +516,7 @@ void HDRViewApp::draw_menus()
     }
 
     auto  a      = action("Show Log window");
-    float text_w = ImGui::CalcTextSize(a.icon.c_str(), NULL).x;
+    float text_w = ImGui::CalcTextSize(a.icon.c_str()).x;
 
     auto pos_x = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - 2.f * text_w -
                  3.5f * ImGui::GetStyle().ItemSpacing.x + 0.5f * ImGui::GetStyle().WindowPadding.x - 2.f;

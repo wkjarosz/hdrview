@@ -41,7 +41,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
     // ImGui::SetNextWindowSize(ImVec2{HelloImGui::EmSize(29), 0}, ImGuiCond_Always);
 
-    if (ImGui::BeginPopupModal("Save as...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Save as...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         open = false;
 
@@ -456,7 +456,7 @@ void HDRViewApp::draw_open_options_dialog(bool &open)
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x / 2, 5.f * HelloImGui::EmSize()),
                             ImGuiCond_Appearing, ImVec2(0.5f, 0.0f));
 
-    if (ImGui::BeginPopupModal("Image loading options...", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("Image loading options...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         open = false;
 

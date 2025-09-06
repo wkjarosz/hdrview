@@ -380,10 +380,10 @@ void UnderLine(ImColor c, float raise)
 void HyperlinkText(const char *label, const char *url)
 {
     ImGuiContext &g = *GImGui;
-    if (url == NULL)
+    if (!url)
         url = label;
     if (TextLink(label))
-        if (g.PlatformIO.Platform_OpenInShellFn != NULL)
+        if (g.PlatformIO.Platform_OpenInShellFn)
             g.PlatformIO.Platform_OpenInShellFn(&g, url);
     PushFont(GetIO().FontDefault, ImGui::GetStyle().FontSizeBase);
     SetItemTooltip("%s '%s'", ICON_MY_LINK, url);

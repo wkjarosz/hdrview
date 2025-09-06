@@ -71,8 +71,8 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
-    TransferFunction tf = desc.colorspace == QOI_LINEAR ? TransferFunction_Linear : TransferFunction_sRGB;
-    if (opts.tf != TransferFunction_Unknown)
+    TransferFunction_ tf = desc.colorspace == QOI_LINEAR ? TransferFunction_Linear : TransferFunction_sRGB;
+    if (opts.tf != TransferFunction_Unspecified)
     {
         spdlog::info("This is a {} QOI file, but we are forcing transfer function to {}.", transfer_function_name(tf),
                      transfer_function_name(opts.tf, 1.f / opts.gamma));

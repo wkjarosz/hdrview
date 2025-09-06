@@ -17,12 +17,12 @@
 
 struct PNGSaveOptions
 {
-    float            gain            = 1.f;
-    bool             dither          = true;
-    TransferFunction tf              = TransferFunction_sRGB;
-    float            gamma           = 1.0f;
-    int              data_type_index = 0;
-    bool             interlaced      = false;
+    float             gain            = 1.f;
+    bool              dither          = true;
+    TransferFunction_ tf              = TransferFunction_sRGB;
+    float             gamma           = 1.0f;
+    int               data_type_index = 0;
+    bool              interlaced      = false;
 };
 
 static PNGSaveOptions s_opts;
@@ -266,9 +266,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
     }
 
-    double           gamma       = 2.2; // default gamma
-    int              srgb_intent = 0;
-    TransferFunction tf          = TransferFunction_Unknown; // default
+    double            gamma       = 2.2; // default gamma
+    int               srgb_intent = 0;
+    TransferFunction_ tf          = TransferFunction_Unspecified; // default
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
@@ -325,7 +325,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         float gamma_f = gamma;
         tf            = transfer_function_from_cicp(transfer_function, &gamma_f);
         gamma         = gamma_f;
-        if (tf == TransferFunction_Unknown)
+        if (tf == TransferFunction_Unspecified)
             spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
     }
 #endif
@@ -515,7 +515,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                                       ? dequantize_narrow(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
                                       : dequantize_narrow(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
         // ICC profile linearization
-        if (opts.tf == TransferFunction_Unknown)
+        if (opts.tf == TransferFunction_Unspecified)
         {
             if (has_icc_profile && !has_cICP)
             {
@@ -548,7 +548,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 }
 
 void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
-                    bool sixteen_bit, TransferFunction tf, float gamma)
+                    bool sixteen_bit, TransferFunction_ tf, float gamma)
 {
     Timer                       timer;
     int                         w = 0, h = 0, n = 0;
@@ -683,8 +683,9 @@ PNGSaveOptions *png_parameters_gui()
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
             bool is_selected = (s_opts.tf == i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction)i, 1.f / s_opts.gamma).c_str(), is_selected))
-                s_opts.tf = (TransferFunction)i;
+            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                                  is_selected))
+                s_opts.tf = (TransferFunction_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
