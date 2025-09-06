@@ -534,7 +534,8 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
             static float  dither = 1.f;
             static Box1f  range{0.0f, 1.0f};
             static int    levels = 256;
-            static float4 c00{float3{1.f}, 1.f}, c10{float3{0.f}, 1.f}, c11{float3{0.f}, 1.f}, c01{float3{1.f}, 1.f};
+            static float4 c00{0.f, 0.f, 1.f, 1.f}, c10{1.f, 0.f, 0.f, 1.f}, c11{1.f, 1.f, 0.f, 1.f},
+                c01{0.f, 1.f, 0.f, 1.f};
             ImGui::SetNextWindowSize(ImVec2(350, 0), ImGuiCond_FirstUseEver);
             if (ImGui::BeginPopupModal("Create gradient image...", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             {

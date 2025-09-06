@@ -1,6 +1,7 @@
 #include "hello_imgui/hello_imgui_assets.h" // for AssetFileData, AssetExists
 #include "stb_image.h"
 #include <memory>
+#include <random>
 #include <spdlog/spdlog.h>
 #include <string>
 
@@ -30,7 +31,7 @@ void create_dither_texture()
         FreeAssetFileData(&asset);
 
         g_dither_texture = DataBuffer{
-            stbi_load_from_memory((const stbi_uc *)asset.data, asset.dataSize, &width, &height, &channels_in_file, 1),
+            stbi_load_from_memory((const stbi_uc *)source.data(), source.size(), &width, &height, &channels_in_file, 1),
             deleter};
         if (!g_dither_texture || width <= 0)
             throw std::runtime_error("Failed to load dither texture from memory");
@@ -65,6 +66,12 @@ void create_dither_texture()
         for (int y = 0; y < g_dither_texture_width; ++y)
             for (int x = 0; x < g_dither_texture_width; ++x)
                 g_dither_texture.get()[y * g_dither_texture_width + x] = bayer[y][x];
+        // static std::mt19937 rng(53);
+        // g_dither_texture_width = 256;
+        // for (int y = 0; y < g_dither_texture_width; ++y)
+        //     for (int x = 0; x < g_dither_texture_width; ++x)
+        //         g_dither_texture.get()[y * g_dither_texture_width + x] = std::uniform_int_distribution<uint8_t>(0,
+        //         255)(rng);
     }
 }
 
