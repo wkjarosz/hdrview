@@ -290,7 +290,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "implot")
 CPMAddPackage(
   NAME my_imgui_command_palette
   GITHUB_REPOSITORY wkjarosz/imgui-command-palette
-  GIT_TAG acb2a0491068749218f10bce296653ba0b94fe07
+  GIT_TAG 425e8c8be56970b3d2173cf1d764614c9c978345
   DOWNLOAD_ONLY YES
 )
 if(my_imgui_command_palette_ADDED)

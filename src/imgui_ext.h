@@ -71,6 +71,7 @@ struct Action
     bool                  needs_menu = false;
     bool                 *p_selected = nullptr;
     std::string           tooltip    = "";
+    int                   last_used  = 0; // incremented whenever the action is used
 };
 
 void MenuItem(const Action &a, bool inlude_name = true);
