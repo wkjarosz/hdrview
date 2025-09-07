@@ -33,6 +33,132 @@ namespace fs = std::filesystem;
 static ImageLoadOptions s_opts;
 static constexpr size_t g_max_recent = 15;
 
+struct LoaderEntry
+{
+    std::string                                                                                              name;
+    std::function<bool(std::istream &, std::string_view, const ImageLoadOptions &, std::vector<ImagePtr> &)> try_load;
+    bool enabled = true;
+};
+
+static std::vector<LoaderEntry> default_loaders()
+{
+    return {
+        {"openexr",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_exr_image(is, filename))
+             {
+                 out = load_exr_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#ifdef HDRVIEW_ENABLE_UHDR
+        {"libultrahdr",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &, std::vector<ImagePtr> &out)
+         {
+             if (is_uhdr_image(is))
+             {
+                 out = load_uhdr_image(is, filename);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#ifdef HDRVIEW_ENABLE_LIBJPEG
+        {"libjpg",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_jpg_image(is))
+             {
+                 out = load_jpg_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+        {"qoi",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &, std::vector<ImagePtr> &out)
+         {
+             if (is_qoi_image(is))
+             {
+                 out = load_qoi_image(is, filename);
+                 return true;
+             }
+             return false;
+         }},
+#ifdef HDRVIEW_ENABLE_JPEGXL
+        {"libjxl",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_jxl_image(is))
+             {
+                 out = load_jxl_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+        {"dds",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_dds_image(is))
+             {
+                 out = load_dds_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#ifdef HDRVIEW_ENABLE_HEIF
+        {"libheif",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_heif_image(is))
+             {
+                 out = load_heif_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+#ifdef HDRVIEW_ENABLE_LIBPNG
+        {"libpng",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_png_image(is))
+             {
+                 out = load_png_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+#endif
+        {"stb",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
+         {
+             if (is_stb_image(is))
+             {
+                 out = load_stb_image(is, filename, opts);
+                 return true;
+             }
+             return false;
+         }},
+        {"pfm",
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &, std::vector<ImagePtr> &out)
+         {
+             if (is_pfm_image(is))
+             {
+                 out = load_pfm_image(is, filename);
+                 return true;
+             }
+             return false;
+         }},
+    };
+}
+
+// Initialize g_loaders with the default order
+static std::vector<LoaderEntry> g_loaders = default_loaders();
+
 struct BackgroundImageLoader::PendingImages
 {
     string                  filename;
@@ -532,37 +658,121 @@ const ImageLoadOptions &load_image_options_gui()
         "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
         "would exclude channels named \"A\". Leave empty to load all parts.");
 
-    static bool force = false;
-    ImGui::BeginGroup();
-    ImGui::BeginDisabled(!force);
-    if (ImGui::BeginCombo("Force transfer function",
-                          s_opts.tf == TransferFunction_Unspecified
-                              ? "Use file's transfer function"
-                              : transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    auto tf_name = [](TransferFunction tf, float gamma)
     {
-        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+        if (tf == TransferFunction_Unspecified)
+            return string("Use file's transfer function");
+        else
+            return transfer_function_name((TransferFunction_)tf, 1.f / gamma);
+    };
+
+    if (ImGui::BeginCombo("Transfer function", tf_name(s_opts.tf, s_opts.gamma).c_str()))
+    {
+        for (TransferFunction i = TransferFunction_Unspecified; i < TransferFunction_Count; ++i)
         {
             bool is_selected = (s_opts.tf == (TransferFunction_)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
-                                  is_selected))
+            if (ImGui::Selectable(tf_name(i, s_opts.gamma).c_str(), is_selected))
                 s_opts.tf = (TransferFunction_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();
     }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (ImGui::Checkbox("##Force transfer function", &force))
-        s_opts.tf = force ? s_opts.tf : TransferFunction_Unspecified;
-    ImGui::BeginDisabled(!force);
+    ImGui::WrappedTooltip(
+        "HDRView can either try to determine the transfer function from the metadata in the file, or it can override "
+        "the metadata and assume pixel values in the image have been encoded using the transfer function you select "
+        "here.");
+    ImGui::BeginDisabled(s_opts.tf != TransferFunction_Unspecified);
     if (s_opts.tf == TransferFunction_Gamma)
         ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
     ImGui::EndDisabled();
 
-    ImGui::EndGroup();
-    ImGui::WrappedTooltip("Ignore any metadata in the file and assume pixel values in the image have been encoded "
-                          "using the chosen transfer function.");
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::BeginTable("FormatOrderTable", 3,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
+                              ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Sortable |
+                              ImGuiTableFlags_SortTristate))
+    {
+        ImGui::TableSetupScrollFreeze(0, 1); // Freeze the header row
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoSort, 0.0f, 0);
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_None, 0.0f, 1); // Only this column is sortable
+        ImGui::TableSetupColumn("Image loading format order (drag to reorder):", ImGuiTableColumnFlags_NoSort, 0.0f, 2);
+        ImGui::TableHeadersRow();
+
+        // Handle sorting
+        if (ImGuiTableSortSpecs *sort_specs = ImGui::TableGetSortSpecs())
+        {
+            if (sort_specs->SpecsDirty && sort_specs->SpecsCount > 0)
+            {
+                const ImGuiTableColumnSortSpecs &spec = sort_specs->Specs[0];
+                if (spec.ColumnIndex == 1) // Only sort if the "Enabled" column is selected
+                {
+                    std::stable_sort(g_loaders.begin(), g_loaders.end(),
+                                     [spec](const LoaderEntry &a, const LoaderEntry &b)
+                                     {
+                                         if (spec.SortDirection == ImGuiSortDirection_Ascending)
+                                             return a.enabled < b.enabled;
+                                         else if (spec.SortDirection == ImGuiSortDirection_Descending)
+                                             return a.enabled > b.enabled;
+                                         else
+                                             return false;
+                                     });
+                }
+                sort_specs->SpecsDirty = false;
+            }
+        }
+
+        for (int n = 0; n < (int)g_loaders.size(); n++)
+        {
+            ImGui::TableNextRow();
+
+            // Order number column
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("%d", n + 1);
+
+            // Enabled checkbox column
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushID(n);
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+            ImGui::Checkbox("##enabled", &g_loaders[n].enabled);
+            ImGui::PopStyleVar();
+
+            // Format name column
+            ImGui::TableSetColumnIndex(2);
+            if (!g_loaders[n].enabled)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::Selectable(g_loaders[n].name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+            if (!g_loaders[n].enabled)
+                ImGui::PopStyleColor();
+
+            // Drag-and-drop reordering
+            if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
+            {
+                ImGui::SetDragDropPayload("FORMAT_ORDER", &n, sizeof(int));
+                ImGui::Text("Move %s", g_loaders[n].name.c_str());
+                ImGui::EndDragDropSource();
+            }
+            if (ImGui::BeginDragDropTarget())
+            {
+                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("FORMAT_ORDER"))
+                {
+                    int src_idx = *(const int *)payload->Data;
+                    if (src_idx != n)
+                    {
+                        auto moved = std::move(g_loaders[src_idx]);
+                        g_loaders.erase(g_loaders.begin() + src_idx);
+                        g_loaders.insert(g_loaders.begin() + n, std::move(moved));
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -570,8 +780,8 @@ const ImageLoadOptions &load_image_options_gui()
 
     if (ImGui::Button("Reset options to defaults"))
     {
-        s_opts = ImageLoadOptions{};
-        force  = false;
+        s_opts    = ImageLoadOptions{};
+        g_loaders = default_loaders();
     }
 
     ImGui::SameLine();
@@ -596,58 +806,21 @@ vector<ImagePtr> load_image(istream &is, string_view filename, const ImageLoadOp
 
         vector<ImagePtr> images;
 
-        if (is_exr_image(is, filename))
+        bool recognized = false;
+        for (auto &loader : g_loaders)
         {
-            spdlog::info("Detected EXR image.");
-            images = load_exr_image(is, filename, opts);
+            if (!loader.enabled)
+                continue;
+            is.clear();
+            is.seekg(0, std::ios::beg);
+            if (loader.try_load(is, filename, opts, images) && !images.empty())
+            {
+                spdlog::info("Loaded using {} loader.", loader.name);
+                recognized = true;
+                break;
+            }
         }
-        else if (is_uhdr_image(is))
-        {
-            spdlog::info("Detected UltraHDR JPEG image. Loading via libultrahdr.");
-            images = load_uhdr_image(is, filename);
-        }
-        else if (is_jpg_image(is))
-        {
-            spdlog::info("Detected JPEG image. Loading via libjpeg.");
-            images = load_jpg_image(is, filename, opts);
-        }
-        else if (is_qoi_image(is))
-        {
-            spdlog::info("Detected QOI image.");
-            images = load_qoi_image(is, filename);
-        }
-        else if (is_jxl_image(is))
-        {
-            spdlog::info("Detected JPEG XL image. Loading via libjxl.");
-            images = load_jxl_image(is, filename, opts);
-        }
-        // is_heif_image falsely claims many dds files are heif files, and then fails, so we put dds earlier
-        else if (is_dds_image(is))
-        {
-            spdlog::info("Detected dds-compatible image. Loading via smalldds.");
-            images = load_dds_image(is, filename, opts);
-        }
-        else if (is_heif_image(is))
-        {
-            spdlog::info("Detected HEIF image.");
-            images = load_heif_image(is, filename, opts);
-        }
-        else if (is_png_image(is))
-        {
-            spdlog::info("Detected PNG image. Loading via libpng.");
-            images = load_png_image(is, filename, opts);
-        }
-        else if (is_stb_image(is))
-        {
-            spdlog::info("Detected stb-compatible image. Loading via stb_image.");
-            images = load_stb_image(is, filename, opts);
-        }
-        else if (is_pfm_image(is))
-        {
-            spdlog::info("Detected PFM image.");
-            images = load_pfm_image(is, filename, opts);
-        }
-        else
+        if (!recognized)
             throw invalid_argument("This doesn't seem to be a supported image file.");
 
         for (auto i : images)
