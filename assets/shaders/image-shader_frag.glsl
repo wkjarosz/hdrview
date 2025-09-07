@@ -135,7 +135,7 @@ vec4 choose_channel(vec4 rgba)
     case Channels_Red: return vec4(rgba.rrr, 1.0);
     case Channels_Green: return vec4(rgba.ggg, 1.0);
     case Channels_Blue: return vec4(rgba.bbb, 1.0);
-    case Channels_Alpha: return rgba;
+    case Channels_Alpha: return vec4(rgba.aaa, 1.0);
     case Channels_Y: return vec4(vec3(dot(rgba.rgb, primary_yw)), rgba.a);
     }
     return rgba;
@@ -203,8 +203,6 @@ void main()
         value.xyz = YC_to_RGB(value.xyz, primary_yw);
 
     value = primary_M_to_sRGB * value;
-    if (channel == Channels_Alpha)
-        value = vec4(value.aaa, 1.0);
 
     if (has_reference)
     {
@@ -217,13 +215,11 @@ void main()
             reference_val.xyz = YC_to_RGB(reference_val.xyz, secondary_yw);
 
         reference_val = secondary_M_to_sRGB * reference_val;
-        if (channel == Channels_Alpha)
-            reference_val = vec4(reference_val.aaa, 1.0);
 
         value = blend(value, reference_val);
     }
 
-    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0) + vec4(vec3(offset), 0.0);
+    vec4  foreground = choose_channel(value) * vec4(vec3(gain), 1.0) + vec4(vec3(offset*value.a), 0.0);
     vec4  tonemapped = tonemap(foreground) + background * (1.0 - foreground.a);
     bvec3 clipped    = greaterThan(foreground.rgb, clip_range.yyy);
     bvec3 crushed    = lessThan(foreground.rgb, clip_range.xxx);

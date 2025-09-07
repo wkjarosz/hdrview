@@ -103,7 +103,7 @@ float4 choose_channel(float4 rgba, int channel, const float3 yw)
         case Channels_Red:   return float4(rgba.rrr, 1.0);
         case Channels_Green: return float4(rgba.ggg, 1.0);
         case Channels_Blue:  return float4(rgba.bbb, 1.0);
-        case Channels_Alpha: return rgba;
+        case Channels_Alpha: return float4(rgba.aaa, 1.0);
         case Channels_Y:     return float4(float3(dot(rgba.rgb, yw)), rgba.a);
     }
     return rgba;
@@ -215,9 +215,6 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
 
     value = primary_M_to_sRGB * value;
 
-    if (channel == Channels_Alpha)
-        value = float4(value.aaa, 1.0);
-
     if (has_reference)
     {
         float4 reference_val = float4(sample_channel(secondary_0_texture, secondary_0_sampler, vert.secondary_uv, in_ref),
@@ -230,13 +227,10 @@ fragment float4 fragment_main(VertexOut vert [[stage_in]],
 
         reference_val = secondary_M_to_sRGB * reference_val;
 
-        if (channel == Channels_Alpha)
-            reference_val = float4(reference_val.aaa, 1.0);
-
         value = blend(value, reference_val, blend_mode);
     }
 
-    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0) + float4(float3(offset), 0.0);
+    float4 foreground = choose_channel(value, channel, primary_yw) * float4(float3(gain), 1.0) + float4(float3(offset * value.a), 0.0);
     float4 tonemapped = tonemap(foreground, tonemap_mode, gamma, colormap, colormap_sampler, reverse_colormap) + background*(1-foreground.a);
     bool3 clipped = draw_clip_warnings and foreground.rgb > clip_range.y;
     bool3 crushed = draw_clip_warnings and foreground.rgb < clip_range.x;
