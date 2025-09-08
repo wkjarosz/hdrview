@@ -11,6 +11,7 @@
 #include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "imgui_internal.h"
 #include "miniz.h"
 #include "timer.h"
 #include <fstream>
@@ -158,6 +159,10 @@ static std::vector<LoaderEntry> default_loaders()
 
 // Initialize g_loaders with the default order
 static std::vector<LoaderEntry> g_loaders = default_loaders();
+
+// Interactive drag-reorder state (preview while dragging)
+static int g_format_order_drag_src       = -1; // index of the item that began the drag
+static int g_format_order_preview_target = -1; // current hover target index while dragging
 
 struct BackgroundImageLoader::PendingImages
 {
@@ -744,32 +749,81 @@ const ImageLoadOptions &load_image_options_gui()
             ImGui::TableSetColumnIndex(2);
             if (!g_loaders[n].enabled)
                 ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-            ImGui::Selectable(g_loaders[n].name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick);
+
+            // Remove highlight for Selectable
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0, 0, 0, 0));        // No highlight when selected
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0, 0, 0, 0)); // No highlight on hover
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0, 0, 0, 0));  // No highlight when active
+
+            if (ImGui::Selectable(g_loaders[n].name.c_str(), false,
+                                  ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_NoAutoClosePopups))
+            {
+            }
+            ImGui::PopStyleColor(3);
             if (!g_loaders[n].enabled)
                 ImGui::PopStyleColor();
 
-            // Drag-and-drop reordering
+            // Drag-and-drop reordering (interactive preview)
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
             {
+                // mark the source index for the interactive preview/moves
+                g_format_order_drag_src = n;
                 ImGui::SetDragDropPayload("FORMAT_ORDER", &n, sizeof(int));
                 ImGui::Text("Move %s", g_loaders[n].name.c_str());
                 ImGui::EndDragDropSource();
             }
             if (ImGui::BeginDragDropTarget())
             {
-                if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("FORMAT_ORDER"))
+                // Accept previews (before delivery) so we can update ordering interactively while hovering.
+                if (const ImGuiPayload *payload =
+                        ImGui::AcceptDragDropPayload("FORMAT_ORDER", ImGuiDragDropFlags_AcceptBeforeDelivery))
                 {
-                    int src_idx = *(const int *)payload->Data;
-                    if (src_idx != n)
+                    // payload->Data contains the original src index (copied by ImGui at drag start).
+                    int payload_src = *(const int *)payload->Data;
+                    int src_idx     = (g_format_order_drag_src >= 0) ? g_format_order_drag_src : payload_src;
+
+                    // While hovering (preview), record the preview target index.
+                    if (payload->Preview)
                     {
-                        auto moved = std::move(g_loaders[src_idx]);
-                        g_loaders.erase(g_loaders.begin() + src_idx);
-                        g_loaders.insert(g_loaders.begin() + n, std::move(moved));
+                        if (src_idx != n)
+                            g_format_order_preview_target = n;
+                    }
+
+                    // On actual drop (delivery) perform the final move and clear drag state.
+                    if (payload->Delivery)
+                    {
+                        if (src_idx != n)
+                        {
+                            auto moved = std::move(g_loaders[src_idx]);
+                            g_loaders.erase(g_loaders.begin() + src_idx);
+                            g_loaders.insert(g_loaders.begin() + n, std::move(moved));
+                            ImGui::TableSetColumnSortDirection(0, ImGuiSortDirection_None, false);
+                        }
+                        g_format_order_drag_src       = -1;
+                        g_format_order_preview_target = -1;
                     }
                 }
                 ImGui::EndDragDropTarget();
             }
             ImGui::PopID();
+        }
+
+        // If we have an interactive preview target (user is dragging and hovering a row),
+        // apply the move now (outside the per-row loop) so we don't mutate the vector while iterating.
+        if (g_format_order_preview_target >= 0 && g_format_order_drag_src >= 0 &&
+            g_format_order_preview_target != g_format_order_drag_src)
+        {
+            int src = g_format_order_drag_src;
+            int dst = g_format_order_preview_target;
+            // Move element src -> dst
+            auto moved = std::move(g_loaders[src]);
+            g_loaders.erase(g_loaders.begin() + src);
+            g_loaders.insert(g_loaders.begin() + dst, std::move(moved));
+            // Update the drag source index to the element's new position so further hovers are consistent.
+            g_format_order_drag_src = dst;
+            // Keep preview target; it will be updated on subsequent hovers or cleared on drop.
+            g_format_order_preview_target = dst;
+            ImGui::TableSetColumnSortDirection(0, ImGuiSortDirection_None, false);
         }
         ImGui::EndTable();
     }
