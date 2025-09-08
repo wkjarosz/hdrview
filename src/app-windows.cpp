@@ -678,7 +678,7 @@ void HDRViewApp::draw_file_window()
 
                     // Display preview
                     ImGui::TextUnformatted("Move here");
-                    if (ImGui::BeginTable("ImageList", 2, table_flags))
+                    if (ImGui::BeginTable("MoveList", 2, table_flags))
                     {
                         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 1.25f * icon_width);
                         ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
