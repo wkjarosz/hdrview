@@ -10,6 +10,10 @@
 #include <fmt/core.h>
 #include <spdlog/spdlog.h>
 
+#ifdef ASSETS_LOCATION
+#include "hello_imgui/hello_imgui_assets.h"
+#endif
+
 #ifdef _WIN32
 #include <shellapi.h>
 #include <windows.h>
