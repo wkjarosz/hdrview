@@ -48,13 +48,25 @@ jobs:
               name: "macOS 14 Apple Silicon",
               os: macos-14,
               arch: "arm64",
-              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+            }
+          - {
+              name: "macOS 14 Apple Silicon (local packages)",
+              os: macos-14,
+              arch: "arm64",
+              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Intel",
               os: macos-15-intel,
               arch: "x86_64",
-              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+            }
+          - {
+              name: "macOS 15 Intel (local packages)",
+              os: macos-15-intel,
+              arch: "x86_64",
+              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
 
         buildtype: [Release, Debug]
@@ -62,11 +74,6 @@ jobs:
     steps:
       - name: Install dependencies
         run: brew install ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif libpng imath cli11 spdlog fmt aom libde265 x265
-
-      # - name: Remove system jpeg-xl (avoid header conflict)
-      #   if: ${{ matrix.config.name == 'macOS 15 Intel' }}
-      #   run: |
-      #     brew uninstall --ignore-dependencies jpeg-xl
 
       - uses: actions/checkout@v4
         with:
