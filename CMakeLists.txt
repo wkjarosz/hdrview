@@ -704,6 +704,7 @@ if(HDRVIEW_ENABLE_JPEGXL)
     message(STATUS "Building JPEG-XL library")
     # make the lcms2 target available for us to link against
     target_link_libraries(jxl PUBLIC lcms2)
+    include_directories(BEFORE ${PROJECT_SOURCE_DIR}/cpm_modules/jxl/ce62/lib)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
@@ -945,7 +946,9 @@ hello_imgui_add_app(
   ASSETS_LOCATION
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
-target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(
+  HDRView PRIVATE ${PROJECT_SOURCE_DIR}/cpm_modules/jxl/ce62/lib ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
 
