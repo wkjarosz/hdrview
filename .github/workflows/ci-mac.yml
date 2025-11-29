@@ -64,6 +64,10 @@ jobs:
         run: brew install ninja create-dmg dylibbundler
         # jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif libpng imath cli11 spdlog fmt aom libde265 x265
 
+      - name: Remove system jpeg-xl (avoid header conflict)
+        run: |
+          brew uninstall --ignore-dependencies jpeg-xl
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
