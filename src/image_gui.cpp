@@ -1079,7 +1079,7 @@ void Image::draw_channel_stats()
                 {
                 case 0: ImGui::TextFmt("{:f}", channel_stats[c]->summary.minimum * gain); break;
                 case 1: ImGui::TextFmt("{:f}", channel_stats[c]->summary.average * gain); break;
-                case 2: ImGui::TextFmt("{:f}", std::sqrt(channel_stats[c]->summary.variance) * gain); break;
+                case 2: ImGui::TextFmt("{:f}", channel_stats[c]->summary.stddev * gain); break;
                 case 3: ImGui::TextFmt("{:f}", channel_stats[c]->summary.maximum * gain); break;
                 case 4: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
                 case 5:

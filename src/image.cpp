@@ -345,12 +345,12 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
             summary.valid_pixels = total.valid_pixels;
             summary.average      = total.average;
 
-            // Compute final variance (using sample variance with Bessel's correction)
-            summary.variance = summary.valid_pixels > 1 ? float(total.M2 / (summary.valid_pixels - 1)) : 0.f;
+            // Compute final stddev (using sample variance with Bessel's correction)
+            summary.stddev = summary.valid_pixels > 1 ? float(std::sqrt(total.M2 / (summary.valid_pixels - 1))) : 0.f;
         }
 
-        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}\nVariance: {}", timer.lap(),
-                      summary.minimum, summary.average, summary.maximum, summary.variance);
+        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}\nStddev: {}", timer.lap(),
+                      summary.minimum, summary.average, summary.maximum, summary.stddev);
         //
 
         //
