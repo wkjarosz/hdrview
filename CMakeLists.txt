@@ -20,8 +20,19 @@ option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 set(CMAKE_INCLUDE_DIRECTORIES_PROJECT_BEFORE ON)
 
 option(HDRVIEW_IGNORE_BREW_PORTS "Ignore Homebrew and MacPorts directories" OFF)
-if(HDRVIEW_IGNORE_BREW_PORTS)
-  set(CMAKE_IGNORE_PATH "/usr/local;/opt/local;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin")
+
+# Treat CPM_USE_LOCAL_PACKAGES = OFF as a signal to ignore Homebrew/MacPorts prefixes.
+if(DEFINED CPM_USE_LOCAL_PACKAGES)
+  set(_CPM_USE_LOCAL_PACKAGES_BOOL ${CPM_USE_LOCAL_PACKAGES})
+else()
+  set(_CPM_USE_LOCAL_PACKAGES_BOOL OFF)
+endif()
+
+if(HDRVIEW_IGNORE_BREW_PORTS OR NOT _CPM_USE_LOCAL_PACKAGES_BOOL)
+  set(CMAKE_IGNORE_PREFIX_PATH
+      "/usr/local;/opt/local;/opt/homebrew;/opt/homebrew/lib;/opt/homebrew/include;/opt/local/bin"
+  )
+  message(STATUS "HDRView: ignoring Homebrew/MacPorts prefixes: ${CMAKE_IGNORE_PREFIX_PATH}")
 endif()
 
 # Set the framework search order to last, so that we can find libraries in the system directories first. This is to
@@ -327,7 +338,7 @@ list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
   NAME spdlog
-  VERSION 1.11.0 # we set the minimum version to the one included in ubuntu 24.04
+  VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
           "SPDLOG_FMT_EXTERNAL NO" # use the bundled fmt library to avoid version conflicts
