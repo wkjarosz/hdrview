@@ -62,6 +62,7 @@ if(HDRVIEW_IGNORE_BREW_PORTS)
     "/opt/local"
     "/opt/homebrew"
     "/opt/homebrew/Cellar"
+    "/opt/homebrew/Cellar/harfbuzz"
     "/opt/homebrew/lib"
     "/opt/homebrew/include"
     "/opt/local/bin"
