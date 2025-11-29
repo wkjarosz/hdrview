@@ -428,7 +428,7 @@ if(HDRVIEW_ENABLE_LIBPNG)
     # set_target_properties(png_shared PROPERTIES POSITION_INDEPENDENT_CODE TRUE) set_target_properties(png_static
     # PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
     list(APPEND HDRVIEW_DEPENDENCIES "png_static")
-  elseif(PNG_FOUND)
+  elseif(TARGET PNG::PNG)
     message(STATUS "Using system-installed libpng library")
     list(APPEND HDRVIEW_DEPENDENCIES "PNG::PNG")
   else()
