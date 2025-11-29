@@ -4,7 +4,7 @@
 #include "opengl_check.h"
 #include "renderpass.h"
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 #include <stdexcept>
 
 RenderPass::RenderPass(bool write_depth, bool clear) :

@@ -8,7 +8,7 @@
 #include "renderpass.h"
 #include "shader.h"
 
-#include <spdlog/fmt/fmt.h>
+#include <fmt/core.h>
 
 using HelloImGui::GetMetalGlobals;
 

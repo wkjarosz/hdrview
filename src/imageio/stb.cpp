@@ -9,8 +9,8 @@
 #include "timer.h"
 #include <cstdint>
 #include <cstring>
+#include <fmt/core.h>
 #include <iostream>
-#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
 #include "app.h"

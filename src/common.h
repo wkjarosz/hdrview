@@ -19,9 +19,9 @@
 #include <utility>
 #include <vector>
 
-#include <spdlog/fmt/bundled/color.h>
-#include <spdlog/fmt/bundled/ranges.h>
-#include <spdlog/fmt/fmt.h> // Use spdlog's bundled fmt to avoid version conflicts
+#include <fmt/color.h>
+#include <fmt/core.h>
+#include <fmt/ranges.h>
 #include <spdlog/mdc.h>
 #include <spdlog/spdlog.h>
 

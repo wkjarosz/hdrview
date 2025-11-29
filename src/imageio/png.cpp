@@ -51,8 +51,8 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #else
 
 #include <cstring>
+#include <fmt/core.h>
 #include <png.h>
-#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 #include <vector>
 

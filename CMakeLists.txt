@@ -321,11 +321,22 @@ endif()
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
 CPMAddPackage(
+  NAME fmt
+  GITHUB_REPOSITORY fmtlib/fmt
+  GIT_TAG 9.1.0
+  OPTIONS "FMT_INSTALL OFF" "FMT_HEADER_ONLY OFF"
+)
+if(fmt_ADDED)
+  message(STATUS "fmt library added")
+endif()
+list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
+
+CPMAddPackage(
   NAME spdlog
   VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.16.0.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          "SPDLOG_FMT_EXTERNAL NO" # use the bundled fmt library to avoid version conflicts
+          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
 )
 if(spdlog_ADDED)
   message(STATUS "spdlog library added")
@@ -663,7 +674,7 @@ if(HDRVIEW_ENABLE_UHDR)
     message(FATAL_ERROR "uhdr library not found. Please install it or turn off HDRVIEW_ENABLE_UHDR.")
   endif()
   message(STATUS "setting uhdr dependent on ${JPEGTURBO_TARGET_NAME}")
-  
+
   if (TARGET core)
     add_dependencies(core JPEG::JPEG)
   endif()
