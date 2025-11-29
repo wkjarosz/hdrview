@@ -54,7 +54,7 @@ jobs:
               name: "macOS 15 Intel",
               os: macos-15-intel,
               arch: "x86_64",
-              flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON -DHDRVIEW_IGNORE_BREW_PORTS=ON",
+              flags: "-DCMAKE_IGNORE_PATH=\"$(find /opt/homebrew/Cellar/harfbuzz/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/harfbuzz/*/lib -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/include -type d 2>/dev/null | tr '\n' ';')$(find /opt/homebrew/Cellar/brotli/*/lib -type d 2>/dev/null | tr '\n' ';')/opt/homebrew/lib;/opt/homebrew/include;/opt/homebrew/Cellar\" -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON -DHDRVIEW_IGNORE_BREW_PORTS=ON",
             }
 
         buildtype: [Release, Debug]
