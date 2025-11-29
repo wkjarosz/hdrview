@@ -459,12 +459,15 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     std::vector<ImagePtr> images;
     for (png_uint_32 frame_idx = 0; frame_idx < num_frames; ++frame_idx)
     {
+#ifdef PNG_APNG_SUPPORTED
         if (frame_idx > 0)
             // Advance to next frame
             png_read_frame_head(png_ptr, info_ptr.get());
+#endif
 
         png_uint_32 frame_width = width, frame_height = height;
         png_uint_32 frame_x_off = 0, frame_y_off = 0;
+#ifdef PNG_APNG_SUPPORTED
         if (animation)
         {
             png_uint_16 delay_num = 0, delay_den = 0;
@@ -473,6 +476,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             png_get_next_frame_fcTL(png_ptr, info_ptr.get(), &frame_width, &frame_height, &frame_x_off, &frame_y_off,
                                     &delay_num, &delay_den, &dispose_op, &blend_op);
         }
+#endif
 
         int3 size{int(frame_width), int(frame_height), channels};
         auto image                     = make_shared<Image>(size.xy(), size.z);

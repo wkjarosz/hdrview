@@ -54,19 +54,19 @@ jobs:
               name: "macOS 14 Apple Silicon (local packages)",
               os: macos-14,
               arch: "arm64",
-              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Intel",
               os: macos-15-intel,
               arch: "x86_64",
-              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Intel (local packages)",
               os: macos-15-intel,
               arch: "x86_64",
-              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
+              flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=OFF -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
 
         buildtype: [Release, Debug]
