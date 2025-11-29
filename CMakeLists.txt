@@ -677,12 +677,13 @@ if(HDRVIEW_ENABLE_UHDR)
 
   if (TARGET core)
     add_dependencies(core JPEG::JPEG)
+    list(APPEND HDRVIEW_DEPENDENCIES "core")
   endif()
   if (TARGET uhdr)
     add_dependencies(uhdr JPEG::JPEG)
+    list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   endif()
 
-  list(APPEND HDRVIEW_DEPENDENCIES "uhdr")
   list(APPEND HDRVIEW_DEFINITIONS HDRVIEW_ENABLE_UHDR)
 endif()
 # cmake-format: on
