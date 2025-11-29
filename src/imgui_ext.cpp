@@ -67,7 +67,7 @@ SpdLogWindow &GlobalSpdLogWindow()
 }
 
 SpdLogWindow::SpdLogWindow(int max_items) :
-    m_filter_sink(make_shared<spdlog::sinks::dup_filter_sink_mt>(std::chrono::seconds(5), spdlog::level::info)),
+    m_filter_sink(make_shared<spdlog::sinks::dup_filter_sink_mt>(std::chrono::seconds(5))),
     m_ringbuffer_sink(make_shared<spdlog::sinks::ringbuffer_color_sink_mt>(max_items)),
     m_level_colors({white, cyan, green, yellow, red, magenta, gray})
 {
