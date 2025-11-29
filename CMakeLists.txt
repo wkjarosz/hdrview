@@ -61,8 +61,7 @@ elseif(APPLE)
     GLOB_RECURSE ADDITIONAL_RESOURCE_FILES
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/Roboto/**.* ${CMAKE_CURRENT_SOURCE_DIR}/assets/app_settings/apple/**.*
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.metal
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders/*.metal ${CMAKE_CURRENT_SOURCE_DIR}/assets/*.png
   )
   list(APPEND MY_RESOURCE_FILES ${ADDITIONAL_RESOURCE_FILES})
 elseif(WIN32)
@@ -324,18 +323,12 @@ if(linalg_ADDED)
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES "linalg")
 
-CPMAddPackage("gh:fmtlib/fmt#9.1.0")
-if(fmt_ADDED)
-  message(STATUS "fmt library added")
-endif()
-# list(APPEND HDRVIEW_DEPENDENCIES "fmt::fmt")
-
 CPMAddPackage(
   NAME spdlog
   VERSION 1.12.0 # we set the minimum version to the one included in ubuntu 24.04
   URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.zip
   OPTIONS "SPDLOG_INSTALL NO" # don't create an installable target
-          "SPDLOG_FMT_EXTERNAL YES" # use the fmt library we added above instead of the bundled one
+          "SPDLOG_FMT_EXTERNAL NO" # use the bundled fmt library to avoid version conflicts
 )
 if(spdlog_ADDED)
   message(STATUS "spdlog library added")

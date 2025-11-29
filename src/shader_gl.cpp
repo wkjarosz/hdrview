@@ -12,7 +12,7 @@
 #define GL_HALF_FLOAT 0x140B
 #endif
 
-#include <fmt/core.h>
+#include <spdlog/fmt/fmt.h>
 
 using std::string;
 using std::string_view;

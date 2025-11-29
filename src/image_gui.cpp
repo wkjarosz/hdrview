@@ -1060,7 +1060,8 @@ void Image::draw_channel_stats()
         ImGui::TableHeadersRow();
         ImGui::PopFont();
 
-        const char   *stat_names[] = {"Minimum", "Average", "Maximum", "# of NaNs", "# of Infs"}; //, "# valid pixels"};
+        const char   *stat_names[] = {"Minimum", "Average",   "Std. Dev.",
+                                      "Maximum", "# of NaNs", "# of Infs"}; //, "# valid pixels"};
         constexpr int NUM_STATS    = sizeof(stat_names) / sizeof(stat_names[0]);
         for (int s = 0; s < NUM_STATS; ++s)
         {
@@ -1078,9 +1079,10 @@ void Image::draw_channel_stats()
                 {
                 case 0: ImGui::TextFmt("{:f}", channel_stats[c]->summary.minimum * gain); break;
                 case 1: ImGui::TextFmt("{:f}", channel_stats[c]->summary.average * gain); break;
-                case 2: ImGui::TextFmt("{:f}", channel_stats[c]->summary.maximum * gain); break;
-                case 3: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
-                case 4:
+                case 2: ImGui::TextFmt("{:f}", std::sqrt(channel_stats[c]->summary.variance) * gain); break;
+                case 3: ImGui::TextFmt("{:f}", channel_stats[c]->summary.maximum * gain); break;
+                case 4: ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.nan_pixels); break;
+                case 5:
                 default:
                     ImGui::TextFmt("{: > 6d}", channel_stats[c]->summary.inf_pixels);
                     break;

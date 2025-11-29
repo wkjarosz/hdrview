@@ -259,13 +259,20 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         };
 
         //
-        // compute pixel summary statistics
+        // compute pixel summary statistics using Welford's online algorithm
+        // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
 
         Timer timer;
         {
+            // Local struct to hold partial statistics for each thread
+            struct Partial : Summary
+            {
+                double M2 = 0.0; // Sum of squared differences from mean (for Welford's algorithm)
+            };
+
             size_t               block_size  = 1024 * 1024;
             const size_t         num_threads = estimate_threads(croi.volume(), block_size, *ThreadPool::singleton());
-            std::vector<Summary> partials(max<size_t>(1, num_threads));
+            std::vector<Partial> partials(max<size_t>(1, num_threads));
 
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
@@ -273,7 +280,7 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 blocked_range<int>(0, croi.volume(), (int)block_size),
                 [&partials, &canceled, &pixel_value](int begin, int end, int unit_index, int)
                 {
-                    Summary partial = partials[unit_index]; //< compute over local symbols.
+                    Partial partial = partials[unit_index]; //< compute over local symbols.
 
                     for (int i = begin; i != end; ++i)
                     {
@@ -291,7 +298,12 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                             ++partial.valid_pixels;
                             partial.maximum = std::max(partial.maximum, val);
                             partial.minimum = std::min(partial.minimum, val);
-                            partial.average += val;
+
+                            // Welford's online algorithm for mean and variance
+                            double delta = val - partial.average;
+                            partial.average += delta / partial.valid_pixels;
+                            double delta2 = val - partial.average;
+                            partial.M2 += delta * delta2;
                         }
                     }
 
@@ -299,22 +311,46 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
                 },
                 (int)num_threads);
 
-            // final reduction from partial results
-            double accum = 0.f;
-            for (auto &p : partials)
+            // final reduction from partial results using Chan's parallel variance algorithm
+            Partial total;
+            for (const auto &p : partials)
             {
                 summary.minimum = std::min(p.minimum, summary.minimum);
                 summary.maximum = std::max(p.maximum, summary.maximum);
                 summary.nan_pixels += p.nan_pixels;
                 summary.inf_pixels += p.inf_pixels;
-                summary.valid_pixels += p.valid_pixels;
-                accum += p.average;
+
+                if (p.valid_pixels > 0)
+                {
+                    // Combine this partial with the running total using Chan's algorithm
+                    int    n_A    = total.valid_pixels;
+                    double mean_A = total.average;
+                    double M2_A   = total.M2;
+                    int    n_B    = p.valid_pixels;
+                    double mean_B = p.average;
+                    double M2_B   = p.M2;
+
+                    int    n_AB  = n_A + n_B;
+                    double delta = mean_B - mean_A;
+                    // Use numerically stable mean formula (avoids scaling down errors in delta)
+                    double mean_AB = (n_A * mean_A + n_B * mean_B) / n_AB;
+                    double M2_AB   = M2_A + M2_B + delta * delta * n_A * n_B / n_AB;
+
+                    total.valid_pixels = n_AB;
+                    total.average      = mean_AB;
+                    total.M2           = M2_AB;
+                }
             }
-            summary.average = summary.valid_pixels ? float(accum / summary.valid_pixels) : 0.f;
+
+            summary.valid_pixels = total.valid_pixels;
+            summary.average      = total.average;
+
+            // Compute final variance (using sample variance with Bessel's correction)
+            summary.variance = summary.valid_pixels > 1 ? float(total.M2 / (summary.valid_pixels - 1)) : 0.f;
         }
 
-        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}", timer.lap(), summary.minimum,
-                      summary.average, summary.maximum);
+        spdlog::trace("Summary stats computed in {} ms:\nMin: {}\nMean: {}\nMax: {}\nVariance: {}", timer.lap(),
+                      summary.minimum, summary.average, summary.maximum, summary.variance);
         //
 
         //

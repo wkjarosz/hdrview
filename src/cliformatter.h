@@ -6,8 +6,8 @@
 
 #pragma once
 #include <CLI/CLI.hpp>
-#include <fmt/color.h>
-#include <fmt/ranges.h>
+#include <spdlog/fmt/bundled/color.h>
+#include <spdlog/fmt/bundled/ranges.h>
 
 class ColorFormatter : public CLI::Formatter
 {

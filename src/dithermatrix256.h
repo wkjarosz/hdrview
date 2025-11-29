@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <cmath>
+#include <cstdint>
 
 void           create_dither_texture();
 int            dither_texture_width();

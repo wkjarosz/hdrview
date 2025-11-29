@@ -13,9 +13,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <fmt/core.h>
 #include <half.h>
 #include <iostream>
+#include <spdlog/fmt/fmt.h>
 #include <stdexcept>
 
 using namespace std;
@@ -107,8 +107,8 @@ bool is_uhdr_image(istream &is) noexcept
                 throw invalid_argument(fmt::format("UltraHDR: Error decoding image: {}", status.detail));
         };
 
-        using Decoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
-        auto decoder  = Decoder{uhdr_create_decoder(), uhdr_release_decoder};
+        using Decoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
+        auto decoder  = Decoder{uhdr_create_decoder(), &uhdr_release_decoder};
 
         uhdr_compressed_image_t compressed_image{
             data.get(),          /**< Pointer to a block of data to decode */
@@ -142,8 +142,8 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     if (!is.good())
         throw invalid_argument("invalid file stream.");
 
-    using Decoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
-    auto decoder  = Decoder{uhdr_create_decoder(), uhdr_release_decoder};
+    using Decoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_decoder)>;
+    auto decoder  = Decoder{uhdr_create_decoder(), &uhdr_release_decoder};
 
     auto throw_if_error = [](uhdr_error_info_t status)
     {
@@ -350,8 +350,8 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
             throw invalid_argument(fmt::format("UltraHDR: Error encoding image: {}", status.detail));
     };
 
-    using Encoder = unique_ptr<uhdr_codec_private_t, void (&)(uhdr_codec_private_t *)>;
-    auto encoder  = Encoder{uhdr_create_encoder(), uhdr_release_encoder};
+    using Encoder = unique_ptr<uhdr_codec_private_t, decltype(&uhdr_release_encoder)>;
+    auto encoder  = Encoder{uhdr_create_encoder(), &uhdr_release_encoder};
 
     uhdr_raw_image_t raw_image{
         UHDR_IMG_FMT_64bppRGBAHalfFloat, /**< Image Format */

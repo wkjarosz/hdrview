@@ -1,0 +1,123 @@
+{
+  "version": 8,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Auto (Ninja on Linux/macOS and MSBuild on Windows)",
+      "description": "Auto-select generator per-host (inherits platform generator presets).",
+      "inherits": ["ninja-multi", "msvc"],
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo"
+      }
+    },
+    {
+      "name": "ninja-multi",
+      "displayName": "Ninja Multi-Config (Linux/macOS)",
+      "description": "Multi-configuration Ninja generator. Used on non-Windows hosts.",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      },
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "msvc",
+      "displayName": "Visual Studio (Windows)",
+      "description": "Visual Studio generator for MSVC on Windows. Used on Windows hosts.",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;MinSizeRel;RelWithDebInfo"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "ninja-debug-single",
+      "displayName": "Ninja single-config (Debug) [hidden]",
+      "hidden": true,
+      "description": "Fallback single-config Ninja preset for Debug builds (hidden).",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ninja-release-single",
+      "displayName": "Ninja single-config (Release) [hidden]",
+      "hidden": true,
+      "description": "Fallback single-config Ninja preset for Release builds (hidden).",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ninja-minsizerel-single",
+      "displayName": "Ninja single-config (MinSizeRel) [hidden]",
+      "hidden": true,
+      "description": "Fallback single-config Ninja preset for MinSizeRel builds (hidden).",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel"
+      }
+    },
+    {
+      "name": "ninja-relwithdeb-single",
+      "displayName": "Ninja single-config (RelWithDebInfo) [hidden]",
+      "hidden": true,
+      "description": "Fallback single-config Ninja preset for RelWithDebInfo builds (hidden).",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Debug",
+      "displayName": "Build Debug",
+      "configurePreset": "default",
+      "configuration": "Debug",
+      "jobs": 0
+    },
+    {
+      "name": "Release",
+      "displayName": "Build Release",
+      "configurePreset": "default",
+      "configuration": "Release",
+      "jobs": 0
+    },
+    {
+      "name": "MinSizeRel",
+      "displayName": "Build MinSizeRel",
+      "configurePreset": "default",
+      "configuration": "MinSizeRel",
+      "jobs": 0
+    },
+    {
+      "name": "RelWithDebInfo",
+      "displayName": "Build RelWithDebInfo",
+      "configurePreset": "default",
+      "configuration": "RelWithDebInfo",
+      "jobs": 0
+    }
+  ],
+  "testPresets": [],
+  "packagePresets": [],
+  "workflowPresets": []
+}
