@@ -20,7 +20,6 @@ jobs:
       fail-fast: false
       matrix:
         config:
-          # macos-13 is an intel x86_64 runner
           # macos-14 is an arm64 runner
           #
           # Disabling universal build until libultrahdr fixes its cross-compilation
@@ -38,7 +37,7 @@ jobs:
             }
           - {
               name: "macOS Intel",
-              os: macos-13,
+              os: macos-15-intel,
               arch: "x86_64",
               flags: "-DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
