@@ -19,59 +19,6 @@ option(HDRVIEW_PORTABLE_INSTALL "Install in a portable way" ON)
 
 set(CMAKE_INCLUDE_DIRECTORIES_PROJECT_BEFORE ON)
 
-# Decide whether the user explicitly set HDRVIEW_IGNORE_BREW_PORTS before we define the option. If the user passed
-# -DHDRVIEW_IGNORE_BREW_PORTS=... at configure time then it will be DEFINED here.
-if(DEFINED HDRVIEW_IGNORE_BREW_PORTS)
-  set(_HDRVIEW_IGNORE_BREW_PORTS_USER_SET ON)
-else()
-  set(_HDRVIEW_IGNORE_BREW_PORTS_USER_SET OFF)
-endif()
-
-option(HDRVIEW_IGNORE_BREW_PORTS "Ignore Homebrew and MacPorts directories" OFF)
-
-# Treat CPM_USE_LOCAL_PACKAGES = OFF as a signal to ignore Homebrew/MacPorts prefixes.
-if(DEFINED CPM_USE_LOCAL_PACKAGES)
-  set(_CPM_USE_LOCAL_PACKAGES_BOOL ${CPM_USE_LOCAL_PACKAGES})
-else()
-  set(_CPM_USE_LOCAL_PACKAGES_BOOL OFF)
-endif()
-
-# If the user did NOT explicitly set HDRVIEW_IGNORE_BREW_PORTS, default it based on CPM_USE_LOCAL_PACKAGES: - when
-# CPM_USE_LOCAL_PACKAGES is OFF (or undefined) we want to ignore Homebrew/MacPorts (i.e. HDRVIEW_IGNORE_BREW_PORTS=ON) -
-# when CPM_USE_LOCAL_PACKAGES is ON we do not ignore them (i.e. HDRVIEW_IGNORE_BREW_PORTS=OFF)
-if(NOT _HDRVIEW_IGNORE_BREW_PORTS_USER_SET)
-  if(_CPM_USE_LOCAL_PACKAGES_BOOL)
-    set(HDRVIEW_IGNORE_BREW_PORTS
-        OFF
-        CACHE BOOL "Ignore Homebrew and MacPorts directories" FORCE
-    )
-    message(STATUS "not ignoring")
-  else()
-    set(HDRVIEW_IGNORE_BREW_PORTS
-        ON
-        CACHE BOOL "Ignore Homebrew and MacPorts directories" FORCE
-    )
-  endif()
-endif()
-
-if(HDRVIEW_IGNORE_BREW_PORTS)
-  list(
-    APPEND
-    CMAKE_IGNORE_PREFIX_PATH
-    "/usr/local"
-    "/opt/local"
-    "/opt/homebrew"
-    "/opt/homebrew/Cellar"
-    "/opt/homebrew/Cellar/harfbuzz"
-    "/opt/homebrew/lib"
-    "/opt/homebrew/include"
-    "/opt/local/bin"
-  )
-  message(STATUS "HDRView: ignoring Homebrew/MacPorts prefixes: ${CMAKE_IGNORE_PREFIX_PATH}")
-else()
-  message(STATUS "HDRView: not ignoring Homebrew/MacPorts prefixes: ${CMAKE_IGNORE_PREFIX_PATH}")
-endif()
-
 # Set the framework search order to last, so that we can find libraries in the system directories first. This is to
 # prevent CMAKE from finding old versions of headers, e.g. libjpeg in /Library/Frameworks/Mono.framework/Headers, and
 # first check other install locations like brew.
