@@ -5,7 +5,7 @@ includedir=${prefix}/include
 
 Name: libjxl_cms
 Description: CMS support library for libjxl
-Version: 0.12.0
+Version: 0.11.1
 Requires: 
 Libs: -L${libdir} -ljxl_cms 
 Libs.private: -lm -lc++
