@@ -47,37 +47,37 @@ jobs:
           - {
               name: "macOS 14 Apple Silicon",
               os: macos-14,
-              arch: "arm64",
+              arch: "arm64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 14 Apple Silicon (local packages)",
               os: macos-14,
-              arch: "arm64",
+              arch: "arm64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Apple Silicon",
               os: macos-15,
-              arch: "arm64",
+              arch: "arm64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Apple Silicon (local packages)",
               os: macos-15,
-              arch: "arm64",
+              arch: "arm64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Intel",
               os: macos-15-intel,
-              arch: "x86_64",
+              arch: "x86_64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
               name: "macOS 15 Intel (local packages)",
               os: macos-15-intel,
-              arch: "x86_64",
+              arch: "x86_64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
 
