@@ -164,7 +164,6 @@ static auto colorspace_name(heif_colorspace cs)
     case heif_colorspace_YCbCr: return "YCbCr";
     case heif_colorspace_RGB: return "RGB";
     case heif_colorspace_monochrome: return "Monochrome";
-    case heif_colorspace_nonvisual: return "Nonvisual";
     case heif_colorspace_undefined: return "Undefined";
     default: return "Unknown";
     }
@@ -431,7 +430,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
             // the code below works for both interleaved (RGBA) and planar (YA) channel layouts
             for (int p = 0; p < num_planes; ++p)
             {
-                size_t         bytes_per_line = 0;
+                int            bytes_per_line = 0;
                 const uint8_t *pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
                 int            bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
                 int            bpc            = himage.get_bits_per_pixel_range(out_planes[p]);
@@ -450,8 +449,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 bool          is_16bit = bpp_storage == cpp * 16;
                 for (int y = 0; y < size.y; ++y)
                 {
-                    auto row8  = reinterpret_cast<const uint8_t *>(pixels + y * bytes_per_line);
-                    auto row16 = reinterpret_cast<const uint16_t *>(pixels + y * bytes_per_line);
+                    auto row8  = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
+                    auto row16 = reinterpret_cast<const uint16_t *>(pixels + y * (size_t)bytes_per_line);
                     for (int x = 0; x < size.x; ++x)
                         for (int c = 0; c < cpp; ++c)
                             float_pixels[(y * size.x + x) * cpp + c] =
@@ -584,12 +583,12 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         heif_img.create(w, h, colorspace, chroma);
         heif_img.add_plane(heif_channel_interleaved, w, h, 8);
 
-        size_t   stride;
+        int      stride;
         uint8_t *plane = heif_img.get_plane(heif_channel_interleaved, &stride);
 
         // Copy pixel data
         size_t row_bytes = w * n * sizeof(uint8_t);
-        for (int y = 0; y < h; ++y) { memcpy(plane + y * stride, pixels8.get() + y * w * n, row_bytes); }
+        for (int y = 0; y < h; ++y) { memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes); }
 
         // Set color profile (nclx)
         heif::ColorProfile_nclx nclx;
