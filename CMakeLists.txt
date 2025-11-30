@@ -693,7 +693,9 @@ if(HDRVIEW_ENABLE_JPEGXL)
   CPMAddPackage(
     NAME JXL
     GITHUB_REPOSITORY libjxl/libjxl
-    GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
+    VERSION 0.11.1
+    URL https://github.com/libjxl/libjxl/archive/refs/tags/v0.11.1.zip
+    # GIT_TAG 6e83d97e73c68ff7d3374f939971bab617be4c3c
     OPTIONS "BUILD_SHARED_LIBS OFF"
             "BUILD_TESTING OFF"
             "JPEGXL_ENABLE_FUZZERS OFF"
@@ -718,7 +720,6 @@ if(HDRVIEW_ENABLE_JPEGXL)
     message(STATUS "Building JPEG-XL library")
     # make the lcms2 target available for us to link against
     target_link_libraries(jxl PUBLIC lcms2)
-    include_directories(BEFORE ${PROJECT_SOURCE_DIR}/cpm_modules/jxl/ce62/lib)
   elseif(TARGET jxl)
     message(STATUS "Using system-installed JPEG-XL library")
   else()
@@ -960,9 +961,7 @@ hello_imgui_add_app(
   ASSETS_LOCATION
   ${CMAKE_CURRENT_BINARY_DIR}/assets
 )
-target_include_directories(
-  HDRView PRIVATE ${PROJECT_SOURCE_DIR}/cpm_modules/jxl/ce62/lib ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
+target_include_directories(HDRView PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(HDRView PROPERTIES OUTPUT_NAME ${output_name} CXX_STANDARD 17)
 target_compile_definitions(HDRView PRIVATE ${HDRVIEW_ICONSET})
 

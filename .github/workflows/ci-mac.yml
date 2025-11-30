@@ -29,53 +29,53 @@ jobs:
       matrix:
         config:
           # macos-14 is an arm64 runner
-          # -DCMAKE_IGNORE_PATH=... dynamically constructs a list of directories to ignore during CMake's
+          # -DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake constructs a list of directories to ignore during CMake's
           #   library and header search. This helps avoid picking up non-universal versions
           #   of harfbuzz and brotli from Homebrew installations, which cause failures for universal builds.
           - {
-              name: "macOS 14 universal",
+              name: "macOS 14 universal cpm",
               os: macos-14,
               arch: "universal",
-              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
+              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
             }
           - {
-              name: "macOS 15 universal",
+              name: "macOS 15 universal cpm",
               os: macos-15,
               arch: "universal",
-              flags: "-DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
+              flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\" -DHDRVIEW_ENABLE_LIBJPEG=OFF -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_UHDR=OFF -DHELLOIMGUI_FREETYPE_STATIC=ON -DPNG_HARDWARE_OPTIMIZATIONS=ON",
             }
           - {
-              name: "macOS 14 Apple Silicon",
+              name: "macOS 14 Apple Silicon cpm",
               os: macos-14,
               arch: "arm64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
-              name: "macOS 14 Apple Silicon (local packages)",
+              name: "macOS 14 Apple Silicon brew",
               os: macos-14,
               arch: "arm64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
-              name: "macOS 15 Apple Silicon",
+              name: "macOS 15 Apple Silicon cpm",
               os: macos-15,
               arch: "arm64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
-              name: "macOS 15 Apple Silicon (local packages)",
+              name: "macOS 15 Apple Silicon brew",
               os: macos-15,
               arch: "arm64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
-              name: "macOS 15 Intel",
+              name: "macOS 15 Intel cpm",
               os: macos-15-intel,
               arch: "x86_64-cpm",
               flags: "-DCMAKE_TOOLCHAIN_FILE=cmake/ignore-brew.cmake -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
             }
           - {
-              name: "macOS 15 Intel (local packages)",
+              name: "macOS 15 Intel brew",
               os: macos-15-intel,
               arch: "x86_64-brew",
               flags: "-DCPM_USE_LOCAL_PACKAGES=ON -DHDRVIEW_ENABLE_HEIF=ON -DHDRVIEW_ENABLE_JPEGXL=ON -DHDRVIEW_ENABLE_UHDR=ON -DUHDR_BUILD_DEPS=ON",
@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: Install dependencies
-        run: brew install ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath cli11 spdlog fmt aom libde265 x265
+        run: brew install ninja create-dmg dylibbundler jpeg-xl libjpeg-turbo little-cms2 libultrahdr libheif zlib libpng imath openexr cli11 spdlog fmt aom libde265 x265
 
       - uses: actions/checkout@v4
         with:
