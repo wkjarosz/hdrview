@@ -63,9 +63,6 @@ struct STBSaveOptions
     int               quality = 95;   // only used for jpg
 };
 
-static STBSaveOptions s_opts;
-static STBSaveOptions s_hdr_opts{1.f, TransferFunction_Linear, 1.f, false, 95};
-
 static const stbi_io_callbacks stbi_callbacks = {
     // read
     [](void *user, char *data, int size)
@@ -258,6 +255,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
 void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma)
 {
+    spdlog::debug("Saving stb HDR with gain {}, tf {}, gamma {}.", gain, (int)tf, gamma);
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<float>(&w, &h, &n, gain, tf, gamma, false);
@@ -276,6 +274,8 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither, float quality)
 {
+    spdlog::debug("Saving stb JPG with gain {}, tf {}, gamma {}, dither {}, quality {}.", gain, (int)tf, gamma,
+                  dither ? "true" : "false", quality);
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
@@ -294,6 +294,8 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
+    spdlog::debug("Saving stb TGA with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf, gamma,
+                  dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
@@ -312,6 +314,8 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
+    spdlog::debug("Saving stb BMP with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf, gamma,
+                  dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
@@ -330,6 +334,8 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
 void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction_ tf,
                   float gamma, bool dither)
 {
+    spdlog::debug("Saving stb PNG with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf, gamma,
+                  dither ? "true" : "false");
     Timer timer;
     int   w = 0, h = 0, n = 0;
     auto  pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither);
@@ -368,6 +374,9 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 // GUI parameter function
 STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
 {
+    static STBSaveOptions s_opts{};
+    static STBSaveOptions s_hdr_opts{1.f, TransferFunction_Linear, 1.f, false, 95};
+
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
     ImGui::BeginGroup();
     ImGui::SliderFloat("Gain", &opts.gain, 0.1f, 10.0f);

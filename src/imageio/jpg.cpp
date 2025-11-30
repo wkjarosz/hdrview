@@ -21,7 +21,7 @@ using namespace std;
 struct JPGSaveOptions
 {
     float gain        = 1.f;
-    int   tf          = 1;
+    int   tf          = 1; // Linear = 0; sRGB = 1
     bool  dither      = true;
     int   quality     = 95;
     bool  progressive = false;
@@ -425,7 +425,8 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     if (params == nullptr)
         throw std::invalid_argument("JPGSaveOptions pointer is null");
 
-    save_jpg_image(img, os, filename, 1.f, s_opts.tf, s_opts.quality, s_opts.dither, s_opts.progressive);
+    save_jpg_image(img, os, filename, params->gain, params->tf == 1, params->dither, params->quality,
+                   params->progressive);
 }
 
 #endif

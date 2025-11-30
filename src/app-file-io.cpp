@@ -136,11 +136,12 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         // ImGui::PushItemWidth(-HelloImGui::EmSize(10));
 
         static int composite = 0;
+        ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
+        ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
+                              "image and reference image as shown in the viewport.");
+        // ImGui::NewLine();
 
         ImGui::BeginGroup();
-        // ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
-        // ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
-        //                       "image and reference image as shown in the viewport.");
 
         // ImGui Combo using BeginCombo/EndCombo
         ImGui::TextUnformatted("File format:");
@@ -182,57 +183,57 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             {
             case Format_JPEG_LIBJPEG:
             {
-                auto libjpeg_params = jpg_parameters_gui();
-                save_func           = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_jpg_image(img, os, filename, libjpeg_params); };
+                auto opts = jpg_parameters_gui();
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_jpg_image(img, os, filename, opts); };
             }
             break;
 
             case Format_HEIF_AVIF:
             {
-                auto heif_params = heif_parameters_gui();
-                save_func        = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_heif_image(img, os, filename, heif_params); };
+                auto opts = heif_parameters_gui();
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_heif_image(img, os, filename, opts); };
             }
             break;
 
             case Format_JPEG_UHDR:
             {
-                auto uhdr_params = uhdr_parameters_gui();
-                save_func        = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_uhdr_image(img, os, filename, uhdr_params); };
+                auto opts = uhdr_parameters_gui();
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_uhdr_image(img, os, filename, opts); };
             }
             break;
 
             case Format_JPEG_XL:
             {
-                auto jxl_params = jxl_parameters_gui();
-                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_jxl_image(img, os, filename, jxl_params); };
+                auto opts = jxl_parameters_gui();
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_jxl_image(img, os, filename, opts); };
             }
             break;
 
             case Format_EXR:
             {
-                auto exr_params = exr_parameters_gui(current_image());
-                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_exr_image(img, os, filename, exr_params); };
+                auto opts = exr_parameters_gui(current_image());
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_exr_image(img, os, filename, opts); };
             }
             break;
 
             case Format_PFM:
             {
                 auto opts = pfm_parameters_gui();
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_pfm_image(img, os, filename, opts); };
             }
             break;
 
             case Format_PNG_LIBPNG:
             {
-                auto png_params = png_parameters_gui();
-                save_func       = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_png_image(img, os, filename, png_params); };
+                auto opts = png_parameters_gui();
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+                { save_png_image(img, os, filename, opts); };
             }
             break;
 
@@ -255,7 +256,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             case Format_JPEG_STB:
             {
                 auto opts = stb_parameters_gui(false, true);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_stb_jpg(img, os, filename, opts); };
             }
             break;
@@ -263,7 +264,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             case Format_BMP_STB:
             {
                 auto opts = stb_parameters_gui(false, false);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_stb_bmp(img, os, filename, opts); };
             }
             break;
@@ -271,7 +272,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             case Format_HDR_STB:
             {
                 auto opts = stb_parameters_gui(true, false);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_stb_hdr(img, os, filename, opts); };
             }
             break;
@@ -279,7 +280,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             case Format_PNG_STB:
             {
                 auto opts = stb_parameters_gui(false, false);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_stb_png(img, os, filename, opts); };
             }
             break;
@@ -287,7 +288,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
             case Format_TGA_STB:
             {
                 auto opts = stb_parameters_gui(false, false);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
+                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
                 { save_stb_tga(img, os, filename, opts); };
             }
             break;
