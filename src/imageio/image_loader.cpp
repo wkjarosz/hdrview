@@ -622,9 +622,9 @@ void BackgroundImageLoader::draw_gui()
 
             ImGui::BeginDisabled(!(*hdrview()->action("Watch for changes").p_selected));
             string text = ImGui::TruncatedText(path.string(), ICON_MY_ADD_WATCHED_FOLDER);
-            // if (ImGui::Selectable(text.c_str(), false))
-            //     ;
-            ImGui::TextUnformatted(text.c_str());
+            ImGui::TextUnformatted(ICON_MY_ADD_WATCHED_FOLDER);
+            ImGui::SameLine(0.f, 0.f);
+            ImGui::TextAligned(1.0f, -FLT_MIN, text.c_str());
             ImGui::EndDisabled();
         }
 

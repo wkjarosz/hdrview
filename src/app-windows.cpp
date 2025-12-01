@@ -3,6 +3,8 @@
 #include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
+#include "imgui.h"
+#include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "implot.h"
 
@@ -617,14 +619,15 @@ void HDRViewApp::draw_file_window()
                 string filename   = (m_short_names ? img->short_name : img->file_and_partname()) +
                                   (m_file_list_mode ? "" : img->delimiter() + layer_path + group_name);
 
-                string the_text =
-                    ImGui::TruncatedText(filename, img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE);
-
-                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "%s", the_text.c_str());
+                bool open = ImGui::TreeNodeEx((void *)(intptr_t)i, node_flags, "");
+                auto icon = img->groups.size() > 1 ? ICON_MY_IMAGES : ICON_MY_IMAGE;
+                ImGui::SameLine(0.f, 0.f);
+                string the_text = ImGui::TruncatedText(filename, icon);
 
                 ImGui::PopStyleColor(3);
 
                 // Add right-click context menu
+                ImGui::PushFont(m_sans_regular, 0.f);
                 if (ImGui::BeginPopupContextItem())
                 {
                     if (ImGui::MenuItem("Copy path to clipboard"))
@@ -660,6 +663,7 @@ void HDRViewApp::draw_file_window()
 
                     ImGui::EndPopup();
                 }
+                ImGui::PopFont();
 
                 if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 {
@@ -715,6 +719,10 @@ void HDRViewApp::draw_file_window()
                     }
                     ImGui::EndDragDropTarget();
                 }
+
+                ImGui::TextUnformatted(icon);
+                ImGui::SameLine(0.f, 0.f);
+                ImGui::TextAligned(1.0f, -FLT_MIN, the_text.c_str());
 
                 if (open)
                 {

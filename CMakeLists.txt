@@ -854,7 +854,7 @@ list(APPEND HDRVIEW_DEPENDENCIES astc_dec)
 CPMAddPackage(
   NAME nvpro_core2
   GITHUB_REPOSITORY nvpro-samples/nvpro_core2
-  GIT_TAG d3fea22dabed0432ab02224aa94bc3dbe3f48dd4
+  GIT_TAG 6b7541eec4a6d6659dd1439887bc6dd9def4c3f9
   DOWNLOAD_ONLY YES
 )
 if(nvpro_core2_ADDED)

@@ -250,17 +250,17 @@ ImU32 SpdLogWindow::get_level_color(spdlog::level::level_enum level)
 
 string TruncatedText(const string &filename, const string &icon)
 {
-    string ellipsis = " ";
+    string ellipsis = "";
     string text     = filename;
 
-    const float avail_width = GetContentRegionAvail().x - GetTreeNodeToLabelSpacing();
+    const float avail_width = GetContentRegionAvail().x;
     while (CalcTextSize((icon + ellipsis + text).c_str()).x > avail_width && text.length() > 1)
     {
         text     = text.substr(1);
         ellipsis = " ...";
     }
 
-    return icon + ellipsis + text;
+    return ellipsis + text;
 };
 
 ImVec2 IconSize() { return CalcTextSize(ICON_MY_WIDEST); }
