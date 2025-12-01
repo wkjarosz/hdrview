@@ -1,0 +1,10 @@
+prefix=/Users/runner/work/hdrview/hdrview/build/deploy
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: openjph
+Description: Open source implementation of JPH
+Version: 0.24.5
+Requires: 
+Libs: -L${libdir} -lopenjph
+Cflags: -I${includedir} -D_FILE_OFFSET_BITS=64
