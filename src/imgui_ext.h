@@ -2,6 +2,8 @@
 
 #include "fwd.h"
 
+#include "box.h"
+
 #include <spdlog/sinks/dup_filter_sink.h>
 #include <spdlog/spdlog.h>
 

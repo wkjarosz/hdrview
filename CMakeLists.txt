@@ -424,16 +424,18 @@ if(HDRVIEW_ENABLE_LIBPNG)
     message(FATAL_ERROR "zlib not found.")
   endif()
   # cmake-format: on
+
   CPMAddPackage(
     NAME PNG
-    GITHUB_REPOSITORY pnggroup/libpng
-    GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
-    # VERSION 1.6.50 URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
+    # GITHUB_REPOSITORY pnggroup/libpng GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
+    VERSION 1.6.51
+    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
             "PNG_TESTS OFF"
             "PNG_TOOLS OFF"
+            "PNG_ARM_NEON off" # for now we disable NEON to avoid build issues on some CI machines
             "SKIP_INSTALL_ALL ON"
             "EXCLUDE_FROM_ALL YES"
   )

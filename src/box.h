@@ -246,3 +246,20 @@ inline std::ostream &operator<<(std::ostream &o, const Box<Vec, Value, Dims> &b)
 {
     return o << "[(" << b.min << "),(" << b.max << ")]";
 }
+
+// define some common types
+using Box1f = Box<float1>;
+using Box1d = Box<double1>;
+using Box1i = Box<int1>;
+
+using Box2f = Box<float2>;
+using Box2d = Box<double2>;
+using Box2i = Box<int2>;
+
+using Box3f = Box<float3>;
+using Box3d = Box<double3>;
+using Box3i = Box<int3>;
+
+using Box4f = Box<float4>;
+using Box4d = Box<double4>;
+using Box4i = Box<int4>;

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <istream>
-#include <string>
 
 #include "fwd.h"
 #include "image_loader.h"

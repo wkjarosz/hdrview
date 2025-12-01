@@ -9,7 +9,6 @@
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_header.h"
 #include "exr_std_streams.h"
-// #include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui.h"
 #include "imgui_ext.h"

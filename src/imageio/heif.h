@@ -7,9 +7,9 @@
 #pragma once
 
 #include <istream>
-#include <string>
 
 #include "fwd.h"
+#include "image_loader.h"
 
 // should not throw
 bool is_heif_image(std::istream &is) noexcept;

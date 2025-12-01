@@ -1,7 +1,5 @@
 #include "app.h"
 
-#include "colorspace.h"
-#include "fonts.h"
 #include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include <fstream>
@@ -19,7 +17,6 @@
 #include "imageio/uhdr.h"
 #include "imgui.h"
 #include "imgui_ext.h"
-#include "imgui_internal.h"
 
 #ifdef __EMSCRIPTEN__
 #include "platform_utils.h"
