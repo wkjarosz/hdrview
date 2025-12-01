@@ -426,9 +426,9 @@ if(HDRVIEW_ENABLE_LIBPNG)
   # cmake-format: on
   CPMAddPackage(
     NAME PNG
-    # GITHUB_REPOSITORY pnggroup/libpng GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
-    VERSION 1.6.50
-    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
+    GITHUB_REPOSITORY pnggroup/libpng
+    GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
+    # VERSION 1.6.50 URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
