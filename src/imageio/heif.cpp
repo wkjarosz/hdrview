@@ -669,14 +669,14 @@ HEIFSaveOptions *heif_parameters_gui()
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::Tooltip("Multiply the pixels by this value before saving.");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Quality");
     ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderInt("##Base image quality", &s_opts.quality, 1, 100);
-    ImGui::WrappedTooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
+    ImGui::Tooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Lossless");
@@ -732,7 +732,7 @@ HEIFSaveOptions *heif_parameters_gui()
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.");
+    ImGui::Tooltip("Encode the pixel values using this transfer function.");
     if (s_opts.tf == TransferFunction_Gamma)
     {
         ImGui::Indent();

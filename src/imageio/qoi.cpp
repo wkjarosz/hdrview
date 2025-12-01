@@ -172,7 +172,7 @@ QOISaveOptions *qoi_parameters_gui()
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::Tooltip("Multiply the pixels by this value before saving.");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Transfer function");

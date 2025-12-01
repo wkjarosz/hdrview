@@ -6,8 +6,9 @@
 #include "hello_imgui/dpi_aware.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "nvgui/property_editor.hpp"
 #include "spdlog/pattern_formatter.h"
+
+#include "app.h"
 
 #include <array>
 
@@ -129,17 +130,17 @@ void SpdLogWindow::draw(ImFont *console_font, float size)
         ImGui::EndCombo();
     }
     ImGui::PopStyleColor();
-    ImGui::WrappedTooltip("Click to choose the verbosity level.");
+    ImGui::Tooltip("Click to choose the verbosity level.");
     ImGui::SameLine();
     if (ImGui::IconButton(ICON_MY_TRASH_CAN))
         m_ringbuffer_sink->clear_messages();
-    ImGui::WrappedTooltip("Clear all messages.");
+    ImGui::Tooltip("Clear all messages.");
     ImGui::SameLine();
     ImGui::IconButton(m_auto_scroll ? ICON_MY_LOCK : ICON_MY_LOCK_OPEN, &m_auto_scroll);
-    ImGui::WrappedTooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
+    ImGui::Tooltip(m_auto_scroll ? "Turn auto scrolling off." : "Turn auto scrolling on.");
     ImGui::SameLine();
     ImGui::IconButton(m_wrap_text ? ICON_MY_TEXT_WRAP_ON : ICON_MY_TEXT_WRAP_OFF, &m_wrap_text);
-    ImGui::WrappedTooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
+    ImGui::Tooltip(m_wrap_text ? "Turn line wrapping off." : "Turn line wrapping on.");
 
     auto window_flags = m_wrap_text
                             ? ImGuiWindowFlags_AlwaysVerticalScrollbar
@@ -588,16 +589,14 @@ void MenuItem(const Action &a, bool include_name)
                               ImGui::GetKeyChordNameTranslated(a.chord), a.p_selected, a.enabled()))
             a.callback();
         if (!include_name)
-            ImGui::WrappedTooltip(
-                fmt::format("{}{}{}", a.name,
-                            a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "",
-                            a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
-                    .c_str());
+            ImGui::Tooltip(fmt::format("{}{}{}", a.name,
+                                       a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "",
+                                       a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                               .c_str());
         else if (!a.tooltip.empty())
-            ImGui::WrappedTooltip(
-                fmt::format("{}{}", a.tooltip.c_str(),
-                            a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "")
-                    .c_str());
+            ImGui::Tooltip(fmt::format("{}{}", a.tooltip.c_str(),
+                                       a.chord ? fmt::format(" ({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "")
+                               .c_str());
     }
 }
 
@@ -610,22 +609,22 @@ void IconButton(const Action &a, bool include_name)
         if (ImGui::IconButton(fmt::format("{} {}", a.icon, a.name).c_str(), a.p_selected, ImVec2(0, -1)))
             a.callback();
         if (a.chord)
-            ImGui::WrappedTooltip(fmt::format("({}){}", ImGui::GetKeyChordNameTranslated(a.chord),
-                                              a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
-                                      .c_str());
+            ImGui::Tooltip(fmt::format("({}){}", ImGui::GetKeyChordNameTranslated(a.chord),
+                                       a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                               .c_str());
         else
-            ImGui::WrappedTooltip(fmt::format("{}", a.tooltip.empty() ? "" : fmt::format("{}", a.tooltip)).c_str());
+            ImGui::Tooltip(fmt::format("{}", a.tooltip.empty() ? "" : fmt::format("{}", a.tooltip)).c_str());
     }
     else
     {
         if (ImGui::IconButton(fmt::format("{}##{}", a.icon, a.name).c_str(), a.p_selected))
             a.callback();
         if (a.chord)
-            ImGui::WrappedTooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
-                                              a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
-                                      .c_str());
+            ImGui::Tooltip(fmt::format("{} ({}){}", a.name, ImGui::GetKeyChordNameTranslated(a.chord),
+                                       a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip))
+                               .c_str());
         else
-            ImGui::WrappedTooltip(
+            ImGui::Tooltip(
                 fmt::format("{}{}", a.name, a.tooltip.empty() ? "" : fmt::format("\n\n{}", a.tooltip)).c_str());
     }
 
@@ -639,14 +638,129 @@ void Checkbox(const Action &a)
     {
         string parenthesized_chord = a.chord ? fmt::format("({})", ImGui::GetKeyChordNameTranslated(a.chord)) : "";
         string tooltip             = fmt::format("{}{}", a.tooltip, parenthesized_chord);
-        ImGui::WrappedTooltip(tooltip.c_str());
+        ImGui::Tooltip(tooltip.c_str());
     }
 }
 
-void WrappedTextProperty(const string &property_name, const string &value, const string &tooltip, ImFont *font,
-                         float wrap_em)
+void Tooltip(const char *description, bool questionMark /*= false*/, float timerThreshold /*= 0.5f*/,
+             float wrap /*=-1.f*/)
 {
-    nvgui::PropertyEditor::entry(
+    ImGuiContext *GImGui = ImGui::GetCurrentContext();
+
+    bool passTimer = GImGui->HoveredIdTimer >= timerThreshold && GImGui->ActiveIdTimer == 0.0f;
+    if (questionMark)
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled(ICON_MY_ABOUT);
+        passTimer = true;
+    }
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && passTimer)
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(wrap < 0.f ? HelloImGui::EmSize(35.f) : wrap);
+        ImGui::TextUnformatted(description);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+// Beginning the Property Editor
+bool PE::Begin(const char *label, ImGuiTableFlags flag)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+    bool result = ImGui::BeginTable(label, 2, flag);
+    if (!result)
+        ImGui::PopStyleVar();
+    return result;
+}
+
+// Ending the Editor
+void PE::End()
+{
+    ImGui::EndTable();
+    ImGui::PopStyleVar();
+}
+
+// adapted from imgui_internal: currently only needed to remove the tooltip at the end
+// align_x: 0.0f = left, 0.5f = center, 1.0f = right.
+// size_x : 0.0f = shortcut for GetContentRegionAvail().x
+// FIXME-WIP: Works but API is likely to be reworked. This is designed for 1 item on the line. (#7024)
+void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args)
+{
+    ImGuiWindow *window = GetCurrentWindow();
+    if (window->SkipItems)
+        return;
+
+    const char *text, *text_end;
+    ImFormatStringToTempBufferV(&text, &text_end, fmt, args);
+    const ImVec2 text_size = CalcTextSize(text, text_end);
+    size_x                 = CalcItemSize(ImVec2(size_x, 0.0f), 0.0f, text_size.y).x;
+
+    ImVec2 pos(window->DC.CursorPos.x, window->DC.CursorPos.y + window->DC.CurrLineTextBaseOffset);
+    ImVec2 pos_max(pos.x + size_x, window->ClipRect.Max.y);
+    ImVec2 size(ImMin(size_x, text_size.x), text_size.y);
+    window->DC.CursorMaxPos.x = ImMax(window->DC.CursorMaxPos.x, pos.x + text_size.x);
+    window->DC.IdealMaxPos.x  = ImMax(window->DC.IdealMaxPos.x, pos.x + text_size.x);
+    if (align_x > 0.0f && text_size.x < size_x)
+        pos.x += ImTrunc((size_x - text_size.x) * align_x);
+    RenderTextClipped(pos, pos_max, text, text_end, &text_size);
+
+    const ImVec2 backup_max_pos = window->DC.CursorMaxPos;
+    ItemSize(size);
+    ItemAdd(ImRect(pos, pos + size), 0);
+    window->DC.CursorMaxPos.x =
+        backup_max_pos.x; // Cancel out extending content size because right-aligned text would otherwise mess it up.
+}
+
+void TextAligned2(float align_x, float size_x, const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    TextAlignedV2(align_x, size_x, fmt, args);
+    va_end(args);
+}
+
+// Generic entry, the lambda function should return true if the widget changed
+bool PE::Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip)
+{
+    ImGui::PushID(property_name.c_str());
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextAligned2(1.0f, -FLT_MIN, property_name.c_str());
+    if (!tooltip.empty())
+        Tooltip(tooltip.c_str(), false, 0);
+    ImGui::TableNextColumn();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    bool result = content_fct();
+    if (!tooltip.empty())
+        Tooltip(tooltip.c_str());
+    ImGui::PopID();
+    return result; // returning if the widget changed
+}
+
+void PE::Hyperlink(const char *name, const char *desc, const char *url /*= nullptr*/)
+{
+    ImGui::PushID(name);
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+
+    ImGui::AlignCursor(name, 1.f);
+    ImGui::PushFont(hdrview()->font("sans bold"), ImGui::GetStyle().FontSizeBase);
+    ImGui::HyperlinkText(name, url);
+    ImGui::PopFont();
+    ImGui::TableNextColumn();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::TextUnformatted(desc);
+    ImGui::PopID();
+}
+
+void PE::WrappedText(const string &property_name, const string &value, const string &tooltip, ImFont *font,
+                     float wrap_em)
+{
+    PE::Entry(
         property_name,
         [&]
         {
@@ -667,6 +781,6 @@ void WrappedTextProperty(const string &property_name, const string &value, const
             return false; // no change
         },
         tooltip);
-};
+}
 
 } // namespace ImGui

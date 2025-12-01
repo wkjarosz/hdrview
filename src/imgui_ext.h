@@ -124,23 +124,6 @@ inline void TextFmt(fmt::format_string<T...> fmt, T &&...args)
     ImGui::TextUnformatted(str.c_str());
 }
 
-/**
-    Displays a property with wrapped text in an ImGui property editor.
-
-    This function renders a property name and its value, wrapping the value text to fit within a specified width.
-    Optionally, a custom font can be used. If the value is clicked, it is copied to the clipboard.
-    When hovered, the mouse cursor changes to a hand icon. A tooltip can be displayed for additional information.
-
-    @param property_name The name of the property to display.
-    @param value The value of the property to display, shown as wrapped text.
-    @param tooltip Tooltip text to show when hovering over the property.
-    @param font Optional font to use for rendering the property value. If nullptr, the default font is used.
-    @param wrap_em The width (in em units) to wrap the text at. If 0 or less, wraps to the available content region
-   width.
-*/
-void WrappedTextProperty(const std::string &property_name, const std::string &value, const std::string &tooltip,
-                         ImFont *font = nullptr, float wrap_em = 0.f);
-
 // return true when activated.
 inline bool MenuItem(const std::string &label, const std::string &shortcut = "", bool selected = false,
                      bool enabled = true)
@@ -179,27 +162,15 @@ inline void AlignCursor(float width, float align)
 
 inline void AlignCursor(const std::string &text, float align) { AlignCursor(CalcTextSize(text.c_str()).x, align); }
 
-inline void TextAligned(const std::string text, float align)
-{
-    AlignCursor(text, align);
-    TextUnformatted(text.c_str());
-}
-
 // right-align the truncated file name
 std::string TruncatedText(const std::string &filename, const std::string &icon);
 
 void PushRowColors(bool is_current, bool is_reference, bool reference_mod = false);
 
-inline void WrappedTooltip(const char *text, float wrap_width = 400.f)
-{
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::PushTextWrapPos(wrap_width);
-        ImGui::TextUnformatted(text);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
-}
+void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
+void TextAligned2(float align_x, float size_x, const char *fmt, ...);
+
+void Tooltip(const char *description, bool questionMark = false, float timerThreshold = 0.5f, float wrap_width = -1.f);
 
 // draw a horizontal line under the last item, raised by a factor of the current font size
 // (e.g. raise=0.5 would strikethrough the previous text)
@@ -242,5 +213,54 @@ void DrawCrosshairs(ImDrawList *draw_list, const float2 &pos, const std::string 
 // bool DragInt4(const char *label, int *values, const char *formats[], ImGuiSliderFlags flags = 0);
 
 // bool InputFloat4(const char *label, float *values, const char *formats[], ImGuiSliderFlags flags = 0);
+
+namespace PropertyEditor
+{
+bool Begin(const char     *label = "PE::Table",
+           ImGuiTableFlags flag  = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable);
+void End();
+bool Entry(const std::string &property_name, const std::function<bool()> &content_fct, const std::string &tooltip = {});
+inline void Entry(const std::string &property_name, const std::string &value)
+{
+    Entry(property_name,
+          [&]
+          {
+              ImGui::Text("%s", value.c_str());
+              return false;
+          });
+}
+
+inline bool SliderFloat2(const char *label, float v[2], float v_min, float v_max, const char *format = "%.3f",
+                         ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(label, [&] { return ImGui::SliderFloat2("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool InputFloat3(const char *label, float v[3], const char *format = "%.3f", ImGuiInputTextFlags flags = 0,
+                        const std::string &tooltip = {})
+{
+    return Entry(label, [&] { return ImGui::InputFloat3("##hidden", v, format, flags); }, tooltip);
+}
+
+/**
+    Displays a property with wrapped text in an ImGui property editor.
+
+    This function renders a property name and its value, wrapping the value text to fit within a specified width.
+    Optionally, a custom font can be used. If the value is clicked, it is copied to the clipboard.
+    When hovered, the mouse cursor changes to a hand icon. A tooltip can be displayed for additional information.
+
+    @param property_name The name of the property to display.
+    @param value The value of the property to display, shown as wrapped text.
+    @param tooltip Tooltip text to show when hovering over the property.
+    @param font Optional font to use for rendering the property value. If nullptr, the default font is used.
+    @param wrap_em The width (in em units) to wrap the text at. If 0 or less, wraps to the available content region
+                   width.
+*/
+void WrappedText(const std::string &property_name, const std::string &value, const std::string &tooltip,
+                 ImFont *font = nullptr, float wrap_em = 0.f);
+void Hyperlink(const char *name, const char *desc, const char *url = nullptr);
+} // namespace PropertyEditor
+
+namespace PE = PropertyEditor; // short alias
 
 } // namespace ImGui

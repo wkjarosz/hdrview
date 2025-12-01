@@ -134,8 +134,8 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
 
         static int composite = 0;
         ImGui::Combo("Image to export", &composite, "Current image\0Current/Reference composite image\0");
-        ImGui::WrappedTooltip("Save either the current image, or the composited/blended result between the current "
-                              "image and reference image as shown in the viewport.");
+        ImGui::Tooltip("Save either the current image, or the composited/blended result between the current "
+                       "image and reference image as shown in the viewport.");
         // ImGui::NewLine();
 
         ImGui::BeginGroup();

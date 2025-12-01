@@ -391,7 +391,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderFloat("##Gain", &opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::Tooltip("Multiply the pixels by this value before saving.");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Transfer function");
@@ -410,9 +410,9 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
-                          "provide a way to signal what transfer function the files were saved with. Without this "
-                          "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
+    ImGui::Tooltip("Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
+                   "provide a way to signal what transfer function the files were saved with. Without this "
+                   "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
     if (opts.tf == TransferFunction_Gamma)
     {
         ImGui::Indent();

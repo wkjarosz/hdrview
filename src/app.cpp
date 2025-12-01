@@ -546,7 +546,7 @@ HDRViewApp::HDRViewApp(optional<float> force_exposure, optional<float> force_gam
                 if (ImGui::Combo("Channels", &channel_mode, "Gray\0RGB\0RGBA\0"))
                     num_channels = channel_mode == 0 ? 1 : channel_mode == 1 ? 3 : 4;
                 ImGui::SliderInt("Quantization levels", &levels, 2, 256);
-                ImGui::WrappedTooltip("If >= 2, quantize the result to this many discrete levels.");
+                ImGui::Tooltip("If >= 2, quantize the result to this many discrete levels.");
                 ImGui::BeginDisabled(levels <= 1);
                 ImGui::SliderFloat("Dither amount", &dither, 0.0f, 1.0f);
                 ImGui::EndDisabled();

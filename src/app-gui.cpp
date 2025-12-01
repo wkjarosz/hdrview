@@ -7,6 +7,7 @@
 #include "image.h"
 #include "imcmd_command_palette.h"
 #include "imgui.h"
+#include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "texture.h"
 #include "version.h"
@@ -543,8 +544,8 @@ void HDRViewApp::draw_top_toolbar()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_exposure = m_exposure_live;
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Increasing (Shift+E) or decreasing (e) the exposure. The displayed brightness of "
-                          "the image is multiplied by 2^exposure.");
+    ImGui::Tooltip("Increasing (Shift+E) or decreasing (e) the exposure. The displayed brightness of "
+                   "the image is multiplied by 2^exposure.");
 
     ImGui::SameLine();
 
@@ -559,8 +560,8 @@ void HDRViewApp::draw_top_toolbar()
     if (ImGui::IsItemDeactivatedAfterEdit())
         m_offset = m_offset_live;
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Increase/decrease the blackpoint offset. The offset is added to the pixel value after "
-                          "exposure is applied.");
+    ImGui::Tooltip("Increase/decrease the blackpoint offset. The offset is added to the pixel value after "
+                   "exposure is applied.");
 
     ImGui::SameLine();
 
@@ -589,7 +590,7 @@ void HDRViewApp::draw_top_toolbar()
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip(
+    ImGui::Tooltip(
         "Set the tonemapping mode, which is applied to the pixel values after exposure and blackpoint offset.\n\n"
         "Gamma: Raise the pixel values to this exponent before display.\n"
         "Colormap [0,1]: Falsecolor with colormap range set to [0,1].\n"
@@ -943,23 +944,6 @@ void HDRViewApp::draw_about_dialog(bool &open)
             ImGui::EndTable();
         }
 
-        auto item_and_description = [this, col_width](const char *name, const char *desc, const char *url = nullptr)
-        {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-
-            ImGui::AlignCursor(name, 1.f);
-            ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
-            ImGui::HyperlinkText(name, url);
-            ImGui::PopFont();
-            ImGui::TableNextColumn();
-
-            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[1] - EmSize());
-            ImGui::PushFont(m_sans_regular, ImGui::GetStyle().FontSizeBase);
-            ImGui::TextUnformatted(desc);
-            ImGui::PopFont();
-        };
-
         if (ImGui::BeginTabBar("AboutTabBar"))
         {
             if (ImGui::BeginTabItem("Keybindings", nullptr))
@@ -967,11 +951,12 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
 
                 ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
-                ImGui::TextAligned("The main keyboard shortcut to remember is:", 0.5f);
+                ImGui::TextAligned2(0.5f, -FLT_MIN, "The main keyboard shortcut to remember is:");
                 ImGui::PopFont();
 
                 ImGui::PushFont(font("mono regular"), ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
-                ImGui::TextAligned(ImGui::GetKeyChordNameTranslated(action("Command palette...").chord), 0.5f);
+                ImGui::TextAligned2(0.5f, -FLT_MIN,
+                                    ImGui::GetKeyChordNameTranslated(action("Command palette...").chord));
                 ImGui::PopFont();
 
                 ImGui::TextUnformatted("This opens the command palette, which lists every available HDRView command "
@@ -997,63 +982,62 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     "alphabetical order):\n\n");
                 ImGui::PopTextWrapPos();
 
-                if (ImGui::BeginTable("about_table2", 2))
+                if (ImGui::PE::Begin("about_table2", 0))
                 {
                     ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
                     ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
 
-                    item_and_description("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
+                    ImGui::PE::Hyperlink("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
 #ifdef __EMSCRIPTEN__
-                    item_and_description("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.",
+                    ImGui::PE::Hyperlink("emscripten", "An MIT-licensed LLVM-to-WebAssembly compiler.",
                                          "https://github.com/emscripten-core/emscripten");
-                    item_and_description("emscripten-browser-file",
+                    ImGui::PE::Hyperlink("emscripten-browser-file",
                                          "Armchair Software's MIT-licensed header-only C++ library "
                                          "to open and save files in the browser.",
                                          "https://github.com/Armchair-Software/emscripten-browser-file");
 #endif
-                    item_and_description("{fmt}", "A modern formatting library.", "https://github.com/fmtlib/fmt");
-                    item_and_description("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.",
+                    ImGui::PE::Hyperlink("{fmt}", "A modern formatting library.", "https://github.com/fmtlib/fmt");
+                    ImGui::PE::Hyperlink("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.",
                                          "https://github.com/pthom/hello_imgui");
 #ifdef HDRVIEW_ENABLE_LCMS2
-                    item_and_description("lcms2", "LittleCMS color management engine.",
+                    ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
                                          "https://github.com/mm2/Little-CMS");
 #endif
 #ifdef HDRVIEW_ENABLE_HEIF
-                    item_and_description("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
+                    ImGui::PE::Hyperlink("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
                                          "https://github.com/strukturag/libheif");
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
-                    item_and_description("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
+                    ImGui::PE::Hyperlink("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
 #endif
 #ifdef HDRVIEW_ENABLE_LIBPNG
-                    item_and_description("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
+                    ImGui::PE::Hyperlink("libpng", "For loading PNG files.", "https://github.com/pnggroup/libpng");
 #endif
 #ifdef HDRVIEW_ENABLE_UHDR
-                    item_and_description("libuhdr", "For loading Ultra HDR JPEG files.",
+                    ImGui::PE::Hyperlink("libuhdr", "For loading Ultra HDR JPEG files.",
                                          "https://github.com/google/libultrahdr");
 #endif
-                    item_and_description(
+                    ImGui::PE::Hyperlink(
                         "linalg", "Sterling Orsten's public domain, single header short vector math library for C++.",
                         "https://github.com/sgorsten/linalg");
-                    item_and_description("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.",
+                    ImGui::PE::Hyperlink("NanoGUI", "Bits of code from Wenzel Jakob's BSD-licensed NanoGUI library.",
                                          "https://github.com/mitsuba-renderer/nanogui");
-                    item_and_description("nvgui", "GUI components (property editor) from nvpro_core2",
-                                         "https://github.com/nvpro-samples/nvpro_core2");
-                    item_and_description("OpenEXR", "High Dynamic-Range (HDR) image file format.",
+                    ImGui::PE::Hyperlink("OpenEXR", "High Dynamic-Range (HDR) image file format.",
                                          "https://github.com/AcademySoftwareFoundation/openexr");
 #ifndef __EMSCRIPTEN__
-                    item_and_description("portable-file-dialogs",
+                    ImGui::PE::Hyperlink("portable-file-dialogs",
                                          "Sam Hocevar's WTFPL portable GUI dialogs library, C++11, single-header.",
                                          "https://github.com/samhocevar/portable-file-dialogs");
 #endif
-                    item_and_description("smalldds", "Single-header library for loading DDS images.",
+                    ImGui::PE::Hyperlink("smalldds", "Single-header library for loading DDS images.",
                                          "https://github.com/wkjarosz/smalldds");
-                    item_and_description("stb_image/write", "Single-header libraries for loading/writing images.",
+                    ImGui::PE::Hyperlink("stb_image/write", "Single-header libraries for loading/writing images.",
                                          "https://github.com/nothings/stb");
-                    item_and_description("tev", "Some code is adapted from Thomas Müller's tev.",
+                    ImGui::PE::Hyperlink("tev", "Some code is adapted from Thomas Müller's tev.",
                                          "https://github.com/Tom94/tev");
-                    ImGui::EndTable();
+
+                    ImGui::PE::End();
                 }
                 ImGui::EndTabItem();
             }

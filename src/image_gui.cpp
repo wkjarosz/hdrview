@@ -11,12 +11,11 @@
 #include "fonts.h"
 #include "image.h"
 #include "imgui_ext.h"
+#include "imgui_internal.h"
 #include "implot.h"
 #include "implot_internal.h"
 #include "shader.h"
 #include "texture.h"
-
-#include "nvgui/property_editor.hpp"
 
 using namespace std;
 using namespace HelloImGui;
@@ -35,9 +34,9 @@ void Image::draw_histogram()
     ImGui::SetNextItemWidth(combo_width);
     ImGui::Combo("##Y-axis type", &hdrview()->histogram_y_scale(), "Linear\0Log\0\0");
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Set the Y-axis scale type.\n\n"
-                          "Linear: linear scale.\n"
-                          "Log: logarithmic scale.");
+    ImGui::Tooltip("Set the Y-axis scale type.\n\n"
+                   "Linear: linear scale.\n"
+                   "Log: logarithmic scale.");
     ImGui::SameLine();
 
     ImGui::BeginGroup();
@@ -47,17 +46,17 @@ void Image::draw_histogram()
     ImGui::SetNextItemWidth(combo_width);
     ImGui::Combo("##X-axis type", &hdrview()->histogram_x_scale(), "Linear\0sRGB\0Asinh\0\0");
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Set the X-axis scale type.\n\n"
-                          "Linear: linear scale.\n"
-                          "sRGB: sRGB gamma curve.\n"
-                          "Asinh: a log-like scale that smoothly handles the transition from negative to "
-                          "positive values. Useful for high dynamic range values.");
+    ImGui::Tooltip("Set the X-axis scale type.\n\n"
+                   "Linear: linear scale.\n"
+                   "sRGB: sRGB gamma curve.\n"
+                   "Asinh: a log-like scale that smoothly handles the transition from negative to "
+                   "positive values. Useful for high dynamic range values.");
     ImGui::SameLine();
 
     if (ImGui::IconButton(plot_cond == ImPlotCond_Always ? ICON_MY_FIT_AXES : ICON_MY_MANUAL_AXES))
         plot_cond = (plot_cond == ImPlotCond_Always) ? ImPlotCond_Once : ImPlotCond_Always;
-    ImGui::WrappedTooltip((plot_cond == ImPlotCond_Always) ? "Click to allow manually panning/zooming in histogram"
-                                                           : "Click to auto-fit histogram axes based on the exposure.");
+    ImGui::Tooltip((plot_cond == ImPlotCond_Always) ? "Click to allow manually panning/zooming in histogram"
+                                                    : "Click to auto-fit histogram axes based on the exposure.");
 
     auto        hovered_pixel = int2{hdrview()->pixel_at_app_pos(ImGui::GetIO().MousePos)};
     float4      color32       = raw_pixel(hovered_pixel);
@@ -230,7 +229,7 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
 {
     static constexpr ImGuiTreeNodeFlags tree_node_flags =
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Leaf |
-        ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_DrawLinesFull;
+        ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_DrawLinesFull | ImGuiTreeNodeFlags_Bullet;
     for (size_t g = 0; g < layer.groups.size(); ++g)
     {
         auto  &group      = groups[layer.groups[g]];
@@ -252,10 +251,10 @@ void Image::draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_
             string shortcut = is_current && visible_group < 10
                                   ? fmt::format(ICON_MY_KEY_CONTROL "{}", mod(visible_group + 1, 10))
                                   : "";
-            ImGui::TextAligned(shortcut, 1.0f);
+            ImGui::TextAligned2(0.0f, -FLT_MIN, shortcut.c_str());
 
             // ImGui::TableNextColumn();
-            // ImGui::TextUnformatted(is_selected_channel ? ICON_MY_VISIBILITY : "");
+            // ImGui::TextAligned2(0.0f, -FLT_MIN, is_selected_channel ? ICON_MY_VISIBILITY : "");
 
             ImGui::TableNextColumn();
             ImGui::TreeNodeEx((void *)(intptr_t)id++,
@@ -356,8 +355,6 @@ void Image::draw_info()
 {
     auto bold_font = hdrview()->font("sans bold");
 
-    namespace PE = nvgui::PropertyEditor;
-
     static ImGuiTextFilter filter;
     const ImVec2           button_size   = ImGui::IconButtonSize();
     bool                   filter_active = filter.IsActive(); // save here to avoid flicker
@@ -379,12 +376,12 @@ void Image::draw_info()
     }
 
     static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg;
-    if (PE::begin("Image info", table_flags))
+    if (ImGui::PE::Begin("Image info", table_flags))
     {
         auto filtered_property = [&](const string &property_name, const string &value, const string &tooltip = "")
         {
             if (filter.PassFilter((property_name + " " + value).c_str()))
-                ImGui::WrappedTextProperty(property_name, value, tooltip, bold_font);
+                ImGui::PE::WrappedText(property_name, value, tooltip, bold_font);
         };
         filtered_property("File name", filename);
         filtered_property("Part name", partname.empty() ? "<none>" : partname.c_str());
@@ -442,7 +439,7 @@ void Image::draw_info()
                     if (!filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
                         continue;
 
-                    ImGui::WrappedTextProperty(key, value, "", bold_font);
+                    ImGui::PE::WrappedText(key, value, "", bold_font);
 
                     // show type + value (raw) as tooltip on hover (similar to EXIF tooltips)
                     if (ImGui::IsItemHovered())
@@ -482,7 +479,7 @@ void Image::draw_info()
                                 if (!filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
                                     continue;
 
-                                ImGui::WrappedTextProperty(key, value, "", bold_font);
+                                ImGui::PE::WrappedText(key, value, "", bold_font);
 
                                 // show type + value (raw) as tooltip on hover
                                 if (ImGui::IsItemHovered())
@@ -499,7 +496,7 @@ void Image::draw_info()
             ImGui::TreePop();
         }
 
-        PE::end();
+        ImGui::PE::End();
     }
 }
 
@@ -507,91 +504,91 @@ void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
 
-    namespace PE = nvgui::PropertyEditor;
-
     static const ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg;
-    if (PE::begin("Colorspace", table_flags))
+    if (ImGui::PE::Begin("Colorspace", table_flags))
     {
-        ImGui::WrappedTextProperty("Transfer function", metadata.value<string>("transfer function", "linear"),
-                                   "The transfer function applied at load time to make the values linear.", bold_font,
-                                   FLT_MAX);
+        ImGui::PE::WrappedText("Transfer function", metadata.value<string>("transfer function", "linear"),
+                               "The transfer function applied at load time to make the values linear.", bold_font,
+                               FLT_MAX);
 
-        PE::entry("Color gamut",
-                  [&]
-                  {
-                      bool modified   = false;
-                      auto csn        = color_gamut_names();
-                      auto open_combo = ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut_)color_space),
-                                                          ImGuiComboFlags_HeightLargest);
-                      if (open_combo)
-                      {
-                          for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
-                          {
-                              auto       cg          = (ColorGamut_)n;
-                              const bool is_selected = (color_space == n);
-                              if (ImGui::Selectable(csn[n], is_selected))
-                              {
-                                  color_space = cg;
-                                  spdlog::debug("Switching to color space {}.", n);
-                                  chromaticities = ::gamut_chromaticities(cg);
-                                  compute_color_transform();
-                                  modified = true;
-                              }
+        ImGui::PE::Entry("Color gamut",
+                         [&]
+                         {
+                             bool modified = false;
+                             auto csn      = color_gamut_names();
+                             auto open_combo =
+                                 ImGui::BeginCombo("##Color gamut", color_gamut_name((ColorGamut_)color_space),
+                                                   ImGuiComboFlags_HeightLargest);
+                             if (open_combo)
+                             {
+                                 for (ColorGamut n = ColorGamut_FirstNamed; n <= ColorGamut_LastNamed; ++n)
+                                 {
+                                     auto       cg          = (ColorGamut_)n;
+                                     const bool is_selected = (color_space == n);
+                                     if (ImGui::Selectable(csn[n], is_selected))
+                                     {
+                                         color_space = cg;
+                                         spdlog::debug("Switching to color space {}.", n);
+                                         chromaticities = ::gamut_chromaticities(cg);
+                                         compute_color_transform();
+                                         modified = true;
+                                     }
 
-                              // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                              if (is_selected)
-                                  ImGui::SetItemDefaultFocus();
-                          }
-                          ImGui::EndCombo();
-                      }
-                      return modified;
-                  });
-        ImGui::WrappedTooltip(
-            "Interpret the values stored in the file using the chromaticities of a common color profile.");
+                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
+                                     // focus)
+                                     if (is_selected)
+                                         ImGui::SetItemDefaultFocus();
+                                 }
+                                 ImGui::EndCombo();
+                             }
+                             return modified;
+                         });
+        ImGui::Tooltip("Interpret the values stored in the file using the chromaticities of a common color profile.");
 
-        PE::entry("White point",
-                  [&]
-                  {
-                      bool modified = false;
-                      auto wpn      = white_point_names();
-                      ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < EmSize(8.f)
-                                                  ? EmSize(8.f)
-                                                  : -FLT_MIN); // use the full width of the column
-                      auto open_combo = ImGui::BeginCombo("##White point", white_point_name(white_point),
-                                                          ImGuiComboFlags_HeightLargest);
-                      if (open_combo)
-                      {
-                          for (WhitePoint n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
-                          {
-                              auto       wp          = (WhitePoint_)n;
-                              const bool is_selected = (white_point == n);
-                              if (ImGui::Selectable(wpn[n], is_selected))
-                              {
-                                  white_point = wp;
-                                  spdlog::debug("Switching to white point {}.", n);
-                                  if (!chromaticities)
-                                      chromaticities = Chromaticities{};
-                                  chromaticities->white = ::white_point(wp);
-                                  compute_color_transform();
-                              }
+        ImGui::PE::Entry("White point",
+                         [&]
+                         {
+                             bool modified = false;
+                             auto wpn      = white_point_names();
+                             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x < EmSize(8.f)
+                                                         ? EmSize(8.f)
+                                                         : -FLT_MIN); // use the full width of the column
+                             auto open_combo = ImGui::BeginCombo("##White point", white_point_name(white_point),
+                                                                 ImGuiComboFlags_HeightLargest);
+                             if (open_combo)
+                             {
+                                 for (WhitePoint n = WhitePoint_FirstNamed; n <= WhitePoint_LastNamed; ++n)
+                                 {
+                                     auto       wp          = (WhitePoint_)n;
+                                     const bool is_selected = (white_point == n);
+                                     if (ImGui::Selectable(wpn[n], is_selected))
+                                     {
+                                         white_point = wp;
+                                         spdlog::debug("Switching to white point {}.", n);
+                                         if (!chromaticities)
+                                             chromaticities = Chromaticities{};
+                                         chromaticities->white = ::white_point(wp);
+                                         compute_color_transform();
+                                     }
 
-                              // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                              if (is_selected)
-                                  ImGui::SetItemDefaultFocus();
-                          }
-                          ImGui::EndCombo();
-                      }
-                      return modified;
-                  });
+                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
+                                     // focus)
+                                     if (is_selected)
+                                         ImGui::SetItemDefaultFocus();
+                                 }
+                                 ImGui::EndCombo();
+                             }
+                             return modified;
+                         });
 
         {
             const Chromaticities chr_orig{chromaticities.value_or(Chromaticities{})};
             Chromaticities       chr{chr_orig};
             bool                 edited = false;
 
-            edited |= PE::SliderFloat2("Red", &chr.red.x, 0.f, 1.f, "%.4f");
-            edited |= PE::SliderFloat2("Green", &chr.green.x, 0.f, 1.f, "%.4f");
-            edited |= PE::SliderFloat2("Blue", &chr.blue.x, 0.f, 1.f, "%.4f");
+            edited |= ImGui::PE::SliderFloat2("Red", &chr.red.x, 0.f, 1.f, "%.4f");
+            edited |= ImGui::PE::SliderFloat2("Green", &chr.green.x, 0.f, 1.f, "%.4f");
+            edited |= ImGui::PE::SliderFloat2("Blue", &chr.blue.x, 0.f, 1.f, "%.4f");
 
             if (chr_orig != chr || edited)
             {
@@ -606,7 +603,7 @@ void Image::draw_colorspace()
             Chromaticities chr{chromaticities.value_or(Chromaticities{})};
             float2         wp = chr.white;
 
-            if (PE::SliderFloat2("White point", &wp.x, 0.f, 1.f, "%.4f") || wp != chr.white)
+            if (ImGui::PE::SliderFloat2("White point", &wp.x, 0.f, 1.f, "%.4f") || wp != chr.white)
             {
                 chr.white = wp;
                 spdlog::info("Setting chromaticities to ({}, {}), ({}, {}), ({}, {}), ({}, {})", chr.red.x, chr.red.y,
@@ -615,7 +612,7 @@ void Image::draw_colorspace()
                 compute_color_transform();
             }
 
-            PE::entry(
+            ImGui::PE::Entry(
                 "Adopted neutral",
                 [&]
                 {
@@ -641,48 +638,48 @@ void Image::draw_colorspace()
                 "adoptedNeutral value should be mapped to neutral values on the display.");
         }
 
-        PE::entry("Adaptation",
-                  [&]
-                  {
-                      const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
+        ImGui::PE::Entry("Adaptation",
+                         [&]
+                         {
+                             const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
 
-                      bool modified   = false;
-                      auto open_combo = ImGui::BeginCombo("##Adaptation",
-                                                          adaptation_method <= AdaptationMethod_Identity ||
-                                                                  adaptation_method >= AdaptationMethod_Count
-                                                              ? "None"
-                                                              : wan[adaptation_method],
-                                                          ImGuiComboFlags_HeightLargest);
-                      ImGui::WrappedTooltip("Method for chromatic adaptation transform.");
-                      if (open_combo)
-                      {
-                          for (AdaptationMethod_ n = 0; wan[n]; ++n)
-                          {
-                              auto       am          = (AdaptationMethod)n;
-                              const bool is_selected = (adaptation_method == am);
-                              if (ImGui::Selectable(wan[n], is_selected))
-                              {
-                                  adaptation_method = am;
-                                  spdlog::debug("Switching to adaptation method {}.", n);
-                                  compute_color_transform();
-                              }
+                             bool modified   = false;
+                             auto open_combo = ImGui::BeginCombo("##Adaptation",
+                                                                 adaptation_method <= AdaptationMethod_Identity ||
+                                                                         adaptation_method >= AdaptationMethod_Count
+                                                                     ? "None"
+                                                                     : wan[adaptation_method],
+                                                                 ImGuiComboFlags_HeightLargest);
+                             ImGui::Tooltip("Method for chromatic adaptation transform.");
+                             if (open_combo)
+                             {
+                                 for (AdaptationMethod_ n = 0; wan[n]; ++n)
+                                 {
+                                     auto       am          = (AdaptationMethod)n;
+                                     const bool is_selected = (adaptation_method == am);
+                                     if (ImGui::Selectable(wan[n], is_selected))
+                                     {
+                                         adaptation_method = am;
+                                         spdlog::debug("Switching to adaptation method {}.", n);
+                                         compute_color_transform();
+                                     }
 
-                              // Set the initial focus when opening the combo (scrolling + keyboard navigation
-                              // focus)
-                              if (is_selected)
-                                  ImGui::SetItemDefaultFocus();
-                          }
-                          ImGui::EndCombo();
-                      }
-                      return modified;
-                  });
+                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
+                                     // focus)
+                                     if (is_selected)
+                                         ImGui::SetItemDefaultFocus();
+                                 }
+                                 ImGui::EndCombo();
+                             }
+                             return modified;
+                         });
 
-        PE::InputFloat3("Yw", &luminance_weights.x, "%+8.2e",
-                        ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly,
-                        "Channel weights to compute the luminance (Y) of a pixel.");
+        ImGui::PE::InputFloat3("Yw", &luminance_weights.x, "%+8.2e",
+                               ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly,
+                               "Channel weights to compute the luminance (Y) of a pixel.");
 
         {
-            PE::entry(
+            ImGui::PE::Entry(
                 "Color matrix",
                 [&]
                 {
@@ -701,7 +698,7 @@ void Image::draw_colorspace()
                 });
         }
 
-        PE::end();
+        ImGui::PE::End();
     }
 
     {

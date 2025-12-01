@@ -470,7 +470,7 @@ void HDRViewApp::draw_file_window()
 
         update_visibility();
     }
-    ImGui::WrappedTooltip(
+    ImGui::Tooltip(
         "Filter visible images and channel groups.\n\nOnly images with filenames matching the file pattern and "
         "channels matching the channel pattern will be shown. A pattern is a comma-separated list of strings "
         "that must be included or excluded (if prefixed with a '-').");
@@ -491,8 +491,8 @@ void HDRViewApp::draw_file_window()
     if (ImGui::IconButton(m_short_names ? ICON_MY_SHORT_NAMES "##short names button"
                                         : ICON_MY_FULL_NAMES "##short names button"))
         m_short_names = !m_short_names;
-    ImGui::WrappedTooltip(m_short_names ? "Click to show full filenames."
-                                        : "Click to show only the unique portion of each file name.");
+    ImGui::Tooltip(m_short_names ? "Click to show full filenames."
+                                 : "Click to show only the unique portion of each file name.");
 
     static const string s_view_mode_icons[] = {ICON_MY_NO_CHANNEL_GROUP, ICON_MY_LIST_VIEW, ICON_MY_TREE_VIEW};
 
@@ -515,7 +515,7 @@ void HDRViewApp::draw_file_window()
 
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip("Choose how the images and layers are listed below");
+    ImGui::Tooltip("Choose how the images and layers are listed below");
 
     static constexpr ImGuiTreeNodeFlags base_node_flags =
         ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnDoubleClick |
@@ -531,7 +531,9 @@ void HDRViewApp::draw_file_window()
     {
         const float icon_width = ImGui::IconSize().x;
 
-        ImGui::TableSetupColumn(ICON_MY_LIST_OL, ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed,
+        ImGui::TableSetupColumn(ICON_MY_LIST_OL,
+                                ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_WidthFixed |
+                                    ImGuiTableColumnFlags_IndentDisable,
                                 ImGui::GetTreeNodeToLabelSpacing());
         ImGui::TableSetupColumn(m_file_list_mode ? "File:part or channel group" : "File:part.layer.channel group",
                                 ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_IndentEnable);
@@ -598,7 +600,7 @@ void HDRViewApp::draw_file_window()
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::PushRowColors(is_current, is_reference, ImGui::GetIO().KeyShift);
-                ImGui::TextAligned(fmt::format("{}", vi + 1), 1.0f);
+                ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str());
 
                 ImGui::TableNextColumn();
 
@@ -689,7 +691,7 @@ void HDRViewApp::draw_file_window()
 
                         ImGui::TableNextRow();
                         ImGui::TableNextColumn();
-                        ImGui::TextAligned(fmt::format("{}", vi + 1), 1.0f);
+                        ImGui::TextAligned2(1.0f, -FLT_MIN, fmt::format("{}", vi + 1).c_str());
                         ImGui::TableNextColumn();
                         ImGui::Text(the_text);
                         ImGui::EndTable();
@@ -722,7 +724,7 @@ void HDRViewApp::draw_file_window()
 
                 ImGui::TextUnformatted(icon);
                 ImGui::SameLine(0.f, 0.f);
-                ImGui::TextAligned(1.0f, -FLT_MIN, the_text.c_str());
+                ImGui::TextAligned2(1.0f, -FLT_MIN, the_text.c_str());
 
                 if (open)
                 {

@@ -941,7 +941,7 @@ JXLSaveOptions *jxl_parameters_gui()
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::Tooltip("Multiply the pixels by this value before saving.");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Transfer function");
@@ -964,7 +964,7 @@ JXLSaveOptions *jxl_parameters_gui()
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.");
+    ImGui::Tooltip("Encode the pixel values using this transfer function.");
     if (s_opts.tf == TransferFunction_Gamma)
     {
         ImGui::Indent();

@@ -397,14 +397,14 @@ UHDRSaveOptions *uhdr_parameters_gui()
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+    ImGui::Tooltip("Multiply the pixels by this value before saving.");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Quality");
     ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::SliderInt("##Base image quality", &s_opts.quality, 1, 100);
-    ImGui::WrappedTooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
+    ImGui::Tooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted("Gain map:");
@@ -416,30 +416,30 @@ UHDRSaveOptions *uhdr_parameters_gui()
         ImGui::SameLine(HelloImGui::EmSize(9.f));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::SliderInt("##Gain map quality", &s_opts.gainmap_quality, 1, 100);
-        ImGui::WrappedTooltip("The quality factor to be used while encoding gain map image.\n[0-100]");
+        ImGui::Tooltip("The quality factor to be used while encoding gain map image.\n[0-100]");
 
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Multi-channel");
         ImGui::SameLine(HelloImGui::EmSize(9.f));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::Checkbox("##Multi-channel gainmap", &s_opts.use_multi_channel);
-        ImGui::WrappedTooltip("Use multi-channel gainmap for better color fidelity.");
+        ImGui::Tooltip("Use multi-channel gainmap for better color fidelity.");
 
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Scale factor");
         ImGui::SameLine(HelloImGui::EmSize(9.f));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::SliderInt("##Gain map scale factor", &s_opts.gainmap_scale, 1, 5);
-        ImGui::WrappedTooltip("The factor by which to reduce the resolution of the gainmap.\n"
-                              "[integer values in range [1 - 128] (1 : default)]]");
+        ImGui::Tooltip("The factor by which to reduce the resolution of the gainmap.\n"
+                       "[integer values in range [1 - 128] (1 : default)]]");
 
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted("Gamma");
         ImGui::SameLine(HelloImGui::EmSize(9.f));
         ImGui::SetNextItemWidth(-FLT_MIN);
         ImGui::SliderFloat("##Gain map gamma", &s_opts.gainmap_gamma, 0.1f, 5.0f);
-        ImGui::WrappedTooltip("The gamma correction to be applied on the gainmap image.\n"
-                              "[any positive real number (1.0 : default)]");
+        ImGui::Tooltip("The gamma correction to be applied on the gainmap image.\n"
+                       "[any positive real number (1.0 : default)]");
 
         if (ImGui::Button("Reset options to defaults"))
             s_opts = UHDRSaveOptions{};

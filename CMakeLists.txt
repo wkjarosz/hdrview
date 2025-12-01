@@ -427,9 +427,10 @@ if(HDRVIEW_ENABLE_LIBPNG)
 
   CPMAddPackage(
     NAME PNG
-    # GITHUB_REPOSITORY pnggroup/libpng GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
-    VERSION 1.6.51
-    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
+    GITHUB_REPOSITORY pnggroup/libpng
+    GIT_TAG 62954d33fe729566e9d17b78ddaf013896a1f3c5
+    VERSION 1.6.0
+    # URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
@@ -850,22 +851,6 @@ if(astc_dec_ADDED)
 
 endif()
 list(APPEND HDRVIEW_DEPENDENCIES astc_dec)
-
-CPMAddPackage(
-  NAME nvpro_core2
-  GITHUB_REPOSITORY nvpro-samples/nvpro_core2
-  GIT_TAG 6b7541eec4a6d6659dd1439887bc6dd9def4c3f9
-  DOWNLOAD_ONLY YES
-)
-if(nvpro_core2_ADDED)
-  message(STATUS "nvgui library added")
-  add_library(nvgui ${nvpro_core2_SOURCE_DIR}/nvgui/property_editor.cpp ${nvpro_core2_SOURCE_DIR}/nvgui/tooltip.cpp)
-  target_compile_features(nvgui PUBLIC cxx_std_11)
-  target_include_directories(nvgui PUBLIC ${nvpro_core2_SOURCE_DIR})
-  # nvgui includes imgui.h as <imgui/imgui.h>, so add its parent include directory
-  target_include_directories(nvgui PUBLIC ${hello_imgui_SOURCE_DIR}/external)
-endif()
-list(APPEND HDRVIEW_DEPENDENCIES nvgui)
 
 CPMAddPackage(
   NAME miniz

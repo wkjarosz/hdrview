@@ -624,7 +624,7 @@ void BackgroundImageLoader::draw_gui()
             string text = ImGui::TruncatedText(path.string(), ICON_MY_ADD_WATCHED_FOLDER);
             ImGui::TextUnformatted(ICON_MY_ADD_WATCHED_FOLDER);
             ImGui::SameLine(0.f, 0.f);
-            ImGui::TextAligned(1.0f, -FLT_MIN, text.c_str());
+            ImGui::TextAligned2(1.0f, -FLT_MIN, text.c_str());
             ImGui::EndDisabled();
         }
 
@@ -652,7 +652,7 @@ const ImageLoadOptions &load_image_options_gui()
     if (ImGui::InputTextWithHint("Channel selector", ICON_MY_FILTER " Filter 'include,-exclude'", buf,
                                  IM_ARRAYSIZE(buf)))
         s_opts.channel_selector = string(buf);
-    ImGui::WrappedTooltip(
+    ImGui::Tooltip(
         "If the image file contains multiple images or channels (e.g. multi-part EXR files), you can specify "
         "which part(s) to load here. This is a comma-separated list of part,layer, or channel names to include or "
         "(prefixed with '-') exclude.\n\n"
@@ -679,7 +679,7 @@ const ImageLoadOptions &load_image_options_gui()
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip(
+    ImGui::Tooltip(
         "HDRView can either try to determine the transfer function from the metadata in the file, or it can override "
         "the metadata and assume pixel values in the image have been encoded using the transfer function you select "
         "here.");

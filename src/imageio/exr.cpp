@@ -333,7 +333,7 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
     ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::Combo("##Pixel format", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
-    ImGui::WrappedTooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
+    ImGui::Tooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
 
     // Compression type
     static const Imf::Compression compression_values[] = {
@@ -361,17 +361,17 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
             Imf::getCompressionDescriptionFromId(compression_values[i], name);
-            ImGui::WrappedTooltip(name.c_str());
+            ImGui::Tooltip(name.c_str());
         }
         ImGui::EndCombo();
     }
-    ImGui::WrappedTooltip("Select the compression method for the EXR file.");
+    ImGui::Tooltip("Select the compression method for the EXR file.");
 
     // DWA compression quality
     if (s_opts.compression == Imf::DWAA_COMPRESSION || s_opts.compression == Imf::DWAB_COMPRESSION)
     {
         ImGui::SliderFloat("DWA compression quality", &s_opts.dwa_quality, 0.0f, 100.0f);
-        ImGui::WrappedTooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
+        ImGui::Tooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
     }
 
     // Tiled vs scanline
@@ -379,7 +379,7 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
     ImGui::TextUnformatted("Tiled");
     ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::Checkbox("##Tiled", &s_opts.tiled);
-    ImGui::WrappedTooltip("Enable to save as a tiled EXR file (recommended for large images).");
+    ImGui::Tooltip("Enable to save as a tiled EXR file (recommended for large images).");
 
     // Tile size
     if (s_opts.tiled)
@@ -393,7 +393,7 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         ImGui::SliderInt("##Tile height", &s_opts.tile_height, 16, 512, "Height: %d");
         ImGui::EndGroup();
-        ImGui::WrappedTooltip("Set the tile size for tiled EXR output.");
+        ImGui::Tooltip("Set the tile size for tiled EXR output.");
     }
 
     if (ImGui::Button("Reset options to defaults"))
