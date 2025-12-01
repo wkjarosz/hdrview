@@ -5,6 +5,7 @@
 //
 
 #include "stb.h"
+#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "timer.h"
 #include <cstdint>
@@ -62,6 +63,9 @@ struct STBSaveOptions
     bool              dither  = true; // only used for LDR formats
     int               quality = 95;   // only used for jpg
 };
+
+static STBSaveOptions s_opts{};
+static STBSaveOptions s_hdr_opts{1.f, TransferFunction_Linear, 1.f, false, 95};
 
 static const stbi_io_callbacks stbi_callbacks = {
     // read
@@ -374,20 +378,27 @@ void save_stb_png(const Image &img, std::ostream &os, const std::string_view fil
 // GUI parameter function
 STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
 {
-    static STBSaveOptions s_opts{};
-    static STBSaveOptions s_hdr_opts{1.f, TransferFunction_Linear, 1.f, false, 95};
-
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
+
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &opts.gain, 0.1f, 10.0f);
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
+    if (ImGui::Button("From exposure"))
         opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    ImGui::BeginGroup();
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(opts.tf, 1.f / opts.gamma).c_str()))
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
+    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf, 1.f / opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
@@ -399,20 +410,40 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
         }
         ImGui::EndCombo();
     }
-    if (opts.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &opts.gamma, 0.1f, 5.f);
-    ImGui::EndGroup();
     ImGui::WrappedTooltip("Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
                           "provide a way to signal what transfer function the files were saved with. Without this "
                           "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
+    if (opts.tf == TransferFunction_Gamma)
+    {
+        ImGui::Indent();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Gamma");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderFloat("##Gamma", &opts.gamma, 0.1f, 5.f);
+        ImGui::Unindent();
+    }
 
     if (!is_hdr)
-        ImGui::Checkbox("Dither", &opts.dither);
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Dither");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::Checkbox("##Dither", &opts.dither);
+    }
     if (has_quality)
-        ImGui::SliderInt("Quality", &opts.quality, 1, 100);
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Quality");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderInt("##Quality", &opts.quality, 1, 100);
+    }
 
     if (ImGui::Button("Reset options to defaults"))
         opts = is_hdr ? STBSaveOptions{1.f, TransferFunction_Linear, 1.f, false, 95} : STBSaveOptions{};
 
+    ImGui::Unindent();
     return &opts;
 }

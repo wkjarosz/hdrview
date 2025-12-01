@@ -221,16 +221,26 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui()
 {
+
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
+    if (ImGui::Button("From exposure"))
         s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    ImGui::BeginGroup();
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
+    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
@@ -243,13 +253,23 @@ PFMSaveOptions *pfm_parameters_gui()
         }
         ImGui::EndCombo();
     }
-    if (s_opts.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
-    ImGui::EndGroup();
     ImGui::WrappedTooltip("Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
                           "file are typically assumed linear, and there is no way to signal in the file "
                           "that the values are encoded with a different transfer function.");
+    if (s_opts.tf == TransferFunction_Gamma)
+    {
+        ImGui::Indent();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Gamma");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
+        ImGui::Unindent();
+    }
+
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PFMSaveOptions{};
+
+    ImGui::Unindent();
     return &s_opts;
 }

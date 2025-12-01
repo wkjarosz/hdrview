@@ -89,20 +89,7 @@ json attribute_to_json(const Attribute &a)
     {
         j["value"] = ta->value();
         std::string comp_str;
-        switch (ta->value())
-        {
-        case NO_COMPRESSION: comp_str = "none"; break;
-        case RLE_COMPRESSION: comp_str = "run-length encoding"; break;
-        case ZIPS_COMPRESSION: comp_str = "zip, individual scanlines"; break;
-        case ZIP_COMPRESSION: comp_str = "zip, multi-scanline blocks"; break;
-        case PIZ_COMPRESSION: comp_str = "piz"; break;
-        case PXR24_COMPRESSION: comp_str = "pxr24"; break;
-        case B44_COMPRESSION: comp_str = "b44"; break;
-        case B44A_COMPRESSION: comp_str = "b44a"; break;
-        case DWAA_COMPRESSION: comp_str = "dwa, small scanline blocks"; break;
-        case DWAB_COMPRESSION: comp_str = "dwa, medium scanline blocks"; break;
-        default: comp_str = fmt::format("{}", static_cast<int>(ta->value())); break;
-        }
+        Imf::getCompressionNameFromId(ta->value(), comp_str);
         j["string"] = comp_str;
     }
     else if (const auto *ta = dynamic_cast<const DoubleAttribute *>(&a))

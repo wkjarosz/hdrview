@@ -141,7 +141,9 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::BeginGroup();
 
         // ImGui Combo using BeginCombo/EndCombo
+        ImGui::PushFont(font("sans bold"), 0.f);
         ImGui::TextUnformatted("File format:");
+        ImGui::PopFont();
         // ImGui::SetNextItemWidth(HelloImGui::EmSize(10.f));
         if (ImGui::BeginListBox("##File format", HelloImGui::EmToVec2(8.f, 17.f)))
         {
@@ -164,135 +166,118 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         ImGui::SameLine();
 
         ImGui::BeginGroup();
+        ImGui::PushFont(font("sans bold"), 0.f);
         ImGui::TextUnformatted("Options:");
+        ImGui::PopFont();
 
-        static float gain   = 1.f;
-        static bool  dither = true;
-        static int   tf     = 1;
-
-        // float                                                                      gain = powf(2.0f,
-        // m_exposure_live);
         std::function<void(const Image &, std::ostream &, const std::string_view)> save_func;
 
-        // if (ImGui::CollapsingHeader("Options"))
+        switch (save_format)
         {
-            switch (save_format)
-            {
-            case Format_JPEG_LIBJPEG:
-            {
-                auto opts = jpg_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_jpg_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_HEIF_AVIF:
-            {
-                auto opts = heif_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_heif_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_JPEG_UHDR:
-            {
-                auto opts = uhdr_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_uhdr_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_JPEG_XL:
-            {
-                auto opts = jxl_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_jxl_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_EXR:
-            {
-                auto opts = exr_parameters_gui(current_image());
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_exr_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_PFM:
-            {
-                auto opts = pfm_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_pfm_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_PNG_LIBPNG:
-            {
-                auto opts = png_parameters_gui();
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_png_image(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_QOI:
-            {
-                ImGui::BeginGroup();
-                ImGui::SliderFloat("Gain", &gain, 0.1f, 10.0f);
-                ImGui::SameLine();
-                if (ImGui::Button("From viewport"))
-                    gain = exp2f(exposure());
-                ImGui::EndGroup();
-                ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-                ImGui::Combo("Transfer function", &tf, "Linear\0sRGB\0");
-                ImGui::Checkbox("Dither", &dither);
-                save_func = [&](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_qoi_image(img, os, filename, gain, tf == 1, dither); };
-            }
-            break;
-
-            case Format_JPEG_STB:
-            {
-                auto opts = stb_parameters_gui(false, true);
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_jpg(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_BMP_STB:
-            {
-                auto opts = stb_parameters_gui(false, false);
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_bmp(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_HDR_STB:
-            {
-                auto opts = stb_parameters_gui(true, false);
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_hdr(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_PNG_STB:
-            {
-                auto opts = stb_parameters_gui(false, false);
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_png(img, os, filename, opts); };
-            }
-            break;
-
-            case Format_TGA_STB:
-            {
-                auto opts = stb_parameters_gui(false, false);
-                save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
-                { save_stb_tga(img, os, filename, opts); };
-            }
-            break;
-            }
+        case Format_JPEG_LIBJPEG:
+        {
+            auto opts = jpg_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_jpg_image(img, os, filename, opts); };
         }
+        break;
 
-        // ImGui::Unindent();
+        case Format_HEIF_AVIF:
+        {
+            auto opts = heif_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_heif_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_JPEG_UHDR:
+        {
+            auto opts = uhdr_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_uhdr_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_JPEG_XL:
+        {
+            auto opts = jxl_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_jxl_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_EXR:
+        {
+            auto opts = exr_parameters_gui(current_image());
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_exr_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_PFM:
+        {
+            auto opts = pfm_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_pfm_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_PNG_LIBPNG:
+        {
+            auto opts = png_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_png_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_QOI:
+        {
+            auto opts = qoi_parameters_gui();
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_qoi_image(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_JPEG_STB:
+        {
+            auto opts = stb_parameters_gui(false, true);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_stb_jpg(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_BMP_STB:
+        {
+            auto opts = stb_parameters_gui(false, false);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_stb_bmp(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_HDR_STB:
+        {
+            auto opts = stb_parameters_gui(true, false);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_stb_hdr(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_PNG_STB:
+        {
+            auto opts = stb_parameters_gui(false, false);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_stb_png(img, os, filename, opts); };
+        }
+        break;
+
+        case Format_TGA_STB:
+        {
+            auto opts = stb_parameters_gui(false, false);
+            save_func = [opts](const Image &img, std::ostream &os, const std::string_view filename)
+            { save_stb_tga(img, os, filename, opts); };
+        }
+        break;
+        }
 
         ImGui::Dummy(HelloImGui::EmToVec2(25.f, 0.f)); // ensure minimum size even for no options
         ImGui::EndGroup();

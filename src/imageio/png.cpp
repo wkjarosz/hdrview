@@ -674,19 +674,29 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 
 PNGSaveOptions *png_parameters_gui()
 {
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
+    if (ImGui::Button("From exposure"))
         s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
+    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
         {
-            bool is_selected = (s_opts.tf == i);
+            bool is_selected = (s_opts.tf == (TransferFunction_)i);
             if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
                                   is_selected))
                 s_opts.tf = (TransferFunction_)i;
@@ -695,14 +705,40 @@ PNGSaveOptions *png_parameters_gui()
         }
         ImGui::EndCombo();
     }
+    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.");
     if (s_opts.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
-    ImGui::Checkbox("Dither", &s_opts.dither);
-    ImGui::Checkbox("Interlaced", &s_opts.interlaced);
-    ImGui::Combo("Data type", &s_opts.data_type_index, "UInt8\0UInt16\0");
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::Indent();
+        ImGui::Text("Gamma");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
+        ImGui::Unindent();
+    }
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Dither");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Dither", &s_opts.dither);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Interlaced");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Interlaced", &s_opts.interlaced);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Pixel format");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Pixel format", &s_opts.data_type_index, "UInt8\0UInt16\0");
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PNGSaveOptions{};
+
+    ImGui::Unindent();
     return &s_opts;
 }
 

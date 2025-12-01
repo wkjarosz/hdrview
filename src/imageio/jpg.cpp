@@ -402,20 +402,48 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 
 JPGSaveOptions *jpg_parameters_gui()
 {
-    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
-        s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::Indent(HelloImGui::EmSize(1.f));
 
-    ImGui::Combo("Transfer function", &s_opts.tf, "Linear\0sRGB\0");
-    ImGui::Checkbox("Dither", &s_opts.dither);
-    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
-    ImGui::Checkbox("Progressive", &s_opts.progressive);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::BeginGroup();
+    if (ImGui::Button("From exposure"))
+        s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Transfer function", &s_opts.tf, "Linear\0sRGB IEC61966-2.1\0");
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Dither");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Dither", &s_opts.dither);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Quality");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderInt("##Quality", &s_opts.quality, 1, 100);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Progressive");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Progressive", &s_opts.progressive);
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JPGSaveOptions{};
 
+    ImGui::Unindent();
     return &s_opts;
 }
 

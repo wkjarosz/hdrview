@@ -657,22 +657,49 @@ HEIFSaveOptions *heif_parameters_gui()
 {
     init_heif_supported_formats();
 
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
+    if (ImGui::Button("From exposure"))
         s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
-    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
-    ImGui::Checkbox("Lossless", &s_opts.lossless);
-    ImGui::Checkbox("Include alpha", &s_opts.use_alpha);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Quality");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderInt("##Base image quality", &s_opts.quality, 1, 100);
+    ImGui::WrappedTooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Lossless");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Lossless", &s_opts.lossless);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Include alpha");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Include alpha", &s_opts.use_alpha);
 
     // Format combo
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Pixel format");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
     static int selected_format = 0;
     if (selected_format >= int(s_heif_supported_formats.size()))
         selected_format = 0;
-    if (ImGui::BeginCombo("Format", s_heif_supported_formats[selected_format].display_name.c_str()))
+    if (ImGui::BeginCombo("##Format", s_heif_supported_formats[selected_format].display_name.c_str()))
     {
         for (size_t i = 0; i < s_heif_supported_formats.size(); ++i)
         {
@@ -686,7 +713,12 @@ HEIFSaveOptions *heif_parameters_gui()
     }
     s_opts.format_index = selected_format; // repurpose as index
 
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
+    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
         {
@@ -700,11 +732,22 @@ HEIFSaveOptions *heif_parameters_gui()
         }
         ImGui::EndCombo();
     }
+    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.");
     if (s_opts.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
+    {
+        ImGui::Indent();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Gamma");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
+        ImGui::Unindent();
+    }
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = HEIFSaveOptions{};
+
+    ImGui::Unindent();
     return &s_opts;
 }
 

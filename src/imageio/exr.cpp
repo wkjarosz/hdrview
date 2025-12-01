@@ -9,6 +9,7 @@
 #include "common.h" // for lerp, mod, clamp, getExtension
 #include "exr_header.h"
 #include "exr_std_streams.h"
+#include "hello_imgui/dpi_aware.h"
 #include "image.h"
 #include "imgui.h"
 #include "imgui_ext.h"
@@ -279,6 +280,8 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
 {
     static ImGuiSelectionBasicStorage group_selection;
 
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+
     if (s_opts.group_enabled.size() != img->groups.size())
     {
         s_opts.group_enabled.assign(img->groups.size(), true);
@@ -286,8 +289,11 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
 
-    ImGui::Text("Channel groups to include (%d/%d):", group_selection.Size, (int)img->groups.size());
+    ImGui::AlignTextToFramePadding();
+    ImGui::Text("Channels (%d/%d):", group_selection.Size, (int)img->groups.size());
 
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::BeginChild("##Groups", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 10),
                           ImGuiChildFlags_FrameStyle | ImGuiChildFlags_ResizeY))
     {
@@ -322,23 +328,28 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
     ImGui::EndChild();
 
     // Pixel type
-    ImGui::Combo("Pixel type", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Pixel format");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Pixel format", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
     ImGui::WrappedTooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
-    ImGui::SameLine();
-    // Tiled vs scanline
-    ImGui::Checkbox("Tiled", &s_opts.tiled);
-    ImGui::WrappedTooltip("Enable to save as a tiled EXR file (recommended for large images).");
 
     // Compression type
     static const Imf::Compression compression_values[] = {
-        Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION, Imf::ZIP_COMPRESSION,
-        Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,  Imf::B44A_COMPRESSION,
-        Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION};
+        Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION,    Imf::ZIP_COMPRESSION,
+        Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,     Imf::B44A_COMPRESSION,
+        Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION,  Imf::HTJ2K32_COMPRESSION, Imf::HTJ2K256_COMPRESSION};
     static const int num_compressions = IM_ARRAYSIZE(compression_values);
 
     string name;
     Imf::getCompressionNameFromId(compression_values[s_opts.compression], name);
-    if (ImGui::BeginCombo("Compression", name.c_str()))
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Compression");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##Compression", name.c_str()))
     {
         for (int i = 0; i < num_compressions; ++i)
         {
@@ -356,14 +367,6 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
     }
     ImGui::WrappedTooltip("Select the compression method for the EXR file.");
 
-    // Tile size
-    if (s_opts.tiled)
-    {
-        ImGui::SliderInt("Tile width", &s_opts.tile_width, 16, 512);
-        ImGui::SliderInt("Tile height", &s_opts.tile_height, 16, 512);
-        ImGui::WrappedTooltip("Set the tile size for tiled EXR output.");
-    }
-
     // DWA compression quality
     if (s_opts.compression == Imf::DWAA_COMPRESSION || s_opts.compression == Imf::DWAB_COMPRESSION)
     {
@@ -371,8 +374,31 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
         ImGui::WrappedTooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
     }
 
+    // Tiled vs scanline
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Tiled");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::Checkbox("##Tiled", &s_opts.tiled);
+    ImGui::WrappedTooltip("Enable to save as a tiled EXR file (recommended for large images).");
+
+    // Tile size
+    if (s_opts.tiled)
+    {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::BeginGroup();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+        ImGui::SliderInt("##Tile width", &s_opts.tile_width, 16, 512, "Width: %d");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        ImGui::SliderInt("##Tile height", &s_opts.tile_height, 16, 512, "Height: %d");
+        ImGui::EndGroup();
+        ImGui::WrappedTooltip("Set the tile size for tiled EXR output.");
+    }
+
     if (ImGui::Button("Reset options to defaults"))
         s_opts = EXRSaveOptions{};
 
+    ImGui::Unindent();
     return &s_opts;
 }

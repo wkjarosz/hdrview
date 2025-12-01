@@ -4,6 +4,9 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "app.h"
+#include "hello_imgui/dpi_aware.h"
+#include "imgui_ext.h"
 #define QOI_NO_STDIO
 #define QOI_IMPLEMENTATION
 #include "qoi.h"
@@ -22,6 +25,16 @@
 #include <stdexcept>
 
 using namespace std;
+
+struct QOISaveOptions
+{
+    float gain   = 1.f;
+    int   tf     = 1; // Linear = 0; sRGB = 1
+    float gamma  = 1.f;
+    bool  dither = true; // only used for LDR formats
+};
+
+static QOISaveOptions s_opts{};
 
 bool is_qoi_image(istream &is) noexcept
 {
@@ -136,4 +149,46 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, float g
 
     os.write(reinterpret_cast<char *>(encoded_data.get()), encoded_size);
     spdlog::info("Saved QOI image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
+}
+
+void save_qoi_image(const Image &img, ostream &os, string_view filename, const QOISaveOptions *opts)
+{
+    if (!opts)
+        throw std::invalid_argument("QOISaveOptions pointer is null.");
+    save_qoi_image(img, os, filename, opts->gain, opts->tf == 1, opts->dither);
+}
+
+// GUI parameter function
+QOISaveOptions *qoi_parameters_gui()
+{
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::BeginGroup();
+    if (ImGui::Button("From exposure"))
+        s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+    ImGui::EndGroup();
+    ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Transfer function", &s_opts.tf, "Linear\0sRGB IEC61966-2.1\0");
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Dither");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Dither", &s_opts.dither);
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_opts = QOISaveOptions{};
+
+    ImGui::Unindent();
+    return &s_opts;
 }

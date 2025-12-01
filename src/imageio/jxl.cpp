@@ -929,15 +929,26 @@ static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, J
 
 JXLSaveOptions *jxl_parameters_gui()
 {
+    ImGui::Indent(HelloImGui::EmSize(1.f));
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Gain");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::BeginGroup();
-    ImGui::SliderFloat("Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::SameLine();
-    if (ImGui::Button("From viewport"))
+    if (ImGui::Button("From exposure"))
         s_opts.gain = exp2f(hdrview()->exposure());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
     ImGui::EndGroup();
     ImGui::WrappedTooltip("Multiply the pixels by this value before saving.");
 
-    if (ImGui::BeginCombo("Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Transfer function");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+
+    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
     {
         for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
         {
@@ -953,18 +964,42 @@ JXLSaveOptions *jxl_parameters_gui()
         }
         ImGui::EndCombo();
     }
+    ImGui::WrappedTooltip("Encode the pixel values using this transfer function.");
     if (s_opts.tf == TransferFunction_Gamma)
-        ImGui::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f);
+    {
+        ImGui::Indent();
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Gamma");
+        ImGui::SameLine(HelloImGui::EmSize(9.f));
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
+        ImGui::Unindent();
+    }
 
-    ImGui::Combo("Data type", &s_opts.data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Pixel format");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Combo("##Pixel format", &s_opts.data_type_index, "Float32\0Float16\0UInt8\0UInt16\0");
 
-    ImGui::Checkbox("Lossless", &s_opts.lossless);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Lossless");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::Checkbox("##Lossless", &s_opts.lossless);
+
     ImGui::BeginDisabled(s_opts.lossless);
-    ImGui::SliderInt("Quality", &s_opts.quality, 1, 100);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Quality");
+    ImGui::SameLine(HelloImGui::EmSize(9.f));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderInt("##Quality", &s_opts.quality, 1, 100);
     ImGui::EndDisabled();
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JXLSaveOptions{};
+
+    ImGui::Unindent();
     return &s_opts;
 }
 
