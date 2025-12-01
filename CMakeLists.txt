@@ -255,10 +255,9 @@ set(IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON)
 CPMAddPackage(
   NAME hello_imgui
   GITHUB_REPOSITORY pthom/hello_imgui
-  # GIT_TAG cbbea7d5bf326821b2fedbff1254a87c25a039d1
-  URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.5.zip
+  # URL https://github.com/pthom/hello_imgui/archive/refs/tags/v1.92.5.zip
   VERSION 1.92.5
-  # GIT_TAG v1.92.0
+  GIT_TAG v1.92.5
   OPTIONS "HELLOIMGUI_EMSCRIPTEN_PTHREAD OFF" "HELLOIMGUI_EMSCRIPTEN_PTHREAD_ALLOW_MEMORY_GROWTH OFF"
           "IMGUI_DISABLE_OBSOLETE_FUNCTIONS ON"
 )
@@ -410,6 +409,7 @@ endif()
 
 option(HDRVIEW_ENABLE_LIBPNG "Enable LIBPNG support" ON)
 if(HDRVIEW_ENABLE_LIBPNG)
+  # cmake-format: off
   CPMAddPackage(
     NAME zlib-cmake
     URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
@@ -423,11 +423,12 @@ if(HDRVIEW_ENABLE_LIBPNG)
   else()
     message(FATAL_ERROR "zlib not found.")
   endif()
+  # cmake-format: on
   CPMAddPackage(
     NAME PNG
-    GITHUB_REPOSITORY pnggroup/libpng
-    GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
-    # VERSION 1.6.50 URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.50.zip
+    # GITHUB_REPOSITORY pnggroup/libpng GIT_TAG 7e69b66b58434f6e99af4d03378eb4e5ff762047
+    VERSION 1.6.51
+    URL https://github.com/pnggroup/libpng/archive/refs/tags/v1.6.51.zip
     OPTIONS "PNG_SHARED OFF"
             "PNG_STATIC ON"
             "PNG_FRAMEWORK OFF"
@@ -476,11 +477,12 @@ endif()
 
 CPMAddPackage(
   NAME OpenEXR
-  GITHUB_REPOSITORY AcademySoftwareFoundation/openexr
-  # FIXME: OpenEXR v3.3.0 and above seems to break our subsample channel loading
+  # GITHUB_REPOSITORY AcademySoftwareFoundation/openexr FIXME: OpenEXR v3.3.0 and above seems to break our subsample
+  # channel loading
   FIND_PACKAGE_ARGUMENTS "REQUIRED"
-  VERSION 3.1.5
-  GIT_TAG v3.3.4
+  VERSION 3.4.4
+  GIT_TAG v3.4.4
+  URL https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.4.4.zip
   OPTIONS "BUILD_SHARED_LIBS OFF"
           "BUILD_TESTING OFF"
           "OPENEXR_FORCE_INTERNAL_DEFLATE ON"
@@ -750,7 +752,7 @@ option(HDRVIEW_ENABLE_HEIF "Enable HEIF/AVIF support" ON)
 if(HDRVIEW_ENABLE_HEIF)
   CPMAddPackage(
     NAME Libheif
-    GITHUB_REPOSITORY strukturag/libheif
+    # GITHUB_REPOSITORY strukturag/libheif
     VERSION 1.17.6 # set minimum version to the one in ubuntu 24.04
     URL https://github.com/strukturag/libheif/archive/refs/tags/v1.20.2.zip
     # GIT_TAG 95428fdf22b2e0ec3ad4515c882fa0d6dd663f0a
