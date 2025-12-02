@@ -163,15 +163,24 @@ Texture *Image::chromaticity_texture() { return s_chromaticity_texture.get(); }
 
 const std::set<std::string> &Image::loadable_formats()
 {
-    static const std::set<std::string> formats = {"dng",  "jpg",  "jpeg",
+    static const std::set<std::string> formats = {"dng",  "jpg",   "jpeg",
 #ifdef HDRVIEW_ENABLE_JPEGXL
                                                   "jxl",
 #endif
-#ifdef HDRVIEW_ENABLE_HEIF
-                                                  "heic", "heif", "avif", "avifs",
+#ifdef HDRVIEW_ENABLE_LIBHEIF
+                                                  "heif", "heifs",
 #endif
-                                                  "pic",  "png",  "pnm",  "pgm",   "ppm", "bmp", "dds",
-                                                  "psd",  "pfm",  "tga",  "gif",   "hdr", "exr", "qoi"};
+#ifdef HDRVIEW_ENABLE_HEIC
+                                                  "heic", "heics",
+#endif
+#ifdef HDRVIEW_ENABLE_AVIF
+                                                  "avif", "avifs",
+#endif
+#ifdef HDRVIEW_ENABLE_AVCI
+                                                  "avci", "avcs",
+#endif
+                                                  "pic",  "png",   "pnm",  "pgm", "ppm", "bmp", "dds",
+                                                  "psd",  "pfm",   "tga",  "gif", "hdr", "exr", "qoi"};
     return formats;
 }
 

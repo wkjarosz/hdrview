@@ -110,7 +110,7 @@ static std::vector<LoaderEntry> default_loaders()
              }
              return false;
          }},
-#ifdef HDRVIEW_ENABLE_HEIF
+#ifdef HDRVIEW_ENABLE_LIBHEIF
         {"libheif",
          [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {

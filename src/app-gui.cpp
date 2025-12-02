@@ -16,8 +16,10 @@
 #include <jpeglib.h>
 #endif
 
-#ifdef HDRVIEW_ENABLE_HEIF
+#ifdef HDRVIEW_ENABLE_LIBHEIF
 #include <libheif/heif.h>
+
+#include "imageio/heif.h"
 #endif
 
 #ifdef HDRVIEW_ENABLE_JPEGXL
@@ -26,6 +28,8 @@
 
 #ifdef HDRVIEW_ENABLE_LIBPNG
 #include <png.h>
+
+#include "imageio/png.h"
 #endif
 
 #ifdef HDRVIEW_ENABLE_UHDR
@@ -33,6 +37,9 @@
 #endif
 
 #include "platform_utils.h"
+
+// Macro to convert a boolean or defined/undefined symbol to "yes"/"no" string
+#define YESNO(x) ((x) ? "yes" : "no")
 
 using namespace std;
 using namespace HelloImGui;
@@ -1004,7 +1011,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
                                          "https://github.com/mm2/Little-CMS");
 #endif
-#ifdef HDRVIEW_ENABLE_HEIF
+#ifdef HDRVIEW_ENABLE_LIBHEIF
                     ImGui::PE::Hyperlink("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
                                          "https://github.com/strukturag/libheif");
 #endif
@@ -1076,9 +1083,12 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #endif
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #ifdef LIBJPEG_TURBO_VERSION
-#define STR_HELPER(x) #x
-#define MY_STR(x)     STR_HELPER(x)
-                ImGui::Text("\tlibjpeg-turbo: %d (%s)", LIBJPEG_TURBO_VERSION_NUMBER, MY_STR(LIBJPEG_TURBO_VERSION));
+#define LIBJPEG_STR_HELPER(x) #x
+#define LIBJPEG_STR(x)        LIBJPEG_STR_HELPER(x)
+                ImGui::Text("\tlibjpeg-turbo: %d (%s)", LIBJPEG_TURBO_VERSION_NUMBER,
+                            LIBJPEG_STR(LIBJPEG_TURBO_VERSION));
+#undef LIBJPEG_STR
+#undef LIBJPEG_STR_HELPER
 #else
                 ImGui::Text("\tlibjpeg: %d", JPEG_LIB_VERSION);
 #endif
@@ -1091,63 +1101,44 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #else
                 ImGui::Text("\tlibjxl:  no");
 #endif
-#ifdef HDRVIEW_ENABLE_HEIF
+#ifdef HDRVIEW_ENABLE_LIBHEIF
                 ImGui::Text("\tlibheif: %s", heif_get_version());
+                ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC: %s", YESNO(HEIC_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF: %s", YESNO(AVIF_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI: %s", YESNO(AVCI_ENABLED));
+                ImGui::Text("\t\tFormat          decoding   encoding");
+                ImGui::Text("\t\t===================================");
+                ImGui::Text("\t\tAVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_AVC)));
+                ImGui::Text("\t\tAV1             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AV1)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_AV1)));
+                ImGui::Text("\t\tHEVC            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_HEVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_HEVC)));
+                ImGui::Text("\t\tJPEG            %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_JPEG)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG)));
+                ImGui::Text("\t\tJPEG2000        %-10s %s",
+                            YESNO(heif_have_decoder_for_format(heif_compression_JPEG2000)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_JPEG2000)));
+                ImGui::Text("\t\tUncompressed    %-10s %s",
+                            YESNO(heif_have_decoder_for_format(heif_compression_uncompressed)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_uncompressed)));
+                ImGui::Text("\t\tVVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_VVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_VVC)));
+                ImGui::Text("\t\tEVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_EVC)),
+                            YESNO(heif_have_encoder_for_format(heif_compression_EVC)));
 #else
                 ImGui::Text("\tlibheif: no");
 #endif
 #ifdef HDRVIEW_ENABLE_LIBPNG
                 ImGui::Text("\tlibpng: %s", PNG_LIBPNG_VER_STRING);
-#ifdef PNG_TEXT_SUPPORTED
-                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: yes");
-#else
-                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: no");
-#endif
-#ifdef PNG_eXIf_SUPPORTED
-                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: yes");
-#else
-                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: no");
-#endif
-#ifdef PNG_EASY_ACCESS_SUPPORTED
-                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: yes");
-#else
-                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: no");
-#endif
-                ImGui::Text("\t\tPNG_READ_ALPHA_MODE_SUPPORTED: %s",
-#ifdef PNG_READ_ALPHA_MODE_SUPPORTED
-                            "yes"
-#else
-                            "no"
-#endif
-                );
-                ImGui::Text("\t\tPNG_GAMMA_SUPPORTED: %s",
-#ifdef PNG_GAMMA_SUPPORTED
-                            "yes"
-#else
-                            "no"
-#endif
-                );
-                ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED: %s",
-#ifdef PNG_USER_CHUNKS_SUPPORTED
-                            "yes"
-#else
-                            "no"
-#endif
-                );
-                ImGui::Text("\t\tPNG_APNG_SUPPORTED: %s",
-#ifdef PNG_APNG_SUPPORTED
-                            "yes"
-#else
-                            "no"
-#endif
-                );
-                ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s",
-#ifdef PNG_PROGRESSIVE_READ_SUPPORTED
-                            "yes"
-#else
-                            "no"
-#endif
-                );
+                ImGui::Text("\t\tPNG_TEXT_SUPPORTED: %s", YESNO(PNG_TEXT_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_eXIf_SUPPORTED: %s", YESNO(PNG_eXIf_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_EASY_ACCESS_SUPPORTED: %s", YESNO(PNG_EASY_ACCESS_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_READ_ALPHA_MODE_SUPPORTED: %s", YESNO(PNG_READ_ALPHA_MODE_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_GAMMA_SUPPORTED: %s", YESNO(PNG_GAMMA_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED: %s", YESNO(PNG_USER_CHUNKS_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_APNG_SUPPORTED: %s", YESNO(PNG_APNG_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s", YESNO(PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED));
 #endif
                 ImGui::EndChild();
                 ImGui::PopFont();

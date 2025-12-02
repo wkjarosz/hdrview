@@ -33,7 +33,7 @@ struct HEIFSaveOptions
 
 static HEIFSaveOptions s_opts;
 
-#ifndef HDRVIEW_ENABLE_HEIF
+#ifndef HDRVIEW_ENABLE_LIBHEIF
 
 bool is_heif_image(istream &is) noexcept { return false; }
 
@@ -64,35 +64,15 @@ HEIFSaveOptions *heif_parameters_gui() { return &s_opts; }
 #include <libheif/heif.h>
 #include <libheif/heif_cxx.h>
 
-struct HeifFormatInfo
-{
-    heif_compression_format format;
-    std::string             display_name;
-    std::string             id_name;
-};
-
-static std::vector<HeifFormatInfo> s_heif_supported_formats;
-static bool                        s_heif_formats_initialized = false;
+static std::vector<heif::EncoderDescriptor> s_heif_supported_formats;
+static bool                                 s_heif_formats_initialized = false;
 
 static void init_heif_supported_formats()
 {
     if (s_heif_formats_initialized)
         return;
-    int num_encoders = heif_get_encoder_descriptors(heif_compression_undefined, nullptr, nullptr, 0);
-    std::vector<const heif_encoder_descriptor *> encoders(num_encoders);
-    heif_get_encoder_descriptors(heif_compression_undefined, nullptr, encoders.data(), num_encoders);
 
-    std::set<heif_compression_format> seen;
-    for (int i = 0; i < num_encoders; ++i)
-    {
-        const heif_encoder_descriptor *desc = encoders[i];
-        heif_compression_format        fmt  = heif_encoder_descriptor_get_compression_format(desc);
-        if (seen.count(fmt))
-            continue;
-        seen.insert(fmt);
-        s_heif_supported_formats.push_back(
-            {fmt, heif_encoder_descriptor_get_name(desc), heif_encoder_descriptor_get_id_name(desc)});
-    }
+    s_heif_supported_formats   = heif::EncoderDescriptor::get_encoder_descriptors(heif_compression_undefined, nullptr);
     s_heif_formats_initialized = true;
 }
 
@@ -610,7 +590,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         if (format_index < 0 || format_index >= int(s_heif_supported_formats.size()))
             throw std::runtime_error("Invalid HEIF/AVIF format selected");
 
-        auto encoder = heif::Encoder(s_heif_supported_formats[format_index].format);
+        auto encoder = s_heif_supported_formats[format_index].get_encoder();
         encoder.set_lossy_quality(quality);
         encoder.set_lossless(lossless);
 
@@ -690,21 +670,20 @@ HEIFSaveOptions *heif_parameters_gui()
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::Checkbox("##Include alpha", &s_opts.use_alpha);
 
-    // Format combo
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Pixel format");
+    ImGui::TextUnformatted("Encoder");
     ImGui::SameLine(HelloImGui::EmSize(9.f));
     ImGui::SetNextItemWidth(-FLT_MIN);
 
     static int selected_format = 0;
     if (selected_format >= int(s_heif_supported_formats.size()))
         selected_format = 0;
-    if (ImGui::BeginCombo("##Format", s_heif_supported_formats[selected_format].display_name.c_str()))
+    if (ImGui::BeginCombo("##Encoder", s_heif_supported_formats[selected_format].get_name().c_str()))
     {
         for (size_t i = 0; i < s_heif_supported_formats.size(); ++i)
         {
             bool selected = (selected_format == int(i));
-            if (ImGui::Selectable(s_heif_supported_formats[i].display_name.c_str(), selected))
+            if (ImGui::Selectable(s_heif_supported_formats[i].get_id_name().c_str(), selected))
                 selected_format = int(i);
             if (selected)
                 ImGui::SetItemDefaultFocus();

@@ -63,7 +63,7 @@ void HDRViewApp::draw_save_as_dialog(bool &open)
         static Format_ save_format = Format_EXR;
 
         static bool format_enabled[Format_Last + 1] = {true, true,
-#ifdef HDRVIEW_ENABLE_HEIF
+#ifdef HDRVIEW_ENABLE_LIBHEIF
                                                        true,
 #else
                                                        false,
