@@ -18,6 +18,7 @@
 
 #include "app.h"
 
+#include "fonts.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -221,55 +222,60 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui()
 {
-
-    ImGui::Indent(HelloImGui::EmSize(1.f));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gain");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::BeginGroup();
-    if (ImGui::Button("From exposure"))
-        s_opts.gain = exp2f(hdrview()->exposure());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::EndGroup();
-    ImGui::Tooltip("Multiply the pixels by this value before saving.");
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Transfer function");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-
-    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable))
     {
-        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-        {
-            bool is_selected = (s_opts.tf == (TransferFunction_)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
-                                  is_selected))
-                s_opts.tf = (TransferFunction_)i;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::Tooltip("Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
-                   "file are typically assumed linear, and there is no way to signal in the file "
-                   "that the values are encoded with a different transfer function.");
-    if (s_opts.tf == TransferFunction_Gamma)
-    {
-        ImGui::Indent();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Gamma");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
-        ImGui::Unindent();
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
+
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
+
+        ImGui::PE::Entry(
+            "Transfer function",
+            [&]
+            {
+                if (ImGui::BeginCombo("##Transfer function",
+                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                {
+                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    {
+                        bool is_selected = (s_opts.tf == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                                              is_selected))
+                            s_opts.tf = (TransferFunction_)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                return true;
+            },
+            "Encode the pixel values using this transfer function.\nWARNING: values in a PFM "
+            "file are typically assumed linear, and there is no way to signal in the file "
+            "that the values are encoded with a different transfer function.");
+
+        if (s_opts.tf == TransferFunction_Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f, "%.3f", 0,
+                                   "When using a gamma transfer function, this is the gamma value to use.");
+        ImGui::PE::End();
     }
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PFMSaveOptions{};
 
-    ImGui::Unindent();
     return &s_opts;
 }

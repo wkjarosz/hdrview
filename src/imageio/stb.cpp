@@ -16,6 +16,7 @@
 
 #include "app.h"
 
+#include "fonts.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 
@@ -380,70 +381,69 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
 {
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
 
-    ImGui::Indent(HelloImGui::EmSize(1.f));
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gain");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::BeginGroup();
-    if (ImGui::Button("From exposure"))
-        opts.gain = exp2f(hdrview()->exposure());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##Gain", &opts.gain, 0.1f, 10.0f);
-    ImGui::EndGroup();
-    ImGui::Tooltip("Multiply the pixels by this value before saving.");
+    if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable))
+    {
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Transfer function");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
 
-    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf, 1.f / opts.gamma).c_str()))
-    {
-        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-        {
-            bool is_selected = (opts.tf == (TransferFunction_)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / opts.gamma).c_str(), is_selected))
-                opts.tf = (TransferFunction_)i;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::Tooltip("Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
-                   "provide a way to signal what transfer function the files were saved with. Without this "
-                   "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
-    if (opts.tf == TransferFunction_Gamma)
-    {
-        ImGui::Indent();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Gamma");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderFloat("##Gamma", &opts.gamma, 0.1f, 5.f);
-        ImGui::Unindent();
-    }
+        ImGui::PE::Entry(
+            "Transfer function",
+            [&]
+            {
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf, 1.f / opts.gamma).c_str()))
+                {
+                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    {
+                        bool is_selected = (opts.tf == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / opts.gamma).c_str(),
+                                              is_selected))
+                            opts.tf = (TransferFunction_)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                return true;
+            },
+            "Encode the pixel values using this transfer function.\nWARNING: The STB library does not "
+            "provide a way to signal what transfer function the files were saved with. Without this "
+            "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
 
-    if (!is_hdr)
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Dither");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::Checkbox("##Dither", &opts.dither);
-    }
-    if (has_quality)
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Quality");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderInt("##Quality", &opts.quality, 1, 100);
+        if (opts.tf == TransferFunction_Gamma)
+            ImGui::PE::Entry(
+                "Gamma", [&] { return ImGui::SliderFloat("##Gamma", &opts.gamma, 0.1f, 5.f); },
+                "When using a gamma transfer function, this is the gamma value to use.");
+
+        if (!is_hdr)
+            ImGui::PE::Entry("Dither", [&] { return ImGui::Checkbox("##Dither", &s_opts.dither); });
+
+        if (has_quality)
+            ImGui::PE::Entry(
+                "Quality", [&] { return ImGui::SliderInt("##Quality", &opts.quality, 1, 100); },
+                "For JPEG images, controls the quality of the saved image (1 = worst, 100 = best).");
+
+        ImGui::PE::End();
     }
 
     if (ImGui::Button("Reset options to defaults"))
         opts = is_hdr ? STBSaveOptions{1.f, TransferFunction_Linear, 1.f, false, 95} : STBSaveOptions{};
 
-    ImGui::Unindent();
     return &opts;
 }

@@ -682,6 +682,15 @@ void PE::End()
     ImGui::PopStyleVar();
 }
 
+bool PE::TreeNode(const std::string &name, ImGuiTreeNodeFlags flags)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    return ImGui::TreeNodeEx(name.c_str(), flags);
+}
+void PE::TreePop() { ImGui::TreePop(); }
+
 // adapted from imgui_internal: currently only needed to remove the tooltip at the end
 // align_x: 0.0f = left, 0.5f = center, 1.0f = right.
 // size_x : 0.0f = shortcut for GetContentRegionAvail().x

@@ -16,6 +16,9 @@
 #include <string>
 #include <vector>
 
+#include "fonts.h"
+#include "imgui_ext.h"
+
 using namespace std;
 
 struct JPGSaveOptions
@@ -397,48 +400,39 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
     jpeg_finish_compress(&cinfo);
 }
 
-#include "imgui.h"
-#include "imgui_ext.h"
-
 JPGSaveOptions *jpg_parameters_gui()
 {
-    ImGui::Indent(HelloImGui::EmSize(1.f));
+    if (ImGui::PE::Begin("libJPEG Save Options", ImGuiTableFlags_Resizable))
+    {
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gain");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::BeginGroup();
-    if (ImGui::Button("From exposure"))
-        s_opts.gain = exp2f(hdrview()->exposure());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::EndGroup();
-    ImGui::Tooltip("Multiply the pixels by this value before saving.");
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Transfer function");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Combo("##Transfer function", &s_opts.tf, "Linear\0sRGB IEC61966-2.1\0");
+        ImGui::PE::Combo("Transfer function", &s_opts.tf, "Linear\0sRGB IEC61966-2.1\0");
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Dither");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Checkbox("##Dither", &s_opts.dither);
+        ImGui::PE::Checkbox("Dither", &s_opts.dither);
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Quality");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderInt("##Quality", &s_opts.quality, 1, 100);
+        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100);
+        ImGui::PE::Checkbox("Progressive", &s_opts.progressive);
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Progressive");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Checkbox("##Progressive", &s_opts.progressive);
+        ImGui::PE::End();
+    }
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = JPGSaveOptions{};

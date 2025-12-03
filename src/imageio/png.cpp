@@ -11,9 +11,11 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
-#include "imgui.h"
 #include "timer.h"
 #include <optional>
+
+#include "fonts.h"
+#include "imgui_ext.h"
 
 struct PNGSaveOptions
 {
@@ -669,76 +671,66 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
     png_write_end(png_ptr, info_ptr.get());
 }
 
-#include "imgui.h"
-#include "imgui_ext.h"
-
 PNGSaveOptions *png_parameters_gui()
 {
-    ImGui::Indent(HelloImGui::EmSize(1.f));
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Gain");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::BeginGroup();
-    if (ImGui::Button("From exposure"))
-        s_opts.gain = exp2f(hdrview()->exposure());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::EndGroup();
-    ImGui::Tooltip("Multiply the pixels by this value before saving.");
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Transfer function");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-
-    if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+    if (ImGui::PE::Begin("libPNG Save Options", ImGuiTableFlags_Resizable))
     {
-        for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
-        {
-            bool is_selected = (s_opts.tf == (TransferFunction_)i);
-            if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
-                                  is_selected))
-                s_opts.tf = (TransferFunction_)i;
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-        }
-        ImGui::EndCombo();
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
+
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
+
+        ImGui::PE::Entry(
+            "Transfer function",
+            [&]
+            {
+                if (ImGui::BeginCombo("##Transfer function",
+                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                {
+                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    {
+                        bool is_selected = (s_opts.tf == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                                              is_selected))
+                            s_opts.tf = (TransferFunction_)i;
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                return true;
+            },
+            "Encode the pixel values using this transfer function.");
+
+        if (s_opts.tf == TransferFunction_Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f, "%.3f", 0,
+                                   "When using a gamma transfer function, this is the gamma value to use.");
+
+        ImGui::PE::Checkbox("Dither", &s_opts.dither);
+        ImGui::PE::Checkbox("Interlaced", &s_opts.interlaced);
+        ImGui::PE::Combo("Pixel format", &s_opts.data_type_index, "UInt8\0UInt16\0");
+
+        ImGui::PE::End();
     }
-    ImGui::Tooltip("Encode the pixel values using this transfer function.");
-    if (s_opts.tf == TransferFunction_Gamma)
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::Indent();
-        ImGui::Text("Gamma");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
-        ImGui::Unindent();
-    }
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Dither");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Checkbox("##Dither", &s_opts.dither);
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Interlaced");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Checkbox("##Interlaced", &s_opts.interlaced);
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Pixel format");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Combo("##Pixel format", &s_opts.data_type_index, "UInt8\0UInt16\0");
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = PNGSaveOptions{};
 
-    ImGui::Unindent();
     return &s_opts;
 }
 

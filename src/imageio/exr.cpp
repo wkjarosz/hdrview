@@ -280,8 +280,6 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
 {
     static ImGuiSelectionBasicStorage group_selection;
 
-    ImGui::Indent(HelloImGui::EmSize(1.f));
-
     if (s_opts.group_enabled.size() != img->groups.size())
     {
         s_opts.group_enabled.assign(img->groups.size(), true);
@@ -289,116 +287,126 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::Text("Channels (%d/%d):", group_selection.Size, (int)img->groups.size());
-
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::BeginChild("##Groups", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 10),
-                          ImGuiChildFlags_FrameStyle | ImGuiChildFlags_ResizeY))
+    if (ImGui::PE::Begin("OpenEXR Save Options", ImGuiTableFlags_Resizable))
     {
-        ImGuiMultiSelectFlags flags = ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect1d;
-        ImGuiMultiSelectIO   *ms_io = ImGui::BeginMultiSelect(flags, group_selection.Size, (int)img->groups.size());
-        group_selection.ApplyRequests(ms_io);
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-        int width = std::to_string(img->groups.size()).size();
-        for (int i = 0; i < (int)img->groups.size(); ++i)
-        {
-            auto &group            = img->groups[i];
-            bool  item_is_selected = group_selection.Contains((ImGuiID)i);
-            ImGui::SetNextItemSelectionUserData(i);
+        // Channels (custom multi-select widget)
+        ImGui::PE::Entry(
+            fmt::format("Channels ({}/{})", group_selection.Size, (int)img->groups.size()),
+            [&]
+            {
+                if (ImGui::BeginChild("##Groups", ImVec2(-FLT_MIN, ImGui::GetFontSize() * 10),
+                                      ImGuiChildFlags_FrameStyle | ImGuiChildFlags_ResizeY))
+                {
+                    ImGuiMultiSelectFlags flags =
+                        ImGuiMultiSelectFlags_ClearOnEscape | ImGuiMultiSelectFlags_BoxSelect1d;
+                    ImGuiMultiSelectIO *ms_io =
+                        ImGui::BeginMultiSelect(flags, group_selection.Size, (int)img->groups.size());
+                    group_selection.ApplyRequests(ms_io);
 
-            auto       &channel    = img->channels[group.channels[0]];
-            string      group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
-            string      layer_path = Channel::head(channel.name) + group_name;
-            std::string label      = fmt::format("{:>{}d} {}", i + 1, width, layer_path);
+                    int width = std::to_string(img->groups.size()).size();
+                    for (int i = 0; i < (int)img->groups.size(); ++i)
+                    {
+                        auto &group            = img->groups[i];
+                        bool  item_is_selected = group_selection.Contains((ImGuiID)i);
+                        ImGui::SetNextItemSelectionUserData(i);
 
-            ImGui::Selectable(label.c_str(), item_is_selected);
-        }
+                        auto       &channel    = img->channels[group.channels[0]];
+                        string      group_name = group.num_channels == 1 ? group.name : "(" + group.name + ")";
+                        string      layer_path = Channel::head(channel.name) + group_name;
+                        std::string label      = fmt::format("{:>{}d} {}", i + 1, width, layer_path);
 
-        ms_io = ImGui::EndMultiSelect();
-        group_selection.ApplyRequests(ms_io);
+                        ImGui::Selectable(label.c_str(), item_is_selected);
+                    }
 
-        // Update s_opts.group_enabled based on selection
-        if (s_opts.group_enabled.size() != img->groups.size())
-            s_opts.group_enabled.assign(img->groups.size(), true);
-        for (int i = 0; i < (int)img->groups.size(); ++i)
-            s_opts.group_enabled[i] = group_selection.Contains((ImGuiID)i);
-    }
-    ImGui::EndChild();
+                    ms_io = ImGui::EndMultiSelect();
+                    group_selection.ApplyRequests(ms_io);
 
-    // Pixel type
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Pixel format");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::Combo("##Pixel format", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0");
-    ImGui::Tooltip("Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
+                    // Update s_opts.group_enabled based on selection
+                    if (s_opts.group_enabled.size() != img->groups.size())
+                        s_opts.group_enabled.assign(img->groups.size(), true);
+                    for (int i = 0; i < (int)img->groups.size(); ++i)
+                        s_opts.group_enabled[i] = group_selection.Contains((ImGuiID)i);
+                }
+                ImGui::EndChild();
+                return true;
+            },
+            "Select which channel groups to write to the EXR file.");
 
-    // Compression type
-    static const Imf::Compression compression_values[] = {
-        Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION,    Imf::ZIP_COMPRESSION,
-        Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,     Imf::B44A_COMPRESSION,
-        Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION,  Imf::HTJ2K32_COMPRESSION, Imf::HTJ2K256_COMPRESSION};
-    static const int num_compressions = IM_ARRAYSIZE(compression_values);
+        // Pixel format
+        ImGui::PE::Combo("Pixel format", &s_opts.pixel_type, "Float (32-bit)\0Half (16-bit)\0", -1,
+                         "Choose whether to store channels as 32-bit float or 16-bit half in the EXR file.");
 
-    string name;
-    Imf::getCompressionNameFromId(compression_values[s_opts.compression], name);
+        // Compression (custom enumerated combo with tooltips)
+        ImGui::PE::Entry(
+            "Compression",
+            [&]
+            {
+                static const Imf::Compression compression_values[] = {
+                    Imf::NO_COMPRESSION,   Imf::RLE_COMPRESSION,   Imf::ZIPS_COMPRESSION,    Imf::ZIP_COMPRESSION,
+                    Imf::PIZ_COMPRESSION,  Imf::PXR24_COMPRESSION, Imf::B44_COMPRESSION,     Imf::B44A_COMPRESSION,
+                    Imf::DWAA_COMPRESSION, Imf::DWAB_COMPRESSION,  Imf::HTJ2K32_COMPRESSION, Imf::HTJ2K256_COMPRESSION};
+                static const int num_compressions = IM_ARRAYSIZE(compression_values);
 
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Compression");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::BeginCombo("##Compression", name.c_str()))
-    {
-        for (int i = 0; i < num_compressions; ++i)
-        {
-            bool is_selected = (s_opts.compression == compression_values[i]);
-            Imf::getCompressionNameFromId(compression_values[i], name);
-            if (ImGui::Selectable(name.c_str(), is_selected))
-                s_opts.compression = compression_values[i];
+                string name;
+                Imf::getCompressionNameFromId(compression_values[s_opts.compression], name);
 
-            if (is_selected)
-                ImGui::SetItemDefaultFocus();
-            Imf::getCompressionDescriptionFromId(compression_values[i], name);
-            ImGui::Tooltip(name.c_str());
-        }
-        ImGui::EndCombo();
-    }
-    ImGui::Tooltip("Select the compression method for the EXR file.");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                if (ImGui::BeginCombo("##Compression", name.c_str()))
+                {
+                    for (int i = 0; i < num_compressions; ++i)
+                    {
+                        bool is_selected = (s_opts.compression == compression_values[i]);
+                        Imf::getCompressionNameFromId(compression_values[i], name);
+                        if (ImGui::Selectable(name.c_str(), is_selected))
+                            s_opts.compression = compression_values[i];
 
-    // DWA compression quality
-    if (s_opts.compression == Imf::DWAA_COMPRESSION || s_opts.compression == Imf::DWAB_COMPRESSION)
-    {
-        ImGui::SliderFloat("DWA compression quality", &s_opts.dwa_quality, 0.0f, 100.0f);
-        ImGui::Tooltip("Set the lossy quality for DWA compression (higher is better, 45 is default).");
-    }
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                        Imf::getCompressionDescriptionFromId(compression_values[i], name);
+                        ImGui::Tooltip(name.c_str());
+                    }
+                    ImGui::EndCombo();
+                }
 
-    // Tiled vs scanline
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Tiled");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::Checkbox("##Tiled", &s_opts.tiled);
-    ImGui::Tooltip("Enable to save as a tiled EXR file (recommended for large images).");
+                return true;
+            },
+            "Select the compression method for the EXR file.");
 
-    // Tile size
-    if (s_opts.tiled)
-    {
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::BeginGroup();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
-        ImGui::SliderInt("##Tile width", &s_opts.tile_width, 16, 512, "Width: %d");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-        ImGui::SliderInt("##Tile height", &s_opts.tile_height, 16, 512, "Height: %d");
-        ImGui::EndGroup();
-        ImGui::Tooltip("Set the tile size for tiled EXR output.");
+        // DWA compression quality
+        if (s_opts.compression == Imf::DWAA_COMPRESSION || s_opts.compression == Imf::DWAB_COMPRESSION)
+            ImGui::PE::SliderFloat("DWA compression quality", &s_opts.dwa_quality, 0.0f, 100.0f, "%.3f", 0,
+                                   "Set the lossy quality for DWA compression (higher is better, 45 is default).");
+
+        // Tiled vs scanline
+        ImGui::PE::Entry(
+            "Tiled",
+            [&]
+            {
+                ImGui::Checkbox("##Tiled", &s_opts.tiled);
+                if (s_opts.tiled)
+                {
+                    ImGui::SameLine();
+                    ImGui::BeginGroup();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x / 2);
+                    ImGui::SliderInt("##Tile width", &s_opts.tile_width, 16, 512, "Width: %d");
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                    ImGui::SliderInt("##Tile height", &s_opts.tile_height, 16, 512, "Height: %d");
+                    ImGui::EndGroup();
+                    ImGui::Tooltip("Set the tile size for tiled EXR output.");
+                }
+                return false;
+            },
+            "Enable to save as a tiled EXR file (recommended for large images).");
+
+        ImGui::PE::End();
     }
 
     if (ImGui::Button("Reset options to defaults"))
         s_opts = EXRSaveOptions{};
 
-    ImGui::Unindent();
     return &s_opts;
 }

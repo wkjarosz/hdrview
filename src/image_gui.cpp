@@ -638,41 +638,43 @@ void Image::draw_colorspace()
                 "adoptedNeutral value should be mapped to neutral values on the display.");
         }
 
-        ImGui::PE::Entry("Adaptation",
-                         [&]
-                         {
-                             const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
+        ImGui::PE::Entry(
+            "Adaptation",
+            [&]
+            {
+                const char *wan[] = {"None", "XYZ scaling", "Bradford", "Von Kries", nullptr};
 
-                             bool modified   = false;
-                             auto open_combo = ImGui::BeginCombo("##Adaptation",
-                                                                 adaptation_method <= AdaptationMethod_Identity ||
-                                                                         adaptation_method >= AdaptationMethod_Count
-                                                                     ? "None"
-                                                                     : wan[adaptation_method],
-                                                                 ImGuiComboFlags_HeightLargest);
-                             ImGui::Tooltip("Method for chromatic adaptation transform.");
-                             if (open_combo)
-                             {
-                                 for (AdaptationMethod_ n = 0; wan[n]; ++n)
-                                 {
-                                     auto       am          = (AdaptationMethod)n;
-                                     const bool is_selected = (adaptation_method == am);
-                                     if (ImGui::Selectable(wan[n], is_selected))
-                                     {
-                                         adaptation_method = am;
-                                         spdlog::debug("Switching to adaptation method {}.", n);
-                                         compute_color_transform();
-                                     }
+                bool modified   = false;
+                auto open_combo = ImGui::BeginCombo("##Adaptation",
+                                                    adaptation_method <= AdaptationMethod_Identity ||
+                                                            adaptation_method >= AdaptationMethod_Count
+                                                        ? "None"
+                                                        : wan[adaptation_method],
+                                                    ImGuiComboFlags_HeightLargest);
+                if (open_combo)
+                {
+                    for (AdaptationMethod_ n = 0; wan[n]; ++n)
+                    {
+                        auto       am          = (AdaptationMethod)n;
+                        const bool is_selected = (adaptation_method == am);
+                        if (ImGui::Selectable(wan[n], is_selected))
+                        {
+                            adaptation_method = am;
+                            spdlog::debug("Switching to adaptation method {}.", n);
+                            compute_color_transform();
+                            modified = true;
+                        }
 
-                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
-                                     // focus)
-                                     if (is_selected)
-                                         ImGui::SetItemDefaultFocus();
-                                 }
-                                 ImGui::EndCombo();
-                             }
-                             return modified;
-                         });
+                        // Set the initial focus when opening the combo (scrolling + keyboard navigation
+                        // focus)
+                        if (is_selected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                return modified;
+            },
+            "Method for chromatic adaptation transform.");
 
         ImGui::PE::InputFloat3("Yw", &luminance_weights.x, "%+8.2e",
                                ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_ReadOnly,

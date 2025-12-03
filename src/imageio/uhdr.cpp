@@ -9,6 +9,7 @@
 #include "colorspace.h"
 #include "exif.h"
 #include "image.h"
+#include "imgui.h"
 #include "timer.h"
 #include <cstdint>
 #include <cstdio>
@@ -17,6 +18,9 @@
 #include <half.h>
 #include <iostream>
 #include <stdexcept>
+
+#include "fonts.h"
+#include "imgui_ext.h"
 
 using namespace std;
 
@@ -380,71 +384,59 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
-#include "imgui.h"
-#include "imgui_ext.h"
-
 UHDRSaveOptions *uhdr_parameters_gui()
 {
-    ImGui::Indent(HelloImGui::EmSize(1.f));
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gain");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::BeginGroup();
-    if (ImGui::Button("From exposure"))
-        s_opts.gain = exp2f(hdrview()->exposure());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
-    ImGui::EndGroup();
-    ImGui::Tooltip("Multiply the pixels by this value before saving.");
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Quality");
-    ImGui::SameLine(HelloImGui::EmSize(9.f));
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::SliderInt("##Base image quality", &s_opts.quality, 1, 100);
-    ImGui::Tooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("Gain map:");
-
-    ImGui::Indent();
+    if (ImGui::PE::Begin("UltraHDR Save Options", ImGuiTableFlags_Resizable))
     {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Quality");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderInt("##Gain map quality", &s_opts.gainmap_quality, 1, 100);
-        ImGui::Tooltip("The quality factor to be used while encoding gain map image.\n[0-100]");
+        ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
+        ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Multi-channel");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::Checkbox("##Multi-channel gainmap", &s_opts.use_multi_channel);
-        ImGui::Tooltip("Use multi-channel gainmap for better color fidelity.");
+        // Gain
+        ImGui::PE::Entry(
+            "Gain",
+            [&]
+            {
+                ImGui::BeginGroup();
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::IconButtonSize().x -
+                                        ImGui::GetStyle().ItemInnerSpacing.x);
+                auto changed = ImGui::SliderFloat("##Gain", &s_opts.gain, 0.1f, 10.0f);
+                ImGui::SameLine(0.f, ImGui::GetStyle().ItemInnerSpacing.x);
+                if (ImGui::IconButton(ICON_MY_EXPOSURE))
+                    s_opts.gain = exp2f(hdrview()->exposure());
+                ImGui::Tooltip("Set gain from the current viewport exposure value.");
+                ImGui::EndGroup();
+                return changed;
+            },
+            "Multiply the pixels by this value before saving.");
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Scale factor");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderInt("##Gain map scale factor", &s_opts.gainmap_scale, 1, 5);
-        ImGui::Tooltip("The factor by which to reduce the resolution of the gainmap.\n"
-                       "[integer values in range [1 - 128] (1 : default)]]");
+        // Base quality
+        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100);
+        ImGui::Tooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
 
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Gamma");
-        ImGui::SameLine(HelloImGui::EmSize(9.f));
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        ImGui::SliderFloat("##Gain map gamma", &s_opts.gainmap_gamma, 0.1f, 5.0f);
-        ImGui::Tooltip("The gamma correction to be applied on the gainmap image.\n"
-                       "[any positive real number (1.0 : default)]");
+        if (ImGui::PE::TreeNode("Gain map", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull |
+                                                ImGuiTreeNodeFlags_SpanFullWidth))
+        {
+            ImGui::PE::SliderInt("Quality", &s_opts.gainmap_quality, 1, 100, "%d", 0,
+                                 "The quality factor to be used while encoding gain map image.\n[0-100]");
 
-        if (ImGui::Button("Reset options to defaults"))
-            s_opts = UHDRSaveOptions{};
+            ImGui::PE::Checkbox("Multi-channel", &s_opts.use_multi_channel,
+                                "Use multi-channel gainmap for better color fidelity.");
+
+            ImGui::PE::SliderInt("Scale factor", &s_opts.gainmap_scale, 1, 5, "%d", 0,
+                                 "The downscaling factor for the gainmap image.\n[1-5]");
+
+            ImGui::PE::SliderFloat(
+                "Gamma", &s_opts.gainmap_gamma, 0.1f, 5.0f, "%.3f", 0,
+                "The gamma correction to be applied on the gainmap image.\n[any positive real number "
+                "(1.0 : default)]");
+            ImGui::PE::TreePop();
+        }
+
+        ImGui::PE::End();
     }
-    ImGui::Unindent();
+
+    if (ImGui::Button("Reset options to defaults"))
+        s_opts = UHDRSaveOptions{};
 
     return &s_opts;
 }

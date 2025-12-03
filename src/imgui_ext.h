@@ -229,21 +229,11 @@ inline void Entry(const std::string &property_name, const std::string &value)
               return false;
           });
 }
-
-inline bool SliderFloat2(const char *label, float v[2], float v_min, float v_max, const char *format = "%.3f",
-                         ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
-{
-    return Entry(label, [&] { return ImGui::SliderFloat2("##hidden", v, v_min, v_max, format, flags); }, tooltip);
-}
-
-inline bool InputFloat3(const char *label, float v[3], const char *format = "%.3f", ImGuiInputTextFlags flags = 0,
-                        const std::string &tooltip = {})
-{
-    return Entry(label, [&] { return ImGui::InputFloat3("##hidden", v, format, flags); }, tooltip);
-}
+bool TreeNode(const std::string &name, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth);
+void TreePop();
 
 /**
-    Displays a property with wrapped text in an ImGui property editor.
+    Displays a property with wrapped text in a property editor.
 
     This function renders a property name and its value, wrapping the value text to fit within a specified width.
     Optionally, a custom font can be used. If the value is clicked, it is copied to the clipboard.
@@ -259,6 +249,251 @@ inline bool InputFloat3(const char *label, float v[3], const char *format = "%.3
 void WrappedText(const std::string &property_name, const std::string &value, const std::string &tooltip,
                  ImFont *font = nullptr, float wrap_em = 0.f);
 void Hyperlink(const char *name, const char *desc, const char *url = nullptr);
+
+// ===== PropertyEditor: explicit named widget forwarders =====
+// These provide PropertyEditor::XXX(property_name, widget_args..., tooltip)
+// and forward into the central Entry(property_name, content_fct, tooltip).
+
+inline bool SliderFloat(const std::string &property_name, float *v, float v_min, float v_max,
+                        const char *format = "%.3f", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::SliderFloat("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool SliderFloat2(const std::string &property_name, float v[2], float v_min, float v_max,
+                         const char *format = "%.3f", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::SliderFloat2("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool SliderFloat3(const std::string &property_name, float v[3], float v_min, float v_max,
+                         const char *format = "%.3f", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::SliderFloat3("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool SliderFloat4(const std::string &property_name, float v[4], float v_min, float v_max,
+                         const char *format = "%.3f", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::SliderFloat4("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool SliderInt(const std::string &property_name, int *v, int v_min, int v_max, const char *format = "%d",
+                      ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::SliderInt("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool SliderInt2(const std::string &property_name, int v[2], int v_min, int v_max, const char *format = "%d",
+                       ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::SliderInt2("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool SliderInt3(const std::string &property_name, int v[3], int v_min, int v_max, const char *format = "%d",
+                       ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::SliderInt3("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool SliderInt4(const std::string &property_name, int v[4], int v_min, int v_max, const char *format = "%d",
+                       ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::SliderInt4("##hidden", v, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool VSliderFloat(const std::string &property_name, const ImVec2 &size, float *v, float v_min, float v_max,
+                         const char *format = "%.3f", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::VSliderFloat("##hidden", size, v, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool VSliderInt(const std::string &property_name, const ImVec2 &size, int *v, int v_min, int v_max,
+                       const char *format = "%d", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::VSliderInt("##hidden", size, v, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool DragFloat(const std::string &property_name, float *v, float v_speed = 1.0f, float v_min = 0.0f,
+                      float v_max = 0.0f, const char *format = "%.3f", ImGuiSliderFlags flags = 0,
+                      const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragFloat("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragFloat2(const std::string &property_name, float v[2], float v_speed = 1.0f, float v_min = 0.0f,
+                       float v_max = 0.0f, const char *format = "%.3f", ImGuiSliderFlags flags = 0,
+                       const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragFloat2("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragFloat3(const std::string &property_name, float v[3], float v_speed = 1.0f, float v_min = 0.0f,
+                       float v_max = 0.0f, const char *format = "%.3f", ImGuiSliderFlags flags = 0,
+                       const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragFloat3("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragFloat4(const std::string &property_name, float v[4], float v_speed = 1.0f, float v_min = 0.0f,
+                       float v_max = 0.0f, const char *format = "%.3f", ImGuiSliderFlags flags = 0,
+                       const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragFloat4("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool DragInt(const std::string &property_name, int *v, float v_speed = 1.0f, int v_min = 0, int v_max = 0,
+                    const char *format = "%d", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragInt("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragInt2(const std::string &property_name, int v[2], float v_speed = 1.0f, int v_min = 0, int v_max = 0,
+                     const char *format = "%d", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragInt2("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragInt3(const std::string &property_name, int v[3], float v_speed = 1.0f, int v_min = 0, int v_max = 0,
+                     const char *format = "%d", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragInt3("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+inline bool DragInt4(const std::string &property_name, int v[4], float v_speed = 1.0f, int v_min = 0, int v_max = 0,
+                     const char *format = "%d", ImGuiSliderFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::DragInt4("##hidden", v, v_speed, v_min, v_max, format, flags); }, tooltip);
+}
+
+inline bool InputFloat(const std::string &property_name, float *v, float step = 0.0f, float step_fast = 0.0f,
+                       const char *format = "%.3f", ImGuiInputTextFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&] { return ImGui::InputFloat("##hidden", v, step, step_fast, format, flags); }, tooltip);
+}
+inline bool InputFloat2(const std::string &property_name, float v[2], const char *format = "%.3f",
+                        ImGuiInputTextFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputFloat2("##hidden", v, format, flags); }, tooltip);
+}
+inline bool InputFloat3(const std::string &property_name, float v[3], const char *format = "%.3f",
+                        ImGuiInputTextFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputFloat3("##hidden", v, format, flags); }, tooltip);
+}
+inline bool InputFloat4(const std::string &property_name, float v[4], const char *format = "%.3f",
+                        ImGuiInputTextFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputFloat4("##hidden", v, format, flags); }, tooltip);
+}
+
+inline bool InputInt(const std::string &property_name, int *v, int step = 1, int step_fast = 100,
+                     ImGuiInputTextFlags flags = 0, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputInt("##hidden", v, step, step_fast, flags); }, tooltip);
+}
+inline bool InputInt2(const std::string &property_name, int v[2], ImGuiInputTextFlags flags = 0,
+                      const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputInt2("##hidden", v, flags); }, tooltip);
+}
+inline bool InputInt3(const std::string &property_name, int v[3], ImGuiInputTextFlags flags = 0,
+                      const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputInt3("##hidden", v, flags); }, tooltip);
+}
+inline bool InputInt4(const std::string &property_name, int v[4], ImGuiInputTextFlags flags = 0,
+                      const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::InputInt4("##hidden", v, flags); }, tooltip);
+}
+
+inline bool Checkbox(const std::string &property_name, bool *v, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::Checkbox("##hidden", v); }, tooltip);
+}
+inline bool CheckboxFlags(const std::string &property_name, int *flags, int flags_value,
+                          const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::CheckboxFlags("##hidden", flags, flags_value); }, tooltip);
+}
+inline bool CheckboxFlags(const std::string &property_name, unsigned int *flags, unsigned int flags_value,
+                          const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::CheckboxFlags("##hidden", flags, flags_value); }, tooltip);
+}
+
+inline bool RadioButton(const std::string &property_name, bool active, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::RadioButton("##hidden", active); }, tooltip);
+}
+inline bool RadioButton(const std::string &property_name, int *v, int v_button, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::RadioButton("##hidden", v, v_button); }, tooltip);
+}
+
+inline bool Button(const std::string &property_name, const ImVec2 &size = ImVec2(0, 0), const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::Button("##hidden", size); }, tooltip);
+}
+inline bool SmallButton(const std::string &property_name, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::SmallButton("##hidden"); }, tooltip);
+}
+
+inline bool Combo(const std::string &property_name, int *current_item, const char *const items[], int items_count,
+                  int popup_max_height_in_items = -1, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name,
+        [&] { return ImGui::Combo("##hidden", current_item, items, items_count, popup_max_height_in_items); }, tooltip);
+}
+inline bool Combo(const std::string &property_name, int *current_item, const char *items_separated_by_zeros,
+                  int popup_max_height_in_items = -1, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name,
+        [&] { return ImGui::Combo("##hidden", current_item, items_separated_by_zeros, popup_max_height_in_items); },
+        tooltip);
+}
+inline bool Combo(const std::string &property_name, int *current_item, const char *(*getter)(void *user_data, int idx),
+                  void *user_data, int items_count, int popup_max_height_in_items = -1, const std::string &tooltip = {})
+{
+    return Entry(
+        property_name, [&]
+        { return ImGui::Combo("##hidden", current_item, getter, user_data, items_count, popup_max_height_in_items); },
+        tooltip);
+}
+
+inline bool ColorEdit3(const std::string &property_name, float col[3], ImGuiColorEditFlags flags = 0,
+                       const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::ColorEdit3("##hidden", col, flags); }, tooltip);
+}
+inline bool ColorEdit4(const std::string &property_name, float col[4], ImGuiColorEditFlags flags = 0,
+                       const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::ColorEdit4("##hidden", col, flags); }, tooltip);
+}
+inline bool ColorPicker3(const std::string &property_name, float col[3], ImGuiColorEditFlags flags = 0,
+                         const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::ColorPicker3("##hidden", col, flags); }, tooltip);
+}
+inline bool ColorPicker4(const std::string &property_name, float col[4], ImGuiColorEditFlags flags = 0,
+                         const float *ref_col = NULL, const std::string &tooltip = {})
+{
+    return Entry(property_name, [&] { return ImGui::ColorPicker4("##hidden", col, flags, ref_col); }, tooltip);
+}
+inline bool ColorButton(const char *label, const ImVec4 &col, ImGuiColorEditFlags flags = 0,
+                        const ImVec2 &size = ImVec2(0, 0), const std::string &tooltip = {})
+{
+    return Entry(label, [&] { return ImGui::ColorButton("##hidden", col, flags, size); }, tooltip);
+}
+
 } // namespace PropertyEditor
 
 namespace PE = PropertyEditor; // short alias
