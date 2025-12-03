@@ -5,36 +5,15 @@
 //
 
 #include "image.h"
-#include "json.h"
-#include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <fmt/core.h>
 #include <iostream>
 #include <stdexcept>
 
 #include "app.h"
-
-#include "exif.h"
-#include "fonts.h"
-#include "imgui_ext.h"
+#include "imgui.h"
 
 using namespace std;
-
-struct HEIFSaveOptions
-{
-    float             gain         = 1.f;
-    int               quality      = 95;
-    bool              lossless     = false;
-    bool              use_alpha    = true;
-    int               format_index = 0;
-    TransferFunction_ tf           = TransferFunction_sRGB;
-    float             gamma        = 2.2f;
-    // encoder parameters stored as JSON so we can keep typed values
-    json encoder_parameters = json::object();
-};
-
-static HEIFSaveOptions s_opts;
 
 #ifndef HDRVIEW_ENABLE_LIBHEIF
 
@@ -51,21 +30,43 @@ void save_heif_image(const Image &, std::ostream &, std::string_view, float, int
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-void save_heif_image(const Image &, std::ostream &, std::string_view, const HEIFSaveOptions *)
+void save_heif_image(const Image &, std::ostream &, std::string_view, const struct HEIFSaveOptions *)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
 
-HEIFSaveOptions *heif_parameters_gui() { return &s_opts; }
+HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 
 #else
 
 #include "colorspace.h"
+#include "exif.h"
+#include "fonts.h"
 #include "heif.h"
 #include "icc.h"
+#include "imgui_ext.h"
+#include "json.h"
 #include "timer.h"
+#include <cstdint>
+#include <cstdio>
+
 #include <libheif/heif.h>
 #include <libheif/heif_cxx.h>
+
+struct HEIFSaveOptions
+{
+    float             gain         = 1.f;
+    int               quality      = 95;
+    bool              lossless     = false;
+    bool              use_alpha    = true;
+    int               format_index = 0;
+    TransferFunction_ tf           = TransferFunction_sRGB;
+    float             gamma        = 2.2f;
+    // encoder parameters stored as JSON so we can keep typed values
+    json encoder_parameters = json::object();
+};
+
+static HEIFSaveOptions s_opts;
 
 static std::vector<heif::EncoderDescriptor> s_heif_supported_formats;
 static bool                                 s_heif_formats_initialized = false;
@@ -679,6 +680,8 @@ HEIFSaveOptions *heif_parameters_gui()
     if (selected_format >= int(s_heif_supported_formats.size()))
         selected_format = 0;
 
+    auto &selected_encoder = s_heif_supported_formats[selected_format];
+
     if (ImGui::PE::Begin("HEIF/AVIF Save Options", ImGuiTableFlags_Resizable))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
@@ -701,19 +704,6 @@ HEIFSaveOptions *heif_parameters_gui()
                 return changed;
             },
             "Multiply the pixels by this value before saving.");
-
-        // Lossless
-        ImGui::PE::Checkbox("Lossless", &s_opts.lossless,
-                            "If enabled, the encoder will use lossless compression if supported.");
-
-        // Quality
-        ImGui::BeginDisabled(s_opts.lossless);
-        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
-                             "Controls the quality of the encoded image (1 = worst, 100 = best).");
-        ImGui::EndDisabled();
-
-        // Include alpha
-        ImGui::PE::Checkbox("Include alpha", &s_opts.use_alpha);
 
         // Transfer function
         ImGui::PE::Entry(
@@ -751,197 +741,249 @@ HEIFSaveOptions *heif_parameters_gui()
             },
             "Encode the pixel values using this transfer function.");
 
-        // Encoder + parameters (complex UI inside Entry)
-        ImGui::PE::Entry(
-            "Encoder",
-            [&]
-            {
-                if (ImGui::BeginCombo("##Encoder", s_heif_supported_formats[selected_format].get_name().c_str()))
-                {
-                    for (size_t i = 0; i < s_heif_supported_formats.size(); ++i)
-                    {
-                        bool selected = (selected_format == int(i));
-                        if (ImGui::Selectable(s_heif_supported_formats[i].get_id_name().c_str(), selected))
-                            selected_format = int(i);
-                        if (selected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                s_opts.format_index = selected_format; // repurpose as index
+        // Include alpha
+        ImGui::PE::Checkbox("Include alpha", &s_opts.use_alpha);
 
-                return true;
-            },
-            "Select encoder.");
-
-        if (ImGui::PE::TreeNode("Encoder options"))
+        auto enc_open =
+            ImGui::PE::TreeNode("Encoder", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull);
+        ImGui::TableNextColumn();
+        ImGui::SetNextItemWidth(-FLT_MIN);
         {
-            // Show encoder-specific parameters
-            heif_encoder *encoder;
-            auto          err = heif::Error(heif_context_get_encoder_for_format(
-                nullptr, s_heif_supported_formats[selected_format].get_compression_format(), &encoder));
-            if (err)
+            if (ImGui::BeginCombo("##Encoder", selected_encoder.get_name().c_str()))
             {
-                throw err;
+                for (size_t i = 0; i < s_heif_supported_formats.size(); ++i)
+                {
+                    bool selected = (selected_format == int(i));
+                    if (ImGui::Selectable(s_heif_supported_formats[i].get_id_name().c_str(), selected))
+                        selected_format = int(i);
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            s_opts.format_index = selected_format; // repurpose as index
+        }
+
+        if (enc_open)
+        {
+            // // Encoder + parameters (complex UI inside Entry)
+            // ImGui::PE::Entry(
+            //     "Encoder",
+            //     [&]
+            //     {
+            //         if (ImGui::BeginCombo("##Encoder", selected_encoder.get_name().c_str()))
+            //         {
+            //             for (size_t i = 0; i < s_heif_supported_formats.size(); ++i)
+            //             {
+            //                 bool selected = (selected_format == int(i));
+            //                 if (ImGui::Selectable(s_heif_supported_formats[i].get_id_name().c_str(), selected))
+            //                     selected_format = int(i);
+            //                 if (selected)
+            //                     ImGui::SetItemDefaultFocus();
+            //             }
+            //             ImGui::EndCombo();
+            //         }
+            //         s_opts.format_index = selected_format; // repurpose as index
+
+            //         return true;
+            //     },
+            //     "Select encoder.");
+
+            // Lossless
+            if (selected_encoder.supports_lossless_compression())
+            {
+                ImGui::BeginDisabled(!selected_encoder.supports_lossy_compression());
+                bool lossless = s_opts.lossless || !selected_encoder.supports_lossy_compression();
+                if (ImGui::PE::Checkbox("Lossless", &lossless,
+                                        "If enabled, the encoder will use lossless compression if supported."))
+                    s_opts.lossless = lossless;
+                ImGui::EndDisabled();
             }
 
-            auto enc = std::shared_ptr<heif_encoder>(encoder, [](heif_encoder *e) { heif_encoder_release(e); });
-
-            const struct heif_encoder_parameter *const *params = heif_encoder_list_parameters(enc.get());
-            for (int i = 0; params[i]; ++i)
+            // Quality
+            if (selected_encoder.supports_lossy_compression())
             {
-                const char *name = heif_encoder_parameter_get_name(params[i]);
-                std::string uppercase_name(name);
-                if (!uppercase_name.empty())
-                    uppercase_name[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(uppercase_name[0])));
-                auto        type = heif_encoder_parameter_get_type(params[i]);
-                std::string key(name);
+                ImGui::BeginDisabled(s_opts.lossless);
+                ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
+                                     "Controls the quality of the encoded image (1 = worst, 100 = best).");
+                ImGui::EndDisabled();
+            }
 
-                // we handle the common "Lossless" and "Quality" parameters separately
-                if (key == "lossless" || key == "quality")
-                    continue;
-
-                // Initialize default value if not present
-                if (!s_opts.encoder_parameters.contains(key))
+            if (ImGui::PE::TreeNode("Advanced", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
+            {
+                // Show encoder-specific parameters
+                heif_encoder *encoder;
+                auto          err = heif::Error(
+                    heif_context_get_encoder_for_format(nullptr, selected_encoder.get_compression_format(), &encoder));
+                if (err)
                 {
-                    if (heif_encoder_has_default(enc.get(), name))
-                    {
-                        if (type == heif_encoder_parameter_type_integer)
-                        {
-                            int value = 0;
-                            (void)heif_encoder_get_parameter_integer(enc.get(), name, &value);
-                            s_opts.encoder_parameters[key] = value;
-                        }
-                        else if (type == heif_encoder_parameter_type_boolean)
-                        {
-                            int value = 0;
-                            (void)heif_encoder_get_parameter_boolean(enc.get(), name, &value);
-                            s_opts.encoder_parameters[key] = (value ? true : false);
-                        }
-                        else if (type == heif_encoder_parameter_type_string)
-                        {
-                            const int bufsize = 256;
-                            char      buf[bufsize];
-                            (void)heif_encoder_get_parameter_string(enc.get(), name, buf, bufsize);
-                            s_opts.encoder_parameters[key] = std::string(buf);
-                        }
-                    }
-                    else
-                    {
-                        // No default - pick a reasonable fallback
-                        if (type == heif_encoder_parameter_type_integer)
-                        {
-                            int have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
-                            const int *valid_values = nullptr;
-                            (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum,
-                                                                              &have_maximum, &minimum, &maximum,
-                                                                              &num_valid_values, &valid_values);
-                            if (num_valid_values > 0)
-                                s_opts.encoder_parameters[key] = valid_values[0];
-                            else if (have_minimum)
-                                s_opts.encoder_parameters[key] = minimum;
-                            else
-                                s_opts.encoder_parameters[key] = 0;
-                        }
-                        else if (type == heif_encoder_parameter_type_boolean)
-                        {
-                            s_opts.encoder_parameters[key] = false;
-                        }
-                        else
-                        {
-                            s_opts.encoder_parameters[key] = std::string("");
-                        }
-                    }
+                    throw err;
                 }
 
-                if (type == heif_encoder_parameter_type_integer)
-                {
-                    int        have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
-                    const int *valid_values = nullptr;
-                    (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum, &have_maximum,
-                                                                      &minimum, &maximum, &num_valid_values,
-                                                                      &valid_values);
+                auto enc = std::shared_ptr<heif_encoder>(encoder, [](heif_encoder *e) { heif_encoder_release(e); });
 
-                    if (num_valid_values > 0)
-                        ImGui::PE::Entry(
-                            uppercase_name,
-                            [&]
+                const struct heif_encoder_parameter *const *params = heif_encoder_list_parameters(enc.get());
+                for (int i = 0; params[i]; ++i)
+                {
+                    const char *name = heif_encoder_parameter_get_name(params[i]);
+                    std::string uppercase_name(name);
+                    if (!uppercase_name.empty())
+                        uppercase_name[0] =
+                            static_cast<char>(std::toupper(static_cast<unsigned char>(uppercase_name[0])));
+                    auto        type = heif_encoder_parameter_get_type(params[i]);
+                    std::string key(name);
+
+                    // we handle the common "Lossless" and "Quality" parameters separately
+                    if (key == "lossless" || key == "quality")
+                        continue;
+
+                    ImGui::PushID(i);
+
+                    // Initialize default value if not present
+                    if (!s_opts.encoder_parameters.contains(key))
+                    {
+                        if (heif_encoder_has_default(enc.get(), name))
+                        {
+                            if (type == heif_encoder_parameter_type_integer)
                             {
-                                int         cur     = s_opts.encoder_parameters.value(key, 0);
-                                std::string preview = std::to_string(cur);
-                                if (ImGui::BeginCombo(("##" + key).c_str(), preview.c_str()))
-                                {
-                                    for (int k = 0; k < num_valid_values; ++k)
-                                    {
-                                        bool selected = (cur == valid_values[k]);
-                                        if (ImGui::Selectable(std::to_string(valid_values[k]).c_str(), selected))
-                                            s_opts.encoder_parameters[key] = valid_values[k];
-                                        if (selected)
-                                            ImGui::SetItemDefaultFocus();
-                                    }
-                                    ImGui::EndCombo();
-                                }
-                                return false;
-                            });
-                    else
-                    {
-                        int val = s_opts.encoder_parameters.value(key, 0);
-                        if (have_minimum && have_maximum)
-                        {
-                            if (ImGui::PE::SliderInt(uppercase_name, &val, minimum, maximum))
-                                s_opts.encoder_parameters[key] = val;
+                                int value = 0;
+                                (void)heif_encoder_get_parameter_integer(enc.get(), name, &value);
+                                s_opts.encoder_parameters[key] = value;
+                            }
+                            else if (type == heif_encoder_parameter_type_boolean)
+                            {
+                                int value = 0;
+                                (void)heif_encoder_get_parameter_boolean(enc.get(), name, &value);
+                                s_opts.encoder_parameters[key] = (value ? true : false);
+                            }
+                            else if (type == heif_encoder_parameter_type_string)
+                            {
+                                const int bufsize = 256;
+                                char      buf[bufsize];
+                                (void)heif_encoder_get_parameter_string(enc.get(), name, buf, bufsize);
+                                s_opts.encoder_parameters[key] = std::string(buf);
+                            }
                         }
                         else
                         {
-                            if (ImGui::PE::DragInt(uppercase_name, &val))
-                                s_opts.encoder_parameters[key] = val;
+                            // No default - pick a reasonable fallback
+                            if (type == heif_encoder_parameter_type_integer)
+                            {
+                                int have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
+                                const int *valid_values = nullptr;
+                                (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum,
+                                                                                  &have_maximum, &minimum, &maximum,
+                                                                                  &num_valid_values, &valid_values);
+                                if (num_valid_values > 0)
+                                    s_opts.encoder_parameters[key] = valid_values[0];
+                                else if (have_minimum)
+                                    s_opts.encoder_parameters[key] = minimum;
+                                else
+                                    s_opts.encoder_parameters[key] = 0;
+                            }
+                            else if (type == heif_encoder_parameter_type_boolean)
+                            {
+                                s_opts.encoder_parameters[key] = false;
+                            }
+                            else
+                            {
+                                s_opts.encoder_parameters[key] = std::string("");
+                            }
                         }
                     }
-                }
-                else if (type == heif_encoder_parameter_type_boolean)
-                {
-                    bool b = s_opts.encoder_parameters.value(key, false);
-                    if (ImGui::PE::Checkbox(uppercase_name, &b))
-                        s_opts.encoder_parameters[key] = b;
-                }
-                else if (type == heif_encoder_parameter_type_string)
-                {
-                    const char *const *valid_options = nullptr;
-                    (void)heif_encoder_parameter_string_valid_values(enc.get(), name, &valid_options);
 
-                    ImGui::PE::Entry(uppercase_name,
-                                     [&]
-                                     {
-                                         if (valid_options)
+                    if (type == heif_encoder_parameter_type_integer)
+                    {
+                        int        have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
+                        const int *valid_values = nullptr;
+                        (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum, &have_maximum,
+                                                                          &minimum, &maximum, &num_valid_values,
+                                                                          &valid_values);
+
+                        if (num_valid_values > 0)
+                            ImGui::PE::Entry(
+                                uppercase_name,
+                                [&]
+                                {
+                                    int         cur     = s_opts.encoder_parameters.value(key, 0);
+                                    std::string preview = std::to_string(cur);
+                                    if (ImGui::BeginCombo(("##" + key).c_str(), preview.c_str()))
+                                    {
+                                        for (int k = 0; k < num_valid_values; ++k)
+                                        {
+                                            bool selected = (cur == valid_values[k]);
+                                            if (ImGui::Selectable(std::to_string(valid_values[k]).c_str(), selected))
+                                                s_opts.encoder_parameters[key] = valid_values[k];
+                                            if (selected)
+                                                ImGui::SetItemDefaultFocus();
+                                        }
+                                        ImGui::EndCombo();
+                                    }
+                                    return false;
+                                });
+                        else
+                        {
+                            int val = s_opts.encoder_parameters.value(key, 0);
+                            if (have_minimum && have_maximum)
+                            {
+                                if (ImGui::PE::SliderInt(uppercase_name, &val, minimum, maximum))
+                                    s_opts.encoder_parameters[key] = val;
+                            }
+                            else
+                            {
+                                if (ImGui::PE::DragInt(uppercase_name, &val))
+                                    s_opts.encoder_parameters[key] = val;
+                            }
+                        }
+                    }
+                    else if (type == heif_encoder_parameter_type_boolean)
+                    {
+                        bool b = s_opts.encoder_parameters.value(key, false);
+                        if (ImGui::PE::Checkbox(uppercase_name, &b))
+                            s_opts.encoder_parameters[key] = b;
+                    }
+                    else if (type == heif_encoder_parameter_type_string)
+                    {
+                        const char *const *valid_options = nullptr;
+                        (void)heif_encoder_parameter_string_valid_values(enc.get(), name, &valid_options);
+
+                        ImGui::PE::Entry(uppercase_name,
+                                         [&]
                                          {
-                                             std::string preview = s_opts.encoder_parameters.value(key, "");
-                                             if (ImGui::BeginCombo(("##" + key).c_str(), preview.c_str()))
+                                             if (valid_options)
                                              {
-                                                 for (int k = 0; valid_options[k]; ++k)
+                                                 std::string preview = s_opts.encoder_parameters.value(key, "");
+                                                 if (ImGui::BeginCombo(("##" + key).c_str(), preview.c_str()))
                                                  {
-                                                     bool selected = (preview == valid_options[k]);
-                                                     if (ImGui::Selectable(valid_options[k], selected))
-                                                         s_opts.encoder_parameters[key] = std::string(valid_options[k]);
-                                                     if (selected)
-                                                         ImGui::SetItemDefaultFocus();
+                                                     for (int k = 0; valid_options[k]; ++k)
+                                                     {
+                                                         bool selected = (preview == valid_options[k]);
+                                                         if (ImGui::Selectable(valid_options[k], selected))
+                                                             s_opts.encoder_parameters[key] =
+                                                                 std::string(valid_options[k]);
+                                                         if (selected)
+                                                             ImGui::SetItemDefaultFocus();
+                                                     }
+                                                     ImGui::EndCombo();
                                                  }
-                                                 ImGui::EndCombo();
                                              }
-                                         }
-                                         else
-                                         {
-                                             char        buf[256];
-                                             std::string cur = "";
-                                             if (s_opts.encoder_parameters[key].is_string())
-                                                 cur = s_opts.encoder_parameters[key].get<std::string>();
-                                             strncpy(buf, cur.c_str(), sizeof(buf));
-                                             buf[sizeof(buf) - 1] = '\0';
-                                             if (ImGui::InputText(("##" + key).c_str(), buf, sizeof(buf)))
-                                                 s_opts.encoder_parameters[key] = std::string(buf);
-                                         }
-                                         return false;
-                                     });
+                                             else
+                                             {
+                                                 char        buf[256];
+                                                 std::string cur = "";
+                                                 if (s_opts.encoder_parameters[key].is_string())
+                                                     cur = s_opts.encoder_parameters[key].get<std::string>();
+                                                 strncpy(buf, cur.c_str(), sizeof(buf));
+                                                 buf[sizeof(buf) - 1] = '\0';
+                                                 if (ImGui::InputText(("##" + key).c_str(), buf, sizeof(buf)))
+                                                     s_opts.encoder_parameters[key] = std::string(buf);
+                                             }
+                                             return false;
+                                         });
+                    }
+                    ImGui::PopID();
                 }
+                ImGui::PE::TreePop();
             }
             ImGui::PE::TreePop();
         }

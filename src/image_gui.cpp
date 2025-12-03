@@ -396,10 +396,7 @@ void Image::draw_info()
                                       display_window.min.y, display_window.max.y));
         filtered_property("Straight alpha", fmt::format("{}", file_has_straight_alpha));
 
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::AlignTextToFramePadding();
-        if (ImGui::TreeNodeEx("Header", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
+        if (ImGui::PE::TreeNode("Header", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
         {
             auto add_tooltip = [](const json &field_obj)
             {
@@ -449,23 +446,19 @@ void Image::draw_info()
 
             if (metadata.contains("exif") && metadata["exif"].is_object())
             {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-                ImGui::AlignTextToFramePadding();
-                if (ImGui::TreeNodeEx("EXIF", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
+                if (ImGui::PE::TreeNode("EXIF", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
                 {
+                    int j = 0;
                     for (auto &exif_entry : metadata["exif"].items())
                     {
+                        j++;
                         const auto &table_obj = exif_entry.value();
                         if (!table_obj.is_object())
                             continue;
-
-                        ImGui::TableNextRow();
-                        ImGui::TableNextColumn();
-                        ImGui::AlignTextToFramePadding();
-                        if (ImGui::TreeNodeEx(exif_entry.key().c_str(), ImGuiTreeNodeFlags_SpanAllColumns |
-                                                                            ImGuiTreeNodeFlags_DefaultOpen |
-                                                                            ImGuiTreeNodeFlags_DrawLinesFull))
+                        ImGui::PushID(j);
+                        if (ImGui::PE::TreeNode(exif_entry.key().c_str(), ImGuiTreeNodeFlags_SpanAllColumns |
+                                                                              ImGuiTreeNodeFlags_DefaultOpen |
+                                                                              ImGuiTreeNodeFlags_DrawLinesFull))
                         {
                             for (auto &field : table_obj.items())
                             {
@@ -485,15 +478,16 @@ void Image::draw_info()
                                 if (ImGui::IsItemHovered())
                                     add_tooltip(field_obj);
                             }
-                            ImGui::TreePop();
+                            ImGui::PE::TreePop();
                         }
+                        ImGui::PopID();
                     }
 
-                    ImGui::TreePop();
+                    ImGui::PE::TreePop();
                 }
             }
 
-            ImGui::TreePop();
+            ImGui::PE::TreePop();
         }
 
         ImGui::PE::End();

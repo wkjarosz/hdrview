@@ -682,15 +682,6 @@ void PE::End()
     ImGui::PopStyleVar();
 }
 
-bool PE::TreeNode(const std::string &name, ImGuiTreeNodeFlags flags)
-{
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    return ImGui::TreeNodeEx(name.c_str(), flags);
-}
-void PE::TreePop() { ImGui::TreePop(); }
-
 // adapted from imgui_internal: currently only needed to remove the tooltip at the end
 // align_x: 0.0f = left, 0.5f = center, 1.0f = right.
 // size_x : 0.0f = shortcut for GetContentRegionAvail().x
@@ -748,6 +739,18 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::PopID();
     return result; // returning if the widget changed
 }
+
+bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
+{
+    ImGui::TableNextRow();
+    ImGui::TableNextColumn();
+    ImGui::AlignTextToFramePadding();
+    auto ret = ImGui::TreeNodeEx("##node", flags | ImGuiTreeNodeFlags_SpanFullWidth);
+    ImGui::SameLine(0.f, 0.f);
+    ImGui::TextAligned2(1.0f, -FLT_MIN, "%s", name);
+    return ret;
+}
+void PE::TreePop() { ImGui::TreePop(); }
 
 void PE::Hyperlink(const char *name, const char *desc, const char *url /*= nullptr*/)
 {

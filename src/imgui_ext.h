@@ -229,7 +229,7 @@ inline void Entry(const std::string &property_name, const std::string &value)
               return false;
           });
 }
-bool TreeNode(const std::string &name, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth);
+bool TreeNode(const char *name, ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanFullWidth);
 void TreePop();
 
 /**
