@@ -50,59 +50,70 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 #include <cstdint>
 #include <cstdio>
 
-#include <map>
-
 #include <libheif/heif.h>
-#include <libheif/heif_cxx.h>
+#include <memory>
+
+using HeifContextPtr     = std::shared_ptr<heif_context>;
+using HeifImagePtr       = std::shared_ptr<heif_image>;
+using HeifImageHandlePtr = std::shared_ptr<heif_image_handle>;
+using HeifEncoderPtr     = std::shared_ptr<heif_encoder>;
+using HeifNCLXPtr        = std::shared_ptr<heif_color_profile_nclx>;
 
 struct HEIFSaveOptions
 {
-    float                   gain      = 1.f;
-    int                     quality   = 95;
-    bool                    lossless  = false;
-    bool                    use_alpha = true;
-    TransferFunction_       tf        = TransferFunction_sRGB;
-    float                   gamma     = 2.2f;
-    heif_compression_format format    = heif_compression_AV1; // default to AVIF
+    float             gain      = 1.f;
+    int               quality   = 95;
+    bool              lossless  = false;
+    bool              use_alpha = true;
+    TransferFunction_ tf        = TransferFunction_sRGB;
+    float             gamma     = 2.2f;
+    size_t            encoder   = 0u;
 };
 
 static HEIFSaveOptions s_opts;
 
-static std::vector<heif::EncoderDescriptor>                             s_heif_supported_encoders;
-static std::map<heif_compression_format, std::shared_ptr<heif_encoder>> s_heif_encoders;
-static bool                                                             s_heif_formats_initialized = false;
+static std::vector<const heif_encoder_descriptor *> s_encoder_descriptors;
+static std::vector<HeifEncoderPtr>                  s_encoders;
+static bool                                         s_encoders_initialized = false;
 
 static void init_heif_supported_formats()
 {
-    if (s_heif_formats_initialized)
+    if (s_encoders_initialized)
         return;
 
-    s_heif_supported_encoders = heif::EncoderDescriptor::get_encoder_descriptors(heif_compression_undefined, nullptr);
-
-    // Initialize one shared encoder instance per compression format so GUI can
-    // edit parameters directly on the C encoder objects.
-    for (auto &desc : s_heif_supported_encoders)
+    int num = heif_get_encoder_descriptors(heif_compression_undefined, nullptr, nullptr, 0);
+    if (num > 0)
     {
-        auto fmt = desc.get_compression_format();
-        if (s_heif_encoders.find(fmt) != s_heif_encoders.end())
-            continue;
+        std::vector<const heif_encoder_descriptor *> descriptors(num);
+        int got = heif_get_encoder_descriptors(heif_compression_undefined, nullptr, descriptors.data(), num);
+        descriptors.resize(got);
+        s_encoder_descriptors = descriptors;
 
-        heif_encoder *enc = nullptr;
-        try
+        // Initialize one shared encoder instance per compression format so GUI can
+        // edit parameters directly on the C encoder objects.
+        for (auto desc : s_encoder_descriptors)
         {
-            heif::Error err = heif::Error(heif_context_get_encoder_for_format(nullptr, fmt, &enc));
-            if (!err && enc)
-            {
-                s_heif_encoders[fmt] =
-                    std::shared_ptr<heif_encoder>(enc, [](heif_encoder *e) { heif_encoder_release(e); });
-            }
-        }
-        catch (...)
-        { /* ignore encoder allocation failures for now */
+            heif_encoder *enc = nullptr;
+            if (heif_context_get_encoder(nullptr, desc, &enc).code == heif_error_Ok && enc)
+                s_encoders.push_back(HeifEncoderPtr(enc, [](heif_encoder *e) { heif_encoder_release(e); }));
+            else
+                s_encoders.push_back(nullptr);
         }
     }
 
-    s_heif_formats_initialized = true;
+    s_encoders_initialized = true;
+}
+
+// Helper: throw a std::runtime_error when a libheif call returns an error
+static inline void throw_on_error(const struct heif_error &e, const char *ctx_msg = "libheif error")
+{
+    if (e.code != heif_error_Ok)
+    {
+        if (e.message && e.message[0])
+            throw std::runtime_error(std::string(e.message));
+        else
+            throw std::runtime_error(std::string(ctx_msg));
+    }
 }
 
 static heif_transfer_characteristics transfer_function_to_heif(TransferFunction_ tf)
@@ -141,21 +152,21 @@ static bool is_heif_transfer_supported(TransferFunction_ tf)
     }
 }
 
-static bool linearize_colors(float *pixels, int3 size, const heif::ColorProfile_nclx *nclx,
+static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_nclx *nclx,
                              string *tf_description = nullptr, Chromaticities *c = nullptr)
 {
     if (!nclx)
         return false;
 
     if (c)
-        *c = chromaticities_from_cicp((int)nclx->get_color_primaries());
+        *c = chromaticities_from_cicp((int)nclx->color_primaries);
 
     float             gamma = 1.f;
-    TransferFunction_ tf    = transfer_function_from_cicp((int)nclx->get_transfer_characteristics(), &gamma);
+    TransferFunction_ tf    = transfer_function_from_cicp((int)nclx->transfer_characteristics, &gamma);
 
     if (tf == TransferFunction_Unspecified)
         spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
-                     (int)nclx->get_transfer_characteristics());
+                     (int)nclx->transfer_characteristics);
 
     if (tf_description)
         *tf_description = transfer_function_name(tf);
@@ -217,12 +228,22 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
     vector<ImagePtr> images;
     try
     {
-        heif::Context ctx;
+        // Create C API context and read from memory
+        HeifContextPtr ctx(heif_context_alloc(), [](heif_context *c) { heif_context_free(c); });
+        if (!ctx)
+            throw std::runtime_error("Failed to allocate heif context");
 
-        ctx.read_from_memory_without_copy(reinterpret_cast<void *>(raw_data.data()), raw_size);
+        throw_on_error(heif_context_read_from_memory_without_copy(
+                           ctx.get(), reinterpret_cast<const void *>(raw_data.data()), raw_size, nullptr),
+                       "Failed to read HEIF memory");
 
-        auto primary_id = ctx.get_primary_image_ID();            // id of primary image
-        auto item_ids   = ctx.get_list_of_top_level_image_IDs(); // ids of all other images
+        heif_item_id primary_id = 0;
+        throw_on_error(heif_context_get_primary_image_ID(ctx.get(), &primary_id), "Failed to get primary image ID");
+
+        int                       num_top = heif_context_get_number_of_top_level_images(ctx.get());
+        std::vector<heif_item_id> item_ids(num_top);
+        if (num_top > 0)
+            heif_context_get_list_of_top_level_image_IDs(ctx.get(), item_ids.data(), num_top);
 
         // remove the primary item from the list of all items
         for (size_t i = 0; i < item_ids.size(); ++i)
@@ -251,28 +272,29 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 continue;
             }
 
-            auto ihandle     = ctx.get_image_handle(id);
-            auto raw_ihandle = ihandle.get_raw_image_handle();
-
-            if (ihandle.empty() || !raw_ihandle)
+            heif_image_handle *raw_ihandle = nullptr;
+            if (heif_context_get_image_handle(ctx.get(), id, &raw_ihandle).code != heif_error_Ok || !raw_ihandle)
+            {
+                spdlog::warn("Failed to get image handle for id {}", id);
                 continue;
+            }
+            HeifImageHandlePtr ihandle(raw_ihandle, [](heif_image_handle *h) { heif_image_handle_release(h); });
 
-            heif_error err;
-
-            heif_colorspace preferred_colorspace;
-            heif_chroma     preferred_chroma;
-            err = heif_image_handle_get_preferred_decoding_colorspace(raw_ihandle, &preferred_colorspace,
-                                                                      &preferred_chroma);
+            heif_colorspace preferred_colorspace = heif_colorspace_undefined;
+            heif_chroma     preferred_chroma     = heif_chroma_undefined;
+            heif_image_handle_get_preferred_decoding_colorspace(ihandle.get(), &preferred_colorspace,
+                                                                &preferred_chroma);
             spdlog::info("Preferred decoding colorspace: {}, chroma: {}", (int)preferred_colorspace,
                          (int)preferred_chroma);
 
-            int3            size{(int)ihandle.get_width(), (int)ihandle.get_height(), 0};
-            bool            has_alpha = ihandle.has_alpha_channel();
+            int3 size{heif_image_handle_get_width(ihandle.get()), heif_image_handle_get_height(ihandle.get()), 0};
+            bool has_alpha = heif_image_handle_has_alpha_channel(ihandle.get()) != 0;
+
             heif_chroma     out_chroma;
             heif_colorspace out_colorspace;
             heif_channel    out_planes[2] = {heif_channel_Y, heif_channel_Alpha};
-            int             cpp; // channels per plane
-            int             num_planes = 1;
+            int             cpp           = 0; // channels per plane
+            int             num_planes    = 1;
             switch (preferred_chroma)
             {
             case heif_chroma_monochrome:
@@ -294,11 +316,27 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
             }
             spdlog::info("Image size: {}", size);
 
-            auto image                                        = make_shared<Image>(size.xy(), size.z);
-            image->filename                                   = filename;
-            image->partname                                   = fmt::format("{:d}", id);
-            image->file_has_straight_alpha                    = has_alpha && !ihandle.is_premultiplied_alpha();
-            image->metadata["loader"]                         = "libheif";
+            auto image                     = make_shared<Image>(size.xy(), size.z);
+            image->filename                = filename;
+            image->partname                = fmt::format("{:d}", id);
+            image->file_has_straight_alpha = has_alpha && !heif_image_handle_is_premultiplied_alpha(ihandle.get());
+
+            // Add file-level metadata: MIME type and main brand (from libheif helpers)
+            const char *mime =
+                heif_get_file_mime_type(reinterpret_cast<const uint8_t *>(raw_data.data()),
+                                        (int)std::min<size_t>(raw_size, std::numeric_limits<int>::max()));
+            char main_brand[5] = {0, 0, 0, 0, 0};
+            heif_brand_to_fourcc(heif_read_main_brand(reinterpret_cast<const uint8_t *>(raw_data.data()),
+                                                      (int)std::min<size_t>(raw_size, std::numeric_limits<int>::max())),
+                                 main_brand);
+
+            image->metadata["header"]["mime type"]  = {{"value", std::string(mime ? mime : "")},
+                                                       {"string", std::string(mime ? mime : "")},
+                                                       {"type", "string"}};
+            image->metadata["header"]["main brand"] = {
+                {"value", std::string(main_brand)}, {"string", std::string(main_brand)}, {"type", "string"}};
+
+            image->metadata["loader"] = "libheif" + std::string(" (" + std::string(main_brand) + ")");
             image->metadata["header"]["preferred colorspace"] = {
                 {"value", int(preferred_colorspace)},
                 {"string", fmt::format("{} ({})", colorspace_name(preferred_colorspace), int(preferred_colorspace))},
@@ -308,122 +346,113 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
                 {"type", "int"}};
 
-            // try to get exif metadata using C++ API
-            auto metadataIDs = ihandle.get_list_of_metadata_block_IDs("Exif");
-            if (!metadataIDs.empty())
+            // EXIF metadata (handle-level)
+            if (int num_blocks = heif_image_handle_get_number_of_metadata_blocks(ihandle.get(), "Exif"); num_blocks > 0)
             {
-                spdlog::info("Found {} EXIF metadata block(s). Attempting to decode...", metadataIDs.size());
-                for (auto metadata_id : metadataIDs)
+                spdlog::info("Found {} EXIF metadata block(s). Attempting to decode...", num_blocks);
+                std::vector<heif_item_id> block_IDs(num_blocks);
+                heif_image_handle_get_list_of_metadata_block_IDs(ihandle.get(), "Exif", block_IDs.data(), num_blocks);
+                for (auto block_ID : block_IDs)
                 {
+                    size_t data_size = heif_image_handle_get_metadata_size(ihandle.get(), block_ID);
+                    if (data_size <= 4)
+                    {
+                        spdlog::warn("Failed to get size of EXIF data.");
+                        continue;
+                    }
                     try
                     {
-                        auto exif_data = ihandle.get_metadata(metadata_id); // throws on error
-                        if (exif_data.size() <= 4)
-                        {
-                            spdlog::warn("Failed to get size of EXIF data.");
-                            continue;
-                        }
-                        // exclude the first four bytes, which are the length
+                        std::vector<uint8_t> exif_data(data_size);
+                        throw_on_error(heif_image_handle_get_metadata(ihandle.get(), block_ID, exif_data.data()),
+                                       "Failed to get EXIF metadata block");
+                        // EXIF data block includes 4-byte length prefix that we need to skip
                         auto j                  = exif_to_json(exif_data.data() + 4, exif_data.size() - 4);
                         image->metadata["exif"] = j;
                         spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata.dump(2));
                     }
-                    catch (const heif::Error &err)
-                    {
-                        spdlog::warn("Failed to read EXIF data: {}", err.get_message());
-                    }
                     catch (const std::exception &e)
                     {
-                        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                        spdlog::warn(e.what());
                     }
                 }
             }
 
             spdlog::info("Decoding heif image...");
-            auto himage = ihandle.decode_image(out_colorspace, out_chroma);
+            HeifImagePtr himage(
+                [&]
+                {
+                    heif_image *raw_img = nullptr;
+                    throw_on_error(heif_decode_image(ihandle.get(), &raw_img, out_colorspace, out_chroma, nullptr),
+                                   "Failed to decode HEIF image");
+                    return raw_img;
+                }(),
+                [](heif_image *h) { heif_image_release(h); });
 
-            if (himage.get_width(out_planes[0]) != size.x || himage.get_height(out_planes[0]) != size.y)
+            int img_w = heif_image_get_width(himage.get(), out_planes[0]);
+            int img_h = heif_image_get_height(himage.get(), out_planes[0]);
+            if (img_w != size.x || img_h != size.y)
             {
-                spdlog::warn("Image size mismatch: {}x{} vs {}x{}", himage.get_width(out_planes[0]),
-                             himage.get_height(out_planes[0]), size.x, size.y);
-                size.x = himage.get_width(out_planes[0]);
-                size.y = himage.get_height(out_planes[0]);
+                spdlog::warn("Image size mismatch: {}x{} vs {}x{}", img_w, img_h, size.x, size.y);
+                size.x = img_w;
+                size.y = img_h;
             }
 
             image->metadata["header"]["decoded colorspace"] = {
-                {"value", int(himage.get_colorspace())},
-                {"string",
-                 fmt::format("{} ({})", colorspace_name(himage.get_colorspace()), int(himage.get_colorspace()))},
+                {"value", int(heif_image_get_colorspace(himage.get()))},
+                {"string", fmt::format("{} ({})", colorspace_name(heif_image_get_colorspace(himage.get())),
+                                       int(heif_image_get_colorspace(himage.get())))},
                 {"type", "int"}};
-
             image->metadata["header"]["decoded chroma"] = {
-                {"value", int(himage.get_chroma_format())},
-                {"string",
-                 fmt::format("{} ({})", chroma_name(himage.get_chroma_format()), int(himage.get_chroma_format()))},
+                {"value", int(heif_image_get_chroma_format(himage.get()))},
+                {"string", fmt::format("{} ({})", chroma_name(heif_image_get_chroma_format(himage.get())),
+                                       int(heif_image_get_chroma_format(himage.get())))},
                 {"type", "int"}};
 
-            // Prefer the image-level NCLX profile via the C++ API (throws heif::Error if missing),
-            // and fall back to the handle-level C API if necessary.
-            std::unique_ptr<heif::ColorProfile_nclx> nclx;
-            try
-            {
-                auto tmp = himage.get_nclx_color_profile(); // may throw if none
-
-                // allocate our own instance and copy fields (avoid copying internals of nclx_tmp)
-                // due to memory safety bug in libheif
-                nclx = std::make_unique<heif::ColorProfile_nclx>();
-                nclx->set_color_primaries(tmp.get_color_primaries());
-                nclx->set_transfer_characteristics(tmp.get_transfer_characteristics());
-                nclx->set_matrix_coefficients(tmp.get_matrix_coefficients());
-                nclx->set_full_range_flag(tmp.is_full_range());
-
-                image->metadata["header"]["nclx profile"] =
-                    json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
-            }
-            catch (const heif::Error &e)
-            {
-                heif_color_profile_nclx *nclx_raw = nullptr;
-                spdlog::warn("No image-level nclx color profile found: {}. Trying at handle level", e.get_message());
-                if (err = heif_image_handle_get_nclx_color_profile(raw_ihandle, &nclx_raw); err.code == heif_error_Ok)
+            // NCLX: prefer image-level then fall back to handle-level
+            auto nclx = HeifNCLXPtr(
+                [&]
                 {
-                    // create our owned C++ object and copy fields from raw C struct
-                    nclx = std::make_unique<heif::ColorProfile_nclx>();
-                    nclx->set_color_primaries(nclx_raw->color_primaries);
-                    nclx->set_transfer_characteristics(nclx_raw->transfer_characteristics);
-                    nclx->set_matrix_coefficients(nclx_raw->matrix_coefficients);
-                    nclx->set_full_range_flag(nclx_raw->full_range_flag);
+                    heif_color_profile_nclx *nclx_raw = nullptr;
+                    if (auto err1 = heif_image_get_nclx_color_profile(himage.get(), &nclx_raw);
+                        err1.code == heif_error_Ok)
+                    {
+                        image->metadata["header"]["nclx profile"] =
+                            json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
+                        return nclx_raw;
+                    }
+                    else
+                    {
+                        nclx_raw = nullptr;
+                        spdlog::warn("No image-level nclx color profile found: {}. Trying at handle level",
+                                     err1.message);
+                        if (auto err = heif_image_handle_get_nclx_color_profile(ihandle.get(), &nclx_raw);
+                            err.code == heif_error_Ok)
+                        {
+                            image->metadata["header"]["nclx profile"] =
+                                json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
+                            return nclx_raw;
+                        }
+                        else
+                        {
+                            spdlog::warn("No handle-level nclx color profile found either: {}", err.message);
+                            image->metadata["header"]["nclx profile"] =
+                                json{{"value", 0}, {"string", "missing"}, {"type", "enum"}};
+                            return heif_nclx_color_profile_alloc();
+                        }
+                    }
+                }(),
+                [](heif_color_profile_nclx *p) { heif_nclx_color_profile_free(p); });
 
-                    // free the raw C struct immediately (we copied fields)
-                    heif_nclx_color_profile_free(nclx_raw);
-
-                    image->metadata["header"]["nclx profile"] =
-                        json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
-                }
-                else
-                {
-                    spdlog::warn("No handle-level nclx color profile found either: {}", err.message);
-                    image->metadata["header"]["nclx profile"] =
-                        json{{"value", 0}, {"string", "missing"}, {"type", "enum"}};
-                }
-            }
-
-            // get the icc profile, first try the image level, then the handle level
-            vector<uint8_t> icc_profile;
-            try
+            // get the icc profile. first try the image level, then the handle level
+            std::vector<uint8_t> icc_profile;
             {
-                icc_profile = himage.get_raw_color_profile();
-                spdlog::info("File contains an image-level ICC profile.");
-                image->metadata["header"]["icc profile"] =
-                    json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
-            }
-            catch (const heif::Error &err)
-            {
-                spdlog::info("No image-level ICC profile found: {}. Trying at handle level", err.get_message());
-                icc_profile.clear();
-                if (size_t icc_size = heif_image_handle_get_raw_color_profile_size(raw_ihandle); icc_size != 0)
+                icc_profile.resize(heif_image_get_raw_color_profile_size(himage.get()));
+                if (auto err =
+                        heif_image_get_raw_color_profile(himage.get(), reinterpret_cast<void *>(icc_profile.data()));
+                    err.code != heif_error_Ok)
                 {
-                    spdlog::info("File contains a handle-level ICC profile.");
-                    icc_profile.resize(icc_size);
+                    spdlog::info("No image-level ICC profile found: {}. Trying at handle level", err.message);
+                    icc_profile.resize(heif_image_handle_get_raw_color_profile_size(ihandle.get()));
                     if (auto err2 = heif_image_handle_get_raw_color_profile(
                             raw_ihandle, reinterpret_cast<void *>(icc_profile.data()));
                         err2.code != heif_error_Ok)
@@ -431,6 +460,18 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         spdlog::warn("Could not read handle-level ICC profile either: {}", err2.message);
                         icc_profile.clear();
                     }
+                    else
+                    {
+                        spdlog::info("File contains a handle-level ICC profile.");
+                        image->metadata["header"]["icc profile"] =
+                            json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
+                    }
+                }
+                else
+                {
+                    spdlog::info("File contains an image-level ICC profile.");
+                    image->metadata["header"]["icc profile"] =
+                        json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
                 }
             }
 
@@ -440,9 +481,9 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
             for (int p = 0; p < num_planes; ++p)
             {
                 int            bytes_per_line = 0;
-                const uint8_t *pixels         = himage.get_plane(out_planes[p], &bytes_per_line);
-                int            bpp_storage    = himage.get_bits_per_pixel(out_planes[p]);
-                int            bpc            = himage.get_bits_per_pixel_range(out_planes[p]);
+                const uint8_t *pixels         = heif_image_get_plane(himage.get(), out_planes[p], &bytes_per_line);
+                int            bpp_storage    = heif_image_get_bits_per_pixel(himage.get(), out_planes[p]);
+                int            bpc            = heif_image_get_bits_per_pixel_range(himage.get(), out_planes[p]);
                 spdlog::debug(
                     "Bits per pixel: {}; Bits per pixel storage: {}; Channels per pixel: {}; Bytes per line: {}", bpc,
                     bpp_storage, cpp, bytes_per_line);
@@ -455,7 +496,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 // copy pixels into a contiguous float buffer and normalize values to [0,1]
                 spdlog::debug("Copying to contiguous float buffer");
                 vector<float> float_pixels(size.x * size.y * cpp);
-                bool          is_16bit = bpp_storage == cpp * 16;
+                bool          is_16bit = (bpp_storage == cpp * 16);
                 for (int y = 0; y < size.y; ++y)
                 {
                     auto row8  = reinterpret_cast<const uint8_t *>(pixels + y * (size_t)bytes_per_line);
@@ -465,15 +506,13 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                             float_pixels[(y * size.x + x) * cpp + c] =
                                 bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
                 }
-                spdlog::debug("done copying to continuguous float buffer");
 
                 if (opts.tf != TransferFunction_Unspecified)
                 {
                     // only prefer the nclx if it exists and it specifies an HDR transfer function
                     bool prefer_icc = // false;
-                        !nclx ||
-                        (nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
-                         nclx->get_transfer_characteristics() != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
+                        !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                                  nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
 
                     string         tf_description;
                     Chromaticities chr;
@@ -506,11 +545,6 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
             spdlog::info("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
             images.emplace_back(image);
         }
-    }
-    catch (const heif::Error &err)
-    {
-        std::string e = err.get_message();
-        throw invalid_argument{e.empty() ? "unknown exception" : e};
     }
     catch (const exception &err)
     {
@@ -557,6 +591,12 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 {
     if (!params)
         throw std::invalid_argument("HEIFSaveOptions pointer is null");
+
+    if (params->encoder >= s_encoders.size() || !s_encoders[params->encoder])
+        throw std::runtime_error("HEIF: no encoder available");
+
+    // Grab the shared C encoder instance configured by the GUI.
+    auto enc = s_encoders[params->encoder].get();
     try
     {
         Timer timer;
@@ -586,117 +626,92 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         if (n != 3 && n != 4)
             throw std::invalid_argument("HEIF/AVIF output only supports 3 or 4 channels (RGB or RGBA)");
 
-        heif::Context   ctx;
-        heif::Image     heif_img;
-        heif_colorspace colorspace = heif_colorspace_RGB;
-        heif_chroma     chroma     = (n == 4) ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB;
+        // Create heif image via C API
+        HeifContextPtr ctx(heif_context_alloc(), [](heif_context *c) { heif_context_free(c); });
+        if (!ctx)
+            throw std::runtime_error("HEIF: Failed to allocate encoding context");
 
-        heif_img.create(w, h, colorspace, chroma);
-        heif_img.add_plane(heif_channel_interleaved, w, h, 8);
+        HeifImagePtr heif_img(
+            [&]
+            {
+                heif_image *raw_heif_img = nullptr;
+                throw_on_error(heif_image_create(w, h, heif_colorspace_RGB,
+                                                 (n == 4) ? heif_chroma_interleaved_RGBA : heif_chroma_interleaved_RGB,
+                                                 &raw_heif_img),
+                               "HEIF: Failed to create heif image");
+                return raw_heif_img;
+            }(),
+            [](heif_image *h) { heif_image_release(h); });
 
-        int      stride;
-        uint8_t *plane = heif_img.get_plane(heif_channel_interleaved, &stride);
+        throw_on_error(heif_image_add_plane(heif_img.get(), heif_channel_interleaved, w, h, 8),
+                       "HEIF: Failed to add interleaved plane");
 
+        int      stride = 0;
+        uint8_t *plane  = heif_image_get_plane(heif_img.get(), heif_channel_interleaved, &stride);
         // Copy pixel data
         size_t row_bytes = w * n * sizeof(uint8_t);
-        for (int y = 0; y < h; ++y) { memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes); }
+        for (int y = 0; y < h; ++y) memcpy(plane + y * (size_t)stride, pixels8.get() + y * w * n, row_bytes);
 
         // Set color profile (nclx)
-        heif::ColorProfile_nclx nclx;
-        nclx.set_color_primaries(heif_color_primaries_ITU_R_BT_709_5); // TODO map from img.chromaticities
-        heif_transfer_characteristics heif_tf = transfer_function_to_heif(params->tf);
-        if (!is_heif_transfer_supported(params->tf))
         {
-            spdlog::warn("HEIF: Transfer function '{}' not supported, falling back to sRGB.",
-                         transfer_function_name(params->tf, params->gamma));
-            heif_tf = heif_transfer_characteristic_IEC_61966_2_1;
-        }
-        nclx.set_transfer_characteristics(heif_tf);
-
-        nclx.set_matrix_coefficients(heif_matrix_coefficients_ITU_R_BT_709_5);
-        nclx.set_full_range_flag(true);
-        heif_img.set_nclx_color_profile(nclx);
-
-        // Create a temporary C++ encoder for encoding (the C++ wrapper will allocate its own encoder),
-        // then copy parameter values from the stored C encoder into this new encoder so the C++
-        // Context::encode_image call can use it safely.
-
-        auto cpp_encoder = heif::Encoder(params->format);
-
-        // Apply top-level quality/lossless settings
-        cpp_encoder.set_lossy_quality(params->quality);
-        cpp_encoder.set_lossless(params->lossless);
-
-        // Copy encoder-specific parameters from the GUI-ed C encoder to the temporary C++ encoder
-        if (auto it = s_heif_encoders.find(s_opts.format); it != s_heif_encoders.end() && it->second)
-        {
-            auto                                        enc   = it->second;
-            const struct heif_encoder_parameter *const *plist = heif_encoder_list_parameters(enc.get());
-            for (int pi = 0; plist && plist[pi]; ++pi)
+            auto nclx = HeifNCLXPtr(heif_nclx_color_profile_alloc(),
+                                    [](heif_color_profile_nclx *p) { heif_nclx_color_profile_free(p); });
+            if (!nclx)
+                throw std::runtime_error("HEIF: Failed to allocate nclx profile");
+            nclx->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // TODO map from img.chromaticities
+            auto heif_tf          = transfer_function_to_heif(params->tf);
+            if (!is_heif_transfer_supported(params->tf))
             {
-                const char *pname = heif_encoder_parameter_get_name(plist[pi]);
-                if (!pname)
-                    continue;
-
-                // skip quality/lossless which are handled above
-                if (std::string(pname) == "quality" || std::string(pname) == "lossless")
-                    continue;
-
-                auto ptype = heif_encoder_parameter_get_type(plist[pi]);
-                try
-                {
-                    if (ptype == heif_encoder_parameter_type_integer)
-                    {
-                        int cur = 0;
-                        (void)heif_encoder_get_parameter_integer(enc.get(), pname, &cur);
-                        cpp_encoder.set_integer_parameter(pname, cur);
-                    }
-                    else if (ptype == heif_encoder_parameter_type_boolean)
-                    {
-                        int cur = 0;
-                        (void)heif_encoder_get_parameter_boolean(enc.get(), pname, &cur);
-                        cpp_encoder.set_boolean_parameter(pname, cur ? true : false);
-                    }
-                    else if (ptype == heif_encoder_parameter_type_string)
-                    {
-                        const int bufsize = 512;
-                        char      buf[bufsize];
-                        (void)heif_encoder_get_parameter_string(enc.get(), pname, buf, bufsize);
-                        cpp_encoder.set_string_parameter(pname, std::string(buf));
-                    }
-                }
-                catch (...)
-                { /* ignore individual parameter copy errors */
-                }
+                spdlog::warn("HEIF: Transfer function '{}' not supported, falling back to sRGB.",
+                             transfer_function_name(params->tf, params->gamma));
+                heif_tf = heif_transfer_characteristic_IEC_61966_2_1;
             }
+            nclx->transfer_characteristics = heif_tf;
+            nclx->matrix_coefficients      = heif_matrix_coefficients_ITU_R_BT_709_5;
+            nclx->full_range_flag          = true;
+            if (heif_image_set_nclx_color_profile(heif_img.get(), nclx.get()).code != heif_error_Ok)
+                spdlog::warn("HEIF: Failed to attach NCLX profile to image");
         }
 
-        // Encode and write
-        auto handle = ctx.encode_image(heif_img, cpp_encoder);
-        ctx.set_primary_image(handle);
-        struct StreamWriter : public heif::Context::Writer
-        {
-            std::ostream &os;
-            StreamWriter(std::ostream &out) : os(out) {}
-            heif_error write(const void *data, size_t size) override
+        // Encode
+        HeifImageHandlePtr out_handle(
+            [&]
             {
-                heif_error herr{heif_error_Ok, heif_suberror_Unspecified, ""};
-                os.write(reinterpret_cast<const char *>(data), size);
-                if (!os)
+                heif_image_handle *out_handle_raw = nullptr;
+                throw_on_error(heif_context_encode_image(ctx.get(), heif_img.get(), enc, nullptr, &out_handle_raw),
+                               "HEIF: encode failed");
+                if (!out_handle_raw)
+                    throw std::runtime_error("HEIF: encode returned NULL handle");
+                return out_handle_raw;
+            }(),
+            [](heif_image_handle *h) { heif_image_handle_release(h); });
+
+        throw_on_error(heif_context_set_primary_image(ctx.get(), out_handle.get()),
+                       "HEIF: Failed to set primary image");
+
+        // Writer trampoline to write to std::ostream
+        static struct heif_writer c_writer = {
+            1, [](struct heif_context * /*ctx*/, const void *data, size_t size, void *userdata) -> struct heif_error
+            {
+                std::ostream     *os   = reinterpret_cast<std::ostream *>(userdata);
+                struct heif_error herr = heif_error_success;
+                os->write(reinterpret_cast<const char *>(data), size);
+                if (!*os)
                 {
                     herr.code    = heif_error_Encoding_error;
                     herr.message = "Failed to write to output stream";
                 }
                 return herr;
-            }
-        } writer(os);
-        ctx.write(writer);
+            }};
+
+        throw_on_error(heif_context_write(ctx.get(), &c_writer, &os),
+                       "HEIF: failed while writing encoded data to output stream");
+
         spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
     }
-    catch (const heif::Error &err)
+    catch (const std::exception &err)
     {
-        throw std::runtime_error(
-            fmt::format("HEIF error ({}.{}): {}", int(err.get_code()), int(err.get_subcode()), err.get_message()));
+        throw std::runtime_error(fmt::format("HEIF error: {}", err.what()));
     }
 }
 
@@ -710,8 +725,9 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.use_alpha = use_alpha;
     params.tf        = tf;
     params.gamma     = gamma;
-    if (format_index >= 0 && format_index < int(heif_compression_HTJ2K))
-        params.format = (heif_compression_format)format_index;
+    params.encoder   = (size_t)clamp(format_index, 0, int(s_encoders.size()) - 1);
+    heif_encoder_set_lossless(s_encoders[params.encoder].get(), lossless);
+    heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
 
     save_heif_image(img, os, filename, &params);
 }
@@ -720,10 +736,6 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 HEIFSaveOptions *heif_parameters_gui()
 {
     init_heif_supported_formats();
-
-    static int encoder_index = 0;
-    if (encoder_index >= int(s_heif_supported_encoders.size()))
-        encoder_index = 0;
 
     if (ImGui::PE::Begin("HEIF/AVIF Save Options", ImGuiTableFlags_Resizable))
     {
@@ -792,167 +804,167 @@ HEIFSaveOptions *heif_parameters_gui()
         ImGui::TableNextColumn();
         ImGui::SetNextItemWidth(-FLT_MIN);
         {
-            if (ImGui::BeginCombo("##Encoder", s_heif_supported_encoders[encoder_index].get_name().c_str()))
+            if (ImGui::BeginCombo("##Encoder", heif_encoder_descriptor_get_name(s_encoder_descriptors[s_opts.encoder])))
             {
-                for (size_t i = 0; i < s_heif_supported_encoders.size(); ++i)
+                for (size_t i = 0; i < s_encoder_descriptors.size(); ++i)
                 {
-                    bool selected = (encoder_index == int(i));
-                    if (ImGui::Selectable(s_heif_supported_encoders[i].get_id_name().c_str(), selected))
-                        encoder_index = int(i);
+                    bool selected = (s_opts.encoder == i);
+                    if (ImGui::Selectable(heif_encoder_descriptor_get_id_name(s_encoder_descriptors[i]), selected))
+                        s_opts.encoder = i;
                     if (selected)
                         ImGui::SetItemDefaultFocus();
                 }
                 ImGui::EndCombo();
             }
-            // set the selected compression format in the save options
-            s_opts.format = s_heif_supported_encoders[encoder_index].get_compression_format();
         }
-
-        auto &selected_encoder = s_heif_supported_encoders[encoder_index];
 
         if (enc_open)
         {
+            auto  selected_encoder = s_encoder_descriptors[s_opts.encoder];
+            auto &enc              = s_encoders[s_opts.encoder];
+
             // Lossless
-            if (selected_encoder.supports_lossless_compression())
+            if (heif_encoder_descriptor_supports_lossless_compression(selected_encoder))
             {
-                ImGui::BeginDisabled(!selected_encoder.supports_lossy_compression());
-                bool lossless = s_opts.lossless || !selected_encoder.supports_lossy_compression();
-                if (ImGui::PE::Checkbox("Lossless", &lossless,
-                                        "If enabled, the encoder will use lossless compression if supported."))
+                ImGui::BeginDisabled(!heif_encoder_descriptor_supports_lossy_compression(selected_encoder));
+                bool lossless =
+                    s_opts.lossless || !heif_encoder_descriptor_supports_lossy_compression(selected_encoder);
+                if (ImGui::PE::Checkbox("Lossless", &lossless, "Use lossless compression."))
+                {
                     s_opts.lossless = lossless;
+                    heif_encoder_set_lossless(enc.get(), lossless);
+                }
                 ImGui::EndDisabled();
             }
 
             // Quality
-            if (selected_encoder.supports_lossy_compression())
+            if (heif_encoder_descriptor_supports_lossy_compression(selected_encoder))
             {
                 ImGui::BeginDisabled(s_opts.lossless);
-                ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
-                                     "Controls the quality of the encoded image (1 = worst, 100 = best).");
+                if (ImGui::PE::SliderInt(
+                        "Quality", &s_opts.quality, 1, 100, "%d", 0,
+                        "Controls the quality of the encoded image for lossy compression (1 = worst, 100 = best)."))
+                    heif_encoder_set_lossy_quality(enc.get(), s_opts.quality);
                 ImGui::EndDisabled();
             }
 
             if (ImGui::PE::TreeNode("Advanced", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
             {
-                // Show encoder-specific parameters using the shared C encoder instance
-                auto it = s_heif_encoders.find(s_opts.format);
-                if (it != s_heif_encoders.end() && it->second)
+                auto params = heif_encoder_list_parameters(enc.get());
+                for (int i = 0; params && params[i]; ++i)
                 {
-                    auto enc = it->second;
+                    auto name = heif_encoder_parameter_get_name(params[i]);
+                    // we handle the common "Lossless" and "Quality" parameters separately
+                    if (!name || std::string(name) == "lossless" || std::string(name) == "quality")
+                        continue;
 
-                    auto params = heif_encoder_list_parameters(enc.get());
-                    for (int i = 0; params && params[i]; ++i)
+                    std::string uppercase_name(name);
+                    if (!uppercase_name.empty())
+                        uppercase_name[0] =
+                            static_cast<char>(std::toupper(static_cast<unsigned char>(uppercase_name[0])));
+
+                    auto type = heif_encoder_parameter_get_type(params[i]);
+
+                    ImGui::PushID(i);
+
+                    switch (type)
                     {
-                        auto name = heif_encoder_parameter_get_name(params[i]);
-                        // we handle the common "Lossless" and "Quality" parameters separately
-                        if (!name || std::string(name) == "lossless" || std::string(name) == "quality")
-                            continue;
+                    case heif_encoder_parameter_type_integer:
+                    {
+                        int        have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
+                        const int *valid_values = nullptr;
+                        (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum, &have_maximum,
+                                                                          &minimum, &maximum, &num_valid_values,
+                                                                          &valid_values);
 
-                        std::string uppercase_name(name);
-                        if (!uppercase_name.empty())
-                            uppercase_name[0] =
-                                static_cast<char>(std::toupper(static_cast<unsigned char>(uppercase_name[0])));
+                        int cur = 0;
+                        (void)heif_encoder_get_parameter_integer(enc.get(), name, &cur);
 
-                        auto type = heif_encoder_parameter_get_type(params[i]);
-
-                        ImGui::PushID(i);
-
-                        switch (type)
+                        if (num_valid_values > 0)
                         {
-                        case heif_encoder_parameter_type_integer:
-                        {
-                            int have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
-                            const int *valid_values = nullptr;
-                            (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum,
-                                                                              &have_maximum, &minimum, &maximum,
-                                                                              &num_valid_values, &valid_values);
-
-                            int cur = 0;
-                            (void)heif_encoder_get_parameter_integer(enc.get(), name, &cur);
-
-                            if (num_valid_values > 0)
+                            std::string preview = std::to_string(cur);
+                            if (ImGui::BeginCombo(("##" + std::string(name)).c_str(), preview.c_str()))
                             {
-                                std::string preview = std::to_string(cur);
-                                if (ImGui::BeginCombo(("##" + std::string(name)).c_str(), preview.c_str()))
+                                for (int k = 0; k < num_valid_values; ++k)
                                 {
-                                    for (int k = 0; k < num_valid_values; ++k)
+                                    bool selected = (cur == valid_values[k]);
+                                    if (ImGui::Selectable(std::to_string(valid_values[k]).c_str(), selected))
                                     {
-                                        bool selected = (cur == valid_values[k]);
-                                        if (ImGui::Selectable(std::to_string(valid_values[k]).c_str(), selected))
-                                        {
-                                            cur = valid_values[k];
-                                            (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
-                                        }
-                                        if (selected)
-                                            ImGui::SetItemDefaultFocus();
+                                        cur = valid_values[k];
+                                        (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
                                     }
-                                    ImGui::EndCombo();
+                                    if (selected)
+                                        ImGui::SetItemDefaultFocus();
                                 }
+                                ImGui::EndCombo();
+                            }
+                        }
+                        else
+                        {
+                            if (have_minimum && have_maximum)
+                            {
+                                if (ImGui::PE::SliderInt(uppercase_name, &cur, minimum, maximum))
+                                    (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
                             }
                             else
                             {
-                                if (have_minimum && have_maximum)
+                                if (ImGui::PE::DragInt(uppercase_name, &cur))
+                                    (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                            }
+                        }
+                    }
+                    break;
+                    case heif_encoder_parameter_type_boolean:
+                    {
+                        int cur = 0;
+                        (void)heif_encoder_get_parameter_boolean(enc.get(), name, &cur);
+                        bool b = (cur != 0);
+                        if (ImGui::PE::Checkbox(uppercase_name, &b))
+                            (void)heif_encoder_set_parameter_boolean(enc.get(), name, b ? 1 : 0);
+                    }
+                    break;
+                    case heif_encoder_parameter_type_string:
+                    {
+                        const char *const *valid_options = nullptr;
+                        (void)heif_encoder_parameter_string_valid_values(enc.get(), name, &valid_options);
+
+                        constexpr int bufsize      = 512;
+                        char          buf[bufsize] = {0};
+                        (void)heif_encoder_get_parameter_string(enc.get(), name, buf, bufsize);
+
+                        ImGui::PE::Entry(
+                            uppercase_name,
+                            [&]
+                            {
+                                if (valid_options)
                                 {
-                                    if (ImGui::PE::SliderInt(uppercase_name, &cur, minimum, maximum))
-                                        (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                                    std::string preview(buf);
+                                    if (ImGui::BeginCombo(("##" + std::string(name)).c_str(), preview.c_str()))
+                                    {
+                                        for (int k = 0; valid_options[k]; ++k)
+                                        {
+                                            bool selected = (preview == valid_options[k]);
+                                            if (ImGui::Selectable(valid_options[k], selected))
+                                                (void)heif_encoder_set_parameter_string(enc.get(), name,
+                                                                                        valid_options[k]);
+                                            if (selected)
+                                                ImGui::SetItemDefaultFocus();
+                                        }
+                                        ImGui::EndCombo();
+                                    }
                                 }
                                 else
                                 {
-                                    if (ImGui::PE::DragInt(uppercase_name, &cur))
-                                        (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                                    if (ImGui::InputText(("##" + std::string(name)).c_str(), buf, bufsize))
+                                        (void)heif_encoder_set_parameter_string(enc.get(), name, buf);
                                 }
-                            }
-                        }
-                        case heif_encoder_parameter_type_boolean:
-                        {
-                            int cur = 0;
-                            (void)heif_encoder_get_parameter_boolean(enc.get(), name, &cur);
-                            bool b = (cur != 0);
-                            if (ImGui::PE::Checkbox(uppercase_name, &b))
-                                (void)heif_encoder_set_parameter_boolean(enc.get(), name, b ? 1 : 0);
-                        }
-                        case heif_encoder_parameter_type_string:
-                        {
-                            const char *const *valid_options = nullptr;
-                            (void)heif_encoder_parameter_string_valid_values(enc.get(), name, &valid_options);
-
-                            constexpr int bufsize      = 512;
-                            char          buf[bufsize] = {0};
-                            (void)heif_encoder_get_parameter_string(enc.get(), name, buf, bufsize);
-
-                            ImGui::PE::Entry(
-                                uppercase_name,
-                                [&]
-                                {
-                                    if (valid_options)
-                                    {
-                                        std::string preview(buf);
-                                        if (ImGui::BeginCombo(("##" + std::string(name)).c_str(), preview.c_str()))
-                                        {
-                                            for (int k = 0; valid_options[k]; ++k)
-                                            {
-                                                bool selected = (preview == valid_options[k]);
-                                                if (ImGui::Selectable(valid_options[k], selected))
-                                                    (void)heif_encoder_set_parameter_string(enc.get(), name,
-                                                                                            valid_options[k]);
-                                                if (selected)
-                                                    ImGui::SetItemDefaultFocus();
-                                            }
-                                            ImGui::EndCombo();
-                                        }
-                                    }
-                                    else
-                                    {
-                                        if (ImGui::InputText(("##" + std::string(name)).c_str(), buf, bufsize))
-                                            (void)heif_encoder_set_parameter_string(enc.get(), name, buf);
-                                    }
-                                    return false;
-                                });
-                        }
-                        }
-
-                        ImGui::PopID();
+                                return false;
+                            });
                     }
+                    break;
+                    }
+
+                    ImGui::PopID();
                 }
                 ImGui::PE::TreePop();
             }
