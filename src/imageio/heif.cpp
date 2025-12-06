@@ -57,8 +57,8 @@ HEIFSaveOptions *heif_parameters_gui() { return nullptr; }
 using HeifContextPtr         = std::unique_ptr<heif_context, void (*)(heif_context *)>;
 using HeifImagePtr           = std::unique_ptr<heif_image, void (*)(const heif_image *)>;
 using HeifImageHandlePtr     = std::unique_ptr<heif_image_handle, void (*)(const heif_image_handle *)>;
-using HeifEncoderPtr         = std::shared_ptr<heif_encoder>;
-using HeifNCLXPtr            = std::shared_ptr<heif_color_profile_nclx>;
+using HeifEncoderPtr         = std::unique_ptr<heif_encoder, void (*)(heif_encoder *)>;
+using HeifNCLXPtr            = std::unique_ptr<heif_color_profile_nclx, void (*)(heif_color_profile_nclx *)>;
 using HeifTrackPtr           = std::unique_ptr<heif_track, void (*)(heif_track *)>;
 using HeifDecodingOptionsPtr = std::unique_ptr<heif_decoding_options, void (*)(heif_decoding_options *)>;
 
@@ -98,9 +98,9 @@ static void init_heif_supported_formats()
         {
             heif_encoder *enc = nullptr;
             if (heif_context_get_encoder(nullptr, desc, &enc).code == heif_error_Ok && enc)
-                s_encoders.push_back(HeifEncoderPtr(enc, [](heif_encoder *e) { heif_encoder_release(e); }));
+                s_encoders.emplace_back(enc, heif_encoder_release);
             else
-                s_encoders.push_back(nullptr);
+                s_encoders.emplace_back(nullptr, heif_encoder_release);
         }
     }
 
@@ -292,7 +292,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
             else
                 return (heif_color_profile_nclx *)nullptr;
         }(),
-        [](heif_color_profile_nclx *p) { heif_nclx_color_profile_free(p); });
+        heif_nclx_color_profile_free);
 
     const heif_color_profile_nclx *nclx = nullptr;
     if (image_level_nclx)
@@ -524,7 +524,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     else
                         return (heif_color_profile_nclx *)nullptr;
                 }(),
-                [](heif_color_profile_nclx *p) { heif_nclx_color_profile_free(p); });
+                heif_nclx_color_profile_free);
 
             std::vector<uint8_t> handle_level_icc_profile;
             {
@@ -757,8 +757,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 
         // Set color profile (nclx)
         {
-            auto nclx = HeifNCLXPtr(heif_nclx_color_profile_alloc(),
-                                    [](heif_color_profile_nclx *p) { heif_nclx_color_profile_free(p); });
+            auto nclx = HeifNCLXPtr(heif_nclx_color_profile_alloc(), heif_nclx_color_profile_free);
             if (!nclx)
                 throw std::runtime_error("HEIF: Failed to allocate nclx profile");
             nclx->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // TODO map from img.chromaticities
@@ -924,8 +923,8 @@ HEIFSaveOptions *heif_parameters_gui()
 
         if (enc_open)
         {
-            auto  selected_encoder = s_encoder_descriptors[s_opts.encoder];
-            auto &enc              = s_encoders[s_opts.encoder];
+            auto selected_encoder = s_encoder_descriptors[s_opts.encoder];
+            auto enc              = s_encoders[s_opts.encoder].get();
 
             // Lossless
             if (heif_encoder_descriptor_supports_lossless_compression(selected_encoder))
@@ -936,7 +935,7 @@ HEIFSaveOptions *heif_parameters_gui()
                 if (ImGui::PE::Checkbox("Lossless", &lossless, "Use lossless compression."))
                 {
                     s_opts.lossless = lossless;
-                    heif_encoder_set_lossless(enc.get(), lossless);
+                    heif_encoder_set_lossless(enc, lossless);
                 }
                 ImGui::EndDisabled();
             }
@@ -948,13 +947,13 @@ HEIFSaveOptions *heif_parameters_gui()
                 if (ImGui::PE::SliderInt(
                         "Quality", &s_opts.quality, 1, 100, "%d", 0,
                         "Controls the quality of the encoded image for lossy compression (1 = worst, 100 = best)."))
-                    heif_encoder_set_lossy_quality(enc.get(), s_opts.quality);
+                    heif_encoder_set_lossy_quality(enc, s_opts.quality);
                 ImGui::EndDisabled();
             }
 
             if (ImGui::PE::TreeNode("Advanced", ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DrawLinesFull))
             {
-                auto params = heif_encoder_list_parameters(enc.get());
+                auto params = heif_encoder_list_parameters(enc);
                 for (int i = 0; params && params[i]; ++i)
                 {
                     auto name = heif_encoder_parameter_get_name(params[i]);
@@ -977,12 +976,12 @@ HEIFSaveOptions *heif_parameters_gui()
                     {
                         int        have_minimum = 0, have_maximum = 0, minimum = 0, maximum = 0, num_valid_values = 0;
                         const int *valid_values = nullptr;
-                        (void)heif_encoder_parameter_integer_valid_values(enc.get(), name, &have_minimum, &have_maximum,
+                        (void)heif_encoder_parameter_integer_valid_values(enc, name, &have_minimum, &have_maximum,
                                                                           &minimum, &maximum, &num_valid_values,
                                                                           &valid_values);
 
                         int cur = 0;
-                        (void)heif_encoder_get_parameter_integer(enc.get(), name, &cur);
+                        (void)heif_encoder_get_parameter_integer(enc, name, &cur);
 
                         if (num_valid_values > 0)
                         {
@@ -995,7 +994,7 @@ HEIFSaveOptions *heif_parameters_gui()
                                     if (ImGui::Selectable(std::to_string(valid_values[k]).c_str(), selected))
                                     {
                                         cur = valid_values[k];
-                                        (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                                        (void)heif_encoder_set_parameter_integer(enc, name, cur);
                                     }
                                     if (selected)
                                         ImGui::SetItemDefaultFocus();
@@ -1008,12 +1007,12 @@ HEIFSaveOptions *heif_parameters_gui()
                             if (have_minimum && have_maximum)
                             {
                                 if (ImGui::PE::SliderInt(uppercase_name, &cur, minimum, maximum))
-                                    (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                                    (void)heif_encoder_set_parameter_integer(enc, name, cur);
                             }
                             else
                             {
                                 if (ImGui::PE::DragInt(uppercase_name, &cur))
-                                    (void)heif_encoder_set_parameter_integer(enc.get(), name, cur);
+                                    (void)heif_encoder_set_parameter_integer(enc, name, cur);
                             }
                         }
                     }
@@ -1021,20 +1020,20 @@ HEIFSaveOptions *heif_parameters_gui()
                     case heif_encoder_parameter_type_boolean:
                     {
                         int cur = 0;
-                        (void)heif_encoder_get_parameter_boolean(enc.get(), name, &cur);
+                        (void)heif_encoder_get_parameter_boolean(enc, name, &cur);
                         bool b = (cur != 0);
                         if (ImGui::PE::Checkbox(uppercase_name, &b))
-                            (void)heif_encoder_set_parameter_boolean(enc.get(), name, b ? 1 : 0);
+                            (void)heif_encoder_set_parameter_boolean(enc, name, b ? 1 : 0);
                     }
                     break;
                     case heif_encoder_parameter_type_string:
                     {
                         const char *const *valid_options = nullptr;
-                        (void)heif_encoder_parameter_string_valid_values(enc.get(), name, &valid_options);
+                        (void)heif_encoder_parameter_string_valid_values(enc, name, &valid_options);
 
                         constexpr int bufsize      = 512;
                         char          buf[bufsize] = {0};
-                        (void)heif_encoder_get_parameter_string(enc.get(), name, buf, bufsize);
+                        (void)heif_encoder_get_parameter_string(enc, name, buf, bufsize);
 
                         ImGui::PE::Entry(
                             uppercase_name,
@@ -1049,8 +1048,7 @@ HEIFSaveOptions *heif_parameters_gui()
                                         {
                                             bool selected = (preview == valid_options[k]);
                                             if (ImGui::Selectable(valid_options[k], selected))
-                                                (void)heif_encoder_set_parameter_string(enc.get(), name,
-                                                                                        valid_options[k]);
+                                                (void)heif_encoder_set_parameter_string(enc, name, valid_options[k]);
                                             if (selected)
                                                 ImGui::SetItemDefaultFocus();
                                         }
@@ -1060,7 +1058,7 @@ HEIFSaveOptions *heif_parameters_gui()
                                 else
                                 {
                                     if (ImGui::InputText(("##" + std::string(name)).c_str(), buf, bufsize))
-                                        (void)heif_encoder_set_parameter_string(enc.get(), name, buf);
+                                        (void)heif_encoder_set_parameter_string(enc, name, buf);
                                 }
                                 return false;
                             });
