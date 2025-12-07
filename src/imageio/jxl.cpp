@@ -21,11 +21,11 @@ using namespace std;
 
 struct JXLSaveOptions
 {
-    float                      gain            = 1.f;
-    bool                       lossless        = false;
-    int                        quality         = 95;
-    int                        data_type_index = 0;
-    TransferFunctionWithParams tf              = TransferFunction_BT2100_PQ;
+    float            gain            = 1.f;
+    bool             lossless        = false;
+    int              quality         = 95;
+    int              data_type_index = 0;
+    TransferFunction tf              = TransferFunction::BT2100_PQ;
 };
 
 static JXLSaveOptions s_opts;
@@ -34,7 +34,7 @@ static JXLSaveOptions s_opts;
 
 bool is_jxl_image(istream &is) noexcept { return false; }
 
-bool jxl_supported_tf(TransferFunction tf) noexcept { return false; }
+bool jxl_supported_tf(TransferFunction::Type tf) noexcept { return false; }
 
 vector<ImagePtr> load_jxl_image(istream &is, string_view filename)
 {
@@ -63,37 +63,37 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
 #include "icc.h"
 #include "timer.h"
 
-static TransferFunctionWithParams transfer_function_from_color_encoding(const JxlColorEncoding &enc)
+static TransferFunction transfer_function_from_color_encoding(const JxlColorEncoding &enc)
 {
     switch (enc.transfer_function)
     {
-    case JXL_TRANSFER_FUNCTION_709: return TransferFunction_ITU;
-    case JXL_TRANSFER_FUNCTION_SRGB: return TransferFunction_sRGB;
-    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction_Gamma, (float)enc.gamma};
-    case JXL_TRANSFER_FUNCTION_LINEAR: return TransferFunction_Linear;
-    case JXL_TRANSFER_FUNCTION_PQ: return TransferFunction_BT2100_PQ;
-    case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction_BT2100_HLG;
-    case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction_DCI_P3;
-    case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction_Unspecified;
+    case JXL_TRANSFER_FUNCTION_709: return TransferFunction::ITU;
+    case JXL_TRANSFER_FUNCTION_SRGB: return TransferFunction::sRGB;
+    case JXL_TRANSFER_FUNCTION_GAMMA: return {TransferFunction::Gamma, (float)enc.gamma};
+    case JXL_TRANSFER_FUNCTION_LINEAR: return TransferFunction::Linear;
+    case JXL_TRANSFER_FUNCTION_PQ: return TransferFunction::BT2100_PQ;
+    case JXL_TRANSFER_FUNCTION_HLG: return TransferFunction::BT2100_HLG;
+    case JXL_TRANSFER_FUNCTION_DCI: return TransferFunction::DCI_P3;
+    case JXL_TRANSFER_FUNCTION_UNKNOWN: return TransferFunction::Unspecified;
     }
 }
 
-static JxlTransferFunction jxl_tf(TransferFunctionWithParams tf) noexcept
+static JxlTransferFunction jxl_tf(TransferFunction tf) noexcept
 {
     switch (tf.type)
     {
-    case TransferFunction_Linear: return JXL_TRANSFER_FUNCTION_LINEAR;
-    case TransferFunction_Gamma: return JXL_TRANSFER_FUNCTION_GAMMA;
-    case TransferFunction_sRGB: return JXL_TRANSFER_FUNCTION_SRGB;
-    case TransferFunction_ITU: return JXL_TRANSFER_FUNCTION_709;
-    case TransferFunction_BT2100_PQ: return JXL_TRANSFER_FUNCTION_PQ;
-    case TransferFunction_BT2100_HLG: return JXL_TRANSFER_FUNCTION_HLG;
-    case TransferFunction_DCI_P3: return JXL_TRANSFER_FUNCTION_DCI;
+    case TransferFunction::Linear: return JXL_TRANSFER_FUNCTION_LINEAR;
+    case TransferFunction::Gamma: return JXL_TRANSFER_FUNCTION_GAMMA;
+    case TransferFunction::sRGB: return JXL_TRANSFER_FUNCTION_SRGB;
+    case TransferFunction::ITU: return JXL_TRANSFER_FUNCTION_709;
+    case TransferFunction::BT2100_PQ: return JXL_TRANSFER_FUNCTION_PQ;
+    case TransferFunction::BT2100_HLG: return JXL_TRANSFER_FUNCTION_HLG;
+    case TransferFunction::DCI_P3: return JXL_TRANSFER_FUNCTION_DCI;
     default: return JXL_TRANSFER_FUNCTION_UNKNOWN;
     }
 }
 
-bool jxl_supported_tf(TransferFunction_ tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
+bool jxl_supported_tf(TransferFunction::Type_ tf) noexcept { return jxl_tf(tf) != JXL_TRANSFER_FUNCTION_UNKNOWN; }
 
 static string color_encoding_info(const JxlColorEncoding &enc)
 {
@@ -170,10 +170,10 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
     }
 
     auto tf = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
-                  ? TransferFunctionWithParams{TransferFunction_Gamma, (float)file_enc.gamma}
+                  ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
                   : transfer_function_from_cicp((int)file_enc.transfer_function);
 
-    if (tf.type == TransferFunction_Unspecified)
+    if (tf.type == TransferFunction::Unspecified)
         spdlog::warn("JPEG-XL: cICP transfer function ({}) is not recognized, assuming sRGB",
                      (int)file_enc.transfer_function);
 
@@ -525,7 +525,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             //
             // We therefore swap the black channel for the alpha channel in the pixel array before applying the ICC
             // profile, and then swap them back afterwards.
-            if (opts.tf_override.type == TransferFunction_Unspecified && prefer_icc && is_cmyk &&
+            if (opts.tf_override.type == TransferFunction::Unspecified && prefer_icc && is_cmyk &&
                 first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
@@ -545,7 +545,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("Swapped alpha channel in interleaved array with black channel data.");
             }
 
-            if (opts.tf_override.type == TransferFunction_Unspecified)
+            if (opts.tf_override.type == TransferFunction::Unspecified)
             {
                 if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
                     linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
@@ -554,7 +554,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                     image->metadata["transfer function"] = tf_description;
                 }
                 else
-                    image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unspecified);
+                    image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
             }
             else
             {
@@ -575,7 +575,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
             }
 
-            if (opts.tf_override.type == TransferFunction_Unspecified && prefer_icc && is_cmyk &&
+            if (opts.tf_override.type == TransferFunction::Unspecified && prefer_icc && is_cmyk &&
                 first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
@@ -630,7 +630,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
                 spdlog::info("Applying transfer function to extra channel '{}'", channel.name);
 
-                if (opts.tf_override.type != TransferFunction_Unspecified)
+                if (opts.tf_override.type != TransferFunction::Unspecified)
                 {
                     if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
                         linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
@@ -778,7 +778,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 }
 
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool lossless,
-                    float quality, TransferFunctionWithParams tf, int data_type)
+                    float quality, TransferFunction tf, int data_type)
 {
     Timer timer;
 
@@ -966,12 +966,13 @@ JXLSaveOptions *jxl_parameters_gui()
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
-                                              is_selected))
-                            s_opts.tf.type = (TransferFunction_)i;
+                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
+                                is_selected))
+                            s_opts.tf.type = (TransferFunction::Type_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -981,7 +982,7 @@ JXLSaveOptions *jxl_parameters_gui()
             },
             "Encode the pixel values using this transfer function.");
 
-        if (s_opts.tf.type == TransferFunction_Gamma)
+        if (s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 

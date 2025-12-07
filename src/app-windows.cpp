@@ -75,17 +75,18 @@ void HDRViewApp::draw_develop_windows()
             {
                 if (ImGui::BeginTabItem("Transfer functions"))
                 {
-                    static TransferFunctionWithParams tf{TransferFunction_Linear, 2.2f};
+                    static TransferFunction tf{TransferFunction::Linear, 2.2f};
                     ImGui::DragFloat("Gamma", &tf.gamma, 0.01f, 0.f);
                     if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf).c_str(),
                                           ImGuiComboFlags_HeightLargest))
                     {
-                        for (TransferFunction n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
+                        for (TransferFunction::Type n = TransferFunction::Linear; n < TransferFunction::Count; ++n)
                         {
                             const bool is_selected = (tf.type == n);
-                            if (ImGui::Selectable(transfer_function_name({(TransferFunction_)n, tf.gamma}).c_str(),
-                                                  is_selected))
-                                tf.type = (TransferFunction_)n;
+                            if (ImGui::Selectable(
+                                    transfer_function_name({(TransferFunction::Type_)n, tf.gamma}).c_str(),
+                                    is_selected))
+                                tf.type = (TransferFunction::Type_)n;
 
                             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
                             if (is_selected)

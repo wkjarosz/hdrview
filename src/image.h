@@ -356,9 +356,8 @@ public:
 
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
-                                        TransferFunctionWithParams tf = {TransferFunction_Linear, 1.f},
-                                        bool dither = true, bool unpremultiply = true,
-                                        bool convert_to_sRGB = true) const;
+                                        TransferFunction tf = {TransferFunction::Linear, 1.f}, bool dither = true,
+                                        bool unpremultiply = true, bool convert_to_sRGB = true) const;
 
     void draw_histogram();
     void draw_layer_groups(const Layer &layer, int img_idx, int &id, bool is_current, bool is_reference,
@@ -395,8 +394,8 @@ private:
 };
 
 template <typename T>
-std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunctionWithParams tf,
-                                           bool dither, bool unpremultiply, bool convert_to_sRGB) const
+std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction tf, bool dither,
+                                           bool unpremultiply, bool convert_to_sRGB) const
 {
     *w                   = size().x;
     *h                   = size().y;

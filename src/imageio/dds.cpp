@@ -724,7 +724,7 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
                 dds.bitmasked ? header["bitmask_string"]["string"].get<string>()
                               : fmt::format("{} ({})", format_name(dxt10hdr.format), (uint32_t)dxt10hdr.format);
             image->metadata["transfer function"] =
-                transfer_function_name(dds.is_sRGB() ? TransferFunction_sRGB : TransferFunction_Linear);
+                transfer_function_name(dds.is_sRGB() ? TransferFunction::sRGB : TransferFunction::Linear);
 
             image->metadata["header"] = header;
 

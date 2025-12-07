@@ -19,11 +19,11 @@
 
 struct PNGSaveOptions
 {
-    float                      gain            = 1.f;
-    bool                       dither          = true;
-    TransferFunctionWithParams tf              = TransferFunction_sRGB;
-    int                        data_type_index = 0;
-    bool                       interlaced      = false;
+    float            gain            = 1.f;
+    bool             dither          = true;
+    TransferFunction tf              = TransferFunction::sRGB;
+    int              data_type_index = 0;
+    bool             interlaced      = false;
 };
 
 static PNGSaveOptions s_opts;
@@ -267,14 +267,14 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
     }
 
-    double                     gamma       = 2.2; // default gamma
-    int                        srgb_intent = 0;
-    TransferFunctionWithParams tf          = TransferFunction_Unspecified; // default
+    double           gamma       = 2.2; // default gamma
+    int              srgb_intent = 0;
+    TransferFunction tf          = TransferFunction::Unspecified; // default
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
         spdlog::info("Found gamma chunk: {:.4f}", gamma);
-        tf.type  = TransferFunction_Gamma;
+        tf.type  = TransferFunction::Gamma;
         tf.gamma = float(gamma);
     }
 
@@ -292,7 +292,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     if (png_get_sRGB(png_ptr, info_ptr.get(), &srgb_intent))
     {
         spdlog::info("Found sRGB chunk. sRGB intent: {}", srgb_intent);
-        tf = TransferFunction_sRGB;
+        tf = TransferFunction::sRGB;
     }
 
     bool     has_cICP              = false;
@@ -325,7 +325,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         }
 
         tf = transfer_function_from_cicp(transfer_function);
-        if (tf.type == TransferFunction_Unspecified)
+        if (tf.type == TransferFunction::Unspecified)
             spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
     }
 #endif
@@ -519,7 +519,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                                       ? dequantize_narrow(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
                                       : dequantize_narrow(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
         // ICC profile linearization
-        if (opts.tf_override.type == TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction::Unspecified)
         {
             if (has_icc_profile && !has_cICP)
             {
@@ -530,7 +530,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                     image->chromaticities = chr;
                 }
             }
-            else if (tf.type != TransferFunction_Linear)
+            else if (tf.type != TransferFunction::Linear)
                 to_linear(float_pixels.data(), size, tf);
 
             image->metadata["transfer function"] = tf_desc;
@@ -562,7 +562,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 }
 
 void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
-                    bool sixteen_bit, TransferFunctionWithParams tf)
+                    bool sixteen_bit, TransferFunction tf)
 {
     Timer                       timer;
     int                         w = 0, h = 0, n = 0;
@@ -708,12 +708,13 @@ PNGSaveOptions *png_parameters_gui()
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
-                                              is_selected))
-                            s_opts.tf.type = (TransferFunction_)i;
+                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
+                                is_selected))
+                            s_opts.tf.type = (TransferFunction::Type_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -723,7 +724,7 @@ PNGSaveOptions *png_parameters_gui()
             },
             "Encode the pixel values using this transfer function.");
 
-        if (s_opts.tf.type == TransferFunction_Gamma)
+        if (s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 

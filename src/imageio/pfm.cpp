@@ -26,8 +26,8 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-    float                      gain = 1.f;
-    TransferFunctionWithParams tf   = {TransferFunction_Linear, 1.f};
+    float            gain = 1.f;
+    TransferFunction tf   = {TransferFunction::Linear, 1.f};
 };
 
 static PFMSaveOptions s_opts;
@@ -147,7 +147,7 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
     auto      image                      = make_shared<Image>(size.xy(), size.z);
     image->filename                      = filename;
     image->metadata["pixel format"]      = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
-    image->metadata["transfer function"] = transfer_function_name(TransferFunction_Linear);
+    image->metadata["transfer function"] = transfer_function_name(TransferFunction::Linear);
 
     to_linear(float_data.get(), size, opts.tf_override);
 
@@ -196,7 +196,8 @@ void write_pfm_image(ostream &os, string_view filename, int width, int height, i
     os.write((const char *)data, width * height * sizeof(float) * num_channels);
 }
 
-void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction_ tf, float gamma)
+void save_pfm_image(const Image &img, ostream &os, string_view filename, float gain, TransferFunction::Type_ tf,
+                    float gamma)
 {
     Timer timer;
     int   w = 0, h = 0, n = 0;
@@ -249,12 +250,13 @@ PFMSaveOptions *pfm_parameters_gui()
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
-                                              is_selected))
-                            s_opts.tf.type = (TransferFunction_)i;
+                        bool is_selected = (s_opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
+                                is_selected))
+                            s_opts.tf.type = (TransferFunction::Type_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -266,7 +268,7 @@ PFMSaveOptions *pfm_parameters_gui()
             "file are typically assumed linear, and there is no way to signal in the file "
             "that the values are encoded with a different transfer function.");
 
-        if (s_opts.tf.type == TransferFunction_Gamma)
+        if (s_opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
         ImGui::PE::End();

@@ -25,7 +25,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
 }
 
 void save_heif_image(const Image &, std::ostream &, std::string_view, float, int, bool, int, bool, bool,
-                     TransferFunction, float)
+                     TransferFunction::Type, float)
 {
     throw std::runtime_error("HEIF/AVIF support not enabled in this build.");
 }
@@ -64,12 +64,12 @@ using HeifDecodingOptionsPtr = std::unique_ptr<heif_decoding_options, void (*)(h
 
 struct HEIFSaveOptions
 {
-    float                      gain      = 1.f;
-    int                        quality   = 95;
-    bool                       lossless  = false;
-    bool                       use_alpha = true;
-    TransferFunctionWithParams tf        = {TransferFunction_sRGB, 2.2f};
-    size_t                     encoder   = 0u;
+    float            gain      = 1.f;
+    int              quality   = 95;
+    bool             lossless  = false;
+    bool             use_alpha = true;
+    TransferFunction tf        = {TransferFunction::sRGB, 2.2f};
+    size_t           encoder   = 0u;
 };
 
 static HEIFSaveOptions s_opts;
@@ -117,25 +117,25 @@ static inline void throw_on_error(const struct heif_error &e, const char *ctx_ms
             throw std::runtime_error(std::string(ctx_msg));
     }
 }
-static heif_transfer_characteristics transfer_function_to_heif(TransferFunctionWithParams tf)
+static heif_transfer_characteristics transfer_function_to_heif(TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_Linear: return heif_transfer_characteristic_linear;
-    case TransferFunction_sRGB: return heif_transfer_characteristic_IEC_61966_2_1;
-    case TransferFunction_ITU: return heif_transfer_characteristic_ITU_R_BT_709_5;
-    case TransferFunction_BT2100_PQ: return heif_transfer_characteristic_ITU_R_BT_2100_0_PQ;
-    case TransferFunction_BT2100_HLG: return heif_transfer_characteristic_ITU_R_BT_2100_0_HLG;
-    case TransferFunction_ST240: return heif_transfer_characteristic_SMPTE_240M;
-    case TransferFunction_Log100: return heif_transfer_characteristic_logarithmic_100;
-    case TransferFunction_Log100_Sqrt10: return heif_transfer_characteristic_logarithmic_100_sqrt10;
-    case TransferFunction_IEC61966_2_4: return heif_transfer_characteristic_IEC_61966_2_4;
-    case TransferFunction_DCI_P3: return heif_transfer_characteristic_SMPTE_ST_428_1;
+    case TransferFunction::Linear: return heif_transfer_characteristic_linear;
+    case TransferFunction::sRGB: return heif_transfer_characteristic_IEC_61966_2_1;
+    case TransferFunction::ITU: return heif_transfer_characteristic_ITU_R_BT_709_5;
+    case TransferFunction::BT2100_PQ: return heif_transfer_characteristic_ITU_R_BT_2100_0_PQ;
+    case TransferFunction::BT2100_HLG: return heif_transfer_characteristic_ITU_R_BT_2100_0_HLG;
+    case TransferFunction::ST240: return heif_transfer_characteristic_SMPTE_240M;
+    case TransferFunction::Log100: return heif_transfer_characteristic_logarithmic_100;
+    case TransferFunction::Log100_Sqrt10: return heif_transfer_characteristic_logarithmic_100_sqrt10;
+    case TransferFunction::IEC61966_2_4: return heif_transfer_characteristic_IEC_61966_2_4;
+    case TransferFunction::DCI_P3: return heif_transfer_characteristic_SMPTE_ST_428_1;
     default: return heif_transfer_characteristic_IEC_61966_2_1; // fallback to sRGB
     }
 }
 
-static bool is_heif_transfer_supported(TransferFunctionWithParams tf)
+static bool is_heif_transfer_supported(TransferFunction tf)
 {
     switch (transfer_function_to_heif(tf))
     {
@@ -164,7 +164,7 @@ static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_
 
     auto tf = transfer_function_from_cicp((int)nclx->transfer_characteristics);
 
-    if (tf.type == TransferFunction_Unspecified)
+    if (tf.type == TransferFunction::Unspecified)
         spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
                      (int)nclx->transfer_characteristics);
 
@@ -364,7 +364,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.tf_override.type == TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction::Unspecified)
         {
             // only prefer the nclx if it exists and it specifies an HDR transfer function
             bool prefer_icc = // false;
@@ -386,8 +386,8 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
             }
             else
             {
-                to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction_Unspecified);
-                image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unspecified);
+                to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
+                image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
             }
         }
         else
@@ -869,7 +869,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, int format_index, TransferFunctionWithParams tf)
+                     bool lossless, bool use_alpha, int format_index, TransferFunction tf)
 {
     HEIFSaveOptions params;
     params.gain      = gain;
@@ -919,21 +919,22 @@ HEIFSaveOptions *heif_parameters_gui()
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
+                    for (int i = TransferFunction::Linear; i < TransferFunction::Count; ++i)
                     {
-                        if (!is_heif_transfer_supported((TransferFunction_)i))
+                        if (!is_heif_transfer_supported((TransferFunction::Type_)i))
                             continue;
-                        bool selected = (s_opts.tf.type == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
-                                              selected))
-                            s_opts.tf.type = (TransferFunction_)i;
+                        bool selected = (s_opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, s_opts.tf.gamma}).c_str(),
+                                selected))
+                            s_opts.tf.type = (TransferFunction::Type_)i;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
                 ImGui::Tooltip("Encode the pixel values using this transfer function.");
-                if (s_opts.tf.type == TransferFunction_Gamma)
+                if (s_opts.tf.type == TransferFunction::Gamma)
                 {
                     ImGui::Indent();
                     ImGui::AlignTextToFramePadding();

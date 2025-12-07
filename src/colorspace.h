@@ -151,36 +151,36 @@ Chromaticities chromaticities_from_cicp(int cicp);
 int         chromaticities_to_cicp(const Chromaticities &chr);
 ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
-using TransferFunction = int;
-enum TransferFunction_ : TransferFunction
+struct TransferFunction
 {
-    TransferFunction_Unspecified = 0,
-    TransferFunction_Linear,
-    TransferFunction_Gamma,
-    TransferFunction_sRGB,
-    TransferFunction_ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
-    TransferFunction_BT2100_PQ,
-    TransferFunction_BT2100_HLG,
-    TransferFunction_ST240,
-    TransferFunction_Log100,
-    TransferFunction_Log100_Sqrt10,
-    TransferFunction_IEC61966_2_4,
-    TransferFunction_DCI_P3,
-    TransferFunction_Count
-};
+    using Type = int;
+    enum Type_ : Type
+    {
+        Unspecified = 0,
+        Linear,
+        Gamma,
+        sRGB,
+        ITU, //!< ITU-T BT.601, BT.709 and BT.2020 specifications, and SMPTE 170M
+        BT2100_PQ,
+        BT2100_HLG,
+        ST240,
+        Log100,
+        Log100_Sqrt10,
+        IEC61966_2_4,
+        DCI_P3,
+        Count
+    };
 
-struct TransferFunctionWithParams
-{
-    TransferFunction_ type = TransferFunction_Unspecified;
+    Type_ type  = Unspecified;
     float gamma = 2.2f; // Should always refer to the exponent of the to_linear transform, only used if type ==
-                        // TransferFunction_Gamma
+                        // TransferFunction::Gamma
 
-    TransferFunctionWithParams(TransferFunction_ t, float g = 2.2f) : type(t), gamma(g) {}
+    TransferFunction(Type_ t, float g = 2.2f) : type(t), gamma(g) {}
 };
 
-std::string                transfer_function_name(TransferFunctionWithParams tf);
-TransferFunctionWithParams transfer_function_from_cicp(int cicp);
-int                        transfer_function_to_cicp(TransferFunctionWithParams tf);
+std::string      transfer_function_name(TransferFunction tf);
+TransferFunction transfer_function_from_cicp(int cicp);
+int              transfer_function_to_cicp(TransferFunction tf);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
@@ -716,95 +716,94 @@ Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float from_linear(float linear, const TransferFunctionWithParams tf)
+inline float from_linear(float linear, const TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_Unspecified: [[fallthrough]];
-    case TransferFunction_sRGB: return linear_to_sRGB(linear);
-    case TransferFunction_Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
-    case TransferFunction_ITU: return OETF_ITU(linear);
-    case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
-    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
-    case TransferFunction_ST240: return OETF_ST240(linear);
-    case TransferFunction_Log100: return OETF_log100(linear);
-    case TransferFunction_Log100_Sqrt10: return OETF_log100_sqrt10(linear);
-    case TransferFunction_IEC61966_2_4: return OETF_IEC61966_2_4(linear);
-    case TransferFunction_DCI_P3: return inverse_EOTF_DCI_P3(linear);
-    case TransferFunction_Linear: [[fallthrough]];
+    case TransferFunction::Unspecified: [[fallthrough]];
+    case TransferFunction::sRGB: return linear_to_sRGB(linear);
+    case TransferFunction::Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
+    case TransferFunction::ITU: return OETF_ITU(linear);
+    case TransferFunction::BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
+    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction::ST240: return OETF_ST240(linear);
+    case TransferFunction::Log100: return OETF_log100(linear);
+    case TransferFunction::Log100_Sqrt10: return OETF_log100_sqrt10(linear);
+    case TransferFunction::IEC61966_2_4: return OETF_IEC61966_2_4(linear);
+    case TransferFunction::DCI_P3: return inverse_EOTF_DCI_P3(linear);
+    case TransferFunction::Linear: [[fallthrough]];
     default: return linear;
     }
 }
 
-inline float3 from_linear(float3 linear, const TransferFunctionWithParams tf)
+inline float3 from_linear(float3 linear, const TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_Unspecified: [[fallthrough]];
-    case TransferFunction_sRGB: return linear_to_sRGB(linear);
-    case TransferFunction_Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
-    case TransferFunction_ITU: return la::apply(OETF_ITU<float>, linear);
-    case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
-    case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
-    case TransferFunction_ST240: return la::apply(OETF_ST240<float>, linear);
-    case TransferFunction_Log100: return la::apply(OETF_log100<float>, linear);
-    case TransferFunction_Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
-    case TransferFunction_IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
-    case TransferFunction_DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
-    case TransferFunction_Linear: [[fallthrough]];
+    case TransferFunction::Unspecified: [[fallthrough]];
+    case TransferFunction::sRGB: return linear_to_sRGB(linear);
+    case TransferFunction::Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
+    case TransferFunction::ITU: return la::apply(OETF_ITU<float>, linear);
+    case TransferFunction::BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
+    case TransferFunction::BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
+    case TransferFunction::ST240: return la::apply(OETF_ST240<float>, linear);
+    case TransferFunction::Log100: return la::apply(OETF_log100<float>, linear);
+    case TransferFunction::Log100_Sqrt10: return la::apply(OETF_log100_sqrt10<float>, linear);
+    case TransferFunction::IEC61966_2_4: return la::apply(OETF_IEC61966_2_4<float>, linear);
+    case TransferFunction::DCI_P3: return la::apply(inverse_EOTF_DCI_P3<float>, linear);
+    case TransferFunction::Linear: [[fallthrough]];
     default: return linear;
     }
 }
 
-inline float to_linear(float encoded, const TransferFunctionWithParams tf)
+inline float to_linear(float encoded, const TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_Unspecified: [[fallthrough]];
-    case TransferFunction_sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, tf.gamma);
-    case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
-    case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
-    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
-    case TransferFunction_ST240: return EOTF_ST240(encoded);
-    case TransferFunction_Log100: return EOTF_log100(encoded);
-    case TransferFunction_Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
-    case TransferFunction_IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
-    case TransferFunction_DCI_P3: return EOTF_DCI_P3(encoded);
-    case TransferFunction_Linear: [[fallthrough]];
+    case TransferFunction::Unspecified: [[fallthrough]];
+    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
+    case TransferFunction::Gamma: return linear_to_gamma(encoded, tf.gamma);
+    case TransferFunction::ITU: return inverse_OETF_ITU(encoded);
+    case TransferFunction::BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
+    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
+    case TransferFunction::ST240: return EOTF_ST240(encoded);
+    case TransferFunction::Log100: return EOTF_log100(encoded);
+    case TransferFunction::Log100_Sqrt10: return EOTF_log100_sqrt10(encoded);
+    case TransferFunction::IEC61966_2_4: return EOTF_IEC61966_2_4(encoded);
+    case TransferFunction::DCI_P3: return EOTF_DCI_P3(encoded);
+    case TransferFunction::Linear: [[fallthrough]];
     default: return encoded;
     }
 }
 
-inline float3 to_linear(const float3 &encoded, const TransferFunctionWithParams tf)
+inline float3 to_linear(const float3 &encoded, const TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_Unspecified: [[fallthrough]];
-    case TransferFunction_sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
-    case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
-    case TransferFunction_BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
-    case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
-    case TransferFunction_ST240: return la::apply(EOTF_ST240<float>, encoded);
-    case TransferFunction_Log100: return la::apply(EOTF_log100<float>, encoded);
-    case TransferFunction_Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
-    case TransferFunction_IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
-    case TransferFunction_DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
-    case TransferFunction_Linear: [[fallthrough]];
+    case TransferFunction::Unspecified: [[fallthrough]];
+    case TransferFunction::sRGB: return sRGB_to_linear(encoded);
+    case TransferFunction::Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
+    case TransferFunction::ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
+    case TransferFunction::BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
+    case TransferFunction::BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
+    case TransferFunction::ST240: return la::apply(EOTF_ST240<float>, encoded);
+    case TransferFunction::Log100: return la::apply(EOTF_log100<float>, encoded);
+    case TransferFunction::Log100_Sqrt10: return la::apply(EOTF_log100_sqrt10<float>, encoded);
+    case TransferFunction::IEC61966_2_4: return la::apply(EOTF_IEC61966_2_4<float>, encoded);
+    case TransferFunction::DCI_P3: return la::apply(EOTF_DCI_P3<float>, encoded);
+    case TransferFunction::Linear: [[fallthrough]];
     default: return encoded;
     }
 }
 
-void        to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunctionWithParams tf,
-                      int stride = 1);
-inline void to_linear(float *pixels, int3 size, TransferFunctionWithParams tf)
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, int stride = 1);
+inline void to_linear(float *pixels, int3 size, TransferFunction tf)
 {
     int num_color_channels = size.z >= 3 ? 3 : 1;
     to_linear(pixels, size.z >= 3 ? pixels + 1 : nullptr, size.z >= 3 ? pixels + 2 : nullptr, size.x * size.y,
               num_color_channels, tf, size.z);
 }
-void from_linear(float *pixels, int3 size, TransferFunctionWithParams tf);
+void from_linear(float *pixels, int3 size, TransferFunction tf);
 
 inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {

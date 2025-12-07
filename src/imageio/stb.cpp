@@ -59,14 +59,14 @@ using namespace std;
 
 struct STBSaveOptions
 {
-    float                      gain    = 1.f;
-    TransferFunctionWithParams tf      = TransferFunction_sRGB;
-    bool                       dither  = true; // only used for LDR formats
-    int                        quality = 95;   // only used for jpg
+    float            gain    = 1.f;
+    TransferFunction tf      = TransferFunction::sRGB;
+    bool             dither  = true; // only used for LDR formats
+    int              quality = 95;   // only used for jpg
 };
 
 static STBSaveOptions s_opts{};
-static STBSaveOptions s_hdr_opts{1.f, {TransferFunction_Linear, 1.f}, false, 95};
+static STBSaveOptions s_hdr_opts{1.f, {TransferFunction::Linear, 1.f}, false, 95};
 
 static const stbi_io_callbacks stbi_callbacks = {
     // read
@@ -188,13 +188,13 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     if (!supported_format(is, j))
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
-    TransferFunctionWithParams tf = TransferFunction_Linear;
-    if (!is_hdr && opts.tf_override.type == TransferFunction_Unspecified)
+    TransferFunction tf = TransferFunction::Linear;
+    if (!is_hdr && opts.tf_override.type == TransferFunction::Unspecified)
     {
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
-        tf = TransferFunction_Unspecified;
+        tf = TransferFunction::Unspecified;
     }
-    if (opts.tf_override.type != TransferFunction_Unspecified)
+    if (opts.tf_override.type != TransferFunction::Unspecified)
     {
         spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf_override));
         tf = opts.tf_override;
@@ -222,7 +222,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
         image->metadata["transfer function"] = transfer_function_name(tf);
-        if (opts.tf_override.type != TransferFunction_Unspecified)
+        if (opts.tf_override.type != TransferFunction::Unspecified)
             try
             {
                 // some cICP transfer functions always correspond to certain primaries, try to deduce that
@@ -267,8 +267,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     return images;
 }
 
-void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain,
-                  TransferFunctionWithParams tf)
+void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf)
 {
     spdlog::debug("Saving stb HDR with gain {}, tf {}, gamma {}.", gain, (int)tf.type, tf.gamma);
     Timer timer;
@@ -286,8 +285,8 @@ void save_stb_hdr(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_hdr(img, os, filename, opts->gain, opts->tf);
 }
 
-void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain,
-                  TransferFunctionWithParams tf, bool dither, float quality)
+void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  bool dither, float quality)
 {
     spdlog::debug("Saving stb JPG with gain {}, tf {}, gamma {}, dither {}, quality {}.", gain, (int)tf.type, tf.gamma,
                   dither ? "true" : "false", quality);
@@ -306,8 +305,8 @@ void save_stb_jpg(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_jpg(img, os, filename, opts->gain, opts->tf, opts->dither, float(opts->quality));
 }
 
-void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain,
-                  TransferFunctionWithParams tf, bool dither)
+void save_stb_tga(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  bool dither)
 {
     spdlog::debug("Saving stb TGA with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf.type, tf.gamma,
                   dither ? "true" : "false");
@@ -326,8 +325,8 @@ void save_stb_tga(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_tga(img, os, filename, opts->gain, opts->tf, opts->dither);
 }
 
-void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain,
-                  TransferFunctionWithParams tf, bool dither)
+void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  bool dither)
 {
     spdlog::debug("Saving stb BMP with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf.type, tf.gamma,
                   dither ? "true" : "false");
@@ -346,8 +345,8 @@ void save_stb_bmp(const Image &img, std::ostream &os, const std::string_view fil
     save_stb_bmp(img, os, filename, opts->gain, opts->tf, opts->dither);
 }
 
-void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain,
-                  TransferFunctionWithParams tf, bool dither)
+void save_stb_png(const Image &img, std::ostream &os, const std::string_view filename, float gain, TransferFunction tf,
+                  bool dither)
 {
     spdlog::debug("Saving stb PNG with gain {}, tf {}, gamma {}, dither {}.", gain, (int)tf.type, tf.gamma,
                   dither ? "true" : "false");
@@ -419,12 +418,13 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
             {
                 if (ImGui::BeginCombo("##Transfer function", transfer_function_name(opts.tf).c_str()))
                 {
-                    for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
+                    for (int i = TransferFunction::Linear; i <= TransferFunction::DCI_P3; ++i)
                     {
-                        bool is_selected = (opts.tf.type == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, opts.tf.gamma}).c_str(),
-                                              is_selected))
-                            opts.tf.type = (TransferFunction_)i;
+                        bool is_selected = (opts.tf.type == (TransferFunction::Type_)i);
+                        if (ImGui::Selectable(
+                                transfer_function_name({(TransferFunction::Type_)i, opts.tf.gamma}).c_str(),
+                                is_selected))
+                            opts.tf.type = (TransferFunction::Type_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -436,7 +436,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
             "provide a way to signal what transfer function the files were saved with. Without this "
             "metadata, most software will assume LDR files are sRGB encoded, and .hdr files are linear.");
 
-        if (opts.tf.type == TransferFunction_Gamma)
+        if (opts.tf.type == TransferFunction::Gamma)
             ImGui::PE::Entry(
                 "Gamma", [&] { return ImGui::SliderFloat("##Gamma", &opts.tf.gamma, 0.1f, 5.f); },
                 "When using a gamma transfer function, this is the gamma value to use.");
@@ -453,7 +453,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
     }
 
     if (ImGui::Button("Reset options to defaults"))
-        opts = is_hdr ? STBSaveOptions{1.f, {TransferFunction_Linear, 1.f}, false, 95} : STBSaveOptions{};
+        opts = is_hdr ? STBSaveOptions{1.f, {TransferFunction::Linear, 1.f}, false, 95} : STBSaveOptions{};
 
     return &opts;
 }

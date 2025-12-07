@@ -46,7 +46,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 void save_jpg_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool sRGB, bool dither,
                     int quality, bool progressive)
 {
-    return save_stb_jpg(img, os, filename, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear, 2.2f, dither,
+    return save_stb_jpg(img, os, filename, gain, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, 2.2f, dither,
                         quality);
 }
 
@@ -272,9 +272,9 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        if (opts.tf_override.type == TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction::Unspecified)
         {
-            string tf_desc = transfer_function_name(TransferFunction_Unspecified);
+            string tf_desc = transfer_function_name(TransferFunction::Unspecified);
             // ICC profile linearization
             if (!icc_profile.empty())
             {
@@ -286,11 +286,11 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                 }
                 else
                     // If no ICC profile, assume sRGB transfer function
-                    to_linear(float_pixels.data(), size, TransferFunction_sRGB);
+                    to_linear(float_pixels.data(), size, TransferFunction::sRGB);
             }
             else
                 // If no ICC profile, assume sRGB transfer function
-                to_linear(float_pixels.data(), size, TransferFunction_sRGB);
+                to_linear(float_pixels.data(), size, TransferFunction::sRGB);
 
             image->metadata["transfer function"] = tf_desc;
         }
@@ -320,8 +320,8 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 {
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-                                              2.2f, dither);
+    auto pixels =
+        img.as_interleaved<uint8_t>(&w, &h, &n, gain, sRGB ? TransferFunction::sRGB : TransferFunction::Linear, dither);
     // Validation: ensure we actually have pixel data / valid dimensions
     if (!pixels || w <= 0 || h <= 0)
         throw runtime_error("JPEG: empty image or invalid image dimensions");

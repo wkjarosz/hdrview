@@ -659,9 +659,9 @@ const ImageLoadOptions &load_image_options_gui()
         "For example, \"diffuse,specular\" will only load layers which contain either of these two words, and \"-.A\" "
         "would exclude channels named \"A\". Leave empty to load all parts.");
 
-    auto tf_name = [](TransferFunctionWithParams tf)
+    auto tf_name = [](TransferFunction tf)
     {
-        if (tf.type == TransferFunction_Unspecified)
+        if (tf.type == TransferFunction::Unspecified)
             return string("Use file's transfer function");
         else
             return transfer_function_name(tf);
@@ -669,11 +669,11 @@ const ImageLoadOptions &load_image_options_gui()
 
     if (ImGui::BeginCombo("Transfer function", tf_name(s_opts.tf_override).c_str()))
     {
-        for (TransferFunction i = TransferFunction_Unspecified; i < TransferFunction_Count; ++i)
+        for (TransferFunction::Type i = TransferFunction::Unspecified; i < TransferFunction::Count; ++i)
         {
-            bool is_selected = (s_opts.tf_override.type == (TransferFunction_)i);
-            if (ImGui::Selectable(tf_name({(TransferFunction_)i, s_opts.tf_override.gamma}).c_str(), is_selected))
-                s_opts.tf_override.type = (TransferFunction_)i;
+            bool is_selected = (s_opts.tf_override.type == (TransferFunction::Type_)i);
+            if (ImGui::Selectable(tf_name({(TransferFunction::Type_)i, s_opts.tf_override.gamma}).c_str(), is_selected))
+                s_opts.tf_override.type = (TransferFunction::Type_)i;
             if (is_selected)
                 ImGui::SetItemDefaultFocus();
         }
@@ -683,8 +683,8 @@ const ImageLoadOptions &load_image_options_gui()
         "HDRView can either try to determine the transfer function from the metadata in the file, or it can override "
         "the metadata and assume pixel values in the image have been encoded using the transfer function you select "
         "here.");
-    ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction_Gamma);
-    if (s_opts.tf_override.type == TransferFunction_Gamma)
+    ImGui::BeginDisabled(s_opts.tf_override.type != TransferFunction::Gamma);
+    if (s_opts.tf_override.type == TransferFunction::Gamma)
         ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
     ImGui::EndDisabled();
 

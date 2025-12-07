@@ -461,19 +461,19 @@ static const char *s_gamut_names[ColorGamut_Count + 1] = {"sRGB/BT.709",
                                                           "Custom",
                                                           nullptr};
 
-static const char *s_transfer_function_names[TransferFunction_Count + 1] = {
-    "Unknown (Assuming sRGB)", // TransferFunction_Unspecified
-    "Linear",                  // TransferFunction_Linear
-    "Gamma",                   // TransferFunction_Gamma
-    "sRGB IEC61966-2.1",       // TransferFunction_sRGB
-    "BT.709/2020",             // TransferFunction_ITU
-    "BT.2100 PQ",              // TransferFunction_BT2100_PQ
-    "BT.2100 HLG",             // TransferFunction_BT2100_HLG
-    "SMPTE ST 240",            // TransferFunction_ST240
-    "Log100",                  // TransferFunction_Log100
-    "Log100 Sqrt10",           // TransferFunction_Log100_Sqrt10
-    "IEC 61966-2-4",           // TransferFunction_IEC61966_2_4
-    "DCI-P3",                  // TransferFunction_DCI_P3
+static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
+    "Unknown (Assuming sRGB)", // TransferFunction::Unspecified
+    "Linear",                  // TransferFunction::Linear
+    "Gamma",                   // TransferFunction::Gamma
+    "sRGB IEC61966-2.1",       // TransferFunction::sRGB
+    "BT.709/2020",             // TransferFunction::ITU
+    "BT.2100 PQ",              // TransferFunction::BT2100_PQ
+    "BT.2100 HLG",             // TransferFunction::BT2100_HLG
+    "SMPTE ST 240",            // TransferFunction::ST240
+    "Log100",                  // TransferFunction::Log100
+    "Log100 Sqrt10",           // TransferFunction::Log100_Sqrt10
+    "IEC 61966-2-4",           // TransferFunction::IEC61966_2_4
+    "DCI-P3",                  // TransferFunction::DCI_P3
     nullptr};
 
 float2 white_point(WhitePoint_ wp)
@@ -554,17 +554,17 @@ ColorGamut_ named_color_gamut(const Chromaticities &chr)
     return ColorGamut_Custom;
 }
 
-string transfer_function_name(TransferFunctionWithParams tf)
+string transfer_function_name(TransferFunction tf)
 {
-    if (tf.type == TransferFunction_Gamma)
-        return fmt::format("{} (={})", s_transfer_function_names[TransferFunction_Gamma], tf.gamma);
-    else if (tf.type < TransferFunction_Unspecified || tf.type >= TransferFunction_Count)
-        return s_transfer_function_names[TransferFunction_Unspecified];
+    if (tf.type == TransferFunction::Gamma)
+        return fmt::format("{} (={})", s_transfer_function_names[TransferFunction::Gamma], tf.gamma);
+    else if (tf.type < TransferFunction::Unspecified || tf.type >= TransferFunction::Count)
+        return s_transfer_function_names[TransferFunction::Unspecified];
     else
         return s_transfer_function_names[tf.type];
 }
 
-TransferFunctionWithParams transfer_function_from_cicp(int cicp)
+TransferFunction transfer_function_from_cicp(int cicp)
 {
     switch (cicp)
     {
@@ -572,43 +572,43 @@ TransferFunctionWithParams transfer_function_from_cicp(int cicp)
     case 6: [[fallthrough]];
     case 12: [[fallthrough]];
     case 14: [[fallthrough]];
-    case 15: return TransferFunction_ITU;
-    case 4: return {TransferFunction_Gamma, 2.2f};
-    case 5: return {TransferFunction_Gamma, 2.8f};
-    case 7: return TransferFunction_ST240;
-    case 8: return TransferFunction_Linear;
-    case 9: return TransferFunction_Log100;
-    case 10: return TransferFunction_Log100_Sqrt10;
-    case 11: return TransferFunction_IEC61966_2_4;
-    case 13: return TransferFunction_sRGB;
-    case 16: return TransferFunction_BT2100_PQ;
-    case 17: return TransferFunction_DCI_P3;
-    case 18: return TransferFunction_BT2100_HLG;
-    default: return TransferFunction_Unspecified;
+    case 15: return TransferFunction::ITU;
+    case 4: return {TransferFunction::Gamma, 2.2f};
+    case 5: return {TransferFunction::Gamma, 2.8f};
+    case 7: return TransferFunction::ST240;
+    case 8: return TransferFunction::Linear;
+    case 9: return TransferFunction::Log100;
+    case 10: return TransferFunction::Log100_Sqrt10;
+    case 11: return TransferFunction::IEC61966_2_4;
+    case 13: return TransferFunction::sRGB;
+    case 16: return TransferFunction::BT2100_PQ;
+    case 17: return TransferFunction::DCI_P3;
+    case 18: return TransferFunction::BT2100_HLG;
+    default: return TransferFunction::Unspecified;
     }
 }
 
-int transfer_function_to_cicp(TransferFunctionWithParams tf)
+int transfer_function_to_cicp(TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction_ITU: return 1; // Also covers 6, 12, 14, 15 in from_cicp
-    case TransferFunction_Gamma:
+    case TransferFunction::ITU: return 1; // Also covers 6, 12, 14, 15 in from_cicp
+    case TransferFunction::Gamma:
         if (tf.gamma == 2.2f)
             return 4;
         else if (tf.gamma == 2.8f)
             return 5;
         else
             return 0; // Unknown gamma
-    case TransferFunction_ST240: return 7;
-    case TransferFunction_Linear: return 8;
-    case TransferFunction_Log100: return 9;
-    case TransferFunction_Log100_Sqrt10: return 10;
-    case TransferFunction_IEC61966_2_4: return 11;
-    case TransferFunction_sRGB: return 13;
-    case TransferFunction_BT2100_PQ: return 16;
-    case TransferFunction_DCI_P3: return 17;
-    case TransferFunction_BT2100_HLG: return 18;
+    case TransferFunction::ST240: return 7;
+    case TransferFunction::Linear: return 8;
+    case TransferFunction::Log100: return 9;
+    case TransferFunction::Log100_Sqrt10: return 10;
+    case TransferFunction::IEC61966_2_4: return 11;
+    case TransferFunction::sRGB: return 13;
+    case TransferFunction::BT2100_PQ: return 16;
+    case TransferFunction::DCI_P3: return 17;
+    case TransferFunction::BT2100_HLG: return 18;
     default: return 0; // Unknown or unsupported
     }
 }
@@ -1007,10 +1007,9 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint_ wp)
 
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra() { return s_CIE_xyz; }
 
-void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunctionWithParams tf,
-               int stride)
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction tf, int stride)
 {
-    if (tf.type == TransferFunction_BT2100_HLG && num_channels == 3)
+    if (tf.type == TransferFunction::BT2100_HLG && num_channels == 3)
     {
         // HLG needs to operate on all three channels at once
         parallel_for(blocked_range<int>(0, num_pixels, 1024 * 1024),
@@ -1025,7 +1024,7 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                          }
                      });
     }
-    else if (tf.type != TransferFunction_Linear)
+    else if (tf.type != TransferFunction::Linear)
     {
         float *rgb[] = {r, g, b};
         for (int c = 0; c < num_channels; ++c)
@@ -1038,9 +1037,9 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
     }
 }
 
-void from_linear(float *pixels, int3 size, TransferFunctionWithParams tf)
+void from_linear(float *pixels, int3 size, TransferFunction tf)
 {
-    if (tf.type == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
+    if (tf.type == TransferFunction::BT2100_HLG && (size.z == 3 || size.z == 4))
     {
         // HLG needs to operate on all three channels at once
         if (size.z == 3)

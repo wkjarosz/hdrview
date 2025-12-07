@@ -23,7 +23,7 @@ std::unique_ptr<float[]> load_pfm_image(std::istream &is, std::string_view filen
 void write_pfm_image(std::ostream &os, std::string_view filename, int width, int height, int num_channels,
                      const float data[]);
 void save_pfm_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
-                    TransferFunctionWithParams tf = {TransferFunction_Linear, 1.f});
+                    TransferFunction tf = {TransferFunction::Linear, 1.f});
 
 struct PFMSaveOptions;
 PFMSaveOptions *pfm_parameters_gui();
