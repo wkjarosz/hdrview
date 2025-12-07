@@ -668,10 +668,10 @@ void Tooltip(const char *description, bool questionMark /*= false*/, float timer
 // Beginning the Property Editor
 bool PE::Begin(const char *label, ImGuiTableFlags flag)
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+    // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
     bool result = ImGui::BeginTable(label, 2, flag);
-    if (!result)
-        ImGui::PopStyleVar();
+    // if (!result)
+    //     ImGui::PopStyleVar();
     return result;
 }
 
@@ -679,7 +679,7 @@ bool PE::Begin(const char *label, ImGuiTableFlags flag)
 void PE::End()
 {
     ImGui::EndTable();
-    ImGui::PopStyleVar();
+    // ImGui::PopStyleVar();
 }
 
 // adapted from imgui_internal: currently only needed to remove the tooltip at the end
@@ -728,7 +728,8 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    ImGui::TextAligned2(1.0f, -FLT_MIN, property_name.c_str());
+    // ImGui::TextAligned2(1.0f, -FLT_MIN, property_name.c_str());
+    ImGui::TextUnformatted(property_name.c_str());
     if (!tooltip.empty())
         Tooltip(tooltip.c_str(), false, 0);
     ImGui::TableNextColumn();
@@ -745,9 +746,10 @@ bool PE::TreeNode(const char *name, ImGuiTreeNodeFlags flags)
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    auto ret = ImGui::TreeNodeEx("##node", flags | ImGuiTreeNodeFlags_SpanFullWidth);
-    ImGui::SameLine(0.f, 0.f);
-    ImGui::TextAligned2(1.0f, -FLT_MIN, "%s", name);
+    auto ret = ImGui::TreeNodeEx(name, flags | ImGuiTreeNodeFlags_SpanFullWidth);
+    // auto ret = ImGui::TreeNodeEx("##node", flags | ImGuiTreeNodeFlags_SpanFullWidth);
+    // ImGui::SameLine(0.f, 0.f);
+    // ImGui::TextAligned2(1.0f, -FLT_MIN, "%s", name);
     return ret;
 }
 void PE::TreePop() { ImGui::TreePop(); }
