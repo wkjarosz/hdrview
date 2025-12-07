@@ -413,6 +413,29 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             image->metadata["loader"]      = "libjxl";
             image->metadata["pixel format"] =
                 fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
+            image->metadata["header"]["intrinsic width"] = {
+                {"value", int(info.intrinsic_xsize)}, {"string", to_string(info.intrinsic_xsize)}, {"type", "int"}};
+            image->metadata["header"]["intrinsic height"] = {
+                {"value", int(info.intrinsic_ysize)}, {"string", to_string(info.intrinsic_ysize)}, {"type", "int"}};
+            image->metadata["header"]["has preview"] = {
+                {"value", bool(info.have_preview)}, {"string", info.have_preview ? "true" : "false"}, {"type", "bool"}};
+            image->metadata["header"]["intensity target"] = {
+                {"value", info.intensity_target}, {"string", to_string(info.intensity_target)}, {"type", "float"}};
+            image->metadata["header"]["has animation"] = {{"value", bool(info.have_animation)},
+                                                          {"string", info.have_animation ? "true" : "false"},
+                                                          {"type", "bool"}};
+            image->metadata["header"]["has container"] = {{"value", bool(info.have_container)},
+                                                          {"string", info.have_container ? "true" : "false"},
+                                                          {"type", "bool"}};
+            image->metadata["header"]["min nits"]      = {
+                {"value", info.min_nits}, {"string", to_string(info.min_nits)}, {"type", "float"}};
+            image->metadata["header"]["orientation"] = {
+                {"value", info.orientation}, {"string", to_string(info.orientation)}, {"type", "enum"}};
+            image->metadata["header"]["relative to max display"] = {{"value", info.relative_to_max_display},
+                                                                    {"string", to_string(info.relative_to_max_display)},
+                                                                    {"type", "int"}};
+            image->metadata["header"]["linear below"]            = {
+                {"value", info.linear_below}, {"string", to_string(info.linear_below)}, {"type", "float"}};
 
             skip_color = false;
             {
