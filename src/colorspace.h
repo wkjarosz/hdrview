@@ -169,9 +169,18 @@ enum TransferFunction_ : TransferFunction
     TransferFunction_Count
 };
 
-std::string       transfer_function_name(TransferFunction_ tf, float gamma = 2.2f);
-TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma = nullptr);
-int               transfer_function_to_cicp(TransferFunction_ tf, float gamma = 2.2f);
+struct TransferFunctionWithParams
+{
+    TransferFunction_ type = TransferFunction_Unspecified;
+    float gamma = 2.2f; // Should always refer to the exponent of the to_linear transform, only used if type ==
+                        // TransferFunction_Gamma
+
+    TransferFunctionWithParams(TransferFunction_ t, float g = 2.2f) : type(t), gamma(g) {}
+};
+
+std::string                transfer_function_name(TransferFunctionWithParams tf);
+TransferFunctionWithParams transfer_function_from_cicp(int cicp);
+int                        transfer_function_to_cicp(TransferFunctionWithParams tf);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
@@ -707,13 +716,13 @@ Color4 linear_to_sRGB(const Color4 &c);
 Color3 linear_to_gamma(const Color3 &c, const Color3 &inv_gamma);
 Color4 linear_to_gamma(const Color4 &c, const Color3 &inv_gamma);
 
-inline float from_linear(float linear, const TransferFunction_ tf, const float gamma = 2.2f)
+inline float from_linear(float linear, const TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
-    case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
     case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return linear_to_sRGB(linear);
+    case TransferFunction_Gamma: return linear_to_gamma(linear, 1.f / tf.gamma);
     case TransferFunction_ITU: return OETF_ITU(linear);
     case TransferFunction_BT2100_PQ: return inverse_EOTF_BT2100_PQ(linear * 219.f);
     case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
@@ -727,13 +736,13 @@ inline float from_linear(float linear, const TransferFunction_ tf, const float g
     }
 }
 
-inline float3 from_linear(float3 linear, const TransferFunction_ tf, const float3 gamma = float3(2.2f))
+inline float3 from_linear(float3 linear, const TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
-    case TransferFunction_Gamma: return linear_to_gamma(linear, gamma);
     case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return linear_to_sRGB(linear);
+    case TransferFunction_Gamma: return linear_to_gamma(linear, float3{1.f / tf.gamma});
     case TransferFunction_ITU: return la::apply(OETF_ITU<float>, linear);
     case TransferFunction_BT2100_PQ: return la::apply(inverse_EOTF_BT2100_PQ<float>, linear * 219.f);
     case TransferFunction_BT2100_HLG: return inverse_EOTF_BT2100_HLG(linear * 219.f);
@@ -747,13 +756,13 @@ inline float3 from_linear(float3 linear, const TransferFunction_ tf, const float
     }
 }
 
-inline float to_linear(float encoded, const TransferFunction_ tf, const float gamma = 2.2f)
+inline float to_linear(float encoded, const TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
     case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return sRGB_to_linear(encoded);
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, tf.gamma);
     case TransferFunction_ITU: return inverse_OETF_ITU(encoded);
     case TransferFunction_BT2100_PQ: return EOTF_BT2100_PQ(encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
@@ -767,13 +776,13 @@ inline float to_linear(float encoded, const TransferFunction_ tf, const float ga
     }
 }
 
-inline float3 to_linear(const float3 &encoded, const TransferFunction_ tf, const float3 &gamma = float3(2.2f))
+inline float3 to_linear(const float3 &encoded, const TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
     case TransferFunction_Unspecified: [[fallthrough]];
     case TransferFunction_sRGB: return sRGB_to_linear(encoded);
-    case TransferFunction_Gamma: return linear_to_gamma(encoded, 1.f / gamma);
+    case TransferFunction_Gamma: return linear_to_gamma(encoded, float3{tf.gamma});
     case TransferFunction_ITU: return la::apply(inverse_OETF_ITU<float>, encoded);
     case TransferFunction_BT2100_PQ: return la::apply(EOTF_BT2100_PQ<float>, encoded) / 219.f;
     case TransferFunction_BT2100_HLG: return EOTF_BT2100_HLG(encoded) / 219.f;
@@ -787,15 +796,15 @@ inline float3 to_linear(const float3 &encoded, const TransferFunction_ tf, const
     }
 }
 
-void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction_ tf, float gamma = 2.2f,
-               int stride = 1);
-inline void to_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma = 2.2f)
+void        to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunctionWithParams tf,
+                      int stride = 1);
+inline void to_linear(float *pixels, int3 size, TransferFunctionWithParams tf)
 {
     int num_color_channels = size.z >= 3 ? 3 : 1;
     to_linear(pixels, size.z >= 3 ? pixels + 1 : nullptr, size.z >= 3 ? pixels + 2 : nullptr, size.x * size.y,
-              num_color_channels, tf, gamma, size.z);
+              num_color_channels, tf, size.z);
 }
-void from_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma = 2.2f);
+void from_linear(float *pixels, int3 size, TransferFunctionWithParams tf);
 
 inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {
@@ -807,7 +816,7 @@ inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Co
     case Tonemap_PositiveNegative:
     {
         auto  xform = tonemap_mode == Tonemap_FalseColor ? float2{1.f, 0.f} : float2{0.5f, 0.5f};
-        float avg   = dot(color, float3(1.f / 3.f));
+        float avg   = sum(color) * (1.f / 3.f);
         float t     = xform.x * avg + xform.y;
         if (reverse_colormap)
             t = 1.f - t;

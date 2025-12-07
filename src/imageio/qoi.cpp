@@ -32,10 +32,9 @@ using namespace std;
 
 struct QOISaveOptions
 {
-    float             gain   = 1.f;
-    TransferFunction_ tf     = TransferFunction_sRGB;
-    float             gamma  = 1.f;
-    bool              dither = true; // only used for LDR formats
+    float                      gain   = 1.f;
+    TransferFunctionWithParams tf     = TransferFunction_sRGB;
+    bool                       dither = true; // only used for LDR formats
 };
 
 static QOISaveOptions s_opts{};
@@ -88,19 +87,32 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
     if (product(size) == 0)
         throw invalid_argument{"Image has zero pixels."};
 
-    TransferFunction_ tf = desc.colorspace == QOI_LINEAR ? TransferFunction_Linear : TransferFunction_sRGB;
-    if (opts.tf != TransferFunction_Unspecified)
+    auto image                      = make_shared<Image>(size.xy(), size.z);
+    image->filename                 = filename;
+    image->file_has_straight_alpha  = size.z > 3;
+    image->metadata["loader"]       = "qoi";
+    image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
+
+    TransferFunctionWithParams tf = desc.colorspace == QOI_LINEAR
+                                        ? TransferFunctionWithParams{TransferFunction_Linear, 1.f}
+                                        : TransferFunction_sRGB;
+    if (opts.tf_override.type != TransferFunction_Unspecified)
     {
-        spdlog::info("This is a {} QOI file, but we are forcing transfer function to {}.", transfer_function_name(tf),
-                     transfer_function_name(opts.tf, 1.f / opts.gamma));
-        tf = opts.tf;
+        spdlog::info("Ignoring QOI file's {} color profile and linearizing using requested transfer function: {}",
+                     transfer_function_name(tf), transfer_function_name(opts.tf_override));
+        tf = opts.tf_override;
+        try
+        {
+            // some cICP transfer functions always correspond to certain primaries, try to deduce that
+            image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+        }
+        catch (...)
+        {
+            spdlog::warn("Failed to infer chromaticities from transfer function cICP value: {}",
+                         int(opts.tf_override.type));
+        }
     }
 
-    auto image                           = make_shared<Image>(size.xy(), size.z);
-    image->filename                      = filename;
-    image->file_has_straight_alpha       = size.z > 3;
-    image->metadata["loader"]            = "qoi";
-    image->metadata["pixel format"]      = fmt::format("{}-bit (8 bpc)", size.z * 8);
     image->metadata["transfer function"] = transfer_function_name(tf);
 
     Timer timer;
@@ -109,12 +121,11 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         image->channels[c].copy_from_interleaved(reinterpret_cast<uint8_t *>(decoded_data.get()), size.x, size.y,
                                                  size.z, c, [](uint8_t v) { return dequantize_full(v); });
     // then apply transfer function
-    if (opts.tf != TransferFunction_Linear)
+    if (opts.tf_override.type != TransferFunction_Linear)
     {
         int num_color_channels = size.z >= 3 ? 3 : 1;
         to_linear(image->channels[0].data(), size.z > 1 ? image->channels[1].data() : nullptr,
-                  size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, opts.gamma,
-                  1);
+                  size.z > 2 ? image->channels[2].data() : nullptr, size.x * size.y, num_color_channels, tf, 1);
     }
 
     spdlog::debug("Copying image channels took: {} seconds.", (timer.elapsed() / 1000.f));
@@ -130,8 +141,8 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
     auto pixels = img.as_interleaved<uint8_t>(
-        &w, &h, &n, opts->gain, opts->tf == TransferFunction_sRGB ? TransferFunction_sRGB : TransferFunction_Linear,
-        2.2f, opts->dither);
+        &w, &h, &n, opts->gain,
+        opts->tf.type == TransferFunction_sRGB ? TransferFunction_sRGB : TransferFunction_Linear, opts->dither);
 
     // The QOI image format only supports RGB or RGBA data.
     if (n != 4 && n != 3)
@@ -140,15 +151,15 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
 
     // write the data
     const qoi_desc desc{
-        static_cast<unsigned int>(w),                                                          // width
-        static_cast<unsigned int>(h),                                                          // height
-        static_cast<unsigned char>(n),                                                         // number of channels
-        static_cast<unsigned char>(opts->tf == TransferFunction_sRGB ? QOI_SRGB : QOI_LINEAR), // colorspace
+        static_cast<unsigned int>(w),  // width
+        static_cast<unsigned int>(h),  // height
+        static_cast<unsigned char>(n), // number of channels
+        static_cast<unsigned char>(opts->tf.type == TransferFunction_sRGB ? QOI_SRGB : QOI_LINEAR), // colorspace
     };
     int encoded_size = 0;
 
     spdlog::info("Saving {}-channel, {}x{} pixels {} QOI image.", n, w, h,
-                 opts->tf == TransferFunction_sRGB ? "sRGB" : "linear");
+                 opts->tf.type == TransferFunction_sRGB ? "sRGB" : "linear");
     std::unique_ptr<void, decltype(std::free) *> encoded_data{qoi_encode(pixels.get(), &desc, &encoded_size),
                                                               std::free};
 
@@ -161,7 +172,7 @@ void save_qoi_image(const Image &img, ostream &os, string_view filename, const Q
 
 void save_qoi_image(const Image &img, ostream &os, string_view filename, float gain, bool sRGB, bool dither)
 {
-    QOISaveOptions opts{gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear, 2.2f, dither};
+    QOISaveOptions opts{gain, sRGB ? TransferFunction_sRGB : TransferFunction_Linear, dither};
     save_qoi_image(img, os, filename, &opts);
 }
 
@@ -194,15 +205,14 @@ QOISaveOptions *qoi_parameters_gui()
             "Transfer function",
             [&]
             {
-                if (ImGui::BeginCombo("##Transfer function",
-                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
                     for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
                                               is_selected))
-                            s_opts.tf = (TransferFunction_)i;
+                            s_opts.tf.type = (TransferFunction_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -214,8 +224,8 @@ QOISaveOptions *qoi_parameters_gui()
             "indicate sRGB or Linear transfer functions. If you choose a different transfer function, we will store "
             "Linear in the QOI header, and the file will likely not be displayed correctly by other software.");
 
-        if (s_opts.tf == TransferFunction_Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f, "%.3f", 0,
+        if (s_opts.tf.type == TransferFunction_Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 
         ImGui::PE::Checkbox("Dither", &s_opts.dither);

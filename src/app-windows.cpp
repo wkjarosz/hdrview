@@ -1,5 +1,6 @@
 #include "app.h"
 
+#include "colorspace.h"
 #include "fonts.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
@@ -74,18 +75,17 @@ void HDRViewApp::draw_develop_windows()
             {
                 if (ImGui::BeginTabItem("Transfer functions"))
                 {
-                    static float             gamma = 2.2f;
-                    static TransferFunction_ tf    = TransferFunction_Linear;
-                    ImGui::DragFloat("Gamma", &gamma, 0.01f, 0.f);
-                    if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf, 1.f / gamma).c_str(),
+                    static TransferFunctionWithParams tf{TransferFunction_Linear, 2.2f};
+                    ImGui::DragFloat("Gamma", &tf.gamma, 0.01f, 0.f);
+                    if (ImGui::BeginCombo("##transfer function", transfer_function_name(tf).c_str(),
                                           ImGuiComboFlags_HeightLargest))
                     {
                         for (TransferFunction n = TransferFunction_Linear; n < TransferFunction_Count; ++n)
                         {
-                            const bool is_selected = (tf == n);
-                            if (ImGui::Selectable(transfer_function_name((TransferFunction_)n, 1.f / gamma).c_str(),
+                            const bool is_selected = (tf.type == n);
+                            if (ImGui::Selectable(transfer_function_name({(TransferFunction_)n, tf.gamma}).c_str(),
                                                   is_selected))
-                                tf = (TransferFunction_)n;
+                                tf.type = (TransferFunction_)n;
 
                             // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
                             if (is_selected)
@@ -100,8 +100,8 @@ void HDRViewApp::draw_develop_windows()
                         ImPlot::PushStyleVar(ImPlotStyleVar_LineWeight, 2.f);
                         ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 2.f);
 
-                        auto f = [](float x) { return to_linear(x, tf, 1.f / gamma); };
-                        auto g = [](float y) { return from_linear(y, tf, 1.f / gamma); };
+                        auto f = [](float x) { return to_linear(x, tf); };
+                        auto g = [](float y) { return from_linear(y, tf); };
 
                         const int    N = 101;
                         static float xs1[N], ys1[N];

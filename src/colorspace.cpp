@@ -462,7 +462,7 @@ static const char *s_gamut_names[ColorGamut_Count + 1] = {"sRGB/BT.709",
                                                           nullptr};
 
 static const char *s_transfer_function_names[TransferFunction_Count + 1] = {
-    "Unknown (Assuming sRGB)", // TransferFunction_Unknown
+    "Unknown (Assuming sRGB)", // TransferFunction_Unspecified
     "Linear",                  // TransferFunction_Linear
     "Gamma",                   // TransferFunction_Gamma
     "sRGB IEC61966-2.1",       // TransferFunction_sRGB
@@ -554,17 +554,17 @@ ColorGamut_ named_color_gamut(const Chromaticities &chr)
     return ColorGamut_Custom;
 }
 
-string transfer_function_name(TransferFunction_ tf, float gamma)
+string transfer_function_name(TransferFunctionWithParams tf)
 {
-    if (tf == TransferFunction_Gamma)
-        return fmt::format("{} (={})", s_transfer_function_names[TransferFunction_Gamma], float(1.0 / gamma));
-    else if (tf < TransferFunction_Unspecified || tf >= TransferFunction_Count)
+    if (tf.type == TransferFunction_Gamma)
+        return fmt::format("{} (={})", s_transfer_function_names[TransferFunction_Gamma], tf.gamma);
+    else if (tf.type < TransferFunction_Unspecified || tf.type >= TransferFunction_Count)
         return s_transfer_function_names[TransferFunction_Unspecified];
     else
-        return s_transfer_function_names[tf];
+        return s_transfer_function_names[tf.type];
 }
 
-TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma)
+TransferFunctionWithParams transfer_function_from_cicp(int cicp)
 {
     switch (cicp)
     {
@@ -573,14 +573,8 @@ TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma)
     case 12: [[fallthrough]];
     case 14: [[fallthrough]];
     case 15: return TransferFunction_ITU;
-    case 4:
-        if (gamma)
-            *gamma = 2.2f;
-        return TransferFunction_Gamma;
-    case 5:
-        if (gamma)
-            *gamma = 2.8f;
-        return TransferFunction_Gamma;
+    case 4: return {TransferFunction_Gamma, 2.2f};
+    case 5: return {TransferFunction_Gamma, 2.8f};
     case 7: return TransferFunction_ST240;
     case 8: return TransferFunction_Linear;
     case 9: return TransferFunction_Log100;
@@ -594,15 +588,15 @@ TransferFunction_ transfer_function_from_cicp(int cicp, float *gamma)
     }
 }
 
-int transfer_function_to_cicp(TransferFunction_ tf, float gamma)
+int transfer_function_to_cicp(TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
     case TransferFunction_ITU: return 1; // Also covers 6, 12, 14, 15 in from_cicp
     case TransferFunction_Gamma:
-        if (gamma == 2.2f)
+        if (tf.gamma == 2.2f)
             return 4;
-        else if (gamma == 2.8f)
+        else if (tf.gamma == 2.8f)
             return 5;
         else
             return 0; // Unknown gamma
@@ -1013,10 +1007,10 @@ const TabulatedSpectrum<float> &white_point_spectrum(WhitePoint_ wp)
 
 const TabulatedSpectrum<float3> &CIE_XYZ_spectra() { return s_CIE_xyz; }
 
-void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunction_ tf, float gamma,
+void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, TransferFunctionWithParams tf,
                int stride)
 {
-    if (tf == TransferFunction_BT2100_HLG && num_channels == 3)
+    if (tf.type == TransferFunction_BT2100_HLG && num_channels == 3)
     {
         // HLG needs to operate on all three channels at once
         parallel_for(blocked_range<int>(0, num_pixels, 1024 * 1024),
@@ -1031,23 +1025,22 @@ void to_linear(float *r, float *g, float *b, int num_pixels, int num_channels, T
                          }
                      });
     }
-    else if (tf != TransferFunction_Linear)
+    else if (tf.type != TransferFunction_Linear)
     {
         float *rgb[] = {r, g, b};
         for (int c = 0; c < num_channels; ++c)
             // other transfer functions apply to each channel independently
             parallel_for(blocked_range<int>(0, num_pixels, 1024 * 1024 / num_channels),
-                         [rgb, c, tf, gamma, stride](int start, int end, int, int)
+                         [rgb, c, tf, stride](int start, int end, int, int)
                          {
-                             for (int i = start; i < end; ++i)
-                                 rgb[c][i * stride] = to_linear(rgb[c][i * stride], tf, gamma);
+                             for (int i = start; i < end; ++i) rgb[c][i * stride] = to_linear(rgb[c][i * stride], tf);
                          });
     }
 }
 
-void from_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma)
+void from_linear(float *pixels, int3 size, TransferFunctionWithParams tf)
 {
-    if (tf == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
+    if (tf.type == TransferFunction_BT2100_HLG && (size.z == 3 || size.z == 4))
     {
         // HLG needs to operate on all three channels at once
         if (size.z == 3)
@@ -1071,11 +1064,11 @@ void from_linear(float *pixels, int3 size, TransferFunction_ tf, float gamma)
         int num_color_channels = (size.z == 2 || size.z == 4) ? size.z - 1 : size.z;
         // other transfer functions apply to each channel independently
         parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024 / size.z),
-                     [&pixels, tf, gamma, size, num_color_channels](int start, int end, int, int)
+                     [&pixels, tf, size, num_color_channels](int start, int end, int, int)
                      {
                          for (int i = start; i < end; ++i)
                              for (int c = 0; c < num_color_channels; ++c)
-                                 pixels[i * size.z + c] = from_linear(pixels[i * size.z + c], tf, gamma);
+                                 pixels[i * size.z + c] = from_linear(pixels[i * size.z + c], tf);
                      });
     }
 }

@@ -14,7 +14,7 @@
 
 // should not throw
 bool is_uhdr_image(std::istream &is) noexcept;
-bool uhdr_supported_tf(TransferFunction_ tf) noexcept;
+bool uhdr_supported_tf(TransferFunctionWithParams tf) noexcept;
 
 // throws on error
 std::vector<ImagePtr> load_uhdr_image(std::istream &is, std::string_view filename);

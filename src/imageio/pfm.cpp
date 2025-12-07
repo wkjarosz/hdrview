@@ -26,9 +26,8 @@ using namespace std;
 
 struct PFMSaveOptions
 {
-    float             gain  = 1.f;
-    TransferFunction_ tf    = TransferFunction_Linear;
-    float             gamma = 1.f;
+    float                      gain = 1.f;
+    TransferFunctionWithParams tf   = {TransferFunction_Linear, 1.f};
 };
 
 static PFMSaveOptions s_opts;
@@ -150,14 +149,14 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
     image->metadata["pixel format"]      = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
     image->metadata["transfer function"] = transfer_function_name(TransferFunction_Linear);
 
-    to_linear(float_data.get(), size, opts.tf, opts.gamma);
+    to_linear(float_data.get(), size, opts.tf_override);
 
     Timer timer;
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
                                                  [](float v) { return v; });
 
-    image->metadata["transfer function"] = transfer_function_name(opts.tf, 1.f / opts.gamma);
+    image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
 
     spdlog::debug("Copying image data for took: {} seconds.", (timer.elapsed() / 1000.f));
     return {image};
@@ -214,7 +213,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
     Timer timer;
     // get interleaved LDR pixel data
     int  w = 0, h = 0, n = 0;
-    auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->gain, opts->tf, opts->gamma);
+    auto pixels = img.as_interleaved<float>(&w, &h, &n, opts->gain, opts->tf);
     write_pfm_image(os, filename, w, h, n, pixels.get());
     spdlog::info("Saved PFM image to \"{}\" in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
@@ -248,15 +247,14 @@ PFMSaveOptions *pfm_parameters_gui()
             "Transfer function",
             [&]
             {
-                if (ImGui::BeginCombo("##Transfer function",
-                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
                     for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
                                               is_selected))
-                            s_opts.tf = (TransferFunction_)i;
+                            s_opts.tf.type = (TransferFunction_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -268,8 +266,8 @@ PFMSaveOptions *pfm_parameters_gui()
             "file are typically assumed linear, and there is no way to signal in the file "
             "that the values are encoded with a different transfer function.");
 
-        if (s_opts.tf == TransferFunction_Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f, "%.3f", 0,
+        if (s_opts.tf.type == TransferFunction_Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
         ImGui::PE::End();
     }

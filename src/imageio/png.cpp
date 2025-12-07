@@ -19,12 +19,11 @@
 
 struct PNGSaveOptions
 {
-    float             gain            = 1.f;
-    bool              dither          = true;
-    TransferFunction_ tf              = TransferFunction_sRGB;
-    float             gamma           = 1.0f;
-    int               data_type_index = 0;
-    bool              interlaced      = false;
+    float                      gain            = 1.f;
+    bool                       dither          = true;
+    TransferFunctionWithParams tf              = TransferFunction_sRGB;
+    int                        data_type_index = 0;
+    bool                       interlaced      = false;
 };
 
 static PNGSaveOptions s_opts;
@@ -268,14 +267,15 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
     }
 
-    double            gamma       = 2.2; // default gamma
-    int               srgb_intent = 0;
-    TransferFunction_ tf          = TransferFunction_Unspecified; // default
+    double                     gamma       = 2.2; // default gamma
+    int                        srgb_intent = 0;
+    TransferFunctionWithParams tf          = TransferFunction_Unspecified; // default
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
         spdlog::info("Found gamma chunk: {:.4f}", gamma);
-        tf = TransferFunction_Gamma;
+        tf.type  = TransferFunction_Gamma;
+        tf.gamma = float(gamma);
     }
 
     std::optional<Chromaticities> chr;
@@ -324,15 +324,13 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             spdlog::warn("Unknown cICP color primaries: {}", int(color_primaries));
         }
 
-        float gamma_f = gamma;
-        tf            = transfer_function_from_cicp(transfer_function, &gamma_f);
-        gamma         = gamma_f;
-        if (tf == TransferFunction_Unspecified)
+        tf = transfer_function_from_cicp(transfer_function);
+        if (tf.type == TransferFunction_Unspecified)
             spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
     }
 #endif
 
-    string tf_desc = transfer_function_name(tf, gamma);
+    string tf_desc = transfer_function_name(tf);
 
     // Done reading color chunks
     //
@@ -521,7 +519,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                                       ? dequantize_narrow(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
                                       : dequantize_narrow(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
         // ICC profile linearization
-        if (opts.tf == TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction_Unspecified)
         {
             if (has_icc_profile && !has_cICP)
             {
@@ -532,17 +530,27 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                     image->chromaticities = chr;
                 }
             }
-            else if (tf != TransferFunction_Linear)
-                to_linear(float_pixels.data(), size, tf, gamma);
+            else if (tf.type != TransferFunction_Linear)
+                to_linear(float_pixels.data(), size, tf);
 
             image->metadata["transfer function"] = tf_desc;
         }
         else
         {
             spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
-                         transfer_function_name(opts.tf, 1.f / opts.gamma));
-            to_linear(float_pixels.data(), size, opts.tf, opts.gamma);
-            image->metadata["transfer function"] = transfer_function_name(opts.tf, 1.f / opts.gamma);
+                         transfer_function_name(opts.tf_override));
+            try
+            {
+                // some cICP transfer functions always correspond to certain primaries, try to deduce that
+                image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+            }
+            catch (...)
+            {
+                spdlog::warn("Failed to infer chromaticities from transfer function cICP value: {}",
+                             int(opts.tf_override.type));
+            }
+            to_linear(float_pixels.data(), size, opts.tf_override);
+            image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
         }
 
         for (int c = 0; c < size.z; ++c)
@@ -554,7 +562,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 }
 
 void save_png_image(const Image &img, ostream &os, string_view filename, float gain, bool dither, bool interlaced,
-                    bool sixteen_bit, TransferFunction_ tf, float gamma)
+                    bool sixteen_bit, TransferFunctionWithParams tf)
 {
     Timer                       timer;
     int                         w = 0, h = 0, n = 0;
@@ -569,7 +577,7 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 
     if (sixteen_bit)
     {
-        pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, gamma, dither, true, cicp_primaries < 0);
+        pixels16 = img.as_interleaved<uint16_t>(&w, &h, &n, gain, tf, dither, true, cicp_primaries < 0);
         if (is_little_endian())
         {
             // Swap bytes for each 16-bit pixel (big-endian required by PNG)
@@ -583,7 +591,7 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
     }
     else
     {
-        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, gamma, dither, true, cicp_primaries < 0);
+        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, gain, tf, dither, true, cicp_primaries < 0);
         pixels  = pixels8.get();
     }
 
@@ -644,11 +652,10 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 
 #ifdef PNG_cICP_SUPPORTED
     // if cicp_primaries are unrecognized (< 0), we already converted values to sRGB/BT.709
-    png_byte color_primaries = cicp_primaries < 0 ? 1 : cicp_primaries; // e.g. 1 for BT.709, 9 for BT.2020
-    png_byte transfer_function =
-        transfer_function_to_cicp(tf, gamma); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
-    png_byte matrix_coefficients = 0;         // e.g. 0 for RGB
-    png_byte video_full_range    = 1;         // 1 for full range, 0 for limited
+    png_byte color_primaries     = cicp_primaries < 0 ? 1 : cicp_primaries; // e.g. 1 for BT.709, 9 for BT.2020
+    png_byte transfer_function   = transfer_function_to_cicp(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
+    png_byte matrix_coefficients = 0;                             // e.g. 0 for RGB
+    png_byte video_full_range    = 1;                             // 1 for full range, 0 for limited
 
     png_set_cICP(png_ptr, info_ptr.get(), color_primaries, transfer_function, matrix_coefficients, video_full_range);
 #endif
@@ -699,15 +706,14 @@ PNGSaveOptions *png_parameters_gui()
             "Transfer function",
             [&]
             {
-                if (ImGui::BeginCombo("##Transfer function",
-                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
                     for (int i = TransferFunction_Linear; i <= TransferFunction_DCI_P3; ++i)
                     {
-                        bool is_selected = (s_opts.tf == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                        bool is_selected = (s_opts.tf.type == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
                                               is_selected))
-                            s_opts.tf = (TransferFunction_)i;
+                            s_opts.tf.type = (TransferFunction_)i;
                         if (is_selected)
                             ImGui::SetItemDefaultFocus();
                     }
@@ -717,8 +723,8 @@ PNGSaveOptions *png_parameters_gui()
             },
             "Encode the pixel values using this transfer function.");
 
-        if (s_opts.tf == TransferFunction_Gamma)
-            ImGui::PE::SliderFloat("Gamma", &s_opts.gamma, 0.1f, 5.f, "%.3f", 0,
+        if (s_opts.tf.type == TransferFunction_Gamma)
+            ImGui::PE::SliderFloat("Gamma", &s_opts.tf.gamma, 0.1f, 5.f, "%.3f", 0,
                                    "When using a gamma transfer function, this is the gamma value to use.");
 
         ImGui::PE::Checkbox("Dither", &s_opts.dither);
@@ -740,8 +746,7 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
     if (opts == nullptr)
         throw std::invalid_argument("PNGSaveOptions pointer is null");
 
-    save_png_image(img, os, filename, opts->gain, opts->dither, opts->interlaced, opts->data_type_index, opts->tf,
-                   opts->gamma);
+    save_png_image(img, os, filename, opts->gain, opts->dither, opts->interlaced, opts->data_type_index, opts->tf);
 }
 
 #endif

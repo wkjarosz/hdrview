@@ -64,13 +64,12 @@ using HeifDecodingOptionsPtr = std::unique_ptr<heif_decoding_options, void (*)(h
 
 struct HEIFSaveOptions
 {
-    float             gain      = 1.f;
-    int               quality   = 95;
-    bool              lossless  = false;
-    bool              use_alpha = true;
-    TransferFunction_ tf        = TransferFunction_sRGB;
-    float             gamma     = 2.2f;
-    size_t            encoder   = 0u;
+    float                      gain      = 1.f;
+    int                        quality   = 95;
+    bool                       lossless  = false;
+    bool                       use_alpha = true;
+    TransferFunctionWithParams tf        = {TransferFunction_sRGB, 2.2f};
+    size_t                     encoder   = 0u;
 };
 
 static HEIFSaveOptions s_opts;
@@ -118,10 +117,9 @@ static inline void throw_on_error(const struct heif_error &e, const char *ctx_ms
             throw std::runtime_error(std::string(ctx_msg));
     }
 }
-
-static heif_transfer_characteristics transfer_function_to_heif(TransferFunction_ tf)
+static heif_transfer_characteristics transfer_function_to_heif(TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
     case TransferFunction_Linear: return heif_transfer_characteristic_linear;
     case TransferFunction_sRGB: return heif_transfer_characteristic_IEC_61966_2_1;
@@ -137,7 +135,7 @@ static heif_transfer_characteristics transfer_function_to_heif(TransferFunction_
     }
 }
 
-static bool is_heif_transfer_supported(TransferFunction_ tf)
+static bool is_heif_transfer_supported(TransferFunctionWithParams tf)
 {
     switch (transfer_function_to_heif(tf))
     {
@@ -164,17 +162,16 @@ static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_
     if (c)
         *c = chromaticities_from_cicp((int)nclx->color_primaries);
 
-    float             gamma = 1.f;
-    TransferFunction_ tf    = transfer_function_from_cicp((int)nclx->transfer_characteristics, &gamma);
+    auto tf = transfer_function_from_cicp((int)nclx->transfer_characteristics);
 
-    if (tf == TransferFunction_Unspecified)
+    if (tf.type == TransferFunction_Unspecified)
         spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
                      (int)nclx->transfer_characteristics);
 
     if (tf_description)
         *tf_description = transfer_function_name(tf);
 
-    to_linear(pixels, size, tf, gamma);
+    to_linear(pixels, size, tf);
 
     return true;
 }
@@ -297,15 +294,22 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     const heif_color_profile_nclx *nclx = nullptr;
     if (image_level_nclx)
     {
-        nclx = image_level_nclx.get();
-        image->metadata["header"]["nclx profile"] =
-            json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
+        nclx                                                    = image_level_nclx.get();
+        image->metadata["header"]["nclx profile (image level)"] = json{
+            {"value", nclx->transfer_characteristics},
+            {"string",
+             fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
+            {"type", "enum"}};
     }
-    else if (handle_level_nclx)
+    // else
+    if (handle_level_nclx)
     {
-        nclx = handle_level_nclx;
-        image->metadata["header"]["nclx profile"] =
-            json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
+        nclx                                                     = handle_level_nclx;
+        image->metadata["header"]["nclx profile (handle level)"] = json{
+            {"value", nclx->transfer_characteristics},
+            {"string",
+             fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
+            {"type", "enum"}};
     }
 
     // get the image-level icc profile.
@@ -360,14 +364,16 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.tf != TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction_Unspecified)
         {
             // only prefer the nclx if it exists and it specifies an HDR transfer function
             bool prefer_icc = // false;
                 !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
                           nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
 
-            string         tf_description;
+            string tf_description;
+            spdlog::warn("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
+                         nclx ? int(nclx->transfer_characteristics) : -1);
             Chromaticities chr;
             // for SDR profiles, try to transform the interleaved data using the icc profile.
             // Then try the nclx profile
@@ -379,14 +385,29 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                 image->metadata["transfer function"] = tf_description;
             }
             else
+            {
+                to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction_Unspecified);
                 image->metadata["transfer function"] = transfer_function_name(TransferFunction_Unspecified);
+            }
         }
         else
         {
-            // FIXME: probably still want to use the icc/nclx profile to get chromaticities
+            spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
+                         transfer_function_name(opts.tf_override));
+            try
+            {
+                // some cICP transfer functions always correspond to certain primaries, try to deduce that
+                image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+            }
+            catch (...)
+            {
+                spdlog::warn("Failed to infer chromaticities from transfer function cICP value: {}",
+                             int(opts.tf_override.type));
+            }
+
             // linearize using the user-specified transfer function
-            to_linear(float_pixels.data(), int3{size.xy(), cpp}, opts.tf, opts.gamma);
-            image->metadata["transfer function"] = transfer_function_name(opts.tf, opts.gamma);
+            to_linear(float_pixels.data(), int3{size.xy(), cpp}, opts.tf_override);
+            image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
         }
 
         // copy the interleaved float pixels into the channels
@@ -435,144 +456,164 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                            ctx.get(), reinterpret_cast<const void *>(raw_data.data()), raw_size, nullptr),
                        "Failed to read HEIF memory");
 
-        heif_item_id primary_id = 0;
-        throw_on_error(heif_context_get_primary_image_ID(ctx.get(), &primary_id), "Failed to get primary image ID");
-
-        int                       num_top = heif_context_get_number_of_top_level_images(ctx.get());
-        std::vector<heif_item_id> item_ids(num_top);
-        if (num_top > 0)
-            heif_context_get_list_of_top_level_image_IDs(ctx.get(), item_ids.data(), num_top);
-
-        // remove the primary item from the list of all items
-        for (size_t i = 0; i < item_ids.size(); ++i)
-            if (item_ids[i] == primary_id)
-            {
-                item_ids.erase(item_ids.begin() + i);
-                break;
-            }
-
-        int num_subimages = 1 + int(item_ids.size());
-
-        spdlog::info("Found {} subimages", num_subimages);
-
         ImGuiTextFilter filter{opts.channel_selector.c_str()};
         filter.Build();
 
-        for (int subimage = 0; subimage < num_subimages; ++subimage)
+        std::vector<heif_item_id> item_ids(heif_context_get_number_of_top_level_images(ctx.get()));
+        heif_context_get_list_of_top_level_image_IDs(ctx.get(), item_ids.data(), item_ids.size());
+
+        if (!item_ids.empty())
         {
-            spdlog::info("Loading subimage {}...", subimage);
-            auto id = (subimage == 0) ? primary_id : item_ids[subimage - 1];
+            heif_item_id primary_id = 0;
+            throw_on_error(heif_context_get_primary_image_ID(ctx.get(), &primary_id), "Failed to get primary image ID");
 
-            if (auto name = fmt::format("{:d}.R,G,B", id); !filter.PassFilter(name.c_str()))
-            {
-                spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name, opts.channel_selector);
-                continue;
-            }
-
-            heif_image_handle *raw_ihandle = nullptr;
-            if (heif_context_get_image_handle(ctx.get(), id, &raw_ihandle).code != heif_error_Ok || !raw_ihandle)
-            {
-                spdlog::warn("Failed to get image handle for id {}", id);
-                continue;
-            }
-            HeifImageHandlePtr ihandle(raw_ihandle, heif_image_handle_release);
-
-            // We query the preferred chroma here so that we can decode monochrome images as monochrome.
-            // All other types are decoded as RGB.
-            heif_colorspace preferred_colorspace = heif_colorspace_undefined;
-            heif_chroma     preferred_chroma     = heif_chroma_undefined;
-            heif_image_handle_get_preferred_decoding_colorspace(ihandle.get(), &preferred_colorspace,
-                                                                &preferred_chroma);
-            spdlog::info("Preferred decoding colorspace: {}, chroma: {}", (int)preferred_colorspace,
-                         (int)preferred_chroma);
-
-            int3 size{heif_image_handle_get_width(ihandle.get()), heif_image_handle_get_height(ihandle.get()), 0};
-            bool has_alpha = heif_image_handle_has_alpha_channel(ihandle.get()) != 0;
-
-            heif_chroma     out_chroma;
-            heif_colorspace out_colorspace;
-            heif_channel    out_planes[2] = {heif_channel_Y, heif_channel_Alpha};
-            int             cpp           = 0; // channels per plane
-            int             num_planes    = 1;
-            if (preferred_chroma == heif_chroma_monochrome)
-            {
-                out_chroma     = heif_chroma_monochrome;
-                out_colorspace = heif_colorspace_monochrome;
-                out_planes[0]  = heif_channel_Y;
-                size.z         = has_alpha ? 2 : 1;
-                cpp            = 1;
-                num_planes     = size.z;
-            }
-            else
-            {
-                out_chroma     = has_alpha ? heif_chroma_interleaved_RRGGBBAA_LE : heif_chroma_interleaved_RRGGBB_LE;
-                out_colorspace = heif_colorspace_RGB;
-                out_planes[0]  = heif_channel_interleaved;
-                size.z         = has_alpha ? 4 : 3;
-                cpp            = size.z;
-                num_planes     = 1;
-            }
-            spdlog::info("Image size: {}", size);
-
-            auto handle_level_nclx = HeifNCLXPtr(
-                [&]
+            // remove the primary item from the list of all items
+            for (size_t i = 0; i < item_ids.size(); ++i)
+                if (item_ids[i] == primary_id)
                 {
-                    heif_color_profile_nclx *nclx_raw = nullptr;
-                    if (auto err = heif_image_handle_get_nclx_color_profile(ihandle.get(), &nclx_raw);
-                        err.code == heif_error_Ok)
-                        return nclx_raw;
-                    else
-                        return (heif_color_profile_nclx *)nullptr;
-                }(),
-                heif_nclx_color_profile_free);
+                    item_ids.erase(item_ids.begin() + i);
+                    break;
+                }
 
-            std::vector<uint8_t> handle_level_icc_profile;
+            int num_subimages = 1 + int(item_ids.size());
+
+            spdlog::info("Found {} subimages", num_subimages);
+
+            for (int subimage = 0; subimage < num_subimages; ++subimage)
             {
-                handle_level_icc_profile.resize(heif_image_handle_get_raw_color_profile_size(ihandle.get()));
-                if (auto err2 = heif_image_handle_get_raw_color_profile(
-                        ihandle.get(), reinterpret_cast<void *>(handle_level_icc_profile.data()));
-                    err2.code != heif_error_Ok)
-                    handle_level_icc_profile.clear();
-            }
+                spdlog::info("Loading subimage {}...", subimage);
+                auto id = (subimage == 0) ? primary_id : item_ids[subimage - 1];
 
-            spdlog::info("Decoding heif image...");
-            HeifImagePtr himage(
-                [&]
+                if (auto name = fmt::format("{:d}.R,G,B", id); !filter.PassFilter(name.c_str()))
                 {
-                    heif_image            *raw_img = nullptr;
-                    HeifDecodingOptionsPtr options(heif_decoding_options_alloc(), heif_decoding_options_free);
-                    options->color_conversion_options.preferred_chroma_upsampling_algorithm =
-                        heif_chroma_upsampling_bilinear;
-                    options->color_conversion_options.only_use_preferred_chroma_algorithm = true;
-                    throw_on_error(
-                        heif_decode_image(ihandle.get(), &raw_img, out_colorspace, out_chroma, options.get()),
-                        "Failed to decode HEIF image");
-                    return raw_img;
-                }(),
-                heif_image_release);
-            // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
-            ImagePtr image =
-                process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts, size,
-                                           cpp, num_planes, out_planes, fmt::format("{:d}", id));
+                    spdlog::debug("Color channels '{}' filtered out by channel selector '{}'", name,
+                                  opts.channel_selector);
+                    continue;
+                }
 
-            // preserve file-level metadata that comes from the handle/context
-            image->filename                = filename;
-            image->file_has_straight_alpha = has_alpha && !heif_image_handle_is_premultiplied_alpha(ihandle.get());
-            image->metadata["header"]["mime type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
-            image->metadata["header"]["main brand"] = {
-                {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
-            image->metadata["loader"] = "libheif" + std::string(" (" + std::string(main_brand) + ")");
-            image->metadata["header"]["preferred colorspace"] = {
-                {"value", int(preferred_colorspace)},
-                {"string", fmt::format("{} ({})", colorspace_name(preferred_colorspace), int(preferred_colorspace))},
-                {"type", "int"}};
-            image->metadata["header"]["preferred chroma"] = {
-                {"value", int(preferred_chroma)},
-                {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
-                {"type", "int"}};
-            image->metadata["exif"] = get_exif(ihandle.get());
+                heif_image_handle *raw_ihandle = nullptr;
+                if (heif_context_get_image_handle(ctx.get(), id, &raw_ihandle).code != heif_error_Ok || !raw_ihandle)
+                {
+                    spdlog::warn("Failed to get image handle for id {}", id);
+                    continue;
+                }
+                HeifImageHandlePtr ihandle(raw_ihandle, heif_image_handle_release);
 
-            images.emplace_back(image);
+                // We query the preferred chroma here so that we can decode monochrome images as monochrome.
+                // All other types are decoded as RGB.
+                heif_colorspace preferred_colorspace = heif_colorspace_undefined;
+                heif_chroma     preferred_chroma     = heif_chroma_undefined;
+                heif_image_handle_get_preferred_decoding_colorspace(ihandle.get(), &preferred_colorspace,
+                                                                    &preferred_chroma);
+                spdlog::info("Preferred decoding colorspace: {}, chroma: {}", (int)preferred_colorspace,
+                             (int)preferred_chroma);
+
+                int3 size{heif_image_handle_get_width(ihandle.get()), heif_image_handle_get_height(ihandle.get()), 0};
+                bool has_alpha = heif_image_handle_has_alpha_channel(ihandle.get()) != 0;
+
+                heif_chroma     out_chroma;
+                heif_colorspace out_colorspace;
+                heif_channel    out_planes[2] = {heif_channel_Y, heif_channel_Alpha};
+                int             cpp           = 0; // channels per plane
+                int             num_planes    = 1;
+                if (preferred_chroma == heif_chroma_monochrome)
+                {
+                    out_chroma     = heif_chroma_monochrome;
+                    out_colorspace = heif_colorspace_monochrome;
+                    out_planes[0]  = heif_channel_Y;
+                    size.z         = has_alpha ? 2 : 1;
+                    cpp            = 1;
+                    num_planes     = size.z;
+                }
+                else
+                {
+                    out_chroma = has_alpha ? heif_chroma_interleaved_RRGGBBAA_LE : heif_chroma_interleaved_RRGGBB_LE;
+                    out_colorspace = heif_colorspace_RGB;
+                    out_planes[0]  = heif_channel_interleaved;
+                    size.z         = has_alpha ? 4 : 3;
+                    cpp            = size.z;
+                    num_planes     = 1;
+                }
+                spdlog::info("Image size: {}", size);
+
+                auto handle_level_nclx = HeifNCLXPtr(
+                    [&]
+                    {
+                        heif_color_profile_nclx *nclx_raw = nullptr;
+                        if (auto err = heif_image_handle_get_nclx_color_profile(ihandle.get(), &nclx_raw);
+                            err.code == heif_error_Ok)
+                        {
+                            spdlog::debug("Found handle-level NCLX color profile: color primaries = {}, transfer "
+                                          "characteristics = {}, matrix coefficients = {}",
+                                          (int)nclx_raw->color_primaries, (int)nclx_raw->transfer_characteristics,
+                                          (int)nclx_raw->matrix_coefficients);
+                            return nclx_raw;
+                        }
+                        else
+                            return (heif_color_profile_nclx *)nullptr;
+                    }(),
+                    heif_nclx_color_profile_free);
+
+                std::vector<uint8_t> handle_level_icc_profile;
+                {
+                    handle_level_icc_profile.resize(heif_image_handle_get_raw_color_profile_size(ihandle.get()));
+                    if (auto err2 = heif_image_handle_get_raw_color_profile(
+                            ihandle.get(), reinterpret_cast<void *>(handle_level_icc_profile.data()));
+                        err2.code != heif_error_Ok)
+                        handle_level_icc_profile.clear();
+                }
+
+                spdlog::info("Decoding heif image...");
+                HeifImagePtr himage(
+                    [&]
+                    {
+                        heif_image            *raw_img = nullptr;
+                        HeifDecodingOptionsPtr options(heif_decoding_options_alloc(), heif_decoding_options_free);
+                        options->color_conversion_options.preferred_chroma_upsampling_algorithm =
+                            heif_chroma_upsampling_bilinear;
+                        options->color_conversion_options.only_use_preferred_chroma_algorithm = true;
+                        heif_error err;
+                        throw_on_error(
+                            err = heif_decode_image(ihandle.get(), &raw_img, out_colorspace, out_chroma, options.get()),
+                            "Failed to decode HEIF image");
+
+                        // show decoding warnings
+                        for (int i = 0;; i++)
+                        {
+                            int n = heif_image_get_decoding_warnings(raw_img, i, &err, 1);
+                            if (n == 0)
+                                break;
+
+                            spdlog::warn("HEIF decoding warning: {}", err.message);
+                        }
+                        return raw_img;
+                    }(),
+                    heif_image_release);
+                // create Image from decoded heif_image; process_decoded_heif_image will create and fill pixel data
+                ImagePtr image =
+                    process_decoded_heif_image(himage.get(), handle_level_nclx.get(), handle_level_icc_profile, opts,
+                                               size, cpp, num_planes, out_planes, fmt::format("{:d}", id));
+
+                // preserve file-level metadata that comes from the handle/context
+                image->filename                = filename;
+                image->file_has_straight_alpha = has_alpha && !heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                image->metadata["header"]["mime type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
+                image->metadata["header"]["main brand"] = {
+                    {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
+                image->metadata["loader"] = "libheif" + std::string(" (" + std::string(main_brand) + ")");
+                image->metadata["header"]["preferred colorspace"] = {
+                    {"value", int(preferred_colorspace)},
+                    {"string",
+                     fmt::format("{} ({})", colorspace_name(preferred_colorspace), int(preferred_colorspace))},
+                    {"type", "int"}};
+                image->metadata["header"]["preferred chroma"] = {
+                    {"value", int(preferred_chroma)},
+                    {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
+                    {"type", "int"}};
+                image->metadata["exif"] = get_exif(ihandle.get());
+
+                images.emplace_back(image);
+            }
         }
 
         // --- sequence tracks: decode all images from any image/video sequence tracks
@@ -620,8 +661,18 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         break;
                     }
 
+                    // show decoding warnings
+                    for (int i = 0;; i++)
+                    {
+                        int n = heif_image_get_decoding_warnings(raw_img, i, &terr, 1);
+                        if (n == 0)
+                            break;
+
+                        spdlog::warn("HEIF decoding warning: {}", terr.message);
+                    }
+
                     int    track_digits = (int)std::to_string(std::max<size_t>(1, track_ids.size())).length();
-                    string partname     = fmt::format("track {:0{}} frame {:04}", track_id, track_digits, frame_index);
+                    string partname     = fmt::format("track {:0{}}.frame {:04}", track_id, track_digits, frame_index);
                     if (!filter.PassFilter(partname.c_str()))
                     {
                         spdlog::debug("Skipping frame {} of track {} (filtered out by channel selector)", frame_index,
@@ -707,7 +758,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
         int                        w = 0, h = 0, n = 0;
         std::unique_ptr<uint8_t[]> pixels8;
         void                      *pixels = nullptr;
-        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, params->gamma, true, true, true);
+        pixels8 = img.as_interleaved<uint8_t>(&w, &h, &n, params->gain, params->tf, true, true, true);
         if (!params->use_alpha && n == 4)
         {
             size_t                     num_pixels = w * h;
@@ -765,7 +816,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
             if (!is_heif_transfer_supported(params->tf))
             {
                 spdlog::warn("HEIF: Transfer function '{}' not supported, falling back to sRGB.",
-                             transfer_function_name(params->tf, params->gamma));
+                             transfer_function_name(params->tf));
                 heif_tf = heif_transfer_characteristic_IEC_61966_2_1;
             }
             nclx->transfer_characteristics = heif_tf;
@@ -818,7 +869,7 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 }
 
 void save_heif_image(const Image &img, std::ostream &os, std::string_view filename, float gain, int quality,
-                     bool lossless, bool use_alpha, int format_index, TransferFunction_ tf, float gamma)
+                     bool lossless, bool use_alpha, int format_index, TransferFunctionWithParams tf)
 {
     HEIFSaveOptions params;
     params.gain      = gain;
@@ -826,7 +877,6 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
     params.lossless  = lossless;
     params.use_alpha = use_alpha;
     params.tf        = tf;
-    params.gamma     = gamma;
     params.encoder   = (size_t)clamp(format_index, 0, int(s_encoders.size()) - 1);
     heif_encoder_set_lossless(s_encoders[params.encoder].get(), lossless);
     heif_encoder_set_lossy_quality(s_encoders[params.encoder].get(), quality);
@@ -867,31 +917,30 @@ HEIFSaveOptions *heif_parameters_gui()
             "Transfer function",
             [&]
             {
-                if (ImGui::BeginCombo("##Transfer function",
-                                      transfer_function_name(s_opts.tf, 1.f / s_opts.gamma).c_str()))
+                if (ImGui::BeginCombo("##Transfer function", transfer_function_name(s_opts.tf).c_str()))
                 {
                     for (int i = TransferFunction_Linear; i < TransferFunction_Count; ++i)
                     {
                         if (!is_heif_transfer_supported((TransferFunction_)i))
                             continue;
-                        bool selected = (s_opts.tf == (TransferFunction_)i);
-                        if (ImGui::Selectable(transfer_function_name((TransferFunction_)i, 1.f / s_opts.gamma).c_str(),
+                        bool selected = (s_opts.tf.type == (TransferFunction_)i);
+                        if (ImGui::Selectable(transfer_function_name({(TransferFunction_)i, s_opts.tf.gamma}).c_str(),
                                               selected))
-                            s_opts.tf = (TransferFunction_)i;
+                            s_opts.tf.type = (TransferFunction_)i;
                         if (selected)
                             ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
                 ImGui::Tooltip("Encode the pixel values using this transfer function.");
-                if (s_opts.tf == TransferFunction_Gamma)
+                if (s_opts.tf.type == TransferFunction_Gamma)
                 {
                     ImGui::Indent();
                     ImGui::AlignTextToFramePadding();
                     ImGui::TextUnformatted("Gamma");
                     ImGui::SameLine(HelloImGui::EmSize(9.f));
                     ImGui::SetNextItemWidth(-FLT_MIN);
-                    ImGui::SliderFloat("##Gamma", &s_opts.gamma, 0.1f, 5.f);
+                    ImGui::SliderFloat("##Gamma", &s_opts.tf.gamma, 0.1f, 5.f);
                     ImGui::Unindent();
                 }
                 return true;

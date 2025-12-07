@@ -40,7 +40,7 @@ static UHDRSaveOptions s_opts;
 
 bool is_uhdr_image(istream &is) noexcept { return false; }
 
-bool uhdr_supported_tf(TransferFunction tf) noexcept { return false; }
+bool uhdr_supported_tf(TransferFunctionWithParams tf) noexcept { return false; }
 
 vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 {
@@ -65,9 +65,9 @@ void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filena
 
 #include <ultrahdr_api.h>
 
-uhdr_color_transfer_t uhdr_tf(TransferFunction_ tf)
+static uhdr_color_transfer_t uhdr_tf(TransferFunctionWithParams tf)
 {
-    switch (tf)
+    switch (tf.type)
     {
     case TransferFunction_Linear: return UHDR_CT_LINEAR;
     case TransferFunction_sRGB: return UHDR_CT_SRGB;
@@ -77,7 +77,7 @@ uhdr_color_transfer_t uhdr_tf(TransferFunction_ tf)
     }
 }
 
-bool uhdr_supported_tf(TransferFunction_ tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
+bool uhdr_supported_tf(TransferFunctionWithParams tf) noexcept { return uhdr_tf(tf) != UHDR_CT_UNSPECIFIED; }
 
 bool is_uhdr_image(istream &is) noexcept
 {
@@ -322,7 +322,7 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     // get interleaved HDR pixel data
     int                     w = 0, h = 0, n = 0;
     std::unique_ptr<half[]> pixels_f16 =
-        img.as_interleaved<half>(&w, &h, &n, gain, TransferFunction_Linear, 1.f, false, true, true);
+        img.as_interleaved<half>(&w, &h, &n, gain, TransferFunction_Linear, false, true, true);
     void *pixels = pixels_f16.get();
 
     if (n != 3 && n != 4)

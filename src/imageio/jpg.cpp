@@ -272,12 +272,9 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        TransferFunction_ tf =
-            TransferFunction_Unspecified; // opts.tf != TransferFunction_Unknown ? opts.tf : TransferFunction_Unknown;
-        string tf_desc = transfer_function_name(tf);
-
-        if (opts.tf == TransferFunction_Unspecified)
+        if (opts.tf_override.type == TransferFunction_Unspecified)
         {
+            string tf_desc = transfer_function_name(TransferFunction_Unspecified);
             // ICC profile linearization
             if (!icc_profile.empty())
             {
@@ -287,19 +284,22 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                     spdlog::info("Linearizing colors using ICC profile.");
                     image->chromaticities = chr;
                 }
+                else
+                    // If no ICC profile, assume sRGB transfer function
+                    to_linear(float_pixels.data(), size, TransferFunction_sRGB);
             }
-            else if (tf != TransferFunction_Linear)
+            else
                 // If no ICC profile, assume sRGB transfer function
-                to_linear(float_pixels.data(), size, tf, 2.2f);
+                to_linear(float_pixels.data(), size, TransferFunction_sRGB);
 
             image->metadata["transfer function"] = tf_desc;
         }
         else
         {
             spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
-                         transfer_function_name(opts.tf, 1.f / opts.gamma));
-            to_linear(float_pixels.data(), size, opts.tf, opts.gamma);
-            image->metadata["transfer function"] = transfer_function_name(opts.tf, 1.f / opts.gamma);
+                         transfer_function_name(opts.tf_override));
+            to_linear(float_pixels.data(), size, opts.tf_override);
+            image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
         }
 
         for (int c = 0; c < size.z; ++c)

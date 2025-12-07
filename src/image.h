@@ -356,7 +356,7 @@ public:
 
     template <typename T>
     std::unique_ptr<T[]> as_interleaved(int *w, int *h, int *n, float gain = 1.f,
-                                        TransferFunction_ tf = TransferFunction_Linear, float gamma = 1.f,
+                                        TransferFunctionWithParams tf = {TransferFunction_Linear, 1.f},
                                         bool dither = true, bool unpremultiply = true,
                                         bool convert_to_sRGB = true) const;
 
@@ -395,7 +395,7 @@ private:
 };
 
 template <typename T>
-std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunction_ tf, float gamma,
+std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, TransferFunctionWithParams tf,
                                            bool dither, bool unpremultiply, bool convert_to_sRGB) const
 {
     *w                   = size().x;
@@ -411,7 +411,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     {
         // process RGB channels together
         parallel_for(blocked_range<int>(0, *h, block_size),
-                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, gamma, unpremultiply,
+                     [this, alpha, w = *w, n = *n, data = pixels.get(), gain, tf, dither, unpremultiply,
                       convert_to_sRGB](int begin_y, int end_y, int, int)
                      {
                          int y_stride = w * n;
@@ -431,7 +431,7 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
                                      rgb /= std::max(k_small_alpha, (*alpha)(x, y));
 
                                  // Apply transfer function to RGB triple
-                                 float3 rgb_out = from_linear(rgb, tf, float3{gamma});
+                                 float3 rgb_out = from_linear(rgb, tf);
 
                                  auto rgba_pixel = data + y * y_stride + n * x;
                                  for (int c = 0; c < 3; ++c)
@@ -449,24 +449,23 @@ std::unique_ptr<T[]> Image::as_interleaved(int *w, int *h, int *n, float gain, T
     }
     else
     {
-        parallel_for(
-            blocked_range<int>(0, *h, block_size),
-            [this, w = *w, n = *n, data = pixels.get(), gain, tf, dither, gamma](int begin_y, int end_y, int, int)
-            {
-                int y_stride = w * n;
-                for (int y = begin_y; y < end_y; ++y)
-                    for (int x = 0; x < w; ++x)
-                    {
-                        auto rgba_pixel = data + y * y_stride + n * x;
-                        for (int c = 0; c < n; ++c)
-                        {
-                            float v = channels[groups[selected_group].channels[c]](x, y);
-                            v *= gain;
-                            v             = from_linear(v, tf, gamma);
-                            rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
-                        }
-                    }
-            });
+        parallel_for(blocked_range<int>(0, *h, block_size),
+                     [this, w = *w, n = *n, data = pixels.get(), gain, tf, dither](int begin_y, int end_y, int, int)
+                     {
+                         int y_stride = w * n;
+                         for (int y = begin_y; y < end_y; ++y)
+                             for (int x = 0; x < w; ++x)
+                             {
+                                 auto rgba_pixel = data + y * y_stride + n * x;
+                                 for (int c = 0; c < n; ++c)
+                                 {
+                                     float v = channels[groups[selected_group].channels[c]](x, y);
+                                     v *= gain;
+                                     v             = from_linear(v, tf);
+                                     rgba_pixel[c] = std::is_integral_v<T> ? quantize_full<T>(v, x, y, dither) : T(v);
+                                 }
+                             }
+                     });
     }
 
     return pixels;
