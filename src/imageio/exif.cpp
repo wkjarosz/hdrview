@@ -285,13 +285,15 @@ json exif_data_to_json(ExifData *ed)
 {
     json j;
 
+    static const char *ExifIfdTable[] = {"TIFF", // Apple's Preview
+                                         "TIFF", // seems to combine the 0th and 1st IFDs into a "TIFF" section
+                                         "EXIF", "GPS", "Interoperability"};
+
     for (int ifd_idx = 0; ifd_idx < EXIF_IFD_COUNT; ++ifd_idx)
     {
         ExifContent *content = ed->ifd[ifd_idx];
         if (!content || !content->count)
             continue;
-
-        string ifd_name = exif_ifd_get_name((ExifIfd)ifd_idx);
 
         json ifd_json;
 
@@ -301,14 +303,21 @@ json exif_data_to_json(ExifData *ed)
             if (!entry)
                 continue;
 
-            string tag_name = exif_tag_get_name_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
+            string tag_name = exif_tag_get_title_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
             if (tag_name.empty())
                 tag_name = "UnknownTag_" + std::to_string(entry->tag);
 
             ifd_json[tag_name] = entry_to_json(entry, exif_data_get_byte_order(ed));
+
+            string desc = exif_tag_get_description_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
+            if (!desc.empty())
+                ifd_json[tag_name]["description"] = desc;
         }
 
-        j[ifd_name] = ifd_json;
+        if (j.contains(ExifIfdTable[ifd_idx]))
+            j[ExifIfdTable[ifd_idx]].update(ifd_json);
+        else
+            j[ExifIfdTable[ifd_idx]] = ifd_json;
     }
 
     return j;

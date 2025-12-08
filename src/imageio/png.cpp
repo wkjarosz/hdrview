@@ -249,6 +249,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     if (bit_depth != 8 && bit_depth != 16)
         throw invalid_argument{fmt::format("Requested bit depth to be either 8 or 16 now, but received {}", bit_depth)};
 
+    json metadata = json::object();
+
     //
     // Read color chunks in reverse priority order
     //
@@ -297,10 +299,10 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     bool     has_cICP              = false;
     png_byte video_full_range_flag = 1;
-#ifdef PNG_cICP_SUPPORTED
     png_byte color_primaries;
     png_byte transfer_function;
     png_byte matrix_coefficients;
+#ifdef PNG_cICP_SUPPORTED
 
     if (png_get_cICP(png_ptr, info_ptr.get(), &color_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
@@ -327,6 +329,17 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
         tf = transfer_function_from_cicp(transfer_function);
         if (tf.type == TransferFunction::Unspecified)
             spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
+
+        metadata["header"]["CICP video full range"] = {{"value", video_full_range_flag != 0},
+                                                       {"string", video_full_range_flag ? "true" : "false"},
+                                                       {"type", "bool"}};
+        metadata["header"]["CICP triple"]           = {
+            {"value", {color_primaries, transfer_function, matrix_coefficients}},
+            {"string", fmt::format("CP={}, TF={}, MC={}", color_primaries, transfer_function, matrix_coefficients)},
+            {"type", "array"},
+            {"description",
+                       "Coding-independent code points (CICP) is a way to signal the color properties of the image via three "
+                                 "numbers: color primaries (CP), transfer function (TF), and matrix coefficients (MC)."}};
     }
 #endif
 
@@ -334,8 +347,6 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     // Done reading color chunks
     //
-
-    json metadata = json::object();
 
 #if defined(PNG_TEXT_SUPPORTED)
     /* png_get_text returns the number of text chunks and writes a pointer to

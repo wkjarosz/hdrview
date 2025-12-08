@@ -409,105 +409,91 @@ void Image::draw_info()
         ImGui::PE::End();
     }
 
-    if (ImGui::CollapsingHeader("More info...",
-                                ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
-                                    ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns))
+    auto get_tooltip = [](const json &field_obj)
     {
-        if (ImGui::PE::Begin("Image info", table_flags))
+        std::string tt;
+        bool        print_value = false;
+        if (field_obj.contains("description") && field_obj["description"].is_string())
+            tt += field_obj["description"].get<std::string>() + "\n\n";
+
+        if (field_obj.contains("type") && field_obj["type"].is_string())
         {
-            ImGui::Indent(HelloImGui::EmSize(0.5f));
-            auto add_tooltip = [](const json &field_obj)
-            {
-                std::string tt;
-                bool        is_string = false;
-                if (field_obj.contains("type") && field_obj["type"].is_string())
-                {
-                    if (field_obj["type"].get<std::string>() == "string")
-                        is_string = true;
-                    tt += std::string("type: ") + field_obj["type"].get<std::string>() + "\n";
-                }
-
-                if (!is_string && field_obj.contains("value"))
-                {
-                    const auto &v = field_obj["value"];
-                    if (v.is_string())
-                        tt += std::string("value: ") + v.get<std::string>();
-                    else
-                        tt += std::string("value: ") + v.dump(2);
-                }
-
-                if (!tt.empty())
-                    ImGui::SetTooltip("%s", tt.c_str());
-            };
-
-            if (metadata.contains("header") && metadata["header"].is_object())
-            {
-                for (auto &field : metadata["header"].items())
-                {
-                    const std::string &key       = field.key();
-                    const auto        &field_obj = field.value();
-                    if (!field_obj.is_object() || !field_obj.contains("string"))
-                        continue;
-
-                    auto value  = field_obj["string"].get<std::string>();
-                    auto concat = key + " " + value;
-                    if (!filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
-                        continue;
-
-                    ImGui::PE::WrappedText(key, value, "", bold_font);
-
-                    // show type + value (raw) as tooltip on hover (similar to EXIF tooltips)
-                    if (ImGui::IsItemHovered())
-                        add_tooltip(field_obj);
-                }
-            }
-
-            if (metadata.contains("exif") && metadata["exif"].is_object())
-            {
-                if (ImGui::PE::TreeNode("EXIF", ImGuiTreeNodeFlags_SpanAllColumns))
-                {
-                    int j = 0;
-                    for (auto &exif_entry : metadata["exif"].items())
-                    {
-                        j++;
-                        const auto &table_obj = exif_entry.value();
-                        if (!table_obj.is_object())
-                            continue;
-                        ImGui::PushID(j);
-                        if (ImGui::PE::TreeNode(exif_entry.key().c_str(),
-                                                ImGuiTreeNodeFlags_SpanAllColumns | ImGuiTreeNodeFlags_DefaultOpen))
-                        {
-                            for (auto &field : table_obj.items())
-                            {
-                                const std::string &key       = field.key();
-                                const auto        &field_obj = field.value();
-                                if (!field_obj.is_object() || !field_obj.contains("string"))
-                                    continue;
-
-                                auto value  = field_obj["string"].get<std::string>();
-                                auto concat = key + " " + value;
-                                if (!filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
-                                    continue;
-
-                                ImGui::PE::WrappedText(key, value, "", bold_font);
-
-                                // show type + value (raw) as tooltip on hover
-                                if (ImGui::IsItemHovered())
-                                    add_tooltip(field_obj);
-                            }
-                            ImGui::PE::TreePop();
-                        }
-                        ImGui::PopID();
-                    }
-
-                    ImGui::PE::TreePop();
-                }
-            }
-
-            // ImGui::PE::TreePop();
-            ImGui::Unindent(HelloImGui::EmSize(0.5f));
+            auto t = field_obj["type"].get<std::string>();
+            if (t == "byte" || t == "short" || t == "long" || t == "sbyte" || t == "sshort" || t == "slong" ||
+                t == "float" || t == "double" || t == "rational" || t == "srational" || t == "int" || t == "uint")
+                print_value = true;
+            tt += std::string("type: ") + field_obj["type"].get<std::string>() + "\n";
         }
-        ImGui::PE::End();
+
+        if (print_value && field_obj.contains("value"))
+        {
+            const auto &v = field_obj["value"];
+            if ((!v.is_array() || (v.is_array() && v.size() > 0 && v.size() <= 5 && v[0].is_number())) &&
+                !v.is_object())
+            {
+                if (v.is_string())
+                    tt += std::string("value: ") + v.get<std::string>();
+                else
+                    tt += std::string("value: ") + v.dump();
+            }
+        }
+        return tt;
+    };
+
+    auto add_fields = [&](const json &fields)
+    {
+        for (auto &field : fields.items())
+        {
+            const std::string &key       = field.key();
+            const auto        &field_obj = field.value();
+            if (!field_obj.is_object() || !field_obj.contains("string"))
+                continue;
+
+            auto value  = field_obj["string"].get<std::string>();
+            auto concat = key + " " + value;
+            if (!filter.PassFilter(concat.c_str(), concat.c_str() + concat.size()))
+                continue;
+
+            ImGui::PE::WrappedText(key, value, get_tooltip(field_obj), bold_font);
+        }
+    };
+
+    if (metadata.contains("header") && metadata["header"].is_object())
+    {
+        if (ImGui::CollapsingHeader("Header", ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
+                                                  ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns))
+        {
+            if (ImGui::PE::Begin("Image info", table_flags))
+            {
+                ImGui::Indent(HelloImGui::EmSize(0.5f));
+                add_fields(metadata["header"]);
+                ImGui::Unindent(HelloImGui::EmSize(0.5f));
+            }
+            ImGui::PE::End();
+        }
+    }
+
+    if (metadata.contains("exif") && metadata["exif"].is_object())
+    {
+        for (auto &exif_entry : metadata["exif"].items())
+        {
+            const auto &table_obj = exif_entry.value();
+            if (!table_obj.is_object())
+                continue;
+
+            if (ImGui::CollapsingHeader(exif_entry.key().c_str(),
+                                        ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_NoAutoOpenOnLog |
+                                            ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_SpanAllColumns))
+            {
+                if (ImGui::PE::Begin("Image info", table_flags))
+                {
+                    ImGui::Indent(HelloImGui::EmSize(0.5f));
+                    add_fields(table_obj);
+                    ImGui::Unindent(HelloImGui::EmSize(0.5f));
+                }
+                ImGui::PE::End();
+            }
+        }
     }
 }
 
@@ -830,7 +816,6 @@ void Image::draw_colorspace()
 {
     auto bold_font = hdrview()->font("sans bold");
 
-    float                        col1_w          = 0.f;
     float                        col2_w          = 0.f;
     float                        col2_big_enough = HelloImGui::EmSize(12.f);
     static const ImGuiTableFlags table_flags =
@@ -838,15 +823,6 @@ void Image::draw_colorspace()
     if (ImGui::PE::Begin("Colorspace", table_flags))
     {
         ImGui::Indent(HelloImGui::EmSize(0.5f));
-        {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::AlignTextToFramePadding();
-            col1_w = ImGui::GetContentRegionAvail().x;
-            ImGui::TableNextColumn();
-            ImGui::SetNextItemWidth(-FLT_MIN);
-            col2_w = ImGui::GetContentRegionAvail().x;
-        }
 
         ImGui::PE::WrappedText("Transfer function", metadata.value<string>("transfer function", "linear"),
                                "The transfer function applied at load time to make the values linear.", bold_font,
@@ -855,6 +831,7 @@ void Image::draw_colorspace()
         ImGui::PE::Entry("Color gamut",
                          [&]
                          {
+                             col2_w        = ImGui::GetContentRegionAvail().x;
                              bool modified = false;
                              auto csn      = color_gamut_names();
                              auto open_combo =
@@ -875,8 +852,8 @@ void Image::draw_colorspace()
                                          modified = true;
                                      }
 
-                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
-                                     // focus)
+                                     // Set the initial focus when opening the combo (scrolling + keyboard
+                                     // navigation focus)
                                      if (is_selected)
                                          ImGui::SetItemDefaultFocus();
                                  }
@@ -912,8 +889,8 @@ void Image::draw_colorspace()
                                          compute_color_transform();
                                      }
 
-                                     // Set the initial focus when opening the combo (scrolling + keyboard navigation
-                                     // focus)
+                                     // Set the initial focus when opening the combo (scrolling + keyboard
+                                     // navigation focus)
                                      if (is_selected)
                                          ImGui::SetItemDefaultFocus();
                                  }

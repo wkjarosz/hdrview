@@ -704,7 +704,8 @@ void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args)
     window->DC.IdealMaxPos.x  = ImMax(window->DC.IdealMaxPos.x, pos.x + text_size.x);
     if (align_x > 0.0f && text_size.x < size_x)
         pos.x += ImTrunc((size_x - text_size.x) * align_x);
-    RenderTextClipped(pos, pos_max, text, text_end, &text_size);
+    // RenderTextClipped(pos, pos_max, text, text_end, &text_size);
+    RenderTextEllipsis(window->DrawList, pos, pos_max, pos_max.x, text, text_end, &text_size);
 
     const ImVec2 backup_max_pos = window->DC.CursorMaxPos;
     ItemSize(size);
@@ -728,8 +729,8 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::TableNextRow();
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    // ImGui::TextAligned2(1.0f, -FLT_MIN, property_name.c_str());
-    ImGui::TextUnformatted(property_name.c_str());
+    ImGui::TextAligned2(0.f, -FLT_MIN, property_name.c_str());
+    // ImGui::TextUnformatted(property_name.c_str());
     if (!tooltip.empty())
         Tooltip(tooltip.c_str(), false, 0);
     ImGui::TableNextColumn();

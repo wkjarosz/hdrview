@@ -253,17 +253,17 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
         if (croi.size() != rroi.size())
             spdlog::error("Image and reference channel ROIs are not the same size!");
 
-        auto pixel_value = [&img, ref, &croi, &rroi, this](int i)
+        auto pixel_value = [&img, ref, &croi, &rroi, this](size_t i)
         {
-            int2 i2d{i % croi.size().x, i / croi.size().x}; // convert to 2D coordinates
-            if (i2d.x < 0 || i2d.y < 0 || i2d.x >= croi.size().x || i2d.y >= croi.size().y)
+            int2 i2d(i % croi.size().x, i / croi.size().x); // convert to 2D coordinates
+            if (i2d.y >= croi.size().y)
             {
                 // spdlog::error("Pixel index {} ({}) out of bounds for ROI {}..{}", i, i2d, croi.min, croi.max);
                 return std::numeric_limits<float>::quiet_NaN(); // out of bounds
             }
-            float val = img(i2d + croi.min);
+            float val = img(i2d);
             if (ref)
-                val = blend(val, (*ref)(i2d + rroi.min), settings.blend_mode);
+                val = blend(val, (*ref)(i2d + croi.min - rroi.min), settings.blend_mode);
             return val;
         };
 
@@ -286,12 +286,12 @@ void PixelStats::calculate(const Channel &img, int2 img_data_origin, const Chann
             spdlog::trace("Breaking summary stats into {} work units.", partials.size());
 
             parallel_for(
-                blocked_range<int>(0, croi.volume(), (int)block_size),
-                [&partials, &canceled, &pixel_value](int begin, int end, int unit_index, int)
+                blocked_range<size_t>(0u, croi.volume(), block_size),
+                [&partials, &canceled, &pixel_value](size_t begin, size_t end, int unit_index, int)
                 {
                     Partial partial = partials[unit_index]; //< compute over local symbols.
 
-                    for (int i = begin; i != end; ++i)
+                    for (size_t i = begin; i != end; ++i)
                     {
                         if (canceled)
                             throw std::runtime_error("canceling summary stats");

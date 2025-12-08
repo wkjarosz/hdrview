@@ -268,12 +268,12 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     // create the Image object now that we know the (possibly corrected) size and channels
     auto image                                      = make_shared<Image>(size.xy(), size.z);
     image->partname                                 = partname;
-    image->metadata["header"]["decoded colorspace"] = {
+    image->metadata["header"]["Decoded colorspace"] = {
         {"value", int(heif_image_get_colorspace(himage))},
         {"string", fmt::format("{} ({})", colorspace_name(heif_image_get_colorspace(himage)),
                                int(heif_image_get_colorspace(himage)))},
         {"type", "int"}};
-    image->metadata["header"]["decoded chroma"] = {
+    image->metadata["header"]["Decoded chroma"] = {
         {"value", int(heif_image_get_chroma_format(himage))},
         {"string", fmt::format("{} ({})", chroma_name(heif_image_get_chroma_format(himage)),
                                int(heif_image_get_chroma_format(himage)))},
@@ -295,7 +295,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     if (image_level_nclx)
     {
         nclx                                                    = image_level_nclx.get();
-        image->metadata["header"]["nclx profile (image level)"] = json{
+        image->metadata["header"]["CICP profile (image level)"] = json{
             {"value", nclx->transfer_characteristics},
             {"string",
              fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
@@ -305,7 +305,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     if (handle_level_nclx)
     {
         nclx                                                     = handle_level_nclx;
-        image->metadata["header"]["nclx profile (handle level)"] = json{
+        image->metadata["header"]["CICP profile (handle level)"] = json{
             {"value", nclx->transfer_characteristics},
             {"string",
              fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
@@ -325,12 +325,12 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     // first try the image level, then the handle level
     std::vector<uint8_t> &icc_profile = image_level_icc_profile;
     if (!image_level_icc_profile.empty())
-        image->metadata["header"]["icc profile"] =
+        image->metadata["header"]["ICC color profile"] =
             json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
     else if (!handle_level_icc_profile.empty())
     {
         icc_profile = handle_level_icc_profile;
-        image->metadata["header"]["icc profile"] =
+        image->metadata["header"]["ICC color profile"] =
             json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
     }
 
@@ -597,16 +597,16 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                 // preserve file-level metadata that comes from the handle/context
                 image->filename                = filename;
                 image->file_has_straight_alpha = has_alpha && !heif_image_handle_is_premultiplied_alpha(ihandle.get());
-                image->metadata["header"]["mime type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
-                image->metadata["header"]["main brand"] = {
+                image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
+                image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
                 image->metadata["loader"] = "libheif" + std::string(" (" + std::string(main_brand) + ")");
-                image->metadata["header"]["preferred colorspace"] = {
+                image->metadata["header"]["Preferred colorspace"] = {
                     {"value", int(preferred_colorspace)},
                     {"string",
                      fmt::format("{} ({})", colorspace_name(preferred_colorspace), int(preferred_colorspace))},
                     {"type", "int"}};
-                image->metadata["header"]["preferred chroma"] = {
+                image->metadata["header"]["Preferred chroma"] = {
                     {"value", int(preferred_chroma)},
                     {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
                     {"type", "int"}};
@@ -690,8 +690,8 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes, partname);
                     image->filename                         = filename;
                     image->file_has_straight_alpha          = false;
-                    image->metadata["header"]["mime type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
-                    image->metadata["header"]["main brand"] = {
+                    image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
+                    image->metadata["header"]["Main brand"] = {
                         {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
                     image->metadata["loader"] = "libheif" + std::string(" (" + std::string(main_brand) + ")");
                     images.emplace_back(image);
