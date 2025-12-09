@@ -102,12 +102,12 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         tf = opts.tf_override;
         try
         {
-            // some cICP transfer functions always correspond to certain primaries, try to deduce that
+            // some CICP transfer functions always correspond to certain primaries, try to deduce that
             image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
         }
         catch (...)
         {
-            spdlog::warn("Failed to infer chromaticities from transfer function cICP value: {}",
+            spdlog::warn("Failed to infer chromaticities from transfer function CICP value: {}",
                          int(opts.tf_override.type));
         }
     }

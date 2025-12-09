@@ -165,7 +165,7 @@ static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_
     auto tf = transfer_function_from_cicp((int)nclx->transfer_characteristics);
 
     if (tf.type == TransferFunction::Unspecified)
-        spdlog::warn("HEIF: cICP transfer function ({}) is not recognized, assuming sRGB",
+        spdlog::warn("HEIF: CICP transfer function ({}) is not recognized, assuming sRGB",
                      (int)nclx->transfer_characteristics);
 
     if (tf_description)
@@ -395,12 +395,12 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                          transfer_function_name(opts.tf_override));
             try
             {
-                // some cICP transfer functions always correspond to certain primaries, try to deduce that
+                // some CICP transfer functions always correspond to certain primaries, try to deduce that
                 image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
             }
             catch (...)
             {
-                spdlog::warn("Failed to infer chromaticities from transfer function cICP value: {}",
+                spdlog::warn("Failed to infer chromaticities from transfer function CICP value: {}",
                              int(opts.tf_override.type));
             }
 
