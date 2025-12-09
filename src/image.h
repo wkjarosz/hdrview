@@ -291,16 +291,16 @@ public:
     std::optional<Chromaticities> chromaticities;             //!< The chromaticities of the file
     std::optional<float2>         adopted_neutral;            //!< The adopted neutral of the file, if any
     float3x3                      M_RGB_to_XYZ, M_XYZ_to_RGB; //!< The RGB to XYZ and XYZ to RGB conversion matrices
-    float3x3                      M_to_sRGB               = la::identity;
-    float3                        luminance_weights       = sRGB_Yw();
-    AdaptationMethod              adaptation_method       = AdaptationMethod_Bradford;
-    ColorGamut_                   color_space             = ColorGamut_Unspecified;
-    WhitePoint_                   white_point             = WhitePoint_Unspecified;
-    bool                          file_has_straight_alpha = false;
-    json                          metadata                = json::object();
-    std::vector<uint8_t>          exif_data; //!< The raw EXIF data from the file, if any
-    std::vector<uint8_t>          xmp_data;  //!< The raw XMP data from the file, if any
-    std::vector<uint8_t>          icc_data;  //!< The raw ICC profile data from the file, if any
+    float3x3                      M_to_sRGB         = la::identity;
+    float3                        luminance_weights = sRGB_Yw();
+    AdaptationMethod              adaptation_method = AdaptationMethod_Bradford;
+    ColorGamut_                   color_space       = ColorGamut_Unspecified;
+    WhitePoint_                   white_point       = WhitePoint_Unspecified;
+    AlphaType            alpha_type = AlphaType_None; //!< Does the image have straight (unpremultiplied) alpha?
+    json                 metadata   = json::object();
+    std::vector<uint8_t> exif_data; //!< The raw EXIF data from the file, if any
+    std::vector<uint8_t> xmp_data;  //!< The raw XMP data from the file, if any
+    std::vector<uint8_t> icc_data;  //!< The raw ICC profile data from the file, if any
 
     fs::path           path;
     fs::file_time_type last_modified;

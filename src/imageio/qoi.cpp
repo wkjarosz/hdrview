@@ -89,7 +89,7 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
 
     auto image                      = make_shared<Image>(size.xy(), size.z);
     image->filename                 = filename;
-    image->file_has_straight_alpha  = size.z > 3;
+    image->alpha_type               = size.z > 3 ? AlphaType_Straight : AlphaType_None;
     image->metadata["loader"]       = "qoi";
     image->metadata["pixel format"] = fmt::format("{}-bit (8 bpc)", size.z * 8);
 

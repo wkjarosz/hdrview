@@ -158,11 +158,10 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
 
         jpeg_start_decompress(&cinfo);
         int3 size{(int)cinfo.output_width, (int)cinfo.output_height, (int)cinfo.output_components};
-        auto image                     = make_shared<Image>(size.xy(), size.z);
-        image->filename                = filename;
-        image->file_has_straight_alpha = false;
-        image->metadata["loader"]      = "libjpeg-turbo";
-        auto color_space_name          = [](J_COLOR_SPACE cp)
+        auto image                = make_shared<Image>(size.xy(), size.z);
+        image->filename           = filename;
+        image->metadata["loader"] = "libjpeg-turbo";
+        auto color_space_name     = [](J_COLOR_SPACE cp)
         {
             switch (cp)
             {

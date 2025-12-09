@@ -594,8 +594,11 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                                                size, cpp, num_planes, out_planes, fmt::format("{:d}", id));
 
                 // preserve file-level metadata that comes from the handle/context
-                image->filename                = filename;
-                image->file_has_straight_alpha = has_alpha && !heif_image_handle_is_premultiplied_alpha(ihandle.get());
+                image->filename                         = filename;
+                image->alpha_type                       = !has_alpha ? AlphaType_None
+                                                                     : (heif_image_handle_is_premultiplied_alpha(ihandle.get())
+                                                                            ? AlphaType_PremultipliedLinear
+                                                                            : AlphaType_Straight);
                 image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                 image->metadata["header"]["Main brand"] = {
                     {"value", main_brand}, {"string", main_brand}, {"type", "string"}};
@@ -703,7 +706,6 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     ImagePtr     image =
                         process_decoded_heif_image(himage.get(), nullptr, {}, opts, size, 3, 1, out_planes, partname);
                     image->filename                         = filename;
-                    image->file_has_straight_alpha          = false;
                     image->metadata["header"]["MIME type"]  = {{"value", mime}, {"string", mime}, {"type", "string"}};
                     image->metadata["header"]["Main brand"] = {
                         {"value", main_brand}, {"string", main_brand}, {"type", "string"}};

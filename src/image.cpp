@@ -998,7 +998,7 @@ void Image::finalize()
 
     // if we have a straight alpha channel, premultiply the other channels by it.
     // this needs to be done after the values have been made linear
-    if (file_has_straight_alpha)
+    if (alpha_type == AlphaType_Straight)
     {
         for (auto &g : groups)
         {

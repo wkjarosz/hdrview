@@ -201,10 +201,10 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 
     int2 size = int2(decoded_image->w, decoded_image->h);
 
-    auto image                     = make_shared<Image>(size, 4);
-    image->filename                = filename;
-    image->file_has_straight_alpha = true;
-    image->metadata["loader"]      = "libuhdr";
+    auto image                = make_shared<Image>(size, 4);
+    image->filename           = filename;
+    image->alpha_type         = AlphaType_Straight;
+    image->metadata["loader"] = "libuhdr";
 
     const uhdr_mem_block_t *exif_data = uhdr_dec_get_exif(decoder.get());
     if (exif_data && exif_data->data && exif_data->data_sz > 0)

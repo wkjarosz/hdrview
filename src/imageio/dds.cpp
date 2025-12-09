@@ -1,4 +1,5 @@
 #include "dds.h"
+#include "colorspace.h"
 #include "image.h"
 #include <fmt/core.h>
 #include <iostream>
@@ -717,8 +718,11 @@ vector<ImagePtr> load_dds_image(istream &is, string_view filename, const ImageLo
             image->filename = filename;
             if (image->partname.empty())
                 image->partname = dds.array_size() > 1 ? cubemap_face_names[p % 6] : "";
-            image->file_has_straight_alpha =
-                dds.alpha_mode != DDSFile::ALPHA_MODE_PREMULTIPLIED && image->channels.size() >= 4;
+            image->alpha_type =
+                image->channels.size() >= 4 || image->channels.size() == 2
+                    ? (dds.alpha_mode == DDSFile::ALPHA_MODE_PREMULTIPLIED ? AlphaType_PremultipliedLinear
+                                                                           : AlphaType_Straight)
+                    : AlphaType_None;
             image->metadata["loader"] = "smalldds";
             image->metadata["pixel format"] =
                 dds.bitmasked ? header["bitmask_string"]["string"].get<string>()

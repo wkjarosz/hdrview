@@ -496,11 +496,11 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 #endif
 
         int3 size{int(frame_width), int(frame_height), channels};
-        auto image                     = make_shared<Image>(size.xy(), size.z);
-        image->filename                = filename;
-        image->file_has_straight_alpha = size.z == 4 || size.z == 2;
-        image->chromaticities          = chr;
-        image->metadata                = metadata;
+        auto image            = make_shared<Image>(size.xy(), size.z);
+        image->filename       = filename;
+        image->alpha_type     = size.z == 4 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
+        image->chromaticities = chr;
+        image->metadata       = metadata;
 
         if (animation)
         {

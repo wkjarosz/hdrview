@@ -207,9 +207,9 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
     {
         auto &image = images[frame];
 
-        image                          = make_shared<Image>(size.xy(), size.z);
-        image->filename                = filename;
-        image->file_has_straight_alpha = true;
+        image             = make_shared<Image>(size.xy(), size.z);
+        image->filename   = filename;
+        image->alpha_type = size.z > 3 || size.z == 2 ? AlphaType_Straight : AlphaType_None;
         if (size.w > 1)
             image->partname = fmt::format("frame {:04}", frame);
         image->metadata["loader"] = fmt::format("stb_image ({})", j["format"].get<string>());

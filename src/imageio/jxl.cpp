@@ -477,11 +477,13 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             spdlog::info("File has {} color channels", size.z);
             format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
-            image                          = make_shared<Image>(size.xy(), size.z);
-            image->filename                = filename;
-            image->partname                = frame_name;
-            image->file_has_straight_alpha = info.alpha_bits && !info.alpha_premultiplied;
-            image->metadata["loader"]      = "libjxl";
+            image                     = make_shared<Image>(size.xy(), size.z);
+            image->filename           = filename;
+            image->partname           = frame_name;
+            image->alpha_type         = !info.alpha_bits
+                                            ? AlphaType_None
+                                            : (info.alpha_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+            image->metadata["loader"] = "libjxl";
             image->metadata["pixel format"] =
                 fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
             image->metadata["header"]["intrinsic width"] = {

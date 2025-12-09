@@ -18,6 +18,19 @@
 
 #include <string>
 
+using AlphaType_ = int;
+enum AlphaType : AlphaType_
+{
+    AlphaType_None = 0,
+    AlphaType_PremultipliedLinear,
+    AlphaType_PremultipliedNonLinear, // values are premultiplied in e.g. gamma- or sRGB-encoded space
+    AlphaType_Straight,
+    AlphaType_Count
+};
+
+const char  *alpha_type_name(AlphaType_ at);
+const char **alpha_type_names();
+
 /**
  * Computes the luminance as ``l = 0.299r + 0.587g + 0.144b + 0.0a``.  If
  * the luminance is less than 0.5, white is returned.  If the luminance is

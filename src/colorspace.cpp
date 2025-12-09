@@ -476,6 +476,13 @@ static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
     "DCI-P3",                  // TransferFunction::DCI_P3
     nullptr};
 
+static const char *s_alpha_type_names[] = {"None", "Premultiplied Linear", "Premultiplied Non-Linear", "Straight",
+                                           nullptr};
+
+const char *alpha_type_name(AlphaType_ at) { return s_alpha_type_names[at]; }
+
+const char **alpha_type_names() { return s_alpha_type_names; }
+
 float2 white_point(WhitePoint_ wp)
 {
     if (wp >= WhitePoint_Custom)

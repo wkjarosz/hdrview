@@ -402,7 +402,7 @@ void Image::draw_info()
             filtered_property("Display window",
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
-            filtered_property("Straight alpha", fmt::format("{}", file_has_straight_alpha));
+            filtered_property("Alpha", alpha_type_name(alpha_type));
             if (!exif_data.empty())
             {
                 auto hs = human_readable_size(exif_data.size());
