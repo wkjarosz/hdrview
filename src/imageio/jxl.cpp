@@ -298,8 +298,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             while ((status = JxlDecoderProcessInput(dec.get())) == JXL_DEC_BOX_NEED_MORE_OUTPUT)
             {
                 size_t remaining = JxlDecoderReleaseBoxBuffer(dec.get());
-                spdlog::info("Doubling box buffer size from {} to {} bytes; remaining: {}; output_pos: {}",
-                             tmp_buffer.size(), tmp_buffer.size() * 2, remaining, output_pos);
+                spdlog::debug("Doubling box buffer size from {} to {} bytes; remaining: {}; output_pos: {}",
+                              tmp_buffer.size(), tmp_buffer.size() * 2, remaining, output_pos);
                 output_pos += prev_size - remaining;
                 tmp_buffer.resize(tmp_buffer.size() * 2);
                 prev_size = tmp_buffer.size() - output_pos;
@@ -336,7 +336,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             else if (stype == "xml ")
             {
                 xmp_buffer = tmp_buffer;
-                spdlog::info("XMP data size: {}", xmp_buffer.size());
+                spdlog::debug("XMP data size: {}", xmp_buffer.size());
             }
         }
         else if (status == JXL_DEC_NEED_MORE_INPUT)
@@ -354,8 +354,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
             size = int3{(int)info.xsize, (int)info.ysize, (int)info.num_color_channels + (info.alpha_bits ? 1 : 0)};
 
-            spdlog::info("JPEG XL {}x{} image with {} color channels ({} including alpha) and {} extra channels",
-                         size.x, size.y, info.num_color_channels, size.z, info.num_extra_channels);
+            spdlog::info("{}x{} image with {} color channels ({} including alpha) and {} extra channels", size.x,
+                         size.y, info.num_color_channels, size.z, info.num_extra_channels);
 
             int count_alpha = 0, count_depth = 0, count_spot = 0, count_mask = 0, count_black = 0, count_cfa = 0,
                 count_thermal = 0;
@@ -452,14 +452,14 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             else
             {
                 is_cmyk = icc::is_cmyk(icc_profile);
-                spdlog::info("JPEG XL file has an {} ICC color profile", is_cmyk ? "CMYK" : "RGB");
+                spdlog::info("File has an {} ICC color profile", is_cmyk ? "CMYK" : "RGB");
             }
 
             if (JXL_DEC_SUCCESS ==
                 JxlDecoderGetColorAsEncodedProfile(dec.get(), JXL_COLOR_PROFILE_TARGET_DATA, &file_enc))
             {
                 has_encoded_profile = true;
-                spdlog::info("JPEG XL file has an encoded color profile:\n{}", color_encoding_info(file_enc));
+                spdlog::info("File has an encoded color profile:\n{}", color_encoding_info(file_enc));
             }
 
             // only prefer the encoded profile if it exists and it specifies an HDR transfer function
@@ -474,7 +474,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
             spdlog::info("size: {}x{}x{}", size.x, size.y, size.z);
 
-            spdlog::info("JPEG XL file has {} color channels", size.z);
+            spdlog::info("File has {} color channels", size.z);
             format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
             image                          = make_shared<Image>(size.xy(), size.z);
@@ -755,7 +755,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 (JXL_DEC_SUCCESS == JxlDecoderGetFrameName(dec.get(), name_buffer.data(), name_buffer.size())))
             {
                 frame_name = name_buffer.data();
-                spdlog::info("JPEG XL frame name: {}", name_buffer.data());
+                spdlog::info("Frame name: {}", name_buffer.data());
             }
             else if (info.have_animation)
                 frame_name = fmt::format("frame {:04}", frame_number);
@@ -812,7 +812,8 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 void save_jxl_image(const Image &img, std::ostream &os, std::string_view filename, float gain, bool lossless,
                     float quality, TransferFunction tf, int data_type)
 {
-    Timer timer;
+    ScopedMDC mdc{"IO", "JXL"};
+    Timer     timer;
 
     JxlBasicInfo info;
     JxlEncoderInitBasicInfo(&info);
@@ -820,11 +821,11 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     JxlTransferFunction jtf = jxl_tf(tf);
 
     if (jtf == JXL_TRANSFER_FUNCTION_UNKNOWN)
-        throw std::runtime_error("JPEG XL: unsupported transfer function");
+        throw std::runtime_error("Unsupported transfer function");
 
     if (!(data_type == JXL_TYPE_FLOAT || data_type == JXL_TYPE_UINT8 || data_type == JXL_TYPE_UINT16 ||
           data_type == JXL_TYPE_FLOAT16))
-        throw std::runtime_error("JPEG XL: unsupported data type");
+        throw std::runtime_error("Unsupported data type");
 
     int                         w = 0, h = 0, n = 0;
     std::unique_ptr<uint8_t[]>  pixels_u8;
@@ -874,7 +875,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     format.num_channels = n;
 
     if (!pixels || w <= 0 || h <= 0)
-        throw std::runtime_error("JPEG XL: empty image or invalid image dimensions");
+        throw std::runtime_error("Empty image or invalid image dimensions");
 
     info.xsize                 = w;
     info.ysize                 = h;
@@ -963,7 +964,7 @@ void save_jxl_image(const Image &img, std::ostream &os, std::string_view filenam
     size_t out_size = next_out - outbuf.data();
     os.write(reinterpret_cast<char *>(outbuf.data()), out_size);
 
-    spdlog::info("Saved JPEG XL image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
+    spdlog::info("Saved image to '{}' in {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
 static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, JXL_TYPE_UINT16};
