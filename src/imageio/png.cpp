@@ -273,9 +273,9 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
-        spdlog::info("Found gamma chunk: {:.4f}", gamma);
         tf.type  = TransferFunction::Gamma;
-        tf.gamma = float(gamma);
+        tf.gamma = float(1.0 / gamma);
+        spdlog::info("Found gamma chunk: {:.4f}", 1.0 / gamma);
     }
 
     std::optional<Chromaticities> chr;

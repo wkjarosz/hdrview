@@ -172,7 +172,7 @@ struct TransferFunction
     };
 
     Type_ type  = Unspecified;
-    float gamma = 2.2f; // Gamma always refer sto the exponent of the to_linear transform, only used if type ==
+    float gamma = 2.2f; // Gamma always refers to the exponent of the to_linear transform, only used if type ==
                         // TransferFunction::Gamma
 
     TransferFunction(Type_ t, float g = 2.2f) : type(t), gamma(g) {}
