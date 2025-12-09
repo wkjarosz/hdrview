@@ -286,6 +286,9 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     if (icc_data && icc_data->data && icc_data->data_sz > 0)
     {
         spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
+        // HACK: for the same file the icc size reported by libuhdr is 14 bytes larger than what libjpeg reports and is
+        // able to successfully load. Skipping it seems to extract an ICC profile that we can load. I assume this is
+        // some additional header
         image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
                                reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
         image->metadata["transfer function"] = icc::icc_description(image->icc_data);

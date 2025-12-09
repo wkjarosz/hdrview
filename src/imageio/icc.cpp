@@ -312,26 +312,46 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
 
     auto flags = (((size.z == 4 || size.z == 2) && !is_cmyk) ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC |
                  cmsFLAGS_NOCACHE;
-    if (auto xform =
-            icc::Transform{cmsCreateTransform(profile_in.get(), format_in, profile_out.get(), format_out,
-                                              is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC, flags)})
+    // Validate that a transform can be created with these parameters. We do not reuse
+    // this transform across threads because LCMS transforms are not guaranteed
+    // to be safe for concurrent use. Instead we create a transform per worker.
+    const auto intent = is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC;
+    if (!icc::Transform{cmsCreateTransform(profile_in.get(), format_in, profile_out.get(), format_out, intent, flags)})
     {
-        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                     [xf = xform.get(), pixels, size, is_cmyk](int start, int end, int, int)
-                     {
-                         auto data_p = pixels + start * size.z;
-                         cmsDoTransform(xf, data_p, data_p, (end - start));
-                         if (is_cmyk)
-                             for (int i = start; i < end; ++i) pixels[i * size.z + 3] = 1.f;
-                     });
-        if (tf_description)
-            *tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
-
-        return true;
+        spdlog::error("Could not create ICC color transform.");
+        return false;
     }
 
-    spdlog::error("Could not create ICC color transform.");
-    return false;
+    if (tf_description)
+        *tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
+
+    // Capture raw profile handles and transform parameters and create a transform
+    // inside each parallel worker so that no LCMS transform object is used from
+    // multiple threads concurrently.
+    parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                 [in_profile = profile_in.get(), out_profile = profile_out.get(), format_in, format_out, flags, intent,
+                  pixels, size, is_cmyk](int start, int end, int, int thread_index)
+                 {
+                     // One transform per OS thread: use thread-local storage so multiple
+                     // blocks executed by the same thread reuse the same transform.
+                     thread_local icc::Transform local_xf{
+                         cmsCreateTransform(in_profile, format_in, out_profile, format_out, intent, flags)};
+                     if (!local_xf)
+                     {
+                         thread_local bool logged = false;
+                         if (!logged)
+                             spdlog::error("Thread {} failed to create ICC transform.", thread_index);
+                         return;
+                     }
+
+                     auto data_p = pixels + start * size.z;
+                     cmsDoTransform(local_xf.get(), data_p, data_p, (end - start));
+
+                     if (is_cmyk)
+                         for (int i = start; i < end; ++i) pixels[i * size.z + 3] = 1.f;
+                 });
+
+    return true;
 }
 
 } // namespace icc

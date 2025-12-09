@@ -8,6 +8,7 @@
 #include "app.h"
 #include "colorspace.h"
 #include "exif.h"
+#include "fmt/ranges.h"
 #include "icc.h"
 #include "image.h"
 #include <algorithm>
@@ -152,6 +153,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
     {
         jpeg_save_markers(&cinfo, JPEG_APP0 + 1, 0xFFFF); // EXIF, XMP
         jpeg_save_markers(&cinfo, JPEG_APP0 + 2, 0xFFFF); // ICC, ISO
+        jpeg_save_markers(&cinfo, JPEG_COM, 0xFFFF);      // comment marker
 
         if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
             throw std::invalid_argument{"Failed to read JPEG header."};
@@ -221,7 +223,7 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                                                                            : "Unknown (RGB or CMYK)"},
                                                             {"type", "uint8"}};
 
-        // EXIF and XMP extraction (APP1 marker)
+        // APP1 (EXIF and XMP) and comment extraction
         for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next)
         {
             static constexpr char   exif_hdr[]  = "Exif\0";
@@ -252,6 +254,30 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                 image->metadata["header"]["XMP"] = {
                     {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
                 spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+            }
+            else if (marker->marker == JPEG_COM)
+            {
+                std::string_view data((const char *)marker->data, marker->data_length);
+                // Additional string metadata can be stored in JPEG files as
+                // comment markers in the form "key:value" or "ident:key:value".
+                spdlog::warn("JPEG comment marker: {}", data);
+
+                if (auto parts = split(data, ":"); parts.size() >= 2)
+                {
+                    std::string combined = "";
+                    for (size_t i = 0; i < parts.size() - 1; ++i)
+                    {
+                        if (i > 0)
+                            combined += ":";
+                        combined += std::string(parts[i]);
+                    }
+                    image->metadata["header"][combined] = {
+                        {"value", parts.back()}, {"string", parts.back()}, {"type", "string"}};
+                }
+                else
+                    // If we made it this far, treat the comment as a description
+                    image->metadata["header"]["ImageDescription"] = {
+                        {"value", data}, {"string", data}, {"type", "string"}};
             }
         }
 
