@@ -256,7 +256,6 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     //
 
     std::vector<uint8_t> icc_profile;
-    bool                 has_icc_profile  = false;
     png_charp            icc_name         = nullptr;
     int                  compression_type = 0;
     png_bytep            icc_ptr          = nullptr;
@@ -265,7 +264,6 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     if (png_get_iCCP(png_ptr, info_ptr.get(), &icc_name, &compression_type, &icc_ptr, &icc_len))
     {
         icc_profile.assign(icc_ptr, icc_ptr + icc_len);
-        has_icc_profile = true;
         spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
     }
 
@@ -362,6 +360,14 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             {
                 if (auto j = decode_exif_text(text_ptr[t].text, text_ptr[t].text_length); !j.empty())
                     metadata["exif"] = j;
+            }
+            else if (string(text_ptr[t].key) == string("XML:com.adobe.xmp"))
+            {
+                spdlog::info("Found XMP chunk in text data: {}", text_ptr[t].text);
+                metadata["header"]["XMP"] = {{"value", text_ptr[t].text},
+                                             {"string", text_ptr[t].text},
+                                             {"type", "string"},
+                                             {"description", "XMP metadata"}};
             }
             else
             {
@@ -530,9 +536,11 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
                                       ? dequantize_narrow(reinterpret_cast<const uint16_t *>(imagedata.data())[i])
                                       : dequantize_narrow(reinterpret_cast<const uint8_t *>(imagedata.data())[i]);
         // ICC profile linearization
+        if (!icc_profile.empty())
+            image->icc_data = icc_profile;
         if (opts.tf_override.type == TransferFunction::Unspecified)
         {
-            if (has_icc_profile && !has_cICP)
+            if (!icc_profile.empty() && !has_cICP)
             {
                 Chromaticities chr;
                 if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))

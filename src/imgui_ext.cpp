@@ -642,20 +642,15 @@ void Checkbox(const Action &a)
     }
 }
 
-void Tooltip(const char *description, bool questionMark /*= false*/, float timerThreshold /*= 0.5f*/,
-             float wrap /*=-1.f*/)
+void Tooltip(const char *description, bool questionMark /*= false*/, float wrap /*=-1.f*/)
 {
-    ImGuiContext *GImGui = ImGui::GetCurrentContext();
-
-    bool passTimer = GImGui->HoveredIdTimer >= timerThreshold && GImGui->ActiveIdTimer == 0.0f;
     if (questionMark)
     {
         ImGui::SameLine();
         ImGui::TextDisabled(ICON_MY_ABOUT);
-        passTimer = true;
     }
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && passTimer)
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | (questionMark ? 0 : ImGuiHoveredFlags_DelayNormal)))
     {
         ImGui::BeginTooltip();
         ImGui::PushTextWrapPos(wrap < 0.f ? HelloImGui::EmSize(35.f) : wrap);
@@ -732,12 +727,10 @@ bool PE::Entry(const std::string &property_name, const std::function<bool()> &co
     ImGui::TextAligned2(0.f, -FLT_MIN, property_name.c_str());
     // ImGui::TextUnformatted(property_name.c_str());
     if (!tooltip.empty())
-        Tooltip(tooltip.c_str(), false, 0);
+        Tooltip(tooltip.c_str());
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
     bool result = content_fct();
-    if (!tooltip.empty())
-        Tooltip(tooltip.c_str());
     ImGui::PopID();
     return result; // returning if the widget changed
 }
@@ -780,18 +773,41 @@ void PE::WrappedText(const string &property_name, const string &value, const str
         [&]
         {
             ImGui::PushFont(font, ImGui::GetStyle().FontSizeBase);
+            // Child 3: manual-resize
+            // ImGui::SeparatorText("Manual-resize");
+            {
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+                ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 1),
+                                                    ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * 10));
+                if (ImGui::BeginChild("ResizableChild", ImVec2(-FLT_MIN, 0.f), ImGuiChildFlags_AutoResizeY))
+                {
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x +
+                                           std::max(HelloImGui::EmSize(8.f), wrap_em <= 0.f
+                                                                                 ? ImGui::GetContentRegionAvail().x
+                                                                                 : HelloImGui::EmSize(wrap_em)));
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::TextUnformatted(value);
+                    Tooltip("Click to copy to clipboard.");
+                    if (ImGui::IsItemClicked())
+                        ImGui::SetClipboardText(value.c_str());
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-            ImGui::PushTextWrapPos(ImGui::GetCursorPos().x +
-                                   std::max(HelloImGui::EmSize(8.f), wrap_em <= 0.f ? ImGui::GetContentRegionAvail().x
-                                                                                    : HelloImGui::EmSize(wrap_em)));
+                    ImGui::PopTextWrapPos();
+                }
+                ImGui::PopStyleColor();
+                ImGui::EndChild();
 
-            ImGui::TextUnformatted(value);
-            if (ImGui::IsItemClicked())
-                ImGui::SetClipboardText(value.c_str());
-            if (ImGui::IsItemHovered())
-                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                // ImGui::SetNextWindowSizeConstraints(
+                //     ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 1),
+                //     ImVec2(FLT_MAX, ImGui::GetTextLineHeightWithSpacing() * max_height_in_lines));
+                // if (ImGui::BeginChild("ConstrainedChild", ImVec2(-FLT_MIN, 0.0f),
+                //                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY))
+                //     for (int n = 0; n < draw_lines; n++) ImGui::Text("Line %04d", n);
+                // ImGui::EndChild();
+            }
 
-            ImGui::PopTextWrapPos();
+            // ImGui::TextUnformatted(value);
             ImGui::PopFont();
             return false; // no change
         },

@@ -240,8 +240,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
     // Multi-threaded parallel runner.
     auto runner = JxlResizableParallelRunnerMake(nullptr);
     auto dec    = JxlDecoderMake(nullptr);
-    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING |
-                                                                    JXL_DEC_FULL_IMAGE | JXL_DEC_FRAME))
+    if (JXL_DEC_SUCCESS !=
+        JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING | JXL_DEC_FULL_IMAGE |
+                                                 JXL_DEC_FRAME | JXL_DEC_BOX | JXL_DEC_BOX_COMPLETE))
         throw invalid_argument{"JxlDecoderSubscribeEvents failed"};
 
     if (JXL_DEC_SUCCESS != JxlDecoderSetParallelRunner(dec.get(), JxlResizableParallelRunner, runner.get()))
@@ -259,15 +260,85 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
         JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size()))
         throw invalid_argument{"Failed to set input for decoder."};
 
+    JxlDecoderCloseInput(dec.get());
+
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
 
+    std::vector<uint8_t> exif_buffer;
+    std::vector<uint8_t> xmp_buffer;
     while (true)
     {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
 
         if (status == JXL_DEC_ERROR)
             throw invalid_argument{"Decoder error"};
+        else if (status == JXL_DEC_BOX)
+        {
+            JxlBoxType type = {};
+            if (JXL_DEC_SUCCESS != JxlDecoderGetBoxType(dec.get(), type, JXL_TRUE))
+                throw invalid_argument{"Failed to get box type."};
+            auto stype = string{type, type + sizeof(type)};
+            spdlog::debug("Box type: '{}'", string{type, type + sizeof(type)});
+
+            if (stype != "Exif" && stype != "xml ")
+                continue;
+
+            // read in entire box with a growing buffer
+            //
+            // we don't know the size of the box yet, so we need to allocate a buffer that can grow
+            // Start with 1 KiB and double by a factor of 2 until we have enough space.
+            vector<uint8_t> tmp_buffer(1024);
+            size_t          prev_size  = tmp_buffer.size();
+            size_t          output_pos = 0;
+
+            if (JXL_DEC_SUCCESS != JxlDecoderSetBoxBuffer(dec.get(), tmp_buffer.data(), tmp_buffer.size()))
+                throw invalid_argument{"Failed to set initial box buffer."};
+
+            while ((status = JxlDecoderProcessInput(dec.get())) == JXL_DEC_BOX_NEED_MORE_OUTPUT)
+            {
+                size_t remaining = JxlDecoderReleaseBoxBuffer(dec.get());
+                spdlog::info("Doubling box buffer size from {} to {} bytes; remaining: {}; output_pos: {}",
+                             tmp_buffer.size(), tmp_buffer.size() * 2, remaining, output_pos);
+                output_pos += prev_size - remaining;
+                tmp_buffer.resize(tmp_buffer.size() * 2);
+                prev_size = tmp_buffer.size() - output_pos;
+                JxlDecoderSetBoxBuffer(dec.get(), tmp_buffer.data() + output_pos, prev_size);
+            }
+
+            if (status != JXL_DEC_BOX_COMPLETE)
+                throw invalid_argument{"Failed to process box."};
+
+            tmp_buffer.resize(tmp_buffer.size() - JxlDecoderReleaseBoxBuffer(dec.get()));
+
+            if (stype == "Exif")
+            {
+                try
+                {
+                    if (tmp_buffer.size() < 4)
+                        throw invalid_argument{"Invalid EXIF data: box size is smaller than 4 bytes."};
+
+                    uint32_t offset = *(uint32_t *)tmp_buffer.data();
+                    if (is_little_endian())
+                        offset = swap_bytes(offset);
+
+                    if (offset + 4 > tmp_buffer.size())
+                        throw invalid_argument{"Invalid EXIF data: offset is larger than box size."};
+
+                    spdlog::debug("EXIF data offset: {}", offset);
+                    exif_buffer.assign(tmp_buffer.data() + 4 + offset, tmp_buffer.data() + tmp_buffer.size());
+                }
+                catch (const invalid_argument &e)
+                {
+                    spdlog::warn("Failed to parse exif data: {}", e.what());
+                }
+            }
+            else if (stype == "xml ")
+            {
+                xmp_buffer = tmp_buffer;
+                spdlog::info("XMP data size: {}", xmp_buffer.size());
+            }
+        }
         else if (status == JXL_DEC_NEED_MORE_INPUT)
             throw invalid_argument{"Decoder error, already provided all input"};
         else if (status == JXL_DEC_BASIC_INFO)
@@ -568,6 +639,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 spdlog::info("Swapped alpha channel in interleaved array with black channel data.");
             }
 
+            if (!icc_profile.empty())
+                image->icc_data = icc_profile;
+
             if (opts.tf_override.type == TransferFunction::Unspecified)
             {
                 if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
@@ -701,99 +775,34 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             throw invalid_argument{"Unknown decoder status"};
     }
 
-    // Attempt to get metadata in a separate pass. The reason we perform a separate pass is that box decoding
-    // appears to interfere with regular image decoding behavior.
-    JxlDecoderRewind(dec.get());
-    if (JXL_DEC_SUCCESS !=
-        JxlDecoderSetInput(dec.get(), reinterpret_cast<const uint8_t *>(raw_data.data()), raw_data.size()))
-    {
-        spdlog::warn("Failed to set input for second decoder pass.");
-        return images;
-    }
-
-    if (JXL_DEC_SUCCESS != JxlDecoderSubscribeEvents(dec.get(), JXL_DEC_BOX))
-    {
-        spdlog::warn("Failed to subscribe to box events.");
-        return images;
-    }
-
-    JxlDecoderStatus status = JXL_DEC_SUCCESS;
-    while (true)
-    {
-        status = JxlDecoderProcessInput(dec.get());
-        if (status != JXL_DEC_BOX)
-            break;
-
-        JxlBoxType type = {};
-        if (JXL_DEC_SUCCESS != JxlDecoderGetBoxType(dec.get(), type, JXL_TRUE))
-            throw invalid_argument{"Failed to get box type."};
-
-        spdlog::debug("Box type: {}", string{type, type + sizeof(type)});
-        if (string{type, type + sizeof(type)} == "Exif")
+    spdlog::debug("Saving EXIF and XMP metadata to image");
+    if (!exif_buffer.empty())
+        try
         {
-            spdlog::info("Got exif box.");
-            //
-            // "Exif": a box with EXIF metadata. Starts with a 4-byte tiff header offset (big-endian uint32) that
-            // indicates the start of the actual EXIF data (which starts with a tiff header). Usually the offset
-            // will be zero and the EXIF data starts immediately after the offset field.
-            //
-            // see
-            // https://libjxl.readthedocs.io/en/latest/api_decoder.html#_CPPv420JxlDecoderGetBoxTypeP10JxlDecoder10JxlBoxType8JXL_BOOL
-            //
+            auto j = exif_to_json(exif_buffer);
+            spdlog::debug("JPEG-XL: EXIF metadata successfully parsed: {}", j.dump(2));
 
-            spdlog::debug("Found EXIF metadata. Attempting to load...");
-
-            // we don't know the size of the box yet, so we need to allocate a buffer that can grow
-            // Start with 1 KiB and double by a factor of 2 until we have enough space.
-            vector<uint8_t> exif_data(1024);
-            if (JXL_DEC_SUCCESS != JxlDecoderSetBoxBuffer(dec.get(), exif_data.data(), exif_data.size()))
-                throw invalid_argument{"Failed to set initial box buffer."};
-
-            while ((status = JxlDecoderProcessInput(dec.get())) == JXL_DEC_BOX_NEED_MORE_OUTPUT)
+            // assign exif metadata to all images
+            for (auto &&image : images)
             {
-                spdlog::debug("Doubling box buffer size from {} to {} bytes.", exif_data.size(), exif_data.size() * 2);
-                if (JXL_DEC_SUCCESS != JxlDecoderReleaseBoxBuffer(dec.get()))
-                    throw invalid_argument{"Failed to release box buffer for resize."};
-
-                exif_data.resize(exif_data.size() * 2);
-                if (JXL_DEC_SUCCESS != JxlDecoderSetBoxBuffer(dec.get(), exif_data.data(), exif_data.size()))
-                    throw invalid_argument{"Failed to set resized box buffer."};
+                image->metadata["exif"] = j;
+                image->exif_data        = exif_buffer;
             }
-
-            if (status != JXL_DEC_SUCCESS && status != JXL_DEC_BOX)
-                throw invalid_argument{"Failed to process box."};
-
-            try
-            {
-                if (exif_data.size() < 4)
-                    throw invalid_argument{"Invalid EXIF data: box size is smaller than 4 bytes."};
-
-                uint32_t offset = *(uint32_t *)exif_data.data();
-                if (is_little_endian())
-                    offset = swap_bytes(offset);
-
-                if (offset + 4 > exif_data.size())
-                    throw invalid_argument{"Invalid EXIF data: offset is larger than box size."};
-
-                spdlog::debug("EXIF data offset: {}", offset);
-
-                try
-                {
-                    auto j = exif_to_json(exif_data.data() + 4 + offset, exif_data.size() - 4 - offset);
-                    image->metadata["exif"] = j;
-                    spdlog::debug("JPEG-XL: EXIF metadata successfully parsed: {}", j.dump(2));
-
-                    for (auto &&image : images) image->metadata["exif"] = j;
-                }
-                catch (const std::exception &e)
-                {
-                    spdlog::warn("JPEG-XL: Exception while parsing EXIF chunk: {}", e.what());
-                }
-            }
-            catch (const invalid_argument &e)
-            {
-                spdlog::warn("Failed to parse exif data: {}", e.what());
-            }
+        }
+        catch (const std::exception &e)
+        {
+            spdlog::warn("JPEG-XL: Exception while parsing EXIF chunk: {}", e.what());
+        }
+    if (!xmp_buffer.empty())
+    {
+        auto xmp = string(xmp_buffer.data(), xmp_buffer.data() + xmp_buffer.size());
+        spdlog::debug("XMP: {}", xmp);
+        // assign xmp metadata to all images
+        for (auto &&image : images)
+        {
+            image->xmp_data                  = xmp_buffer;
+            image->metadata["header"]["XMP"] = {
+                {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
         }
     }
 

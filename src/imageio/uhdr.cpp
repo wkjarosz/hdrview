@@ -213,14 +213,25 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
 
         try
         {
-            auto j                  = exif_to_json(reinterpret_cast<uint8_t *>(exif_data->data), exif_data->data_sz);
+            image->exif_data.assign(reinterpret_cast<uint8_t *>(exif_data->data),
+                                    reinterpret_cast<uint8_t *>(exif_data->data) + exif_data->data_sz);
+            auto j                  = exif_to_json(image->exif_data);
             image->metadata["exif"] = j;
             spdlog::debug("EXIF metadata successfully parsed: {}", j.dump(2));
         }
         catch (const std::exception &e)
         {
             spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+            image->exif_data.clear();
         }
+    }
+
+    const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
+    if (icc_data && icc_data->data && icc_data->data_sz > 0)
+    {
+        spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
+        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data),
+                               reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
     }
 
     {

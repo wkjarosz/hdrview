@@ -209,9 +209,9 @@ static auto chroma_name(heif_chroma ch)
     }
 }
 
-static json get_exif(const heif_image_handle *ihandle)
+static std::vector<uint8_t> get_exif(const heif_image_handle *ihandle)
 {
-    json result;
+    std::vector<uint8_t> result;
     if (!ihandle)
         return result;
 
@@ -232,12 +232,9 @@ static json get_exif(const heif_image_handle *ihandle)
         }
         try
         {
-            std::vector<uint8_t> exif_data(data_size);
-            throw_on_error(heif_image_handle_get_metadata(ihandle, block_ID, exif_data.data()),
+            result.resize(data_size);
+            throw_on_error(heif_image_handle_get_metadata(ihandle, block_ID, result.data()),
                            "Failed to get EXIF metadata block");
-            // EXIF data block includes 4-byte length prefix that we need to skip
-            result = exif_to_json(exif_data.data() + 4, exif_data.size() - 4);
-            spdlog::debug("EXIF metadata successfully parsed: {}", result.dump(2));
             return result;
         }
         catch (const std::exception &e)
@@ -323,13 +320,15 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     }
 
     // first try the image level, then the handle level
-    std::vector<uint8_t> &icc_profile = image_level_icc_profile;
     if (!image_level_icc_profile.empty())
+    {
+        image->icc_data = image_level_icc_profile;
         image->metadata["header"]["ICC color profile"] =
             json{{"value", 2}, {"string", "present at image level"}, {"type", "enum"}};
+    }
     else if (!handle_level_icc_profile.empty())
     {
-        icc_profile = handle_level_icc_profile;
+        image->icc_data = handle_level_icc_profile;
         image->metadata["header"]["ICC color profile"] =
             json{{"value", 1}, {"string", "present at handle level"}, {"type", "enum"}};
     }
@@ -377,7 +376,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
             Chromaticities chr;
             // for SDR profiles, try to transform the interleaved data using the icc profile.
             // Then try the nclx profile
-            if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, icc_profile,
+            if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, image->icc_data,
                                                      &tf_description, &chr)) ||
                 linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &chr))
             {
@@ -610,7 +609,22 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     {"value", int(preferred_chroma)},
                     {"string", fmt::format("{} ({})", chroma_name(preferred_chroma), int(preferred_chroma))},
                     {"type", "int"}};
-                image->metadata["exif"] = get_exif(ihandle.get());
+
+                // EXIF data block includes 4-byte length prefix that we need to skip
+                if (auto exif_data = get_exif(ihandle.get()); exif_data.size() > 4)
+                {
+                    try
+                    {
+                        image->exif_data.assign(exif_data.data() + 4, exif_data.data() + exif_data.size());
+                        image->metadata["exif"] = exif_to_json(image->exif_data);
+                        spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
+                    }
+                    catch (const std::exception &e)
+                    {
+                        spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                        image->exif_data.clear();
+                    }
+                }
 
                 images.emplace_back(image);
             }

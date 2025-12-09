@@ -14,35 +14,34 @@ static json exif_data_to_json(ExifData *ed);
 
 json exif_to_json(const uint8_t *data_ptr, size_t data_size)
 {
-    // 1) Prepare data buffer and prepend FOURCC if missing
-    vector<uint8_t> data;
-    if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
-    {
-        data.reserve(data_size + FOURCC.size());
-        data.insert(data.end(), FOURCC.begin(), FOURCC.end());
-        data.insert(data.end(), data_ptr, data_ptr + data_size);
-    }
-    else
-        data.assign(data_ptr, data_ptr + data_size);
-
-    ExifData *exif_data = nullptr;
-    ExifLog  *exif_log  = nullptr;
-    json      result;
+    json result;
 
     try
     {
+        // 1) Prepare data buffer and prepend FOURCC if missing
+        vector<uint8_t> data;
+        if (data_size < FOURCC.size() || memcmp(data_ptr, FOURCC.data(), FOURCC.size()) != 0)
+        {
+            data.reserve(data_size + FOURCC.size());
+            data.insert(data.end(), FOURCC.begin(), FOURCC.end());
+            data.insert(data.end(), data_ptr, data_ptr + data_size);
+        }
+        else
+            data.assign(data_ptr, data_ptr + data_size);
+
         // 2) Create ExifData and ExifLog with custom log function
         bool error = false;
-        exif_data  = exif_data_new();
+
+        std::unique_ptr<ExifData, decltype(&exif_data_unref)> exif_data(exif_data_new(), &exif_data_unref);
         if (!exif_data)
             throw std::invalid_argument("Failed to allocate ExifData.");
 
-        exif_log = exif_log_new();
+        std::unique_ptr<ExifLog, decltype(&exif_log_unref)> exif_log(exif_log_new(), &exif_log_unref);
         if (!exif_log)
             throw std::invalid_argument("Failed to allocate ExifLog.");
 
         exif_log_set_func(
-            exif_log,
+            exif_log.get(),
             [](ExifLog *log, ExifLogCode kind, const char *domain, const char *format, va_list args, void *user_data)
             {
                 bool *error = static_cast<bool *>(user_data);
@@ -62,24 +61,19 @@ json exif_to_json(const uint8_t *data_ptr, size_t data_size)
             },
             &error);
 
-        exif_data_log(exif_data, exif_log);
+        exif_data_log(exif_data.get(), exif_log.get());
 
         // 3) Load the EXIF data from memory buffer
-        exif_data_load_data(exif_data, data.data(), data.size());
+        exif_data_load_data(exif_data.get(), data.data(), data.size());
 
         if (!exif_data || error)
             throw std::invalid_argument{"Failed to decode EXIF data."};
 
         // 4) Convert to JSON
-        result = exif_data_to_json(exif_data);
+        result = exif_data_to_json(exif_data.get());
     }
     catch (const std::exception &e)
     {
-        // 5) Clean up
-        if (exif_log)
-            exif_log_unref(exif_log);
-        if (exif_data)
-            exif_data_unref(exif_data);
         throw e;
     }
 
@@ -306,6 +300,17 @@ json exif_data_to_json(ExifData *ed)
             string tag_name = exif_tag_get_title_in_ifd(entry->tag, static_cast<ExifIfd>(ifd_idx));
             if (tag_name.empty())
                 tag_name = "UnknownTag_" + std::to_string(entry->tag);
+
+            // if (entry->tag == EXIF_TAG_XML_PACKET)
+            // {
+            //     // Special handling for XMP data
+            //     string xmp_data(reinterpret_cast<char *>(entry->data), entry->size);
+            //     ifd_json["XMP"] = {{"value", xmp_data},
+            //                        {"string", xmp_data},
+            //                        {"type", "string"},
+            //                        {"description", "XMP metadata packet"}};
+            //     continue;
+            // }
 
             ifd_json[tag_name] = entry_to_json(entry, exif_data_get_byte_order(ed));
 

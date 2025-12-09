@@ -8,5 +8,7 @@
 
 #include "common.h"
 #include "json.h"
+#include <cstdint>
 
-json exif_to_json(const uint8_t *data_ptr, size_t data_size);
+json        exif_to_json(const uint8_t *data_ptr, size_t data_size);
+inline json exif_to_json(const std::vector<uint8_t> &data) { return exif_to_json(data.data(), data.size()); }

@@ -403,6 +403,24 @@ void Image::draw_info()
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
             filtered_property("Straight alpha", fmt::format("{}", file_has_straight_alpha));
+            if (!exif_data.empty())
+            {
+                auto hs = human_readable_size(exif_data.size());
+                filtered_property("EXIF data", fmt::format("{} {}", hs.first, hs.second),
+                                  "Size of the EXIF metadata block embedded in the image file.");
+            }
+            if (!xmp_data.empty())
+            {
+                auto hs = human_readable_size(xmp_data.size());
+                filtered_property("XMP data", fmt::format("{} {}", hs.first, hs.second),
+                                  "Size of the XMP metadata block embedded in the image file.");
+            }
+            if (!icc_data.empty())
+            {
+                auto hs = human_readable_size(icc_data.size());
+                filtered_property("ICC data", fmt::format("{} {}", hs.first, hs.second),
+                                  "Size of the ICC profile embedded in the image file.");
+            }
             ImGui::Unindent(HelloImGui::EmSize(0.5f));
         }
 

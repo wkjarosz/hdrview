@@ -170,7 +170,7 @@ void PushRowColors(bool is_current, bool is_reference, bool reference_mod = fals
 void TextAlignedV2(float align_x, float size_x, const char *fmt, va_list args);
 void TextAligned2(float align_x, float size_x, const char *fmt, ...);
 
-void Tooltip(const char *description, bool questionMark = false, float timerThreshold = 0.5f, float wrap_width = -1.f);
+void Tooltip(const char *description, bool questionMark = false, float wrap_width = -1.f);
 
 // draw a horizontal line under the last item, raised by a factor of the current font size
 // (e.g. raise=0.5 would strikethrough the previous text)

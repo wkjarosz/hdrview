@@ -10,6 +10,7 @@
 #include "exif.h"
 #include "icc.h"
 #include "image.h"
+#include <algorithm>
 #include <fmt/core.h>
 #include <iostream>
 #include <stdexcept>
@@ -155,31 +156,6 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK)
             throw std::invalid_argument{"Failed to read JPEG header."};
 
-        // ICC profile extraction
-        std::vector<uint8_t> icc_profile;
-        {
-            unsigned char *icc_data = nullptr;
-            unsigned int   icc_len  = 0;
-            if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len))
-            {
-                spdlog::warn("Read in ICC profile from JPEG.");
-                icc_profile.assign(icc_data, icc_data + icc_len);
-                free(icc_data);
-            }
-        }
-
-        // EXIF extraction (APP1 marker)
-        std::vector<uint8_t> exif_data;
-        for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next)
-        {
-            if (marker->marker == JPEG_APP0 + 1 && marker->data_length > 6 &&
-                std::memcmp(marker->data, "Exif\0\0", 6) == 0)
-            {
-                exif_data.assign(marker->data + 6, marker->data + marker->data_length);
-                break;
-            }
-        }
-
         jpeg_start_decompress(&cinfo);
         int3 size{(int)cinfo.output_width, (int)cinfo.output_height, (int)cinfo.output_components};
         auto image                     = make_shared<Image>(size.xy(), size.z);
@@ -246,16 +222,49 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
                                                                            : "Unknown (RGB or CMYK)"},
                                                             {"type", "uint8"}};
 
-        if (!exif_data.empty())
+        // EXIF and XMP extraction (APP1 marker)
+        for (jpeg_saved_marker_ptr marker = cinfo.marker_list; marker; marker = marker->next)
         {
-            try
+            static constexpr char   exif_hdr[]  = "Exif\0";
+            static constexpr size_t exif_hdr_sz = std::size(exif_hdr);
+            static constexpr char   xmp_hdr[]   = "http://ns.adobe.com/xap/1.0/";
+            static constexpr size_t xmp_hdr_sz  = std::size(xmp_hdr);
+
+            if (marker->marker == JPEG_APP0 + 1 && marker->data_length > exif_hdr_sz &&
+                std::equal(marker->data, marker->data + exif_hdr_sz, exif_hdr))
             {
-                image->metadata["exif"] = exif_to_json(exif_data.data(), exif_data.size());
-                spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
+                try
+                {
+                    image->exif_data.assign(marker->data + exif_hdr_sz, marker->data + marker->data_length);
+                    image->metadata["exif"] = exif_to_json(image->exif_data);
+                    spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
+                }
+                catch (const std::exception &e)
+                {
+                    spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                    image->exif_data.clear();
+                }
             }
-            catch (const std::exception &e)
+            else if (marker->marker == JPEG_APP0 + 1 && marker->data_length > xmp_hdr_sz &&
+                     std::equal(marker->data, marker->data + xmp_hdr_sz, xmp_hdr))
             {
-                spdlog::warn("Exception while parsing EXIF chunk: {}", e.what());
+                image->xmp_data.assign(marker->data + xmp_hdr_sz, marker->data + marker->data_length);
+                auto xmp = string(image->xmp_data.data(), image->xmp_data.data() + image->xmp_data.size());
+                image->metadata["header"]["XMP"] = {
+                    {"value", xmp}, {"string", xmp}, {"type", "string"}, {"documentation", "XMP metadata"}};
+                spdlog::debug("XMP metadata successfully parsed: {}", xmp);
+            }
+        }
+
+        // ICC profile extraction
+        {
+            unsigned char *icc_data = nullptr;
+            unsigned int   icc_len  = 0;
+            if (jpeg_read_icc_profile(&cinfo, &icc_data, &icc_len))
+            {
+                spdlog::debug("Read in ICC profile from JPEG.");
+                image->icc_data.assign(icc_data, icc_data + icc_len);
+                free(icc_data);
             }
         }
 
@@ -276,10 +285,10 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         {
             string tf_desc = transfer_function_name(TransferFunction::Unspecified);
             // ICC profile linearization
-            if (!icc_profile.empty())
+            if (!image->icc_data.empty())
             {
                 Chromaticities chr;
-                if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
+                if (icc::linearize_colors(float_pixels.data(), size, image->icc_data, &tf_desc, &chr))
                 {
                     spdlog::info("Linearizing colors using ICC profile.");
                     image->chromaticities = chr;
