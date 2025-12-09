@@ -430,30 +430,21 @@ void Image::draw_info()
     auto get_tooltip = [](const json &field_obj)
     {
         std::string tt;
-        bool        print_value = false;
         if (field_obj.contains("description") && field_obj["description"].is_string())
             tt += field_obj["description"].get<std::string>() + "\n\n";
 
         if (field_obj.contains("type") && field_obj["type"].is_string())
         {
             auto t = field_obj["type"].get<std::string>();
-            if (t == "byte" || t == "short" || t == "long" || t == "sbyte" || t == "sshort" || t == "slong" ||
-                t == "float" || t == "double" || t == "rational" || t == "srational" || t == "int" || t == "uint")
-                print_value = true;
             tt += std::string("type: ") + field_obj["type"].get<std::string>() + "\n";
         }
 
-        if (print_value && field_obj.contains("value"))
+        if (field_obj.contains("value"))
         {
             const auto &v = field_obj["value"];
-            if ((!v.is_array() || (v.is_array() && v.size() > 0 && v.size() <= 5 && v[0].is_number())) &&
-                !v.is_object())
-            {
-                if (v.is_string())
-                    tt += std::string("value: ") + v.get<std::string>();
-                else
-                    tt += std::string("value: ") + v.dump();
-            }
+            if (!v.is_object() && !v.is_string() &&
+                (!v.is_array() || (v.is_array() && v.size() > 0 && v.size() <= 5 && v[0].is_number())))
+                tt += std::string("value: ") + v.dump();
         }
         return tt;
     };

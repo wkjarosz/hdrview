@@ -23,6 +23,16 @@ namespace icc
 bool is_cmyk(const std::vector<uint8_t> &icc_profile);
 
 /*!
+    \brief Returns the description of the ICC profile.
+
+    \param icc_profile
+        A byte array containing the ICC profile to describe.
+    \returns
+        The description of the ICC profile, or an empty string if the profile could not be opened.
+*/
+std::string icc_description(const std::vector<uint8_t> &icc_profile);
+
+/*!
     \brief Linearize a (potentially interleaved) array of floating-point pixel values using the transfer function of the
     provided ICC profile.
 

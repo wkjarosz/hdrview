@@ -973,7 +973,8 @@ static int s_data_types[] = {JXL_TYPE_FLOAT, JXL_TYPE_FLOAT16, JXL_TYPE_UINT8, J
 
 JXLSaveOptions *jxl_parameters_gui()
 {
-    if (ImGui::PE::Begin("JPEG-XL Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("JPEG-XL Save Options",
+                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);

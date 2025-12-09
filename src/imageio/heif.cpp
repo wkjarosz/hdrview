@@ -905,7 +905,8 @@ HEIFSaveOptions *heif_parameters_gui()
 {
     init_heif_supported_formats();
 
-    if (ImGui::PE::Begin("HEIF/AVIF Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("HEIF/AVIF Save Options",
+                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);

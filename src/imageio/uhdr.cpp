@@ -20,6 +20,7 @@
 #include <stdexcept>
 
 #include "fonts.h"
+#include "icc.h"
 #include "imgui_ext.h"
 
 using namespace std;
@@ -32,6 +33,7 @@ struct UHDRSaveOptions
     bool  use_multi_channel = false;
     int   gainmap_scale     = 1;
     float gainmap_gamma     = 1.f;
+    int   preset            = 1;
 };
 
 static UHDRSaveOptions s_opts;
@@ -206,6 +208,60 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     image->alpha_type         = AlphaType_Straight;
     image->metadata["loader"] = "libuhdr";
 
+    if (auto md = uhdr_dec_get_gainmap_metadata(decoder.get()))
+    {
+        spdlog::debug("Found gainmap metadata: hdr_capacity_min={} hdr_capacity_max={} use_base_cg={}",
+                      md->hdr_capacity_min, md->hdr_capacity_max, md->use_base_cg);
+
+        // Add gainmap metadata to header
+        image->metadata["header"]["HDR capacity min"] = {
+            {"value", md->hdr_capacity_min},
+            {"string", std::to_string(md->hdr_capacity_min)},
+            {"type", "float"},
+            {"description", "Minimum display boost value for which the map is applied completely."}};
+        image->metadata["header"]["HDR capacity max"] = {
+            {"value", md->hdr_capacity_max},
+            {"string", std::to_string(md->hdr_capacity_max)},
+            {"type", "float"},
+            {"description", "Maximum display boost value for which the map is applied completely."}};
+        image->metadata["header"]["Use base cg"] = {
+            {"value", md->use_base_cg},
+            {"string", md->use_base_cg ? "true" : "false"},
+            {"type", "bool"},
+            {"description", "Is gainmap application space same as base image color space"}};
+
+        // Arrays: max_content_boost, min_content_boost, gamma, offset_sdr, offset_hdr
+        image->metadata["header"]["Max content boost"] = {
+            {"value", std::vector<float>(md->max_content_boost, md->max_content_boost + 3)},
+            {"string",
+             fmt::format("[{}, {}, {}]", md->max_content_boost[0], md->max_content_boost[1], md->max_content_boost[2])},
+            {"type", "float3"},
+            {"description", "Value to control how much brighter an image can get, when shown on an HDR display, "
+                            "relative to the SDR rendition. This is constant for a given image."}};
+
+        image->metadata["header"]["Min content boost"] = {
+            {"value", std::vector<float>(md->min_content_boost, md->min_content_boost + 3)},
+            {"string",
+             fmt::format("[{}, {}, {}]", md->min_content_boost[0], md->min_content_boost[1], md->min_content_boost[2])},
+            {"type", "float3"},
+            {"description", "Value to control how much darker an image can get, when shown on an HDR display, relative "
+                            "to the SDR rendition. This is constant for a given image."}};
+        image->metadata["header"]["Gainmap gamma"] = {
+            {"value", std::vector<float>(md->gamma, md->gamma + 3)},
+            {"string", fmt::format("[{}, {}, {}]", md->gamma[0], md->gamma[1], md->gamma[2])},
+            {"type", "float3"}};
+        image->metadata["header"]["offset SDR"] = {
+            {"value", std::vector<float>(md->offset_sdr, md->offset_sdr + 3)},
+            {"string", fmt::format("[{}, {}, {}]", md->offset_sdr[0], md->offset_sdr[1], md->offset_sdr[2])},
+            {"type", "float3"},
+            {"description", "The offset applies to the SDR pixel values during gainmap generation and application."}};
+        image->metadata["header"]["offset HDR"] = {
+            {"value", std::vector<float>(md->offset_hdr, md->offset_hdr + 3)},
+            {"string", fmt::format("[{}, {}, {}]", md->offset_hdr[0], md->offset_hdr[1], md->offset_hdr[2])},
+            {"type", "float3"},
+            {"description", "The offset applies to the HDR pixel values during gainmap generation and application."}};
+    }
+
     const uhdr_mem_block_t *exif_data = uhdr_dec_get_exif(decoder.get());
     if (exif_data && exif_data->data && exif_data->data_sz > 0)
     {
@@ -230,8 +286,9 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     if (icc_data && icc_data->data && icc_data->data_sz > 0)
     {
         spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
-        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data),
+        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
                                reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
+        image->metadata["transfer function"] = icc::icc_description(image->icc_data);
     }
 
     {
@@ -324,16 +381,18 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     return {image};
 }
 
-void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, float base_quality,
-                     float gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor,
-                     float gainmap_gamma)
+// throws on error
+void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *opts)
 {
+    if (opts == nullptr)
+        throw std::invalid_argument("UHDRSaveOptions pointer is null");
+
     Timer timer;
 
     // get interleaved HDR pixel data
     int                     w = 0, h = 0, n = 0;
     std::unique_ptr<half[]> pixels_f16 =
-        img.as_interleaved<half>(&w, &h, &n, gain, TransferFunction::Linear, false, true, true);
+        img.as_interleaved<half>(&w, &h, &n, opts->gain, TransferFunction::Linear, false, true, true);
     void *pixels = pixels_f16.get();
 
     if (n != 3 && n != 4)
@@ -380,11 +439,11 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     };
 
     throw_if_error(uhdr_enc_set_raw_image(encoder.get(), &raw_image, UHDR_HDR_IMG));
-    throw_if_error(uhdr_enc_set_quality(encoder.get(), (int)base_quality, UHDR_BASE_IMG));
-    throw_if_error(uhdr_enc_set_quality(encoder.get(), (int)gainmap_quality, UHDR_GAIN_MAP_IMG));
-    throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), use_multi_channel_gainmap));
-    throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), gainmap_scale_factor));
-    throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), gainmap_gamma));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->quality, UHDR_BASE_IMG));
+    throw_if_error(uhdr_enc_set_quality(encoder.get(), opts->gainmap_quality, UHDR_GAIN_MAP_IMG));
+    throw_if_error(uhdr_enc_set_using_multi_channel_gainmap(encoder.get(), opts->use_multi_channel));
+    throw_if_error(uhdr_enc_set_gainmap_scale_factor(encoder.get(), opts->gainmap_scale));
+    throw_if_error(uhdr_enc_set_gainmap_gamma(encoder.get(), opts->gainmap_gamma));
     throw_if_error(uhdr_enc_set_preset(encoder.get(), UHDR_USAGE_BEST_QUALITY));
 
     throw_if_error(uhdr_encode(encoder.get()));
@@ -395,9 +454,20 @@ void save_uhdr_image(const Image &img, ostream &os, const string_view filename, 
     spdlog::info("Writing UltraHDR image to \"{}\" took: {} seconds.", filename, (timer.elapsed() / 1000.f));
 }
 
+void save_uhdr_image(const Image &img, ostream &os, const string_view filename, float gain, int base_quality,
+                     int gainmap_quality, bool use_multi_channel_gainmap, int gainmap_scale_factor, float gainmap_gamma)
+{
+    UHDRSaveOptions opts = {
+        gain, base_quality, gainmap_quality, use_multi_channel_gainmap, gainmap_scale_factor, gainmap_gamma,
+    };
+
+    save_uhdr_image(img, os, filename, &opts);
+}
+
 UHDRSaveOptions *uhdr_parameters_gui()
 {
-    if (ImGui::PE::Begin("UltraHDR Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("UltraHDR Save Options",
+                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
@@ -421,8 +491,12 @@ UHDRSaveOptions *uhdr_parameters_gui()
             "Multiply the pixels by this value before saving.");
 
         // Base quality
-        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100);
-        ImGui::Tooltip("The quality factor to be used while encoding SDR intent.\n[0-100]");
+        ImGui::PE::SliderInt("Quality", &s_opts.quality, 1, 100, "%d", 0,
+                             "The quality factor to be used while encoding SDR intent.\n[0-100]");
+
+        ImGui::PE::Combo("Preset", &s_opts.preset, "Realtime\0Best quality\0", 2,
+                         "Choose encoding preset.\n\nRealtime: tune encoder settings for performance.\nBest quality: "
+                         "tune encoder settings for quality.");
 
         if (ImGui::PE::TreeNode("Gain map", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_DrawLinesFull |
                                                 ImGuiTreeNodeFlags_SpanFullWidth))
@@ -450,16 +524,6 @@ UHDRSaveOptions *uhdr_parameters_gui()
         s_opts = UHDRSaveOptions{};
 
     return &s_opts;
-}
-
-// throws on error
-void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, const UHDRSaveOptions *params)
-{
-    if (params == nullptr)
-        throw std::invalid_argument("UHDRSaveOptions pointer is null");
-
-    save_uhdr_image(img, os, filename, params->gain, params->quality, params->gainmap_quality,
-                    params->use_multi_channel, params->gainmap_scale, params->gainmap_gamma);
 }
 
 #endif

@@ -522,7 +522,7 @@ void Channel::update_stats(int c, ConstImagePtr img1, ConstImagePtr img2)
          ref             = img2 ? &img2->channels[img2->groups[img2->reference_group].channels[c]] : nullptr,
          ref_data_origin = img2 ? img2->data_window.min : int2{}]()
     {
-        spdlog::info("id: {}", img1->id);
+        spdlog::debug("id: {}", img1->id);
         // First cancel the potential previous async task
         if (async_canceled)
         {

@@ -410,7 +410,8 @@ void save_jpg_image(const Image &img, std::ostream &os, std::string_view filenam
 
 JPGSaveOptions *jpg_parameters_gui()
 {
-    if (ImGui::PE::Begin("libJPEG Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("libJPEG Save Options",
+                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);

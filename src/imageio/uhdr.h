@@ -20,7 +20,7 @@ bool uhdr_supported_tf(TransferFunction tf) noexcept;
 std::vector<ImagePtr> load_uhdr_image(std::istream &is, std::string_view filename);
 // throws on error
 void save_uhdr_image(const Image &img, std::ostream &os, std::string_view filename, float gain = 1.f,
-                     float base_quality = 95.f, float gainmap_quality = 95.f, bool use_multi_channel_gainmap = false,
+                     int base_quality = 95, int gainmap_quality = 95, bool use_multi_channel_gainmap = false,
                      int gainmap_scale_factor = 1, float gainmap_gamma = 1.f);
 
 struct UHDRSaveOptions;

@@ -287,7 +287,8 @@ EXRSaveOptions *exr_parameters_gui(const ImagePtr &img)
         for (int i = 0; i < (int)img->groups.size(); ++i) group_selection.SetItemSelected(i, true);
     }
 
-    if (ImGui::PE::Begin("OpenEXR Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("OpenEXR Save Options",
+                         ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);

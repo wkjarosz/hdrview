@@ -58,6 +58,19 @@ Profile create_linear_RGB_profile(const cmsCIExyY &whitepoint, const cmsCIExyYTR
     return Profile{cmsCreateRGBProfile(&whitepoint, &primaries, linear_curves)};
 }
 
+Profile create_linear_Gray_profile(const cmsCIExyY &whitepoint)
+{
+    // Create linear transfer curves
+    ToneCurve linear_curve(cmsBuildGamma(nullptr, 1.0));
+    if (!linear_curve)
+    {
+        spdlog::error("Failed to create linear tone curve.");
+        return nullptr;
+    }
+
+    return Profile{cmsCreateGrayProfile(&whitepoint, linear_curve.get())};
+}
+
 Profile create_linear_sRGB_profile()
 {
     static const cmsCIExyY       D65            = {0.3127, 0.3290, 1.0};
@@ -199,6 +212,22 @@ bool is_cmyk(const vector<uint8_t> &icc_profile)
     return (color_space == cmsSigCmykData);
 }
 
+string icc_description(const vector<uint8_t> &icc_profile)
+{
+    if (icc_profile.empty())
+    {
+        spdlog::error("Empty ICC profile.");
+        return "";
+    }
+
+    if (auto profile_in = icc::open_profile_from_mem(icc_profile))
+        return icc::profile_description(profile_in);
+
+    spdlog::error("Could not open ICC profile from memory.");
+
+    return "";
+}
+
 bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
                       Chromaticities *c)
 {
@@ -211,6 +240,10 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
         spdlog::error("Could not open ICC profile from memory.");
         return false;
     }
+
+    auto desc = icc::profile_description(profile_in);
+
+    spdlog::debug("ICC profile description: {}", desc);
 
     // Detect profile color space
     cmsColorSpaceSignature color_space = cmsGetColorSpace(profile_in.get());
@@ -256,13 +289,8 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     // Extract chromaticities/whitepoint for RGB, or set defaults for CMYK
     cmsCIExyY       whitepoint = {0.3127, 0.3290, 1.0};
     cmsCIExyYTRIPLE primaries  = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    if (is_rgb)
-    {
-        if (!extract_chromaticities(profile_in, &primaries, &whitepoint))
-        {
-            spdlog::warn("Could not extract chromaticities from ICC profile, using sRGB defaults");
-        }
-    }
+    if (is_rgb && !extract_chromaticities(profile_in, &primaries, &whitepoint))
+        spdlog::warn("Could not extract chromaticities from ICC profile, using sRGB defaults");
 
     if (c)
     {
@@ -273,7 +301,8 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
     }
 
     // Create a linear output profile matching the input color space
-    icc::Profile profile_out = icc::create_linear_RGB_profile(whitepoint, primaries);
+    icc::Profile profile_out =
+        is_gray ? icc::create_linear_Gray_profile(whitepoint) : icc::create_linear_RGB_profile(whitepoint, primaries);
 
     if (!profile_out)
     {
@@ -287,7 +316,6 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
             icc::Transform{cmsCreateTransform(profile_in.get(), format_in, profile_out.get(), format_out,
                                               is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC, flags)})
     {
-        auto desc = icc::profile_description(profile_in);
         parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
                      [xf = xform.get(), pixels, size, is_cmyk](int start, int end, int, int)
                      {

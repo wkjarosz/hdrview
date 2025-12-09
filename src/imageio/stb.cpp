@@ -390,7 +390,7 @@ STBSaveOptions *stb_parameters_gui(bool is_hdr, bool has_quality)
 {
     auto &opts = is_hdr ? s_hdr_opts : s_opts;
 
-    if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("STB Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);

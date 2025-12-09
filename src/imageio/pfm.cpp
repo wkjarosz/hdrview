@@ -222,7 +222,7 @@ void save_pfm_image(const Image &img, ostream &os, string_view filename, const P
 // GUI parameter function
 PFMSaveOptions *pfm_parameters_gui()
 {
-    if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable))
+    if (ImGui::PE::Begin("PFM Save Options", ImGuiTableFlags_Resizable | ImGuiTableFlags_NoBordersInBodyUntilResize))
     {
         ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_None);
         ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthStretch);
