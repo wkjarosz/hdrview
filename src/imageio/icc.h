@@ -120,7 +120,7 @@ public:
             True if the pixel values were successfully linearized.
     */
     bool linearize_pixels(float *pixels, int3 size, bool keep_primaries = true, std::string *tf_description = nullptr,
-                          Chromaticities *c = nullptr) const;
+                          Chromaticities *c = nullptr, AdaptationMethod CAT_method = AdaptationMethod_Bradford) const;
 
     /**
        \brief Transform an array of floating-point pixels between two ICC profiles in-place.
@@ -151,4 +151,39 @@ private:
     //! Internal constructor from raw profile pointer.
     ICCProfile(void *profile) : m_profile{profile} {}
     void *m_profile = nullptr;
+};
+
+// A lightweight wrapper for color profiles described using CICP integers
+// (colour_primaries, transfer_characteristics, matrix_coeffs). This class
+// provides utility functions analogous to `ICCProfile` but for CICP-encoded
+// profiles and uses the helpers in `colorspace.h`.
+class CICPProfile
+{
+public:
+    CICPProfile(int colour_primaries = 1, int transfer_characteristics = 13, int matrix_coeffs = 0) :
+        m_colour_primaries(colour_primaries), m_transfer_characteristics(transfer_characteristics),
+        m_matrix_coeffs(matrix_coeffs)
+    {
+    }
+
+    int colour_primaries() const { return m_colour_primaries; }
+    int transfer_characteristics() const { return m_transfer_characteristics; }
+    int matrix_coeffs() const { return m_matrix_coeffs; }
+
+    // Linearize a pixel buffer encoded with this CICP profile. If `keep_primaries`
+    // is false, the pixels will also be converted to Rec.709/sRGB primaries.
+    bool linearize_pixels(float *pixels, int3 size, bool keep_primaries = true, std::string *tf_description = nullptr,
+                          Chromaticities *c = nullptr, AdaptationMethod CAT_method = AdaptationMethod_Bradford) const;
+
+    // Transform pixel buffer in-place from one CICP profile to another. This
+    // performs inverse transfer of `profile_in`, optional primary conversion,
+    // and forward transfer of `profile_out`.
+    static bool transform_pixels(float *pixels, int3 size, const CICPProfile &profile_in,
+                                 const CICPProfile &profile_out,
+                                 AdaptationMethod   CAT_method = AdaptationMethod_Bradford);
+
+private:
+    int m_colour_primaries;
+    int m_transfer_characteristics;
+    int m_matrix_coeffs;
 };

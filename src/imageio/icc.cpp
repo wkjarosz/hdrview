@@ -281,7 +281,10 @@ ICCProfile ICCProfile::linearized_profile(Chromaticities *c) const
     if (c)
         *c = chr;
 
-    return is_Gray() ? ICCProfile::linear_Gray(chr.white) : ICCProfile::linear_RGB(chr);
+    if (is_Gray())
+        return ICCProfile::linear_Gray(chr.white);
+    else
+        return ICCProfile::linear_RGB(chr);
 }
 
 bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out)
@@ -351,7 +354,7 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 }
 
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
-                                  Chromaticities *c) const
+                                  Chromaticities *c, AdaptationMethod CAT_method) const
 {
     ICCProfile profile_out = nullptr;
     if (keep_primaries)
@@ -418,3 +421,136 @@ bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep
 }
 
 #endif // HDRVIEW_ENABLE_LCMS2
+
+// --- CICPProfile implementation -------------------------------------------------
+
+// Linearize CICP-encoded pixels in-place. Uses colorspace helpers for transfer
+// functions and chromaticity conversions.
+bool CICPProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, std::string *tf_description,
+                                   Chromaticities *c, AdaptationMethod CAT_method) const
+{
+    // Determine transfer function and chromaticities
+    auto tf = transfer_function_from_CICP(m_transfer_characteristics);
+
+    if (tf_description)
+        *tf_description = transfer_function_name(tf);
+
+    // Apply inverse transfer (encode -> linear)
+    to_linear(pixels, size, tf);
+
+    // Provide chromaticities if requested
+    Chromaticities src_chroma;
+    try
+    {
+        src_chroma = chromaticities_from_cicp(m_colour_primaries);
+        if (c)
+            *c = src_chroma;
+    }
+    catch (...)
+    { /* leave src_chroma default if unknown */
+    }
+
+    if (!keep_primaries)
+    {
+        // Convert to Rec.709/sRGB primaries
+        if (size.z >= 3)
+        {
+            float3x3 M;
+            auto     dst_chroma = gamut_chromaticities(ColorGamut_sRGB_BT709);
+            if (color_conversion_matrix(M, src_chroma, dst_chroma, CAT_method))
+            {
+                // apply matrix M to all pixels (parallel)
+                parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                             [M, pixels, size](int start, int end, int, int)
+                             {
+                                 for (int i = start; i < end; ++i)
+                                 {
+                                     float *p = pixels + i * size.z;
+                                     float  r = p[0], g = p[1], b = p[2];
+                                     float  nr = M[0][0] * r + M[0][1] * g + M[0][2] * b;
+                                     float  ng = M[1][0] * r + M[1][1] * g + M[1][2] * b;
+                                     float  nb = M[2][0] * r + M[2][1] * g + M[2][2] * b;
+                                     p[0]      = nr;
+                                     p[1]      = ng;
+                                     p[2]      = nb;
+                                 }
+                             });
+            }
+        }
+    }
+
+    return true;
+}
+
+// Transform pixels from one CICP profile to another in-place.
+bool CICPProfile::transform_pixels(float *pixels, int3 size, const CICPProfile &profile_in,
+                                   const CICPProfile &profile_out, AdaptationMethod CAT_method)
+{
+    if (!pixels)
+        return false;
+
+    auto tf_in  = transfer_function_from_CICP(profile_in.transfer_characteristics());
+    auto tf_out = transfer_function_from_CICP(profile_out.transfer_characteristics());
+
+    // Handle grayscale (1 channel) separately
+    if (size.z < 3)
+    {
+        // inverse transfer of input -> linear
+        to_linear(pixels, size, tf_in);
+        // forward transfer of output
+        from_linear(pixels, size, tf_out);
+        return true;
+    }
+
+    // RGB path
+
+    // inverse transfer
+    to_linear(pixels, size, tf_in);
+
+    // primary conversion if needed
+    Chromaticities src_chroma, dst_chroma;
+    bool           have_src = true, have_dst = true;
+    try
+    {
+        src_chroma = chromaticities_from_cicp(profile_in.colour_primaries());
+    }
+    catch (...)
+    {
+        have_src = false;
+    }
+    try
+    {
+        dst_chroma = chromaticities_from_cicp(profile_out.colour_primaries());
+    }
+    catch (...)
+    {
+        have_dst = false;
+    }
+
+    if (have_src && have_dst)
+    {
+        float3x3 M;
+        if (color_conversion_matrix(M, src_chroma, dst_chroma, CAT_method))
+        {
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [M, pixels, size](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i)
+                             {
+                                 float *p = pixels + i * size.z;
+                                 float  r = p[0], g = p[1], b = p[2];
+                                 float  nr = M[0][0] * r + M[0][1] * g + M[0][2] * b;
+                                 float  ng = M[1][0] * r + M[1][1] * g + M[1][2] * b;
+                                 float  nb = M[2][0] * r + M[2][1] * g + M[2][2] * b;
+                                 p[0]      = nr;
+                                 p[1]      = ng;
+                                 p[2]      = nb;
+                             }
+                         });
+        }
+    }
+
+    // forward transfer of output
+    from_linear(pixels, size, tf_out);
+    return true;
+}
