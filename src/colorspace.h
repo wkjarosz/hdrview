@@ -192,8 +192,8 @@ struct TransferFunction
 };
 
 std::string      transfer_function_name(TransferFunction tf);
-TransferFunction transfer_function_from_cicp(int cicp);
-int              transfer_function_to_cicp(TransferFunction tf);
+TransferFunction transfer_function_from_CICP(int cicp);
+int              transfer_function_to_CICP(TransferFunction tf);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_

@@ -251,6 +251,30 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     json metadata = json::object();
 
+    // Read PLTE palette chunk if present and expose it in metadata
+    png_colorp palette     = nullptr;
+    int        num_palette = 0;
+    if (png_get_PLTE(png_ptr, info_ptr.get(), &palette, &num_palette) && palette && num_palette > 0)
+    {
+        spdlog::info("Found PLTE chunk with {} entries", num_palette);
+        json pal = json::array();
+        for (int i = 0; i < num_palette; ++i)
+        {
+            pal.push_back({{"r", palette[i].red}, {"g", palette[i].green}, {"b", palette[i].blue}});
+        }
+        metadata["header"]["PLTE"] = {{"value", pal},
+                                      {"string", fmt::format("Present ({} entries)", num_palette)},
+                                      {"type", "array"},
+                                      {"description", "PNG PLTE chunk specifies the palette for index-color files."}};
+    }
+    else
+    {
+        metadata["header"]["PLTE"] = {{"value", "<not present>"},
+                                      {"string", "<not present>"},
+                                      {"type", "array"},
+                                      {"description", "PNG PLTE chunk specifies the palette for index-color files."}};
+    }
+
     //
     // Read color chunks in reverse priority order
     //
@@ -261,38 +285,88 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     png_bytep            icc_ptr          = nullptr;
     png_uint_32          icc_len          = 0;
 
+#ifdef PNG_iCCP_SUPPORTED
     if (png_get_iCCP(png_ptr, info_ptr.get(), &icc_name, &compression_type, &icc_ptr, &icc_len))
     {
         icc_profile.assign(icc_ptr, icc_ptr + icc_len);
         spdlog::info("Found ICC profile: {} ({} bytes)", icc_name, icc_len);
+        metadata["header"]["iCCP"] = {{"value", icc_name},
+                                      {"string", icc_name},
+                                      {"type", "string"},
+                                      {"description", "PNG iCCP chunk specifies the ICC profile"}};
+    }
+    else
+#endif
+    {
+        metadata["header"]["iCCP"] = {{"value", "<not present>"},
+                                      {"string", "<not present>"},
+                                      {"type", "string"},
+                                      {"description", "PNG iCCP chunk specifies the ICC profile"}};
     }
 
     double           gamma       = 2.2; // default gamma
     int              srgb_intent = 0;
     TransferFunction tf          = TransferFunction::Unspecified; // default
-
+#ifdef PNG_gAMA_SUPPORTED
     if (png_get_gAMA(png_ptr, info_ptr.get(), &gamma))
     {
-        tf.type  = TransferFunction::Gamma;
-        tf.gamma = float(1.0 / gamma);
+        tf.type                    = TransferFunction::Gamma;
+        tf.gamma                   = float(1.0 / gamma);
+        metadata["header"]["gAMA"] = {{"value", 1.0 / gamma},
+                                      {"string", fmt::format("{:.4f} ({:.4f})", 1.0 / gamma, gamma)},
+                                      {"type", "float"},
+                                      {"description", "PNG gAMA chunk specifies the image gamma"}};
         spdlog::info("Found gamma chunk: {:.4f}", 1.0 / gamma);
+    }
+    else
+#endif
+    {
+        metadata["header"]["gAMA"] = {{"value", std::numeric_limits<float>::quiet_NaN()},
+                                      {"string", "<not present>"},
+                                      {"type", "float"},
+                                      {"description", "PNG gAMA chunk specifies the image gamma"}};
     }
 
     std::optional<Chromaticities> chr;
 
     // Read chromaticities if present
+#ifdef PNG_cHRM_SUPPORTED
     double wx, wy, rx, ry, gx, gy, bx, by;
     if (png_get_cHRM(png_ptr, info_ptr.get(), &wx, &wy, &rx, &ry, &gx, &gy, &bx, &by))
     {
         spdlog::info("Found chromaticities chunk: R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})",
                      rx, ry, gx, gy, bx, by, wx, wy);
-        *chr = Chromaticities{float2(rx, ry), float2(gx, gy), float2(bx, by), float2(wx, wy)};
+        *chr                       = Chromaticities{float2(rx, ry), float2(gx, gy), float2(bx, by), float2(wx, wy)};
+        metadata["header"]["cHRM"] = {
+            {"value", {rx, ry, gx, gy, bx, by, wx, wy}},
+            {"string", fmt::format("R({:.4f},{:.4f}) G({:.4f},{:.4f}) B({:.4f},{:.4f}) W({:.4f},{:.4f})", rx, ry, gx,
+                                   gy, bx, by, wx, wy)},
+            {"type", "chromaticities"},
+            {"description", "PNG cHRM chunk specifies the chromaticities of the image"}};
+    }
+    else
+#endif
+    {
+        metadata["header"]["cHRM"] = {{"value", "<not present>"},
+                                      {"string", "<not present>"},
+                                      {"type", "chromaticities"},
+                                      {"description", "PNG cHRM chunk specifies the chromaticities of the image"}};
     }
 
+#ifdef PNG_sRGB_SUPPORTED
     if (png_get_sRGB(png_ptr, info_ptr.get(), &srgb_intent))
     {
         spdlog::info("Found sRGB chunk. sRGB intent: {}", srgb_intent);
         tf = TransferFunction::sRGB;
+    }
+    else
+#endif
+    {
+        metadata["header"]["sRGB"] = {
+            {"value", "<not present>"},
+            {"string", "<not present>"},
+            {"type", "chromaticities"},
+            {"description", "PNG sRGB chunk specifies that the image is in sRGB color space"}};
     }
 
     bool     has_cICP              = false;
@@ -300,8 +374,11 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
     png_byte color_primaries;
     png_byte transfer_function;
     png_byte matrix_coefficients;
+    string   iccp_desc =
+        "Coding-independent code points (CICP) is a way to signal the color properties of the image via four "
+        "properties: color primaries (CP), transfer function (TF), matrix coefficients (MC), and full-range vs. "
+        "narrow-range flag (FR).";
 #ifdef PNG_cICP_SUPPORTED
-
     if (png_get_cICP(png_ptr, info_ptr.get(), &color_primaries, &transfer_function, &matrix_coefficients,
                      &video_full_range_flag))
     {
@@ -324,22 +401,23 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             spdlog::warn("Unknown cICP color primaries: {}", int(color_primaries));
         }
 
-        tf = transfer_function_from_cicp(transfer_function);
+        tf = transfer_function_from_CICP(transfer_function);
         if (tf.type == TransferFunction::Unspecified)
             spdlog::warn("cICP transfer function ({}) is not recognized, assuming sRGB", transfer_function);
 
-        metadata["header"]["CICP video full range"] = {{"value", video_full_range_flag != 0},
-                                                       {"string", video_full_range_flag ? "true" : "false"},
-                                                       {"type", "bool"}};
-        metadata["header"]["CICP triple"]           = {
-            {"value", {color_primaries, transfer_function, matrix_coefficients}},
-            {"string", fmt::format("CP={}, TF={}, MC={}", color_primaries, transfer_function, matrix_coefficients)},
+        metadata["header"]["cICP"] = {
+            {"value", {color_primaries, transfer_function, matrix_coefficients, video_full_range_flag}},
+            {"string", fmt::format("CP={}, TF={}, MC={}, FR={}", color_primaries, transfer_function,
+                                   matrix_coefficients, video_full_range_flag)},
             {"type", "array"},
-            {"description",
-                       "Coding-independent code points (CICP) is a way to signal the color properties of the image via three "
-                                 "numbers: color primaries (CP), transfer function (TF), and matrix coefficients (MC)."}};
+            {"description", iccp_desc}};
     }
+    else
 #endif
+    {
+        metadata["header"]["cICP"] = {
+            {"value", "<not present>"}, {"string", "<not present>"}, {"type", "array"}, {"description", iccp_desc}};
+    }
 
     string tf_desc = transfer_function_name(tf);
 
@@ -403,11 +481,11 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
             {"type", "int"}};
 
-        // b                                      = png_get_compression_type(png_ptr, info_ptr.get());
-        // metadata["header"]["compression type"] = {
-        //     {"value", b},
-        //     {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
-        //     {"type", "int"}};
+        b                                      = png_get_compression_type(png_ptr, info_ptr.get());
+        metadata["header"]["compression type"] = {
+            {"value", b},
+            {"string", fmt::format("{} ({})", b == 0 ? "Default" : "Intrapixel Differencing", b)},
+            {"type", "int"}};
 
         b                                    = png_get_interlace_type(png_ptr, info_ptr.get());
         metadata["header"]["interlace type"] = {
@@ -455,7 +533,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 
     metadata["loader"] = "libpng";
     if (color_type == PNG_COLOR_TYPE_PALETTE)
-        metadata["pixel format"] = fmt::format("{}-bit indexed color", file_bit_depth);
+        metadata["pixel format"] = fmt::format("{}-bit indexed ({} colors)", file_bit_depth, num_palette);
     else
         metadata["pixel format"] = fmt::format("{}-bit ({} bpc)", channels * file_bit_depth, file_bit_depth);
 
@@ -466,9 +544,23 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
 #endif
 
     if (animation)
+    {
         spdlog::info("Detected APNG with {} frames, {} plays", num_frames, num_plays);
+        metadata["header"]["animation"] = {
+            {"value", {num_frames, num_plays}},
+            {"string", fmt::format("{} frames, {} plays", num_frames, num_plays)},
+            {"type", "array"},
+            {"description", "PNG acTL chunk specifies that the image is an animated PNG"}};
+    }
     else
+    {
         num_frames = 1, num_plays = 0;
+        metadata["header"]["animation"] = {
+            {"value", {num_frames, num_plays}},
+            {"string", "Not an animation"},
+            {"type", "array"},
+            {"description", "PNG acTL chunk specifies that the image is an animated PNG"}};
+    }
 
     ImGuiTextFilter filter{opts.channel_selector.c_str()};
     filter.Build();
@@ -543,7 +635,8 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             if (!icc_profile.empty() && !has_cICP)
             {
                 Chromaticities chr;
-                if (icc::linearize_colors(float_pixels.data(), size, icc_profile, &tf_desc, &chr))
+                if (ICCProfile(icc_profile)
+                        .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &tf_desc, &chr))
                 {
                     spdlog::info("Linearizing colors using ICC profile.");
                     image->chromaticities = chr;
@@ -561,7 +654,7 @@ vector<ImagePtr> load_png_image(istream &is, string_view filename, const ImageLo
             try
             {
                 // some cICP transfer functions always correspond to certain primaries, try to deduce that
-                image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+                image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
             }
             catch (...)
             {
@@ -672,7 +765,7 @@ void save_png_image(const Image &img, ostream &os, string_view filename, float g
 #ifdef PNG_cICP_SUPPORTED
     // if cicp_primaries are unrecognized (< 0), we already converted values to sRGB/BT.709
     png_byte color_primaries     = cicp_primaries < 0 ? 1 : cicp_primaries; // e.g. 1 for BT.709, 9 for BT.2020
-    png_byte transfer_function   = transfer_function_to_cicp(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
+    png_byte transfer_function   = transfer_function_to_CICP(tf); // e.g. 13 for sRGB/BT.709, 8 for linear, 16 for PQ
     png_byte matrix_coefficients = 0;                             // e.g. 0 for RGB
     png_byte video_full_range    = 1;                             // 1 for full range, 0 for limited
 

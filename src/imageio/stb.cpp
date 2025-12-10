@@ -226,7 +226,7 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
             try
             {
                 // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+                image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
             }
             catch (...)
             {

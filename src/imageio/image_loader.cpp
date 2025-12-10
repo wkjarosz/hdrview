@@ -688,6 +688,15 @@ const ImageLoadOptions &load_image_options_gui()
         ImGui::SliderFloat("Gamma", &s_opts.tf_override.gamma, 0.1f, 5.f);
     ImGui::EndDisabled();
 
+    ImGui::Checkbox("Keep file's primaries and only linearize on load", &s_opts.keep_primaries);
+    ImGui::Tooltip(
+        "By default, HDRView converts all pixel values to the working linear Rec709/sRGB color space upon loading. "
+        "Enabling this option will keep the image's original color primaries and only linearize the pixel values based "
+        "on the file's transfer function on load. HDRView will extract the file's primaries and still use them to "
+        "transform colors to the working space for display, but the numerical pixel values will remain in the original "
+        "color space.\n\n"
+        "This is useful if you want to work in the image's native color space.");
+
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();

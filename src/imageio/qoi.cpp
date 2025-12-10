@@ -103,7 +103,7 @@ vector<ImagePtr> load_qoi_image(istream &is, string_view filename, const ImageLo
         try
         {
             // some CICP transfer functions always correspond to certain primaries, try to deduce that
-            image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+            image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
         }
         catch (...)
         {

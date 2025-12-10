@@ -4,6 +4,7 @@
 #include <vector>
 
 using std::string;
+using std::string_view;
 using std::vector;
 using namespace stp;
 
@@ -14,15 +15,7 @@ using namespace stp;
 // Some minimal wrappers around just the Little CMS 2 functionality we need
 //
 
-namespace icc
-{
-
 // Custom deleters for unique_ptr
-struct ProfileDeleter
-{
-    void operator()(cmsHPROFILE p) const { cmsCloseProfile(p); }
-};
-
 struct TransformDeleter
 {
     void operator()(cmsHTRANSFORM t) const { cmsDeleteTransform(t); }
@@ -34,20 +27,70 @@ struct ToneCurveDeleter
 };
 
 // Safe auto-freeing wrappers to LCMS2's opaque types
-using Profile   = std::unique_ptr<std::remove_pointer_t<cmsHPROFILE>, ProfileDeleter>;
 using Transform = std::unique_ptr<std::remove_pointer_t<cmsHTRANSFORM>, TransformDeleter>;
 using ToneCurve = std::unique_ptr<cmsToneCurve, ToneCurveDeleter>;
 
-Profile open_profile_from_mem(const std::vector<uint8_t> &icc_profile)
+class CmsErrorHandler
 {
-    return Profile{cmsOpenProfileFromMem(reinterpret_cast<const void *>(icc_profile.data()),
-                                         static_cast<cmsUInt32Number>(icc_profile.size()))};
+public:
+    CmsErrorHandler()
+    {
+        cmsSetLogErrorHandler([](cmsContext, cmsUInt32Number errorCode, const char *message)
+                              { spdlog::error("lcms error #{}: {}", errorCode, message); });
+    }
+};
+
+class CmsContext
+{
+public:
+    static const CmsContext &thread_local_instance()
+    {
+        static thread_local CmsContext c;
+        return c;
+    }
+
+    cmsContext get() const { return m_ctx; }
+
+private:
+    CmsContext()
+    {
+        static CmsErrorHandler ehandler;
+
+        m_ctx = cmsCreateContext(nullptr, nullptr);
+        if (!m_ctx)
+            throw std::runtime_error{"Failed to create LCMS context."};
+    }
+
+    ~CmsContext()
+    {
+        if (m_ctx)
+            cmsDeleteContext(m_ctx);
+    }
+
+    cmsContext m_ctx = nullptr;
+};
+
+ICCProfile::ICCProfile(const uint8_t *icc_profile, size_t icc_profile_size) :
+    m_profile(cmsOpenProfileFromMemTHR(CmsContext::thread_local_instance().get(), (const void *)icc_profile,
+                                       (cmsUInt32Number)icc_profile_size))
+{
+    // empty
 }
 
-Profile create_linear_RGB_profile(const cmsCIExyY &whitepoint, const cmsCIExyYTRIPLE &primaries)
+ICCProfile::~ICCProfile()
 {
+    if (m_profile)
+        cmsCloseProfile(static_cast<cmsHPROFILE>(m_profile));
+}
+
+ICCProfile ICCProfile::linear_RGB(const Chromaticities &chr)
+{
+    cmsCIExyY       whitepoint = {chr.white.x, chr.white.y, 1.0};
+    cmsCIExyYTRIPLE primaries  = {
+        {chr.red.x, chr.red.y, 1.0}, {chr.green.x, chr.green.y, 1.0}, {chr.blue.x, chr.blue.y, 1.0}};
+
     // Create linear transfer curves
-    ToneCurve linear_curve(cmsBuildGamma(nullptr, 1.0));
+    ToneCurve linear_curve(cmsBuildGamma(CmsContext::thread_local_instance().get(), 1.0));
     if (!linear_curve)
     {
         spdlog::error("Failed to create linear tone curve.");
@@ -55,71 +98,27 @@ Profile create_linear_RGB_profile(const cmsCIExyY &whitepoint, const cmsCIExyYTR
     }
 
     cmsToneCurve *linear_curves[3] = {linear_curve.get(), linear_curve.get(), linear_curve.get()};
-    return Profile{cmsCreateRGBProfile(&whitepoint, &primaries, linear_curves)};
+    return ICCProfile{
+        cmsCreateRGBProfileTHR(CmsContext::thread_local_instance().get(), &whitepoint, &primaries, linear_curves)};
 }
 
-Profile create_linear_Gray_profile(const cmsCIExyY &whitepoint)
+ICCProfile ICCProfile::linear_Gray(const float2 &whitepoint)
 {
+    cmsCIExyY wp = {whitepoint.x, whitepoint.y, 1.0};
     // Create linear transfer curves
-    ToneCurve linear_curve(cmsBuildGamma(nullptr, 1.0));
+    ToneCurve linear_curve(cmsBuildGamma(CmsContext::thread_local_instance().get(), 1.0));
     if (!linear_curve)
     {
         spdlog::error("Failed to create linear tone curve.");
         return nullptr;
     }
 
-    return Profile{cmsCreateGrayProfile(&whitepoint, linear_curve.get())};
+    return ICCProfile{cmsCreateGrayProfileTHR(CmsContext::thread_local_instance().get(), &wp, linear_curve.get())};
 }
 
-Profile create_linear_sRGB_profile()
-{
-    static const cmsCIExyY       D65            = {0.3127, 0.3290, 1.0};
-    static const cmsCIExyYTRIPLE sRGB_primaries = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    return create_linear_RGB_profile(D65, sRGB_primaries);
-}
-
-// Returns white point that was specified when creating the profile.
 // NOTE: we can't just use cmsSigMediaWhitePointTag because its interpretation differs between ICC versions.
-cmsCIEXYZ unadapted_white(const Profile &profile)
-{
-    // This code is adapted from the UnadaptedWhitePoint function in libjxl
-    // Copyright (c) the JPEG XL Project Authors. All rights reserved.
-    //
-    // Use of this source code is governed by a BSD-style
-    // license that can be found in the LICENSE file.
-
-    auto white_point = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(profile.get(), cmsSigMediaWhitePointTag));
-    if (white_point && !cmsReadTag(profile.get(), cmsSigChromaticAdaptationTag))
-    {
-        // No chromatic adaptation matrix: the white point is already unadapted.
-        return *white_point;
-    }
-
-    cmsCIEXYZ XYZ = {1.0, 1.0, 1.0};
-    Profile   profile_xyz{cmsCreateXYZProfile()};
-    if (!profile_xyz)
-        return XYZ;
-
-    // Array arguments are one per profile.
-    cmsHPROFILE profiles[2] = {profile.get(), profile_xyz.get()};
-    // Leave white point unchanged - that is what we're trying to extract.
-    cmsUInt32Number  intents[2]            = {INTENT_ABSOLUTE_COLORIMETRIC, INTENT_ABSOLUTE_COLORIMETRIC};
-    cmsBool          black_compensation[2] = {0, 0};
-    cmsFloat64Number adaption[2]           = {0.0, 0.0};
-    // Only transforming a single pixel, so skip expensive optimizations.
-    cmsUInt32Number flags = cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC;
-    Transform xform{cmsCreateExtendedTransform(nullptr, 2, profiles, black_compensation, intents, adaption, nullptr, 0,
-                                               TYPE_RGB_DBL, TYPE_XYZ_DBL, flags)};
-    if (!xform)
-        return XYZ;
-
-    // xy are relative, so magnitude does not matter if we ignore output Y.
-    const cmsFloat64Number in[3] = {1.0, 1.0, 1.0};
-    cmsDoTransform(xform.get(), in, &XYZ.X, 1);
-    return XYZ;
-}
-
-bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, cmsCIExyY *whitepoint)
+// The white-point extraction logic is adapted from the UnadaptedWhitePoint function in libjxl.
+bool ICCProfile::extract_chromaticities(Chromaticities *c) const
 {
     // This code is adapted from the IdentifyPrimaries function in libjxl
     // Copyright (c) the JPEG XL Project Authors. All rights reserved.
@@ -127,31 +126,54 @@ bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, 
     // Use of this source code is governed by a BSD-style
     // license that can be found in the LICENSE file.
 
+    // Read white point / chromatic adaptation tags so we can decide whether
+    // we need to build an XYZ profile + transform. We cannot rely solely on
+    // cmsSigMediaWhitePointTag because its interpretation differs between ICC
+    // versions; when a chromatic adaptation tag is present we must transform
+    // through the profile to obtain the unadapted white point.
+
     // These were adapted to the profile illuminant before storing in the profile.
-    const cmsCIEXYZ *adapted_r = nullptr, *adapted_g = nullptr, *adapted_b = nullptr;
-    adapted_r = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(profile.get(), cmsSigRedColorantTag));
-    adapted_g = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(profile.get(), cmsSigGreenColorantTag));
-    adapted_b = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(profile.get(), cmsSigBlueColorantTag));
+    const cmsCIEXYZ *adapted_r = nullptr, *adapted_g = nullptr, *adapted_b = nullptr, *white_point_tag = nullptr;
+    adapted_r                       = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(get(), cmsSigRedColorantTag));
+    adapted_g                       = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(get(), cmsSigGreenColorantTag));
+    adapted_b                       = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(get(), cmsSigBlueColorantTag));
+    white_point_tag                 = reinterpret_cast<const cmsCIEXYZ *>(cmsReadTag(get(), cmsSigMediaWhitePointTag));
+    const void *chromatic_adapt_tag = cmsReadTag(get(), cmsSigChromaticAdaptationTag);
 
     cmsCIEXYZ converted_rgb[3];
+
+    // Determine whether we need a transform: if the profile doesn't include
+    // colorant tags (so we must derive primaries by transforming) or if the
+    // white point needs to be obtained via a transform (no direct unadapted
+    // tag present), create the XYZ profile and transform once and reuse it.
+    bool need_unadapted_wp = !(white_point_tag && !chromatic_adapt_tag);
+    bool need_transform    = (!adapted_r || !adapted_g || !adapted_b) || need_unadapted_wp;
+
+    ICCProfile profile_xyz{nullptr};
+    Transform  xform;
+    if (need_transform)
+    {
+        profile_xyz = ICCProfile{cmsCreateXYZProfileTHR(CmsContext::thread_local_instance().get())};
+        if (profile_xyz.valid())
+        {
+            // Array arguments are one per profile.
+            cmsHPROFILE      profiles[2]           = {get(), profile_xyz.get()};
+            cmsUInt32Number  intents[2]            = {INTENT_ABSOLUTE_COLORIMETRIC, INTENT_ABSOLUTE_COLORIMETRIC};
+            cmsBool          black_compensation[2] = {0, 0};
+            cmsFloat64Number adaption[2]           = {0.0, 0.0};
+            // Only transforming a small number of pixels, so skip expensive optimizations.
+            cmsUInt32Number flags = cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC;
+            xform = Transform{cmsCreateExtendedTransform(CmsContext::thread_local_instance().get(), 2, profiles,
+                                                         black_compensation, intents, adaption, nullptr, 0,
+                                                         TYPE_RGB_DBL, TYPE_XYZ_DBL, flags)};
+        }
+    }
+
     if (!adapted_r || !adapted_g || !adapted_b)
     {
         // No colorant tag, determine the XYZ coordinates of the primaries by converting from the colorspace.
         // According to the LCMS2 author (https://sourceforge.net/p/lcms/mailman/message/58730697/)
         // This is the correct way to deduce the chromaticities of an ICC profile
-        Profile profile_xyz{cmsCreateXYZProfile()};
-        if (!profile_xyz)
-            return false;
-
-        // Array arguments are one per profile.
-        cmsHPROFILE      profiles[2]           = {profile.get(), profile_xyz.get()};
-        cmsUInt32Number  intents[2]            = {INTENT_ABSOLUTE_COLORIMETRIC, INTENT_ABSOLUTE_COLORIMETRIC};
-        cmsBool          black_compensation[2] = {0, 0};
-        cmsFloat64Number adaption[2]           = {0.0, 0.0};
-        // Only transforming three pixels, so skip expensive optimizations.
-        cmsUInt32Number flags = cmsFLAGS_NOOPTIMIZE | cmsFLAGS_HIGHRESPRECALC;
-        Transform xform{cmsCreateExtendedTransform(nullptr, 2, profiles, black_compensation, intents, adaption, nullptr,
-                                                   0, TYPE_RGB_DBL, TYPE_XYZ_DBL, flags)};
         if (!xform)
             return false;
 
@@ -165,7 +187,21 @@ bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, 
     // Undo the chromatic adaptation.
     auto d50 = cmsD50_XYZ();
 
-    auto wp_unadapted = unadapted_white(profile);
+    // Compute the unadapted white point. If the profile provides a MediaWhitePoint
+    // and there is no chromatic adaptation tag, use it directly. Otherwise fall
+    // back to transforming an RGB white through the profile into XYZ. If we
+    // couldn't create the transform, use a safe default of {1,1,1}.
+    cmsCIEXYZ wp_unadapted = {1.0, 1.0, 1.0};
+    if (!need_unadapted_wp)
+    {
+        // No chromatic adaptation matrix: the white point is already unadapted.
+        wp_unadapted = *white_point_tag;
+    }
+    else if (xform)
+    {
+        const cmsFloat64Number in_white[3] = {1.0, 1.0, 1.0};
+        cmsDoTransform(xform.get(), in_white, &wp_unadapted.X, 1);
+    }
 
     cmsCIEXYZ r, g, b;
     cmsAdaptToIlluminant(&r, d50, &wp_unadapted, adapted_r);
@@ -173,20 +209,32 @@ bool extract_chromaticities(const Profile &profile, cmsCIExyYTRIPLE *primaries, 
     cmsAdaptToIlluminant(&b, d50, &wp_unadapted, adapted_b);
 
     // Convert to xyY
-    if (primaries)
-    {
-        cmsXYZ2xyY(&primaries->Red, &r);
-        cmsXYZ2xyY(&primaries->Green, &g);
-        cmsXYZ2xyY(&primaries->Blue, &b);
-    }
-    if (whitepoint)
-        cmsXYZ2xyY(whitepoint, &wp_unadapted);
+    cmsCIExyYTRIPLE primaries;
+    cmsXYZ2xyY(&primaries.Red, &r);
+    cmsXYZ2xyY(&primaries.Green, &g);
+    cmsXYZ2xyY(&primaries.Blue, &b);
+    cmsCIExyY whitepoint;
+    cmsXYZ2xyY(&whitepoint, &wp_unadapted);
+
+    *c = {{(float)primaries.Red.x, (float)primaries.Red.y},
+          {(float)primaries.Green.x, (float)primaries.Green.y},
+          {(float)primaries.Blue.x, (float)primaries.Blue.y},
+          {(float)whitepoint.x, (float)whitepoint.y}};
+
     return true;
 }
+bool ICCProfile::supported() { return true; }
+int  ICCProfile::lcms_version() { return cmsGetEncodedCMMversion(); }
 
-string profile_description(const Profile &profile)
+string ICCProfile::description() const
 {
-    if (auto desc = reinterpret_cast<const cmsMLU *>(cmsReadTag(profile.get(), cmsSigProfileDescriptionTag)))
+    if (!valid())
+    {
+        spdlog::error("Could not open ICC profile from memory.");
+        return "";
+    }
+
+    if (auto desc = reinterpret_cast<const cmsMLU *>(cmsReadTag(get(), cmsSigProfileDescriptionTag)))
     {
         auto              size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
         std::vector<char> desc_str((size_t)size);
@@ -196,64 +244,63 @@ string profile_description(const Profile &profile)
     return "";
 }
 
-bool is_cmyk(const vector<uint8_t> &icc_profile)
+bool ICCProfile::is_CMYK() const
 {
-    if (icc_profile.empty())
+    if (!valid())
         return false;
 
-    auto profile = open_profile_from_mem(icc_profile);
-    if (!profile)
-    {
-        spdlog::error("Could not open ICC profile from memory.");
+    return (cmsGetColorSpace(get()) == cmsSigCmykData);
+}
+bool ICCProfile::is_RGB() const
+{
+    if (!valid())
         return false;
-    }
 
-    cmsColorSpaceSignature color_space = cmsGetColorSpace(profile.get());
-    return (color_space == cmsSigCmykData);
+    return (cmsGetColorSpace(get()) == cmsSigRgbData);
+}
+bool ICCProfile::is_Gray() const
+{
+    if (!valid())
+        return false;
+
+    return (cmsGetColorSpace(get()) == cmsSigGrayData);
 }
 
-string icc_description(const vector<uint8_t> &icc_profile)
+ICCProfile ICCProfile::linearized_profile(Chromaticities *c) const
 {
-    if (icc_profile.empty())
+    if (!valid())
+        return nullptr;
+
+    Chromaticities chr;
+    if (!extract_chromaticities(&chr))
     {
-        spdlog::error("Empty ICC profile.");
-        return "";
+        spdlog::error("Could not extract chromaticities from ICC profile.");
+        return nullptr;
     }
 
-    if (auto profile_in = icc::open_profile_from_mem(icc_profile))
-        return icc::profile_description(profile_in);
+    if (c)
+        *c = chr;
 
-    spdlog::error("Could not open ICC profile from memory.");
-
-    return "";
+    return is_Gray() ? ICCProfile::linear_Gray(chr.white) : ICCProfile::linear_RGB(chr);
 }
 
-bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
-                      Chromaticities *c)
+bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &profile_in, const ICCProfile &profile_out)
 {
-    if (icc_profile.empty())
+    if (!profile_in || !profile_out)
         return false;
-
-    auto profile_in = icc::open_profile_from_mem(icc_profile);
-    if (!profile_in)
-    {
-        spdlog::error("Could not open ICC profile from memory.");
-        return false;
-    }
-
-    auto desc = icc::profile_description(profile_in);
-
-    spdlog::debug("ICC profile description: {}", desc);
 
     // Detect profile color space
-    cmsColorSpaceSignature color_space = cmsGetColorSpace(profile_in.get());
-    bool                   is_cmyk     = (color_space == cmsSigCmykData);
-    bool                   is_cmy      = (color_space == cmsSigCmyData);
-    bool                   is_rgb      = (color_space == cmsSigRgbData);
-    bool                   is_gray     = (color_space == cmsSigGrayData);
+    bool is_cmyk = profile_in.is_CMYK() && profile_out.is_RGB();
+    bool is_rgb  = profile_in.is_RGB() && profile_out.is_RGB();
+    bool is_gray = profile_in.is_Gray() && profile_out.is_Gray();
 
-    spdlog::debug("ICC profile color space: {}\n\tCMYK: {}\n\tRGB: {}\n\tGray: {}\n\tCMY: {}", (int)color_space,
-                  is_cmyk, is_rgb, is_gray, is_cmy);
+    spdlog::debug("ICC profile color space:\n\tCMYK: {}\n\tRGB: {}\n\tGray: {}", is_cmyk, is_rgb, is_gray);
+
+    if (!is_rgb && !is_cmyk && !is_gray)
+    {
+        spdlog::error("Unsupported ICC profile color space");
+        return false;
+    }
 
     cmsUInt32Number format_in = TYPE_GRAY_FLT, format_out = TYPE_GRAY_FLT;
     if (is_rgb)
@@ -276,97 +323,98 @@ bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profi
         }
     }
 
-    if (!is_rgb && !is_cmyk && !is_gray)
-    {
-        spdlog::error("Unsupported ICC profile color space: {}", (int)color_space);
-        return false;
-    }
-
     // If CMYK, lcms expects floating-point values in the range [0, 100]
     if (is_cmyk)
         for (int i = 0; i < size.x * size.y * size.z; ++i) pixels[i] = (1.0f - pixels[i]) * 100.0f;
 
-    // Extract chromaticities/whitepoint for RGB, or set defaults for CMYK
-    cmsCIExyY       whitepoint = {0.3127, 0.3290, 1.0};
-    cmsCIExyYTRIPLE primaries  = {{0.6400, 0.3300, 1.0}, {0.3000, 0.6000, 1.0}, {0.1500, 0.0600, 1.0}};
-    if (is_rgb && !extract_chromaticities(profile_in, &primaries, &whitepoint))
-        spdlog::warn("Could not extract chromaticities from ICC profile, using sRGB defaults");
-
-    if (c)
-    {
-        c->red   = float2((float)primaries.Red.x, (float)primaries.Red.y);
-        c->green = float2((float)primaries.Green.x, (float)primaries.Green.y);
-        c->blue  = float2((float)primaries.Blue.x, (float)primaries.Blue.y);
-        c->white = float2((float)whitepoint.x, (float)whitepoint.y);
-    }
-
-    // Create a linear output profile matching the input color space
-    icc::Profile profile_out =
-        is_gray ? icc::create_linear_Gray_profile(whitepoint) : icc::create_linear_RGB_profile(whitepoint, primaries);
-
-    if (!profile_out)
-    {
-        spdlog::error("Failed to create profile.");
-        return false;
-    }
-
     auto flags = (((size.z == 4 || size.z == 2) && !is_cmyk) ? cmsFLAGS_COPY_ALPHA : 0) | cmsFLAGS_HIGHRESPRECALC |
                  cmsFLAGS_NOCACHE;
-    // Validate that a transform can be created with these parameters. We do not reuse
-    // this transform across threads because LCMS transforms are not guaranteed
-    // to be safe for concurrent use. Instead we create a transform per worker.
-    const auto intent = is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC;
-    if (!icc::Transform{cmsCreateTransform(profile_in.get(), format_in, profile_out.get(), format_out, intent, flags)})
+    if (auto xform = Transform{cmsCreateTransformTHR(
+            CmsContext::thread_local_instance().get(), profile_in.get(), format_in, profile_out.get(), format_out,
+            is_cmyk ? INTENT_PERCEPTUAL : INTENT_ABSOLUTE_COLORIMETRIC, flags)})
+
     {
-        spdlog::error("Could not create ICC color transform.");
-        return false;
+        parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                     [xf = xform.get(), pixels, size, is_cmyk](int start, int end, int, int)
+                     {
+                         auto data_p = pixels + start * size.z;
+                         cmsDoTransform(xf, data_p, data_p, (end - start));
+                         if (is_cmyk)
+                             for (int i = start; i < end; ++i) pixels[i * size.z + 3] = 1.f;
+                     });
+
+        return true;
     }
 
-    if (tf_description)
-        *tf_description = fmt::format("ICC profile{}", desc.empty() ? "" : " (" + desc + ")");
-
-    // Capture raw profile handles and transform parameters and create a transform
-    // inside each parallel worker so that no LCMS transform object is used from
-    // multiple threads concurrently.
-    parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                 [in_profile = profile_in.get(), out_profile = profile_out.get(), format_in, format_out, flags, intent,
-                  pixels, size, is_cmyk](int start, int end, int, int thread_index)
-                 {
-                     // One transform per OS thread: use thread-local storage so multiple
-                     // blocks executed by the same thread reuse the same transform.
-                     thread_local icc::Transform local_xf{
-                         cmsCreateTransform(in_profile, format_in, out_profile, format_out, intent, flags)};
-                     if (!local_xf)
-                     {
-                         thread_local bool logged = false;
-                         if (!logged)
-                             spdlog::error("Thread {} failed to create ICC transform.", thread_index);
-                         return;
-                     }
-
-                     auto data_p = pixels + start * size.z;
-                     cmsDoTransform(local_xf.get(), data_p, data_p, (end - start));
-
-                     if (is_cmyk)
-                         for (int i = start; i < end; ++i) pixels[i * size.z + 3] = 1.f;
-                 });
-
-    return true;
-}
-
-} // namespace icc
-
-#else
-
-namespace icc
-{
-
-bool linearize_colors(float *pixels, int3 size, const vector<uint8_t> &icc_profile, string *tf_description,
-                      Chromaticities *chr)
-{
+    spdlog::error("Could not create ICC color transform.");
     return false;
 }
 
-} // namespace icc
+bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
+                                  Chromaticities *c) const
+{
+    ICCProfile profile_out = nullptr;
+    if (keep_primaries)
+        profile_out = linearized_profile(c);
+    else
+    {
+        profile_out = (is_Gray() ? ICCProfile::linear_Gray() : ICCProfile::linear_RGB());
+        if (c)
+            *c = Chromaticities();
+    }
+
+    if (transform_pixels(pixels, size, *this, profile_out))
+    {
+        if (tf_description)
+            *tf_description = description();
+
+        return true;
+    }
+    return false;
+}
+
+std::vector<uint8_t> ICCProfile::dump_to_memory() const
+{
+    if (!valid())
+        return {};
+
+    std::vector<uint8_t> data;
+    cmsUInt32Number      size;
+    cmsSaveProfileToMem(get(), nullptr, &size);
+    data.resize(size);
+    if (cmsSaveProfileToMem(get(), reinterpret_cast<void *>(data.data()), &size))
+        return data;
+
+    return {};
+}
+
+#else
+
+// Stubs for builds without LCMS2 which just return failure for operations that require LCMS functionality.
+
+ICCProfile::ICCProfile(const uint8_t * /*icc_profile*/, size_t /*icc_profile_size*/) : m_profile(nullptr) {}
+ICCProfile::~ICCProfile() {}
+ICCProfile           ICCProfile::linear_RGB(const Chromaticities           &/*chr*/) { return ICCProfile(nullptr); }
+ICCProfile           ICCProfile::linear_Gray(const float2           &/*whitepoint*/) { return ICCProfile(nullptr); }
+ICCProfile           ICCProfile::linearized_profile(Chromaticities           */*c*/) const { return ICCProfile(nullptr); }
+bool                 ICCProfile::supported() { return false; }
+int                  ICCProfile::lcms_version() { return 0; }
+std::string          ICCProfile::description() const { return std::string(); }
+bool                 ICCProfile::extract_chromaticities(Chromaticities                 */*c*/) const { return false; }
+std::vector<uint8_t> ICCProfile::dump_to_memory() const { return {}; }
+bool                 ICCProfile::is_CMYK() const { return false; }
+bool                 ICCProfile::is_RGB() const { return false; }
+bool                 ICCProfile::is_Gray() const { return false; }
+
+bool ICCProfile::transform_pixels(float * /*pixels*/, int3 /*size*/, const ICCProfile & /*profile_in*/,
+                                  const ICCProfile & /*profile_out*/)
+{
+    return false;
+}
+bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep_primaries*/,
+                                  std::string * /*tf_description*/, Chromaticities * /*c*/) const
+{
+    return false;
+}
 
 #endif // HDRVIEW_ENABLE_LCMS2

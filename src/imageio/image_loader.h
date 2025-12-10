@@ -25,6 +25,10 @@ struct ImageLoadOptions
 
     //! Override any metadata in the file and decode pixel values using this transfer function
     TransferFunction tf_override = TransferFunction::Unspecified;
+
+    //! If true, keep the file's primaries and only linearize the pixel values on load. If false, convert to Rec709/sRGB
+    //! or Gray at D65 primaries as appropriate.
+    bool keep_primaries = false;
 };
 
 const ImageLoadOptions &load_image_options();

@@ -171,7 +171,7 @@ static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc
 
     auto tf = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
                   ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
-                  : transfer_function_from_cicp((int)file_enc.transfer_function);
+                  : transfer_function_from_CICP((int)file_enc.transfer_function);
 
     if (tf.type == TransferFunction::Unspecified)
         spdlog::warn("JPEG-XL: CICP transfer function ({}) is not recognized, assuming sRGB",
@@ -451,7 +451,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 throw invalid_argument{"JxlDecoderGetColorAsICCProfile failed"};
             else
             {
-                is_cmyk = icc::is_cmyk(icc_profile);
+                is_cmyk = ICCProfile(icc_profile).is_CMYK();
                 spdlog::info("File has an {} ICC color profile", is_cmyk ? "CMYK" : "RGB");
             }
 
@@ -646,14 +646,21 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
             if (opts.tf_override.type == TransferFunction::Unspecified)
             {
-                if ((prefer_icc && icc::linearize_colors(pixels.data(), size, icc_profile, &tf_description, &chr)) ||
-                    linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
+                image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
+                if (prefer_icc)
+                {
+                    if (ICCProfile(image->icc_data)
+                            .linearize_pixels(pixels.data(), size, opts.keep_primaries, &tf_description, &chr))
+                    {
+                        image->chromaticities                = chr;
+                        image->metadata["transfer function"] = tf_description;
+                    }
+                }
+                else if (linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
                 {
                     image->chromaticities                = chr;
                     image->metadata["transfer function"] = tf_description;
                 }
-                else
-                    image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
             }
             else
             {
@@ -662,7 +669,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 try
                 {
                     // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                    image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+                    image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
                 }
                 catch (...)
                 {
@@ -731,7 +738,9 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
                 if (opts.tf_override.type != TransferFunction::Unspecified)
                 {
-                    if ((prefer_icc && icc::linearize_colors(channel.data(), int3{size.xy(), 1}, icc_profile)) ||
+                    if ((prefer_icc &&
+                         ICCProfile(icc_profile)
+                             .linearize_pixels(channel.data(), int3{size.xy(), 1}, opts.keep_primaries)) ||
                         linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
                     {
                         //

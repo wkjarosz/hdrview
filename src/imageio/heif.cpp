@@ -162,7 +162,7 @@ static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_
     if (c)
         *c = chromaticities_from_cicp((int)nclx->color_primaries);
 
-    auto tf = transfer_function_from_cicp((int)nclx->transfer_characteristics);
+    auto tf = transfer_function_from_CICP((int)nclx->transfer_characteristics);
 
     if (tf.type == TransferFunction::Unspecified)
         spdlog::warn("HEIF: CICP transfer function ({}) is not recognized, assuming sRGB",
@@ -295,7 +295,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         image->metadata["header"]["CICP profile (image level)"] = json{
             {"value", nclx->transfer_characteristics},
             {"string",
-             fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
+             fmt::format("{}", transfer_function_name(transfer_function_from_CICP(nclx->transfer_characteristics)))},
             {"type", "enum"}};
     }
     // else
@@ -305,7 +305,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
         image->metadata["header"]["CICP profile (handle level)"] = json{
             {"value", nclx->transfer_characteristics},
             {"string",
-             fmt::format("{}", transfer_function_name(transfer_function_from_cicp(nclx->transfer_characteristics)))},
+             fmt::format("{}", transfer_function_name(transfer_function_from_CICP(nclx->transfer_characteristics)))},
             {"type", "enum"}};
     }
 
@@ -376,7 +376,8 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
             Chromaticities chr;
             // for SDR profiles, try to transform the interleaved data using the icc profile.
             // Then try the nclx profile
-            if ((prefer_icc && icc::linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, image->icc_data,
+            if ((prefer_icc && ICCProfile(image->icc_data)
+                                   .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
                                                      &tf_description, &chr)) ||
                 linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &chr))
             {
@@ -396,7 +397,7 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
             try
             {
                 // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                image->chromaticities = chromaticities_from_cicp(transfer_function_to_cicp(opts.tf_override.type));
+                image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
             }
             catch (...)
             {

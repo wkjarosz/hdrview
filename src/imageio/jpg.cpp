@@ -313,7 +313,8 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
             if (!image->icc_data.empty())
             {
                 Chromaticities chr;
-                if (icc::linearize_colors(float_pixels.data(), size, image->icc_data, &tf_desc, &chr))
+                if (ICCProfile(image->icc_data)
+                        .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &tf_desc, &chr))
                 {
                     spdlog::info("Linearizing colors using ICC profile.");
                     image->chromaticities = chr;

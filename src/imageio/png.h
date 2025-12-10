@@ -69,3 +69,13 @@ void save_png_image(const Image &img, std::ostream &os, std::string_view filenam
 #else
 #define PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED 0
 #endif
+#ifdef PNG_cICP_SUPPORTED
+#define PNG_cICP_SUPPORTED_ENABLED 1
+#else
+#define PNG_cICP_SUPPORTED_ENABLED 0
+#endif
+#ifdef PNG_iCCP_SUPPORTED
+#define PNG_iCCP_SUPPORTED_ENABLED 1
+#else
+#define PNG_iCCP_SUPPORTED_ENABLED 0
+#endif

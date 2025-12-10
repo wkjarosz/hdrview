@@ -571,7 +571,7 @@ string transfer_function_name(TransferFunction tf)
         return s_transfer_function_names[tf.type];
 }
 
-TransferFunction transfer_function_from_cicp(int cicp)
+TransferFunction transfer_function_from_CICP(int cicp)
 {
     switch (cicp)
     {
@@ -595,7 +595,7 @@ TransferFunction transfer_function_from_cicp(int cicp)
     }
 }
 
-int transfer_function_to_cicp(TransferFunction tf)
+int transfer_function_to_CICP(TransferFunction tf)
 {
     switch (tf.type)
     {

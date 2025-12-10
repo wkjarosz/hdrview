@@ -291,7 +291,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
         // some additional header
         image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
                                reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
-        image->metadata["transfer function"] = icc::icc_description(image->icc_data);
+        image->metadata["transfer function"] = ICCProfile(image->icc_data).description();
     }
 
     {

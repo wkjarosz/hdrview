@@ -5,12 +5,15 @@
 #include "hello_imgui/dpi_aware.h"
 #include "hello_imgui/hello_imgui.h"
 #include "image.h"
+#include "imageio/icc.h"
 #include "imcmd_command_palette.h"
 #include "imgui.h"
 #include "imgui_ext.h"
 #include "imgui_internal.h"
 #include "texture.h"
 #include "version.h"
+
+#include <OpenEXRConfig.h>
 
 #ifdef HDRVIEW_ENABLE_LIBJPEG
 #include <jpeglib.h>
@@ -1007,10 +1010,9 @@ void HDRViewApp::draw_about_dialog(bool &open)
                     ImGui::PE::Hyperlink("{fmt}", "A modern formatting library.", "https://github.com/fmtlib/fmt");
                     ImGui::PE::Hyperlink("Hello ImGui", "Pascal Thomet's cross-platform starter-kit for Dear ImGui.",
                                          "https://github.com/pthom/hello_imgui");
-#ifdef HDRVIEW_ENABLE_LCMS2
-                    ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
-                                         "https://github.com/mm2/Little-CMS");
-#endif
+                    if (ICCProfile::lcms_version() != 0)
+                        ImGui::PE::Hyperlink("lcms2", "LittleCMS color management engine.",
+                                             "https://github.com/mm2/Little-CMS");
 #ifdef HDRVIEW_ENABLE_LIBHEIF
                     ImGui::PE::Hyperlink("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
                                          "https://github.com/strukturag/libheif");
@@ -1075,7 +1077,14 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("HDRVIEW_ICONSET: Material Design Icons");
 #endif
 
+                if (ICCProfile::lcms_version() != 0)
+                    ImGui::Text("lcms2: %d", ICCProfile::lcms_version());
+                else
+                    ImGui::Text("lcms2: NO");
+
                 ImGui::Text("Image IO libraries:");
+                ImGui::Text("\tOpenEXR: %d.%d.%d\n", OPENEXR_VERSION_MAJOR, OPENEXR_VERSION_MINOR,
+                            OPENEXR_VERSION_PATCH);
 #ifdef HDRVIEW_ENABLE_UHDR
                 ImGui::Text("\tlibuhdr: %s", UHDR_LIB_VERSION_STR);
 #else
@@ -1139,6 +1148,8 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("\t\tPNG_USER_CHUNKS_SUPPORTED: %s", YESNO(PNG_USER_CHUNKS_SUPPORTED_ENABLED));
                 ImGui::Text("\t\tPNG_APNG_SUPPORTED: %s", YESNO(PNG_APNG_SUPPORTED_ENABLED));
                 ImGui::Text("\t\tPNG_PROGRESSIVE_READ_SUPPORTED: %s", YESNO(PNG_PROGRESSIVE_READ_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_iCCP_SUPPORTED: %s", YESNO(PNG_iCCP_SUPPORTED_ENABLED));
+                ImGui::Text("\t\tPNG_cICP_SUPPORTED: %s", YESNO(PNG_cICP_SUPPORTED_ENABLED));
 #endif
                 ImGui::EndChild();
                 ImGui::PopFont();
