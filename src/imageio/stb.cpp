@@ -189,15 +189,21 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         throw runtime_error{"loaded the image, but then couldn't figure out the format (this should never happen)."};
 
     TransferFunction tf = TransferFunction::Linear;
-    if (!is_hdr && opts.tf_override.type == TransferFunction::Unspecified)
+    ColorGamut_      cg = ColorGamut_Unspecified;
+    if (!is_hdr && !opts.override_transfer())
     {
         spdlog::info("Assuming STB image is sRGB encoded, linearizing.");
         tf = TransferFunction::Unspecified;
     }
-    if (opts.tf_override.type != TransferFunction::Unspecified)
+    if (opts.override_transfer())
     {
         spdlog::info("Forcing transfer function to {}.", transfer_function_name(opts.tf_override));
         tf = opts.tf_override;
+    }
+    if (opts.override_gamut())
+    {
+        spdlog::info("Forcing color gamut to {}.", color_gamut_name(opts.gamut_override));
+        cg = opts.gamut_override;
     }
 
     Timer            timer;
@@ -221,18 +227,9 @@ vector<ImagePtr> load_stb_image(istream &is, const string_view filename, const I
         else
             image->metadata["pixel format"] = fmt::format("{} bbp", 8);
 
-        image->metadata["transfer function"] = transfer_function_name(tf);
-        if (opts.tf_override.type != TransferFunction::Unspecified)
-            try
-            {
-                // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
-            }
-            catch (...)
-            {
-                spdlog::warn("Failed to infer chromaticities from transfer function CICP value: {}",
-                             int(opts.tf_override.type));
-            }
+        image->metadata["color profile"] = color_profile_name(cg, tf);
+        if (opts.override_color())
+            image->metadata["color profile"] += " (user override)";
 
         // first convert+copy to float channels
         if (is_hdr)

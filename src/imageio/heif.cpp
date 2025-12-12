@@ -153,27 +153,25 @@ static bool is_heif_transfer_supported(TransferFunction tf)
     }
 }
 
-static bool linearize_colors(float *pixels, int3 size, const heif_color_profile_nclx *nclx,
-                             string *tf_description = nullptr, Chromaticities *c = nullptr)
+static bool linearize_colors(float *pixels, int3 size, bool keep_primaries, const heif_color_profile_nclx *nclx,
+                             string *profile_description = nullptr, Chromaticities *c = nullptr)
 {
     if (!nclx)
         return false;
 
-    if (c)
-        *c = chromaticities_from_cicp((int)nclx->color_primaries);
+    CICPProfile cicp((uint8_t)nclx->color_primaries, (uint8_t)nclx->transfer_characteristics,
+                     (uint8_t)nclx->matrix_coefficients, nclx->full_range_flag != 0);
 
-    auto tf = transfer_function_from_CICP((int)nclx->transfer_characteristics);
+    if (!cicp)
+    {
+        spdlog::warn(
+            "HEIF: CICP profile is not valid or unsupported (primaries: {}, transfer: {}, matrix: {}, full_range: {})",
+            (int)nclx->color_primaries, (int)nclx->transfer_characteristics, (int)nclx->matrix_coefficients,
+            (int)nclx->full_range_flag);
+        return false;
+    }
 
-    if (tf.type == TransferFunction::Unspecified)
-        spdlog::warn("HEIF: CICP transfer function ({}) is not recognized, assuming sRGB",
-                     (int)nclx->transfer_characteristics);
-
-    if (tf_description)
-        *tf_description = transfer_function_name(tf);
-
-    to_linear(pixels, size, tf);
-
-    return true;
+    return cicp.linearize_pixels(pixels, size, keep_primaries, profile_description, c);
 }
 
 // Add preferred colorspace to header
@@ -291,22 +289,20 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
     const heif_color_profile_nclx *nclx = nullptr;
     if (image_level_nclx)
     {
-        nclx                                                    = image_level_nclx.get();
-        image->metadata["header"]["CICP profile (image level)"] = json{
-            {"value", nclx->transfer_characteristics},
-            {"string",
-             fmt::format("{}", transfer_function_name(transfer_function_from_CICP(nclx->transfer_characteristics)))},
-            {"type", "enum"}};
+        nclx = image_level_nclx.get();
+        CICPProfile cicp((uint8_t)nclx->color_primaries, (uint8_t)nclx->transfer_characteristics,
+                         (uint8_t)nclx->matrix_coefficients, nclx->full_range_flag != 0);
+        image->metadata["header"]["CICP profile (image level)"] =
+            json{{"value", cicp.to_array()}, {"string", cicp.short_name()}, {"type", "array"}};
     }
     // else
     if (handle_level_nclx)
     {
-        nclx                                                     = handle_level_nclx;
-        image->metadata["header"]["CICP profile (handle level)"] = json{
-            {"value", nclx->transfer_characteristics},
-            {"string",
-             fmt::format("{}", transfer_function_name(transfer_function_from_CICP(nclx->transfer_characteristics)))},
-            {"type", "enum"}};
+        nclx = handle_level_nclx;
+        CICPProfile cicp((uint8_t)nclx->color_primaries, (uint8_t)nclx->transfer_characteristics,
+                         (uint8_t)nclx->matrix_coefficients, nclx->full_range_flag != 0);
+        image->metadata["header"]["CICP profile (handle level)"] =
+            json{{"value", cicp.to_array()}, {"string", cicp.short_name()}, {"type", "array"}};
     }
 
     // get the image-level icc profile.
@@ -363,51 +359,46 @@ static ImagePtr process_decoded_heif_image(heif_image *himage, const heif_color_
                         bpc_div * (is_16bit ? row16[cpp * x + c] : row8[cpp * x + c]);
         }
 
-        if (opts.tf_override.type == TransferFunction::Unspecified)
+        if (opts.override_color())
+        {
+            spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                         color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+            Chromaticities chr;
+            if (linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, gamut_chromaticities(opts.gamut_override),
+                                 opts.tf_override, opts.keep_primaries, &profile_desc, &chr))
+            {
+                image->chromaticities = chr;
+                profile_desc + " (override)";
+            }
+            image->metadata["color profile"] = profile_desc;
+        }
+        else
         {
             // only prefer the nclx if it exists and it specifies an HDR transfer function
-            bool prefer_icc = // false;
-                !nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
-                          nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ);
+            bool prefer_icc =
+                !image->icc_data.empty() &&
+                (!nclx || (nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_HLG &&
+                           nclx->transfer_characteristics != heif_transfer_characteristic_ITU_R_BT_2100_0_PQ));
 
-            string tf_description;
             spdlog::warn("prefer_icc: {}, nclx transfer function: {}", prefer_icc,
                          nclx ? int(nclx->transfer_characteristics) : -1);
+            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
             Chromaticities chr;
             // for SDR profiles, try to transform the interleaved data using the icc profile.
             // Then try the nclx profile
             if ((prefer_icc && ICCProfile(image->icc_data)
                                    .linearize_pixels(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries,
-                                                     &tf_description, &chr)) ||
-                linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, nclx, &tf_description, &chr))
-            {
-                image->chromaticities                = chr;
-                image->metadata["transfer function"] = tf_description;
-            }
+                                                     &profile_desc, &chr)) ||
+                linearize_colors(float_pixels.data(), int3{size.xy(), cpp}, opts.keep_primaries, nclx, &profile_desc,
+                                 &chr))
+                image->chromaticities = chr;
             else
-            {
+                // icc and nclx profiles failed or not present, so we can only assume we are sRGB/BT709
                 to_linear(float_pixels.data(), int3{size.xy(), cpp}, TransferFunction::Unspecified);
-                image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
-            }
-        }
-        else
-        {
-            spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
-                         transfer_function_name(opts.tf_override));
-            try
-            {
-                // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
-            }
-            catch (...)
-            {
-                spdlog::warn("Failed to infer chromaticities from transfer function CICP value: {}",
-                             int(opts.tf_override.type));
-            }
 
-            // linearize using the user-specified transfer function
-            to_linear(float_pixels.data(), int3{size.xy(), cpp}, opts.tf_override);
-            image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
+            image->metadata["color profile"] = profile_desc;
         }
 
         // copy the interleaved float pixels into the channels
@@ -572,6 +563,7 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                         options->color_conversion_options.preferred_chroma_upsampling_algorithm =
                             heif_chroma_upsampling_bilinear;
                         options->color_conversion_options.only_use_preferred_chroma_algorithm = true;
+                        // options->ignore_transformations                                       = true;
                         heif_error err;
                         throw_on_error(
                             err = heif_decode_image(ihandle.get(), &raw_img, out_colorspace, out_chroma, options.get()),
@@ -621,6 +613,24 @@ vector<ImagePtr> load_heif_image(istream &is, string_view filename, const ImageL
                     {
                         image->exif_data.assign(exif_data.data() + 4, exif_data.data() + exif_data.size());
                         image->metadata["exif"] = exif_to_json(image->exif_data);
+
+                        // // libheif already applies the orientation field, so we need to remove it from exif
+                        // std::string orientation_key;
+                        // for (auto &exif_entry : image->metadata["exif"].items())
+                        // {
+                        //     if (exif_entry.value().contains("orientation") ||
+                        //         exif_entry.value().contains("Orientation"))
+                        //     {
+                        //         orientation_key = exif_entry.key();
+                        //         break;
+                        //     }
+                        // }
+                        // if (!orientation_key.empty())
+                        // {
+                        //     image->metadata["exif"][orientation_key].erase("orientation");
+                        //     image->metadata["exif"][orientation_key].erase("Orientation");
+                        // }
+
                         spdlog::debug("EXIF metadata successfully parsed: {}", image->metadata["exif"].dump(2));
                     }
                     catch (const std::exception &e)

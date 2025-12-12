@@ -158,9 +158,9 @@ vector<ImagePtr> load_exr_image(istream &is_, string_view filename, const ImageL
         part.readPixels(dataWindow.min.y, dataWindow.max.y);
 
         // now up-res any subsampled channels
-        // FIXME: OpenEXR v3.3.0 and above seems to break this subsample channel loading
+        // NOTE: OpenEXR v3.3.0 broke this subsample channel loading
         // see https://github.com/AcademySoftwareFoundation/openexr/issues/1949
-        // Until that is fixed in the next release, we are sticking with v3.2.4
+        // This was fixed in v3.4
         int i = 0;
         for (auto c = part.header().channels().begin(); c != part.header().channels().end(); ++c, ++i)
         {

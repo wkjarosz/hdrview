@@ -1,4 +1,5 @@
 #include "icc.h"
+#include "colorspace.h"
 #include "smallthreadpool.h"
 #include <spdlog/spdlog.h>
 #include <vector>
@@ -231,7 +232,7 @@ string ICCProfile::description() const
     if (!valid())
     {
         spdlog::error("Could not open ICC profile from memory.");
-        return "";
+        return "ICC (Invalid)";
     }
 
     if (auto desc = reinterpret_cast<const cmsMLU *>(cmsReadTag(get(), cmsSigProfileDescriptionTag)))
@@ -239,9 +240,9 @@ string ICCProfile::description() const
         auto              size = cmsMLUgetASCII(desc, "en", "US", nullptr, 0);
         std::vector<char> desc_str((size_t)size);
         cmsMLUgetASCII(desc, "en", "US", desc_str.data(), (cmsUInt32Number)desc_str.size());
-        return string(desc_str.data());
+        return fmt::format("ICC ({})", string(desc_str.data()));
     }
-    return "";
+    return "ICC (Unknown Description)";
 }
 
 bool ICCProfile::is_CMYK() const
@@ -354,9 +355,10 @@ bool ICCProfile::transform_pixels(float *pixels, int3 size, const ICCProfile &pr
 }
 
 bool ICCProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, string *tf_description,
-                                  Chromaticities *c, AdaptationMethod CAT_method) const
+                                  Chromaticities *c) const
 {
     ICCProfile profile_out = nullptr;
+    // create the output profile and store either the input or output primaries in c
     if (keep_primaries)
         profile_out = linearized_profile(c);
     else
@@ -424,62 +426,55 @@ bool ICCProfile::linearize_pixels(float * /*pixels*/, int3 /*size*/, bool /*keep
 
 // --- CICPProfile implementation -------------------------------------------------
 
-// Linearize CICP-encoded pixels in-place. Uses colorspace helpers for transfer
-// functions and chromaticity conversions.
-bool CICPProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, std::string *tf_description,
-                                   Chromaticities *c, AdaptationMethod CAT_method) const
+// version of linearize_pixels that uses chromaticities and transfer function (instead of ICC or CICP profiles)
+bool linearize_pixels(float *pixels, int3 size, const Chromaticities &src_chroma, const TransferFunction &tf,
+                      bool keep_primaries, std::string *profile_description, Chromaticities *c,
+                      AdaptationMethod CAT_method)
 {
-    // Determine transfer function and chromaticities
-    auto tf = transfer_function_from_CICP(m_transfer_characteristics);
-
-    if (tf_description)
-        *tf_description = transfer_function_name(tf);
+    if (profile_description)
+        *profile_description = color_profile_name(src_chroma, tf);
 
     // Apply inverse transfer (encode -> linear)
     to_linear(pixels, size, tf);
 
-    // Provide chromaticities if requested
-    Chromaticities src_chroma;
-    try
+    if (!src_chroma.valid())
     {
-        src_chroma = chromaticities_from_cicp(m_colour_primaries);
-        if (c)
-            *c = src_chroma;
-    }
-    catch (...)
-    { /* leave src_chroma default if unknown */
+        spdlog::warn("linearize_pixels: invalid color primaries");
+        return true;
     }
 
     if (!keep_primaries)
     {
-        // Convert to Rec.709/sRGB primaries
-        if (size.z >= 3)
-        {
-            float3x3 M;
-            auto     dst_chroma = gamut_chromaticities(ColorGamut_sRGB_BT709);
-            if (color_conversion_matrix(M, src_chroma, dst_chroma, CAT_method))
-            {
-                // apply matrix M to all pixels (parallel)
-                parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                             [M, pixels, size](int start, int end, int, int)
-                             {
-                                 for (int i = start; i < end; ++i)
-                                 {
-                                     float *p = pixels + i * size.z;
-                                     float  r = p[0], g = p[1], b = p[2];
-                                     float  nr = M[0][0] * r + M[0][1] * g + M[0][2] * b;
-                                     float  ng = M[1][0] * r + M[1][1] * g + M[1][2] * b;
-                                     float  nb = M[2][0] * r + M[2][1] * g + M[2][2] * b;
-                                     p[0]      = nr;
-                                     p[1]      = ng;
-                                     p[2]      = nb;
-                                 }
-                             });
-            }
-        }
+        spdlog::warn("linearize_pixels: converting to Rec.709/sRGB primaries.");
+        auto dst_chroma = Chromaticities{}; // Rec.709/sRGB
+        if (c)
+            *c = dst_chroma;
+        convert_primaries(pixels, size, src_chroma, dst_chroma, CAT_method);
+    }
+    else
+    {
+        spdlog::warn("linearize_pixels: keeping original primaries.");
+        // keep primaries; provide chromaticities if requested
+        if (c)
+            *c = src_chroma;
     }
 
     return true;
+}
+
+// Linearize CICP-encoded pixels in-place. Uses colorspace helpers for transfer
+// functions and chromaticity conversions.
+bool CICPProfile::linearize_pixels(float *pixels, int3 size, bool keep_primaries, std::string *profile_description,
+                                   Chromaticities *c, AdaptationMethod CAT_method) const
+{
+    // Determine transfer function and chromaticities
+    auto tf         = transfer_function_from_CICP(tc());
+    auto src_chroma = chromaticities_from_CICP(cp());
+
+    if (profile_description)
+        *profile_description = short_name();
+
+    return ::linearize_pixels(pixels, size, src_chroma, tf, keep_primaries, nullptr, c, CAT_method);
 }
 
 // Transform pixels from one CICP profile to another in-place.
@@ -489,8 +484,8 @@ bool CICPProfile::transform_pixels(float *pixels, int3 size, const CICPProfile &
     if (!pixels)
         return false;
 
-    auto tf_in  = transfer_function_from_CICP(profile_in.transfer_characteristics());
-    auto tf_out = transfer_function_from_CICP(profile_out.transfer_characteristics());
+    auto tf_in  = transfer_function_from_CICP(profile_in.tc());
+    auto tf_out = transfer_function_from_CICP(profile_out.tc());
 
     // Handle grayscale (1 channel) separately
     if (size.z < 3)
@@ -508,49 +503,213 @@ bool CICPProfile::transform_pixels(float *pixels, int3 size, const CICPProfile &
     to_linear(pixels, size, tf_in);
 
     // primary conversion if needed
-    Chromaticities src_chroma, dst_chroma;
-    bool           have_src = true, have_dst = true;
-    try
-    {
-        src_chroma = chromaticities_from_cicp(profile_in.colour_primaries());
-    }
-    catch (...)
-    {
-        have_src = false;
-    }
-    try
-    {
-        dst_chroma = chromaticities_from_cicp(profile_out.colour_primaries());
-    }
-    catch (...)
-    {
-        have_dst = false;
-    }
+    Chromaticities src_chroma{chromaticities_from_CICP(profile_in.cp())},
+        dst_chroma{chromaticities_from_CICP(profile_out.cp())};
 
-    if (have_src && have_dst)
-    {
-        float3x3 M;
-        if (color_conversion_matrix(M, src_chroma, dst_chroma, CAT_method))
-        {
-            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
-                         [M, pixels, size](int start, int end, int, int)
-                         {
-                             for (int i = start; i < end; ++i)
-                             {
-                                 float *p = pixels + i * size.z;
-                                 float  r = p[0], g = p[1], b = p[2];
-                                 float  nr = M[0][0] * r + M[0][1] * g + M[0][2] * b;
-                                 float  ng = M[1][0] * r + M[1][1] * g + M[1][2] * b;
-                                 float  nb = M[2][0] * r + M[2][1] * g + M[2][2] * b;
-                                 p[0]      = nr;
-                                 p[1]      = ng;
-                                 p[2]      = nb;
-                             }
-                         });
-        }
-    }
+    if (src_chroma.valid() && dst_chroma.valid())
+        convert_primaries(pixels, size, src_chroma, dst_chroma, CAT_method);
 
     // forward transfer of output
     from_linear(pixels, size, tf_out);
     return true;
+}
+
+// --- CICPProfile helper implementations -------------------------------------
+
+bool CICPProfile::has_known_primaries() const { return chromaticities_from_CICP(cp()).valid(); }
+bool CICPProfile::has_known_transfer() const { return transfer_function().type != TransferFunction::Unspecified; }
+bool CICPProfile::valid() const { return has_known_transfer() && has_known_primaries(); }
+
+TransferFunction CICPProfile::transfer_function() const { return transfer_function_from_CICP(tc()); }
+Chromaticities   CICPProfile::chromaticities() const { return chromaticities_from_CICP(cp()); }
+
+ColorGamut_ CICPProfile::gamut_enum() const
+{
+    if (auto chr = chromaticities_from_CICP(cp()); chr.valid())
+        return named_color_gamut(chromaticities_from_CICP(cp()));
+    else
+        return ColorGamut_Unspecified;
+}
+
+std::string CICPProfile::cp_long_name() const
+{
+    if (auto chr = chromaticities_from_CICP(cp()); chr.valid())
+        return color_gamut_name(named_color_gamut(chromaticities_from_CICP(cp())));
+    else
+        return fmt::format("CP={}", cp());
+}
+
+std::string CICPProfile::tc_long_name() const
+{
+    auto tf = transfer_function_from_CICP(tc());
+    return transfer_function_name(tf);
+}
+
+std::string CICPProfile::mc_long_name() const
+{
+    switch (mc())
+    {
+    case 0: return "Identity";
+    case 1: return "BT.709 / BT.1361";
+    case 2: return "Unspecified";
+    case 3: return "Reserved";
+    case 4: return "FCC";
+    case 5: return "BT.470 BG / BT.601/625";
+    case 6: return "BT.601/525 / NTSC";
+    case 7: return "SMPTE 240M";
+    case 8: return "YCgCo";
+    case 9: return "BT.2020 non-constant luminance";
+    case 10: return "BT.2020 constant luminance";
+    case 11: return "SMPTE ST 2085";
+    case 12: return "Chromaticity-derived non-constant luminance";
+    case 13: return "Chromaticity-derived constant luminance";
+    case 14: return "BT.2100 ICtCp";
+    case 15: return "IPT-PQ-C2";
+    case 16: return "YCgCo-Re";
+    case 17: return "YCgCo-Ro";
+    default: return "Reserved";
+    }
+}
+
+const char *CICPProfile::cp_short_name() const
+{
+    if (cp() > 255 || cp() < 0)
+        return "Invalid";
+    switch (cp())
+    {
+    case 0: return "Reserved";
+    case 1: return "BT709";
+    case 4: return "BT470M";
+    case 5: return "BT470BG";
+    case 6: return "BT601/525";
+    case 7: return "SMPTE240M";
+    case 8: return "Film";
+    case 9: return "BT2020";
+    case 10: return "XYZ";
+    case 11: return "DCI-P3";
+    case 12: return "Display-P3";
+    case 22: return "BT601/525Alt";
+    default: return "Reserved";
+    }
+}
+
+const char *CICPProfile::tc_short_name() const
+{
+    if (tc() > 255 || tc() < 0)
+        return "Invalid";
+    switch (tc())
+    {
+    case 0: return "Reserved";
+    case 1: return "BT709";
+    case 2: return "Unspecified";
+    case 3: return "Reserved";
+    case 4: return "Gamma2.2";
+    case 5: return "Gamma2.8";
+    case 6: return "BT601";
+    case 7: return "SMPTE240M";
+    case 8: return "Linear";
+    case 9: return "Log100";
+    case 10: return "Log100Sqrt";
+    case 11: return "IEC61966";
+    case 12: return "BT1361";
+    case 13: return "sRGB";
+    case 14: return "BT.2020-10bit";
+    case 15: return "BT.2020-12bit";
+    case 16: return "PQ";
+    case 17: return "DCI-P3";
+    case 18: return "HLG";
+    default: return "Reserved";
+    }
+}
+
+const char *CICPProfile::mc_short_name() const
+{
+    if (mc() > 255 || mc() < 0)
+        return "Invalid";
+    switch (mc())
+    {
+    case 0: return "RGB";
+    case 1: return "BT709";
+    case 2: return "Unspecified";
+    case 3: return "Reserved";
+    case 4: return "FCC";
+    case 5: return "BT601";
+    case 6: return "BT601";
+    case 7: return "SMPTE240M";
+    case 8: return "YCgCo";
+    case 9: return "BT2020NCL";
+    case 10: return "BT2020CL";
+    case 11: return "SMPTE2085";
+    case 12: return "ChromaNCL";
+    case 13: return "ChromaCL";
+    case 14: return "ICtCp";
+    case 15: return "IPTC2";
+    case 16: return "YCgCo-Re";
+    case 17: return "YCgCo-Ro";
+    default: return "Reserved";
+    }
+}
+
+std::string CICPProfile::short_name() const
+{
+    // // Functional equivalence groups (from H.273 and H-Suppl.19)
+    // auto is_sdr_tc = [&](uint8_t v) { return (v == 1 || v == 6 || v == 14 || v == 15); };
+    // auto is_601_mc = [&](uint8_t v) { return (v == 5 || v == 6); };
+
+    // bool full = full_range();
+
+    // // ------------------------------------------------------------
+    // // OFFICIAL TAGS from H‑Supplement 19
+    // // ------------------------------------------------------------
+
+    // // SDR NCG
+    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 1 && !full)
+    //     return "BT709_YCC";
+    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 0 && !full)
+    //     return "BT709_RGB";
+    // if (cp() == 6 && is_sdr_tc(tc()) && is_601_mc(mc()) && !full)
+    //     return "BT601_525";
+    // if (cp() == 5 && is_sdr_tc(tc()) && is_601_mc(mc()) && !full)
+    //     return "BT601_625";
+
+    // // SDR WCG
+    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 9 && !full)
+    //     return "BT2020_YCC_NCL";
+    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 0 && !full)
+    //     return "BT2020_RGB";
+
+    // // HDR WCG
+    // if (cp() == 9 && tc() == 16 && mc() == 9 && !full)
+    //     return "BT2100_PQ_YCC";
+    // if (cp() == 9 && tc() == 18 && mc() == 9 && !full)
+    //     return "BT2100_HLG_YCC";
+    // if (cp() == 9 && tc() == 16 && mc() == 14 && !full)
+    //     return "BT2100_PQ_ICTCP";
+    // if (cp() == 9 && tc() == 16 && mc() == 0 && !full)
+    //     return "BT2100_PQ_RGB";
+    // if (cp() == 9 && tc() == 18 && mc() == 0 && !full)
+    //     return "BT2100_HLG_RGB";
+
+    // // Additional Annex A combinations
+    // if (cp() == 1 && is_sdr_tc(tc()) && mc() == 0 && full)
+    //     return "FR709_RGB";
+    // if (cp() == 9 && is_sdr_tc(tc()) && mc() == 0 && full)
+    //     return "FR2020_RGB";
+    // if (cp() == 12 && is_sdr_tc(tc()) && is_601_mc(mc()) && full)
+    //     return "FRP3D65_YCC";
+
+    // // special-case for common profile
+    // if (cp() == 1 && tc() == 13 && full_range())
+    //     return "CICP (sRGB IEC61966-2.1)";
+    // // Rec. ITU-R BT.2100 PQ
+    // else if (cp() == 9 && tc() == 16 && mc() == 10 && !full_range())
+    //     return "CICP (Rec.ITU-R BT.2100 PQ)";
+
+    return fmt::format("CICP ({} {} {} {})", cp_short_name(), tc_short_name(), mc_short_name(), r_short_name());
+}
+
+CICPProfile CICPProfile::from_gamut_and_tf(ColorGamut_ gamut, TransferFunction tf, int matrix_coeffs, bool full_range)
+{
+    return {chromaticities_to_CICP(gamut_chromaticities(gamut)), transfer_function_to_CICP(tf), matrix_coeffs,
+            full_range};
 }

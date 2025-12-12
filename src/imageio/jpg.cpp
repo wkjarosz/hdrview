@@ -306,35 +306,43 @@ std::vector<ImagePtr> load_jpg_image(std::istream &is, std::string_view filename
         }
         jpeg_finish_decompress(&cinfo);
 
-        if (opts.tf_override.type == TransferFunction::Unspecified)
+        if (opts.override_color())
         {
-            string tf_desc = transfer_function_name(TransferFunction::Unspecified);
+            spdlog::info("Ignoring embedded color profile with user-specified profile: {} {}",
+                         color_gamut_name(opts.gamut_override), transfer_function_name(opts.tf_override));
+
+            string         profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+            Chromaticities chr;
+            if (linearize_pixels(float_pixels.data(), size, gamut_chromaticities(opts.gamut_override), opts.tf_override,
+                                 opts.keep_primaries, &profile_desc, &chr))
+            {
+                image->chromaticities = chr;
+                profile_desc + " (override)";
+            }
+            image->metadata["color profile"] = profile_desc;
+        }
+        else
+        {
+            string profile_desc = color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
             // ICC profile linearization
             if (!image->icc_data.empty())
             {
                 Chromaticities chr;
                 if (ICCProfile(image->icc_data)
-                        .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &tf_desc, &chr))
+                        .linearize_pixels(float_pixels.data(), size, opts.keep_primaries, &profile_desc, &chr))
                 {
                     spdlog::info("Linearizing colors using ICC profile.");
                     image->chromaticities = chr;
                 }
                 else
-                    // If no ICC profile, assume sRGB transfer function
+                    // If ICC profile fails, assume sRGB transfer function
                     to_linear(float_pixels.data(), size, TransferFunction::sRGB);
             }
             else
                 // If no ICC profile, assume sRGB transfer function
                 to_linear(float_pixels.data(), size, TransferFunction::sRGB);
 
-            image->metadata["transfer function"] = tf_desc;
-        }
-        else
-        {
-            spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
-                         transfer_function_name(opts.tf_override));
-            to_linear(float_pixels.data(), size, opts.tf_override);
-            image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
+            image->metadata["color profile"] = profile_desc;
         }
 
         for (int c = 0; c < size.z; ++c)

@@ -4,6 +4,7 @@
 // be found in the LICENSE.txt file.
 //
 
+#include "colorspace.h"
 #include "fwd.h"
 
 #include "app.h"
@@ -402,7 +403,9 @@ void Image::draw_info()
             filtered_property("Display window",
                               fmt::format("[{}, {}) {} [{}, {})", display_window.min.x, display_window.max.x,
                                           ICON_MY_TIMES, display_window.min.y, display_window.max.y));
-            filtered_property("Alpha", alpha_type_name(alpha_type));
+            filtered_property("Alpha", alpha_type_name(alpha_type),
+                              "Type of alpha channel stored in the file. HDRView always converts the file's gamma to "
+                              "premultiplied alpha upon load.");
             if (!exif_data.empty())
             {
                 auto hs = human_readable_size(exif_data.size());
@@ -833,9 +836,15 @@ void Image::draw_colorspace()
     {
         ImGui::Indent(HelloImGui::EmSize(0.5f));
 
-        ImGui::PE::WrappedText("Transfer function", metadata.value<string>("transfer function", "linear"),
-                               "The transfer function applied at load time to make the values linear.", bold_font,
-                               FLT_MAX);
+        ImGui::PE::WrappedText(
+            "Profile name",
+            metadata.value<string>("color profile", color_profile_name(ColorGamut_sRGB_BT709, TransferFunction::Linear))
+                .c_str(),
+            "The color profile (primaries and transfer function) applied at load time to make the values linear. This "
+            "might come from various sources (ICC profiles, CICP tags, structured metadata provided by the image "
+            "loading library). If no color profile is found, HDRView assumes BT.709/sRGB primaries with a D65 "
+            "whitepoint, and an sRGB transfer function for SDR images.",
+            bold_font, FLT_MAX);
 
         ImGui::PE::Entry("Color gamut",
                          [&]

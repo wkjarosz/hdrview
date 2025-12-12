@@ -68,6 +68,14 @@ struct Chromaticities
     {
         return red != c.red || green != c.green || blue != c.blue || white != c.white;
     }
+
+    bool valid() const
+    {
+        return (red.x >= 0 && red.y >= 0 && green.x >= 0 && green.y >= 0 && blue.x >= 0 && blue.y >= 0 &&
+                white.x >= 0 && white.y >= 0);
+    }
+
+    static Chromaticities Invalid() { return {{-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}}; }
 };
 
 template <typename T, int N>
@@ -159,9 +167,9 @@ const char **color_gamut_names();
 //! Returns the Chromaticities corresponding to one of the predefined color primaries, or throws if the primaries
 //! are not recognized.
 Chromaticities gamut_chromaticities(ColorGamut_ primaries);
-Chromaticities chromaticities_from_cicp(int cicp);
+Chromaticities chromaticities_from_CICP(int cp);
 // Returns -1 if the chromaticities do not match one of the predefined CICP values
-int         chromaticities_to_cicp(const Chromaticities &chr);
+int         chromaticities_to_CICP(const Chromaticities &chr);
 ColorGamut_ named_color_gamut(const Chromaticities &chr);
 
 struct TransferFunction
@@ -194,6 +202,9 @@ struct TransferFunction
 std::string      transfer_function_name(TransferFunction tf);
 TransferFunction transfer_function_from_CICP(int cicp);
 int              transfer_function_to_CICP(TransferFunction tf);
+
+std::string color_profile_name(ColorGamut_ gamut, TransferFunction tf);
+std::string color_profile_name(const Chromaticities &chroma, TransferFunction tf);
 
 using AdaptationMethod_ = int;
 enum AdaptationMethod : AdaptationMethod_
@@ -817,6 +828,9 @@ inline void to_linear(float *pixels, int3 size, TransferFunction tf)
               num_color_channels, tf, size.z);
 }
 void from_linear(float *pixels, int3 size, TransferFunction tf);
+
+void convert_primaries(float *pixels, int3 size, const Chromaticities &src, const Chromaticities &dst,
+                       AdaptationMethod m = AdaptationMethod_Bradford);
 
 inline Color3 tonemap(const Color3 color, float gamma, Tonemap_ tonemap_mode, Colormap_ colormap, bool reverse_colormap)
 {

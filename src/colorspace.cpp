@@ -465,14 +465,14 @@ static const char *s_transfer_function_names[TransferFunction::Count + 1] = {
     "Unknown (Assuming sRGB)", // TransferFunction::Unspecified
     "Linear",                  // TransferFunction::Linear
     "Gamma",                   // TransferFunction::Gamma
-    "sRGB IEC61966-2.1",       // TransferFunction::sRGB
-    "BT.709/2020",             // TransferFunction::ITU
-    "BT.2100 PQ",              // TransferFunction::BT2100_PQ
-    "BT.2100 HLG",             // TransferFunction::BT2100_HLG
-    "SMPTE ST 240",            // TransferFunction::ST240
+    "sRGB",                    // TransferFunction::sRGB
+    "BT709/601/2020",          // TransferFunction::ITU
+    "PQ",                      // TransferFunction::BT2100_PQ
+    "HLG",                     // TransferFunction::BT2100_HLG
+    "SMPTE240M",               // TransferFunction::ST240
     "Log100",                  // TransferFunction::Log100
-    "Log100 Sqrt10",           // TransferFunction::Log100_Sqrt10
-    "IEC 61966-2-4",           // TransferFunction::IEC61966_2_4
+    "Log100Sqrt10",            // TransferFunction::Log100_Sqrt10
+    "IEC61966",                // TransferFunction::IEC61966_2_4
     "DCI-P3",                  // TransferFunction::DCI_P3
     nullptr};
 
@@ -521,9 +521,9 @@ Chromaticities gamut_chromaticities(ColorGamut_ primaries)
     return s_gamut_chromaticities[primaries];
 }
 
-Chromaticities chromaticities_from_cicp(int cicp)
+Chromaticities chromaticities_from_CICP(int cp)
 {
-    switch (cicp)
+    switch (cp)
     {
     case 1: return s_gamut_chromaticities[ColorGamut_sRGB_BT709];
     case 2: return s_gamut_chromaticities[ColorGamut_Unspecified];
@@ -537,21 +537,24 @@ Chromaticities chromaticities_from_cicp(int cicp)
     case 11: return s_gamut_chromaticities[ColorGamut_DCI_P3_SMPTE431];
     case 12: return s_gamut_chromaticities[ColorGamut_Display_P3_SMPTE432];
     case 22: return s_gamut_chromaticities[ColorGamut_CICP_22];
-    default: throw std::invalid_argument("Unrecognized or unsupported CICP value for chromaticities");
+    default: return Chromaticities::Invalid();
     }
 }
 
-int chromaticities_to_cicp(const Chromaticities &chr)
+int chromaticities_to_CICP(const Chromaticities &chr)
 {
-    for (int cicp : {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22})
-        if (approx_equal(chr, chromaticities_from_cicp(cicp)))
-            return cicp;
+    for (int cp : {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 22})
+        if (approx_equal(chr, chromaticities_from_CICP(cp)))
+            return cp;
 
     return -1;
 }
 
 ColorGamut_ named_color_gamut(const Chromaticities &chr)
 {
+    if (!chr.valid())
+        return ColorGamut_Unspecified;
+
     for (ColorGamut i = ColorGamut_FirstNamed; i <= ColorGamut_LastNamed; ++i)
     {
         if (approx_equal(chr, gamut_chromaticities(static_cast<ColorGamut_>(i))))
@@ -564,16 +567,21 @@ ColorGamut_ named_color_gamut(const Chromaticities &chr)
 string transfer_function_name(TransferFunction tf)
 {
     if (tf.type == TransferFunction::Gamma)
-        return fmt::format("{} (={})", s_transfer_function_names[TransferFunction::Gamma], tf.gamma);
+    {
+        if (fabs(tf.gamma - 1.f) <= 1e-4f)
+            return fmt::format("Linear Gamma");
+        else
+            return fmt::format("{} (={})", s_transfer_function_names[TransferFunction::Gamma], tf.gamma);
+    }
     else if (tf.type < TransferFunction::Unspecified || tf.type >= TransferFunction::Count)
         return s_transfer_function_names[TransferFunction::Unspecified];
     else
         return s_transfer_function_names[tf.type];
 }
 
-TransferFunction transfer_function_from_CICP(int cicp)
+TransferFunction transfer_function_from_CICP(int tc)
 {
-    switch (cicp)
+    switch (tc)
     {
     case 1: [[fallthrough]];
     case 6: [[fallthrough]];
@@ -599,7 +607,7 @@ int transfer_function_to_CICP(TransferFunction tf)
 {
     switch (tf.type)
     {
-    case TransferFunction::ITU: return 1; // Also covers 6, 12, 14, 15 in from_cicp
+    case TransferFunction::ITU: return 1; // Also covers 6, 12, 14, 15
     case TransferFunction::Gamma:
         if (tf.gamma == 2.2f)
             return 4;
@@ -618,6 +626,25 @@ int transfer_function_to_CICP(TransferFunction tf)
     case TransferFunction::BT2100_HLG: return 18;
     default: return 0; // Unknown or unsupported
     }
+}
+
+std::string color_profile_name(ColorGamut_ gamut, TransferFunction tf)
+{
+    if (gamut == ColorGamut_Unspecified && tf.type == TransferFunction::Unspecified)
+        return "Unspecified (Assuming sRGB IEC61966-2.1)";
+
+    if (gamut == ColorGamut_sRGB_BT709 && tf.type == TransferFunction::sRGB)
+        return "sRGB IEC61966-2.1";
+
+    std::string gamut_name = color_gamut_name(gamut);
+    std::string tf_name    = transfer_function_name(tf);
+    return fmt::format("{} gamut with {} transfer", gamut_name, tf_name);
+}
+
+std::string color_profile_name(const Chromaticities &chroma, TransferFunction tf)
+{
+    ColorGamut_ gamut = named_color_gamut(chroma);
+    return color_profile_name(gamut, tf);
 }
 
 float3x3 RGB_to_XYZ(const Chromaticities &chroma, float Y)
@@ -1076,5 +1103,29 @@ void from_linear(float *pixels, int3 size, TransferFunction tf)
                              for (int c = 0; c < num_color_channels; ++c)
                                  pixels[i * size.z + c] = from_linear(pixels[i * size.z + c], tf);
                      });
+    }
+}
+
+void convert_primaries(float *pixels, int3 size, const Chromaticities &src_chroma, const Chromaticities &dst_chroma,
+                       AdaptationMethod CAT_method)
+{
+    if (size.z >= 3)
+    {
+        float3x3 M;
+        if (color_conversion_matrix(M, src_chroma, dst_chroma, CAT_method))
+        {
+            // apply matrix M to all pixels (parallel)
+            parallel_for(blocked_range<int>(0, size.x * size.y, 1024 * 1024),
+                         [M, pixels, size](int start, int end, int, int)
+                         {
+                             for (int i = start; i < end; ++i)
+                             {
+                                 // reinterpret the three floats as a float3 so
+                                 // that assigning to it writes back into the pixel buffer.
+                                 float3 &in = *reinterpret_cast<float3 *>(pixels + i * size.z);
+                                 in         = mul(M, in);
+                             }
+                         });
+        }
     }
 }

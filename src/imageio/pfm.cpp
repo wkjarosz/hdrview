@@ -143,11 +143,13 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
 {
     ScopedMDC mdc{"IO", "PFM"};
     int3      size;
-    auto      float_data                 = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
-    auto      image                      = make_shared<Image>(size.xy(), size.z);
-    image->filename                      = filename;
-    image->metadata["pixel format"]      = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
-    image->metadata["transfer function"] = transfer_function_name(TransferFunction::Linear);
+    auto      float_data             = load_pfm_image(is, filename, &size.x, &size.y, &size.z);
+    auto      image                  = make_shared<Image>(size.xy(), size.z);
+    image->filename                  = filename;
+    image->metadata["pixel format"]  = fmt::format("{}-bit (32-bit float per channel)", size.z * 32);
+    image->metadata["color profile"] = (opts.override_color())
+                                           ? color_profile_name(ColorGamut_Unspecified, opts.tf_override)
+                                           : color_profile_name(ColorGamut_Unspecified, TransferFunction::Linear);
 
     to_linear(float_data.get(), size, opts.tf_override);
 
@@ -155,8 +157,6 @@ vector<ImagePtr> load_pfm_image(std::istream &is, std::string_view filename, con
     for (int c = 0; c < size.z; ++c)
         image->channels[c].copy_from_interleaved(float_data.get(), size.x, size.y, size.z, c,
                                                  [](float v) { return v; });
-
-    image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
 
     spdlog::debug("Copying image data for took: {} seconds.", (timer.elapsed() / 1000.f));
     return {image};

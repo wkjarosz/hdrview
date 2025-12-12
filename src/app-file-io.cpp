@@ -531,8 +531,9 @@ void HDRViewApp::reload_image(ImagePtr image, bool should_select)
     }
 
     spdlog::info("Reloading file '{}' with channel selector '{}'...", image->filename, image->channel_selector);
-    m_image_loader.background_load(image->filename, {}, should_select, image,
-                                   ImageLoadOptions{image->channel_selector});
+    auto opts             = load_image_options();
+    opts.channel_selector = image->channel_selector;
+    m_image_loader.background_load(image->filename, {}, should_select, image, opts);
 }
 
 void HDRViewApp::close_image(int index)

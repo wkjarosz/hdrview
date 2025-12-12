@@ -156,33 +156,32 @@ bool is_jxl_image(istream &is) noexcept
     return ret;
 }
 
-static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc, string *tf_description = nullptr,
-                             Chromaticities *c = nullptr)
+static Chromaticities file_chromaticities(const JxlColorEncoding &enc)
 {
-    Timer timer;
+    return Chromaticities{float2(enc.primaries_red_xy[0], enc.primaries_red_xy[1]),
+                          float2(enc.primaries_green_xy[0], enc.primaries_green_xy[1]),
+                          float2(enc.primaries_blue_xy[0], enc.primaries_blue_xy[1]),
+                          float2(enc.white_point_xy[0], enc.white_point_xy[1])};
+}
+
+// wrapper to linearize_pixels that uses the JPEG-XL encoded color profile
+static bool linearize_colors(float *pixels, int3 size, JxlColorEncoding file_enc, bool keep_primaries,
+                             string *profile_description = nullptr, Chromaticities *c = nullptr)
+{
     spdlog::info("Linearizing pixel values using encoded profile.");
-    if (c)
+    Chromaticities file_chr = file_chromaticities(file_enc);
+    auto           tf       = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
+                                  ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
+                                  : transfer_function_from_CICP((int)file_enc.transfer_function);
+
+    // this needs to use our general linearization function
+    if (file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA || file_enc.primaries == JXL_PRIMARIES_CUSTOM)
+        return linearize_pixels(pixels, size, file_chr, tf, keep_primaries, profile_description, c);
+    else // we can map to a CICP profile
     {
-        c->red   = float2(file_enc.primaries_red_xy[0], file_enc.primaries_red_xy[1]);
-        c->green = float2(file_enc.primaries_green_xy[0], file_enc.primaries_green_xy[1]);
-        c->blue  = float2(file_enc.primaries_blue_xy[0], file_enc.primaries_blue_xy[1]);
-        c->white = float2(file_enc.white_point_xy[0], file_enc.white_point_xy[1]);
+        return CICPProfile((int)file_enc.primaries, (int)file_enc.transfer_function, 0, 1)
+            .linearize_pixels(pixels, size, keep_primaries, profile_description, c);
     }
-
-    auto tf = file_enc.transfer_function == JXL_TRANSFER_FUNCTION_GAMMA
-                  ? TransferFunction{TransferFunction::Gamma, (float)file_enc.gamma}
-                  : transfer_function_from_CICP((int)file_enc.transfer_function);
-
-    if (tf.type == TransferFunction::Unspecified)
-        spdlog::warn("JPEG-XL: CICP transfer function ({}) is not recognized, assuming sRGB",
-                     (int)file_enc.transfer_function);
-
-    if (tf_description)
-        *tf_description = transfer_function_name(tf);
-
-    to_linear(pixels, size, tf);
-
-    return true;
 }
 
 //
@@ -267,6 +266,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
     std::vector<uint8_t> exif_buffer;
     std::vector<uint8_t> xmp_buffer;
+    json                 metadata;
     while (true)
     {
         JxlDecoderStatus status = JxlDecoderProcessInput(dec.get());
@@ -477,13 +477,28 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             spdlog::info("File has {} color channels", size.z);
             format = {(uint32_t)size.z, JXL_TYPE_FLOAT, JXL_NATIVE_ENDIAN, 0};
 
-            image                     = make_shared<Image>(size.xy(), size.z);
-            image->filename           = filename;
-            image->partname           = frame_name;
-            image->alpha_type         = !info.alpha_bits
-                                            ? AlphaType_None
-                                            : (info.alpha_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
-            image->metadata["loader"] = "libjxl";
+            image                                         = make_shared<Image>(size.xy(), size.z);
+            image->filename                               = filename;
+            image->partname                               = frame_name;
+            image->alpha_type                             = !info.alpha_bits
+                                                                ? AlphaType_None
+                                                                : (info.alpha_premultiplied ? AlphaType_PremultipliedLinear : AlphaType_Straight);
+            image->metadata["loader"]                     = "libjxl";
+            image->metadata["header"]["original profile"] = {
+                {"value", (bool)info.uses_original_profile},
+                {"string", info.uses_original_profile ? "yes" : "no"},
+                {"type", "bool"},
+                {"description",
+                 "Whether libjxl returned the pixel data encoded in the original color profile that is attached to the "
+                 "codestream metadata header, or encoded in an internally supported absolute color space (which the "
+                 "decoder can always convert to linear or non-linear sRGB or to XYB)."}};
+            image->metadata["header"]["has encoded color profile"] = {
+                {"value", has_encoded_profile},
+                {"string", has_encoded_profile ? "yes" : "no"},
+                {"type", "bool"},
+                {"description",
+                 "libjxl extracted the following profile:\n" +
+                     (has_encoded_profile ? color_encoding_info(file_enc) : "    no encoded color profile")}};
             image->metadata["pixel format"] =
                 fmt::format("{}-bit ({} bpc)", size.z * info.bits_per_sample, info.bits_per_sample);
             image->metadata["header"]["intrinsic width"] = {
@@ -491,16 +506,14 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             image->metadata["header"]["intrinsic height"] = {
                 {"value", int(info.intrinsic_ysize)}, {"string", to_string(info.intrinsic_ysize)}, {"type", "int"}};
             image->metadata["header"]["has preview"] = {
-                {"value", bool(info.have_preview)}, {"string", info.have_preview ? "true" : "false"}, {"type", "bool"}};
+                {"value", bool(info.have_preview)}, {"string", info.have_preview ? "yes" : "no"}, {"type", "bool"}};
             image->metadata["header"]["intensity target"] = {
                 {"value", info.intensity_target}, {"string", to_string(info.intensity_target)}, {"type", "float"}};
-            image->metadata["header"]["has animation"] = {{"value", bool(info.have_animation)},
-                                                          {"string", info.have_animation ? "true" : "false"},
-                                                          {"type", "bool"}};
-            image->metadata["header"]["has container"] = {{"value", bool(info.have_container)},
-                                                          {"string", info.have_container ? "true" : "false"},
-                                                          {"type", "bool"}};
-            image->metadata["header"]["min nits"]      = {
+            image->metadata["header"]["has animation"] = {
+                {"value", bool(info.have_animation)}, {"string", info.have_animation ? "yes" : "no"}, {"type", "bool"}};
+            image->metadata["header"]["has container"] = {
+                {"value", bool(info.have_container)}, {"string", info.have_container ? "yes" : "no"}, {"type", "bool"}};
+            image->metadata["header"]["min nits"] = {
                 {"value", info.min_nits}, {"string", to_string(info.min_nits)}, {"type", "float"}};
             image->metadata["header"]["orientation"] = {
                 {"value", info.orientation}, {"string", to_string(info.orientation)}, {"type", "enum"}};
@@ -584,9 +597,6 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
                 continue;
             }
 
-            string         tf_description;
-            Chromaticities chr;
-
             // for premultiplied files, JPEGL-XL premultiplies by the non-linear alpha value, so we must unpremultiply
             // before applying the inverse transfer function, then premultiply again
             if (info.alpha_premultiplied)
@@ -621,8 +631,7 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             //
             // We therefore swap the black channel for the alpha channel in the pixel array before applying the ICC
             // profile, and then swap them back afterwards.
-            if (opts.tf_override.type == TransferFunction::Unspecified && prefer_icc && is_cmyk &&
-                first_black_channel >= 0 && size.z > 1)
+            if (!opts.override_color() && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 float *black_data        = image->channels[size.z + first_black_channel].data();
@@ -644,45 +653,43 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
             if (!icc_profile.empty())
                 image->icc_data = icc_profile;
 
-            if (opts.tf_override.type == TransferFunction::Unspecified)
-            {
-                image->metadata["transfer function"] = transfer_function_name(TransferFunction::Unspecified);
-                if (prefer_icc)
-                {
-                    if (ICCProfile(image->icc_data)
-                            .linearize_pixels(pixels.data(), size, opts.keep_primaries, &tf_description, &chr))
-                    {
-                        image->chromaticities                = chr;
-                        image->metadata["transfer function"] = tf_description;
-                    }
-                }
-                else if (linearize_colors(pixels.data(), size, file_enc, &tf_description, &chr))
-                {
-                    image->chromaticities                = chr;
-                    image->metadata["transfer function"] = tf_description;
-                }
-            }
-            else
+            string         profile_description;
+            Chromaticities chr;
+            if (opts.override_color())
             {
                 spdlog::info("Ignoring embedded color profile and linearizing using requested transfer function: {}",
                              transfer_function_name(opts.tf_override));
-                try
-                {
-                    // some CICP transfer functions always correspond to certain primaries, try to deduce that
-                    image->chromaticities = chromaticities_from_cicp(transfer_function_to_CICP(opts.tf_override.type));
-                }
-                catch (...)
-                {
-                    spdlog::warn("Failed to infer chromaticities from transfer function CICP value: {}",
-                                 int(opts.tf_override.type));
-                }
-                // use the transfer function specified by the user
-                to_linear(pixels.data(), size, opts.tf_override);
-                image->metadata["transfer function"] = transfer_function_name(opts.tf_override);
-            }
 
-            if (opts.tf_override.type == TransferFunction::Unspecified && prefer_icc && is_cmyk &&
-                first_black_channel >= 0 && size.z > 1)
+                Chromaticities file_chr;
+                // determine chromaticities of the file
+                if (prefer_icc && ICCProfile(image->icc_data).extract_chromaticities(&file_chr))
+                {
+                    //
+                }
+                else
+                    file_chr = file_chromaticities(file_enc);
+
+                linearize_pixels(pixels.data(), size, file_chr, opts.tf_override, opts.keep_primaries,
+                                 &profile_description, &chr);
+
+                image->chromaticities = chr;
+                profile_description += " (user override)";
+            }
+            else
+            {
+                image->metadata["color profile"] =
+                    color_profile_name(ColorGamut_Unspecified, TransferFunction::Unspecified);
+                if (prefer_icc &&
+                    ICCProfile(image->icc_data)
+                        .linearize_pixels(pixels.data(), size, opts.keep_primaries, &profile_description, &chr))
+                    image->chromaticities = chr;
+                else if (linearize_colors(pixels.data(), size, file_enc, opts.keep_primaries, &profile_description,
+                                          &chr))
+                    image->chromaticities = chr;
+            }
+            image->metadata["color profile"] = profile_description;
+
+            if (!opts.override_color() && prefer_icc && is_cmyk && first_black_channel >= 0 && size.z > 1)
             {
                 size_t alpha_channel_idx = size.z - 1;
                 // Copy from alpha_copy back into the alpha channel
@@ -736,19 +743,19 @@ vector<ImagePtr> load_jxl_image(istream &is, string_view filename, const ImageLo
 
                 spdlog::info("Applying transfer function to extra channel '{}'", channel.name);
 
-                if (opts.tf_override.type != TransferFunction::Unspecified)
+                if (opts.override_color())
+                    // use the transfer function specified by the user
+                    to_linear(channel.data(), int3{size.xy(), 1}, opts.tf_override);
+                else
                 {
                     if ((prefer_icc &&
                          ICCProfile(icc_profile)
                              .linearize_pixels(channel.data(), int3{size.xy(), 1}, opts.keep_primaries)) ||
-                        linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc))
+                        linearize_colors(channel.data(), int3{size.xy(), 1}, file_enc, opts.keep_primaries))
                     {
                         //
                     }
                 }
-                else
-                    // use the transfer function specified by the user
-                    to_linear(channel.data(), int3{size.xy(), 1}, opts.tf_override);
             }
 
             images.push_back(image);

@@ -44,7 +44,7 @@ bool is_uhdr_image(istream &is) noexcept { return false; }
 
 bool uhdr_supported_tf(TransferFunction tf) noexcept { return false; }
 
-vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
+vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     throw runtime_error("UltraHDR support not enabled in this build.");
 }
@@ -142,7 +142,7 @@ bool is_uhdr_image(istream &is) noexcept
     return ret;
 }
 
-vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
+vector<ImagePtr> load_uhdr_image(istream &is, string_view filename, const ImageLoadOptions &opts)
 {
     ScopedMDC mdc{"IO", "UHDR"};
     if (!is.good())
@@ -282,30 +282,7 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
         }
     }
 
-    const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
-    if (icc_data && icc_data->data && icc_data->data_sz > 0)
-    {
-        spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
-        // HACK: for the same file the icc size reported by libuhdr is 14 bytes larger than what libjpeg reports and is
-        // able to successfully load. Skipping it seems to extract an ICC profile that we can load. I assume this is
-        // some additional header
-        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
-                               reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
-        image->metadata["transfer function"] = ICCProfile(image->icc_data).description();
-    }
-
-    {
-        auto  half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]);
-        int   stride_y  = decoded_image->stride[UHDR_PLANE_PACKED] * 4;
-        Timer timer;
-        for (int c = 0; c < 4; ++c)
-            image->channels[c].copy_from_interleaved(
-                half_data, decoded_image->w, decoded_image->h, 4, c, [](half v) { return (float)v; }, stride_y);
-
-        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
-    }
-
-    // HDRView assumes the Rec 709 primaries/gamut. Set the matrix to convert to it
+    // Save the chromaticities of the file's pixel data
     if (decoded_image->cg == UHDR_CG_DISPLAY_P3)
     {
         image->chromaticities = gamut_chromaticities(ColorGamut_Display_P3_SMPTE432);
@@ -324,6 +301,58 @@ vector<ImagePtr> load_uhdr_image(istream &is, string_view filename)
     }
     else // if (decoded_image->cg == UHDR_CG_UNSPECIFIED)
         spdlog::warn("File does not specify a color gamut. Assuming Rec. 709/sRGB primaries and whitepoint.");
+
+    const uhdr_mem_block_t *icc_data = uhdr_dec_get_icc(decoder.get());
+    if (icc_data && icc_data->data && icc_data->data_sz > 0)
+    {
+        spdlog::debug("Found ICC data of size {} bytes", icc_data->data_sz);
+        // HACK: for the same file the icc size reported by libuhdr is 14 bytes larger than what libjpeg reports and is
+        // able to successfully load. Skipping it seems to extract an ICC profile that we can load. I assume this is
+        // some additional header
+        image->icc_data.assign(reinterpret_cast<uint8_t *>(icc_data->data) + 14,
+                               reinterpret_cast<uint8_t *>(icc_data->data) + icc_data->data_sz);
+        image->metadata["color profile"] = ICCProfile(image->icc_data).description();
+    }
+
+    {
+        Timer timer;
+
+        // copy half-float pixel data into a float buffer first
+        std::vector<float> pixels(size.x * size.y * 4);
+        parallel_for(
+            blocked_range<int>(0, size.y, 512),
+            [pixels_ptr = pixels.data(), half_data = reinterpret_cast<half *>(decoded_image->planes[UHDR_PLANE_PACKED]),
+             stride_y = decoded_image->stride[UHDR_PLANE_PACKED] * 4, width = size.x](int start, int end, int, int)
+            {
+                for (int y = start; y < end; ++y)
+                {
+                    size_t src = (size_t)y * (size_t)stride_y;
+                    size_t dst = (size_t)y * (size_t)width * 4;
+                    for (int x = 0; x < width; ++x)
+                    {
+                        // copy 4 channels
+                        pixels_ptr[dst + x * 4 + 0] = (float)(half_data[src + x * 4 + 0]);
+                        pixels_ptr[dst + x * 4 + 1] = (float)(half_data[src + x * 4 + 1]);
+                        pixels_ptr[dst + x * 4 + 2] = (float)(half_data[src + x * 4 + 2]);
+                        pixels_ptr[dst + x * 4 + 3] = (float)(half_data[src + x * 4 + 3]);
+                    }
+                }
+            });
+
+        if (!opts.keep_primaries && decoded_image->cg != UHDR_CG_BT_709 && image->chromaticities)
+        {
+            // if we are not keeping primaries, convert to Rec. 709/sRGB
+            auto rec709 = Chromaticities();
+            convert_primaries(pixels.data(), {size, 4}, *image->chromaticities, rec709);
+            image->chromaticities = rec709;
+        }
+
+        // copy the interleaved float pixels into the channels
+        for (int c = 0; c < 4; ++c)
+            image->channels[c].copy_from_interleaved(pixels.data(), size.x, size.y, 4, c, [](float v) { return v; });
+
+        spdlog::debug("Copying image data took: {} seconds.", (timer.elapsed() / 1000.f));
+    }
 
     uhdr_raw_image_t *gainmap = uhdr_get_decoded_gainmap_image(decoder.get()); // freed by decoder destructor
     int2              gainmap_size(gainmap->w, gainmap->h);

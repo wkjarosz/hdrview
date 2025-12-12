@@ -56,11 +56,11 @@ static std::vector<LoaderEntry> default_loaders()
          }},
 #ifdef HDRVIEW_ENABLE_UHDR
         {"libultrahdr",
-         [](std::istream &is, std::string_view filename, const ImageLoadOptions &, std::vector<ImagePtr> &out)
+         [](std::istream &is, std::string_view filename, const ImageLoadOptions &opts, std::vector<ImagePtr> &out)
          {
              if (is_uhdr_image(is))
              {
-                 out = load_uhdr_image(is, filename);
+                 out = load_uhdr_image(is, filename, opts);
                  return true;
              }
              return false;
