@@ -279,58 +279,58 @@ void Theme::load(json j)
             }
 
             // ImGuiStyle scalar/vector members
-            auto read_float = [&](const char *key, float &val)
+            auto read_float1 = [&](const char *key, float &val)
             {
                 if (j_style.contains(key))
                     val = j_style[key].get<float>();
             };
-            auto read_vec2 = [&](const char *key, ImVec2 &val)
+            auto read_float2 = [&](const char *key, ImVec2 &val)
             {
                 if (j_style.contains(key) && j_style[key].is_array() && j_style[key].size() == 2)
                     val = ImVec2(j_style[key][0].get<float>(), j_style[key][1].get<float>());
             };
 
-            read_float("Alpha", style.Alpha);
-            read_float("DisabledAlpha", style.DisabledAlpha);
-            read_vec2("WindowPadding", style.WindowPadding);
-            read_float("WindowRounding", style.WindowRounding);
-            read_float("WindowBorderSize", style.WindowBorderSize);
-            read_vec2("WindowMinSize", style.WindowMinSize);
-            read_vec2("WindowTitleAlign", style.WindowTitleAlign);
-            read_float("ChildRounding", style.ChildRounding);
-            read_float("ChildBorderSize", style.ChildBorderSize);
-            read_float("PopupRounding", style.PopupRounding);
-            read_float("PopupBorderSize", style.PopupBorderSize);
-            read_vec2("FramePadding", style.FramePadding);
-            read_float("FrameRounding", style.FrameRounding);
-            read_float("FrameBorderSize", style.FrameBorderSize);
-            read_vec2("ItemSpacing", style.ItemSpacing);
-            read_vec2("ItemInnerSpacing", style.ItemInnerSpacing);
-            read_float("IndentSpacing", style.IndentSpacing);
-            read_vec2("CellPadding", style.CellPadding);
-            read_float("ScrollbarSize", style.ScrollbarSize);
-            read_float("ScrollbarRounding", style.ScrollbarRounding);
-            read_float("GrabMinSize", style.GrabMinSize);
-            read_float("GrabRounding", style.GrabRounding);
-            read_float("ImageBorderSize", style.ImageBorderSize);
-            read_float("TabRounding", style.TabRounding);
-            read_float("TabBorderSize", style.TabBorderSize);
-            read_float("TabBarBorderSize", style.TabBarBorderSize);
-            read_float("TabBarOverlineSize", style.TabBarOverlineSize);
-            read_float("TableAngledHeadersAngle", style.TableAngledHeadersAngle);
-            read_vec2("TableAngledHeadersTextAlign", style.TableAngledHeadersTextAlign);
-            read_float("TreeLinesSize", style.TreeLinesSize);
-            read_float("TreeLinesRounding", style.TreeLinesRounding);
-            read_vec2("ButtonTextAlign", style.ButtonTextAlign);
-            read_vec2("SelectableTextAlign", style.SelectableTextAlign);
-            read_float("SeparatorTextBorderSize", style.SeparatorTextBorderSize);
-            read_vec2("SeparatorTextAlign", style.SeparatorTextAlign);
-            read_vec2("SeparatorTextPadding", style.SeparatorTextPadding);
-            read_float("DockingSeparatorSize", style.DockingSeparatorSize);
-            read_float("FontSizeBase", style.FontSizeBase);
-            read_float("FontScaleMain", style.FontScaleMain);
-            read_float("FontScaleDpi", style.FontScaleDpi);
-            read_float("CircleTessellationMaxError", style.CircleTessellationMaxError);
+            read_float1("Alpha", style.Alpha);
+            read_float1("DisabledAlpha", style.DisabledAlpha);
+            read_float2("WindowPadding", style.WindowPadding);
+            read_float1("WindowRounding", style.WindowRounding);
+            read_float1("WindowBorderSize", style.WindowBorderSize);
+            read_float2("WindowMinSize", style.WindowMinSize);
+            read_float2("WindowTitleAlign", style.WindowTitleAlign);
+            read_float1("ChildRounding", style.ChildRounding);
+            read_float1("ChildBorderSize", style.ChildBorderSize);
+            read_float1("PopupRounding", style.PopupRounding);
+            read_float1("PopupBorderSize", style.PopupBorderSize);
+            read_float2("FramePadding", style.FramePadding);
+            read_float1("FrameRounding", style.FrameRounding);
+            read_float1("FrameBorderSize", style.FrameBorderSize);
+            read_float2("ItemSpacing", style.ItemSpacing);
+            read_float2("ItemInnerSpacing", style.ItemInnerSpacing);
+            read_float1("IndentSpacing", style.IndentSpacing);
+            read_float2("CellPadding", style.CellPadding);
+            read_float1("ScrollbarSize", style.ScrollbarSize);
+            read_float1("ScrollbarRounding", style.ScrollbarRounding);
+            read_float1("GrabMinSize", style.GrabMinSize);
+            read_float1("GrabRounding", style.GrabRounding);
+            read_float1("ImageBorderSize", style.ImageBorderSize);
+            read_float1("TabRounding", style.TabRounding);
+            read_float1("TabBorderSize", style.TabBorderSize);
+            read_float1("TabBarBorderSize", style.TabBarBorderSize);
+            read_float1("TabBarOverlineSize", style.TabBarOverlineSize);
+            read_float1("TableAngledHeadersAngle", style.TableAngledHeadersAngle);
+            read_float2("TableAngledHeadersTextAlign", style.TableAngledHeadersTextAlign);
+            read_float1("TreeLinesSize", style.TreeLinesSize);
+            read_float1("TreeLinesRounding", style.TreeLinesRounding);
+            read_float2("ButtonTextAlign", style.ButtonTextAlign);
+            read_float2("SelectableTextAlign", style.SelectableTextAlign);
+            read_float1("SeparatorTextBorderSize", style.SeparatorTextBorderSize);
+            read_float2("SeparatorTextAlign", style.SeparatorTextAlign);
+            read_float2("SeparatorTextPadding", style.SeparatorTextPadding);
+            read_float1("DockingSeparatorSize", style.DockingSeparatorSize);
+            read_float1("FontSizeBase", style.FontSizeBase);
+            read_float1("FontScaleMain", style.FontScaleMain);
+            read_float1("FontScaleDpi", style.FontScaleDpi);
+            read_float1("CircleTessellationMaxError", style.CircleTessellationMaxError);
             if (j_style.contains("WindowMenuButtonPosition"))
                 style.WindowMenuButtonPosition = (ImGuiDir)j_style["WindowMenuButtonPosition"].get<int>();
         }
