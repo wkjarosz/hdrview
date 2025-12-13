@@ -40,3 +40,8 @@ void save_heif_image(const Image &img, std::ostream &os, std::string_view filena
 #else
 #define AVCI_ENABLED 0
 #endif
+#ifdef HDRVIEW_ENABLE_HTJ2K
+#define HTJ2K_ENABLED 1
+#else
+#define HTJ2K_ENABLED 0
+#endif

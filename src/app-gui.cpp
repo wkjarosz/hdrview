@@ -958,11 +958,15 @@ void HDRViewApp::draw_about_dialog(bool &open)
         {
             if (ImGui::BeginTabItem("Keybindings", nullptr))
             {
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
+                ImVec2 child_size = ImVec2(0, EmSize(13.f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
 
-                ImGui::PushFont(m_sans_bold, ImGui::GetStyle().FontSizeBase);
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1] -
+                                       ImGui::GetStyle().ScrollbarSize);
+
+                ImGui::Spacing();
                 ImGui::TextAligned2(0.5f, -FLT_MIN, "The main keyboard shortcut to remember is:");
-                ImGui::PopFont();
 
                 ImGui::PushFont(font("mono regular"), ImGui::GetStyle().FontSizeBase * 30.f / 14.f);
                 ImGui::TextAligned2(0.5f, -FLT_MIN,
@@ -971,7 +975,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
                 ImGui::TextUnformatted("This opens the command palette, which lists every available HDRView command "
                                        "along with its keyboard shortcuts (if any).");
-                ImGui::Spacing();
+                ImGui::Dummy(EmToVec2(1.f, 1.f));
 
                 ImGui::TextUnformatted("Many commands and their keyboard shortcuts are also listed in the menu bar.");
 
@@ -982,20 +986,30 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Spacing();
                 ImGui::PopTextWrapPos();
 
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
                 ImGui::EndTabItem();
             }
+
             if (ImGui::BeginTabItem("Credits"))
             {
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1]);
+                ImVec2 child_size = ImVec2(0, EmSize(18.f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
+
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + col_width[0] + col_width[1] -
+                                       ImGui::GetStyle().ScrollbarSize);
+                ImGui::Spacing();
                 ImGui::TextUnformatted(
                     "HDRView additionally makes use of the following external libraries and techniques (in "
                     "alphabetical order):\n\n");
                 ImGui::PopTextWrapPos();
 
+                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
                 if (ImGui::PE::Begin("about_table2", 0))
                 {
-                    ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0]);
-                    ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
+                    ImGui::TableSetupColumn("one", ImGuiTableColumnFlags_WidthFixed, col_width[0] * 0.85f);
+                    // ImGui::TableSetupColumn("two", ImGuiTableColumnFlags_WidthFixed, col_width[1]);
 
                     ImGui::PE::Hyperlink("Dear ImGui", "Omar Cornut's immediate-mode graphical user interface for C++.",
                                          "https://github.com/ocornut/imgui");
@@ -1016,6 +1030,20 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #ifdef HDRVIEW_ENABLE_LIBHEIF
                     ImGui::PE::Hyperlink("libheif", "For loading HEIF, HEIC, AVIF, and AVIFS files.",
                                          "https://github.com/strukturag/libheif");
+#ifdef HDRVIEW_ENABLE_HEIC
+                    ImGui::PE::Hyperlink("x265", "For encoding HEIC/HEVC files.",
+                                         "https://www.videolan.org/developers/x265.html");
+                    ImGui::PE::Hyperlink("libde265", "For decoding HEIC/HEVC files.",
+                                         "https://github.com/strukturag/libde265");
+#endif
+#ifdef HDRVIEW_ENABLE_AVCI
+                    ImGui::PE::Hyperlink("OpenH264", "For decoding AVCI files.", "https://github.com/cisco/openh264");
+#endif
+#ifdef HDRVIEW_ENABLE_HTJ2K
+                    ImGui::PE::Hyperlink("OpenJPEG", "For encoding/decoding J2K and decoding HTJ2K files.",
+                                         "https://github.com/uclouvain/openjpeg");
+                    ImGui::PE::Hyperlink("OpenJPH", "For encoding HTJ2K files.", "https://github.com/aous72/OpenJPH");
+#endif
 #endif
 #ifdef HDRVIEW_ENABLE_JPEGXL
                     ImGui::PE::Hyperlink("libjxl", "For loading JPEG-XL files.", "https://github.com/libjxl/libjxl");
@@ -1048,13 +1076,17 @@ void HDRViewApp::draw_about_dialog(bool &open)
 
                     ImGui::PE::End();
                 }
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Build info"))
             {
                 ImGui::PushFont(m_mono_regular, 0.f);
                 ImVec2 child_size = ImVec2(0, EmSize(18.f));
-                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_FrameStyle);
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+                ImGui::BeginChild(ImGui::GetID("cfg_infos"), child_size, ImGuiChildFlags_AlwaysUseWindowPadding);
 
                 ImGui::Text("ImGui version: %s", ImGui::GetVersion());
 
@@ -1112,9 +1144,10 @@ void HDRViewApp::draw_about_dialog(bool &open)
 #endif
 #ifdef HDRVIEW_ENABLE_LIBHEIF
                 ImGui::Text("\tlibheif: %s", heif_get_version());
-                ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC: %s", YESNO(HEIC_ENABLED));
-                ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF: %s", YESNO(AVIF_ENABLED));
-                ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI: %s", YESNO(AVCI_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_HEIC : %s", YESNO(HEIC_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVIF : %s", YESNO(AVIF_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_AVCI : %s", YESNO(AVCI_ENABLED));
+                ImGui::Text("\t\tHDRVIEW_ENABLE_HTJ2K: %s", YESNO(HTJ2K_ENABLED));
                 ImGui::Text("\t\tFormat          decoding   encoding");
                 ImGui::Text("\t\t===================================");
                 ImGui::Text("\t\tAVC             %-10s %s", YESNO(heif_have_decoder_for_format(heif_compression_AVC)),
@@ -1152,6 +1185,7 @@ void HDRViewApp::draw_about_dialog(bool &open)
                 ImGui::Text("\t\tPNG_cICP_SUPPORTED: %s", YESNO(PNG_cICP_SUPPORTED_ENABLED));
 #endif
                 ImGui::EndChild();
+                ImGui::PopStyleColor();
                 ImGui::PopFont();
                 ImGui::EndTabItem();
             }
